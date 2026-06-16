@@ -4551,3 +4551,11 @@
 "正在恢复…" = "Restoring…";
 "下载并恢复" = "Download and Restore";
 "背景图片或视频链接" = "Background image or video URL";
+"用量总览" = "Usage Overview";
+"Token 总量" = "Total Tokens";
+"会话数" = "Sessions";
+"消息数" = "Messages";
+"活跃天数" = "Active Days";
+"连续活跃" = "Streak";
+"最常用" = "Most Used";
+"占比 %@" = "Share %@";

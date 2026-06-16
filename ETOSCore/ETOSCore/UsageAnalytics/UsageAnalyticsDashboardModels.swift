@@ -28,6 +28,34 @@ public enum UsageAnalyticsDetailScope: String, CaseIterable, Sendable {
     }
 }
 
+public struct UsageAnalyticsSummaryStats: Hashable, Sendable {
+    public var totalTokens: Int
+    public var sessionCount: Int
+    public var messageCount: Int
+    public var activeDays: Int
+    public var currentStreak: Int
+    public var mostUsedModel: String
+    public var mostUsedModelShare: Double
+
+    public init(
+        totalTokens: Int = 0,
+        sessionCount: Int = 0,
+        messageCount: Int = 0,
+        activeDays: Int = 0,
+        currentStreak: Int = 0,
+        mostUsedModel: String = "",
+        mostUsedModelShare: Double = 0
+    ) {
+        self.totalTokens = totalTokens
+        self.sessionCount = sessionCount
+        self.messageCount = messageCount
+        self.activeDays = activeDays
+        self.currentStreak = currentStreak
+        self.mostUsedModel = mostUsedModel
+        self.mostUsedModelShare = mostUsedModelShare
+    }
+}
+
 public struct UsageAnalyticsOverviewCard: Identifiable, Hashable, Sendable {
     public var id: UsageAnalyticsDetailScope { scope }
     public var scope: UsageAnalyticsDetailScope
@@ -368,6 +396,7 @@ public struct UsageAnalyticsDashboardState: Sendable {
     public var overviewCards: [UsageAnalyticsOverviewCard]
     public var heatmapWeeks: [UsageAnalyticsHeatmapWeek]
     public var monthDays: [UsageAnalyticsCalendarDay?]
+    public var summaryStats: UsageAnalyticsSummaryStats
     public var detail: UsageAnalyticsDetailSnapshot
 
     public var activeOverviewCard: UsageAnalyticsOverviewCard? {
@@ -384,6 +413,7 @@ public struct UsageAnalyticsDashboardState: Sendable {
         overviewCards: [UsageAnalyticsOverviewCard],
         heatmapWeeks: [UsageAnalyticsHeatmapWeek],
         monthDays: [UsageAnalyticsCalendarDay?],
+        summaryStats: UsageAnalyticsSummaryStats = .init(),
         detail: UsageAnalyticsDetailSnapshot
     ) {
         self.isLoading = isLoading
@@ -395,6 +425,7 @@ public struct UsageAnalyticsDashboardState: Sendable {
         self.overviewCards = overviewCards
         self.heatmapWeeks = heatmapWeeks
         self.monthDays = monthDays
+        self.summaryStats = summaryStats
         self.detail = detail
     }
 }

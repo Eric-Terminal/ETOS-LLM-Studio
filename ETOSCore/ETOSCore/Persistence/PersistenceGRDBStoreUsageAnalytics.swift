@@ -426,6 +426,52 @@ extension PersistenceGRDBStore {
         )
     }
 
+    func countDistinctUsageSessions(dayKeys: Set<String>?) -> Int {
+        do {
+            return try dbPool.read { db in
+                if let dayKeys, !dayKeys.isEmpty {
+                    let sorted = dayKeys.sorted()
+                    let placeholders = Array(repeating: "?", count: sorted.count).joined(separator: ", ")
+                    return try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(DISTINCT session_id) FROM usage_request_events WHERE session_id IS NOT NULL AND day_key IN (\(placeholders))",
+                        arguments: StatementArguments(sorted)
+                    ) ?? 0
+                }
+                return try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(DISTINCT session_id) FROM usage_request_events WHERE session_id IS NOT NULL"
+                ) ?? 0
+            }
+        } catch {
+            logger.error("统计用量会话数失败: \(error.localizedDescription)")
+            return 0
+        }
+    }
+
+    func countUsageMessages(dayKeys: Set<String>?) -> Int {
+        do {
+            return try dbPool.read { db in
+                if let dayKeys, !dayKeys.isEmpty {
+                    let sorted = dayKeys.sorted()
+                    let placeholders = Array(repeating: "?", count: sorted.count).joined(separator: ", ")
+                    return try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM usage_request_events WHERE request_source = 'chat' AND day_key IN (\(placeholders))",
+                        arguments: StatementArguments(sorted)
+                    ) ?? 0
+                }
+                return try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM usage_request_events WHERE request_source = 'chat'"
+                ) ?? 0
+            }
+        } catch {
+            logger.error("统计聊天消息数失败: \(error.localizedDescription)")
+            return 0
+        }
+    }
+
     private func usageSpecificDayKeyFilter(_ dayKeys: [String]?) -> UsageDayKeyFilter {
         guard let dayKeys else {
             return UsageDayKeyFilter(sql: "", arguments: StatementArguments(), shouldQuery: true)

@@ -4646,3 +4646,12 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "背景图片或视频链接" = "URL d'image ou de vidéo d'arrière-plan";
 "无法读取视频数据。" = "Impossible de lire les données vidéo.";
 "不支持的视频格式。" = "Format vidéo non pris en charge.";
+
+"用量总览" = "Aperçu d'utilisation";
+"Token 总量" = "Tokens totaux";
+"会话数" = "Sessions";
+"消息数" = "Messages";
+"活跃天数" = "Jours actifs";
+"连续活跃" = "Série";
+"最常用" = "Plus utilisé";
+"占比 %@" = "Part %@";

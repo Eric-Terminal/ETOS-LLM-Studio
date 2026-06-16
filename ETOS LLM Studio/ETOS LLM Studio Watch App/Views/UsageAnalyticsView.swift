@@ -19,6 +19,8 @@ struct UsageAnalyticsView: View {
                 }
             }
 
+            watchSummarySection
+
             Section(NSLocalizedString("绿墙", comment: "")) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(NSLocalizedString("请求热力图", comment: ""))
@@ -280,6 +282,94 @@ struct UsageAnalyticsView: View {
         .navigationTitle(NSLocalizedString("用量统计", comment: ""))
     }
 
+    private var watchSummarySection: some View {
+        let stats = viewModel.state.summaryStats
+        return Section(NSLocalizedString("用量总览", comment: "Usage summary section")) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "diamond.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(NSLocalizedString("Token 总量", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Text(watchCompactNumber(stats.totalTokens))
+                    .etFont(.title3.weight(.bold).monospacedDigit())
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("会话数", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("\(stats.sessionCount)")
+                        .etFont(.headline.monospacedDigit().weight(.bold))
+                }
+                Spacer()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("消息数", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("\(stats.messageCount)")
+                        .etFont(.headline.monospacedDigit().weight(.bold))
+                }
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("活跃天数", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("\(stats.activeDays)")
+                        .etFont(.headline.monospacedDigit().weight(.bold))
+                }
+                Spacer()
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                        Text(NSLocalizedString("连续活跃", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("\(stats.currentStreak)")
+                        .etFont(.headline.monospacedDigit().weight(.bold))
+                }
+            }
+
+            if !stats.mostUsedModel.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(NSLocalizedString("最常用", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    MarqueeText(
+                        content: stats.mostUsedModel,
+                        uiFont: .preferredFont(forTextStyle: .footnote),
+                        speed: 28,
+                        spacing: 28
+                    )
+                    .etFont(.footnote.weight(.bold))
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(String(format: NSLocalizedString("占比 %@", comment: ""), percentageText(stats.mostUsedModelShare)))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func watchCompactNumber(_ value: Int) -> String {
+        value.formatted(.number.notation(.compactName))
+    }
+
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {
         viewModel.state.heatmapWeeks
     }
@@ -528,15 +618,7 @@ private struct WatchUsageAnalyticsTokenTrendChart: View {
                 }
                 .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
 
-                trendPath(points: trend.dailyPoints.map(\.totalTokens), in: rect)
-                    .stroke(Color.primary.opacity(0.28), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-
-                ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
-                    trendPath(points: series.points.map(\.totalTokens), in: rect)
-                        .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
-                }
-
-                singleDayMarkers(in: rect)
+                watchBarContent(in: rect)
 
                 HStack {
                     if let first = trend.dailyPoints.first {
@@ -556,64 +638,61 @@ private struct WatchUsageAnalyticsTokenTrendChart: View {
     }
 
     @ViewBuilder
-    private func singleDayMarkers(in rect: CGRect) -> some View {
-        if trend.dailyPoints.count == 1,
-           let point = trend.dailyPoints.first,
-           point.totalTokens > 0 {
+    private func watchBarContent(in rect: CGRect) -> some View {
+        let count = trend.dailyPoints.count
+        let maxTokens = max(trend.maxDailyTokens, 1)
+
+        if count > 0 {
+            let barStep = rect.width / CGFloat(count)
+            let barWidth = max(1.5, barStep * (count > 15 ? 0.72 : 0.62))
+            let barGap = (barStep - barWidth) / 2
+            let cr = min(barWidth / 2, 2)
+
             Path { path in
-                let marker = pointPosition(index: 0, count: 1, value: point.totalTokens, in: rect)
-                let halfWidth = min(rect.width * 0.18, 18)
-                path.move(to: CGPoint(x: marker.x - halfWidth, y: marker.y))
-                path.addLine(to: CGPoint(x: marker.x + halfWidth, y: marker.y))
-            }
-            .stroke(Color.primary.opacity(0.24), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-
-            Circle()
-                .fill(Color.primary.opacity(0.24))
-                .frame(width: 9, height: 9)
-                .position(pointPosition(index: 0, count: 1, value: point.totalTokens, in: rect))
-
-            ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { index, series in
-                if let value = series.points.first?.totalTokens, value > 0 {
-                    Path { path in
-                        let marker = pointPosition(index: 0, count: 1, value: value, in: rect)
-                        let halfWidth = min(rect.width * 0.14, 14)
-                        path.move(to: CGPoint(x: marker.x - halfWidth, y: marker.y))
-                        path.addLine(to: CGPoint(x: marker.x + halfWidth, y: marker.y))
+                for (i, point) in trend.dailyPoints.enumerated() {
+                    guard point.totalTokens > 0 else { continue }
+                    let topModelTokens = trend.modelSeries.reduce(0) { sum, series in
+                        i < series.points.count ? sum + series.points[i].totalTokens : sum
                     }
-                    .stroke(modelColors[index % modelColors.count], style: StrokeStyle(lineWidth: 2, lineCap: .round))
-
-                    Circle()
-                        .fill(modelColors[index % modelColors.count])
-                        .frame(width: 6, height: 6)
-                        .position(pointPosition(index: 0, count: 1, value: value, in: rect))
+                    let otherTokens = max(0, point.totalTokens - topModelTokens)
+                    guard otherTokens > 0 else { continue }
+                    let x = rect.minX + CGFloat(i) * barStep + barGap
+                    let totalH = CGFloat(point.totalTokens) / CGFloat(maxTokens) * rect.height
+                    let modelH = CGFloat(topModelTokens) / CGFloat(maxTokens) * rect.height
+                    let otherH = totalH - modelH
+                    path.addRoundedRect(
+                        in: CGRect(x: x, y: rect.maxY - totalH, width: barWidth, height: otherH),
+                        cornerSize: CGSize(width: cr, height: cr)
+                    )
                 }
             }
-        }
-    }
+            .fill(Color.secondary.opacity(0.22))
 
-    private func trendPath(points: [Int], in rect: CGRect) -> Path {
-        Path { path in
-            guard !points.isEmpty else { return }
-            for (index, value) in points.enumerated() {
-                let point = pointPosition(index: index, count: points.count, value: value, in: rect)
-                if index == 0 {
-                    path.move(to: point)
-                } else {
-                    path.addLine(to: point)
+            ForEach(Array(trend.modelSeries.enumerated()), id: \.element.id) { modelIndex, series in
+                Path { path in
+                    for dayIndex in trend.dailyPoints.indices {
+                        let tokens = dayIndex < series.points.count ? series.points[dayIndex].totalTokens : 0
+                        guard tokens > 0 else { continue }
+                        let x = rect.minX + CGFloat(dayIndex) * barStep + barGap
+
+                        var belowHeight: CGFloat = 0
+                        for j in 0..<modelIndex {
+                            if dayIndex < trend.modelSeries[j].points.count {
+                                belowHeight += CGFloat(trend.modelSeries[j].points[dayIndex].totalTokens) / CGFloat(maxTokens) * rect.height
+                            }
+                        }
+
+                        let h = CGFloat(tokens) / CGFloat(maxTokens) * rect.height
+                        let y = rect.maxY - belowHeight - h
+                        path.addRoundedRect(
+                            in: CGRect(x: x, y: y, width: barWidth, height: h),
+                            cornerSize: CGSize(width: cr, height: cr)
+                        )
+                    }
                 }
+                .fill(modelColors[modelIndex % modelColors.count])
             }
         }
-    }
-
-    private func pointPosition(index: Int, count: Int, value: Int, in rect: CGRect) -> CGPoint {
-        let maxValue = max(trend.maxDailyTokens, 1)
-        let progress = count <= 1 ? 0.5 : CGFloat(index) / CGFloat(count - 1)
-        let x = rect.minX + rect.width * progress
-        let yRatio = min(1, max(0, CGFloat(value) / CGFloat(maxValue)))
-        let verticalInset = min(rect.height * 0.12, 7)
-        let y = rect.maxY - verticalInset - (rect.height - verticalInset * 2) * yRatio
-        return CGPoint(x: x, y: y)
     }
 }
 

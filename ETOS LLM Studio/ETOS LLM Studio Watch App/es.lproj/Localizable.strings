@@ -4628,3 +4628,12 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "正在恢复…" = "Restaurando…";
 "下载并恢复" = "Descargar y restaurar";
 "背景图片或视频链接" = "URL de imagen o video de fondo";
+
+"用量总览" = "Resumen de uso";
+"Token 总量" = "Tokens totales";
+"会话数" = "Sesiones";
+"消息数" = "Mensajes";
+"活跃天数" = "Días activos";
+"连续活跃" = "Racha";
+"最常用" = "Más usado";
+"占比 %@" = "Proporción %@";
