@@ -292,22 +292,30 @@ struct UsageAnalyticsView: View {
                         }
                     }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: heatmapCellSpacing) {
-                            HStack(spacing: heatmapCellSpacing) {
-                                ForEach(heatmapMonthSegments) { segment in
-                                    heatmapMonthSegment(segment)
-                                }
-                            }
-
-                            HStack(alignment: .top, spacing: heatmapCellSpacing) {
-                                ForEach(viewModel.state.heatmapWeeks) { week in
-                                    VStack(spacing: heatmapCellSpacing) {
-                                        ForEach(week.days) { day in
-                                            heatCell(day: day, side: heatmapCellSide)
-                                        }
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            VStack(alignment: .leading, spacing: heatmapCellSpacing) {
+                                HStack(spacing: heatmapCellSpacing) {
+                                    ForEach(heatmapMonthSegments) { segment in
+                                        heatmapMonthSegment(segment)
                                     }
                                 }
+
+                                HStack(alignment: .top, spacing: heatmapCellSpacing) {
+                                    ForEach(viewModel.state.heatmapWeeks) { week in
+                                        VStack(spacing: heatmapCellSpacing) {
+                                            ForEach(week.days) { day in
+                                                heatCell(day: day, side: heatmapCellSide)
+                                            }
+                                        }
+                                        .id(week.id)
+                                    }
+                                }
+                            }
+                        }
+                        .onAppear {
+                            if let lastWeek = viewModel.state.heatmapWeeks.last {
+                                proxy.scrollTo(lastWeek.id, anchor: .trailing)
                             }
                         }
                     }
