@@ -35,8 +35,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
     case images = "ImageFiles"
     case memory = "Memory"
     case backgrounds = "Backgrounds"
-    case providers = "Providers"
-    case mcpServers = "MCPServers"
+    case config = "Config"
     case skills = "Skills"
     case shortcutTools = "ShortcutTools"
     case worldbooks = "Worldbooks"
@@ -51,8 +50,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .images: return NSLocalizedString("图片文件", comment: "")
         case .memory: return NSLocalizedString("记忆数据", comment: "")
         case .backgrounds: return NSLocalizedString("背景图片", comment: "")
-        case .providers: return NSLocalizedString("提供商配置", comment: "")
-        case .mcpServers: return NSLocalizedString("MCP 服务器", comment: "")
+        case .config: return NSLocalizedString("配置数据库", comment: "")
         case .skills: return NSLocalizedString("Agent Skills", comment: "")
         case .shortcutTools: return NSLocalizedString("快捷指令工具", comment: "")
         case .worldbooks: return NSLocalizedString("世界书", comment: "")
@@ -67,8 +65,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .images: return "photo.on.rectangle"
         case .memory: return "brain.head.profile"
         case .backgrounds: return "photo.artframe"
-        case .providers: return "server.rack"
-        case .mcpServers: return "point.3.connected.trianglepath.dotted"
+        case .config: return "gearshape.2"
         case .skills: return "sparkles.square.filled.on.square"
         case .shortcutTools: return "bolt.horizontal.circle"
         case .worldbooks: return "book.pages"
@@ -83,8 +80,7 @@ public enum StorageCategory: String, CaseIterable, Identifiable {
         case .images: return .green
         case .memory: return .purple
         case .backgrounds: return .pink
-        case .providers: return .indigo
-        case .mcpServers: return .teal
+        case .config: return .indigo
         case .skills: return .cyan
         case .shortcutTools: return .mint
         case .worldbooks: return .brown
