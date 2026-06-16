@@ -709,11 +709,11 @@ extension ChatView {
                                 // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
                                 // 不使用 opacity / scaleEffect——超长消息和宽气泡会产生可见的变淡/收缩
                                 .scrollTransition(
-                                    topLeading: .animated(.smooth(duration: 0.3)),
-                                    bottomTrailing: .animated(.spring(response: 0.35, dampingFraction: 0.78))
+                                    topLeading: .animated(.smooth(duration: 0.35)),
+                                    bottomTrailing: .animated(.spring(response: 0.45, dampingFraction: 0.65))
                                 ) { content, phase in
                                     content
-                                        .offset(y: phase.value * 12)
+                                        .offset(y: phase.value * 20)
                                 }
                                 .onAppear {
                                     loadMoreAutomaticHistoryIfNeeded(
