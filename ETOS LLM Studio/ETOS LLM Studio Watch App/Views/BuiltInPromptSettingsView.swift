@@ -245,28 +245,3 @@ private struct BuiltInPromptEditorView: View {
         }
     }
 }
-
-// MARK: - watchOS TextField 换行支持
-
-fileprivate extension String {
-    func watchKeyboardEscapedNewlines() -> String {
-        replacingOccurrences(of: "\n", with: "\\n")
-    }
-
-    func watchKeyboardUnescapedNewlines() -> String {
-        replacingOccurrences(of: "\\n", with: "\n")
-    }
-}
-
-fileprivate extension Binding where Value == String {
-    func watchKeyboardNewlineBinding() -> Binding<String> {
-        Binding(
-            get: { wrappedValue.watchKeyboardEscapedNewlines() },
-            set: { newValue in
-                let unescaped = newValue.watchKeyboardUnescapedNewlines()
-                guard unescaped != wrappedValue else { return }
-                wrappedValue = unescaped
-            }
-        )
-    }
-}
