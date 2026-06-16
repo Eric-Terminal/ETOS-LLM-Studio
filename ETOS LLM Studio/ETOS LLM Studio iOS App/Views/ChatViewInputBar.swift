@@ -41,10 +41,10 @@ extension ChatView {
                 isSending: viewModel.isSendingMessage,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
+                    let outgoingText = draftText
                     if AppConfigStore.shared.chatSendAnimationEnabled {
-                        withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
-                            viewModel.sendMessage()
-                        }
+                        // 启动「输入框 → 气泡」Overlay 飞行（内部已调用 viewModel.sendMessage()）
+                        beginSendFlight(text: outgoingText)
                     } else {
                         viewModel.sendMessage()
                     }
@@ -53,8 +53,7 @@ extension ChatView {
                 stopAction: {
                     viewModel.cancelSending()
                 },
-                focus: $composerFocused,
-                sendMorphNamespace: sendMorphNS
+                focus: $composerFocused
             )
             .onReceive(viewModel.$userInput) { newValue in
                 guard draftText != newValue else { return }

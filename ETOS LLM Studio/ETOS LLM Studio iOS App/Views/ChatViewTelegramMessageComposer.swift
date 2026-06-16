@@ -23,8 +23,6 @@ struct TelegramMessageComposer: View {
     let sendAction: () -> Void
     let stopAction: () -> Void
     let focus: FocusState<Bool>.Binding
-    // 发送变形动画：输入框 → 气泡几何插值
-    var sendMorphNamespace: Namespace.ID
 
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -272,7 +270,15 @@ struct TelegramMessageComposer: View {
             }
         }
         .onPreferenceChange(InputWidthKey.self, perform: updateInputWidth)
-        .matchedGeometryEffect(id: "sendMorph", in: sendMorphNamespace, properties: .frame, isSource: true)
+        // 上报输入框 shell 在聊天坐标空间内的 frame，作为发送飞行动画的起点锚定
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: InputBarRectKey.self,
+                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                )
+            }
+        )
     }
 
     private func attachmentMenuButton(size: CGFloat) -> some View {

@@ -74,7 +74,9 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
-    @Namespace var sendMorphNS
+    // 发送飞行动画：Overlay hero 状态，及输入框实时 frame（飞行起点来源）
+    @State var flightState: SendFlightState?
+    @State var inputBarRect: CGRect = .zero
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
 
@@ -696,10 +698,11 @@ extension ChatView {
                                     },
                                     providers: viewModel.providers
                                 )
-                                // 发送入场动画：用户气泡从输入框变形飞入，助手气泡从左下弹入
+                                // 发送入场动画：用户气泡走 Overlay 飞行（见 flightOverlayLayer），
+                                // 飞行期间真实气泡隐身、落地交接；助手气泡保持原有从下弹入。
                                 .transition(
                                     message.role == .user && appConfig.chatSendAnimationEnabled
-                                    ? .sendMorph(in: sendMorphNS)
+                                    ? .opacity
                                     : .asymmetric(
                                         insertion: .move(edge: .bottom)
                                             .combined(with: .scale(scale: 0.92, anchor: .bottomLeading))
@@ -707,6 +710,10 @@ extension ChatView {
                                         removal: .opacity
                                     )
                                 )
+                                // 飞行期间隐藏真实气泡，让飞行气泡接管视觉
+                                .opacity(isHiddenForFlight(message.id) ? 0 : 1)
+                                // 仅飞行目标消息上报整行 frame（用于推算真实落点）
+                                .background(flightTargetReporter(for: message.id))
                                 .id(ChatScrollTargetID.message(state.id))
                                 // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
                                 .scrollTransition(
@@ -873,6 +880,19 @@ extension ChatView {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(30)
                 }
+
+                // 发送飞行气泡覆盖层：从输入框变形飞入落点气泡（置于最顶层）
+                flightOverlayLayer
+            }
+            .coordinateSpace(.named(ChatView.flightCoordinateSpace))
+            .onPreferenceChange(InputBarRectKey.self) { rect in
+                handleInputBarRect(rect)
+            }
+            .onPreferenceChange(FlightTargetRectKey.self) { rect in
+                handleFlightTargetRect(rect)
+            }
+            .onChange(of: viewModel.displayMessages.count) { _, _ in
+                lockFlightTargetIfNeeded()
             }
             .background(
                 GeometryReader { proxy in
@@ -908,35 +928,3 @@ extension ChatView {
             .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
         }
     }
-
-// MARK: - 发送变形过渡（输入框 → 气泡 hero 动画）
-
-/// active 阶段：气泡的 frame 锚定到输入框（.frame = 位置 + 尺寸同步插值），
-/// identity 阶段：切换到私有空 Namespace，气泡归位到自然布局。
-/// 不叠加 opacity，保证变形全程可见。
-private struct SendMorphTransition: ViewModifier {
-    let matchID: String
-    let namespace: Namespace.ID
-    let isActive: Bool
-
-    @Namespace private var idle
-
-    func body(content: Content) -> some View {
-        content
-            .matchedGeometryEffect(
-                id: matchID,
-                in: isActive ? namespace : idle,
-                properties: .frame,
-                isSource: false
-            )
-    }
-}
-
-extension AnyTransition {
-    static func sendMorph(id: String = "sendMorph", in namespace: Namespace.ID) -> AnyTransition {
-        .modifier(
-            active: SendMorphTransition(matchID: id, namespace: namespace, isActive: true),
-            identity: SendMorphTransition(matchID: id, namespace: namespace, isActive: false)
-        )
-    }
-}
