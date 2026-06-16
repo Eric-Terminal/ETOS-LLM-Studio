@@ -496,23 +496,12 @@ private struct FileImage: View {
     
     private func loadImage() async {
         let fileURL = ConfigLoader.getBackgroundsDirectory().appendingPathComponent(filename)
-        let image = ConfigLoader.isVideoBackgroundFile(filename)
-            ? Self.makeVideoThumbnail(from: fileURL)
-            : UIImage(contentsOfFile: fileURL.path)
+        // watchOS 不支持视频背景，只加载静态图片
+        let image = UIImage(contentsOfFile: fileURL.path)
         if let image {
             await MainActor.run {
                 self.uiImage = image
             }
         }
-    }
-
-    private static func makeVideoThumbnail(from url: URL) -> UIImage? {
-        let asset = AVAsset(url: url)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
     }
 }
