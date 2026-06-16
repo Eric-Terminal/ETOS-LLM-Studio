@@ -294,13 +294,15 @@ struct UsageAnalyticsView: View {
         let stats = viewModel.state.summaryStats
         return Section(NSLocalizedString("用量总览", comment: "Usage summary section")) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     Image(systemName: "diamond.fill")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text(NSLocalizedString("Token 总量", comment: ""))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 Text(watchCompactNumber(stats.totalTokens))
                     .etFont(.title3.weight(.bold).monospacedDigit())
@@ -375,7 +377,7 @@ struct UsageAnalyticsView: View {
     }
 
     private func watchCompactNumber(_ value: Int) -> String {
-        value.formatted(.number.notation(.compactName))
+        value.formatted(.number.notation(.compactName).locale(Locale(identifier: "en_US")))
     }
 
     private var visibleHeatmapWeeks: [UsageAnalyticsHeatmapWeek] {

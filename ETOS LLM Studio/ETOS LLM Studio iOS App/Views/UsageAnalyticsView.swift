@@ -139,7 +139,7 @@ struct UsageAnalyticsView: View {
     }
 
     private func compactFormattedNumber(_ value: Int) -> String {
-        value.formatted(.number.notation(.compactName))
+        value.formatted(.number.notation(.compactName).locale(Locale(identifier: "en_US")))
     }
 
     private var overviewSection: some View {
