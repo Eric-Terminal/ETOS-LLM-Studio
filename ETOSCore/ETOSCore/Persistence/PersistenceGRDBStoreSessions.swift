@@ -519,11 +519,11 @@ extension PersistenceGRDBStore {
         }
     }
 
-    struct OrphanedAudioReferenceRecord {
-        let sessionID: UUID
-        let sessionName: String
-        let messageID: UUID
-        let audioFileName: String
+    public struct OrphanedAudioReferenceRecord {
+        public let sessionID: UUID
+        public let sessionName: String
+        public let messageID: UUID
+        public let audioFileName: String
     }
 
     func allAudioReferencesWithSessionInfo() -> [OrphanedAudioReferenceRecord] {
