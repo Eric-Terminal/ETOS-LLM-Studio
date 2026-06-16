@@ -127,15 +127,9 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 calendar: calendar
             )
 
-            let scopeDayKeys = scopeDayKeysForQuery(
-                selectedScope: selectedScope,
-                selectedDayKey: effectiveSelectedDayKey,
-                dailyTotals: dailyTotals,
-                dailyModelTotals: dailyModelTotals,
-                calendar: calendar
-            )
-            let sessionCount = Persistence.countDistinctUsageSessions(dayKeys: scopeDayKeys)
-            let messageCount = Persistence.countUsageMessages(dayKeys: scopeDayKeys)
+            // 摘要卡片始终统计全量，不跟随当前 scope
+            let sessionCount = Persistence.countDistinctUsageSessions(dayKeys: nil)
+            let messageCount = Persistence.countUsageMessages(dayKeys: nil)
 
             let selectedDayEvents = selectedScope == .day
                 ? Persistence.loadUsageStatsDayBundles(dayKeys: [effectiveSelectedDayKey]).first?.events ?? []
@@ -153,28 +147,6 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 messageCount: messageCount
             )
         }.value
-    }
-
-    private nonisolated static func scopeDayKeysForQuery(
-        selectedScope: UsageAnalyticsDetailScope,
-        selectedDayKey: String,
-        dailyTotals: [UsageDailyTotal],
-        dailyModelTotals: [UsageDailyModelTotal],
-        calendar: Calendar
-    ) -> Set<String>? {
-        let anchorDate = UsageAnalyticsRuntimeContext.date(for: selectedDayKey, calendar: calendar) ?? Date()
-        switch selectedScope {
-        case .day:
-            let start = calendar.startOfDay(for: anchorDate)
-            let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
-            return Set(UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar))
-        case .week:
-            return Set(rollingDayKeys(endingAt: anchorDate, dayCount: 7, calendar: calendar))
-        case .month:
-            return Set(rollingDayKeys(endingAt: anchorDate, dayCount: 30, calendar: calendar))
-        case .allTime:
-            return nil
-        }
     }
 
     private nonisolated static func buildState(
@@ -230,28 +202,9 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             calendar: calendar
         )
 
-        let scopedTotalsByDayKey = totalsByDayKey
-        let scopeDayKeysForSummary: Set<String> = {
-            switch selectedScope {
-            case .day:
-                let start = calendar.startOfDay(for: UsageAnalyticsRuntimeContext.date(for: effectiveSelectedDayKey, calendar: calendar) ?? Date())
-                let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
-                return Set(UsageAnalyticsRuntimeContext.dayKeys(in: DateInterval(start: start, end: end), calendar: calendar))
-            case .week:
-                let anchor = UsageAnalyticsRuntimeContext.date(for: effectiveSelectedDayKey, calendar: calendar) ?? Date()
-                return Set(rollingDayKeys(endingAt: anchor, dayCount: 7, calendar: calendar))
-            case .month:
-                let anchor = UsageAnalyticsRuntimeContext.date(for: effectiveSelectedDayKey, calendar: calendar) ?? Date()
-                return Set(rollingDayKeys(endingAt: anchor, dayCount: 30, calendar: calendar))
-            case .allTime:
-                return Set(scopedTotalsByDayKey.keys)
-            }
-        }()
-
         let summaryStats = makeSummaryStats(
             allDailyTotals: dailyTotals,
-            scopeDayKeys: scopeDayKeysForSummary,
-            detail: detail,
+            allDailyModelTotals: dailyModelTotals,
             sessionCount: sessionCount,
             messageCount: messageCount,
             calendar: calendar
@@ -484,27 +437,23 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
 
     private nonisolated static func makeSummaryStats(
         allDailyTotals: [UsageDailyTotal],
-        scopeDayKeys: Set<String>,
-        detail: UsageAnalyticsDetailSnapshot,
+        allDailyModelTotals: [UsageDailyModelTotal],
         sessionCount: Int,
         messageCount: Int,
         calendar: Calendar
     ) -> UsageAnalyticsSummaryStats {
-        let totalTokens = detail.tokenTotals.totalTokens > 0
-            ? detail.tokenTotals.totalTokens
-            : inferredTotalTokens(detail.tokenTotals)
+        // 摘要卡片始终统计全量，不跟随当前 scope
+        let totalTokens = allDailyTotals.reduce(0) { $0 + inferredTotalTokens($1.tokenTotals) }
 
-        let scopedActiveDays = allDailyTotals
-            .filter { scopeDayKeys.contains($0.dayKey) && $0.requestCount > 0 }
-            .count
+        let activeDayKeys = Set(allDailyTotals.filter { $0.requestCount > 0 }.map(\.dayKey))
+        let activeDays = activeDayKeys.count
 
-        let allActiveDayKeys = Set(allDailyTotals.filter { $0.requestCount > 0 }.map(\.dayKey))
         let todayKey = UsageAnalyticsRuntimeContext.dayKey(for: Date(), calendar: calendar)
         var streak = 0
         var cursor = Date()
         while true {
             let key = UsageAnalyticsRuntimeContext.dayKey(for: cursor, calendar: calendar)
-            if allActiveDayKeys.contains(key) {
+            if activeDayKeys.contains(key) {
                 streak += 1
             } else if key != todayKey {
                 break
@@ -513,15 +462,23 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             cursor = prev
         }
 
-        let topModel = detail.topModels.first
-        let mostUsedModel = topModel?.title ?? ""
-        let mostUsedModelShare = topModel?.tokenShare ?? 0
+        // 全量最常用模型：按 token 总量聚合
+        var modelTokens: [String: Int] = [:]
+        var allTokens = 0
+        for m in allDailyModelTotals {
+            let tokens = inferredTotalTokens(m.tokenTotals)
+            modelTokens[m.modelID, default: 0] += tokens
+            allTokens += tokens
+        }
+        let topEntry = modelTokens.max(by: { $0.value < $1.value })
+        let mostUsedModel = topEntry?.key ?? ""
+        let mostUsedModelShare = allTokens > 0 ? Double(topEntry?.value ?? 0) / Double(allTokens) : 0
 
         return UsageAnalyticsSummaryStats(
             totalTokens: totalTokens,
             sessionCount: sessionCount,
             messageCount: messageCount,
-            activeDays: scopedActiveDays,
+            activeDays: activeDays,
             currentStreak: streak,
             mostUsedModel: mostUsedModel,
             mostUsedModelShare: mostUsedModelShare

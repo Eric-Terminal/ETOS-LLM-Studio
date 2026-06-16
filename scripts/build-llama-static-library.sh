@@ -263,7 +263,7 @@ if ! command -v cmake >/dev/null 2>&1; then
     if [ "${CI_XCODE_CLOUD:-FALSE}" = "TRUE" ] || [ "${ETOS_LLAMA_INSTALL_CMAKE:-0}" = "1" ]; then
         if command -v brew >/dev/null 2>&1; then
             echo "未找到 cmake，正在通过 Homebrew 安装。"
-            brew install cmake
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install cmake
         fi
     fi
 fi
@@ -276,16 +276,19 @@ fi
 if ! command -v ninja >/dev/null 2>&1; then
     if command -v brew >/dev/null 2>&1; then
         echo "未找到 ninja，正在通过 Homebrew 安装。"
-        brew install ninja
+        HOMEBREW_NO_AUTO_UPDATE=1 brew install ninja
     fi
 fi
 
-if ! command -v ninja >/dev/null 2>&1; then
-    echo "未找到 ninja，请先运行 brew install ninja 后再构建 llama.cpp 静态库。" >&2
-    exit 1
+# ninja 不可用时降级为 Unix Makefiles，避免 CI 环境 Homebrew 网络故障导致构建失败。
+if command -v ninja >/dev/null 2>&1; then
+    NINJA_PATH="$(command -v ninja)"
+else
+    echo "ninja 不可用，降级使用 Unix Makefiles。"
+    CMAKE_GENERATOR="Unix Makefiles"
+    CMAKE_BUILD_DIR_SUFFIX="make"
+    NINJA_PATH=""
 fi
-
-NINJA_PATH="$(command -v ninja)"
 
 SDK_PATH="$(xcrun --sdk "$SDK_NAME" --show-sdk-path)"
 CC_PATH="$(xcrun --sdk "$SDK_NAME" --find clang)"
@@ -308,10 +311,15 @@ for arch in $REQUESTED_ARCHS; do
        ! xcrun lipo -verify_arch "$arch" "$ARCH_PRODUCT_LIBRARY" >/dev/null 2>&1; then
         mkdir -p "$BUILD_DIR" "$ARCH_PRODUCT_DIR"
 
+        CMAKE_EXTRA_ARGS=""
+        if [ -n "$NINJA_PATH" ]; then
+            CMAKE_EXTRA_ARGS="-DCMAKE_MAKE_PROGRAM=$NINJA_PATH"
+        fi
+
         cmake -S "$LLAMA_SOURCE_PATH" -B "$BUILD_DIR" -G "$CMAKE_GENERATOR" \
             -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
             -DCMAKE_SYSTEM_NAME="$CMAKE_SYSTEM_NAME" \
-            -DCMAKE_MAKE_PROGRAM="$NINJA_PATH" \
+            $CMAKE_EXTRA_ARGS \
             -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
             -DCMAKE_OSX_ARCHITECTURES="$arch" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
