@@ -490,6 +490,28 @@ extension Persistence {
         activeGRDBStore()?.mergeUsageStatsDayBundles(bundles) ?? .init()
     }
 
+    // MARK: - 存储管理：批量引用查询
+
+    public static func allReferencedAudioFileNames() -> Set<String> {
+        activeGRDBStore()?.allReferencedAudioFileNames() ?? []
+    }
+
+    public static func allReferencedImageFileNames() -> Set<String> {
+        activeGRDBStore()?.allReferencedImageFileNames() ?? []
+    }
+
+    public static func sessionIDsWithoutMessageData() -> [UUID] {
+        activeGRDBStore()?.sessionIDsWithoutMessageData() ?? []
+    }
+
+    public static func allAudioReferencesWithSessionInfo() -> [PersistenceGRDBStore.OrphanedAudioReferenceRecord] {
+        activeGRDBStore()?.allAudioReferencesWithSessionInfo() ?? []
+    }
+
+    public static func clearAudioFileNames(messageIDs: [UUID]) {
+        activeGRDBStore()?.clearAudioFileNames(messageIDs: messageIDs)
+    }
+
     /// 判断会话是否存在可读取的数据文件（当前格式或 legacy）。
     public static func sessionDataExists(sessionID: UUID) -> Bool {
         if let store = activeGRDBStore() {

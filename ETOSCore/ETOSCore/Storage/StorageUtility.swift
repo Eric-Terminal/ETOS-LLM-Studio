@@ -252,56 +252,18 @@ public enum StorageUtility {
     }
     
     // MARK: - 孤立文件检测
-    
-    /// 获取所有会话中引用的音频文件名
-    public static func getReferencedAudioFiles() -> Set<String> {
-        let sessions = Persistence.loadChatSessions()
-        var referencedFiles = Set<String>()
-        
-        for session in sessions {
-            let messages = Persistence.loadMessages(for: session.id)
-            for message in messages {
-                if let audioFileName = message.audioFileName {
-                    referencedFiles.insert(audioFileName)
-                }
-            }
-        }
-        
-        return referencedFiles
-    }
-    
-    /// 获取所有会话中引用的图片文件名
-    public static func getReferencedImageFiles() -> Set<String> {
-        let sessions = Persistence.loadChatSessions()
-        var referencedFiles = Set<String>()
-        
-        for session in sessions {
-            let messages = Persistence.loadMessages(for: session.id)
-            for message in messages {
-                if let imageFileNames = message.imageFileNames {
-                    for fileName in imageFileNames {
-                        referencedFiles.insert(fileName)
-                    }
-                }
-            }
-        }
-        
-        return referencedFiles
-    }
-    
-    /// 查找孤立的音频文件
+
+    /// 查找孤立的音频文件（无消息引用的音频文件）
     public static func findOrphanedAudioFiles() -> [FileItem] {
-        let referencedFiles = getReferencedAudioFiles()
+        let referencedFiles = Persistence.allReferencedAudioFileNames()
         let allAudioFiles = listFiles(for: .audio)
-        
         return allAudioFiles.filter { !referencedFiles.contains($0.name) }
     }
-    
-    /// 查找孤立的图片文件
+
+    /// 查找孤立的图片文件（无消息引用的图片文件）
     public static func findOrphanedImageFiles() -> [FileItem] {
-        let referencedFiles = getReferencedImageFiles()
+        let referencedFiles = Persistence.allReferencedImageFileNames()
         let allImageFiles = listFiles(for: .images)
-        
         return allImageFiles.filter { !referencedFiles.contains($0.name) }
     }
     
@@ -318,40 +280,30 @@ public enum StorageUtility {
         }
     }
     
-    /// 查找幽灵会话（会话记录存在但消息文件丢失）
-    /// 这是一个"彩蛋"功能 - 检测数据不一致的情况
+    /// 查找幽灵会话（会话记录存在但无任何消息）
     public static func findGhostSessions() -> [GhostSession] {
+        let ghostIDs = Persistence.sessionIDsWithoutMessageData()
+        guard !ghostIDs.isEmpty else { return [] }
+
         let sessions = Persistence.loadChatSessions()
-        var ghosts: [GhostSession] = []
-        
-        for session in sessions {
-            // 如果会话索引中有记录，但对应的会话数据文件不存在
-            if !Persistence.sessionDataExists(sessionID: session.id) {
-                ghosts.append(GhostSession(
-                    id: session.id,
-                    name: session.name
-                ))
-            }
+        let sessionsByID = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+
+        return ghostIDs.compactMap { id in
+            guard let session = sessionsByID[id] else { return nil }
+            return GhostSession(id: id, name: session.name)
         }
-        
-        return ghosts
     }
-    
-    /// 清理幽灵会话（从会话索引中移除但会话数据文件不存在的会话）
-    /// 返回被清理的会话数量
+
+    /// 清理幽灵会话，返回被清理的会话数量
     public static func cleanupGhostSessions() -> Int {
         let ghostSessions = findGhostSessions()
         guard !ghostSessions.isEmpty else { return 0 }
-        
+
         var allSessions = Persistence.loadChatSessions()
-        let ghostIDs = Set(ghostSessions.map { $0.id })
-        
-        // 移除幽灵会话
+        let ghostIDs = Set(ghostSessions.map(\.id))
         allSessions.removeAll { ghostIDs.contains($0.id) }
-        
-        // 保存更新后的会话列表
         Persistence.saveChatSessions(allSessions)
-        
+
         logger.info("Cleaned up \(ghostSessions.count) ghost sessions")
         return ghostSessions.count
     }
@@ -435,64 +387,32 @@ public enum StorageUtility {
     
     /// 查找消息中引用但文件不存在的音频
     public static func findOrphanedAudioReferences() -> [OrphanedAudioReference] {
-        let sessions = Persistence.loadChatSessions()
         let audioDirectory = getDirectory(for: .audio)
         let fileManager = FileManager.default
-        var orphanedRefs: [OrphanedAudioReference] = []
-        
-        for session in sessions {
-            let messages = Persistence.loadMessages(for: session.id)
-            for message in messages {
-                if let audioFileName = message.audioFileName {
-                    let audioFileURL = audioDirectory.appendingPathComponent(audioFileName)
-                    if !fileManager.fileExists(atPath: audioFileURL.path) {
-                        orphanedRefs.append(OrphanedAudioReference(
-                            sessionID: session.id,
-                            sessionName: session.name,
-                            messageID: message.id,
-                            missingFile: audioFileName
-                        ))
-                    }
-                }
-            }
+        let allRefs = Persistence.allAudioReferencesWithSessionInfo()
+
+        return allRefs.compactMap { ref in
+            let audioFileURL = audioDirectory.appendingPathComponent(ref.audioFileName)
+            guard !fileManager.fileExists(atPath: audioFileURL.path) else { return nil }
+            return OrphanedAudioReference(
+                sessionID: ref.sessionID,
+                sessionName: ref.sessionName,
+                messageID: ref.messageID,
+                missingFile: ref.audioFileName
+            )
         }
-        
-        return orphanedRefs
     }
-    
-    /// 清理消息中的无效音频引用
-    /// 返回清理的引用数量
+
+    /// 清理消息中的无效音频引用，返回清理的引用数量
     public static func cleanupOrphanedAudioReferences() -> Int {
         let orphanedRefs = findOrphanedAudioReferences()
         guard !orphanedRefs.isEmpty else { return 0 }
-        
-        // 按会话分组
-        var refsBySession: [UUID: [UUID]] = [:]
-        for ref in orphanedRefs {
-            refsBySession[ref.sessionID, default: []].append(ref.messageID)
-        }
-        
-        var cleanedCount = 0
-        
-        // 逐个会话处理
-        for (sessionID, messageIDs) in refsBySession {
-            var messages = Persistence.loadMessages(for: sessionID)
-            let messageIDSet = Set(messageIDs)
-            
-            // 清除无效音频引用
-            for i in messages.indices {
-                if messageIDSet.contains(messages[i].id) {
-                    messages[i].audioFileName = nil
-                    cleanedCount += 1
-                }
-            }
-            
-            // 保存更新后的消息
-            Persistence.saveMessages(messages, for: sessionID)
-        }
-        
-        logger.info("Cleaned up \(cleanedCount) orphaned audio references")
-        return cleanedCount
+
+        let messageIDs = orphanedRefs.map(\.messageID)
+        Persistence.clearAudioFileNames(messageIDs: messageIDs)
+
+        logger.info("Cleaned up \(orphanedRefs.count) orphaned audio references")
+        return orphanedRefs.count
     }
     
     // MARK: - 统一清理

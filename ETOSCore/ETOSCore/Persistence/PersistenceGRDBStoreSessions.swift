@@ -461,6 +461,117 @@ extension PersistenceGRDBStore {
         }
     }
 
+    // MARK: - 存储管理：批量引用查询
+
+    func allReferencedAudioFileNames() -> Set<String> {
+        do {
+            return try dbPool.read { db in
+                let names = try String.fetchAll(
+                    db,
+                    sql: "SELECT DISTINCT audio_file_name FROM messages WHERE audio_file_name IS NOT NULL AND audio_file_name != ''"
+                )
+                return Set(names)
+            }
+        } catch {
+            logger.error("查询音频文件引用失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func allReferencedImageFileNames() -> Set<String> {
+        do {
+            return try dbPool.read { db in
+                let jsonBlobs = try Data.fetchAll(
+                    db,
+                    sql: "SELECT DISTINCT image_file_names_json FROM messages WHERE image_file_names_json IS NOT NULL"
+                )
+                var allNames = Set<String>()
+                let decoder = JSONDecoder()
+                for blob in jsonBlobs {
+                    if let names = try? decoder.decode([String].self, from: blob) {
+                        allNames.formUnion(names)
+                    }
+                }
+                return allNames
+            }
+        } catch {
+            logger.error("查询图片文件引用失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func sessionIDsWithoutMessageData() -> [UUID] {
+        do {
+            return try dbPool.read { db in
+                let orphanedIDs = try String.fetchAll(
+                    db,
+                    sql: """
+                    SELECT s.id FROM sessions s
+                    LEFT JOIN messages m ON m.session_id = s.id
+                    WHERE m.id IS NULL
+                    """
+                )
+                return orphanedIDs.compactMap { UUID(uuidString: $0) }
+            }
+        } catch {
+            logger.error("查询幽灵会话失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    struct OrphanedAudioReferenceRecord {
+        let sessionID: UUID
+        let sessionName: String
+        let messageID: UUID
+        let audioFileName: String
+    }
+
+    func allAudioReferencesWithSessionInfo() -> [OrphanedAudioReferenceRecord] {
+        do {
+            return try dbPool.read { db in
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT m.id AS message_id, m.session_id, m.audio_file_name, s.name AS session_name
+                    FROM messages m
+                    JOIN sessions s ON s.id = m.session_id
+                    WHERE m.audio_file_name IS NOT NULL AND m.audio_file_name != ''
+                    """
+                )
+                return rows.compactMap { row -> OrphanedAudioReferenceRecord? in
+                    guard let sessionID = UUID(uuidString: row["session_id"] as String? ?? ""),
+                          let messageID = UUID(uuidString: row["message_id"] as String? ?? ""),
+                          let audioFileName: String = row["audio_file_name"] else { return nil }
+                    let sessionName: String = row["session_name"] ?? ""
+                    return OrphanedAudioReferenceRecord(
+                        sessionID: sessionID,
+                        sessionName: sessionName,
+                        messageID: messageID,
+                        audioFileName: audioFileName
+                    )
+                }
+            }
+        } catch {
+            logger.error("查询音频引用详情失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func clearAudioFileNames(messageIDs: [UUID]) {
+        guard !messageIDs.isEmpty else { return }
+        do {
+            try dbPool.write { db in
+                let placeholders = messageIDs.map { _ in "?" }.joined(separator: ", ")
+                try db.execute(
+                    sql: "UPDATE messages SET audio_file_name = NULL WHERE id IN (\(placeholders))",
+                    arguments: StatementArguments(messageIDs.map(\.uuidString))
+                )
+            }
+        } catch {
+            logger.error("清除音频引用失败: \(error.localizedDescription)")
+        }
+    }
+
     func deleteSessionArtifacts(sessionID: UUID) {
         do {
             try dbPool.write { db in
