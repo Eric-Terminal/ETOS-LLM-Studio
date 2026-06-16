@@ -706,15 +706,14 @@ extension ChatView {
                                     removal: .opacity
                                 ))
                                 .id(ChatScrollTargetID.message(state.id))
-                                // iMessage 风格滚动波浪：气泡随滚动位置交错弹性变换
-                                // 不使用 opacity——超长消息永远无法完全进入视口，会导致整条消息变淡
+                                // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
+                                // 不使用 opacity / scaleEffect——超长消息和宽气泡会产生可见的变淡/收缩
                                 .scrollTransition(
                                     topLeading: .animated(.smooth(duration: 0.3)),
                                     bottomTrailing: .animated(.spring(response: 0.35, dampingFraction: 0.78))
                                 ) { content, phase in
                                     content
-                                        .scaleEffect(1.0 - abs(phase.value) * 0.04)
-                                        .offset(y: phase.value * 8)
+                                        .offset(y: phase.value * 12)
                                 }
                                 .onAppear {
                                     loadMoreAutomaticHistoryIfNeeded(
