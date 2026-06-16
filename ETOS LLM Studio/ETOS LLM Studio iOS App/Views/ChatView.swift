@@ -695,7 +695,27 @@ extension ChatView {
                                     },
                                     providers: viewModel.providers
                                 )
+                                // 发送入场动画：用户气泡从右下弹入，助手气泡从左下弹入
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .bottom)
+                                        .combined(with: .scale(
+                                            scale: 0.92,
+                                            anchor: message.role == .user ? .bottomTrailing : .bottomLeading
+                                        ))
+                                        .combined(with: .opacity),
+                                    removal: .opacity
+                                ))
                                 .id(ChatScrollTargetID.message(state.id))
+                                // iMessage 风格滚动波浪：气泡随滚动位置交错弹性变换
+                                .scrollTransition(
+                                    topLeading: .animated(.smooth(duration: 0.3)),
+                                    bottomTrailing: .animated(.spring(response: 0.35, dampingFraction: 0.78))
+                                ) { content, phase in
+                                    content
+                                        .opacity(1.0 - abs(phase.value) * 0.3)
+                                        .scaleEffect(1.0 - abs(phase.value) * 0.03)
+                                        .offset(y: phase.value * 6)
+                                }
                                 .onAppear {
                                     loadMoreAutomaticHistoryIfNeeded(
                                         anchorMessageID: state.id,

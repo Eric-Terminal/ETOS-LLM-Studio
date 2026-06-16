@@ -40,7 +40,10 @@ extension ChatView {
                 isSending: viewModel.isSendingMessage,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
-                    viewModel.sendMessage()
+                    // 弹性动画驱动用户消息气泡的入场 transition
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.72)) {
+                        viewModel.sendMessage()
+                    }
                     draftText = ""
                 },
                 stopAction: {
