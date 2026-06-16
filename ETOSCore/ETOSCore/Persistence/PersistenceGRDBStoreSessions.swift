@@ -10,6 +10,13 @@ import Foundation
 import GRDB
 import os.log
 
+public struct OrphanedAudioReferenceRecord {
+    public let sessionID: UUID
+    public let sessionName: String
+    public let messageID: UUID
+    public let audioFileName: String
+}
+
 extension PersistenceGRDBStore {
     func saveChatSessions(_ sessions: [ChatSession]) {
         let persistedSessions = sessions.filter { !$0.isTemporary }
@@ -517,13 +524,6 @@ extension PersistenceGRDBStore {
             logger.error("查询幽灵会话失败: \(error.localizedDescription)")
             return []
         }
-    }
-
-    public struct OrphanedAudioReferenceRecord {
-        public let sessionID: UUID
-        public let sessionName: String
-        public let messageID: UUID
-        public let audioFileName: String
     }
 
     func allAudioReferencesWithSessionInfo() -> [OrphanedAudioReferenceRecord] {

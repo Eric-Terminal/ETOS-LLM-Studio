@@ -490,6 +490,14 @@ extension Persistence {
         activeGRDBStore()?.mergeUsageStatsDayBundles(bundles) ?? .init()
     }
 
+    public static func countDistinctUsageSessions(dayKeys: Set<String>? = nil) -> Int {
+        activeGRDBStore()?.countDistinctUsageSessions(dayKeys: dayKeys) ?? 0
+    }
+
+    public static func countUsageMessages(dayKeys: Set<String>? = nil) -> Int {
+        activeGRDBStore()?.countUsageMessages(dayKeys: dayKeys) ?? 0
+    }
+
     // MARK: - 存储管理：批量引用查询
 
     public static func allReferencedAudioFileNames() -> Set<String> {
@@ -504,7 +512,7 @@ extension Persistence {
         activeGRDBStore()?.sessionIDsWithoutMessageData() ?? []
     }
 
-    public static func allAudioReferencesWithSessionInfo() -> [PersistenceGRDBStore.OrphanedAudioReferenceRecord] {
+    public static func allAudioReferencesWithSessionInfo() -> [OrphanedAudioReferenceRecord] {
         activeGRDBStore()?.allAudioReferencesWithSessionInfo() ?? []
     }
 
