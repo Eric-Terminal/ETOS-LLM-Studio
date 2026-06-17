@@ -24,6 +24,40 @@ struct SpeechRecorderView: View {
                 Text(processingDescription)
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
+            } else if viewModel.isShowingTranscriptPreview {
+                // 预览识别结果，让用户确认或取消
+                Text(NSLocalizedString("识别结果", comment: ""))
+                    .etFont(.headline)
+                    .foregroundColor(.secondary)
+
+                ScrollView {
+                    Text(viewModel.speechStreamingTranscript)
+                        .etFont(.footnote)
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(Color.secondary.opacity(0.15))
+                        .cornerRadius(8)
+                }
+                .frame(maxHeight: 100)
+
+                HStack(spacing: 12) {
+                    Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
+                        viewModel.cancelSpeechRecording()
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+
+                    Button(NSLocalizedString("使用", comment: "")) {
+                        viewModel.confirmSpeechTranscript()
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .frame(maxWidth: .infinity)
+                }
             } else {
                 if viewModel.isRecordingSpeech {
                     WaveformView(samples: viewModel.waveformSamples)
