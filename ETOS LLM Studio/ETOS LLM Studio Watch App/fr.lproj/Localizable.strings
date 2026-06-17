@@ -4637,3 +4637,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "连续活跃" = "Série";
 "最常用" = "Plus utilisé";
 "占比 %@" = "Part %@";
+
+/* 语音识别预览状态标题 */
+"识别结果" = "Résultat de reconnaissance";
+/* 语音识别预览确认按钮 */
+"使用" = "Utiliser";

@@ -4637,3 +4637,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "连续活跃" = "Racha";
 "最常用" = "Más usado";
 "占比 %@" = "Proporción %@";
+
+/* 语音识别预览状态标题 */
+"识别结果" = "Resultado del reconocimiento";
+/* 语音识别预览确认按钮 */
+"使用" = "Usar";
