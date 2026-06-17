@@ -1,0 +1,93 @@
+# SwiftLint Configuration
+# https://github.com/realm/SwiftLint
+
+# 排除第三方依赖和构建产物
+excluded:
+  - Dependencies
+  - .build
+  - DerivedData
+  - docs
+  - assets
+  - ci_scripts
+  - scripts
+
+# 禁用的规则（根据项目风格调整）
+disabled_rules:
+  - trailing_comma          # 允许尾随逗号
+  - force_cast              # 项目中部分 force cast 为已知安全
+  - force_try               # 项目中部分 force try 用于编译期已知正则
+  - type_body_length         # 大型 ViewModel 需要更多行数
+  - file_length              # 部分文件较大但结构清晰
+  - function_body_length     # 部分函数逻辑较长
+  - cyclomatic_complexity    # 部分函数分支较多
+  - nesting                  # 允许嵌套类型
+
+# 启用的规则
+opt_in_rules:
+  - empty_count              # 使用 isEmpty 而非 count == 0
+  - closure_spacing          # 闭包内空格
+  - contains_over_filter_count   # 使用 contains 而非 filter().count > 0
+  - contains_over_filter_is_empty # 使用 contains 而非 filter().isEmpty
+  - contains_over_first_not_nil  # 使用 contains 而非 first != nil
+  - empty_string             # 使用 isEmpty 而非 == ""
+  - fallthrough              # 避免无注释的 fallthrough
+  - fatal_error_message      # fatalError 应有消息
+  - first_where              # 使用 first(where:) 而非 filter().first
+  - last_where               # 使用 last(where:) 而非 filter().last
+  - modifier_order           # 修饰符顺序
+  - overridden_super_call    # 重写方法应调用 super
+  - private_action           # IBAction 应为 private
+  - private_outlet           # IBOutlet 应为 private
+  - redundant_nil_coalescing # 避免冗余的 nil 合并
+  - sorted_first_last        # 使用 min/max 而非 sorted().first/last
+  - toggle_bool              # 使用 toggle() 而非 = !value
+  - unavailable_function     # 避免调用不可用函数
+  - unowned_variable_capture # 避免 unowned 捕获
+  - vertical_whitespace_closing_braces  # 闭合大括号前无空行
+  - yoda_condition           # 避免 Yoda 条件
+
+# 命名规则
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 60
+    error: 80
+  excluded:
+    - id
+    - i
+    - x
+    - y
+    - z
+
+# 行长度
+line_length:
+  warning: 120
+  error: 160
+  ignores_urls: true
+  ignores_comments: true
+  ignores_interpolated_strings: true
+
+# 类型名长度
+type_name:
+  min_length:
+    warning: 3
+    error: 2
+  max_length:
+    warning: 60
+    error: 80
+
+# 缩进
+indentation:
+  width: 4
+  conditional: 4
+
+# 垂直间距
+vertical_whitespace:
+  max_empty_lines: 2
+
+# 强制换行
+wrap:
+  mode: soft
+  line_length: 120
