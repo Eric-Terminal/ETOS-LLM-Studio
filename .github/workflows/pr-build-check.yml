@@ -32,7 +32,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
       - name: 显示 Xcode 版本
         run: xcodebuild -version
@@ -41,8 +40,7 @@ jobs:
         run: |
           env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
             xcodebuild -resolvePackageDependencies \
-            -workspace 'ETOS LLM Studio.xcworkspace' \
-            -scheme 'ETOS LLM Studio App'
+            -workspace 'ETOS LLM Studio.xcworkspace'
 
       - name: 编译 iOS App（含嵌入 watch App）
         run: |
