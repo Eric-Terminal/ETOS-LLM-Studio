@@ -38,7 +38,8 @@ jobs:
         run: |
           env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
             xcodebuild -resolvePackageDependencies \
-            -workspace 'ETOS LLM Studio.xcworkspace'
+            -workspace 'ETOS LLM Studio.xcworkspace' \
+            -scheme 'ETOS LLM Studio App'
 
       - name: 编译 iOS App（含嵌入 watch App）
         run: |
