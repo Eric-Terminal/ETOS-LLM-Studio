@@ -49,6 +49,7 @@ extension ChatViewModel {
         }
         speechErrorMessage = nil
         showSpeechErrorAlert = false
+        isShowingTranscriptPreview = false
         isSpeechRecordingPreparing = true
         isSpeechRecorderPresented = true
     }
@@ -225,18 +226,12 @@ extension ChatViewModel {
                 presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
                 isSpeechRecordingPreparing = false
                 isSpeechRecorderPresented = false
+                isShowingTranscriptPreview = false
                 resetRecordingVisuals()
                 return
             }
-            speechTranscriptionInProgress = true
-            Task {
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                appendTranscribedText(transcript)
-                speechStreamingTranscript = ""
-                speechTranscriptionInProgress = false
-                isSpeechRecorderPresented = false
-                resetRecordingVisuals()
-            }
+            // 进入预览状态，让用户确认识别结果
+            isShowingTranscriptPreview = true
             return
         }
 
@@ -245,6 +240,7 @@ extension ChatViewModel {
             speechRecordingURL = nil
             isSpeechRecordingPreparing = false
             isSpeechRecorderPresented = false
+            isShowingTranscriptPreview = false
             presentSpeechError(NSLocalizedString("录音文件未找到，无法处理。", comment: ""))
             resetRecordingVisuals()
             return
@@ -275,6 +271,7 @@ extension ChatViewModel {
                     await MainActor.run {
                         pendingAudioAttachment = attachment
                         isSpeechRecorderPresented = false
+                        isShowingTranscriptPreview = false
                     }
                 } else {
                     guard let speechModel = selectedSpeechModel else {
@@ -291,14 +288,37 @@ extension ChatViewModel {
                         throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")])
                     }
                     speechStreamingTranscript = trimmedTranscript
-                    appendTranscribedText(trimmedTranscript)
-                    isSpeechRecorderPresented = false
+                    // 进入预览状态，而不是直接填入输入框
+                    await MainActor.run {
+                        isShowingTranscriptPreview = true
+                    }
                 }
             } catch {
-                presentSpeechError(error.localizedDescription)
-                isSpeechRecorderPresented = false
+                await MainActor.run {
+                    presentSpeechError(error.localizedDescription)
+                    isSpeechRecorderPresented = false
+                    isShowingTranscriptPreview = false
+                }
             }
         }
+    }
+
+    /// 用户确认使用识别结果后，将文本填入输入框并关闭面板
+    func confirmSpeechTranscript() {
+        let transcript = speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transcript.isEmpty else {
+            presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
+            isSpeechRecorderPresented = false
+            isShowingTranscriptPreview = false
+            resetRecordingVisuals()
+            return
+        }
+        appendTranscribedText(transcript)
+        speechStreamingTranscript = ""
+        speechTranscriptionInProgress = false
+        isShowingTranscriptPreview = false
+        isSpeechRecorderPresented = false
+        resetRecordingVisuals()
     }
 
     func cancelSpeechRecording() {
@@ -313,6 +333,7 @@ extension ChatViewModel {
         }
         speechTranscriptionInProgress = false
         isSpeechRecordingPreparing = false
+        isShowingTranscriptPreview = false
         if let url = speechRecordingURL {
             try? FileManager.default.removeItem(at: url)
         }

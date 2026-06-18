@@ -108,6 +108,7 @@ class ChatViewModel: ObservableObject {
     @Published var isRecordingSpeech: Bool = false
     @Published var speechTranscriptionInProgress: Bool = false
     @Published var speechStreamingTranscript: String = ""
+    @Published var isShowingTranscriptPreview: Bool = false
     @Published var speechErrorMessage: String?
     @Published var showSpeechErrorAlert: Bool = false
     @Published var showDimensionMismatchAlert: Bool = false

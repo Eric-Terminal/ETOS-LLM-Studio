@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: 显示 Xcode 版本
         run: xcodebuild -version

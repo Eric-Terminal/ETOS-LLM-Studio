@@ -26,6 +26,7 @@ struct AudioRecorderSheet: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var isRecording = false
+    @State private var showingPreview = false
     @State private var recordingDuration: TimeInterval = 0
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
@@ -48,6 +49,29 @@ struct AudioRecorderSheet: View {
                     Text(NSLocalizedString("请稍候，正在将语音转换为文本。", comment: ""))
                         .etFont(.callout)
                         .foregroundStyle(.secondary)
+                } else if showingPreview && isSpeechToTextMode {
+                    // 语音识别预览状态：展示识别结果，让用户确认或取消
+                    Text(NSLocalizedString("识别结果", comment: ""))
+                        .etFont(.headline)
+                        .foregroundStyle(.secondary)
+
+                    ScrollView {
+                        Text(liveTranscript)
+                            .etFont(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .frame(maxHeight: 200)
+
+                    if let processingErrorMessage, !processingErrorMessage.isEmpty {
+                        Text(processingErrorMessage)
+                            .etFont(.footnote)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
                 } else {
                     Text(formatDuration(recordingDuration))
                         .etFont(.system(size: 48, weight: .light, design: .monospaced))
@@ -132,6 +156,7 @@ struct AudioRecorderSheet: View {
         preparedTranscript = nil
         hasAppliedPreparedTranscript = false
         liveTranscript = ""
+        showingPreview = false
         if let existingURL = recordingURL {
             try? FileManager.default.removeItem(at: existingURL)
         }
@@ -231,6 +256,7 @@ struct AudioRecorderSheet: View {
             liveTranscript = transcript
             streamingSession = nil
             isRecording = false
+            showingPreview = true
             return
         }
 
@@ -251,6 +277,7 @@ struct AudioRecorderSheet: View {
         recordingURL = nil
         audioRecorder = nil
         isRecording = false
+        showingPreview = false
         isTranscriptionInProgress = false
         liveTranscript = ""
         preparedTranscript = nil
