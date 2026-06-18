@@ -6,7 +6,7 @@
 //
 //  原理：点击发送时，在聊天根 ZStack 顶层放一个临时飞行气泡，先停在输入框 shell（起点）；
 //  待真实用户气泡异步插入并测到其落点后，用欠阻尼弹簧把飞行气泡从输入框变形飞到真实落点
-//  （带 overshoot 回弹）；飞行期间真实气泡隐身，落地时短暂淡入淡出交接。
+//  （带 overshoot 回弹）；飞行期间真实气泡隐身，结束时无动画切回真实气泡。
 //
 //  关键设计：
 //  - 落点用「真实测量」而非估算 —— 落点随对话长短在屏幕不同高度（初始对话靠上、长对话靠下），
@@ -28,6 +28,8 @@ import UIKit
 struct SendFlightState: Equatable {
     /// 本次飞行的唯一标识，用于异步回调中校验是否被新的发送覆盖。
     let id: UUID
+    /// 发送动作开始时间，用来在目标锁定前识别新插入的同文本用户消息。
+    let startedAt: Date
     /// 发送瞬间列表里最后一条用户消息 id，用来识别「新插入」的那条。
     let baselineUserMessageID: UUID?
     /// 已锁定的真实气泡 id（即新插入的用户消息）。
@@ -43,8 +45,6 @@ struct SendFlightState: Equatable {
     let startRect: CGRect
     /// 终点：根据真实落点行 frame 推算的气泡 frame（测到后填入，触发起飞）。
     var landingRect: CGRect?
-    /// 是否已落地（进入交接淡出阶段）。
-    var isLanded: Bool
 }
 
 // MARK: - 坐标上报 PreferenceKey
@@ -128,8 +128,8 @@ extension ChatView {
         .spring(response: appConfig.chatSendAnimationSpringResponse * 0.55,
                 dampingFraction: 0.82)
     }
-    /// 落地后真实气泡淡入 / 飞行气泡淡出的交接时长。
-    private var flightHandoffDuration: Double { 0.12 }
+    /// 落点迟迟没有上报时的兜底清理时长，防止飞行层残留。
+    private var flightCleanupFallbackDuration: Double { 1.4 }
     /// 飞行可见时长，用于安排落地交接（覆盖 y 轴弹簧回弹收尾）。
     private var flightVisibleDuration: Double { 0.65 }
 
@@ -146,6 +146,8 @@ extension ChatView {
             return
         }
 
+        let flightID = UUID()
+        let startedAt = Date()
         let colors = ChatFlightBubbleStyle.resolvedColors()
         let baseline = viewModel.displayMessages.last { $0.message.role == .user }?.id
 
@@ -156,7 +158,8 @@ extension ChatView {
         flightAnimHeight = inputBarRect.height
 
         flightState = SendFlightState(
-            id: UUID(),
+            id: flightID,
+            startedAt: startedAt,
             baselineUserMessageID: baseline,
             targetMessageID: nil,
             text: trimmed,
@@ -164,9 +167,9 @@ extension ChatView {
             endColor: colors.end,
             cornerRadius: ChatFlightBubbleStyle.cornerRadius,
             startRect: inputBarRect,
-            landingRect: nil,
-            isLanded: false
+            landingRect: nil
         )
+        scheduleFlightCleanup(flightID: flightID)
 
         // 让本次插入走「瞬间吸底」，新真实气泡尽快定位到落点，缩短飞行气泡的等待时间。
         needsImmediateBottomSnap = true
@@ -180,8 +183,7 @@ extension ChatView {
     /// 消息插入后调用：找到新出现的用户消息并锁定（驱动隐身与落点上报）。
     func lockFlightTargetIfNeeded() {
         guard var state = flightState, state.targetMessageID == nil else { return }
-        guard let newUserMessage = viewModel.displayMessages.last(where: { $0.message.role == .user }),
-              newUserMessage.id != state.baselineUserMessageID else { return }
+        guard let newUserMessage = flightTargetCandidate(for: state) else { return }
 
         state.targetMessageID = newUserMessage.id
         flightState = state
@@ -197,7 +199,7 @@ extension ChatView {
     /// x 快（先靠右）、y 慢（后靠上+Q弹回弹）、尺寸高阻尼（防压扁），形成曲线弧轨迹。
     func handleFlightTargetRect(_ rowFrame: CGRect?) {
         guard let rowFrame, rowFrame.width > 1, rowFrame.height > 1 else { return }
-        guard var state = flightState, state.targetMessageID != nil, !state.isLanded else { return }
+        guard var state = flightState, state.targetMessageID != nil else { return }
 
         let size = estimatedFlyingBubbleSize(text: state.text, maxWidth: max(80, rowFrame.width * 0.92))
         let landing = CGRect(
@@ -228,24 +230,32 @@ extension ChatView {
         }
     }
 
-    /// 落地交接：真实气泡淡入、飞行气泡淡出后移除。
+    /// 落地交接：直接移除飞行层，避免 overlay 与真实气泡同时绘制出重影文本。
     private func finishFlight(flightID: UUID) {
-        guard var state = flightState, state.id == flightID, !state.isLanded else { return }
-        state.isLanded = true
-        withAnimation(.easeOut(duration: flightHandoffDuration)) {
-            flightState = state
+        clearFlightWithoutAnimation(flightID: flightID)
+    }
+
+    private func scheduleFlightCleanup(flightID: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + flightCleanupFallbackDuration) { [self] in
+            clearFlightWithoutAnimation(flightID: flightID)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + flightHandoffDuration) { [self] in
-            if flightState?.id == flightID {
-                flightState = nil
-            }
+    }
+
+    private func clearFlightWithoutAnimation(flightID: UUID) {
+        guard flightState?.id == flightID else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            flightState = nil
         }
     }
 
     /// 指定消息当前是否因飞行而需要隐身（真实气泡让位给飞行气泡）。
-    func isHiddenForFlight(_ messageID: UUID) -> Bool {
+    func isHiddenForFlight(_ message: ChatMessage) -> Bool {
         guard let state = flightState else { return false }
-        return state.targetMessageID == messageID && !state.isLanded
+        if state.targetMessageID == message.id { return true }
+        guard state.targetMessageID == nil else { return false }
+        return isFlightTargetCandidate(message, for: state)
     }
 
     /// 飞行覆盖层：置于聊天根 ZStack 顶层。位置与尺寸由分轴弹簧独立驱动，
@@ -261,7 +271,6 @@ extension ChatView {
             )
             .frame(width: max(flightAnimWidth, 1), height: max(flightAnimHeight, 1))
             .position(x: flightAnimPosX, y: flightAnimPosY)
-            .opacity(state.isLanded ? 0 : 1)
             .allowsHitTesting(false)
             .zIndex(40)
         }
@@ -270,7 +279,7 @@ extension ChatView {
     /// 落点上报器：仅挂在飞行目标消息上（单条测量），上报其整行 frame。
     @ViewBuilder
     func flightTargetReporter(for messageID: UUID) -> some View {
-        if let state = flightState, state.targetMessageID == messageID, !state.isLanded {
+        if let state = flightState, state.targetMessageID == messageID {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: FlightTargetRectKey.self,
@@ -278,6 +287,25 @@ extension ChatView {
                 )
             }
         }
+    }
+
+    private func flightTargetCandidate(for state: SendFlightState) -> ChatMessageRenderState? {
+        let messages = viewModel.displayMessages
+        let searchRange: ArraySlice<ChatMessageRenderState>
+        if let baseline = state.baselineUserMessageID,
+           let baselineIndex = messages.lastIndex(where: { $0.id == baseline }) {
+            searchRange = messages[messages.index(after: baselineIndex)...]
+        } else {
+            searchRange = messages[...]
+        }
+        return searchRange.first { isFlightTargetCandidate($0.message, for: state) }
+    }
+
+    private func isFlightTargetCandidate(_ message: ChatMessage, for state: SendFlightState) -> Bool {
+        guard message.role == .user, message.id != state.baselineUserMessageID else { return false }
+        guard message.content.trimmingCharacters(in: .whitespacesAndNewlines) == state.text else { return false }
+        guard let requestedAt = message.requestedAt else { return true }
+        return requestedAt >= state.startedAt.addingTimeInterval(-0.2)
     }
 
     /// 同步估算飞行气泡（≈ 真实用户气泡）的自然尺寸，用于推算落点的气泡大小。

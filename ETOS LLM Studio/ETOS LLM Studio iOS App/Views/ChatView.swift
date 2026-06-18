@@ -649,6 +649,7 @@ extension ChatView {
                                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+                                let hiddenForFlight = isHiddenForFlight(message)
                                 ChatBubble(
                                     messageState: state,
                                     layoutWidth: messageLayoutWidth,
@@ -704,10 +705,10 @@ extension ChatView {
                                     providers: viewModel.providers
                                 )
                                 // 发送入场动画：用户气泡走 Overlay 飞行（见 flightOverlayLayer），
-                                // 飞行期间真实气泡隐身、落地交接；助手气泡保持原有从下弹入。
+                                // 真实气泡在飞行期间无动画隐身，避免两份白字文本叠加。
                                 .transition(
                                     message.role == .user && appConfig.chatSendAnimationEnabled
-                                    ? .opacity
+                                    ? .identity
                                     : .asymmetric(
                                         insertion: .move(edge: .bottom)
                                             .combined(with: .scale(scale: 0.92, anchor: .bottomLeading))
@@ -716,7 +717,8 @@ extension ChatView {
                                     )
                                 )
                                 // 飞行期间隐藏真实气泡，让飞行气泡接管视觉
-                                .opacity(isHiddenForFlight(message.id) ? 0 : 1)
+                                .opacity(hiddenForFlight ? 0 : 1)
+                                .animation(nil, value: hiddenForFlight)
                                 // 仅飞行目标消息上报整行 frame（用于推算真实落点）
                                 .background(flightTargetReporter(for: message.id))
                                 .id(ChatScrollTargetID.message(state.id))
