@@ -77,6 +77,7 @@ struct ChatView: View {
     // 发送飞行动画：Overlay hero 状态，及输入框实时 frame（飞行起点来源）
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
+    @State var pendingFlightCleanupTask: Task<Void, Never>?
     // 分轴弹簧动画状态：x/y 用不同 spring 形成弧线轨迹，尺寸独立高阻尼防压扁
     @State var flightAnimPosX: CGFloat = 0
     @State var flightAnimPosY: CGFloat = 0
@@ -929,6 +930,9 @@ extension ChatView {
                 pendingBottomSnapTask = nil
                 chatLayoutSettleTask?.cancel()
                 chatLayoutSettleTask = nil
+                pendingFlightCleanupTask?.cancel()
+                pendingFlightCleanupTask = nil
+                flightState = nil
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)

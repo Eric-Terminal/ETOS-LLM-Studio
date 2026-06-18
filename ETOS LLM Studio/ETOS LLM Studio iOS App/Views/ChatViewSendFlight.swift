@@ -169,7 +169,7 @@ extension ChatView {
             startRect: inputBarRect,
             landingRect: nil
         )
-        scheduleFlightCleanup(flightID: flightID)
+        scheduleFlightCleanup(flightID: flightID, delay: flightCleanupFallbackDuration)
 
         // 让本次插入走「瞬间吸底」，新真实气泡尽快定位到落点，缩短飞行气泡的等待时间。
         needsImmediateBottomSnap = true
@@ -223,20 +223,16 @@ extension ChatView {
         }
 
         if isFirstLanding {
-            let flightID = state.id
-            DispatchQueue.main.asyncAfter(deadline: .now() + flightVisibleDuration) { [self] in
-                finishFlight(flightID: flightID)
-            }
+            scheduleFlightCleanup(flightID: state.id, delay: flightVisibleDuration)
         }
     }
 
-    /// 落地交接：直接移除飞行层，避免 overlay 与真实气泡同时绘制出重影文本。
-    private func finishFlight(flightID: UUID) {
-        clearFlightWithoutAnimation(flightID: flightID)
-    }
-
-    private func scheduleFlightCleanup(flightID: UUID) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + flightCleanupFallbackDuration) { [self] in
+    private func scheduleFlightCleanup(flightID: UUID, delay: Double) {
+        pendingFlightCleanupTask?.cancel()
+        pendingFlightCleanupTask = Task { @MainActor in
+            let nanoseconds = UInt64(max(0, delay) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled else { return }
             clearFlightWithoutAnimation(flightID: flightID)
         }
     }
@@ -247,6 +243,8 @@ extension ChatView {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             flightState = nil
+            pendingFlightCleanupTask?.cancel()
+            pendingFlightCleanupTask = nil
         }
     }
 
@@ -269,6 +267,7 @@ extension ChatView {
                 endColor: state.endColor,
                 cornerRadius: state.cornerRadius
             )
+            .id(state.id)
             .frame(width: max(flightAnimWidth, 1), height: max(flightAnimHeight, 1))
             .position(x: flightAnimPosX, y: flightAnimPosY)
             .allowsHitTesting(false)
