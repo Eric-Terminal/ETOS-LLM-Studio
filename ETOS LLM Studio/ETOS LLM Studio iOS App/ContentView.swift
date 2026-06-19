@@ -27,6 +27,8 @@ struct ContentView: View {
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
+    @State private var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
+    @State private var launchRecoveryErrorMessage: String?
     @State private var rootBodyFont: Font = .body
     @State private var legacyMigrationErrorMessage: String?
     @State private var isLegacyMigrationErrorPresented: Bool = false
@@ -115,10 +117,28 @@ struct ContentView: View {
         } message: {
             Text(viewModel.dimensionMismatchMessage)
         }
-        .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: launchRecoveryNoticePresented) {
+        .alert(NSLocalizedString("数据库已恢复", comment: ""), isPresented: launchRecoveryNoticePresented) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
+        }
+        .alert(NSLocalizedString("检测到数据库损坏", comment: ""), isPresented: launchRecoveryRequestPresented) {
+            Button(NSLocalizedString("稍后再说", comment: ""), role: .cancel) {
+                Persistence.dismissPendingLaunchRecoveryRequest()
+                launchRecoveryRequest = nil
+            }
+            Button(NSLocalizedString("从启动备份恢复", comment: "")) {
+                restoreLaunchBackupFromPrompt()
+            }
+        } message: {
+            Text(launchRecoveryRequest?.message ?? "")
+        }
+        .alert(NSLocalizedString("启动备份恢复失败", comment: ""), isPresented: launchRecoveryErrorPresented) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                launchRecoveryErrorMessage = nil
+            }
+        } message: {
+            Text(launchRecoveryErrorMessage ?? "")
         }
         .alert(NSLocalizedString("导入失败", comment: ""), isPresented: externalDocumentImportErrorPresented) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
@@ -220,6 +240,28 @@ struct ContentView: View {
         )
     }
 
+    private var launchRecoveryRequestPresented: Binding<Bool> {
+        Binding(
+            get: { launchRecoveryRequest != nil },
+            set: { newValue in
+                if !newValue {
+                    launchRecoveryRequest = nil
+                }
+            }
+        )
+    }
+
+    private var launchRecoveryErrorPresented: Binding<Bool> {
+        Binding(
+            get: { launchRecoveryErrorMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    launchRecoveryErrorMessage = nil
+                }
+            }
+        )
+    }
+
     private var externalDocumentImportErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.externalDocumentImportErrorMessage != nil },
@@ -284,6 +326,7 @@ struct ContentView: View {
     }
 
     private func handleLaunchTasks() async {
+        launchRecoveryRequest = Persistence.currentLaunchRecoveryRequest()
         launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
         legacyJSONMigrationManager.refreshStatus()
         await announcementManager.checkAnnouncement()
@@ -305,6 +348,23 @@ struct ContentView: View {
                 openAchievementJournal()
             case .updateTimeline:
                 openUpdateTimeline()
+            }
+        }
+    }
+
+    private func restoreLaunchBackupFromPrompt() {
+        launchRecoveryRequest = nil
+        Task {
+            do {
+                let message = try await Task.detached(priority: .userInitiated) {
+                    try Persistence.restorePendingLaunchBackupRequest()
+                }.value
+                viewModel.reloadAfterSnapshotRestore()
+                _ = Persistence.consumeLaunchRecoveryNotice()
+                launchRecoveryNoticeMessage = message
+            } catch {
+                _ = Persistence.consumeLaunchRecoveryNotice()
+                launchRecoveryErrorMessage = error.localizedDescription
             }
         }
     }

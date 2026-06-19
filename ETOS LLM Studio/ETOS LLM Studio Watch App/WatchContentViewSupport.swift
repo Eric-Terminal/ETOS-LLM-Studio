@@ -60,13 +60,37 @@ extension ContentView {
                 rewriteMessageView(for: target.id)
             }
         }
-        .alert(NSLocalizedString("数据库已自动恢复", comment: ""), isPresented: Binding(
+        .alert(NSLocalizedString("数据库已恢复", comment: ""), isPresented: Binding(
             get: { launchRecoveryNoticeMessage != nil },
             set: { if !$0 { launchRecoveryNoticeMessage = nil } }
         )) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) { }
         } message: {
             Text(launchRecoveryNoticeMessage ?? "")
+        }
+        .alert(NSLocalizedString("检测到数据库损坏", comment: ""), isPresented: Binding(
+            get: { launchRecoveryRequest != nil },
+            set: { if !$0 { launchRecoveryRequest = nil } }
+        )) {
+            Button(NSLocalizedString("稍后再说", comment: ""), role: .cancel) {
+                Persistence.dismissPendingLaunchRecoveryRequest()
+                launchRecoveryRequest = nil
+            }
+            Button(NSLocalizedString("从启动备份恢复", comment: "")) {
+                restoreLaunchBackupFromPrompt()
+            }
+        } message: {
+            Text(launchRecoveryRequest?.message ?? "")
+        }
+        .alert(NSLocalizedString("启动备份恢复失败", comment: ""), isPresented: Binding(
+            get: { launchRecoveryErrorMessage != nil },
+            set: { if !$0 { launchRecoveryErrorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                launchRecoveryErrorMessage = nil
+            }
+        } message: {
+            Text(launchRecoveryErrorMessage ?? "")
         }
         .alert(NSLocalizedString("重写失败", comment: "Message rewrite failure alert title"), isPresented: Binding(
             get: { viewModel.messageRewriteErrorMessage != nil },
@@ -91,6 +115,7 @@ extension ContentView {
             }
         }
         .task {
+            launchRecoveryRequest = Persistence.currentLaunchRecoveryRequest()
             launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
             await announcementManager.checkAnnouncement()
             scheduleDailyPulsePreparation(after: 1_500_000_000)
@@ -422,6 +447,23 @@ extension ContentView {
             }
         } else {
             EmptyView()
+        }
+    }
+
+    func restoreLaunchBackupFromPrompt() {
+        launchRecoveryRequest = nil
+        Task {
+            do {
+                let message = try await Task.detached(priority: .userInitiated) {
+                    try Persistence.restorePendingLaunchBackupRequest()
+                }.value
+                viewModel.reloadAfterSnapshotRestore()
+                _ = Persistence.consumeLaunchRecoveryNotice()
+                launchRecoveryNoticeMessage = message
+            } catch {
+                _ = Persistence.consumeLaunchRecoveryNotice()
+                launchRecoveryErrorMessage = error.localizedDescription
+            }
         }
     }
 

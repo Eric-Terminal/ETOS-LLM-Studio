@@ -129,6 +129,8 @@ extension Persistence {
         launchPreparationResult = LaunchPreparationResult()
         hasCreatedLaunchBackupPoint = false
         hasScheduledLaunchBackupPoint = false
+        pendingLaunchRecoveryRequest = nil
+        pendingLaunchRecoveryKinds = []
         launchBackupAndRecoveryLock.unlock()
     }
 

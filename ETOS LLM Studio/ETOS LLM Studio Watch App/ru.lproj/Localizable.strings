@@ -4553,3 +4553,16 @@
 "连续活跃" = "Серия";
 "最常用" = "Наиболее используемая";
 "占比 %@" = "Доля %@";
+"数据库已恢复" = "Database Restored";
+"检测到数据库损坏" = "Database Damage Detected";
+"从启动备份恢复" = "Restore from Startup Backup";
+"启动备份恢复失败" = "Startup Backup Restore Failed";
+"只保留一个本机启动还原点；新还原点确认可用后会删除上一份。" = "Keeps one local startup restore point; after a new restore point is verified, the previous one is deleted.";
+"检测到%@可能已损坏。可以使用上一次启动留下的本机还原点恢复；恢复会替换对应数据库。" = "The app detected that %@ may be damaged. You can restore from the local restore point left by the previous launch; restoring replaces the matching database.";
+"已按你的确认从启动备份恢复%@。" = "Restored %@ from the startup backup after your confirmation.";
+"%@损坏，但未找到可用的启动备份。" = "%@ is damaged, but no usable startup backup was found.";
+"%@损坏，且从启动备份恢复失败。请尽快手动导入快照备份。" = "%@ is damaged, and restoring from the startup backup failed. Import a snapshot backup manually as soon as possible.";
+"聊天检索索引已重新构建。" = "The chat search index has been rebuilt.";
+"没有待恢复的启动备份。" = "No startup backup is waiting to be restored.";
+"启动备份已恢复。" = "Startup backup restored.";
+"检测到%@无法打开或迁移，已隔离损坏文件并自动重建。" = "Detected that %@ could not be opened or migrated. The damaged files were quarantined and rebuilt automatically.";

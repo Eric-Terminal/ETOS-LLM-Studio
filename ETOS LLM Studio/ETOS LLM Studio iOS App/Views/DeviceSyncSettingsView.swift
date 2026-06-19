@@ -50,7 +50,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("启动保护备份", comment: ""))
             } footer: {
-                Text(NSLocalizedString("只在启动时写入本机可恢复备份点。", comment: ""))
+                Text(NSLocalizedString("只保留一个本机启动还原点；新还原点确认可用后会删除上一份。", comment: ""))
             }
 
             if syncManager.isCompanionAvailable {

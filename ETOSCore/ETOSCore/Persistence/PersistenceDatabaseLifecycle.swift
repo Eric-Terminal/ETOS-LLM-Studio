@@ -205,6 +205,10 @@ extension Persistence {
 
     public static func bootstrapGRDBStoreOnLaunch() {
         let launchPreparation = prepareDatabasesForLaunchIfNeeded()
+        guard !launchPreparation.hasPendingRecoveryRequest else {
+            logger.warning("启动阶段检测到可恢复的数据库损坏，等待用户确认。")
+            return
+        }
         let grdbStore = activeGRDBStore()
         _ = activeAuxiliaryStore(kind: .config)
         _ = activeAuxiliaryStore(kind: .memory)
@@ -280,6 +284,8 @@ extension Persistence {
         hasCreatedLaunchBackupPoint = false
         hasScheduledLaunchBackupPoint = false
         pendingLaunchRecoveryNotice = nil
+        pendingLaunchRecoveryRequest = nil
+        pendingLaunchRecoveryKinds = []
         launchBackupAndRecoveryLock.unlock()
         deleteAppConfig(key: launchRecoveryNoticeKey)
     }

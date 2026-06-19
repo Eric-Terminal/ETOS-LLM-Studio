@@ -58,6 +58,8 @@ public enum Persistence {
     static var hasPreparedLaunchDatabases = false
     static var launchPreparationResult = LaunchPreparationResult()
     static var pendingLaunchRecoveryNotice: String?
+    static var pendingLaunchRecoveryRequest: LaunchRecoveryRequest?
+    static var pendingLaunchRecoveryKinds: [LaunchDatabaseKind] = []
     static var hasCreatedLaunchBackupPoint = false
     static var hasScheduledLaunchBackupPoint = false
 
@@ -70,12 +72,29 @@ public enum Persistence {
     }
 
     struct LaunchPreparationResult {
+        var recoverableKinds: [LaunchDatabaseKind] = []
         var restoredKinds: [LaunchDatabaseKind] = []
         var failedKinds: [LaunchDatabaseKind] = []
         var missingBackupKinds: [LaunchDatabaseKind] = []
 
         var needsChatFTSRebuild: Bool {
             restoredKinds.contains(.chat)
+        }
+
+        var hasPendingRecoveryRequest: Bool {
+            !recoverableKinds.isEmpty
+        }
+    }
+
+    public struct LaunchRecoveryRequest: Identifiable, Equatable, Sendable {
+        public let id: String
+        public let message: String
+        public let databaseNames: [String]
+
+        init(kinds: [LaunchDatabaseKind], message: String) {
+            self.id = kinds.map(\.requestIdentifier).joined(separator: ".")
+            self.message = message
+            self.databaseNames = kinds.map(\.localizedDisplayName)
         }
     }
 
@@ -143,10 +162,21 @@ public enum Persistence {
         }
     }
 
-    enum LaunchDatabaseKind: CaseIterable {
+    enum LaunchDatabaseKind: CaseIterable, Sendable {
         case chat
         case config
         case memory
+
+        var requestIdentifier: String {
+            switch self {
+            case .chat:
+                return "chat"
+            case .config:
+                return "config"
+            case .memory:
+                return "memory"
+            }
+        }
 
         var displayName: String {
             switch self {
@@ -157,6 +187,10 @@ public enum Persistence {
             case .memory:
                 return "记忆数据库"
             }
+        }
+
+        var localizedDisplayName: String {
+            NSLocalizedString(displayName, comment: "Launch recovery database name")
         }
     }
 

@@ -55,6 +55,15 @@ public final class AppLaunchStateMachine: ObservableObject {
                 Persistence.bootstrapGRDBStoreOnLaunch()
             }.value
 
+            if Persistence.hasPendingLaunchRecoveryRequest() {
+                await MainActor.run {
+                    self?.phase = .ready
+                    self?.bootstrapTask = nil
+                    self?.logger.info("启动状态机等待用户确认启动备份恢复。")
+                }
+                return
+            }
+
             guard !Task.isCancelled else {
                 await MainActor.run {
                     self?.bootstrapTask = nil

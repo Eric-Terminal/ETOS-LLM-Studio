@@ -40,6 +40,8 @@ struct ContentView: View {
     @State var shouldRestorePendingJumpOnAppear = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var launchRecoveryNoticeMessage: String?
+    @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
+    @State var launchRecoveryErrorMessage: String?
     @State var rootBodyFont: Font = .body
     @State var legacyMigrationErrorMessage: String?
     @State var isRequestControlsPresented = false

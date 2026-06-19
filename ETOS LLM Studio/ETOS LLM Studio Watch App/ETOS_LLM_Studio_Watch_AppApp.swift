@@ -65,6 +65,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                 }
                 .task(id: launchStateMachine.phase) {
                     guard launchStateMachine.phase == .ready else { return }
+                    guard !Persistence.hasPendingLaunchRecoveryRequest() else { return }
                     // 启动持久化预热完成后再触发自动同步，避免冷启动阶段覆盖未加载完的会话状态。
                     syncManager.performAutoSyncIfEnabled()
                     cloudSyncManager.performAutoSyncIfEnabled()
