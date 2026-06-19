@@ -251,9 +251,7 @@ extension ChatView {
     /// 指定消息当前是否因飞行而需要隐身（真实气泡让位给飞行气泡）。
     func isHiddenForFlight(_ message: ChatMessage) -> Bool {
         guard let state = flightState else { return false }
-        if state.targetMessageID == message.id { return true }
-        guard state.targetMessageID == nil else { return false }
-        return isFlightTargetCandidate(message, for: state)
+        return state.targetMessageID == message.id && state.landingRect != nil
     }
 
     /// 飞行覆盖层：置于聊天根 ZStack 顶层。位置与尺寸由分轴弹簧独立驱动，
@@ -261,6 +259,7 @@ extension ChatView {
     @ViewBuilder
     var flightOverlayLayer: some View {
         if let state = flightState {
+            let isReadyToFly = state.landingRect != nil
             FlyingBubbleView(
                 text: state.text,
                 startColor: state.startColor,
@@ -270,7 +269,9 @@ extension ChatView {
             .id(state.id)
             .frame(width: max(flightAnimWidth, 1), height: max(flightAnimHeight, 1))
             .position(x: flightAnimPosX, y: flightAnimPosY)
+            .opacity(isReadyToFly ? 1 : 0)
             .allowsHitTesting(false)
+            .accessibilityHidden(true)
             .zIndex(40)
         }
     }

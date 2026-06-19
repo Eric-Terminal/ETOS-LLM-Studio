@@ -899,7 +899,8 @@ extension ChatView {
             .onPreferenceChange(FlightTargetRectKey.self) { rect in
                 handleFlightTargetRect(rect)
             }
-            .onChange(of: viewModel.displayMessages.count) { _, _ in
+            .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
+                // 自动历史窗口可能保持消息数量不变，只替换可见消息身份；用身份版本避免漏锁飞行目标。
                 lockFlightTargetIfNeeded()
             }
             .background(
