@@ -371,7 +371,6 @@ extension ChatService {
                 coalescer: &streamingPublishCoalescer
             )
             finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
-            emitSessionRequestStatus(.cancelled, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .cancelled,

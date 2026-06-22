@@ -349,6 +349,15 @@ public class ChatService {
     }
 
     func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
+        switch status {
+        case .started:
+            break
+        case .finished, .error, .cancelled:
+            if !Task.isCancelled {
+                setSessionRunning(sessionID, isRunning: false)
+            }
+        }
+
         sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
         switch status {
         case .started:
@@ -639,10 +648,21 @@ public class ChatService {
 
     /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
     public func cancelRequest(for sessionID: UUID) async {
-        guard let context = withRequestStateLock({ requestContextBySessionID[sessionID] }),
-              let task = context.task else { return }
-        let token = context.token
+        guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
+              let task = activeContext.task else { return }
         task.cancel()
+        emitSessionRequestStatus(.cancelled, sessionID: sessionID)
+
+        if let imageContext = activeContext.imageGenerationContext {
+            imageGenerationStatusSubject.send(
+                .cancelled(
+                    sessionID: imageContext.sessionID,
+                    loadingMessageID: imageContext.loadingMessageID,
+                    prompt: imageContext.prompt,
+                    finishedAt: Date()
+                )
+            )
+        }
 
         do {
             try await task.value
@@ -655,11 +675,6 @@ public class ChatService {
             } else {
                 logger.error("取消会话请求时出现意外错误: \(error.localizedDescription)")
             }
-        }
-
-        guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
-              activeContext.token == token else {
-            return
         }
 
         if let loadingID = activeContext.loadingMessageID {
@@ -675,22 +690,12 @@ public class ChatService {
             }
         }
 
-        let cancelledImageContext = activeContext.imageGenerationContext
         _ = withRequestStateLock {
+            guard let context = requestContextBySessionID[sessionID],
+                  context.token == activeContext.token else {
+                return
+            }
             requestContextBySessionID.removeValue(forKey: sessionID)
-        }
-        setSessionRunning(sessionID, isRunning: false)
-        emitSessionRequestStatus(.cancelled, sessionID: sessionID)
-
-        if let imageContext = cancelledImageContext {
-            imageGenerationStatusSubject.send(
-                .cancelled(
-                    sessionID: imageContext.sessionID,
-                    loadingMessageID: imageContext.loadingMessageID,
-                    prompt: imageContext.prompt,
-                    finishedAt: Date()
-                )
-            )
         }
     }
 

@@ -101,10 +101,19 @@ struct ChatServiceConcurrentSessionTests {
         #expect(runningAfterBStarted.contains(sessionA.id))
         #expect(runningAfterBStarted.contains(sessionB.id))
 
+        var runningAtBFinishedEvent: Set<UUID>?
+        let statusCancellable = service.sessionRequestStatusSubject.sink { event in
+            guard event.sessionID == sessionB.id, event.status == .finished else { return }
+            runningAtBFinishedEvent = service.runningSessionIDsSubject.value
+        }
+
         ControlledSessionURLProtocol.release(marker: "B")
         await taskB.value
+        statusCancellable.cancel()
 
         let runningAfterBFinished = service.runningSessionIDsSubject.value
+        let runningAtFinishedEvent = try #require(runningAtBFinishedEvent)
+        #expect(!runningAtFinishedEvent.contains(sessionB.id))
         #expect(runningAfterBFinished.contains(sessionA.id))
         #expect(!runningAfterBFinished.contains(sessionB.id))
 

@@ -95,8 +95,18 @@ struct ChatServiceConcurrentSessionInteractionTests {
             ControlledSessionURLProtocol.hasStarted(marker: "B")
         }
 
+        var runningAtCancelEvent: Set<UUID>?
+        let statusCancellable = service.sessionRequestStatusSubject.sink { event in
+            guard event.sessionID == sessionA.id, event.status == .cancelled else { return }
+            runningAtCancelEvent = service.runningSessionIDsSubject.value
+        }
+
         await service.cancelRequest(for: sessionA.id)
+        statusCancellable.cancel()
         let runningAfterCancelA = service.runningSessionIDsSubject.value
+        let runningAtCancelledEvent = try #require(runningAtCancelEvent)
+        #expect(!runningAtCancelledEvent.contains(sessionA.id))
+        #expect(runningAtCancelledEvent.contains(sessionB.id))
         #expect(!runningAfterCancelA.contains(sessionA.id))
         #expect(runningAfterCancelA.contains(sessionB.id))
 

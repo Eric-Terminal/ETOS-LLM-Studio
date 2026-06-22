@@ -514,6 +514,12 @@ class ChatViewModel: ObservableObject {
     }
 
     func cancelSending() {
+        if let currentSessionID = currentSession?.id {
+            runningSessionIDs.remove(currentSessionID)
+        }
+        isSendingMessage = false
+        updateAutoReasoningPreviewState(with: allMessagesForSession)
+
         Task {
             await chatService.cancelOngoingRequest()
         }

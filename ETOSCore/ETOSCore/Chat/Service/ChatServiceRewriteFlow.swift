@@ -179,11 +179,9 @@ extension ChatService {
             try await requestTask.value
             emitSessionRequestStatus(.finished, sessionID: resolvedSessionID)
         } catch is CancellationError {
-            emitSessionRequestStatus(.cancelled, sessionID: resolvedSessionID)
             throw CancellationError()
         } catch {
             if isCancellationError(error) {
-                emitSessionRequestStatus(.cancelled, sessionID: resolvedSessionID)
                 throw CancellationError()
             }
             removeMessage(withID: loadingMessageID, in: resolvedSessionID)
