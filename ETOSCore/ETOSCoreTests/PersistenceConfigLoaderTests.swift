@@ -82,6 +82,24 @@ extension PersistenceTests {
         #expect(Persistence.readAppConfigText(key: key.rawValue) == legacyIdentifier)
     }
 
+    @Test("延迟发送秒数默认立即发送且会归一化负值")
+    @MainActor
+    func testChatSendDelaySecondsDefaultAndNormalization() {
+        let key = AppConfigKey.chatSendDelaySeconds
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .real(0.0))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: -0.5])
+
+        #expect(AppConfigStore.shared.chatSendDelaySeconds == 0)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Double == 0)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:

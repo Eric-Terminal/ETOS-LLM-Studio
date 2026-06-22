@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct AudioAttachment {
+public struct AudioAttachment: Sendable {
     public let data: Data
     public let mimeType: String
     public let format: String

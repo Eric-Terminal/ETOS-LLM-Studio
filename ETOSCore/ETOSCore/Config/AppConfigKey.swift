@@ -134,6 +134,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case reasoningContentEchoMode = "chat.reasoningContentEchoMode"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
+    case chatSendDelaySeconds = "chat.sendDelaySeconds"
     case messageRegexRules = "chat.messageRegexRules"
 
     case enableMemory = "enableMemory"
@@ -328,6 +329,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text(ReasoningContentEchoMode.defaultMode.rawValue)
         case .modelConnectivityTestConcurrencyLimit:
             return .integer(1)
+        case .chatSendDelaySeconds:
+            return .real(0.0)
         case .lazyLoadMessageCount:
             #if os(watchOS)
             return .integer(3)

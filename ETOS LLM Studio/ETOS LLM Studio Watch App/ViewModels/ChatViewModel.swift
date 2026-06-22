@@ -43,6 +43,28 @@ enum WatchBackgroundOpacitySetting {
     }
 }
 
+private struct PendingChatSendPayload: Sendable {
+    let sessionID: UUID?
+    let content: String
+    let aiTemperature: Double
+    let aiTopP: Double
+    let systemPrompt: String
+    let maxChatHistory: Int
+    let enableStreaming: Bool
+    let enhancedPrompt: String?
+    let enableMemory: Bool
+    let enableMemoryWrite: Bool
+    let enableMemoryActiveRetrieval: Bool
+    let includeSystemTime: Bool
+    let systemTimeInjectionPosition: SystemTimeInjectionPosition
+    let enablePeriodicTimeLandmark: Bool
+    let periodicTimeLandmarkIntervalMinutes: Int
+    let enableResponseSpeedMetrics: Bool
+    let audioAttachment: AudioAttachment?
+    let imageAttachments: [ImageAttachment]
+    let fileAttachments: [FileAttachment]
+}
+
 @MainActor
 class ChatViewModel: ObservableObject {
     // 注意：这里必须使用系统合成的 objectWillChange，
@@ -93,6 +115,7 @@ class ChatViewModel: ObservableObject {
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var autoOpenedPendingToolCallIDs: Set<String> = []
     @Published var isSendingMessage: Bool = false
+    @Published var isSendDelayPending: Bool = false
     @Published var speechModels: [RunnableModel] = []
     @Published var ttsModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
@@ -416,6 +439,8 @@ class ChatViewModel: ObservableObject {
     var lastMemoryEmbeddingErrorDate: Date = .distantPast
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     var memoryRetryStoppedNoticeTask: Task<Void, Never>?
+    var pendingSendDelayTask: Task<Void, Never>?
+    var pendingSendDelayPayload: PendingChatSendPayload?
     private let iso8601Formatter = ISO8601DateFormatter()
     let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
@@ -466,6 +491,16 @@ class ChatViewModel: ObservableObject {
     
     func sendMessage() {
         logger.info("sendMessage called.")
+        guard let payload = capturePendingSendPayload() else { return }
+        let delay = AppConfigStore.shared.chatSendDelaySeconds
+        guard delay > 0 else {
+            sendCapturedMessage(payload)
+            return
+        }
+        scheduleDelayedSend(payload, delay: delay)
+    }
+
+    private func capturePendingSendPayload() -> PendingChatSendPayload? {
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasAudio = pendingAudioAttachment != nil
         
@@ -475,45 +510,120 @@ class ChatViewModel: ObservableObject {
             hasAudio: hasAudio,
             imageCount: pendingImageAttachments.count,
             fileCount: pendingFileAttachments.count,
-            isSending: isSendingMessage
-        ) else { return }
+            isSending: isSendingMessage || isSendDelayPending
+        ) else { return nil }
         
         let audioToSend = pendingAudioAttachment
         let imagesToSend = pendingImageAttachments
         let filesToSend = pendingFileAttachments
+        let payload = PendingChatSendPayload(
+            sessionID: currentSession?.id,
+            content: userMessageContent,
+            aiTemperature: aiTemperature,
+            aiTopP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: currentSession?.enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            includeSystemTime: includeSystemTimeInPrompt,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+            audioAttachment: audioToSend,
+            imageAttachments: imagesToSend,
+            fileAttachments: filesToSend
+        )
         userInput = ""
         pendingAudioAttachment = nil
         pendingImageAttachments = []
         pendingFileAttachments = []
-        
-        // 构建消息内容（仅使用用户输入文本）
-        let messageContent = userMessageContent
-        
+
+        return payload
+    }
+
+    private func scheduleDelayedSend(_ payload: PendingChatSendPayload, delay: Double) {
+        pendingSendDelayTask?.cancel()
+        pendingSendDelayPayload = payload
+        isSendDelayPending = true
+        pendingSendDelayTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.delayNanoseconds(for: delay))
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.pendingSendDelayTask = nil
+            self.pendingSendDelayPayload = nil
+            self.isSendDelayPending = false
+            guard self.currentSession?.id == payload.sessionID else { return }
+            self.sendCapturedMessage(payload)
+        }
+    }
+
+    private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
         Task {
             await chatService.sendAndProcessMessage(
-                content: messageContent,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming,
-                enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeSystemTime: includeSystemTimeInPrompt,
-                systemTimeInjectionPosition: systemTimeInjectionPosition,
-                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                audioAttachment: audioToSend,
-                imageAttachments: imagesToSend,
-                fileAttachments: filesToSend
+                content: payload.content,
+                aiTemperature: payload.aiTemperature,
+                aiTopP: payload.aiTopP,
+                systemPrompt: payload.systemPrompt,
+                maxChatHistory: payload.maxChatHistory,
+                enableStreaming: payload.enableStreaming,
+                enhancedPrompt: payload.enhancedPrompt,
+                enableMemory: payload.enableMemory,
+                enableMemoryWrite: payload.enableMemoryWrite,
+                enableMemoryActiveRetrieval: payload.enableMemoryActiveRetrieval,
+                includeSystemTime: payload.includeSystemTime,
+                systemTimeInjectionPosition: payload.systemTimeInjectionPosition,
+                enablePeriodicTimeLandmark: payload.enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: payload.periodicTimeLandmarkIntervalMinutes,
+                enableResponseSpeedMetrics: payload.enableResponseSpeedMetrics,
+                audioAttachment: payload.audioAttachment,
+                imageAttachments: payload.imageAttachments,
+                fileAttachments: payload.fileAttachments
             )
         }
     }
 
+    @discardableResult
+    private func cancelPendingDelayedSend() -> Bool {
+        guard let task = pendingSendDelayTask else { return false }
+        let payload = pendingSendDelayPayload
+        task.cancel()
+        pendingSendDelayTask = nil
+        pendingSendDelayPayload = nil
+        isSendDelayPending = false
+        restorePendingSendDraftIfPossible(payload)
+        return true
+    }
+
+    private func restorePendingSendDraftIfPossible(_ payload: PendingChatSendPayload?) {
+        guard let payload,
+              userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              pendingAudioAttachment == nil,
+              pendingImageAttachments.isEmpty,
+              pendingFileAttachments.isEmpty else {
+            return
+        }
+        userInput = payload.content
+        pendingAudioAttachment = payload.audioAttachment
+        pendingImageAttachments = payload.imageAttachments
+        pendingFileAttachments = payload.fileAttachments
+    }
+
+    private static func delayNanoseconds(for delay: Double) -> UInt64 {
+        let maxSafeDelay = Double(UInt64.max) / 1_000_000_000
+        let boundedDelay = min(max(0, delay), maxSafeDelay)
+        return UInt64((boundedDelay * 1_000_000_000).rounded())
+    }
+
     func cancelSending() {
+        let cancelledPendingDelay = cancelPendingDelayedSend()
+        guard isSendingMessage || !cancelledPendingDelay else { return }
         if let currentSessionID = currentSession?.id {
             runningSessionIDs.remove(currentSessionID)
         }
@@ -647,7 +757,7 @@ class ChatViewModel: ObservableObject {
     var canQuickRetryLatestMessage: Bool {
         ChatQuickRetrySupport.canRetryLatestMessage(
             in: allMessagesForSession,
-            isSending: isSendingMessage
+            isSending: isSendingMessage || isSendDelayPending
         )
     }
 

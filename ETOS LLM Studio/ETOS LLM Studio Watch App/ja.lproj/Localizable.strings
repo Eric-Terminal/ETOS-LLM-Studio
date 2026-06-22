@@ -4566,3 +4566,6 @@
 "没有待恢复的启动备份。" = "No startup backup is waiting to be restored.";
 "启动备份已恢复。" = "Startup backup restored.";
 "检测到%@无法打开或迁移，已隔离损坏文件并自动重建。" = "Detected that %@ could not be opened or migrated. The damaged files were quarantined and rebuilt automatically.";
+"延迟发送（秒）" = "送信遅延（秒）";
+"秒" = "秒";
+"设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。" = "0 に設定するとすぐに送信します。0 より大きい場合は、送信をタップしてから指定秒数待ち、その間に停止をタップするとキャンセルできます。";

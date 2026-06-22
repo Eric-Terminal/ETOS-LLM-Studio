@@ -12,7 +12,7 @@ import UIKit
 #endif
 
 /// 图片附件，用于发送给支持视觉的模型
-public struct ImageAttachment: Identifiable {
+public struct ImageAttachment: Identifiable, Sendable {
     public let id: UUID
     public let data: Data
     public let mimeType: String
@@ -73,7 +73,7 @@ public struct ImageAttachment: Identifiable {
 }
 
 /// 通用文件附件，用于发送给支持文件输入的模型
-public struct FileAttachment: Identifiable {
+public struct FileAttachment: Identifiable, Sendable {
     public let id: UUID
     public let data: Data
     public let mimeType: String

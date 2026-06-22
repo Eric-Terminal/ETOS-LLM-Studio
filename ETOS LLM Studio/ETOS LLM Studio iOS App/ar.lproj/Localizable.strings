@@ -4679,3 +4679,6 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "没有待恢复的启动备份。" = "No startup backup is waiting to be restored.";
 "启动备份已恢复。" = "Startup backup restored.";
 "检测到%@无法打开或迁移，已隔离损坏文件并自动重建。" = "Detected that %@ could not be opened or migrated. The damaged files were quarantined and rebuilt automatically.";
+"延迟发送（秒）" = "تأخير الإرسال (بالثواني)";
+"秒" = "ثوانٍ";
+"设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。" = "اضبطه على 0 للإرسال فورًا. عند استخدام قيمة أكبر من 0، ينتظر التطبيق هذا العدد من الثواني بعد الضغط على إرسال؛ اضغط إيقاف أثناء الانتظار للإلغاء.";

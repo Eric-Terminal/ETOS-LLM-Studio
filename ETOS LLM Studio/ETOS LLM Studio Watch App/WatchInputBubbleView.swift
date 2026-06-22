@@ -244,7 +244,7 @@ struct WatchInputBubbleView: View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
-            isSending: viewModel.isSendingMessage,
+            isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
             hasSendableContent: canSend,
             canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput

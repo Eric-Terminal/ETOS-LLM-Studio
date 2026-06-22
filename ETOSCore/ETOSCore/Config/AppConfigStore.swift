@@ -190,6 +190,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
+    @Published public var chatSendDelaySeconds: Double { didSet { write(.chatSendDelaySeconds, chatSendDelaySeconds) } }
 
     @Published public var enableMemory: Bool { didSet { write(.enableMemory, enableMemory) } }
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
@@ -347,6 +348,7 @@ public final class AppConfigStore: ObservableObject {
         ).rawValue
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
+        chatSendDelaySeconds = Self.realValue(.chatSendDelaySeconds, userDefaults: userDefaults)
 
         enableMemory = Self.boolValue(.enableMemory, userDefaults: userDefaults)
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
@@ -448,7 +450,8 @@ public final class AppConfigStore: ObservableObject {
             case .integer(let defaultValue):
                 result[key.rawValue] = Persistence.readAppConfigInteger(key: key.rawValue) ?? defaultValue
             case .real(let defaultValue):
-                result[key.rawValue] = Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+                let stored = Persistence.readAppConfigReal(key: key.rawValue) ?? defaultValue
+                result[key.rawValue] = normalizedRealValue(stored, for: key)
             case .text(let defaultValue):
                 let stored = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
                 if key == .reasoningContentEchoMode {
@@ -797,6 +800,7 @@ public final class AppConfigStore: ObservableObject {
         case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
+        case .chatSendDelaySeconds: return .real(chatSendDelaySeconds)
 
         case .enableMemory: return .bool(enableMemory)
         case .enableMemoryWrite: return .bool(enableMemoryWrite)
@@ -1006,6 +1010,7 @@ public final class AppConfigStore: ObservableObject {
         case .chatScrollAnimationOffset: chatScrollAnimationOffset = value
         case .chatSendAnimationSpringResponse: chatSendAnimationSpringResponse = value
         case .chatSendAnimationSpringDamping: chatSendAnimationSpringDamping = value
+        case .chatSendDelaySeconds: chatSendDelaySeconds = Self.normalizedRealValue(value, for: key)
         default: break
         }
     }
@@ -1245,7 +1250,7 @@ public final class AppConfigStore: ObservableObject {
 
     private static func realValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> Double {
         if case .real(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return value
+            return normalizedRealValue(value, for: key)
         }
         return 0
     }
@@ -1272,7 +1277,7 @@ public final class AppConfigStore: ObservableObject {
         case .integer:
             return coerceInt(object).map { .integer(normalizedIntegerValue($0, for: key)) }
         case .real:
-            return coerceDouble(object).map(AppConfigValue.real)
+            return coerceDouble(object).map { .real(normalizedRealValue($0, for: key)) }
         case .text:
             if let values = object as? [String] {
                 return .text(encodeStringArray(values))
@@ -1292,7 +1297,7 @@ public final class AppConfigStore: ObservableObject {
         case .integer(let value):
             return Persistence.writeAppConfig(key: key.rawValue, integer: normalizedIntegerValue(value, for: key), typeHint: "integer")
         case .real(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, real: value, typeHint: "real")
+            return Persistence.writeAppConfig(key: key.rawValue, real: normalizedRealValue(value, for: key), typeHint: "real")
         case .text(let value):
             return Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
         }
@@ -1306,7 +1311,7 @@ public final class AppConfigStore: ObservableObject {
         case .integer:
             return coerceInt(value).map { .integer(normalizedIntegerValue($0, for: key)) }
         case .real:
-            return coerceDouble(value).map(AppConfigValue.real)
+            return coerceDouble(value).map { .real(normalizedRealValue($0, for: key)) }
         case .text:
             if key == .reasoningContentEchoMode {
                 return coerceString(value).map { .text(ReasoningContentEchoMode.normalized($0).rawValue) }
@@ -1327,6 +1332,8 @@ public final class AppConfigStore: ObservableObject {
         switch value {
         case .integer(let value):
             return .integer(normalizedIntegerValue(value, for: key))
+        case .real(let value):
+            return .real(normalizedRealValue(value, for: key))
         case .text(let value) where key == .reasoningContentEchoMode:
             return .text(ReasoningContentEchoMode.normalized(value).rawValue)
         default:
@@ -1339,6 +1346,16 @@ public final class AppConfigStore: ObservableObject {
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit:
             return max(1, value)
+        default:
+            return value
+        }
+    }
+
+    private nonisolated static func normalizedRealValue(_ value: Double, for key: AppConfigKey) -> Double {
+        switch key {
+        case .chatSendDelaySeconds:
+            guard value.isFinite else { return 0 }
+            return max(0, value)
         default:
             return value
         }

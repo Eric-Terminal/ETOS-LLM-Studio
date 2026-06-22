@@ -4679,3 +4679,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "没有待恢复的启动备份。" = "No startup backup is waiting to be restored.";
 "启动备份已恢复。" = "Startup backup restored.";
 "检测到%@无法打开或迁移，已隔离损坏文件并自动重建。" = "Detected that %@ could not be opened or migrated. The damaged files were quarantined and rebuilt automatically.";
+"延迟发送（秒）" = "Retraso de envío (segundos)";
+"秒" = "s";
+"设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。" = "Configúralo en 0 para enviar de inmediato. Si es mayor que 0, se esperará ese número de segundos después de tocar enviar; toca detener durante la espera para cancelar.";

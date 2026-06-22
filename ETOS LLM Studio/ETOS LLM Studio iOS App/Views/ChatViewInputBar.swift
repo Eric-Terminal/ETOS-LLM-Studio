@@ -38,11 +38,12 @@ extension ChatView {
                         viewModel.userInput = newValue
                     }
                 ),
-                isSending: viewModel.isSendingMessage,
+                isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
                     let outgoingText = draftText
-                    if AppConfigStore.shared.chatSendAnimationEnabled {
+                    if AppConfigStore.shared.chatSendAnimationEnabled,
+                       AppConfigStore.shared.chatSendDelaySeconds <= 0 {
                         // 启动「输入框 → 气泡」Overlay 飞行（内部已调用 viewModel.sendMessage()）
                         beginSendFlight(text: outgoingText)
                     } else {

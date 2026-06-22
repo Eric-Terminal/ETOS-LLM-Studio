@@ -61,6 +61,15 @@ struct ModelAdvancedSettingsView: View {
         return formatter
     }
 
+    private var sendDelayFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.minimumIntegerDigits = 1
+        return formatter
+    }
+
     private var selectedGlobalPromptEntry: GlobalSystemPromptEntry? {
         guard let selectedGlobalSystemPromptEntryID else { return nil }
         return globalSystemPromptEntries.first(where: { $0.id == selectedGlobalSystemPromptEntryID })
@@ -215,9 +224,22 @@ struct ModelAdvancedSettingsView: View {
 
             // MARK: - Tab 4：会话与上下文
             Form {
-                Section(NSLocalizedString("基础行为", comment: "")) {
+                Section {
                     Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                     Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
+                    LabeledContent(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title")) {
+                        TextField(NSLocalizedString("秒", comment: "Seconds placeholder"), value: sendDelayBinding, formatter: sendDelayFormatter)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .frame(width: 80)
+                    }
+                } header: {
+                    Text(NSLocalizedString("基础行为", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section(NSLocalizedString("上下文窗口管理", comment: "")) {
@@ -369,6 +391,13 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
+    private var sendDelayBinding: Binding<Double> {
+        Binding(
+            get: { normalizedSendDelay(appConfig.chatSendDelaySeconds) },
+            set: { appConfig.chatSendDelaySeconds = normalizedSendDelay($0) }
+        )
+    }
+
     private var outputReasoningFooterText: String {
         let base = NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: "")
         let compatibility = NSLocalizedString("该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。", comment: "")
@@ -402,6 +431,11 @@ struct ModelAdvancedSettingsView: View {
         guard value.isFinite else { return range.lowerBound }
         let clampedValue = min(max(value, range.lowerBound), range.upperBound)
         return (clampedValue / samplingParameterStep).rounded() * samplingParameterStep
+    }
+
+    private func normalizedSendDelay(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return max(0, value)
     }
 
     private func unlockTemperatureBoundaryAchievementIfNeeded(_ value: Double) {

@@ -65,6 +65,15 @@ struct ModelAdvancedSettingsView: View {
         return formatter
     }
 
+    private var sendDelayFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.minimumIntegerDigits = 1
+        return formatter
+    }
+
     private var selectedGlobalPromptEntry: GlobalSystemPromptEntry? {
         guard let selectedGlobalSystemPromptEntryID else { return nil }
         return globalSystemPromptEntries.first(where: { $0.id == selectedGlobalSystemPromptEntryID })
@@ -188,9 +197,22 @@ struct ModelAdvancedSettingsView: View {
             }
 
             // MARK: Section 3：会话与上下文
-            Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
+            Section(
+                header: Text(NSLocalizedString("会话与上下文", comment: "")),
+                footer: Text(NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
                 Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
+                HStack {
+                    Text(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"))
+                    Spacer()
+                    TextField(NSLocalizedString("秒", comment: "Seconds placeholder"), value: sendDelayBinding, formatter: sendDelayFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .frame(width: 60)
+                }
 
                 HStack {
                     Text(NSLocalizedString("最大上下文消息数", comment: ""))
@@ -288,6 +310,13 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
+    private var sendDelayBinding: Binding<Double> {
+        Binding(
+            get: { normalizedSendDelay(appConfig.chatSendDelaySeconds) },
+            set: { appConfig.chatSendDelaySeconds = normalizedSendDelay($0) }
+        )
+    }
+
     private var reasoningContentEchoFooter: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: ""))
@@ -324,6 +353,11 @@ struct ModelAdvancedSettingsView: View {
         guard value.isFinite else { return range.lowerBound }
         let clampedValue = min(max(value, range.lowerBound), range.upperBound)
         return (clampedValue / samplingParameterStep).rounded() * samplingParameterStep
+    }
+
+    private func normalizedSendDelay(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return max(0, value)
     }
 
     private func unlockTemperatureBoundaryAchievementIfNeeded(_ value: Double) {
