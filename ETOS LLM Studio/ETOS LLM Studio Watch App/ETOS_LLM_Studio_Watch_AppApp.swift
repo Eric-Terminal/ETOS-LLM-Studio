@@ -50,6 +50,10 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                 .environmentObject(cloudSyncManager)
                 .onOpenURL { url in
                     Task {
+                        if NewAPIProviderImportURLHandler.canHandle(url) {
+                            _ = try? await NewAPIProviderImportURLHandler.importProvider(from: url)
+                            return
+                        }
                         _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
                     }
                 }

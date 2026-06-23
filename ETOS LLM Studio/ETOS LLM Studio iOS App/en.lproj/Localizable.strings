@@ -4604,3 +4604,12 @@
 "延迟发送（秒）" = "Send Delay (Seconds)";
 "秒" = "Seconds";
 "设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。" = "Set to 0 to send immediately. Values above 0 wait that many seconds after you tap send; tap stop during the wait to cancel.";
+"无法识别 New API 导入链接。" = "The New API import link could not be recognized.";
+"导入链接中的 data 不是有效的 Base64 JSON。" = "The data parameter in the import link is not valid Base64 JSON.";
+"导入链接缺少 API 地址。" = "The import link is missing the API address.";
+"导入链接缺少 API Key。" = "The import link is missing the API key.";
+"已导入 New API 连接信息。新增提供商 %d，跳过 %d。" = "Imported New API connection info. Added providers: %d, skipped: %d.";
+"已导入 New API 连接信息。" = "Imported New API connection info.";
+"无法导入 New API 连接信息。" = "Unable to import New API connection info.";
+"连接信息已导入" = "Connection Info Imported";
+"New API 导入失败" = "New API Import Failed";

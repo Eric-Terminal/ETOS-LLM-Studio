@@ -79,6 +79,10 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .environmentObject(cloudSyncManager)
                 .onOpenURL { url in
                     Task { @MainActor in
+                        if NewAPIProviderImportURLHandler.canHandle(url) {
+                            await handleNewAPIProviderImport(url)
+                            return
+                        }
                         let handledByShortcutRouter = await ShortcutURLRouter.shared.handleIncomingURL(url)
                         if !handledByShortcutRouter {
                             if IncomingSnapshotRestoreSupport.isSnapshotURL(url) {
@@ -122,6 +126,21 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         }
         .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {
             await DailyPulseBackgroundDeliveryScheduler.shared.handleAppRefresh()
+        }
+    }
+
+    @MainActor
+    private func handleNewAPIProviderImport(_ url: URL) async {
+        do {
+            let result = try await NewAPIProviderImportURLHandler.importProvider(from: url)
+            let message = String(
+                format: NSLocalizedString("已导入 New API 连接信息。新增提供商 %d，跳过 %d。", comment: "New API deeplink import success message"),
+                result.summary.importedProviders,
+                result.summary.skippedProviders
+            )
+            NotificationCenter.default.post(name: .newAPIProviderImportDidFinish, object: message)
+        } catch {
+            NotificationCenter.default.post(name: .newAPIProviderImportDidFail, object: error.localizedDescription)
         }
     }
 

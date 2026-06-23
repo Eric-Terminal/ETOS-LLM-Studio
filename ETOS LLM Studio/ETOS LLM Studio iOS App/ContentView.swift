@@ -34,6 +34,8 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
+    @State private var newAPIProviderImportNoticeMessage: String?
+    @State private var newAPIProviderImportErrorMessage: String?
     
     var body: some View {
         contentWithMigrationOverlays
@@ -176,8 +178,34 @@ struct ContentView: View {
         }
     }
 
-    private var contentWithMigrationOverlays: some View {
+    private var contentWithNewAPIImportAlerts: some View {
         baseContent
+            .onReceive(NotificationCenter.default.publisher(for: .newAPIProviderImportDidFinish)) { notification in
+                newAPIProviderImportNoticeMessage = notification.object as? String
+                    ?? NSLocalizedString("已导入 New API 连接信息。", comment: "New API deeplink import fallback success message")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .newAPIProviderImportDidFail)) { notification in
+                newAPIProviderImportErrorMessage = notification.object as? String
+                    ?? NSLocalizedString("无法导入 New API 连接信息。", comment: "New API deeplink import fallback error message")
+            }
+            .alert(NSLocalizedString("连接信息已导入", comment: "New API deeplink import success title"), isPresented: newAPIProviderImportNoticePresented) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                    newAPIProviderImportNoticeMessage = nil
+                }
+            } message: {
+                Text(newAPIProviderImportNoticeMessage ?? "")
+            }
+            .alert(NSLocalizedString("New API 导入失败", comment: "New API deeplink import failure title"), isPresented: newAPIProviderImportErrorPresented) {
+                Button(NSLocalizedString("好的", comment: ""), role: .cancel) {
+                    newAPIProviderImportErrorMessage = nil
+                }
+            } message: {
+                Text(newAPIProviderImportErrorMessage ?? "")
+            }
+    }
+
+    private var contentWithMigrationOverlays: some View {
+        contentWithNewAPIImportAlerts
             .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
                 NavigationStack {
                     legacyJSONMigrationPromptSheet
@@ -268,6 +296,28 @@ struct ContentView: View {
             set: { isPresented in
                 if !isPresented {
                     viewModel.externalDocumentImportErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private var newAPIProviderImportNoticePresented: Binding<Bool> {
+        Binding(
+            get: { newAPIProviderImportNoticeMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    newAPIProviderImportNoticeMessage = nil
+                }
+            }
+        )
+    }
+
+    private var newAPIProviderImportErrorPresented: Binding<Bool> {
+        Binding(
+            get: { newAPIProviderImportErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    newAPIProviderImportErrorMessage = nil
                 }
             }
         )

@@ -52,4 +52,26 @@ struct ShortcutURLRouterTests {
         let handled = await ShortcutURLRouter.shared.handleIncomingURL(url)
         #expect(handled == true)
     }
+
+    @Test("New API provider deeplink is parsed")
+    func testNewAPIProviderDeeplinkParse() throws {
+        let payload = #"{"id":"new-api","baseUrl":"https://api.ericterminal.com","apiKey":"sk-test"}"#
+        var components = URLComponents()
+        components.scheme = ShortcutURLRouter.appScheme
+        components.host = "provider"
+        components.path = "/install"
+        components.queryItems = [
+            URLQueryItem(name: "v", value: "1"),
+            URLQueryItem(name: "data", value: Data(payload.utf8).base64EncodedString())
+        ]
+        let url = try #require(components.url)
+
+        #expect(NewAPIProviderImportURLHandler.canHandle(url))
+        let provider = try NewAPIProviderImportURLHandler.parseProvider(from: url)
+
+        #expect(provider.name == "New API")
+        #expect(provider.baseURL == "https://api.ericterminal.com/v1")
+        #expect(provider.apiKeys == ["sk-test"])
+        #expect(provider.apiFormat == "openai-compatible")
+    }
 }
