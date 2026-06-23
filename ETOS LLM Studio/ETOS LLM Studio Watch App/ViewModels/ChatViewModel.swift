@@ -440,7 +440,7 @@ class ChatViewModel: ObservableObject {
     private let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     var memoryRetryStoppedNoticeTask: Task<Void, Never>?
     var pendingSendDelayTask: Task<Void, Never>?
-    var pendingSendDelayPayload: PendingChatSendPayload?
+    private var pendingSendDelayPayload: PendingChatSendPayload?
     private let iso8601Formatter = ISO8601DateFormatter()
     let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()

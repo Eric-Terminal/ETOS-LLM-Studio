@@ -394,7 +394,7 @@ final class ChatViewModel: ObservableObject {
     let memoryEmbeddingErrorAlertCooldown: TimeInterval = 8
     var memoryRetryStoppedNoticeTask: Task<Void, Never>?
     var pendingSendDelayTask: Task<Void, Never>?
-    var pendingSendDelayPayload: PendingChatSendPayload?
+    private var pendingSendDelayPayload: PendingChatSendPayload?
     let iso8601Formatter = ISO8601DateFormatter()
 #if canImport(UIKit)
     var activeBackgroundTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
