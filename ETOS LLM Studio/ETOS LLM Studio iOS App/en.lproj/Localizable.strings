@@ -4613,3 +4613,14 @@
 "无法导入 New API 连接信息。" = "Unable to import New API connection info.";
 "连接信息已导入" = "Connection Info Imported";
 "New API 导入失败" = "New API Import Failed";
+"应用内置的网页搜索 MCP 服务器，可按查询词返回真实网页结果。" = "Built-in web search MCP server that returns real web results for a query.";
+"使用设备网络搜索网页。如果 query 包含 URL 或域名，会优先抓取该页面标题和摘要，再补充搜索结果。" = "Search the web using the device network. If query contains a URL or domain, the page title and summary are fetched first, then search results are added.";
+"搜索请求失败：%@" = "Search request failed: %@";
+"搜索完成，但没有找到「%@」的可用网页结果。" = "Search finished, but no usable web results were found for \"%@\".";
+"搜索完成，以下是「%@」的真实网页结果。" = "Search finished. Here are real web results for \"%@\".";
+"网页没有可读取的标题。" = "The page has no readable title.";
+"网页没有可读取的摘要。" = "The page has no readable summary.";
+"来自 %@ 的网页结果。" = "Web result from %@.";
+"无法构造搜索请求 URL。" = "Unable to build the search request URL.";
+"搜索响应无效：%@" = "Invalid search response: %@";
+"搜索请求返回 HTTP %d：%@" = "Search request returned HTTP %d: %@";

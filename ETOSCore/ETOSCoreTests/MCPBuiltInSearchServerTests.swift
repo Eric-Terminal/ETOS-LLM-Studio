@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOSCoreTests
 //
-// 验证应用内置 Mock MCP 搜索服务器能通过标准 MCP 客户端链路发现和调用。
+// 验证应用内置 MCP 搜索服务器能通过标准 MCP 客户端链路发现和调用真实搜索后端。
 // ============================================================================
 
 import Foundation
@@ -12,9 +12,9 @@ import Testing
 
 @Suite("内置 MCP 搜索服务器测试")
 struct MCPBuiltInSearchServerTests {
-    @Test("本地 Transport 可发现并调用搜索工具")
+    @Test("本地 Transport 可发现并调用网页搜索工具")
     func testBuiltInSearchTransportToolFlow() async throws {
-        let transport = MCPBuiltInSearchTransport()
+        let transport = MCPBuiltInSearchTransport(dataLoader: searchDataLoader)
         let client = MCPClient(transport: transport)
 
         let info = try await client.initialize(clientInfo: .init(name: "Harness", version: "0.1"))
@@ -43,8 +43,8 @@ struct MCPBuiltInSearchServerTests {
             return
         }
         #expect(text.contains("Swift MCP"))
-        #expect(text.contains("mock01"))
-        #expect(text.contains("mock02"))
+        #expect(text.contains("https://swift.org"))
+        #expect(text.contains("https://modelcontextprotocol.io"))
 
         guard case let .dictionary(structuredContent)? = resultObject["structuredContent"],
               case let .string(provider)? = structuredContent["provider"],
@@ -52,10 +52,42 @@ struct MCPBuiltInSearchServerTests {
             Issue.record("工具结果应包含 structuredContent。")
             return
         }
-        #expect(provider == "etos_builtin_mock_search")
+        #expect(provider == "etos_builtin_web_search")
         #expect(items.count == 2)
 
         await client.disconnect()
+    }
+
+    @Test("query 包含 URL 时优先抓取网页标题和摘要")
+    func testBuiltInSearchDirectURLFetch() async throws {
+        let engine = MCPBuiltInSearchServerEngine(dataLoader: searchDataLoader)
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": MCPBuiltInSearchServer.toolID,
+                "arguments": [
+                    "query": "爬取 blog.ericterminal.com",
+                    "max_results": 1
+                ]
+            ]
+        ]
+        let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
+        guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let result = object["result"] as? [String: Any],
+              let structuredContent = result["structuredContent"] as? [String: Any],
+              let items = structuredContent["items"] as? [[String: Any]],
+              let firstItem = items.first else {
+            Issue.record("工具结果应包含直接抓取的 structuredContent.items。")
+            return
+        }
+
+        #expect(structuredContent["provider"] as? String == "etos_builtin_web_search")
+        #expect(firstItem["source"] as? String == "direct_fetch")
+        #expect(firstItem["title"] as? String == "Eric Terminal Blog")
+        #expect(firstItem["url"] as? String == "https://blog.ericterminal.com")
+        #expect((firstItem["text"] as? String)?.contains("技术笔记") == true)
     }
 
     @Test("内置搜索服务器配置可编码解码")
@@ -140,5 +172,49 @@ struct MCPBuiltInSearchServerTests {
         MCPServerStore.delete(server)
         let afterDelete = MCPServerStore.loadServers()
         #expect(afterDelete.isEmpty)
+    }
+
+    private var searchDataLoader: @Sendable (URLRequest) async throws -> (Data, URLResponse) {
+        { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+
+            let html: String
+            switch url.host {
+            case "html.duckduckgo.com":
+                html = """
+                <html>
+                <body>
+                  <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fswift.org%2F&amp;rut=abc">Swift.org - Swift</a>
+                  <div class="result__snippet">Swift is a powerful and intuitive programming language.</div>
+                  <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmodelcontextprotocol.io%2F&amp;rut=def">Model Context Protocol</a>
+                  <div class="result__snippet">MCP is an open protocol for connecting AI applications.</div>
+                </body>
+                </html>
+                """
+            case "blog.ericterminal.com":
+                html = """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Eric Terminal Blog</title>
+                  <meta name="description" content="Eric 的技术笔记和项目记录。">
+                </head>
+                <body><main>这里是博客正文。</main></body>
+                </html>
+                """
+            default:
+                throw URLError(.cannotFindHost)
+            }
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "text/html; charset=utf-8"]
+            )!
+            return (Data(html.utf8), response)
+        }
     }
 }
