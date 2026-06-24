@@ -50,6 +50,12 @@ enum WatchChatInputActionState: Equatable {
     }
 }
 
+enum WatchChatInputSubmission {
+    static func normalizedText(from submittedText: String) -> String {
+        submittedText.watchKeyboardUnescapedNewlines()
+    }
+}
+
 struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
     let id: UUID
 }

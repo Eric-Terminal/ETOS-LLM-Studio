@@ -41,18 +41,24 @@ struct WatchInputBubbleView: View {
         viewModel.attachmentImportProgress != nil || viewModel.attachmentImportInProgress
     }
 
-    private var transparentInputField: some View {
-        ZStack(alignment: .leading) {
-            inputDisplayText
-            TextField("", text: $viewModel.userInput.watchKeyboardNewlineBinding())
-                .textFieldStyle(.plain)
-                .opacity(0.01)
-                .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
+    private var inputTextLink: some View {
+        TextFieldLink(prompt: Text(inputPlaceholderText)) {
+            inputLinkLabel
+        } onSubmit: { submittedText in
+            viewModel.userInput = WatchChatInputSubmission.normalizedText(from: submittedText)
         }
-        .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputSampleText : viewModel.userInput)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
-        .layoutPriority(1)
+        .buttonStyle(.plain)
+        .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
+        .accessibilityValue(Text(viewModel.userInput))
+    }
+
+    private var inputLinkLabel: some View {
+        inputDisplayText
+            .etFont(.body, sampleText: viewModel.userInput.isEmpty ? inputSampleText : viewModel.userInput)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: inputControlHeight, maxHeight: inputControlHeight, alignment: .leading)
+            .layoutPriority(1)
+            .contentShape(Capsule())
     }
 
     private var inputSampleText: String {
@@ -261,7 +267,7 @@ struct WatchInputBubbleView: View {
                 } else if isLiquidGlassEnabled {
                     HStack(spacing: 10) {
                         if #available(watchOS 26.0, *) {
-                            transparentInputField
+                            inputTextLink
                                 .glassEffect(.clear, in: Capsule())
 
                             Button {
@@ -282,7 +288,7 @@ struct WatchInputBubbleView: View {
                                         Capsule()
                                             .stroke(inputStrokeColor, lineWidth: 0.6)
                                     )
-                                transparentInputField
+                                inputTextLink
                             }
 
                             Button {
@@ -310,7 +316,7 @@ struct WatchInputBubbleView: View {
                                     Capsule()
                                         .stroke(inputStrokeColor, lineWidth: 0.6)
                                 )
-                            transparentInputField
+                            inputTextLink
                         }
 
                         Button {

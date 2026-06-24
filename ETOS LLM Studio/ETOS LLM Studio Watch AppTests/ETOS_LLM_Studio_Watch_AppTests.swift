@@ -461,6 +461,13 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         )
     }
 
+    @Test("TextFieldLink 提交会保留换行转义输入习惯")
+    func testWatchChatInputSubmissionNormalizesEscapedNewlines() {
+        let submittedText = "第一行\\n第二行"
+
+        #expect(WatchChatInputSubmission.normalizedText(from: submittedText) == "第一行\n第二行")
+    }
+
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """
