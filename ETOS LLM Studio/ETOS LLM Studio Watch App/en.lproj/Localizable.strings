@@ -4595,3 +4595,5 @@
 "无法构造搜索请求 URL。" = "Unable to build the search request URL.";
 "搜索响应无效：%@" = "Invalid search response: %@";
 "搜索请求返回 HTTP %d：%@" = "Search request returned HTTP %d: %@";
+"公式预览" = "Formula Preview";
+"点按在手表上查看完整渲染。" = "Tap to view the full render on Apple Watch.";

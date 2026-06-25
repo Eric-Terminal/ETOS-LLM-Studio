@@ -103,22 +103,44 @@ extension ChatBubble {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
+    func openWidgetWebPage(payload: ToolWidgetPayload) {
+        let title = payload.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        webHTMLPageItem = WatchWebHTMLPageItem(
+            title: title?.isEmpty == false ? (title ?? "") : NSLocalizedString("可视化 Widget", comment: ""),
+            html: WatchWebHTMLDocumentFactory.widgetDocument(
+                payload: payload,
+                prefersDarkPalette: colorScheme == .dark
+            )
+        )
+    }
+
     @ViewBuilder
     func widgetInlineSummaryView(payload: ToolWidgetPayload) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(NSLocalizedString("可视化 Widget", comment: ""))
-                .etFont(.caption2.weight(.semibold))
-                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
-            if let title = payload.title,
-               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(title)
-                    .etFont(.caption2)
-                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
+        Button {
+            openWidgetWebPage(payload: payload)
+        } label: {
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString("可视化 Widget", comment: ""))
+                        .etFont(.caption2.weight(.semibold))
+                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.9))
+                    if let title = payload.title,
+                       !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(title)
+                            .etFont(.caption2)
+                            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
+                    }
+                    Text(NSLocalizedString("点按在手表上查看完整渲染。", comment: ""))
+                        .etFont(.caption2)
+                        .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.forward")
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.75))
             }
-            Text(NSLocalizedString("已生成 HTML 卡片，请在 iPhone 端查看完整渲染。", comment: ""))
-                .etFont(.caption2)
-                .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
         }
+        .buttonStyle(.plain)
         .padding(.leading, 4)
     }
 
@@ -539,19 +561,8 @@ extension ChatBubble {
             Text(label)
                 .etFont(.caption2.weight(.semibold))
                 .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.85))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(NSLocalizedString("检测到可视化 Widget", comment: ""))
-                    .etFont(.caption2.weight(.medium))
-                if let title = payload.title,
-                   !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(String(format: NSLocalizedString("标题：%@", comment: ""), title))
-                        .etFont(.caption2)
-                }
-                Text(NSLocalizedString("请在 iPhone 端查看完整渲染效果。", comment: ""))
-                    .etFont(.caption2)
-            }
-            .foregroundColor(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.82))
-            .padding(.vertical, 2)
+            widgetInlineSummaryView(payload: payload)
+                .padding(.vertical, 2)
 
             if display.shouldShowRawSection {
                 toolResultSection(

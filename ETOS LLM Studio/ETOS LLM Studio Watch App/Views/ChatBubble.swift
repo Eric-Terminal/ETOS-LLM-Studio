@@ -59,6 +59,7 @@ struct ChatBubble: View {
     @State var filePreview: FileAttachmentPreviewPayload?
     @State var toolCallResultExpandedState: [String: Bool] = [:]
     @State var selectedToolCallDetailSheetItem: ToolCallDetailSheetItem?
+    @State var webHTMLPageItem: WatchWebHTMLPageItem?
     @State var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
@@ -227,6 +228,11 @@ struct ChatBubble: View {
         }
         .sheet(item: $selectedToolCallDetailSheetItem) { item in
             toolCallDetailSheet(for: item)
+        }
+        .sheet(item: $webHTMLPageItem) { item in
+            NavigationStack {
+                WatchWebHTMLPage(item: item)
+            }
         }
         .onAppear {
             autoPresentPendingToolCallIfNeeded()

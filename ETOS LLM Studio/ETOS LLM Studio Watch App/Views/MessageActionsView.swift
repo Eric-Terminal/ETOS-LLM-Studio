@@ -32,6 +32,7 @@ struct MessageActionsView: View {
     let supportsMathRenderToggle: Bool
     let isMathRenderingEnabled: Bool
     let onToggleMathRendering: () -> Void
+    let mathRenderContent: String?
     let onJumpToMessageIndex: (Int) -> Bool
     let session: ChatSession?
     let allMessages: [ChatMessage]
@@ -58,6 +59,7 @@ struct MessageActionsView: View {
         supportsMathRenderToggle: Bool = false,
         isMathRenderingEnabled: Bool = false,
         onToggleMathRendering: @escaping () -> Void = {},
+        mathRenderContent: String? = nil,
         onJumpToMessageIndex: @escaping (Int) -> Bool,
         session: ChatSession?,
         allMessages: [ChatMessage],
@@ -82,6 +84,7 @@ struct MessageActionsView: View {
         self.supportsMathRenderToggle = supportsMathRenderToggle
         self.isMathRenderingEnabled = isMathRenderingEnabled
         self.onToggleMathRendering = onToggleMathRendering
+        self.mathRenderContent = mathRenderContent
         self.onJumpToMessageIndex = onJumpToMessageIndex
         self.session = session
         self.allMessages = allMessages
@@ -99,7 +102,10 @@ struct MessageActionsView: View {
     @State private var pendingRetryMessage: ChatMessage?
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
+    @State private var mathHTMLPageItem: WatchWebHTMLPageItem?
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var ttsManager = TTSManager.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     private var responseAttemptVersionInfo: ChatResponseAttemptVersionInfo? {
         ChatResponseAttemptSupport.versionInfo(for: message, in: allMessages)
@@ -187,12 +193,17 @@ struct MessageActionsView: View {
 
                 if supportsMathRenderToggle {
                     Button {
-                        onToggleMathRendering()
-                        dismiss()
+                        if let mathRenderContent {
+                            openMathRenderingPage(content: mathRenderContent)
+                        } else {
+                            onToggleMathRendering()
+                            dismiss()
+                        }
                     } label: {
+                        let usesToggleFallback = mathRenderContent == nil && isMathRenderingEnabled
                         Label(
-                            isMathRenderingEnabled ? NSLocalizedString("取消渲染公式", comment: "") : NSLocalizedString("渲染公式", comment: ""),
-                            systemImage: isMathRenderingEnabled ? "xmark.circle" : "function"
+                            usesToggleFallback ? NSLocalizedString("取消渲染公式", comment: "") : NSLocalizedString("渲染公式", comment: ""),
+                            systemImage: usesToggleFallback ? "xmark.circle" : "function"
                         )
                     }
                 }
@@ -440,6 +451,11 @@ struct MessageActionsView: View {
         .onDisappear {
             performPendingRetryIfNeeded()
         }
+        .sheet(item: $mathHTMLPageItem) { item in
+            NavigationStack {
+                WatchWebHTMLPage(item: item)
+            }
+        }
     }
 
     private var deleteVersionConfirmPresented: Binding<Bool> {
@@ -460,6 +476,21 @@ struct MessageActionsView: View {
             return "\(base) (\(NSLocalizedString("估算", comment: "Estimated")))"
         }
         return base
+    }
+
+    private func openMathRenderingPage(content: String) {
+        let fontScale = FontLibrary.effectiveFontScale(
+            appConfig.fontCustomScale,
+            isCustomFontEnabled: appConfig.fontUseCustomFonts
+        )
+        mathHTMLPageItem = WatchWebHTMLPageItem(
+            title: NSLocalizedString("公式预览", comment: "Math rendering preview title"),
+            html: WatchWebHTMLDocumentFactory.mathDocument(
+                content: content,
+                prefersDarkPalette: colorScheme == .dark,
+                fontScale: fontScale
+            )
+        )
     }
 
     private func submitJump() {

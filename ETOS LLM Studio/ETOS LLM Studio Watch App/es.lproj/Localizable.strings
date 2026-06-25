@@ -4673,3 +4673,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "无法构造搜索请求 URL。" = "No se pudo construir la URL de la solicitud de búsqueda.";
 "搜索响应无效：%@" = "Respuesta de búsqueda no válida: %@";
 "搜索请求返回 HTTP %d：%@" = "La solicitud de búsqueda devolvió HTTP %d: %@";
+"公式预览" = "Vista previa de fórmula";
+"点按在手表上查看完整渲染。" = "Toca para ver el render completo en Apple Watch.";
