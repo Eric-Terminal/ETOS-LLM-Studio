@@ -30,6 +30,7 @@ struct WatchInputBubbleView: View {
     @Binding var attachmentSourceText: String
     @State private var resourceUsageTask: Task<Void, Never>?
     @State private var speechPreviewFinalizeTask: Task<Void, Never>?
+    @State private var isDraftEditorPresented = false
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -41,15 +42,27 @@ struct WatchInputBubbleView: View {
         viewModel.attachmentImportProgress != nil || viewModel.attachmentImportInProgress
     }
 
+    @ViewBuilder
     private var inputTextLink: some View {
-        TextFieldLink(prompt: Text(inputPlaceholderText)) {
-            inputLinkLabel
-        } onSubmit: { submittedText in
-            viewModel.userInput = WatchChatInputSubmission.normalizedText(from: submittedText)
+        if WatchChatInputSubmission.shouldUseBoundEditor(for: viewModel.userInput) {
+            Button {
+                isDraftEditorPresented = true
+            } label: {
+                inputLinkLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
+            .accessibilityValue(Text(viewModel.userInput))
+        } else {
+            TextFieldLink(prompt: Text(inputPlaceholderText)) {
+                inputLinkLabel
+            } onSubmit: { submittedText in
+                viewModel.userInput = WatchChatInputSubmission.normalizedText(from: submittedText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
+            .accessibilityValue(Text(viewModel.userInput))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
-        .accessibilityValue(Text(viewModel.userInput))
     }
 
     private var inputLinkLabel: some View {
@@ -437,6 +450,12 @@ struct WatchInputBubbleView: View {
                     )
                 }
             }
+            .sheet(isPresented: $isDraftEditorPresented) {
+                WatchChatDraftEditorView(
+                    text: $viewModel.userInput,
+                    placeholder: inputPlaceholderText
+                )
+            }
             .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: Binding(
                 get: { viewModel.showSpeechErrorAlert },
                 set: { viewModel.showSpeechErrorAlert = $0 }
@@ -550,5 +569,31 @@ struct WatchInputBubbleView: View {
     private func stopResourceUsageSampling() {
         resourceUsageTask?.cancel()
         resourceUsageTask = nil
+    }
+}
+
+private struct WatchChatDraftEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var text: String
+    let placeholder: String
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(placeholder, text: $text.watchKeyboardNewlineBinding(), axis: .vertical)
+                } footer: {
+                    Text(NSLocalizedString("继续编辑当前聊天草稿。", comment: "Watch chat draft editor footer"))
+                }
+            }
+            .navigationTitle(NSLocalizedString("输入", comment: "Watch chat draft editor title"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("完成", comment: "Done button")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }

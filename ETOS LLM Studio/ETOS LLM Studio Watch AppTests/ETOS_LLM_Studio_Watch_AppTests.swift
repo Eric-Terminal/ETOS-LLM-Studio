@@ -468,6 +468,12 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(WatchChatInputSubmission.normalizedText(from: submittedText) == "第一行\n第二行")
     }
 
+    @Test("手表聊天输入已有草稿时使用可回填编辑页")
+    func testWatchChatInputUsesBoundEditorForExistingDraft() {
+        #expect(!WatchChatInputSubmission.shouldUseBoundEditor(for: ""))
+        #expect(WatchChatInputSubmission.shouldUseBoundEditor(for: "继续写"))
+    }
+
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """

@@ -54,6 +54,11 @@ enum WatchChatInputSubmission {
     static func normalizedText(from submittedText: String) -> String {
         submittedText.watchKeyboardUnescapedNewlines()
     }
+
+    static func shouldUseBoundEditor(for currentText: String) -> Bool {
+        // TextFieldLink 没有初始文本入口，已有草稿要走可绑定编辑页才能回填。
+        !currentText.isEmpty
+    }
 }
 
 struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
