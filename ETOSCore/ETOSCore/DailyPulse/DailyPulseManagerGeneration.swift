@@ -29,7 +29,12 @@ extension DailyPulseManager {
         notifyReadyWhenFinished: Bool = false
     ) async {
         if isGenerating { return }
-        guard force || autoGenerateEnabled || trigger == .manual || trigger == .delivery else { return }
+        guard Self.shouldStartGeneration(
+            isDailyPulseEnabled: isDailyPulseEnabled,
+            force: force,
+            trigger: trigger,
+            autoGenerateEnabled: autoGenerateEnabled
+        ) else { return }
         prunePendingCurationIfNeeded(referenceDate: Date())
 
         beginGenerationBackgroundTaskIfNeeded()
@@ -108,6 +113,16 @@ extension DailyPulseManager {
             }
             logger.error("每日脉冲生成失败: \(description, privacy: .public)")
         }
+    }
+
+    nonisolated static func shouldStartGeneration(
+        isDailyPulseEnabled: Bool,
+        force: Bool,
+        trigger: DailyPulseTrigger,
+        autoGenerateEnabled: Bool
+    ) -> Bool {
+        guard isDailyPulseEnabled else { return false }
+        return force || autoGenerateEnabled || trigger == .manual || trigger == .delivery
     }
 
     func upsertRun(_ run: DailyPulseRun) {

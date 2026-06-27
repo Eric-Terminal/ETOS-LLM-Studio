@@ -221,6 +221,28 @@ struct DailyPulseTests {
         #expect(resolved?.id == chatFallback.id)
     }
 
+    @Test("关闭每日脉冲总开关后所有生成入口都会停用")
+    func disabledDailyPulseStopsEveryGenerationTrigger() {
+        #expect(!DailyPulseManager.shouldStartGeneration(
+            isDailyPulseEnabled: false,
+            force: true,
+            trigger: .manual,
+            autoGenerateEnabled: true
+        ))
+        #expect(!DailyPulseManager.shouldStartGeneration(
+            isDailyPulseEnabled: false,
+            force: false,
+            trigger: .delivery,
+            autoGenerateEnabled: true
+        ))
+        #expect(!DailyPulseManager.shouldStartGeneration(
+            isDailyPulseEnabled: false,
+            force: false,
+            trigger: .automatic,
+            autoGenerateEnabled: true
+        ))
+    }
+
     // 上下文与交付类测试已拆分到 `DailyPulseContextAndDeliveryTests.swift`。
 }
 

@@ -36,6 +36,7 @@ struct DailyPulseView: View {
             if pulseManager.todayRun == nil && !pulseManager.isPreparingTodayPulse {
                 todayPulseSection
             }
+            pulseAvailabilitySection
         }
         .navigationTitle(NSLocalizedString("每日脉冲", comment: ""))
         .task {
@@ -98,11 +99,19 @@ struct DailyPulseView: View {
                     }
                 }
             }
-            .disabled(pulseManager.isGenerating)
+            .disabled(pulseManager.isGenerating || !pulseManager.isDailyPulseEnabled)
         } header: {
             Text(NSLocalizedString("生成", comment: ""))
         } footer: {
             Text(NSLocalizedString("会优先参考最近聊天、记忆系统、请求日志、反馈历史、明日策展与当前关注焦点，并可选结合外部上下文生成约 3 张卡片。", comment: ""))
+        }
+    }
+
+    private var pulseAvailabilitySection: some View {
+        Section {
+            Toggle(NSLocalizedString("启用每日脉冲", comment: "Daily Pulse enabled toggle"), isOn: $pulseManager.isDailyPulseEnabled)
+        } footer: {
+            Text(NSLocalizedString("关闭后不会再生成新的每日脉冲；已有卡片、任务和反馈记录仍会保留。", comment: "Daily Pulse enabled toggle footer"))
         }
     }
 

@@ -4624,3 +4624,5 @@
 "无法构造搜索请求 URL。" = "Unable to build the search request URL.";
 "搜索响应无效：%@" = "Invalid search response: %@";
 "搜索请求返回 HTTP %d：%@" = "Search request returned HTTP %d: %@";
+"启用每日脉冲" = "Enable Daily Pulse";
+"关闭后不会再生成新的每日脉冲；已有卡片、任务和反馈记录仍会保留。" = "When off, no new Daily Pulse will be generated; existing cards, tasks, and feedback history are kept.";
