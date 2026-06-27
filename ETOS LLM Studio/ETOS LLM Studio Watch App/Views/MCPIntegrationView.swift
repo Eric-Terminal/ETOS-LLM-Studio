@@ -79,9 +79,7 @@ struct MCPIntegrationView: View {
                         NavigationLink {
                             MCPServerDetailView(serverID: server.id)
                         } label: {
-                            Text(server.displayName)
-                                .etFont(.headline)
-                                .lineLimit(1)
+                            serverSelectionRow(for: server)
                         }
                     }
                 }
@@ -204,6 +202,28 @@ struct MCPIntegrationView: View {
             moreSection
         }
         .navigationTitle(NSLocalizedString("MCP", comment: "MCP navigation title"))
+    }
+
+    private func serverSelectionRow(for server: MCPServerConfiguration) -> some View {
+        let isSelectedForChat = manager.status(for: server).isSelectedForChat
+
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 8, height: 8)
+                .opacity(isSelectedForChat ? 1 : 0)
+                .accessibilityHidden(true)
+
+            Text(server.displayName)
+                .etFont(.headline)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(
+            isSelectedForChat
+                ? Text(NSLocalizedString("已选中用于聊天", comment: "MCP server selected for chat accessibility value"))
+                : Text("")
+        )
     }
 
     @ViewBuilder
