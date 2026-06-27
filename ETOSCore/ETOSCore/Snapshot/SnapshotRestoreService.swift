@@ -59,9 +59,11 @@ public enum SnapshotRestoreService {
 
     public static func restoreSnapshot(from fileURL: URL, password: String?) throws {
         let fileManager = FileManager.default
-        let workingDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Snapshot-Restore-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Snapshot-Restore",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let readableURL = try makeReadableSnapshotURL(fileURL, in: workingDirectory)

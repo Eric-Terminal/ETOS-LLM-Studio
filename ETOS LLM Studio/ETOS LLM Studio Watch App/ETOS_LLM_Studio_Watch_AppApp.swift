@@ -28,6 +28,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
     
     init() {
         AppLanguageRuntime.applyConfiguredLanguage()
+        SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         Task { @MainActor in

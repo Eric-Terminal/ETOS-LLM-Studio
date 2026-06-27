@@ -111,9 +111,13 @@ public enum SyncPackageTransferService {
         exportedAt: Date = Date(),
         fileManager: FileManager = .default
     ) throws -> SyncPackageExportFileOutput {
+        let temporaryDirectory = try SyncTemporaryFileCleaner.ensureCurrentSessionDirectory(
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         try exportPackageToFile(
             package,
-            destinationDirectory: fileManager.temporaryDirectory,
+            destinationDirectory: temporaryDirectory,
             exportedAt: exportedAt,
             fileManager: fileManager
         )

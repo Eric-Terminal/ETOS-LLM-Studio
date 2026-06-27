@@ -70,8 +70,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         record[Self.checksumKey] = snapshot.checksum as NSString
         record[Self.optionsRawValueKey] = snapshot.snapshot.optionsRawValue as NSNumber
 
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cloud-sync-\(UUID().uuidString).json")
+        let tempURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "cloud-sync", fileExtension: "json")
         let encodedSnapshot = try JSONEncoder().encode(snapshot.snapshot)
         try encodedSnapshot.write(to: tempURL, options: [.atomic])
         record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)

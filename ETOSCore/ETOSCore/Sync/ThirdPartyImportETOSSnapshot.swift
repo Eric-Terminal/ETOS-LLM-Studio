@@ -19,9 +19,11 @@ enum ETOSSnapshotPackageImporter {
         }
 
         let fileManager = FileManager.default
-        let workingDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Snapshot-Import-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Snapshot-Import",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let archive: Archive

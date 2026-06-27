@@ -18,8 +18,12 @@ func stageIncomingSyncExchangeFile(
     from sourceURL: URL,
     fileManager: FileManager = .default
 ) throws -> URL {
-    let stagedURL = fileManager.temporaryDirectory
-        .appendingPathComponent("watch-sync-\(UUID().uuidString).json", isDirectory: false)
+    let stagedURL = try SyncTemporaryFileCleaner.makeFileURL(
+        prefix: "watch-sync",
+        fileExtension: "json",
+        temporaryDirectory: fileManager.temporaryDirectory,
+        fileManager: fileManager
+    )
     try fileManager.copyItem(at: sourceURL, to: stagedURL)
     return stagedURL
 }
@@ -28,8 +32,12 @@ func stageIncomingSyncExchangeData(
     _ data: Data,
     fileManager: FileManager = .default
 ) throws -> URL {
-    let stagedURL = fileManager.temporaryDirectory
-        .appendingPathComponent("watch-sync-\(UUID().uuidString).json", isDirectory: false)
+    let stagedURL = try SyncTemporaryFileCleaner.makeFileURL(
+        prefix: "watch-sync",
+        fileExtension: "json",
+        temporaryDirectory: fileManager.temporaryDirectory,
+        fileManager: fileManager
+    )
     try data.write(to: stagedURL, options: [.atomic])
     return stagedURL
 }
@@ -189,9 +197,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 }
                 return
             }
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("sync-\(UUID().uuidString).json")
+            let tempURL: URL
             do {
+                tempURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "sync", fileExtension: "json")
                 try data.write(to: tempURL, options: [.atomic])
             } catch {
                 await MainActor.run { [weak self] in
@@ -337,9 +345,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                 }
                 return
             }
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("sync-\(UUID().uuidString).json")
+            let tempURL: URL
             do {
+                tempURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "sync", fileExtension: "json")
                 try data.write(to: tempURL, options: [.atomic])
             } catch {
                 await MainActor.run { [weak self] in
@@ -1035,9 +1043,9 @@ public final class WatchSyncManager: NSObject, ObservableObject {
                         }
                         return
                     }
-                    let tempURL = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("sync-\(UUID().uuidString).json")
+                    let tempURL: URL
                     do {
+                        tempURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "sync", fileExtension: "json")
                         try data.write(to: tempURL, options: [.atomic])
                     } catch {
                         await MainActor.run { [weak self] in

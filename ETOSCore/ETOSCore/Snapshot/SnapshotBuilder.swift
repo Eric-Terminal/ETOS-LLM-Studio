@@ -53,8 +53,11 @@ public enum SnapshotBuilder {
         now: Date = Date(),
         fileManager: FileManager = .default
     ) throws -> Result {
-        let workingDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Snapshot-\(UUID().uuidString)", isDirectory: true)
+        let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Snapshot",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         let payloadDirectory = workingDirectory.appendingPathComponent("Payload", isDirectory: true)
         try fileManager.createDirectory(at: payloadDirectory, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: workingDirectory) }

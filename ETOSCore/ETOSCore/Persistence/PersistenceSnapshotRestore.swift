@@ -26,12 +26,15 @@ extension Persistence {
         let fileManager = FileManager.default
         let targets = snapshotRestoreTargetURLs()
         let shouldPreserveDatabaseEncryption = databaseEncryptionHasStoredPassphrase()
-        let conversionDirectory = shouldPreserveDatabaseEncryption
-            ? fileManager.temporaryDirectory
-                .appendingPathComponent("ETOS-Snapshot-Encrypt-\(UUID().uuidString)", isDirectory: true)
-            : nil
-        if let conversionDirectory {
-            try fileManager.createDirectory(at: conversionDirectory, withIntermediateDirectories: true)
+        let conversionDirectory: URL?
+        if shouldPreserveDatabaseEncryption {
+            conversionDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+                prefix: "ETOS-Snapshot-Encrypt",
+                temporaryDirectory: fileManager.temporaryDirectory,
+                fileManager: fileManager
+            )
+        } else {
+            conversionDirectory = nil
         }
         defer {
             if let conversionDirectory {
@@ -53,9 +56,11 @@ extension Persistence {
                 DatabaseReplacement(sourceURL: sources.memoryStoreURL, targetURL: targets.memoryStoreURL)
             ]
         }
-        let rollbackDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Snapshot-Rollback-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
+        let rollbackDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Snapshot-Rollback",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: rollbackDirectory) }
 
         var didPrepareRollback = false

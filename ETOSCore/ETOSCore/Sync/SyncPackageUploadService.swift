@@ -356,7 +356,7 @@ public enum SyncPackageUploadService {
     public static func downloadRemoteSnapshot(
         objectKey: String,
         s3 configuration: S3CompatibleUploadConfiguration,
-        destinationDirectory: URL = FileManager.default.temporaryDirectory,
+        destinationDirectory: URL = SyncTemporaryFileCleaner.currentSessionDirectoryURL(),
         timeout: TimeInterval = 180,
         now: Date = Date(),
         transport: DownloadTransport? = nil,
@@ -1033,9 +1033,8 @@ private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelega
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        let destinationURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ETOS-Download-\(UUID().uuidString)", isDirectory: false)
         do {
+            let destinationURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "ETOS-Download")
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)
             }

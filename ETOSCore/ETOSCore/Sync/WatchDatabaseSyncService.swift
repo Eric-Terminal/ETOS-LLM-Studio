@@ -169,8 +169,11 @@ public enum WatchDatabaseSyncService {
     public static func buildArchive(for kinds: Set<WatchSyncDatabaseKind>) throws -> URL {
         let selectedKinds = Set(kinds)
         let fileManager = FileManager.default
-        let workingDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Watch-Database-Sync-\(UUID().uuidString)", isDirectory: true)
+        let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Watch-Database-Sync",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         let payloadDirectory = workingDirectory.appendingPathComponent("Payload", isDirectory: true)
         let databasesDirectory = payloadDirectory.appendingPathComponent(databaseDirectoryPath, isDirectory: true)
         try fileManager.createDirectory(at: databasesDirectory, withIntermediateDirectories: true)
@@ -194,9 +197,12 @@ public enum WatchDatabaseSyncService {
             databaseItems.append((kind, destinationURL))
         }
 
-        let archiveURL = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Watch-Database-Sync-\(UUID().uuidString)", isDirectory: false)
-            .appendingPathExtension("etoswatchdb")
+        let archiveURL = try SyncTemporaryFileCleaner.makeFileURL(
+            prefix: "ETOS-Watch-Database-Sync",
+            fileExtension: "etoswatchdb",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         try Persistence.removeItemIfExists(at: archiveURL)
         let archive = try Archive(url: archiveURL, accessMode: .create, pathEncoding: nil)
         try archive.addEntry(with: manifestPath, fileURL: manifestURL, compressionMethod: .deflate)
@@ -234,9 +240,11 @@ public enum WatchDatabaseSyncService {
     @discardableResult
     public static func installArchive(at archiveURL: URL, replacing kinds: Set<WatchSyncDatabaseKind>) throws -> SyncMergeSummary {
         let fileManager = FileManager.default
-        let workingDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Watch-Database-Sync-Install-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: workingDirectory, withIntermediateDirectories: true)
+        let workingDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Watch-Database-Sync-Install",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: workingDirectory) }
 
         let archive: Archive
@@ -507,12 +515,15 @@ extension Persistence {
         let fileManager = FileManager.default
         let targets = snapshotRestoreTargetURLs()
         let shouldPreserveDatabaseEncryption = databaseEncryptionHasStoredPassphrase()
-        let conversionDirectory = shouldPreserveDatabaseEncryption
-            ? fileManager.temporaryDirectory
-                .appendingPathComponent("ETOS-Watch-Database-Sync-Encrypt-\(UUID().uuidString)", isDirectory: true)
-            : nil
-        if let conversionDirectory {
-            try fileManager.createDirectory(at: conversionDirectory, withIntermediateDirectories: true)
+        let conversionDirectory: URL?
+        if shouldPreserveDatabaseEncryption {
+            conversionDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+                prefix: "ETOS-Watch-Database-Sync-Encrypt",
+                temporaryDirectory: fileManager.temporaryDirectory,
+                fileManager: fileManager
+            )
+        } else {
+            conversionDirectory = nil
         }
         defer {
             if let conversionDirectory {
@@ -533,9 +544,11 @@ extension Persistence {
             return DatabaseReplacement(sourceURL: sourceURL, targetURL: targetURL)
         }
 
-        let rollbackDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("ETOS-Watch-Database-Sync-Rollback-\(UUID().uuidString)", isDirectory: true)
-        try fileManager.createDirectory(at: rollbackDirectory, withIntermediateDirectories: true)
+        let rollbackDirectory = try SyncTemporaryFileCleaner.makeDirectoryURL(
+            prefix: "ETOS-Watch-Database-Sync-Rollback",
+            temporaryDirectory: fileManager.temporaryDirectory,
+            fileManager: fileManager
+        )
         defer { try? fileManager.removeItem(at: rollbackDirectory) }
 
         var didPrepareRollback = false
