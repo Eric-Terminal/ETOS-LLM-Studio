@@ -115,7 +115,7 @@ public enum SyncPackageTransferService {
             temporaryDirectory: fileManager.temporaryDirectory,
             fileManager: fileManager
         )
-        try exportPackageToFile(
+        return try exportPackageToFile(
             package,
             destinationDirectory: temporaryDirectory,
             exportedAt: exportedAt,
