@@ -162,6 +162,13 @@ ETOS is open-source / spare-time pace, not 24×7 support. **First response usual
 
 Yes. Repo: [github.com/Eric-Terminal/ETOS-LLM-Studio](https://github.com/Eric-Terminal/ETOS-LLM-Studio).
 
+Before opening a PR, read the
+[contribution guide](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CONTRIBUTING.md).
+All contributions require signing the
+[CLA](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CLA.md):
+check the statement in your first PR template, or comment
+`I have read the CLA Document and I hereby sign the CLA.`.
+
 ### How do I contribute to this doc site?
 
 Source lives in `docs/site/`. Local preview:

@@ -223,6 +223,16 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个
 
 ---
 
+## 🤝 贡献与 CLA
+
+欢迎提 Issue、PR、文档修订和翻译补全。开始前请阅读 [贡献指南](CONTRIBUTING.md)。
+
+所有贡献都需要签署 [CLA](CLA.md)：首次 PR 中勾选模板里的声明，或在评论区单独发送：
+
+> I have read the CLA Document and I hereby sign the CLA.
+
+---
+
 ## 📬 联系方式
 
 *   **开发者**: Eric Terminal
@@ -231,4 +241,4 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个
 
 ---
 
-本次 README 修订于 2026 年 6 月 9 日（基于 `cb7bf431` 之后的提交）。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
+本次 README 修订于 2026 年 6 月 27 日（基于 `cb7bf431` 之后的提交）。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
