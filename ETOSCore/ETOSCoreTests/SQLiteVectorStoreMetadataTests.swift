@@ -43,4 +43,46 @@ struct SQLiteVectorStoreMetadataTests {
         #expect(loadedItems.first?.metadata["parentMemoryId"] == "parent-1")
         #expect(loadedItems.first?.metadata["tag"] == "alpha")
     }
+
+    @Test("重写为空索引后应回收 SQLite 空闲页")
+    func testRewriteToEmptyIndexReclaimsSQLiteFreePages() throws {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SQLiteVectorStoreVacuumTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+
+        let store = SQLiteVectorStore()
+        let items = (0..<160).map { index in
+            IndexItem(
+                id: "chunk-\(index)",
+                text: String(repeating: "memory-vector-cleanup-\(index)", count: 8),
+                embedding: Array(repeating: Float(index), count: 512),
+                metadata: ["parentMemoryId": "parent-\(index)"]
+            )
+        }
+
+        let databaseURL = try store.saveIndex(items: items, to: rootDirectory, as: "memory_vectors")
+        let autoVacuumMode = try sqlitePragmaInt(databaseURL, sql: "PRAGMA auto_vacuum;")
+        #expect(autoVacuumMode == 2)
+
+        _ = try store.saveIndex(items: [], to: rootDirectory, as: "memory_vectors")
+
+        let loadedItems = try store.loadIndex(from: databaseURL)
+        let freelistCount = try sqlitePragmaInt(databaseURL, sql: "PRAGMA freelist_count;")
+        #expect(loadedItems.isEmpty)
+        #expect(freelistCount == 0)
+    }
+
+    private func sqlitePragmaInt(_ databaseURL: URL, sql: String) throws -> Int {
+        var database: OpaquePointer?
+        #expect(sqlite3_open(databaseURL.path, &database) == SQLITE_OK)
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        #expect(sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK)
+        defer { sqlite3_finalize(statement) }
+
+        #expect(sqlite3_step(statement) == SQLITE_ROW)
+        return Int(sqlite3_column_int(statement, 0))
+    }
 }

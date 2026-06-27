@@ -27,12 +27,15 @@ public final class SQLiteVectorStore: VectorStoreProtocol {
             throw SQLiteError.openDatabase(databaseURL.path)
         }
         defer { sqlite3_close(db) }
+
+        try configureIncrementalAutoVacuumIfNeeded(in: db)
         
         try createTableIfNeeded(in: db)
         try beginExclusiveTransaction(in: db)
         try clearExistingRows(in: db)
         try insert(items, into: db)
         try commitTransaction(in: db)
+        try reclaimFreePages(in: db)
         
         return databaseURL
     }
@@ -93,6 +96,19 @@ private extension SQLiteVectorStore {
     
     func clearExistingRows(in db: OpaquePointer?) throws {
         try execute(sql: "DELETE FROM \(tableName);", in: db)
+    }
+
+    func configureIncrementalAutoVacuumIfNeeded(in db: OpaquePointer?) throws {
+        let currentMode = try intValue(sql: "PRAGMA auto_vacuum;", in: db) ?? 0
+        guard currentMode != 2 else { return }
+
+        // 向量库会被整库重写，启用增量 vacuum 避免旧索引页长期占用磁盘空间。
+        try execute(sql: "PRAGMA auto_vacuum=INCREMENTAL;", in: db)
+        try execute(sql: "VACUUM;", in: db)
+    }
+
+    func reclaimFreePages(in db: OpaquePointer?) throws {
+        try execute(sql: "PRAGMA incremental_vacuum;", in: db)
     }
     
     func insert(_ items: [IndexItem], into db: OpaquePointer?) throws {
@@ -161,6 +177,19 @@ private extension SQLiteVectorStore {
             let message = sqlite3_errmsg(db).flatMap { String(cString: $0) } ?? "未知错误"
             throw SQLiteError.executionFailed(message)
         }
+    }
+
+    func intValue(sql: String, in db: OpaquePointer?) throws -> Int? {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            throw SQLiteError.prepareStatement("无法准备 PRAGMA 语句")
+        }
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return nil
+        }
+        return Int(sqlite3_column_int(statement, 0))
     }
 }
 
