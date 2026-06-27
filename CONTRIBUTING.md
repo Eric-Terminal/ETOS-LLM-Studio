@@ -17,9 +17,8 @@
 
 > I have read the CLA Document and I hereby sign the CLA.
 
-仓库内的 CLA 检查会由 `github-actions[bot]` 写入 `license/cla` 状态。
-未签署 CLA 时该状态会失败，PR 作者勾选声明或发送签署评论后会自动变为成功。
-这个要求不区分改动大小；错别字、文档、测试和资源文件也一样。
+维护者会在 review 时人工确认 CLA 是否已由 PR 作者本人签署。这个要求不区分
+改动大小；错别字、文档、测试和资源文件也一样。
 
 ## 开始之前
 
