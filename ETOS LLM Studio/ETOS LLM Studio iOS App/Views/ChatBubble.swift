@@ -193,7 +193,9 @@ struct ChatBubble: View {
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: openMoreAction))
-        .sheet(item: $imagePreview) { payload in
+        .sheet(item: $imagePreview, onDismiss: {
+            refreshChatBubbleLocalPresentationBlocker()
+        }) { payload in
             ZStack {
                 Color.black.ignoresSafeArea()
                 Image(uiImage: payload.image)
@@ -202,20 +204,41 @@ struct ChatBubble: View {
                     .padding(24)
             }
         }
-        .sheet(item: $filePreview) { payload in
+        .sheet(item: $filePreview, onDismiss: {
+            refreshChatBubbleLocalPresentationBlocker()
+        }) { payload in
             ChatFileAttachmentPreviewSheet(payload: payload)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(item: $selectedToolCallDetailSheetItem) { item in
+        .sheet(item: $selectedToolCallDetailSheetItem, onDismiss: {
+            refreshChatBubbleLocalPresentationBlocker()
+        }) { item in
             toolCallDetailSheet(for: item)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .onAppear {
+            refreshChatBubbleLocalPresentationBlocker()
             autoPresentPendingToolCallIfNeeded()
         }
+        .onDisappear {
+            setChatBubbleLocalPresentationBlocked(false)
+        }
+        .onChange(of: imagePreview != nil) { _, _ in
+            refreshChatBubbleLocalPresentationBlocker()
+        }
+        .onChange(of: filePreview != nil) { _, _ in
+            refreshChatBubbleLocalPresentationBlocker()
+        }
+        .onChange(of: selectedToolCallDetailSheetItem?.id) { _, _ in
+            refreshChatBubbleLocalPresentationBlocker()
+        }
         .onChange(of: toolPermissionCenter.activeRequest?.id) { _, _ in
+            autoPresentPendingToolCallIfNeeded()
+        }
+        .onChange(of: toolPermissionCenter.canAutoPresentRequestDetails) { _, canAutoPresent in
+            guard canAutoPresent else { return }
             autoPresentPendingToolCallIfNeeded()
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in

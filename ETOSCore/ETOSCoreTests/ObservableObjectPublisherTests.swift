@@ -178,6 +178,33 @@ struct ObservableObjectPublisherTests {
         withExtendedLifetime(cancellable) {}
     }
 
+    @Test("ToolPermissionCenter 自动弹层 blocker 支持排除自身")
+    @MainActor
+    func toolPermissionCenterAutoPresentationBlockersCanExcludeSelf() {
+        let center = ToolPermissionCenter.shared
+        let baselineBlockers = center.autoPresentationBlockerIDs
+        let firstBlocker = "test.auto-presentation.first.\(UUID().uuidString)"
+        let secondBlocker = "test.auto-presentation.second.\(UUID().uuidString)"
+
+        defer {
+            center.setAutoPresentationBlocked(false, reason: firstBlocker)
+            center.setAutoPresentationBlocked(false, reason: secondBlocker)
+        }
+
+        center.setAutoPresentationBlocked(true, reason: firstBlocker)
+        center.setAutoPresentationBlocked(true, reason: secondBlocker)
+
+        #expect(!center.canAutoPresentRequestDetails)
+        #expect(center.hasAutoPresentationBlockers(excluding: baselineBlockers.union([firstBlocker])))
+        #expect(!center.hasAutoPresentationBlockers(excluding: baselineBlockers.union([firstBlocker, secondBlocker])))
+
+        center.setAutoPresentationBlocked(false, reason: firstBlocker)
+        #expect(center.hasAutoPresentationBlockers(excluding: baselineBlockers))
+
+        center.setAutoPresentationBlocked(false, reason: secondBlocker)
+        #expect(!center.hasAutoPresentationBlockers(excluding: baselineBlockers))
+    }
+
     @Test("AppToolManager 切换聊天工具总开关会触发 objectWillChange")
     @MainActor
     func appToolManagerPublishesWhenTogglingChatToolsEnabled() {

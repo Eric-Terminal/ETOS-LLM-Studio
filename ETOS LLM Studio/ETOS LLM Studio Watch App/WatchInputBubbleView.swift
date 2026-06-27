@@ -12,6 +12,7 @@ import ETOSCore
 struct WatchInputBubbleView: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject private var resourceUsageMonitor = LocalResourceUsageMonitor.shared
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
 
     let isLiquidGlassEnabled: Bool
     let inputControlHeight: CGFloat
@@ -40,6 +41,16 @@ struct WatchInputBubbleView: View {
 
     private var hasAttachmentImportProgress: Bool {
         viewModel.attachmentImportProgress != nil || viewModel.attachmentImportInProgress
+    }
+
+    private var inputLocalPresentationBlocked: Bool {
+        isRequestControlsPresented
+            || isAttachmentImportPresented
+            || isDraftEditorPresented
+            || viewModel.showSpeechErrorAlert
+            || viewModel.showAttachmentImportErrorAlert
+            || viewModel.showDimensionMismatchAlert
+            || viewModel.showMemoryEmbeddingErrorAlert
     }
 
     @ViewBuilder
@@ -484,14 +495,19 @@ struct WatchInputBubbleView: View {
             }
             .onAppear {
                 updateResourceUsageSampling()
+                refreshInputLocalPresentationBlocker()
             }
             .onChange(of: viewModel.selectedModel?.id) { _, _ in
                 updateResourceUsageSampling()
+            }
+            .onChange(of: inputLocalPresentationBlocked) { _, _ in
+                refreshInputLocalPresentationBlocker()
             }
             .onDisappear {
                 stopResourceUsageSampling()
                 speechPreviewFinalizeTask?.cancel()
                 speechPreviewFinalizeTask = nil
+                setInputLocalPresentationBlocked(false)
             }
     }
 
@@ -546,6 +562,14 @@ struct WatchInputBubbleView: View {
             guard !Task.isCancelled else { return }
             viewModel.finishSpeechRecording()
         }
+    }
+
+    private func setInputLocalPresentationBlocked(_ blocked: Bool) {
+        toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: "watch.input.presentation")
+    }
+
+    private func refreshInputLocalPresentationBlocker() {
+        setInputLocalPresentationBlocked(inputLocalPresentationBlocked)
     }
 
     private func updateResourceUsageSampling() {

@@ -41,7 +41,10 @@ extension ContentView {
         )) { wrapper in
             FullErrorContentView(content: wrapper.content)
         }
-        .sheet(item: $viewModel.activeAskUserInputRequest) { request in
+        .sheet(item: $presentedAskUserInputRequest, onDismiss: {
+            presentedAskUserInputRequest = nil
+            refreshWatchPresentationPriorities()
+        }) { request in
             WatchAskUserInputView(
                 request: request,
                 onSubmit: { answers in
@@ -137,6 +140,25 @@ extension ContentView {
                 }
             }
         }
+        .onAppear {
+            refreshWatchPresentationPriorities()
+        }
+        .onDisappear {
+            setWatchToolPermissionAutoPresentationBlocked(false)
+        }
+        .onChange(of: watchToolPermissionAutoPresentationBlocked) { _, _ in
+            refreshWatchPresentationPriorities()
+        }
+        .onChange(of: watchModalBlocksAskUserInputPresentation) { _, _ in
+            presentPendingAskUserInputIfPossible()
+        }
+        .onChange(of: viewModel.activeAskUserInputRequest?.requestID) { _, _ in
+            syncPresentedAskUserInputRequest()
+            refreshWatchPresentationPriorities()
+        }
+        .onChange(of: presentedAskUserInputRequest?.requestID) { _, _ in
+            refreshWatchPresentationPriorities()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
@@ -146,6 +168,67 @@ extension ContentView {
                 cancelDailyPulsePreparation()
             }
         }
+    }
+
+    var watchModalBlocksAskUserInputPresentation: Bool {
+        isSettingsPresented
+            || isSessionListPresented
+            || viewModel.activeSheet != nil
+            || fullErrorContent != nil
+            || messageActionsTarget != nil
+            || messageRewriteTarget != nil
+            || announcementManager.shouldShowAlert
+            || launchRecoveryNoticeMessage != nil
+            || launchRecoveryRequest != nil
+            || launchRecoveryErrorMessage != nil
+            || viewModel.messageRewriteErrorMessage != nil
+            || legacyJSONMigrationManager.isMigrationPromptPresented
+            || legacyJSONMigrationManager.isMigrating
+            || legacyJSONMigrationManager.isCleanupPromptPresented
+            || legacyMigrationErrorMessage != nil
+            || isRequestControlsPresented
+            || isAttachmentImportPresented
+            || viewModel.showSpeechErrorAlert
+            || viewModel.showAttachmentImportErrorAlert
+            || viewModel.showDimensionMismatchAlert
+            || viewModel.showMemoryEmbeddingErrorAlert
+            || appLockManager.state == .locked
+            || toolPermissionCenter.hasAutoPresentationBlockers(excluding: ["watch.root.presentation"])
+    }
+
+    var watchToolPermissionAutoPresentationBlocked: Bool {
+        watchModalBlocksAskUserInputPresentation
+            || presentedAskUserInputRequest != nil
+    }
+
+    func setWatchToolPermissionAutoPresentationBlocked(_ blocked: Bool) {
+        toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: "watch.root.presentation")
+    }
+
+    func refreshWatchPresentationPriorities() {
+        setWatchToolPermissionAutoPresentationBlocked(watchToolPermissionAutoPresentationBlocked)
+        presentPendingAskUserInputIfPossible()
+    }
+
+    func syncPresentedAskUserInputRequest() {
+        guard let activeRequest = viewModel.activeAskUserInputRequest else {
+            presentedAskUserInputRequest = nil
+            return
+        }
+        if let presentedAskUserInputRequest,
+           presentedAskUserInputRequest.requestID == activeRequest.requestID {
+            return
+        }
+        presentPendingAskUserInputIfPossible()
+    }
+
+    func presentPendingAskUserInputIfPossible() {
+        guard presentedAskUserInputRequest == nil,
+              !watchModalBlocksAskUserInputPresentation,
+              let request = viewModel.activeAskUserInputRequest else {
+            return
+        }
+        presentedAskUserInputRequest = request
     }
 
     @ViewBuilder

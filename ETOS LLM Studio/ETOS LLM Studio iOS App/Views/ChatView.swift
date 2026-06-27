@@ -261,6 +261,44 @@ struct ChatView: View {
     }
     var body: some View {
         applyPresentationModifiers(to: adaptiveChatLayout)
+            .onAppear {
+                refreshChatToolPermissionAutoPresentationBlocker()
+            }
+            .onDisappear {
+                setChatToolPermissionAutoPresentationBlocked(false)
+            }
+            .onChange(of: chatToolPermissionAutoPresentationBlocked) { _, _ in
+                refreshChatToolPermissionAutoPresentationBlocker()
+            }
+    }
+
+    var chatToolPermissionAutoPresentationBlocked: Bool {
+        navigationDestination != nil
+            || editingMessage != nil
+            || viewModel.messageRewritePayload != nil
+            || messageActionSheetPayload != nil
+            || fullErrorContent != nil
+            || sessionInfo != nil
+            || exportSharePayload != nil
+            || activeChatPickerSheet != nil
+            || showBranchOptions
+            || messageToDelete != nil
+            || messageVersionToDelete != nil
+            || sessionToDelete != nil
+            || showGhostSessionAlert
+            || exportErrorMessage != nil
+            || viewModel.messageRewriteErrorMessage != nil
+            || imageDownloadAlertMessage != nil
+            || viewModel.showMemoryEmbeddingErrorAlert
+            || viewModel.activeAskUserInputRequest != nil
+    }
+
+    func setChatToolPermissionAutoPresentationBlocked(_ blocked: Bool) {
+        toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: "ios.chat.presentation")
+    }
+
+    func refreshChatToolPermissionAutoPresentationBlocker() {
+        setChatToolPermissionAutoPresentationBlocked(chatToolPermissionAutoPresentationBlocked)
     }
 
     @ViewBuilder

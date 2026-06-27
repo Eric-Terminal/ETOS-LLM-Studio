@@ -188,6 +188,7 @@ public final class ToolPermissionCenter: ObservableObject {
     @Published public private(set) var autoApproveCountdownSeconds: Int
     @Published public private(set) var autoApproveRemainingSeconds: Int?
     @Published public private(set) var disabledAutoApproveTools: [String]
+    @Published public private(set) var autoPresentationBlockerIDs: Set<String> = []
     
     private var allowAll = false
     private var allowedTools: Set<String> = []
@@ -205,6 +206,10 @@ public final class ToolPermissionCenter: ObservableObject {
 
     private let autoApproveCountdownMin = 1
     private let autoApproveCountdownMax = 30
+
+    public var canAutoPresentRequestDetails: Bool {
+        autoPresentationBlockerIDs.isEmpty
+    }
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -311,6 +316,25 @@ public final class ToolPermissionCenter: ObservableObject {
     public func autoApproveRemainingSeconds(for request: ToolPermissionRequest) -> Int? {
         guard activeRequest?.id == request.id else { return nil }
         return autoApproveRemainingSeconds
+    }
+
+    public func setAutoPresentationBlocked(_ blocked: Bool, reason: String) {
+        let normalizedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedReason.isEmpty else { return }
+
+        var updatedBlockers = autoPresentationBlockerIDs
+        if blocked {
+            updatedBlockers.insert(normalizedReason)
+        } else {
+            updatedBlockers.remove(normalizedReason)
+        }
+
+        guard updatedBlockers != autoPresentationBlockerIDs else { return }
+        autoPresentationBlockerIDs = updatedBlockers
+    }
+
+    public func hasAutoPresentationBlockers(excluding excludedIDs: Set<String> = []) -> Bool {
+        !autoPresentationBlockerIDs.subtracting(excludedIDs).isEmpty
     }
     
     private func advanceQueueIfNeeded() {

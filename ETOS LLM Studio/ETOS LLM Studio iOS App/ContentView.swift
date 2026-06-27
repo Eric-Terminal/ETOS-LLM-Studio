@@ -24,6 +24,7 @@ struct ContentView: View {
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appLockManager = AppLockManager.shared
+    @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -42,6 +43,15 @@ struct ContentView: View {
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()
+            }
+            .onAppear {
+                refreshRootToolPermissionAutoPresentationBlocker()
+            }
+            .onDisappear {
+                setRootToolPermissionAutoPresentationBlocked(false)
+            }
+            .onChange(of: rootToolPermissionAutoPresentationBlocked) { _, _ in
+                refreshRootToolPermissionAutoPresentationBlocker()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
@@ -251,6 +261,32 @@ struct ContentView: View {
                         .zIndex(1_000)
                 }
             }
+    }
+
+    private var rootToolPermissionAutoPresentationBlocked: Bool {
+        isNativeSettingsPresented
+            || announcementManager.shouldShowAlert
+            || incomingSnapshotRestorePayload != nil
+            || viewModel.showDimensionMismatchAlert
+            || viewModel.externalDocumentImportErrorMessage != nil
+            || launchRecoveryNoticeMessage != nil
+            || launchRecoveryRequest != nil
+            || launchRecoveryErrorMessage != nil
+            || newAPIProviderImportNoticeMessage != nil
+            || newAPIProviderImportErrorMessage != nil
+            || legacyJSONMigrationManager.isMigrationPromptPresented
+            || legacyJSONMigrationManager.isMigrating
+            || legacyJSONMigrationManager.isCleanupPromptPresented
+            || isLegacyMigrationErrorPresented
+            || appLockManager.state == .locked
+    }
+
+    private func setRootToolPermissionAutoPresentationBlocked(_ blocked: Bool) {
+        toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: "ios.root.presentation")
+    }
+
+    private func refreshRootToolPermissionAutoPresentationBlocker() {
+        setRootToolPermissionAutoPresentationBlocked(rootToolPermissionAutoPresentationBlocked)
     }
 
     private func openDailyPulse() {

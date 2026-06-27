@@ -364,7 +364,24 @@ extension ChatBubble {
         return "\(message.id.uuidString)#\(callIDs)#\(activeRequestID)"
     }
 
+    var chatBubbleLocalPresentationBlockerID: String {
+        "ios.chat.bubble-presentation.\(messageState.message.id.uuidString)"
+    }
+
+    var hasChatBubbleLocalPresentation: Bool {
+        imagePreview != nil || filePreview != nil || selectedToolCallDetailSheetItem != nil
+    }
+
+    func setChatBubbleLocalPresentationBlocked(_ blocked: Bool) {
+        toolPermissionCenter.setAutoPresentationBlocked(blocked, reason: chatBubbleLocalPresentationBlockerID)
+    }
+
+    func refreshChatBubbleLocalPresentationBlocker() {
+        setChatBubbleLocalPresentationBlocked(hasChatBubbleLocalPresentation)
+    }
+
     func autoPresentPendingToolCallIfNeeded() {
+        guard toolPermissionCenter.canAutoPresentRequestDetails else { return }
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
         markPendingToolCallAutoOpened(pendingCall.id)
