@@ -51,6 +51,79 @@ func TestBuildMCPServerUpsertPayloadForHTTP(t *testing.T) {
 	}
 }
 
+func TestBuildMCPServerUpsertPayloadNormalizesUUIDID(t *testing.T) {
+	payload, _, err := buildMCPServerUpsertPayload(mcpServerInput{
+		ID:                " 5b7bcb6c-4e7f-4d98-8f17-9fbf5d2c0a91 ",
+		DisplayName:       "GitHub",
+		TransportKind:     "http",
+		EndpointURL:       "https://mcp.example.com/mcp",
+		IsSelectedForChat: true,
+	}, false)
+	if err != nil {
+		t.Fatalf("buildMCPServerUpsertPayload 返回错误: %v", err)
+	}
+	parameters := payload["parameters"].([]any)
+	if parameters[0] != "5B7BCB6C-4E7F-4D98-8F17-9FBF5D2C0A91" {
+		t.Fatalf("MCP UUID 未规范为大写: %#v", parameters[0])
+	}
+}
+
+func TestBuildMCPServerUpdatePayloadMatchesExistingUUIDCaseInsensitively(t *testing.T) {
+	payload, _, err := buildMCPServerUpdatePayload(mcpServerInput{
+		ID:                "5b7bcb6c-4e7f-4d98-8f17-9fbf5d2c0a91",
+		DisplayName:       "GitHub",
+		TransportKind:     "http",
+		EndpointURL:       "https://mcp.example.com/mcp",
+		IsSelectedForChat: true,
+	}, false)
+	if err != nil {
+		t.Fatalf("buildMCPServerUpdatePayload 返回错误: %v", err)
+	}
+	sql := asString(payload["sql"])
+	if !strings.Contains(sql, "UPDATE mcp_servers") || strings.Contains(sql, "INSERT INTO mcp_servers") {
+		t.Fatalf("编辑已有 MCP 服务器应使用 UPDATE 而不是 INSERT: %s", sql)
+	}
+	if !strings.Contains(sql, "WHERE id COLLATE NOCASE = ?") {
+		t.Fatalf("编辑已有 MCP 服务器没有大小写不敏感匹配 ID: %s", sql)
+	}
+	parameters := payload["parameters"].([]any)
+	if parameters[len(parameters)-1] != "5B7BCB6C-4E7F-4D98-8F17-9FBF5D2C0A91" {
+		t.Fatalf("UPDATE 查询 ID 未规范为大写: %#v", parameters[len(parameters)-1])
+	}
+}
+
+func TestMCPServerIDPayloadsNormalizeUUIDAndMatchCaseInsensitively(t *testing.T) {
+	lowerID := "5b7bcb6c-4e7f-4d98-8f17-9fbf5d2c0a91"
+	upperID := "5B7BCB6C-4E7F-4D98-8F17-9FBF5D2C0A91"
+
+	payloads := []map[string]any{
+		mcpToggleServerChatPayload(lowerID, true),
+		mcpUpdatePoliciesPayload(lowerID, `["tool"]`, `{"tool":"always_allow"}`),
+		mcpDeleteToolsPayload(lowerID),
+		mcpDeleteServerPayload(lowerID),
+	}
+	for index, payload := range payloads {
+		sql := asString(payload["sql"])
+		if !strings.Contains(sql, "COLLATE NOCASE") {
+			t.Fatalf("payload %d 没有大小写不敏感匹配 ID: %s", index, sql)
+		}
+		parameters := payload["parameters"].([]any)
+		if parameters[len(parameters)-1] != upperID {
+			t.Fatalf("payload %d 的 ID 参数 = %#v, want %s", index, parameters[len(parameters)-1], upperID)
+		}
+	}
+}
+
+func TestNewTUIUUIDUsesUppercaseCanonicalText(t *testing.T) {
+	id := newTUIUUID()
+	if id != strings.ToUpper(id) {
+		t.Fatalf("newTUIUUID 生成了非大写 UUID: %s", id)
+	}
+	if !isUUIDText(id) {
+		t.Fatalf("newTUIUUID 生成了非法 UUID: %s", id)
+	}
+}
+
 func TestBuildMCPServerUpsertPayloadInfersSSEMessageEndpoint(t *testing.T) {
 	payload, resetMetadata, err := buildMCPServerUpsertPayload(mcpServerInput{
 		ID:                "server-1",

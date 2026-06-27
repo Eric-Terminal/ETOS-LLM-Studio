@@ -170,7 +170,7 @@ func (m *tuiModel) promptMCPServer(title string, input mcpServerInput, isNew boo
 		if err != nil {
 			return tuiMessageCommand(tuiCommandResultMsg{op: "mcp:upsert", err: err})
 		}
-		payload, resetMetadata, err := buildMCPServerUpsertPayload(input, resetMetadata)
+		payload, resetMetadata, err := buildMCPServerSavePayload(input, resetMetadata, isNew)
 		if err != nil {
 			return tuiMessageCommand(tuiCommandResultMsg{op: "mcp:upsert", err: err})
 		}
@@ -347,27 +347,79 @@ func (m *tuiModel) deleteSelectedMCPServer() tea.Cmd {
 }
 
 func buildMCPServerUpsertPayload(input mcpServerInput, resetMetadata bool) (map[string]any, bool, error) {
+	values, err := buildMCPServerMutationValues(input)
+	if err != nil {
+		return nil, false, err
+	}
+
+	sql := mcpUpsertSQL(resetMetadata)
+	payload := map[string]any{
+		"command":            "mutate_sqlite",
+		"database":           "config",
+		"sql":                sql,
+		"parameters":         values.insertParameters(),
+		"returning_max_rows": 1,
+	}
+	return payload, resetMetadata, nil
+}
+
+func buildMCPServerSavePayload(input mcpServerInput, resetMetadata bool, isNew bool) (map[string]any, bool, error) {
+	if isNew {
+		return buildMCPServerUpsertPayload(input, resetMetadata)
+	}
+	return buildMCPServerUpdatePayload(input, resetMetadata)
+}
+
+func buildMCPServerUpdatePayload(input mcpServerInput, resetMetadata bool) (map[string]any, bool, error) {
+	values, err := buildMCPServerMutationValues(input)
+	if err != nil {
+		return nil, false, err
+	}
+
+	payload := map[string]any{
+		"command":            "mutate_sqlite",
+		"database":           "config",
+		"sql":                mcpUpdateSQL(resetMetadata),
+		"parameters":         values.updateParameters(),
+		"returning_max_rows": 1,
+	}
+	return payload, resetMetadata, nil
+}
+
+type mcpServerMutationValues struct {
+	input               mcpServerInput
+	endpointURL         string
+	messageEndpointURL  string
+	sseEndpointURL      string
+	apiKey              string
+	headersJSON         string
+	disabledToolIDsJSON string
+	policiesJSON        string
+	oauthPayloadJSON    string
+}
+
+func buildMCPServerMutationValues(input mcpServerInput) (mcpServerMutationValues, error) {
 	input = normalizedMCPServerInput(input)
 
 	if input.ID == "" {
-		return nil, false, fmt.Errorf("MCP 服务器 ID 不能为空")
+		return mcpServerMutationValues{}, fmt.Errorf("MCP 服务器 ID 不能为空")
 	}
 	if input.DisplayName == "" {
-		return nil, false, fmt.Errorf("显示名称不能为空")
+		return mcpServerMutationValues{}, fmt.Errorf("显示名称不能为空")
 	}
 
 	endpointURL, messageEndpointURL, sseEndpointURL, err := resolveMCPTransportURLs(input)
 	if err != nil {
-		return nil, false, err
+		return mcpServerMutationValues{}, err
 	}
 
 	disabledToolIDsJSON, err := normalizeJSONStringArray(input.DisabledToolIDsJSON, "Disabled Tool IDs")
 	if err != nil {
-		return nil, false, err
+		return mcpServerMutationValues{}, err
 	}
 	policiesJSON, err := normalizeMCPApprovalPoliciesJSON(input.ToolApprovalPoliciesJSON)
 	if err != nil {
-		return nil, false, err
+		return mcpServerMutationValues{}, err
 	}
 
 	apiKey := input.APIKey
@@ -377,41 +429,52 @@ func buildMCPServerUpsertPayload(input mcpServerInput, resetMetadata bool) (map[
 	case "http", "sse":
 		headersJSON, err = normalizeMCPHeadersJSON(input.AdditionalHeadersJSON)
 		if err != nil {
-			return nil, false, err
+			return mcpServerMutationValues{}, err
 		}
 	case "oauth":
 		oauthPayloadJSON, err = normalizeMCPOAuthPayloadJSON(input.OAuthPayloadJSON)
 		if err != nil {
-			return nil, false, err
+			return mcpServerMutationValues{}, err
 		}
 		apiKey = ""
 	}
 
-	sql := mcpUpsertSQL(resetMetadata)
-	payload := map[string]any{
-		"command":  "mutate_sqlite",
-		"database": "config",
-		"sql":      sql,
-		"parameters": []any{
-			input.ID,
-			input.DisplayName,
-			nullableTrimmed(input.Notes),
-			boolToSQLiteInt(input.IsSelectedForChat),
-			input.TransportKind,
-			nullableTrimmed(endpointURL),
-			nullableTrimmed(messageEndpointURL),
-			nullableTrimmed(sseEndpointURL),
-			unixNowSeconds(),
-			nullableTrimmed(apiKey),
-			nullableTrimmed(headersJSON),
-			nullableTrimmed(disabledToolIDsJSON),
-			nullableTrimmed(policiesJSON),
-			nullableTrimmed(oauthPayloadJSON),
-			nullableTrimmed(input.StreamResumptionToken),
-		},
-		"returning_max_rows": 1,
+	return mcpServerMutationValues{
+		input:               input,
+		endpointURL:         endpointURL,
+		messageEndpointURL:  messageEndpointURL,
+		sseEndpointURL:      sseEndpointURL,
+		apiKey:              apiKey,
+		headersJSON:         headersJSON,
+		disabledToolIDsJSON: disabledToolIDsJSON,
+		policiesJSON:        policiesJSON,
+		oauthPayloadJSON:    oauthPayloadJSON,
+	}, nil
+}
+
+func (values mcpServerMutationValues) insertParameters() []any {
+	return []any{
+		values.input.ID,
+		values.input.DisplayName,
+		nullableTrimmed(values.input.Notes),
+		boolToSQLiteInt(values.input.IsSelectedForChat),
+		values.input.TransportKind,
+		nullableTrimmed(values.endpointURL),
+		nullableTrimmed(values.messageEndpointURL),
+		nullableTrimmed(values.sseEndpointURL),
+		unixNowSeconds(),
+		nullableTrimmed(values.apiKey),
+		nullableTrimmed(values.headersJSON),
+		nullableTrimmed(values.disabledToolIDsJSON),
+		nullableTrimmed(values.policiesJSON),
+		nullableTrimmed(values.oauthPayloadJSON),
+		nullableTrimmed(values.input.StreamResumptionToken),
 	}
-	return payload, resetMetadata, nil
+}
+
+func (values mcpServerMutationValues) updateParameters() []any {
+	parameters := values.insertParameters()[1:]
+	return append(parameters, values.input.ID)
 }
 
 func mcpShouldResetMetadata(original, updated mcpServerInput, isNew bool) (bool, error) {
@@ -463,7 +526,7 @@ func mcpTransportSignature(input mcpServerInput, strict bool) (string, error) {
 }
 
 func normalizedMCPServerInput(input mcpServerInput) mcpServerInput {
-	input.ID = strings.TrimSpace(input.ID)
+	input.ID = normalizeMCPServerID(input.ID)
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.TransportKind = strings.TrimSpace(strings.ToLower(input.TransportKind))
 	input.EndpointURL = strings.TrimSpace(input.EndpointURL)
@@ -471,6 +534,33 @@ func normalizedMCPServerInput(input mcpServerInput) mcpServerInput {
 	input.SSEEndpointURL = strings.TrimSpace(input.SSEEndpointURL)
 	input.APIKey = strings.TrimSpace(input.APIKey)
 	return input
+}
+
+func normalizeMCPServerID(serverID string) string {
+	trimmed := strings.TrimSpace(serverID)
+	if isUUIDText(trimmed) {
+		return strings.ToUpper(trimmed)
+	}
+	return trimmed
+}
+
+func isUUIDText(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for index, r := range value {
+		switch index {
+		case 8, 13, 18, 23:
+			if r != '-' {
+				return false
+			}
+		default:
+			if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func mcpUpsertSQL(resetMetadata bool) string {
@@ -508,6 +598,40 @@ ON CONFLICT(id) DO UPDATE SET
     tool_approval_policies_json = excluded.tool_approval_policies_json,
     oauth_payload_json = excluded.oauth_payload_json,
     stream_resumption_token = excluded.stream_resumption_token` + resetClause + `
+RETURNING id, display_name, transport_kind, is_selected_for_chat
+`
+}
+
+func mcpUpdateSQL(resetMetadata bool) string {
+	resetClause := ""
+	if resetMetadata {
+		resetClause = `,
+    status = 'idle',
+    metadata_cached_at = NULL,
+    info_json = NULL,
+    resources_json = NULL,
+    resource_templates_json = NULL,
+    prompts_json = NULL,
+    roots_json = NULL`
+	}
+	return `
+UPDATE mcp_servers
+SET
+    display_name = ?,
+    notes = ?,
+    is_selected_for_chat = ?,
+    transport_kind = ?,
+    endpoint_url = ?,
+    message_endpoint_url = ?,
+    sse_endpoint_url = ?,
+    updated_at = ?,
+    api_key = ?,
+    additional_headers_json = ?,
+    disabled_tool_ids_json = ?,
+    tool_approval_policies_json = ?,
+    oauth_payload_json = ?,
+    stream_resumption_token = ?` + resetClause + `
+WHERE id COLLATE NOCASE = ?
 RETURNING id, display_name, transport_kind, is_selected_for_chat
 `
 }
@@ -572,10 +696,11 @@ func inferMCPMessageEndpoint(sseEndpoint string) string {
 }
 
 func mcpToggleServerChatPayload(serverID string, enabled bool) map[string]any {
+	serverID = normalizeMCPServerID(serverID)
 	return map[string]any{
 		"command":  "mutate_sqlite",
 		"database": "config",
-		"sql":      "UPDATE mcp_servers SET is_selected_for_chat = ?, updated_at = ? WHERE id = ? RETURNING id, display_name, is_selected_for_chat",
+		"sql":      "UPDATE mcp_servers SET is_selected_for_chat = ?, updated_at = ? WHERE id COLLATE NOCASE = ? RETURNING id, display_name, is_selected_for_chat",
 		"parameters": []any{
 			boolToSQLiteInt(enabled),
 			unixNowSeconds(),
@@ -586,10 +711,11 @@ func mcpToggleServerChatPayload(serverID string, enabled bool) map[string]any {
 }
 
 func mcpUpdatePoliciesPayload(serverID, disabledToolIDsJSON, policiesJSON string) map[string]any {
+	serverID = normalizeMCPServerID(serverID)
 	return map[string]any{
 		"command":  "mutate_sqlite",
 		"database": "config",
-		"sql":      "UPDATE mcp_servers SET disabled_tool_ids_json = ?, tool_approval_policies_json = ?, updated_at = ? WHERE id = ? RETURNING id, display_name",
+		"sql":      "UPDATE mcp_servers SET disabled_tool_ids_json = ?, tool_approval_policies_json = ?, updated_at = ? WHERE id COLLATE NOCASE = ? RETURNING id, display_name",
 		"parameters": []any{
 			nullableTrimmed(disabledToolIDsJSON),
 			nullableTrimmed(policiesJSON),
@@ -601,26 +727,28 @@ func mcpUpdatePoliciesPayload(serverID, disabledToolIDsJSON, policiesJSON string
 }
 
 func mcpDeleteToolsPayload(serverID string) map[string]any {
+	serverID = normalizeMCPServerID(serverID)
 	return map[string]any{
 		"command":    "mutate_sqlite",
 		"database":   "config",
-		"sql":        "DELETE FROM mcp_tools WHERE server_id = ?",
+		"sql":        "DELETE FROM mcp_tools WHERE server_id COLLATE NOCASE = ?",
 		"parameters": []any{serverID},
 	}
 }
 
 func mcpDeleteServerPayload(serverID string) map[string]any {
+	serverID = normalizeMCPServerID(serverID)
 	return map[string]any{
 		"command":    "mutate_sqlite",
 		"database":   "config",
-		"sql":        "DELETE FROM mcp_servers WHERE id = ?",
+		"sql":        "DELETE FROM mcp_servers WHERE id COLLATE NOCASE = ?",
 		"parameters": []any{serverID},
 	}
 }
 
 func mcpServerInputFromRow(row map[string]any) mcpServerInput {
 	return mcpServerInput{
-		ID:                       asString(row["id"]),
+		ID:                       normalizeMCPServerID(asString(row["id"])),
 		DisplayName:              asString(row["display_name"]),
 		Notes:                    asString(row["notes"]),
 		TransportKind:            asString(row["transport_kind"]),
@@ -1006,11 +1134,11 @@ func newTUIUUID() string {
 	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+	return strings.ToUpper(fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		b[0:4],
 		b[4:6],
 		b[6:8],
 		b[8:10],
 		b[10:16],
-	)
+	))
 }
