@@ -4704,3 +4704,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "搜索请求返回 HTTP %d：%@" = "La solicitud de búsqueda devolvió HTTP %d: %@";
 "启用每日脉冲" = "Activar Daily Pulse";
 "关闭后不会再生成新的每日脉冲；已有卡片、任务和反馈记录仍会保留。" = "Al desactivarlo, no se generará ningún Daily Pulse nuevo; se conservarán las tarjetas, tareas e historial de comentarios existentes.";
+"时间格式不正确，请输入 00:00-23:59。" = "Formato de hora no válido. Introduce 00:00-23:59.";

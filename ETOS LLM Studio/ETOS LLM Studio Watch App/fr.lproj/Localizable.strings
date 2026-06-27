@@ -4677,3 +4677,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "点按在手表上查看完整渲染。" = "Touchez pour afficher le rendu complet sur Apple Watch.";
 "启用每日脉冲" = "Activer Daily Pulse";
 "关闭后不会再生成新的每日脉冲；已有卡片、任务和反馈记录仍会保留。" = "Lorsque cette option est désactivée, aucun nouveau Daily Pulse n'est généré ; les cartes, tâches et historiques de retours existants sont conservés.";
+"时间格式不正确，请输入 00:00-23:59。" = "Format d'heure non valide. Saisissez 00:00-23:59.";

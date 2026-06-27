@@ -20,6 +20,8 @@ struct DailyPulseView: View {
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
 
     @State private var statusMessage: String?
+    @State private var reminderTimeDraft: String?
+    @State private var reminderTimeInputIsInvalid = false
 
     var body: some View {
         List {
@@ -123,11 +125,29 @@ struct DailyPulseView: View {
             Toggle(NSLocalizedString("晨间提醒", comment: ""), isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
-                DatePicker(
-                    NSLocalizedString("提醒时间", comment: ""),
-                    selection: reminderTimeBinding,
-                    displayedComponents: .hourAndMinute
-                )
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(NSLocalizedString("提醒时间", comment: ""))
+                        Spacer()
+                        TextField(NSLocalizedString("提醒时间", comment: ""), text: reminderTimeTextBinding)
+                            .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .keyboardType(.numbersAndPunctuation)
+                            .frame(width: 96)
+                            .onSubmit {
+                                normalizeReminderTimeDraft()
+                            }
+                            .onDisappear {
+                                normalizeReminderTimeDraft()
+                            }
+                    }
+
+                    if reminderTimeInputIsInvalid {
+                        Text(NSLocalizedString("时间格式不正确，请输入 00:00-23:59。", comment: "Daily Pulse reminder time invalid input"))
+                            .etFont(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
 
                 if notificationCenter.authorizationStatus == .denied {
                     Button(NSLocalizedString("打开系统通知设置", comment: "")) {
@@ -470,21 +490,40 @@ struct DailyPulseView: View {
         )
     }
 
-    private var reminderTimeBinding: Binding<Date> {
+    private var reminderTimeTextBinding: Binding<String> {
         Binding(
-            get: {
-                var components = DateComponents()
-                components.calendar = Calendar(identifier: .gregorian)
-                components.hour = deliveryCoordinator.reminderHour
-                components.minute = deliveryCoordinator.reminderMinute
-                return components.date ?? Date()
-            },
+            get: { reminderTimeDraft ?? deliveryCoordinator.reminderTimeText },
             set: { newValue in
-                let components = Calendar(identifier: .gregorian).dateComponents([.hour, .minute], from: newValue)
-                deliveryCoordinator.reminderHour = components.hour ?? deliveryCoordinator.reminderHour
-                deliveryCoordinator.reminderMinute = components.minute ?? deliveryCoordinator.reminderMinute
+                reminderTimeDraft = newValue
+                applyReminderTimeInput(newValue)
             }
         )
+    }
+
+    private func applyReminderTimeInput(_ input: String) {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            reminderTimeInputIsInvalid = false
+            return
+        }
+        guard let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: trimmed) else {
+            reminderTimeInputIsInvalid = true
+            return
+        }
+
+        reminderTimeInputIsInvalid = false
+        deliveryCoordinator.reminderHour = components.hour
+        deliveryCoordinator.reminderMinute = components.minute
+    }
+
+    private func normalizeReminderTimeDraft() {
+        let input = reminderTimeDraft ?? deliveryCoordinator.reminderTimeText
+        if let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: input) {
+            deliveryCoordinator.reminderHour = components.hour
+            deliveryCoordinator.reminderMinute = components.minute
+        }
+        reminderTimeDraft = deliveryCoordinator.reminderTimeText
+        reminderTimeInputIsInvalid = false
     }
 }
 
