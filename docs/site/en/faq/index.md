@@ -166,7 +166,7 @@ Before opening a PR, read the
 [contribution guide](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CONTRIBUTING.md).
 All contributions require signing the
 [CLA](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CLA.md):
-check the statement in your first PR template, or comment
+the PR author should check the template statement or comment
 `I have read the CLA Document and I hereby sign the CLA.`.
 
 ### How do I contribute to this doc site?

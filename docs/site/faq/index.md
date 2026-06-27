@@ -164,7 +164,7 @@ ETOS 的开发是开源 / 业余维护节奏，不是 7×24 客服。**通常 24
 
 提 PR 前请先阅读 [贡献指南](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CONTRIBUTING.md)。
 所有贡献都需要签署 [CLA](https://github.com/Eric-Terminal/ETOS-LLM-Studio/blob/main/CLA.md)：
-首次 PR 中勾选模板里的声明，或在评论区发送
+首次 PR 请由 PR 作者勾选模板里的声明，或在评论区发送
 `I have read the CLA Document and I hereby sign the CLA.`。
 
 ### 文档站本身怎么贡献？

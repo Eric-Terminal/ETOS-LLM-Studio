@@ -1,0 +1,115 @@
+name: CLA 签署检查
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+  issue_comment:
+    types:
+      - created
+      - edited
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: cla-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  cla:
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    name: 写入 license/cla 状态
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检查 PR 作者 CLA 签署
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const signature = 'I have read the CLA Document and I hereby sign the CLA.';
+            const contextName = 'license/cla';
+            const { owner, repo } = context.repo;
+
+            async function loadPullRequest() {
+              if (context.payload.pull_request) {
+                return context.payload.pull_request;
+              }
+
+              const pullNumber = context.payload.issue.number;
+              const response = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+              return response.data;
+            }
+
+            function containsSignature(body) {
+              return String(body || '')
+                .replace(/\r\n/g, '\n')
+                .split('\n')
+                .map((line) => line.trim().replace(/^>\s*/, ''))
+                .some((line) => line === signature);
+            }
+
+            function hasCheckedSignature(body) {
+              return String(body || '')
+                .replace(/\r\n/g, '\n')
+                .split('\n')
+                .map((line) => line.trim())
+                .some((line) => {
+                  return /^[-*]\s*\[[xX]\]\s*I have read the CLA Document and I hereby sign the CLA\.\s*$/.test(line);
+                });
+            }
+
+            const pullRequest = await loadPullRequest();
+            const author = pullRequest.user.login;
+            const headSha = pullRequest.head.sha;
+            const pullNumber = pullRequest.number;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner,
+                repo,
+                issue_number: pullNumber,
+                per_page: 100,
+              }
+            );
+
+            const signedByComment = comments.some((comment) => {
+              return comment.user?.login === author && containsSignature(comment.body);
+            });
+            const signedByCheckbox = hasCheckedSignature(pullRequest.body);
+            const signed = signedByComment || signedByCheckbox;
+
+            const state = signed ? 'success' : 'failure';
+            const description = signed
+              ? `CLA signed by PR author ${author}`
+              : 'PR author must sign the CLA by comment or checkbox';
+
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha: headSha,
+              state,
+              context: contextName,
+              description,
+              target_url: `https://github.com/${owner}/${repo}/blob/main/CLA.md`,
+            });
+
+            if (signed) {
+              core.info(`${author} has signed the CLA.`);
+              core.info(`Signature source: ${signedByComment ? 'comment' : 'checkbox'}`);
+            } else {
+              core.warning(`${author} has not signed the CLA yet.`);
+              core.info(`Ask the PR author to check the CLA box or comment exactly: ${signature}`);
+            }

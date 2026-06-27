@@ -69,8 +69,9 @@ You represent that:
 
 ## 5. How to Sign
 
-On your first pull request, either check the CLA statement in the pull
-request template or comment the following sentence:
+On your first pull request, the pull request author must either check
+the CLA statement in the pull request template or comment the following
+sentence:
 
 > I have read the CLA Document and I hereby sign the CLA.
 
@@ -83,5 +84,5 @@ identity, employer authorization, or authorship is unclear.
 **中文摘要（以英文条款为准）**：ETOS LLM Studio 公开仓库采用 GPL-3.0，
 官方构建可能通过 TestFlight、App Store 或其他正式渠道分发。签署本协议
 表示你授予维护者将你的贡献用于公开源码版本与官方构建的版权许可与必要
-专利许可；贡献的版权仍归你所有。首次 PR 中勾选模板里的 CLA 声明，或在
-评论区单独发送上面的英文句子，即视为签署。
+专利许可；贡献的版权仍归你所有。首次 PR 中由 PR 作者勾选模板里的 CLA 声明，
+或在评论区单独发送上面的英文句子，即视为签署。

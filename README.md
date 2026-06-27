@@ -227,7 +227,7 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个
 
 欢迎提 Issue、PR、文档修订和翻译补全。开始前请阅读 [贡献指南](CONTRIBUTING.md)。
 
-所有贡献都需要签署 [CLA](CLA.md)：首次 PR 中勾选模板里的声明，或在评论区单独发送：
+所有贡献都需要签署 [CLA](CLA.md)：首次 PR 请由 PR 作者勾选模板里的声明，或在评论区单独发送：
 
 > I have read the CLA Document and I hereby sign the CLA.
 

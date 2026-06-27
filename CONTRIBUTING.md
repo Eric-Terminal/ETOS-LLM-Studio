@@ -10,12 +10,16 @@
 测试贡献都需要签署 [CLA](CLA.md)，这样维护者才能把贡献同时纳入公开源码版
 和官方构建。
 
-首次 PR 请在 PR 模板里勾选这句话，或在 PR 评论区单独发送：
+首次 PR 请由 PR 作者完成以下任一项：
+
+- 勾选 PR 模板里的 CLA 声明。
+- 在 PR 评论区单独发送：
 
 > I have read the CLA Document and I hereby sign the CLA.
 
-未签署 CLA 的 PR 不会合并。这个要求不区分改动大小；错别字、文档、测试和
-资源文件也一样。
+仓库内的 CLA 检查会由 `github-actions[bot]` 写入 `license/cla` 状态。
+未签署 CLA 时该状态会失败，PR 作者勾选声明或发送签署评论后会自动变为成功。
+这个要求不区分改动大小；错别字、文档、测试和资源文件也一样。
 
 ## 开始之前
 
@@ -73,7 +77,7 @@
 2. 保持提交粒度清晰，commit message 使用 Conventional Commits 风格。
 3. PR 标题简洁说明目的；正文写清楚改了什么、为什么改、怎么验证。
 4. UI 改动请附截图或录屏；iOS 和 watchOS 都受影响时，两端都要说明。
-5. 勾选 PR 模板里的 CLA 声明。
+5. 由 PR 作者勾选 CLA 声明，或在评论区发送 CLA 签署声明。
 
 维护者可能会要求你拆分 PR、补测试、补本地化或调整实现边界。这不是形式主义，
 而是为了让项目长期还能被人读懂和维护。
@@ -81,7 +85,8 @@
 ## English Summary
 
 All contributions require signing [CLA.md](CLA.md). On your first pull
-request, check the CLA statement in the PR template or comment:
+request, the PR author must either check the CLA statement in the pull
+request template or comment:
 
 > I have read the CLA Document and I hereby sign the CLA.
 
