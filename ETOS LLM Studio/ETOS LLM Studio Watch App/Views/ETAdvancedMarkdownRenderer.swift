@@ -66,21 +66,12 @@ struct ETAdvancedMarkdownRenderer: View {
                     fontScale: fontScale
                 )
             } else if let prepared = effectivePreparedContent {
-                if shouldUseMathEngine(prepared) {
-                    ETMathAwareMarkdownView(
-                        preparedContent: prepared,
-                        isOutgoing: isOutgoing,
-                        customTextColor: customTextColor,
-                        fontScale: fontScale
-                    )
-                } else {
-                    markdownTextView(
-                        markdownContent: prepared.markdownContent,
-                        sampleText: prepared.sourceText,
-                        textColor: textColor,
-                        fontScale: fontScale
-                    )
-                }
+                markdownTextView(
+                    markdownContent: prepared.markdownContent,
+                    sampleText: prepared.sourceText,
+                    textColor: textColor,
+                    fontScale: fontScale
+                )
             } else {
                 markdownTextView(
                     markdownContent: MarkdownContent(content),
@@ -115,10 +106,6 @@ struct ETAdvancedMarkdownRenderer: View {
             return nil
         }
         return (prefix, activeLine)
-    }
-
-    private func shouldUseMathEngine(_ prepared: ETPreparedMarkdownRenderPayload) -> Bool {
-        enableAdvancedRenderer && enableMathRendering && prepared.containsMathContent
     }
 
     @ViewBuilder
@@ -277,86 +264,6 @@ private struct ETStreamingActiveLineText: View {
         settledText = newText
         fadingTail = ""
         tailOpacity = 1
-    }
-}
-
-// TODO: 后续评估让 watchOS 直接消费 iPhone 侧预渲染的高质量公式/图表资源，避免手表端继续背实时渲染依赖。
-private struct ETMathAwareMarkdownView: View {
-    let preparedContent: ETPreparedMarkdownRenderPayload
-    let isOutgoing: Bool
-    let customTextColor: Color?
-    let fontScale: Double
-
-    private var textColor: Color {
-        customTextColor ?? (isOutgoing ? .white : .primary)
-    }
-
-    private var inlineMathFontSize: CGFloat {
-        17 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
-    }
-
-    private var blockMathFontSize: CGFloat {
-        20 * CGFloat(FontLibrary.normalizedFontScale(fontScale))
-    }
-
-    private var blocks: [ETMathRenderBlock] {
-        ETMathRenderBlock.build(from: preparedContent.mathSegments)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .emptyLine:
-                    Color.clear.frame(height: 6)
-                case .blockMath(let latex):
-                    ScrollView(.horizontal) {
-                        ETMathView(
-                            latex: latex,
-                            displayMode: .block,
-                            style: ETMathStyle(fontSize: blockMathFontSize, textColor: textColor)
-                        )
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 2)
-                    }
-                    .padding(.vertical, 2)
-                case .line(let parts):
-                    renderLine(parts)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func renderLine(_ parts: [ETInlineRenderPart]) -> some View {
-        if parts.contains(where: \.isMath) {
-            let tokens = ETInlineRenderToken.tokens(from: parts)
-            ETInlineMathFlowLayout(itemSpacing: 0, lineSpacing: 4) {
-                ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in
-                    switch token {
-                    case .text(let text):
-                        Text(verbatim: text)
-                            .etFont(.body, sampleText: text)
-                            .foregroundStyle(textColor)
-                            .fixedSize(horizontal: true, vertical: true)
-                    case .math(let latex):
-                        ETMathView(
-                            latex: latex,
-                            displayMode: .inline,
-                            style: ETMathStyle(fontSize: inlineMathFontSize, textColor: textColor)
-                        )
-                        .fixedSize(horizontal: true, vertical: true)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            let text = parts.compactMap(\.textValue).joined()
-            Text(verbatim: text)
-                .etFont(.body, sampleText: text)
-                .foregroundStyle(textColor)
-        }
     }
 }
 

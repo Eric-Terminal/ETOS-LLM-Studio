@@ -1,13 +1,12 @@
 // ============================================================================
-// ETAdvancedMarkdownRendererCodeAndMathSupport.swift
+// ETAdvancedMarkdownRendererCodeSupport.swift
 // ============================================================================
 // ETOS LLM Studio Watch App
 //
-// 负责 watchOS Markdown 渲染器的代码高亮与数学布局辅助。
+// 负责 watchOS Markdown 渲染器的代码高亮辅助。
 // ============================================================================
 
 import Foundation
-import ETOSCore
 import SwiftUI
 import MarkdownUI
 
@@ -375,158 +374,6 @@ struct ETCodeSyntaxHighlighter: CodeSyntaxHighlighter {
             return palette.punctuation
         case .operatorSymbol:
             return palette.operatorSymbol
-        }
-    }
-}
-
-enum ETMathRenderBlock {
-    case line([ETInlineRenderPart])
-    case blockMath(String)
-    case emptyLine
-
-    static func build(from segments: [ETMathContentSegment]) -> [ETMathRenderBlock] {
-        var blocks: [ETMathRenderBlock] = []
-        var line: [ETInlineRenderPart] = []
-
-        func flushLine() {
-            guard !line.isEmpty else { return }
-            blocks.append(.line(line))
-            line.removeAll(keepingCapacity: true)
-        }
-
-        func appendText(_ text: String) {
-            let parts = text.split(separator: "\n", omittingEmptySubsequences: false)
-            for (index, part) in parts.enumerated() {
-                let value = String(part)
-                if !value.isEmpty {
-                    line.append(.text(value))
-                }
-                if index < parts.count - 1 {
-                    flushLine()
-                    if value.isEmpty {
-                        blocks.append(.emptyLine)
-                    }
-                }
-            }
-        }
-
-        for segment in segments {
-            switch segment {
-            case .text(let text):
-                appendText(text)
-            case .inlineMath(let latex):
-                line.append(.math(latex))
-            case .blockMath(let latex):
-                flushLine()
-                blocks.append(.blockMath(latex))
-            @unknown default:
-                break
-            }
-        }
-
-        flushLine()
-        return blocks
-    }
-}
-
-enum ETInlineRenderPart {
-    case text(String)
-    case math(String)
-
-    var isMath: Bool {
-        if case .math = self { return true }
-        return false
-    }
-
-    var textValue: String? {
-        if case .text(let value) = self { return value }
-        return nil
-    }
-}
-
-enum ETInlineRenderToken {
-    case text(String)
-    case math(String)
-
-    static func tokens(from parts: [ETInlineRenderPart]) -> [ETInlineRenderToken] {
-        var tokens: [ETInlineRenderToken] = []
-        for part in parts {
-            switch part {
-            case .math(let latex):
-                tokens.append(.math(latex))
-            case .text(let text):
-                for character in text {
-                    tokens.append(.text(String(character)))
-                }
-            }
-        }
-        return tokens
-    }
-}
-
-struct ETInlineMathFlowLayout: Layout {
-    let itemSpacing: CGFloat
-    let lineSpacing: CGFloat
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-        guard !subviews.isEmpty else { return .zero }
-
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var maxLineWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth {
-                maxLineWidth = max(maxLineWidth, x - itemSpacing)
-                x = 0
-                y += lineHeight + lineSpacing
-                lineHeight = 0
-            }
-
-            x += size.width + itemSpacing
-            lineHeight = max(lineHeight, size.height)
-        }
-
-        maxLineWidth = max(maxLineWidth, x - itemSpacing)
-        y += lineHeight
-
-        let measuredWidth = proposal.width ?? maxLineWidth
-        return CGSize(width: measuredWidth, height: y)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        let maxWidth = bounds.width > 0 ? bounds.width : .greatestFiniteMagnitude
-
-        var x = bounds.minX
-        var y = bounds.minY
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
-                x = bounds.minX
-                y += lineHeight + lineSpacing
-                lineHeight = 0
-            }
-
-            subview.place(
-                at: CGPoint(x: x, y: y),
-                proposal: ProposedViewSize(width: size.width, height: size.height)
-            )
-            x += size.width + itemSpacing
-            lineHeight = max(lineHeight, size.height)
         }
     }
 }

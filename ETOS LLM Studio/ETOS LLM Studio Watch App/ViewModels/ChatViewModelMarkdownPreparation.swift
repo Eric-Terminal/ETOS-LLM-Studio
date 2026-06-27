@@ -15,28 +15,17 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
     let normalizedText: String
     let markdownContent: MarkdownContent
-    let mathSegments: [ETMathContentSegment]
     let containsMathContent: Bool
     let containsMermaidContent: Bool
     let thinkingTitle: String?
 
     nonisolated static func build(from sourceText: String) async -> ETPreparedMarkdownRenderPayload {
         let normalizedText = normalizedMarkdownForStreaming(sourceText)
-        let mathSegments = ETMathContentParser.parseSegments(in: normalizedText)
-        let containsMath = mathSegments.contains { segment in
-            switch segment {
-            case .text:
-                return false
-            case .inlineMath, .blockMath:
-                return true
-            }
-        }
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
             normalizedText: normalizedText,
             markdownContent: MarkdownContent(normalizedText),
-            mathSegments: mathSegments,
-            containsMathContent: containsMath,
+            containsMathContent: ETMathContentParser.containsMath(in: normalizedText),
             containsMermaidContent: containsMermaidFence(in: normalizedText),
             thinkingTitle: extractThinkingTitle(from: normalizedText)
         )
