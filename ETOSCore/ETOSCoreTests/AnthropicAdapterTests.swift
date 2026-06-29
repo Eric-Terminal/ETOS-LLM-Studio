@@ -163,6 +163,57 @@ struct AnthropicAdapterTests {
         #expect(payload["effort"] as? String == "medium")
     }
 
+    @Test("Anthropic 自定义 Body 会和运行时工具合并")
+    func testAnthropicCustomBodyMergesWithRuntimeTools() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(
+                modelName: "claude-sonnet-4-6",
+                overrideParameters: [
+                    "tools": .array([
+                        .dictionary([
+                            "name": .string("custom_provider_tool"),
+                            "description": .string("用户自定义工具"),
+                            "input_schema": .dictionary(["type": .string("object")])
+                        ])
+                    ]),
+                    "metadata": .dictionary(["trace": .string("manual")])
+                ]
+            )
+        )
+        let runtimeTool = InternalToolDefinition(
+            name: "mcp_search",
+            description: "搜索",
+            parameters: .dictionary(["type": .string("object")])
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试一下")],
+            tools: [runtimeTool],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let toolsPayload = try #require(payload["tools"] as? [[String: Any]])
+        let metadata = try #require(payload["metadata"] as? [String: Any])
+
+        #expect(toolsPayload.count == 2)
+        #expect(toolsPayload.first?["name"] as? String == "mcp_search")
+        #expect(toolsPayload.last?["name"] as? String == "custom_provider_tool")
+        #expect(metadata["trace"] as? String == "manual")
+    }
+
     @Test("Anthropic 请求体在不回传模式下移除 thinking block")
     func testAnthropicBuildRequestOmitsThinkingBlockWhenDisabled() throws {
         let message = ChatMessage(

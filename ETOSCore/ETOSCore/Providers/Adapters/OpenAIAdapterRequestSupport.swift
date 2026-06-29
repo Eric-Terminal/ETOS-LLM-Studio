@@ -164,8 +164,7 @@ extension OpenAIAdapter {
 
         let shouldIncludeUsageInStream = boolValue(from: commonPayload[Self.streamIncludeUsageControlKey]) ?? true
 
-        var finalPayload = commonPayload
-        finalPayload.merge(overrides) { _, new in new }
+        var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
@@ -198,10 +197,10 @@ extension OpenAIAdapter {
                 ]
                 return ["type": "function", "function": function]
             }
-            finalPayload["tools"] = apiTools
-            finalPayload["tool_choice"] = "auto"
-        } else {
-            removeOpenAIToolFields(from: &finalPayload)
+            finalPayload = mergedRequestPayload(finalPayload, with: ["tools": apiTools])
+            if finalPayload["tool_choice"] == nil {
+                finalPayload["tool_choice"] = "auto"
+            }
         }
 
         do {
@@ -266,8 +265,7 @@ extension OpenAIAdapter {
             fileAttachments: fileAttachments
         )
 
-        var finalPayload = commonPayload
-        finalPayload.merge(overrides) { _, new in new }
+        var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
@@ -285,14 +283,15 @@ extension OpenAIAdapter {
                     "strict": false
                 ]
             }
-            finalPayload["tools"] = apiTools
+            finalPayload = mergedRequestPayload(finalPayload, with: ["tools": apiTools])
             if finalPayload["tool_choice"] == nil {
                 finalPayload["tool_choice"] = "auto"
             } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
                 finalPayload["tool_choice"] = normalizedChoice
             }
-        } else {
-            removeOpenAIToolFields(from: &finalPayload)
+        } else if finalPayload["tools"] != nil,
+                  let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
+            finalPayload["tool_choice"] = normalizedChoice
         }
 
         do {

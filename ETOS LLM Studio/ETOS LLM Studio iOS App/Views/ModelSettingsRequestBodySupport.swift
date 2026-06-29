@@ -403,7 +403,7 @@ extension ModelSettingsView {
             if !generationConfig.isEmpty {
                 payload["generationConfig"] = generationConfig
             }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: passthroughGeminiPreviewOverrides(overridesAny))
 
         case .anthropic:
             var payload: [String: Any] = [:]
@@ -431,7 +431,7 @@ extension ModelSettingsView {
             if let effort = overridesAny["effort"] {
                 payload["effort"] = effort
             }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: passthroughAnthropicPreviewOverrides(overridesAny))
 
         case .openAIResponses:
             var payload = sanitizedResponsesPreviewOverrides(overridesAny)
@@ -487,6 +487,41 @@ extension ModelSettingsView {
                 return payload
             }
         }
+    }
+
+    private func mergedPreviewRequestPayload(_ base: [String: Any], with overlay: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, overlayValue) in overlay {
+            if let baseDictionary = result[key] as? [String: Any],
+               let overlayDictionary = overlayValue as? [String: Any] {
+                result[key] = mergedPreviewRequestPayload(baseDictionary, with: overlayDictionary)
+            } else if let baseArray = result[key] as? [Any],
+                      let overlayArray = overlayValue as? [Any] {
+                result[key] = baseArray + overlayArray
+            } else {
+                result[key] = overlayValue
+            }
+        }
+        return result
+    }
+
+    private func passthroughGeminiPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        let mappedKeys: Set<String> = [
+            "model",
+            "stream",
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_tokens",
+            "thinking_level",
+            "thinkingBudget",
+            "thinking_budget"
+        ]
+        return overrides.filter { !mappedKeys.contains($0.key) }
+    }
+
+    private func passthroughAnthropicPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter { $0.key != "thinking_budget" }
     }
 
     private enum OpenAIPreviewMode {

@@ -171,8 +171,8 @@ struct OpenAIAdapterCoreTests {
         #expect(filtersSchema["type"] as? String == "object")
     }
 
-    @Test("OpenAI 无工具请求会移除覆盖参数里的工具字段")
-    func testOpenAIRequestWithoutToolsRemovesOverrideToolFields() throws {
+    @Test("OpenAI 无工具请求会保留覆盖参数里的工具字段")
+    func testOpenAIRequestWithoutToolsKeepsOverrideToolFields() throws {
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
@@ -210,11 +210,52 @@ struct OpenAIAdapterCoreTests {
             return
         }
 
-        #expect(jsonPayload["tools"] == nil)
-        #expect(jsonPayload["tool_choice"] == nil)
-        #expect(jsonPayload["functions"] == nil)
-        #expect(jsonPayload["function_call"] == nil)
-        #expect(jsonPayload["parallel_tool_calls"] == nil)
+        let toolsPayload = try #require(jsonPayload["tools"] as? [[String: Any]])
+        let firstTool = try #require(toolsPayload.first)
+        let function = try #require(firstTool["function"] as? [String: Any])
+
+        #expect(function["name"] as? String == "stale_tool")
+        #expect(jsonPayload["tool_choice"] as? String == "auto")
+        #expect((jsonPayload["functions"] as? [[String: Any]])?.first?["name"] as? String == "legacy_tool")
+        #expect(jsonPayload["function_call"] as? String == "auto")
+        #expect(jsonPayload["parallel_tool_calls"] as? Bool == true)
+    }
+
+    @Test("OpenAI 运行时工具会和自定义 tools 合并")
+    func testOpenAIToolsMergeRuntimeAndOverrideTools() throws {
+        let model = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "test-model",
+                overrideParameters: [
+                    "tools": .array([
+                        .dictionary(["googleSearch": .dictionary([:])])
+                    ])
+                ]
+            )
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        guard let request = adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: [saveMemoryToolDefinition()],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]] else {
+            Issue.record("无法解析 OpenAI 合并后的工具字段。")
+            return
+        }
+
+        #expect(toolsPayload.count == 2)
+        #expect((toolsPayload.first?["googleSearch"] as? [String: Any]) != nil)
+        let runtimeFunction = toolsPayload.last?["function"] as? [String: Any]
+        #expect(runtimeFunction?["name"] as? String == "save_memory")
     }
 
     @Test("OpenAI 工具 schema 组合类型和叶子节点兜底补全")

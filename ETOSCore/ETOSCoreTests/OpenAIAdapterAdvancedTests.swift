@@ -269,8 +269,8 @@ struct OpenAIAdapterAdvancedTests {
         #expect(request == nil)
     }
 
-    @Test("OpenAI Responses 无工具请求会移除覆盖参数里的工具字段")
-    func testOpenAIResponsesRequestWithoutToolsRemovesOverrideToolFields() throws {
+    @Test("OpenAI Responses 无工具请求会保留覆盖参数里的工具字段")
+    func testOpenAIResponsesRequestWithoutToolsKeepsOverrideToolFields() throws {
         let model = RunnableModel(
             provider: responsesDummyModel.provider,
             model: Model(
@@ -304,9 +304,46 @@ struct OpenAIAdapterAdvancedTests {
             return
         }
 
-        #expect(jsonPayload["tools"] == nil)
-        #expect(jsonPayload["tool_choice"] == nil)
-        #expect(jsonPayload["parallel_tool_calls"] == nil)
+        let toolsPayload = try #require(jsonPayload["tools"] as? [[String: Any]])
+        #expect(toolsPayload.first?["name"] as? String == "stale_tool")
+        #expect(jsonPayload["tool_choice"] as? String == "auto")
+        #expect(jsonPayload["parallel_tool_calls"] as? Bool == true)
+    }
+
+    @Test("OpenAI Responses 运行时工具会和自定义 tools 合并")
+    func testOpenAIResponsesToolsMergeRuntimeAndOverrideTools() throws {
+        let model = RunnableModel(
+            provider: responsesDummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "tools": .array([
+                        .dictionary(["type": .string("web_search_preview")])
+                    ])
+                ]
+            )
+        )
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        guard let request = responsesAdapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: [saveMemoryToolDefinition()],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ),
+        let httpBody = request.httpBody,
+        let jsonPayload = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any],
+        let toolsPayload = jsonPayload["tools"] as? [[String: Any]] else {
+            Issue.record("无法解析 OpenAI Responses 合并后的工具字段。")
+            return
+        }
+
+        #expect(toolsPayload.count == 2)
+        #expect(toolsPayload.first?["type"] as? String == "web_search_preview")
+        #expect(toolsPayload.last?["name"] as? String == "save_memory")
     }
 
     @Test("OpenAI Responses 响应可解析正文、推理与工具调用")

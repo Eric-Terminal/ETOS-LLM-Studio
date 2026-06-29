@@ -374,6 +374,8 @@ public class AnthropicAdapter: APIAdapter {
             }
             payload["tools"] = anthropicTools
         }
+
+        payload = mergedRequestPayload(payload, with: passthroughAnthropicRequestOverrides(overrides))
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
@@ -387,6 +389,10 @@ public class AnthropicAdapter: APIAdapter {
         }
         
         return request
+    }
+
+    private func passthroughAnthropicRequestOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter { $0.key != "thinking_budget" }
     }
     
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {

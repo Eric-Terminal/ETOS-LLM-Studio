@@ -71,6 +71,23 @@ func resolvedRequestModelName(for model: RunnableModel, overrides: [String: Any]
     return model.model.modelName
 }
 
+// 让高级自定义 Body 和适配器生成字段共存；数组拼接用于保留双方工具声明。
+func mergedRequestPayload(_ base: [String: Any], with overlay: [String: Any]) -> [String: Any] {
+    var result = base
+    for (key, overlayValue) in overlay {
+        if let baseDictionary = result[key] as? [String: Any],
+           let overlayDictionary = overlayValue as? [String: Any] {
+            result[key] = mergedRequestPayload(baseDictionary, with: overlayDictionary)
+        } else if let baseArray = result[key] as? [Any],
+                  let overlayArray = overlayValue as? [Any] {
+            result[key] = baseArray + overlayArray
+        } else {
+            result[key] = overlayValue
+        }
+    }
+    return result
+}
+
 func inferredImageMimeType(from data: Data) -> String {
     guard data.count >= 12 else { return "image/png" }
     let bytes = [UInt8](data.prefix(12))

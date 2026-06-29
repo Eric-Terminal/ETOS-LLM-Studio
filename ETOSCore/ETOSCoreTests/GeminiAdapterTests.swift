@@ -563,6 +563,54 @@ struct GeminiAdapterTests {
         #expect(thinkingConfig["thinkingLevel"] as? String == "MEDIUM")
     }
 
+    @Test("Gemini 自定义 Body 会和运行时工具合并")
+    func testGeminiCustomBodyMergesWithRuntimeTools() throws {
+        let model = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gemini-2.5-pro",
+                overrideParameters: [
+                    "temperature": .double(0.4),
+                    "generationConfig": .dictionary(["candidateCount": .int(1)]),
+                    "tools": .array([
+                        .dictionary(["googleSearch": .dictionary([:])])
+                    ])
+                ]
+            )
+        )
+        let runtimeTool = InternalToolDefinition(
+            name: "mcp_search",
+            description: "搜索",
+            parameters: .dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "query": .dictionary(["type": .string("string")])
+                ])
+            ])
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试一下")],
+            tools: [runtimeTool],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let generationConfig = try #require(payload["generationConfig"] as? [String: Any])
+        let toolsPayload = try #require(payload["tools"] as? [[String: Any]])
+        let functionGroup = try #require(toolsPayload.first?["function_declarations"] as? [[String: Any]])
+
+        #expect(generationConfig["temperature"] as? Double == 0.4)
+        #expect(generationConfig["candidateCount"] as? Int == 1)
+        #expect(payload["temperature"] == nil)
+        #expect(functionGroup.first?["name"] as? String == "mcp_search")
+        #expect((toolsPayload.last?["googleSearch"] as? [String: Any]) != nil)
+    }
+
     @Test("Gemini 流式增量保留 thought_signature")
     func testGeminiStreamingDeltaPreservesThoughtSignature() throws {
         let line = """

@@ -253,6 +253,8 @@ extension GeminiAdapter {
             }
         }
         
+        payload = mergedRequestPayload(payload, with: passthroughGeminiRequestOverrides(overrides))
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
@@ -265,6 +267,21 @@ extension GeminiAdapter {
         }
         
         return request
+    }
+
+    private func passthroughGeminiRequestOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        let mappedKeys: Set<String> = [
+            "model",
+            "stream",
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_tokens",
+            "thinking_level",
+            "thinkingBudget",
+            "thinking_budget"
+        ]
+        return overrides.filter { !mappedKeys.contains($0.key) }
     }
     
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {
