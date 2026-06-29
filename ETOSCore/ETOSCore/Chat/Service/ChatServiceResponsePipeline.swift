@@ -39,6 +39,24 @@ extension ChatService {
         var trailingUnparsedHTTPStatusCode: Int?
         var messages = messagesSnapshot(for: currentSessionID)
         var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
+        let shouldCaptureResponseBody = AppConfigStore.boolValue(for: .requestLogEnabled)
+        var rawStreamingResponseLines: [String] = []
+
+        func rawStreamingResponseBody() -> String {
+            rawStreamingResponseLines.joined(separator: "\n")
+        }
+
+        func logCapturedStreamingResponse(isPartial: Bool = false, httpStatusCode: Int? = nil) {
+            guard shouldCaptureResponseBody, !rawStreamingResponseLines.isEmpty else { return }
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                body: rawStreamingResponseBody(),
+                httpStatusCode: httpStatusCode,
+                isPartial: isPartial
+            )
+        }
+
         do {
             let bytes = try await streamData(for: request, provider: provider)
 
@@ -61,6 +79,10 @@ extension ChatService {
             var finalResponseCompletedAtForLog: Date?
 
             for try await line in bytes.lines {
+                if shouldCaptureResponseBody {
+                    rawStreamingResponseLines.append(line)
+                }
+
                 guard let part = adapter.parseStreamingResponse(line: line) else {
                     updateTrailingUnparsedStreamingResponse(
                         with: line,
@@ -256,6 +278,7 @@ extension ChatService {
                 body: trailingUnparsedResponseBody,
                 fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
             ) {
+                logCapturedStreamingResponse(isPartial: true, httpStatusCode: unparsedError.httpStatusCode)
                 messages = flushPendingStreamingMessages(
                     messages,
                     loadingMessageID: loadingMessageID,
@@ -374,6 +397,7 @@ extension ChatService {
 
             if let finalAssistantMessage = finalAssistantMessage {
                 let finishedAt = finalResponseCompletedAtForLog ?? finalAssistantMessage.responseMetrics?.responseCompletedAt ?? Date()
+                logCapturedStreamingResponse()
                 persistRequestLog(
                     context: requestLogContext,
                     status: .success,
@@ -400,6 +424,7 @@ extension ChatService {
                     periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes
                 )
             } else {
+                logCapturedStreamingResponse()
                 persistRequestLog(
                     context: requestLogContext,
                     status: .success,
@@ -410,6 +435,7 @@ extension ChatService {
             }
         } catch is CancellationError {
             logger.info("流式请求在处理中被取消。")
+            logCapturedStreamingResponse(isPartial: true)
             messages = flushPendingStreamingMessages(
                 messages,
                 loadingMessageID: loadingMessageID,
@@ -436,6 +462,12 @@ extension ChatService {
             } else {
                 bodySnippet = NSLocalizedString("响应体为空。", comment: "Empty response body")
             }
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                bodyData: bodyData,
+                httpStatusCode: code
+            )
             messages = flushPendingStreamingMessages(
                 messages,
                 loadingMessageID: loadingMessageID,
@@ -455,6 +487,7 @@ extension ChatService {
         } catch {
             if isCancellationError(error) {
                 logger.info("流式请求在处理中被取消 (URLError)。")
+                logCapturedStreamingResponse(isPartial: true)
                 messages = flushPendingStreamingMessages(
                     messages,
                     loadingMessageID: loadingMessageID,
@@ -474,6 +507,7 @@ extension ChatService {
                     body: trailingUnparsedResponseBody,
                     fallbackHTTPStatusCode: trailingUnparsedHTTPStatusCode
                 ) {
+                    logCapturedStreamingResponse(isPartial: true, httpStatusCode: unparsedError.httpStatusCode)
                     messages = flushPendingStreamingMessages(
                         messages,
                         loadingMessageID: loadingMessageID,
@@ -495,6 +529,7 @@ extension ChatService {
                         errorKind: "streaming_unparsed_error_response"
                     )
                 } else {
+                    logCapturedStreamingResponse(isPartial: true)
                     messages = flushPendingStreamingMessages(
                         messages,
                         loadingMessageID: loadingMessageID,

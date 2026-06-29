@@ -88,6 +88,70 @@ extension ChatServiceTests {
         #expect(usageRequestCount > 0)
     }
 
+    @Test("响应体日志会保留完整内容并受总开关控制")
+    func testResponseBodySnapshotPayloadKeepsFullBodyAndHonorsSwitch() async throws {
+        await cleanup()
+        let request = URLRequest(url: URL(string: "https://fake.url/chat?api_key=secret")!)
+        let requestID = UUID()
+        let context = ChatService.RequestLogContext(
+            requestID: requestID,
+            sessionID: nil,
+            providerID: dummyModel.provider.id,
+            providerName: dummyModel.provider.name,
+            modelID: dummyModel.model.modelName,
+            requestSource: .chat,
+            isStreaming: false,
+            requestedAt: Date()
+        )
+        let longBody = String(repeating: "完整响应", count: 2_000)
+
+        AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)
+        let payload = try #require(chatService.makeResponseBodySnapshotPayload(
+            context: context,
+            request: request,
+            body: longBody,
+            byteCount: longBody.data(using: .utf8)?.count ?? 0,
+            httpStatusCode: 200
+        ))
+
+        #expect(payload.values.contains(longBody))
+        #expect(payload.values.contains(requestID.uuidString))
+        #expect(payload.values.contains("200"))
+        #expect(payload.values.contains { $0.contains("fake.url") && !$0.contains("secret") })
+
+        let streamingContext = ChatService.RequestLogContext(
+            requestID: requestID,
+            sessionID: nil,
+            providerID: dummyModel.provider.id,
+            providerName: dummyModel.provider.name,
+            modelID: dummyModel.model.modelName,
+            requestSource: .chat,
+            isStreaming: true,
+            requestedAt: Date()
+        )
+        let streamingPayload = try #require(chatService.makeResponseBodySnapshotPayload(
+            context: streamingContext,
+            request: request,
+            body: "data: {}",
+            byteCount: 8,
+            isPartial: true
+        ))
+        #expect(streamingPayload.values.contains("data: {}"))
+
+        AppConfigStore.persistSynchronously(.bool(false), for: .requestLogEnabled)
+        defer {
+            AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)
+        }
+
+        let disabledPayload = chatService.makeResponseBodySnapshotPayload(
+            context: context,
+            request: request,
+            body: longBody,
+            byteCount: longBody.count
+        )
+        #expect(disabledPayload == nil)
+    }
+
     @Test("发送消息后会在会话 JSON 中保存请求时间")
     func testSendMessagePersistsRequestedAtInSessionJSON() async {
         await cleanup()

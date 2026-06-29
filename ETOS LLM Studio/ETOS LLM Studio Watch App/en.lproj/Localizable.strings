@@ -4602,3 +4602,12 @@
 "时间格式不正确，请输入 00:00-23:59。" = "Invalid time format. Enter 00:00-23:59.";
 "启用 API 请求日志" = "Enable API request logging";
 "关闭后不会保存聊天请求日志或请求体快照；开启后可选择是否记录明文消息，图片、音频和文件的 Base64 仍会隐藏。" = "When off, chat request logs and request body snapshots are not saved. When on, plaintext messages are optional; Base64 for images, audio, and files remains hidden.";
+"请求 ID" = "Request ID";
+"响应体字节数" = "Response body bytes";
+"状态码" = "Status code";
+"流式响应体" = "Streaming response body";
+"流式响应体(部分)" = "Streaming response body (partial)";
+"响应体" = "Response body";
+"响应体(部分)" = "Response body (partial)";
+"接收%@响应" = "Receive %@ response";
+"%@ 响应体已接收" = "%@ response body received";

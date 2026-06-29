@@ -166,6 +166,11 @@ extension ChatService {
             let data = try await fetchData(for: request, provider: provider)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
             logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                bodyData: data
+            )
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
@@ -250,6 +255,12 @@ extension ChatService {
                 errorKind: "cancelled"
             )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                bodyData: bodyData,
+                httpStatusCode: code
+            )
             let bodyString: String
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
                 bodyString = utf8Text

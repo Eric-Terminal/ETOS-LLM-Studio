@@ -187,11 +187,6 @@ extension ChatService {
         let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
         publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("切换会话", comment: "App log action"),
-            payload: ["sessionID": session?.id.uuidString ?? NSLocalizedString("无", comment: "App log empty value")]
-        )
     }
 
     func promoteSessionToTopIfNeeded(sessionID: UUID) {

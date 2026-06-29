@@ -161,6 +161,104 @@ extension ChatService {
         Persistence.appendUsageAnalyticsEvent(usageEvent)
     }
 
+    func makeResponseBodySnapshotPayload(
+        context: RequestLogContext,
+        request: URLRequest,
+        body: String,
+        byteCount: Int,
+        httpStatusCode: Int? = nil,
+        isPartial: Bool = false
+    ) -> [String: String]? {
+        guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return nil }
+
+        var payload: [String: String] = [
+            NSLocalizedString("提供商", comment: "App log payload key"): context.providerName,
+            NSLocalizedString("模型", comment: "App log payload key"): context.modelID,
+            NSLocalizedString("请求 ID", comment: "App log payload key"): context.requestID.uuidString,
+            NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
+            NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
+            NSLocalizedString("流式", comment: "App log payload key"): context.isStreaming
+                ? NSLocalizedString("是", comment: "App log payload value")
+                : NSLocalizedString("否", comment: "App log payload value"),
+            NSLocalizedString("响应体字节数", comment: "App log payload key"): "\(byteCount)"
+        ]
+
+        if let httpStatusCode {
+            payload[NSLocalizedString("状态码", comment: "App log payload key")] = "\(httpStatusCode)"
+        }
+
+        let bodyKey: String
+        if context.isStreaming {
+            bodyKey = isPartial
+                ? NSLocalizedString("流式响应体(部分)", comment: "App log payload key")
+                : NSLocalizedString("流式响应体", comment: "App log payload key")
+        } else {
+            bodyKey = isPartial
+                ? NSLocalizedString("响应体(部分)", comment: "App log payload key")
+                : NSLocalizedString("响应体", comment: "App log payload key")
+        }
+        payload[bodyKey] = body
+        return payload
+    }
+
+    func logResponseBodySnapshot(
+        context: RequestLogContext,
+        request: URLRequest,
+        body: String,
+        byteCount: Int? = nil,
+        httpStatusCode: Int? = nil,
+        isPartial: Bool = false
+    ) {
+        let resolvedByteCount = byteCount ?? body.data(using: .utf8)?.count ?? 0
+        guard let payload = makeResponseBodySnapshotPayload(
+            context: context,
+            request: request,
+            body: body,
+            byteCount: resolvedByteCount,
+            httpStatusCode: httpStatusCode,
+            isPartial: isPartial
+        ) else {
+            return
+        }
+
+        AppLog.developer(
+            level: .debug,
+            category: NSLocalizedString("请求", comment: "App log category"),
+            action: String(format: NSLocalizedString("接收%@响应", comment: "App log action"), context.providerName),
+            message: String(format: NSLocalizedString("%@ 响应体已接收", comment: "App log message"), context.providerName),
+            payload: payload
+        )
+    }
+
+    func logResponseBodySnapshot(
+        context: RequestLogContext,
+        request: URLRequest,
+        bodyData: Data?,
+        httpStatusCode: Int? = nil,
+        isPartial: Bool = false
+    ) {
+        let bodyText: String
+        if let bodyData, let text = String(data: bodyData, encoding: .utf8) {
+            bodyText = text
+        } else if let bodyData, !bodyData.isEmpty {
+            bodyText = String(
+                format: NSLocalizedString("响应体包含 %d 字节，无法以 UTF-8 解码。", comment: "Response body not UTF-8 with byte count"),
+                bodyData.count
+            )
+        } else {
+            bodyText = NSLocalizedString("响应体为空。", comment: "Empty response body")
+        }
+
+        logResponseBodySnapshot(
+            context: context,
+            request: request,
+            body: bodyText,
+            byteCount: bodyData?.count ?? 0,
+            httpStatusCode: httpStatusCode,
+            isPartial: isPartial
+        )
+    }
+
     private func makeProxySessionIfNeeded(for provider: Provider?) -> (session: URLSession, proxy: NetworkProxyConfiguration?) {
         guard let proxyConfiguration = NetworkProxySettings.resolvedConfiguration(for: provider),
               let proxyDictionary = NetworkProxySettings.makeConnectionProxyDictionary(from: proxyConfiguration) else {
