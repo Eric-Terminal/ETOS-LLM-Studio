@@ -128,6 +128,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case maxChatHistory = "maxChatHistory"
     case enableStreaming = "enableStreaming"
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
+    case requestLogEnabled = "logs.request.enabled"
     case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
     case modelConnectivityTestConcurrencyLimit = "modelConnectivityTest.concurrencyLimit"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
@@ -323,6 +324,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .bool(true)
             #endif
+        case .requestLogEnabled:
+            return .bool(true)
         case .requestLogPlainMessageEnabled:
             return .bool(false)
         case .reasoningContentEchoMode:
@@ -500,6 +503,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .lastAnnouncementId,
              .hideAnnouncementSection,
              .hiddenAnnouncementKeys,
+             .requestLogEnabled,
              .requestLogPlainMessageEnabled,
              .watchUseThirdPartyKeyboard,
              .localDebugLastServerAddress,

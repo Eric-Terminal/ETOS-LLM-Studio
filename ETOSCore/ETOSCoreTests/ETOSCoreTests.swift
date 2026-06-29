@@ -76,6 +76,7 @@ struct ChatServiceTests {
             await memoryManager.deleteMemories(allMems)
         }
         Persistence.clearRequestLogs()
+        Persistence.deleteAppConfig(key: AppConfigKey.requestLogEnabled.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.enableReasoningSummary.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.speechModelIdentifier.rawValue)
         Persistence.deleteAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue)

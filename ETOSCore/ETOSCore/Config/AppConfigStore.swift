@@ -184,6 +184,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var maxChatHistory: Int { didSet { write(.maxChatHistory, maxChatHistory) } }
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
+    @Published public var requestLogEnabled: Bool { didSet { write(.requestLogEnabled, requestLogEnabled) } }
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
@@ -340,6 +341,7 @@ public final class AppConfigStore: ObservableObject {
         maxChatHistory = Self.integerValue(.maxChatHistory, userDefaults: userDefaults)
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
+        requestLogEnabled = Self.boolValue(.requestLogEnabled, userDefaults: userDefaults)
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
@@ -794,6 +796,7 @@ public final class AppConfigStore: ObservableObject {
         case .maxChatHistory: return .integer(maxChatHistory)
         case .enableStreaming: return .bool(enableStreaming)
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
+        case .requestLogEnabled: return .bool(requestLogEnabled)
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
         case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
@@ -939,6 +942,7 @@ public final class AppConfigStore: ObservableObject {
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableStreaming: enableStreaming = value
         case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
+        case .requestLogEnabled: requestLogEnabled = value
         case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value
         case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
         case .enableAutoSessionNaming: enableAutoSessionNaming = value

@@ -113,6 +113,8 @@ func logChatRequestSnapshot(
     request: URLRequest,
     payload: [String: Any]
 ) {
+    guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
+
     var detailPayload: [String: String] = [
         NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
         NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",

@@ -23,9 +23,11 @@ struct AppLogsView: View {
     var body: some View {
         List {
             Section {
+                Toggle(NSLocalizedString("启用 API 请求日志", comment: ""), isOn: $appConfig.requestLogEnabled)
                 Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
+                    .disabled(!appConfig.requestLogEnabled)
             } footer: {
-                Text(NSLocalizedString("关闭时请求体日志会隐藏 message、content 等消息字段；开启后会记录明文消息文本，但图片、音频和文件的 Base64 仍会隐藏。", comment: ""))
+                Text(NSLocalizedString("关闭后不会保存聊天请求日志或请求体快照；开启后可选择是否记录明文消息，图片、音频和文件的 Base64 仍会隐藏。", comment: ""))
             }
 
             if logCenter.logDayFolders.isEmpty {

@@ -53,6 +53,41 @@ extension ChatServiceTests {
         #expect(logs[0].tokenUsage?.thinkingTokens == 5)
     }
 
+    @Test("关闭 API 请求日志后聊天请求不写独立请求日志")
+    func testChatRequestLogSwitchDisablesIndependentRequestLog() async {
+        await cleanup()
+        Persistence.clearUsageAnalyticsData()
+        AppConfigStore.persistSynchronously(.bool(false), for: .requestLogEnabled)
+        defer {
+            AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)
+            Persistence.clearUsageAnalyticsData()
+        }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(
+            role: .assistant,
+            content: "关闭日志后的回复",
+            tokenUsage: MessageTokenUsage(promptTokens: 3, completionTokens: 5, totalTokens: 8)
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "这次不要写请求日志",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        #expect(Persistence.loadRequestLogs(query: .init(limit: 1)).isEmpty)
+        let usageRequestCount = Persistence.loadUsageDailyTotals().reduce(0) { $0 + $1.requestCount }
+        #expect(usageRequestCount > 0)
+    }
+
     @Test("发送消息后会在会话 JSON 中保存请求时间")
     func testSendMessagePersistsRequestedAtInSessionJSON() async {
         await cleanup()

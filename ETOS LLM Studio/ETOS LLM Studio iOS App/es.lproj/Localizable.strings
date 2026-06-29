@@ -4705,3 +4705,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "启用每日脉冲" = "Activar Daily Pulse";
 "关闭后不会再生成新的每日脉冲；已有卡片、任务和反馈记录仍会保留。" = "Al desactivarlo, no se generará ningún Daily Pulse nuevo; se conservarán las tarjetas, tareas e historial de comentarios existentes.";
 "时间格式不正确，请输入 00:00-23:59。" = "Formato de hora no válido. Introduce 00:00-23:59.";
+"启用 API 请求日志" = "Enable API request logging";
+"关闭后不会保存聊天请求日志或请求体快照；开启后可选择是否记录明文消息，图片、音频和文件的 Base64 仍会隐藏。" = "When off, chat request logs and request body snapshots are not saved. When on, plaintext messages are optional; Base64 for images, audio, and files remains hidden.";
