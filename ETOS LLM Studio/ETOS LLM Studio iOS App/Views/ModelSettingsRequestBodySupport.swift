@@ -384,26 +384,7 @@ extension ModelSettingsView {
                     ]
                 ]
             ]
-
-            var generationConfig: [String: Any] = [:]
-            if let temperature = overridesAny["temperature"] { generationConfig["temperature"] = temperature }
-            if let topP = overridesAny["top_p"] { generationConfig["topP"] = topP }
-            if let topK = overridesAny["top_k"] { generationConfig["topK"] = topK }
-            if let maxTokens = overridesAny["max_tokens"] { generationConfig["maxOutputTokens"] = maxTokens }
-            var thinkingConfig: [String: Any] = [:]
-            if let thinkingLevel = overridesAny["thinking_level"] {
-                thinkingConfig["thinkingLevel"] = thinkingLevel
-            }
-            if let thinkingBudget = overridesAny["thinkingBudget"] ?? overridesAny["thinking_budget"] {
-                thinkingConfig["thinkingBudget"] = thinkingBudget
-            }
-            if !thinkingConfig.isEmpty {
-                generationConfig["thinkingConfig"] = thinkingConfig
-            }
-            if !generationConfig.isEmpty {
-                payload["generationConfig"] = generationConfig
-            }
-            return mergedPreviewRequestPayload(payload, with: passthroughGeminiPreviewOverrides(overridesAny))
+            return mergedPreviewRequestPayload(payload, with: overridesAny)
 
         case .anthropic:
             var payload: [String: Any] = [:]
@@ -503,21 +484,6 @@ extension ModelSettingsView {
             }
         }
         return result
-    }
-
-    private func passthroughGeminiPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
-        let mappedKeys: Set<String> = [
-            "model",
-            "stream",
-            "temperature",
-            "top_p",
-            "top_k",
-            "max_tokens",
-            "thinking_level",
-            "thinkingBudget",
-            "thinking_budget"
-        ]
-        return overrides.filter { !mappedKeys.contains($0.key) }
     }
 
     private func passthroughAnthropicPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {

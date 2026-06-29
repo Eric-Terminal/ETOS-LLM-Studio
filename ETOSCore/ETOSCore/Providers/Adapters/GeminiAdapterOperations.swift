@@ -204,29 +204,19 @@ extension GeminiAdapter {
             payload["system_instruction"] = ["parts": systemInstructionParts]
         }
         
-        // 构建 generationConfig
+        // App 全局采样参数仍按 Gemini 原生结构发送；模型自定义 Body 在后面原样合并。
         var generationConfig: [String: Any] = [:]
-        if let temperature = overrides["temperature"] ?? commonPayload["temperature"] {
+        if let temperature = commonPayload["temperature"] {
             generationConfig["temperature"] = temperature
         }
-        if let topP = overrides["top_p"] ?? commonPayload["top_p"] {
+        if let topP = commonPayload["top_p"] {
             generationConfig["topP"] = topP
         }
-        if let topK = overrides["top_k"] ?? commonPayload["top_k"] {
+        if let topK = commonPayload["top_k"] {
             generationConfig["topK"] = topK
         }
-        if let maxTokens = overrides["max_tokens"] ?? commonPayload["max_tokens"] {
+        if let maxTokens = commonPayload["max_tokens"] {
             generationConfig["maxOutputTokens"] = maxTokens
-        }
-        var thinkingConfig: [String: Any] = [:]
-        if let thinkingLevel = overrides["thinking_level"] {
-            thinkingConfig["thinkingLevel"] = thinkingLevel
-        }
-        if let thinkingBudget = overrides["thinkingBudget"] ?? overrides["thinking_budget"] {
-            thinkingConfig["thinkingBudget"] = thinkingBudget
-        }
-        if !thinkingConfig.isEmpty {
-            generationConfig["thinkingConfig"] = thinkingConfig
         }
         if !generationConfig.isEmpty {
             payload["generationConfig"] = generationConfig
@@ -253,7 +243,7 @@ extension GeminiAdapter {
             }
         }
         
-        payload = mergedRequestPayload(payload, with: passthroughGeminiRequestOverrides(overrides))
+        payload = mergedRequestPayload(payload, with: overrides)
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
@@ -269,21 +259,6 @@ extension GeminiAdapter {
         return request
     }
 
-    private func passthroughGeminiRequestOverrides(_ overrides: [String: Any]) -> [String: Any] {
-        let mappedKeys: Set<String> = [
-            "model",
-            "stream",
-            "temperature",
-            "top_p",
-            "top_k",
-            "max_tokens",
-            "thinking_level",
-            "thinkingBudget",
-            "thinking_budget"
-        ]
-        return overrides.filter { !mappedKeys.contains($0.key) }
-    }
-    
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {
         guard let baseURL = normalizedGeminiBaseURL(from: provider.baseURL) else {
             logger.error("构建模型列表请求失败: 无效的 API 基础 URL - \(provider.baseURL)")

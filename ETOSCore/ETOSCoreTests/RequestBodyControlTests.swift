@@ -215,8 +215,21 @@ struct RequestBodyControlTests {
         #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
 
         #expect(gemini.defaultOptionID == "medium")
-        #expect(gemini.options.first(where: { $0.id == "high" })?.payload["thinking_level"] == .string("HIGH"))
-        #expect(gemini.options.first(where: { $0.id == "auto" })?.payload["thinkingBudget"] == .int(-1))
+        let geminiHighPayload = gemini.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
+        if case let .dictionary(generationConfig)? = geminiHighPayload,
+           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+            #expect(thinkingConfig["thinkingLevel"] == .string("HIGH"))
+        } else {
+            Issue.record("Gemini 高思考档位没有使用原生 generationConfig.thinkingConfig。")
+        }
+
+        let geminiAutoPayload = gemini.options.first(where: { $0.id == "auto" })?.payload["generationConfig"]
+        if case let .dictionary(generationConfig)? = geminiAutoPayload,
+           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+            #expect(thinkingConfig["thinkingBudget"] == .int(-1))
+        } else {
+            Issue.record("Gemini 自动思考档位没有使用原生 generationConfig.thinkingConfig。")
+        }
 
         #expect(anthropic.defaultOptionID == "medium")
         #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["effort"] == .string("high"))

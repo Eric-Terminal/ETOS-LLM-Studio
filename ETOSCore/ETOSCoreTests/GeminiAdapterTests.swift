@@ -534,8 +534,8 @@ struct GeminiAdapterTests {
         #expect(functionCall["thoughtSignature"] == nil)
     }
 
-    @Test("Gemini 请求体会把思考档位放入 thinkingConfig")
-    func testGeminiBuildRequestUsesThinkingLevelControl() throws {
+    @Test("Gemini 默认思考控制使用原生 thinkingConfig")
+    func testGeminiDefaultThinkingControlUsesNativeThinkingConfig() throws {
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
@@ -563,8 +563,8 @@ struct GeminiAdapterTests {
         #expect(thinkingConfig["thinkingLevel"] as? String == "MEDIUM")
     }
 
-    @Test("Gemini 自定义 Body 会和运行时工具合并")
-    func testGeminiCustomBodyMergesWithRuntimeTools() throws {
+    @Test("Gemini 自定义 Body 会原样和运行时工具合并")
+    func testGeminiCustomBodyPassesThroughAndMergesWithRuntimeTools() throws {
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
@@ -604,9 +604,9 @@ struct GeminiAdapterTests {
         let toolsPayload = try #require(payload["tools"] as? [[String: Any]])
         let functionGroup = try #require(toolsPayload.first?["function_declarations"] as? [[String: Any]])
 
-        #expect(generationConfig["temperature"] as? Double == 0.4)
         #expect(generationConfig["candidateCount"] as? Int == 1)
-        #expect(payload["temperature"] == nil)
+        #expect(generationConfig["temperature"] == nil)
+        #expect(payload["temperature"] as? Double == 0.4)
         #expect(functionGroup.first?["name"] as? String == "mcp_search")
         #expect((toolsPayload.last?["googleSearch"] as? [String: Any]) != nil)
     }
