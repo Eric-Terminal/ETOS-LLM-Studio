@@ -24,7 +24,21 @@ extension Persistence {
     static let sqlCipherKDFIterations = DatabaseEncryptionManager.kdfIterations
 
     static func databaseEncryptionHasStoredPassphrase() -> Bool {
-        DatabaseEncryptionManager.shared.hasStoredPassphrase
+        DatabaseEncryptionManager.shared.isDatabaseEncryptionEnabled
+    }
+
+    public static func validateDatabaseEncryptionPassphrase(_ passphrase: Data) -> Bool {
+        let targets = databaseEncryptionTargetURLs()
+        let existingDatabaseURLs = [
+            targets.chatStoreURL,
+            targets.configStoreURL,
+            targets.memoryStoreURL
+        ].filter { FileManager.default.fileExists(atPath: $0.path) }
+
+        guard !existingDatabaseURLs.isEmpty else { return true }
+        return existingDatabaseURLs.allSatisfy { databaseURL in
+            isDatabaseHealthy(at: databaseURL, encrypted: true, passphrase: passphrase)
+        }
     }
 
     static func makeDatabaseConfiguration(
@@ -200,7 +214,11 @@ extension Persistence {
                 temporaryDirectory: temporaryDirectory,
                 newPassphrase: passphrase
             )
-            try manager.savePassphrase(passphrase, confirmation: confirmation)
+            try manager.setActivePassphrase(
+                passphrase,
+                confirmation: confirmation,
+                storesPassphraseInKeychain: true
+            )
             try installDatabaseReplacements(replacements)
             writeDatabaseEncryptionEnabled(true)
             bootstrapGRDBStoreOnLaunch()
@@ -221,6 +239,7 @@ extension Persistence {
 
     static func disableDatabaseEncryption(passphrase: String) throws {
         let manager = DatabaseEncryptionManager.shared
+        let shouldStorePassphraseInKeychain = manager.storesPassphraseInKeychain
         try manager.verify(passphrase: passphrase)
 
         let targets = databaseEncryptionTargetURLs()
@@ -240,7 +259,11 @@ extension Persistence {
             do {
                 try installDatabaseReplacements(replacements)
             } catch {
-                try? manager.savePassphrase(passphrase, confirmation: passphrase)
+                try? manager.setActivePassphrase(
+                    passphrase,
+                    confirmation: passphrase,
+                    storesPassphraseInKeychain: shouldStorePassphraseInKeychain
+                )
                 throw error
             }
             writeDatabaseEncryptionEnabled(false)
@@ -261,6 +284,7 @@ extension Persistence {
         confirmation: String
     ) throws {
         let manager = DatabaseEncryptionManager.shared
+        let shouldStorePassphraseInKeychain = manager.storesPassphraseInKeychain
         try manager.verify(passphrase: currentPassphrase)
         guard !newPassphrase.isEmpty else {
             throw DatabaseEncryptionManager.DatabaseEncryptionError.emptyPassphrase
@@ -283,11 +307,19 @@ extension Persistence {
                 temporaryDirectory: temporaryDirectory,
                 newPassphrase: newPassphrase
             )
-            try manager.savePassphrase(newPassphrase, confirmation: confirmation)
+            try manager.setActivePassphrase(
+                newPassphrase,
+                confirmation: confirmation,
+                storesPassphraseInKeychain: shouldStorePassphraseInKeychain
+            )
             do {
                 try installDatabaseReplacements(replacements)
             } catch {
-                try? manager.savePassphrase(currentPassphrase, confirmation: currentPassphrase)
+                try? manager.setActivePassphrase(
+                    currentPassphrase,
+                    confirmation: currentPassphrase,
+                    storesPassphraseInKeychain: shouldStorePassphraseInKeychain
+                )
                 throw error
             }
             writeDatabaseEncryptionEnabled(true)

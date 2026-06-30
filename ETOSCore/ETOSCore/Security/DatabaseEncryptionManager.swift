@@ -23,6 +23,21 @@ protocol DatabaseEncryptionPassphraseStore {
     func deletePassphrase() -> Bool
 }
 
+public extension Notification.Name {
+    static let databaseEncryptionLockStateDidChange = Notification.Name("com.ETOS.databaseEncryption.lockStateDidChange")
+    static let databaseEncryptionDidUnlock = Notification.Name("com.ETOS.databaseEncryption.didUnlock")
+}
+
+struct DatabaseEncryptionBootstrapState: Codable, Equatable, Sendable {
+    var isEnabled: Bool
+    var storesPassphraseInKeychain: Bool
+
+    static let disabled = DatabaseEncryptionBootstrapState(
+        isEnabled: false,
+        storesPassphraseInKeychain: true
+    )
+}
+
 public final class DatabaseEncryptionManager: @unchecked Sendable {
     public enum DatabaseEncryptionError: LocalizedError, Equatable {
         case emptyPassphrase
@@ -51,25 +66,88 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
     public static let kdfIterations = 256_000
 
     private let passphraseStore: any DatabaseEncryptionPassphraseStore
+    private let bootstrapStateLock = NSLock()
+    private var cachedBootstrapState: DatabaseEncryptionBootstrapState
+    private let memoryPassphraseLock = NSLock()
+    private var memoryPassphrase: Data?
 
     init(passphraseStore: any DatabaseEncryptionPassphraseStore = DatabaseEncryptionPassphraseStoreFactory.makeDefaultStore()) {
         self.passphraseStore = passphraseStore
+        let storedState = DatabaseEncryptionBootstrapStore.load()
+        if storedState == .disabled, passphraseStore.loadPassphrase() != nil {
+            let migratedState = DatabaseEncryptionBootstrapState(isEnabled: true, storesPassphraseInKeychain: true)
+            self.cachedBootstrapState = migratedState
+            DatabaseEncryptionBootstrapStore.save(migratedState)
+        } else {
+            self.cachedBootstrapState = storedState
+        }
     }
 
     public var hasStoredPassphrase: Bool {
         passphraseStore.loadPassphrase() != nil
     }
 
+    public var isDatabaseEncryptionEnabled: Bool {
+        bootstrapState.isEnabled
+    }
+
+    public var storesPassphraseInKeychain: Bool {
+        guard isDatabaseEncryptionEnabled else { return true }
+        return bootstrapState.storesPassphraseInKeychain
+    }
+
+    public var isManualUnlockModeEnabled: Bool {
+        isDatabaseEncryptionEnabled && !storesPassphraseInKeychain
+    }
+
+    public var hasAvailablePassphrase: Bool {
+        hasStoredPassphrase || hasMemoryPassphrase
+    }
+
+    public var requiresManualUnlock: Bool {
+        isManualUnlockModeEnabled && !hasMemoryPassphrase
+    }
+
+    var bootstrapState: DatabaseEncryptionBootstrapState {
+        loadBootstrapState()
+    }
+
     public func savePassphrase(_ passphrase: String, confirmation: String) throws {
+        try setActivePassphrase(
+            passphrase,
+            confirmation: confirmation,
+            storesPassphraseInKeychain: true
+        )
+    }
+
+    func setActivePassphrase(
+        _ passphrase: String,
+        confirmation: String,
+        storesPassphraseInKeychain shouldStoreInKeychain: Bool
+    ) throws {
         guard !passphrase.isEmpty else {
             throw DatabaseEncryptionError.emptyPassphrase
         }
         guard passphrase == confirmation else {
             throw DatabaseEncryptionError.passphraseMismatch
         }
-        guard passphraseStore.savePassphrase(Self.passphraseData(from: passphrase)) else {
-            throw DatabaseEncryptionError.storageFailed
+        let passphraseData = Self.passphraseData(from: passphrase)
+        if shouldStoreInKeychain {
+            guard passphraseStore.savePassphrase(passphraseData) else {
+                throw DatabaseEncryptionError.storageFailed
+            }
+            clearMemoryPassphrase()
+        } else {
+            storeMemoryPassphrase(passphraseData)
+            guard passphraseStore.deletePassphrase() else {
+                throw DatabaseEncryptionError.storageFailed
+            }
         }
+        saveBootstrapState(DatabaseEncryptionBootstrapState(
+            isEnabled: true,
+            storesPassphraseInKeychain: shouldStoreInKeychain
+        ))
+        postLockStateDidChange()
     }
 
     public func replacePassphrase(
@@ -90,24 +168,36 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
         guard passphraseStore.deletePassphrase() else {
             throw DatabaseEncryptionError.storageFailed
         }
+        clearMemoryPassphrase()
+        saveBootstrapState(.disabled)
+        postLockStateDidChange()
     }
 
     public func verify(passphrase: String) throws {
         guard !passphrase.isEmpty else {
             throw DatabaseEncryptionError.emptyPassphrase
         }
-        guard let storedPassphrase = passphraseStore.loadPassphrase() else {
-            throw DatabaseEncryptionError.passphraseUnavailable
-        }
         let inputPassphrase = Self.passphraseData(from: passphrase)
-        guard Self.constantTimeEqual(storedPassphrase, inputPassphrase) else {
+        if let storedPassphrase = passphraseStore.loadPassphrase() {
+            guard Self.constantTimeEqual(storedPassphrase, inputPassphrase) else {
+                throw DatabaseEncryptionError.invalidPassphrase
+            }
+            return
+        }
+        if let memoryPassphrase = loadMemoryPassphrase() {
+            guard Self.constantTimeEqual(memoryPassphrase, inputPassphrase) else {
+                throw DatabaseEncryptionError.invalidPassphrase
+            }
+            return
+        }
+        guard Persistence.validateDatabaseEncryptionPassphrase(inputPassphrase) else {
             throw DatabaseEncryptionError.invalidPassphrase
         }
     }
 
     @discardableResult
     public func withPassphraseDataIfAvailable<T>(_ body: (inout Data) throws -> T) throws -> T? {
-        guard var passphrase = passphraseStore.loadPassphrase() else {
+        guard var passphrase = passphraseStore.loadPassphrase() ?? loadMemoryPassphrase() else {
             return nil
         }
         defer {
@@ -116,8 +206,102 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
         return try body(&passphrase)
     }
 
+    public func unlockWithPassphrase(_ passphrase: String) throws {
+        guard !passphrase.isEmpty else {
+            throw DatabaseEncryptionError.emptyPassphrase
+        }
+        let passphraseData = Self.passphraseData(from: passphrase)
+        guard Persistence.validateDatabaseEncryptionPassphrase(passphraseData) else {
+            throw DatabaseEncryptionError.invalidPassphrase
+        }
+        storeMemoryPassphrase(passphraseData)
+        saveBootstrapState(DatabaseEncryptionBootstrapState(
+            isEnabled: true,
+            storesPassphraseInKeychain: false
+        ))
+        postLockStateDidChange()
+        NotificationCenter.default.post(name: .databaseEncryptionDidUnlock, object: self)
+    }
+
+    public func setStoresPassphraseInKeychain(_ shouldStore: Bool, verificationPassphrase: String) throws {
+        try verify(passphrase: verificationPassphrase)
+        let passphraseData = Self.passphraseData(from: verificationPassphrase)
+        if shouldStore {
+            guard passphraseStore.savePassphrase(passphraseData) else {
+                throw DatabaseEncryptionError.storageFailed
+            }
+            clearMemoryPassphrase()
+        } else {
+            storeMemoryPassphrase(passphraseData)
+            guard passphraseStore.deletePassphrase() else {
+                throw DatabaseEncryptionError.storageFailed
+            }
+        }
+        saveBootstrapState(DatabaseEncryptionBootstrapState(
+            isEnabled: true,
+            storesPassphraseInKeychain: shouldStore
+        ))
+        postLockStateDidChange()
+    }
+
+    public func clearManualUnlockSession() {
+        guard isManualUnlockModeEnabled else { return }
+        clearMemoryPassphrase()
+        postLockStateDidChange()
+    }
+
     private static func passphraseData(from passphrase: String) -> Data {
         Data(passphrase.utf8)
+    }
+
+    private func loadBootstrapState() -> DatabaseEncryptionBootstrapState {
+        bootstrapStateLock.lock()
+        let state = cachedBootstrapState
+        bootstrapStateLock.unlock()
+        return state
+    }
+
+    private func saveBootstrapState(_ state: DatabaseEncryptionBootstrapState) {
+        bootstrapStateLock.lock()
+        cachedBootstrapState = state
+        bootstrapStateLock.unlock()
+        DatabaseEncryptionBootstrapStore.save(state)
+    }
+
+    private var hasMemoryPassphrase: Bool {
+        memoryPassphraseLock.lock()
+        let hasPassphrase = memoryPassphrase != nil
+        memoryPassphraseLock.unlock()
+        return hasPassphrase
+    }
+
+    private func loadMemoryPassphrase() -> Data? {
+        memoryPassphraseLock.lock()
+        let passphrase = memoryPassphrase.map { Data($0) }
+        memoryPassphraseLock.unlock()
+        return passphrase
+    }
+
+    private func storeMemoryPassphrase(_ passphrase: Data) {
+        memoryPassphraseLock.lock()
+        if let count = memoryPassphrase?.count {
+            memoryPassphrase?.resetBytes(in: 0..<count)
+        }
+        memoryPassphrase = Data(passphrase)
+        memoryPassphraseLock.unlock()
+    }
+
+    private func clearMemoryPassphrase() {
+        memoryPassphraseLock.lock()
+        if let count = memoryPassphrase?.count {
+            memoryPassphrase?.resetBytes(in: 0..<count)
+        }
+        memoryPassphrase = nil
+        memoryPassphraseLock.unlock()
+    }
+
+    private func postLockStateDidChange() {
+        NotificationCenter.default.post(name: .databaseEncryptionLockStateDidChange, object: self)
     }
 
     private static func constantTimeEqual(_ lhs: Data, _ rhs: Data) -> Bool {
@@ -127,6 +311,43 @@ public final class DatabaseEncryptionManager: @unchecked Sendable {
             difference |= lhs[index] ^ rhs[index]
         }
         return difference == 0
+    }
+}
+
+enum DatabaseEncryptionBootstrapStore {
+    private static let fileName = "database-encryption-bootstrap.json"
+
+    static func load() -> DatabaseEncryptionBootstrapState {
+        guard let data = try? Data(contentsOf: fileURL()) else {
+            return .disabled
+        }
+        return (try? JSONDecoder().decode(DatabaseEncryptionBootstrapState.self, from: data)) ?? .disabled
+    }
+
+    static func save(_ state: DatabaseEncryptionBootstrapState) {
+        do {
+            let url = fileURL()
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder().encode(state)
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            databaseEncryptionLogger.error("写入数据库加密引导状态失败: \(error.localizedDescription)")
+        }
+    }
+
+    private static func fileURL() -> URL {
+        let baseDirectory: URL
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            baseDirectory = FileManager.default.temporaryDirectory
+        } else {
+            baseDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        }
+        return baseDirectory
+            .appendingPathComponent("ETOS LLM Studio", isDirectory: true)
+            .appendingPathComponent(fileName, isDirectory: false)
     }
 }
 

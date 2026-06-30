@@ -366,6 +366,7 @@ public struct AppLockSettingsView: View {
     @State private var requestedDestination: AppLockSettingsDestination?
     @State private var successMessage: String?
     @State private var isShowingIntroDetails = false
+    @State private var databaseEncryptionStateVersion = 0
 
     public init() {}
 
@@ -382,6 +383,7 @@ public struct AppLockSettingsView: View {
 
             Section {
                 Toggle(NSLocalizedString("应用锁", comment: ""), isOn: appLockEnabledBinding)
+                    .disabled(isManualDatabaseUnlockMode)
 
                 if lockManager.isEnabled {
                     NavigationLink {
@@ -401,7 +403,7 @@ public struct AppLockSettingsView: View {
             } header: {
                 Text(NSLocalizedString("应用锁", comment: ""))
             } footer: {
-                Text(NSLocalizedString("只影响这台设备，不随同步发送。", comment: ""))
+                Text(appLockFooterText)
             }
 
             if lockManager.isEnabled {
@@ -433,9 +435,12 @@ public struct AppLockSettingsView: View {
                 Toggle(NSLocalizedString("数据库物理加密", comment: ""), isOn: databaseEncryptionEnabledBinding)
 
                 if isDatabaseEncryptionEnabled {
+                    Toggle(NSLocalizedString("在 Keychain 中记住数据库主密码", comment: ""), isOn: databaseEncryptionKeychainStorageBinding)
+
                     NavigationLink {
                         DatabaseEncryptionUpdatePassphraseView {
                             successMessage = NSLocalizedString("数据库主密码已更新。", comment: "")
+                            databaseEncryptionStateVersion += 1
                         }
                     } label: {
                         Label(NSLocalizedString("更新数据库主密码", comment: ""), systemImage: "key")
@@ -444,7 +449,7 @@ public struct AppLockSettingsView: View {
             } header: {
                 Text(NSLocalizedString("数据库物理加密", comment: ""))
             } footer: {
-                Text(NSLocalizedString("用于保护被离线提取的数据库文件。", comment: ""))
+                Text(databaseEncryptionFooterText)
             }
 
             if let successMessage {
@@ -472,14 +477,33 @@ public struct AppLockSettingsView: View {
             case .enableDatabaseEncryption:
                 DatabaseEncryptionEnableView {
                     appConfig.databaseEncryptionEnabled = true
+                    databaseEncryptionStateVersion += 1
                     successMessage = NSLocalizedString("数据库物理加密已启用。", comment: "")
                 }
             case .disableDatabaseEncryption:
                 DatabaseEncryptionDisableView {
                     appConfig.databaseEncryptionEnabled = false
+                    databaseEncryptionStateVersion += 1
                     successMessage = NSLocalizedString("数据库物理加密已关闭。", comment: "")
                 }
+            case .enableDatabaseKeychainStorage:
+                DatabaseEncryptionKeychainStorageView(storesPassphraseInKeychain: true) {
+                    appConfig.reloadFromPersistentStore()
+                    databaseEncryptionStateVersion += 1
+                    successMessage = NSLocalizedString("数据库主密码将保存到 Keychain。", comment: "")
+                }
+            case .disableDatabaseKeychainStorage:
+                DatabaseEncryptionKeychainStorageView(storesPassphraseInKeychain: false) {
+                    appConfig.reloadFromPersistentStore()
+                    databaseEncryptionStateVersion += 1
+                    lockManager.refreshState()
+                    successMessage = NSLocalizedString("数据库主密码已改为仅保存在内存中。", comment: "")
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .databaseEncryptionLockStateDidChange)) { _ in
+            databaseEncryptionStateVersion += 1
+            lockManager.refreshState()
         }
     }
 
@@ -505,8 +529,42 @@ public struct AppLockSettingsView: View {
         )
     }
 
+    private var databaseEncryptionKeychainStorageBinding: Binding<Bool> {
+        Binding(
+            get: {
+                _ = databaseEncryptionStateVersion
+                return DatabaseEncryptionManager.shared.storesPassphraseInKeychain
+            },
+            set: { shouldStore in
+                guard shouldStore != DatabaseEncryptionManager.shared.storesPassphraseInKeychain else { return }
+                successMessage = nil
+                requestedDestination = shouldStore ? .enableDatabaseKeychainStorage : .disableDatabaseKeychainStorage
+            }
+        )
+    }
+
     private var isDatabaseEncryptionEnabled: Bool {
-        appConfig.databaseEncryptionEnabled || DatabaseEncryptionManager.shared.hasStoredPassphrase
+        _ = databaseEncryptionStateVersion
+        return appConfig.databaseEncryptionEnabled || DatabaseEncryptionManager.shared.isDatabaseEncryptionEnabled
+    }
+
+    private var isManualDatabaseUnlockMode: Bool {
+        _ = databaseEncryptionStateVersion
+        return DatabaseEncryptionManager.shared.isManualUnlockModeEnabled
+    }
+
+    private var appLockFooterText: String {
+        if isManualDatabaseUnlockMode {
+            return NSLocalizedString("数据库主密码未保存到 Keychain 时，数据库解锁会接管本机界面保护，普通应用锁会暂时停用。", comment: "")
+        }
+        return NSLocalizedString("只影响这台设备，不随同步发送。", comment: "")
+    }
+
+    private var databaseEncryptionFooterText: String {
+        if isManualDatabaseUnlockMode {
+            return NSLocalizedString("当前不会把数据库主密码保存到 Keychain；冷启动时需要先输入主密码，验证成功后只暂存在内存中。", comment: "")
+        }
+        return NSLocalizedString("用于保护被离线提取的数据库文件。默认会把主密码保存在本机 Keychain 中，以便启动时自动解锁。", comment: "")
     }
 
     private var appLockIntroDetails: String {
@@ -514,6 +572,7 @@ public struct AppLockSettingsView: View {
             NSLocalizedString("应用锁用于保护已经解锁设备上的 App 界面。开启后，回到前台或手动锁定时，需要输入应用锁密码；iOS 上可额外开启 Face ID / Touch ID，失败后仍能回退到密码。", comment: ""),
             NSLocalizedString("自动锁定只在应用进入后台后计时。选择“立即”会在每次离开后重新验证；选择更长时间则适合频繁切换应用的场景。", comment: ""),
             NSLocalizedString("数据库物理加密是另一层保护：它会把聊天、配置和记忆三处分库迁移为 SQLCipher 加密文件，主密码保存在本机 Keychain 中，用于启动时透明解锁。", comment: ""),
+            NSLocalizedString("如果关闭 Keychain 保存，应用会在冷启动时要求输入数据库主密码；主密码验证通过后只暂存在当前进程内存里，数据库未解锁前不会启动聊天、同步或每日脉冲等数据访问任务。", comment: ""),
             NSLocalizedString("两者保护的对象不同：应用锁防止别人直接打开界面，数据库物理加密防止数据库文件被离线提取后读取。快照导出仍使用单独的导出密码，不会复用数据库主密码。", comment: ""),
             NSLocalizedString("应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。", comment: "")
         ].joined(separator: "\n\n")
@@ -594,6 +653,8 @@ private enum AppLockSettingsDestination: Hashable, Identifiable {
     case disableAppLock
     case enableDatabaseEncryption
     case disableDatabaseEncryption
+    case enableDatabaseKeychainStorage
+    case disableDatabaseKeychainStorage
 
     var id: String {
         switch self {
@@ -605,152 +666,10 @@ private enum AppLockSettingsDestination: Hashable, Identifiable {
             return "enableDatabaseEncryption"
         case .disableDatabaseEncryption:
             return "disableDatabaseEncryption"
-        }
-    }
-}
-
-private struct AppLockEnableView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var lockManager = AppLockManager.shared
-    @State private var password = ""
-    @State private var confirmation = ""
-    @State private var errorMessage: String?
-    let onCompletion: () -> Void
-
-    var body: some View {
-        List {
-            Section {
-                SecureField(NSLocalizedString("密码", comment: ""), text: $password)
-                    .textContentType(.newPassword)
-                SecureField(NSLocalizedString("确认密码", comment: ""), text: $confirmation)
-                    .textContentType(.newPassword)
-
-                Button(NSLocalizedString("启用应用锁", comment: "")) {
-                    enable()
-                }
-                .disabled(!canConfirm)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            } header: {
-                Text(NSLocalizedString("密码", comment: ""))
-            }
-        }
-        .navigationTitle(NSLocalizedString("启用应用锁", comment: ""))
-    }
-
-    private var canConfirm: Bool {
-        !password.isEmpty && password == confirmation
-    }
-
-    private func enable() {
-        do {
-            try lockManager.enable(password: password, confirmation: confirmation)
-            onCompletion()
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-}
-
-private struct AppLockDisableView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var lockManager = AppLockManager.shared
-    @State private var password = ""
-    @State private var errorMessage: String?
-    let onCompletion: () -> Void
-
-    var body: some View {
-        List {
-            Section {
-                SecureField(NSLocalizedString("当前密码", comment: ""), text: $password)
-                    .textContentType(.password)
-
-                Button(NSLocalizedString("关闭应用锁", comment: ""), role: .destructive) {
-                    disable()
-                }
-                .disabled(password.isEmpty)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            } header: {
-                Text(NSLocalizedString("密码", comment: ""))
-            }
-        }
-        .navigationTitle(NSLocalizedString("关闭应用锁", comment: ""))
-    }
-
-    private func disable() {
-        do {
-            try lockManager.disable(password: password)
-            onCompletion()
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-}
-
-private struct AppLockUpdatePasswordView: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var lockManager = AppLockManager.shared
-    @State private var currentPassword = ""
-    @State private var newPassword = ""
-    @State private var confirmation = ""
-    @State private var errorMessage: String?
-    let onCompletion: () -> Void
-
-    var body: some View {
-        List {
-            Section {
-                SecureField(NSLocalizedString("当前密码", comment: ""), text: $currentPassword)
-                    .textContentType(.password)
-                SecureField(NSLocalizedString("新密码", comment: ""), text: $newPassword)
-                    .textContentType(.newPassword)
-                SecureField(NSLocalizedString("确认新密码", comment: ""), text: $confirmation)
-                    .textContentType(.newPassword)
-
-                Button(NSLocalizedString("更新密码", comment: "")) {
-                    updatePassword()
-                }
-                .disabled(!canConfirm)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            } header: {
-                Text(NSLocalizedString("密码", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("更新或关闭应用锁前需要输入当前密码。", comment: ""))
-            }
-        }
-        .navigationTitle(NSLocalizedString("更新密码", comment: ""))
-    }
-
-    private var canConfirm: Bool {
-        !currentPassword.isEmpty && !newPassword.isEmpty && newPassword == confirmation
-    }
-
-    private func updatePassword() {
-        do {
-            try lockManager.setPassword(
-                currentPassword: currentPassword,
-                newPassword: newPassword,
-                confirmation: confirmation
-            )
-            onCompletion()
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
+        case .enableDatabaseKeychainStorage:
+            return "enableDatabaseKeychainStorage"
+        case .disableDatabaseKeychainStorage:
+            return "disableDatabaseKeychainStorage"
         }
     }
 }

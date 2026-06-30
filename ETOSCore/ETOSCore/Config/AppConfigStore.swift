@@ -328,7 +328,8 @@ public final class AppConfigStore: ObservableObject {
         appLockEnabled = Self.boolValue(.appLockEnabled, userDefaults: userDefaults)
         appLockTimeoutSeconds = Self.integerValue(.appLockTimeoutSeconds, userDefaults: userDefaults)
         appLockBiometricEnabled = Self.boolValue(.appLockBiometricEnabled, userDefaults: userDefaults)
-        databaseEncryptionEnabled = Self.boolValue(.databaseEncryptionEnabled, userDefaults: userDefaults)
+        databaseEncryptionEnabled = DatabaseEncryptionManager.shared.isDatabaseEncryptionEnabled
+            || Self.boolValue(.databaseEncryptionEnabled, userDefaults: userDefaults)
         localModelsEnabled = Self.boolValue(.localModelsEnabled, userDefaults: userDefaults)
         localModelPerformanceMonitorEnabled = Self.boolValue(.localModelPerformanceMonitorEnabled, userDefaults: userDefaults)
         localModelCacheEnabled = Self.boolValue(.localModelCacheEnabled, userDefaults: userDefaults)

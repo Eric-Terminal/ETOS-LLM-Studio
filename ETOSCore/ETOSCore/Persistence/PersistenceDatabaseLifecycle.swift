@@ -23,6 +23,7 @@ extension Persistence {
 
     static func activeGRDBStore() -> PersistenceGRDBStore? {
         guard shouldUseGRDBStore() else { return nil }
+        guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return nil }
         if let store = cachedGRDBStore {
             return store
         }
@@ -80,6 +81,7 @@ extension Persistence {
 
     static func activeAuxiliaryStore(kind: AuxiliaryStoreKind) -> PersistenceAuxiliaryGRDBStore? {
         guard shouldUseGRDBStore() else { return nil }
+        guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return nil }
         if let store = cachedAuxiliaryStores[kind] {
             return store
         }
@@ -204,6 +206,10 @@ extension Persistence {
     }
 
     public static func bootstrapGRDBStoreOnLaunch() {
+        guard !DatabaseEncryptionManager.shared.requiresManualUnlock else {
+            logger.info("数据库加密处于手动解锁模式，启动期等待用户输入主密码。")
+            return
+        }
         let launchPreparation = prepareDatabasesForLaunchIfNeeded()
         guard !launchPreparation.hasPendingRecoveryRequest else {
             logger.warning("启动阶段检测到可恢复的数据库损坏，等待用户确认。")

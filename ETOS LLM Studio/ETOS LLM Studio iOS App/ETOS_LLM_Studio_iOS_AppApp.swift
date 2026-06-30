@@ -79,6 +79,14 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .environmentObject(appConfig)
                 .environmentObject(syncManager)
                 .environmentObject(cloudSyncManager)
+                .overlay {
+                    if launchStateMachine.phase == .waitingForDatabaseUnlock {
+                        DatabaseUnlockOverlayView {
+                            handleDatabaseUnlocked()
+                        }
+                        .zIndex(2_000)
+                    }
+                }
                 .onOpenURL { url in
                     Task { @MainActor in
                         if NewAPIProviderImportURLHandler.canHandle(url) {
@@ -130,6 +138,14 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         .backgroundTask(.appRefresh(DailyPulseBackgroundDeliveryScheduler.taskIdentifier)) {
             await DailyPulseBackgroundDeliveryScheduler.shared.handleAppRefresh()
         }
+    }
+
+    @MainActor
+    private func handleDatabaseUnlocked() {
+        guard launchStateMachine.phase == .waitingForDatabaseUnlock else { return }
+        appConfig.reloadFromPersistentStore()
+        viewModel.reloadPersistedDataAfterLegacyJSONMigration()
+        launchStateMachine.continueAfterDatabaseUnlock()
     }
 
     @MainActor

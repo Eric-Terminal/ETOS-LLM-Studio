@@ -12,6 +12,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) var scenePhase
 
     @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
     @StateObject var announcementManager = AnnouncementManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
@@ -124,6 +125,13 @@ struct ContentView: View {
                 AppLockOverlayView()
                     .zIndex(1_000)
             }
+
+            if launchStateMachine.phase == .waitingForDatabaseUnlock {
+                DatabaseUnlockOverlayView {
+                    handleDatabaseUnlocked()
+                }
+                .zIndex(2_000)
+            }
         }
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
@@ -210,6 +218,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
             viewModel.reloadPersistedDataAfterLegacyJSONMigration()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .databaseEncryptionDidUnlock)) { _ in
+            handleDatabaseUnlocked()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
@@ -228,5 +239,12 @@ struct ContentView: View {
             appLockManager.refreshState()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
+    }
+
+    private func handleDatabaseUnlocked() {
+        guard launchStateMachine.phase == .waitingForDatabaseUnlock else { return }
+        appConfig.reloadFromPersistentStore()
+        viewModel.reloadPersistedDataAfterLegacyJSONMigration()
+        launchStateMachine.continueAfterDatabaseUnlock()
     }
 }

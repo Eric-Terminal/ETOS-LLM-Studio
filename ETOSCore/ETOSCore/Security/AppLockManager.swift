@@ -136,6 +136,7 @@ public final class AppLockManager: ObservableObject {
     }
 
     public var isEnabled: Bool {
+        guard !DatabaseEncryptionManager.shared.isManualUnlockModeEnabled else { return false }
         appConfig.appLockEnabled && credentialStore.loadCredential() != nil
     }
 
@@ -349,6 +350,7 @@ public final class AppLockManager: ObservableObject {
         credential: AppLockCredentialRecord?
     ) -> LockState {
         guard appConfig.appLockEnabled,
+              !DatabaseEncryptionManager.shared.isManualUnlockModeEnabled,
               credential != nil else {
             return .disabled
         }
