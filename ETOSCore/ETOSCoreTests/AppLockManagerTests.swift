@@ -34,6 +34,72 @@ struct AppLockManagerTests {
         #expect(manager.state == .unlocked)
     }
 
+    @Test("数字密码会启用数字输入模式")
+    func testNumericPasswordMetadata() throws {
+        let backup = backupAppLockConfig()
+        defer { restoreAppLockConfig(backup) }
+
+        let manager = AppLockManager(credentialStore: InMemoryAppLockCredentialStore())
+
+        try manager.enable(password: "123456", confirmation: "123456")
+
+        #expect(manager.usesNumericPassword == true)
+    }
+
+    @Test("非纯数字密码会保持普通输入模式")
+    func testNonNumericPasswordMetadata() throws {
+        let backup = backupAppLockConfig()
+        defer { restoreAppLockConfig(backup) }
+
+        let manager = AppLockManager(credentialStore: InMemoryAppLockCredentialStore())
+
+        try manager.enable(password: "passcode1", confirmation: "passcode1")
+
+        #expect(manager.usesNumericPassword == false)
+    }
+
+    @Test("旧版应用锁凭据缺少输入模式时默认普通密码")
+    func testLegacyCredentialDecodesAsTextPassword() throws {
+        let legacyRecord = LegacyAppLockCredentialRecord(
+            version: 1,
+            iterations: 1,
+            salt: Data([1, 2, 3]),
+            hash: Data([4, 5, 6])
+        )
+        let data = try JSONEncoder().encode(legacyRecord)
+        let decoded = try JSONDecoder().decode(AppLockCredentialRecord.self, from: data)
+
+        #expect(decoded.isNumericPassword == false)
+    }
+
+    @Test("旧版数字密码成功解锁后会补写数字输入模式")
+    func testLegacyNumericPasswordMetadataMigratesAfterUnlock() throws {
+        let backup = backupAppLockConfig()
+        defer { restoreAppLockConfig(backup) }
+
+        let store = InMemoryAppLockCredentialStore()
+        let manager = AppLockManager(credentialStore: store)
+        try manager.enable(password: "123456", confirmation: "123456")
+
+        let credential = try #require(store.loadCredential())
+        _ = store.saveCredential(AppLockCredentialRecord(
+            version: credential.version,
+            iterations: credential.iterations,
+            salt: credential.salt,
+            hash: credential.hash,
+            isNumericPassword: false
+        ))
+        manager.refreshState()
+        manager.lock()
+
+        #expect(manager.usesNumericPassword == false)
+
+        try manager.unlock(password: "123456")
+
+        #expect(manager.usesNumericPassword == true)
+        #expect(store.loadCredential()?.isNumericPassword == true)
+    }
+
     @Test("设置密码会拒绝空密码与确认不一致")
     func testEnableValidatesPassword() {
         let backup = backupAppLockConfig()
@@ -155,4 +221,11 @@ private final class InMemoryAppLockCredentialStore: AppLockCredentialStore {
         credential = nil
         return true
     }
+}
+
+private struct LegacyAppLockCredentialRecord: Encodable {
+    let version: Int
+    let iterations: UInt32
+    let salt: Data
+    let hash: Data
 }

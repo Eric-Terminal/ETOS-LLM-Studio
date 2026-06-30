@@ -171,6 +171,7 @@ struct ContentView: View {
                 legacyJSONMigrationPromptSheet
             }
             .interactiveDismissDisabled(true)
+            .appLockOverlayLayer()
         }
         .sheet(isPresented: Binding(
             get: { legacyJSONMigrationManager.isMigrating },
@@ -180,6 +181,7 @@ struct ContentView: View {
                 legacyJSONMigrationProgressSheet
             }
             .interactiveDismissDisabled(true)
+            .appLockOverlayLayer()
         }
         .alert(NSLocalizedString("是否清理旧版 JSON 文件？", comment: ""),
             isPresented: $legacyJSONMigrationManager.isCleanupPromptPresented

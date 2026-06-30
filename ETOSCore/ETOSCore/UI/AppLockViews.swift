@@ -25,56 +25,7 @@ public struct AppLockOverlayView: View {
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(.primary)
-
-                VStack(spacing: 6) {
-                    Text(NSLocalizedString("ETOS LLM Studio 已锁定", comment: ""))
-                        .font(.headline)
-                    Text(NSLocalizedString("输入应用锁密码继续。", comment: ""))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                SecureField(NSLocalizedString("密码", comment: ""), text: $password)
-                    .textContentType(.password)
-                    .submitLabel(.go)
-                    .onSubmit(unlock)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-
-                #if !os(watchOS)
-                    if lockManager.isBiometricEnabled {
-                        Button {
-                            startBiometricUnlock()
-                        } label: {
-                            Label(NSLocalizedString("使用生物识别", comment: ""), systemImage: "faceid")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isBiometricUnlocking)
-                    }
-                #endif
-
-                Button {
-                    unlock()
-                } label: {
-                    Label(NSLocalizedString("解锁", comment: ""), systemImage: "lock.open")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(password.isEmpty)
-            }
-            .padding()
-            .frame(maxWidth: 360)
+            lockContent
         }
         .onAppear {
             password = ""
@@ -82,6 +33,255 @@ public struct AppLockOverlayView: View {
             #if !os(watchOS)
             startBiometricUnlockIfNeeded()
             #endif
+        }
+    }
+
+    private var lockContent: some View {
+        VStack(spacing: lockContentSpacing) {
+            lockHeader
+
+            if lockManager.usesNumericPassword {
+                numericPasswordDisplay
+                errorText
+                numericKeyboard
+            } else {
+                passwordField
+                errorText
+                biometricButton
+                unlockButton
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, lockContentVerticalPadding)
+        .frame(maxWidth: lockContentMaxWidth)
+    }
+
+    private var lockHeader: some View {
+        VStack(spacing: lockHeaderSpacing) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: lockIconSize, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 4) {
+                Text(NSLocalizedString("ETOS LLM Studio 已锁定", comment: ""))
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                Text(NSLocalizedString("输入应用锁密码继续。", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var passwordField: some View {
+        SecureField(NSLocalizedString("密码", comment: ""), text: $password)
+            .textContentType(.password)
+            .submitLabel(.go)
+            .onSubmit(unlock)
+    }
+
+    @ViewBuilder
+    private var errorText: some View {
+        if let errorMessage {
+            Text(errorMessage)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    @ViewBuilder
+    private var biometricButton: some View {
+        #if !os(watchOS)
+            if lockManager.isBiometricEnabled {
+                Button {
+                    startBiometricUnlock()
+                } label: {
+                    Label(NSLocalizedString("使用生物识别", comment: ""), systemImage: "faceid")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBiometricUnlocking)
+            }
+        #else
+            EmptyView()
+        #endif
+    }
+
+    private var unlockButton: some View {
+        Button {
+            unlock()
+        } label: {
+            Label(NSLocalizedString("解锁", comment: ""), systemImage: "lock.open")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(password.isEmpty)
+    }
+
+    private var numericPasswordDisplay: some View {
+        Text(maskedNumericPassword)
+            .font(.title3.monospaced())
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity, minHeight: numericPasswordDisplayHeight)
+            .padding(.horizontal, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.secondary.opacity(0.28), lineWidth: 1)
+            }
+    }
+
+    private var numericKeyboard: some View {
+        VStack(spacing: numericKeyboardSpacing) {
+            ForEach(AppLockNumericKey.rows, id: \.self) { row in
+                HStack(spacing: numericKeyboardSpacing) {
+                    ForEach(row, id: \.self) { key in
+                        numericKeyButton(for: key)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func numericKeyButton(for key: AppLockNumericKey) -> some View {
+        if key == .unlock {
+            Button {
+                handleNumericKey(key)
+            } label: {
+                numericKeyLabel(for: key)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(password.isEmpty)
+        } else {
+            Button {
+                handleNumericKey(key)
+            } label: {
+                numericKeyLabel(for: key)
+            }
+            .buttonStyle(.bordered)
+            .disabled(key.requiresPassword && password.isEmpty)
+        }
+    }
+
+    @ViewBuilder
+    private func numericKeyLabel(for key: AppLockNumericKey) -> some View {
+        switch key {
+        case .digit(let digit):
+            Text(digit)
+                .font(numericKeyFont)
+                .frame(maxWidth: .infinity, minHeight: numericKeyHeight)
+        case .delete:
+            Image(systemName: "delete.left")
+                .font(numericActionFont)
+                .frame(maxWidth: .infinity, minHeight: numericKeyHeight)
+                .accessibilityLabel(NSLocalizedString("删除", comment: ""))
+        case .unlock:
+            Image(systemName: "lock.open")
+                .font(numericActionFont)
+                .frame(maxWidth: .infinity, minHeight: numericKeyHeight)
+                .accessibilityLabel(NSLocalizedString("解锁", comment: ""))
+        }
+    }
+
+    private var maskedNumericPassword: String {
+        guard !password.isEmpty else { return " " }
+        return String(repeating: "•", count: min(password.count, 24))
+    }
+
+    private var lockContentSpacing: CGFloat {
+        #if os(watchOS)
+        lockManager.usesNumericPassword ? 8 : 14
+        #else
+        18
+        #endif
+    }
+
+    private var lockHeaderSpacing: CGFloat {
+        #if os(watchOS)
+        lockManager.usesNumericPassword ? 4 : 8
+        #else
+        12
+        #endif
+    }
+
+    private var lockIconSize: CGFloat {
+        #if os(watchOS)
+        lockManager.usesNumericPassword ? 20 : 36
+        #else
+        42
+        #endif
+    }
+
+    private var lockContentVerticalPadding: CGFloat {
+        #if os(watchOS)
+        lockManager.usesNumericPassword ? 8 : 14
+        #else
+        16
+        #endif
+    }
+
+    private var lockContentMaxWidth: CGFloat {
+        #if os(watchOS)
+        240
+        #else
+        lockManager.usesNumericPassword ? 320 : 360
+        #endif
+    }
+
+    private var numericPasswordDisplayHeight: CGFloat {
+        #if os(watchOS)
+        28
+        #else
+        42
+        #endif
+    }
+
+    private var numericKeyboardSpacing: CGFloat {
+        #if os(watchOS)
+        5
+        #else
+        8
+        #endif
+    }
+
+    private var numericKeyHeight: CGFloat {
+        #if os(watchOS)
+        26
+        #else
+        44
+        #endif
+    }
+
+    private var numericKeyFont: Font {
+        #if os(watchOS)
+        .headline
+        #else
+        .title3.weight(.semibold)
+        #endif
+    }
+
+    private var numericActionFont: Font {
+        #if os(watchOS)
+        .subheadline.weight(.semibold)
+        #else
+        .headline.weight(.semibold)
+        #endif
+    }
+
+    private func handleNumericKey(_ key: AppLockNumericKey) {
+        errorMessage = nil
+        switch key {
+        case .digit(let digit):
+            password.append(digit)
+        case .delete:
+            guard !password.isEmpty else { return }
+            password.removeLast()
+        case .unlock:
+            unlock()
         }
     }
 
@@ -116,6 +316,48 @@ public struct AppLockOverlayView: View {
         }
     }
     #endif
+}
+
+private enum AppLockNumericKey: Hashable {
+    case digit(String)
+    case delete
+    case unlock
+
+    static let rows: [[AppLockNumericKey]] = [
+        [.digit("1"), .digit("2"), .digit("3")],
+        [.digit("4"), .digit("5"), .digit("6")],
+        [.digit("7"), .digit("8"), .digit("9")],
+        [.delete, .digit("0"), .unlock]
+    ]
+
+    var requiresPassword: Bool {
+        switch self {
+        case .delete, .unlock:
+            return true
+        case .digit:
+            return false
+        }
+    }
+}
+
+private struct AppLockOverlayLayerModifier: ViewModifier {
+    @ObservedObject private var lockManager = AppLockManager.shared
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if lockManager.state == .locked {
+                    AppLockOverlayView()
+                        .zIndex(1_000)
+                }
+            }
+    }
+}
+
+public extension View {
+    func appLockOverlayLayer() -> some View {
+        modifier(AppLockOverlayLayerModifier())
+    }
 }
 
 public struct AppLockSettingsView: View {

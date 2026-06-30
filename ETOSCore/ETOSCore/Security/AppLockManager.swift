@@ -27,6 +27,38 @@ struct AppLockCredentialRecord: Codable, Equatable {
     let iterations: UInt32
     let salt: Data
     let hash: Data
+    let isNumericPassword: Bool
+
+    init(
+        version: Int,
+        iterations: UInt32,
+        salt: Data,
+        hash: Data,
+        isNumericPassword: Bool = false
+    ) {
+        self.version = version
+        self.iterations = iterations
+        self.salt = salt
+        self.hash = hash
+        self.isNumericPassword = isNumericPassword
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case iterations
+        case salt
+        case hash
+        case isNumericPassword
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        iterations = try container.decode(UInt32.self, forKey: .iterations)
+        salt = try container.decode(Data.self, forKey: .salt)
+        hash = try container.decode(Data.self, forKey: .hash)
+        isNumericPassword = try container.decodeIfPresent(Bool.self, forKey: .isNumericPassword) ?? false
+    }
 }
 
 protocol AppLockCredentialStore {
@@ -81,6 +113,7 @@ public final class AppLockManager: ObservableObject {
     public static let maximumTimeoutSeconds = 86_400
 
     @Published public private(set) var state: LockState
+    @Published public private(set) var usesNumericPassword: Bool
 
     private let appConfig: AppConfigStore
     private let credentialStore: any AppLockCredentialStore
@@ -93,10 +126,12 @@ public final class AppLockManager: ObservableObject {
         now: @escaping () -> Date = Date.init
     ) {
         let resolvedAppConfig = appConfig ?? AppConfigStore.shared
+        let credential = credentialStore.loadCredential()
         self.appConfig = resolvedAppConfig
         self.credentialStore = credentialStore
         self.now = now
-        self.state = Self.resolvedState(appConfig: resolvedAppConfig, credentialStore: credentialStore)
+        self.state = Self.resolvedState(appConfig: resolvedAppConfig, credential: credential)
+        self.usesNumericPassword = credential?.isNumericPassword == true
         normalizeTimeoutIfNeeded()
     }
 
@@ -113,7 +148,9 @@ public final class AppLockManager: ObservableObject {
     }
 
     public func refreshState() {
-        let resolved = Self.resolvedState(appConfig: appConfig, credentialStore: credentialStore)
+        let credential = credentialStore.loadCredential()
+        let resolved = Self.resolvedState(appConfig: appConfig, credential: credential)
+        usesNumericPassword = credential?.isNumericPassword == true
         if resolved == .disabled {
             state = .disabled
         } else if state == .disabled {
@@ -135,6 +172,7 @@ public final class AppLockManager: ObservableObject {
             throw AppLockError.storageFailed
         }
         appConfig.appLockEnabled = true
+        usesNumericPassword = credential.isNumericPassword
         normalizeTimeoutIfNeeded()
         state = .unlocked
         backgroundEnteredAt = nil
@@ -166,12 +204,14 @@ public final class AppLockManager: ObservableObject {
         }
         appConfig.appLockEnabled = false
         appConfig.appLockBiometricEnabled = false
+        usesNumericPassword = false
         state = .disabled
         backgroundEnteredAt = nil
     }
 
     public func unlock(password: String) throws {
         try verify(password: password)
+        refreshNumericPasswordMetadataIfNeeded(password: password)
         state = .unlocked
         backgroundEnteredAt = nil
     }
@@ -287,12 +327,29 @@ public final class AppLockManager: ObservableObject {
         }
     }
 
+    private func refreshNumericPasswordMetadataIfNeeded(password: String) {
+        guard Self.isASCIIIntegerPassword(password),
+              let credential = credentialStore.loadCredential(),
+              !credential.isNumericPassword else {
+            return
+        }
+        let updatedCredential = AppLockCredentialRecord(
+            version: credential.version,
+            iterations: credential.iterations,
+            salt: credential.salt,
+            hash: credential.hash,
+            isNumericPassword: true
+        )
+        guard credentialStore.saveCredential(updatedCredential) else { return }
+        usesNumericPassword = true
+    }
+
     private static func resolvedState(
         appConfig: AppConfigStore,
-        credentialStore: any AppLockCredentialStore
+        credential: AppLockCredentialRecord?
     ) -> LockState {
         guard appConfig.appLockEnabled,
-              credentialStore.loadCredential() != nil else {
+              credential != nil else {
             return .disabled
         }
         return .locked
@@ -316,8 +373,16 @@ private extension AppLockManager {
             version: credentialVersion,
             iterations: passwordHashIterations,
             salt: salt,
-            hash: hash
+            hash: hash,
+            isNumericPassword: isASCIIIntegerPassword(password)
         )
+    }
+
+    static func isASCIIIntegerPassword(_ password: String) -> Bool {
+        guard !password.isEmpty else { return false }
+        return password.unicodeScalars.allSatisfy { scalar in
+            scalar.value >= 48 && scalar.value <= 57
+        }
     }
 
     static func deriveHash(password: String, salt: Data, iterations: UInt32) throws -> Data {

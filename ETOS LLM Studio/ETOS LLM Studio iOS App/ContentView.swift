@@ -255,12 +255,6 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
                 viewModel.reloadPersistedDataAfterLegacyJSONMigration()
             }
-            .overlay {
-                if appLockManager.state == .locked {
-                    AppLockOverlayView()
-                        .zIndex(1_000)
-                }
-            }
     }
 
     private var rootToolPermissionAutoPresentationBlocked: Bool {

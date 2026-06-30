@@ -59,6 +59,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
     @StateObject private var feedbackService = FeedbackService.shared
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var appConfig = AppConfigStore.shared
+    @StateObject private var appLockWindowPresenter = AppLockWindowPresenter()
     @State private var hasTriggeredFeedbackRefreshOnLaunch = false
 
     init() {
@@ -95,6 +96,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     }
                 }
                 .onAppear {
+                    appLockWindowPresenter.install()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
                     dailyPulseDeliveryCoordinator.activate()

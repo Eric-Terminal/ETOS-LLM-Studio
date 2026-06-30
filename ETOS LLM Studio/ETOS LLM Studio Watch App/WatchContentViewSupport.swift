@@ -26,20 +26,24 @@ extension ContentView {
         .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: ""))
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
+                .appLockOverlayLayer()
         }
         .sheet(isPresented: $isSessionListPresented) {
             NavigationStack {
                 sessionListView
             }
+            .appLockOverlayLayer()
         }
         .sheet(item: $viewModel.activeSheet) { item in
             sheetView(for: item)
+                .appLockOverlayLayer()
         }
         .sheet(item: Binding(
             get: { fullErrorContent.map { FullErrorContentWrapper(content: $0) } },
             set: { _ in fullErrorContent = nil }
         )) { wrapper in
             FullErrorContentView(content: wrapper.content)
+                .appLockOverlayLayer()
         }
         .sheet(item: $presentedAskUserInputRequest, onDismiss: {
             presentedAskUserInputRequest = nil
@@ -54,6 +58,7 @@ extension ContentView {
                     viewModel.cancelAskUserInputRequest(using: request)
                 }
             )
+            .appLockOverlayLayer()
         }
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
@@ -62,6 +67,7 @@ extension ContentView {
             NavigationStack {
                 rewriteMessageView(for: target.id)
             }
+            .appLockOverlayLayer()
         }
         .alert(NSLocalizedString("数据库已恢复", comment: ""), isPresented: Binding(
             get: { launchRecoveryNoticeMessage != nil },
@@ -115,6 +121,7 @@ extension ContentView {
                         }
                     )
                 }
+                .appLockOverlayLayer()
             }
         }
         .task {
