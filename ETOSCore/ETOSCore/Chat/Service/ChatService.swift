@@ -162,6 +162,9 @@ public class ChatService {
     /// 每个会话独立维护请求上下文，支持跨会话并发。
     private var requestContextBySessionID: [UUID: RequestExecutionContext] = [:]
     private let requestStateLock = NSRecursiveLock()
+    /// 运行期消息快照用于覆盖 GRDB 异步写入窗口，避免后台会话连续工具调用读到旧落库状态。
+    private var runtimeMessagesBySessionID: [UUID: [ChatMessage]] = [:]
+    private let runtimeMessagesLock = NSRecursiveLock()
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
     /// 重试时要添加新版本的assistant消息ID（如果有）
@@ -268,12 +271,48 @@ public class ChatService {
         if currentSessionSubject.value?.id == sessionID {
             return messagesForSessionSubject.value
         }
+        if let cachedMessages = runtimeMessagesSnapshot(for: sessionID) {
+            return cachedMessages
+        }
         return Persistence.loadMessages(for: sessionID)
+    }
+
+    func messagesForSessionActivation(_ sessionID: UUID) -> [ChatMessage] {
+        if hasActiveRequestContext(for: sessionID),
+           let cachedMessages = runtimeMessagesSnapshot(for: sessionID) {
+            return cachedMessages
+        }
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
+        return Persistence.loadMessages(for: sessionID)
+    }
+
+    private func runtimeMessagesSnapshot(for sessionID: UUID) -> [ChatMessage]? {
+        runtimeMessagesLock.lock()
+        defer { runtimeMessagesLock.unlock() }
+        return runtimeMessagesBySessionID[sessionID]
+    }
+
+    func storeRuntimeMessagesSnapshot(_ messages: [ChatMessage], for sessionID: UUID) {
+        runtimeMessagesLock.lock()
+        runtimeMessagesBySessionID[sessionID] = messages
+        runtimeMessagesLock.unlock()
+    }
+
+    func clearRuntimeMessagesSnapshot(for sessionID: UUID) {
+        runtimeMessagesLock.lock()
+        runtimeMessagesBySessionID.removeValue(forKey: sessionID)
+        runtimeMessagesLock.unlock()
     }
 
     func loadingMessageID(for sessionID: UUID) -> UUID? {
         withRequestStateLock {
             requestContextBySessionID[sessionID]?.loadingMessageID
+        }
+    }
+
+    func hasActiveRequestContext(for sessionID: UUID) -> Bool {
+        withRequestStateLock {
+            requestContextBySessionID[sessionID] != nil
         }
     }
 
@@ -291,6 +330,7 @@ public class ChatService {
         for sessionID: UUID,
         keepingSpeedSamplesFor preferredMessageID: UUID? = nil
     ) {
+        storeRuntimeMessagesSnapshot(messages, for: sessionID)
         publishMessagesIfCurrentSession(messages, for: sessionID, keepingSpeedSamplesFor: preferredMessageID)
         persistMessages(messages, for: sessionID)
     }
@@ -332,6 +372,8 @@ public class ChatService {
         }
         guard didClear else { return }
         setSessionRunning(sessionID, isRunning: false)
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
+        clearRuntimeMessagesSnapshot(for: sessionID)
     }
 
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {

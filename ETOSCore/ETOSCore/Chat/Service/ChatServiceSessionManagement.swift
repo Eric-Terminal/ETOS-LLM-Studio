@@ -47,7 +47,9 @@ extension ChatService {
             // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
             if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
                 if currentSessionSubject.value?.id == target.id {
-                    publishMessages(Persistence.loadMessages(for: target.id))
+                    let messages = messagesForSessionActivation(target.id)
+                    storeRuntimeMessagesSnapshot(messages, for: target.id)
+                    publishMessages(messages)
                 } else {
                     setCurrentSession(target)
                 }
@@ -69,6 +71,7 @@ extension ChatService {
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
+        storeRuntimeMessagesSnapshot([], for: newSession.id)
         publishMessages([])
         logger.info("创建了新的临时会话。")
         AppLog.userOperation(
@@ -108,6 +111,7 @@ extension ChatService {
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
         currentSessionSubject.send(newSession)
+        storeRuntimeMessagesSnapshot(initialMessages, for: newSession.id)
         publishMessages(initialMessages)
         persistMessages(initialMessages, for: newSession.id)
         Persistence.saveChatSessions(updatedSessions)
@@ -131,6 +135,7 @@ extension ChatService {
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
+            clearRuntimeMessagesSnapshot(for: session.id)
             let messages = Persistence.loadMessages(for: session.id)
             deletedSessionMessages.append(contentsOf: messages)
 

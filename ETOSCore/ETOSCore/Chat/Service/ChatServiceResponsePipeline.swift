@@ -648,7 +648,7 @@ extension ChatService {
         if !blockingCalls.isEmpty {
             logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
-                let outcome = await handleToolCall(toolCall)
+                let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
                 if let toolResult = outcome.toolResult {
                     await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
@@ -680,7 +680,7 @@ extension ChatService {
                 logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
-                        let outcome = await handleToolCall(toolCall)
+                        let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
                         if let toolResult = outcome.toolResult {
                             await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
@@ -699,7 +699,7 @@ extension ChatService {
             } else {
                 logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
-                    let outcome = await handleToolCall(toolCall)
+                    let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
                     if let toolResult = outcome.toolResult {
                         await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }

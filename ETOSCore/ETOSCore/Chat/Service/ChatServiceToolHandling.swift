@@ -17,7 +17,7 @@ extension ChatService {
     }
     
     /// 处理单个工具调用
-    func handleToolCall(_ toolCall: InternalToolCall) async -> ToolCallOutcome {
+    func handleToolCall(_ toolCall: InternalToolCall, sessionID: UUID? = nil) async -> ToolCallOutcome {
         logger.info("正在处理工具调用: \(toolCall.toolName)")
 
         var content = ""
@@ -129,7 +129,9 @@ extension ChatService {
                 let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                     toolName: toolCall.toolName,
                     displayName: toolLabel,
-                    arguments: toolCall.arguments
+                    arguments: toolCall.arguments,
+                    sourceSessionID: sessionID,
+                    toolCallID: toolCall.id
                 )
                 switch permissionDecision {
                 case .deny:
@@ -167,7 +169,9 @@ extension ChatService {
             let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                 toolName: toolCall.toolName,
                 displayName: toolLabel,
-                arguments: toolCall.arguments
+                arguments: toolCall.arguments,
+                sourceSessionID: sessionID,
+                toolCallID: toolCall.id
             )
             switch permissionDecision {
             case .deny:
@@ -262,7 +266,9 @@ extension ChatService {
                 let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                     toolName: toolCall.toolName,
                     displayName: toolLabel,
-                    arguments: toolCall.arguments
+                    arguments: toolCall.arguments,
+                    sourceSessionID: sessionID,
+                    toolCallID: toolCall.id
                 )
                 switch permissionDecision {
                 case .deny:

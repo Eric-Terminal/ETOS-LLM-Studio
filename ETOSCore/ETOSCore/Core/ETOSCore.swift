@@ -158,12 +158,23 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
     public let toolName: String
     public let displayName: String?
     public let arguments: String
+    public let sourceSessionID: UUID?
+    public let toolCallID: String?
     
-    public init(id: UUID = UUID(), toolName: String, displayName: String?, arguments: String) {
+    public init(
+        id: UUID = UUID(),
+        toolName: String,
+        displayName: String?,
+        arguments: String,
+        sourceSessionID: UUID? = nil,
+        toolCallID: String? = nil
+    ) {
         self.id = id
         self.toolName = toolName
         self.displayName = displayName
         self.arguments = arguments
+        self.sourceSessionID = sourceSessionID
+        self.toolCallID = toolCallID
     }
 }
 
@@ -225,13 +236,25 @@ public final class ToolPermissionCenter: ObservableObject {
         disabledAutoApproveTools = disabledAutoApproveToolSet.sorted()
     }
     
-    public func requestPermission(toolName: String, displayName: String?, arguments: String) async -> ToolPermissionDecision {
+    public func requestPermission(
+        toolName: String,
+        displayName: String?,
+        arguments: String,
+        sourceSessionID: UUID? = nil,
+        toolCallID: String? = nil
+    ) async -> ToolPermissionDecision {
         if allowAll || allowedTools.contains(toolName) {
             return .allowOnce
         }
         
         return await withCheckedContinuation { continuation in
-            let request = ToolPermissionRequest(toolName: toolName, displayName: displayName, arguments: arguments)
+            let request = ToolPermissionRequest(
+                toolName: toolName,
+                displayName: displayName,
+                arguments: arguments,
+                sourceSessionID: sourceSessionID,
+                toolCallID: toolCallID
+            )
             if activeRequest == nil {
                 activeRequest = request
                 activeContinuation = continuation

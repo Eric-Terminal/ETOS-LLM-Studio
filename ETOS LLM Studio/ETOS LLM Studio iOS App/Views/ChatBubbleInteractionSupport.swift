@@ -352,6 +352,9 @@ extension ChatBubble {
               let request = toolPermissionCenter.activeRequest else {
             return nil
         }
+        if let toolCallID = request.toolCallID {
+            return call.id == toolCallID ? request : nil
+        }
         let trimmedArgs = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs

@@ -80,6 +80,7 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             sessionID: sessionID
         )
+        storeRuntimeMessagesSnapshot(merged, for: sessionID)
         publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
         return merged
     }
@@ -96,6 +97,7 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             sessionID: sessionID
         )
+        storeRuntimeMessagesSnapshot(merged, for: sessionID)
         if coalescer.shouldPublish(force: force) {
             publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
         }
@@ -113,6 +115,7 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             sessionID: sessionID
         )
+        storeRuntimeMessagesSnapshot(merged, for: sessionID)
         if coalescer.shouldFlushPending() {
             publishMessagesIfCurrentSession(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
         }
@@ -129,11 +132,13 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             sessionID: sessionID
         )
+        storeRuntimeMessagesSnapshot(merged, for: sessionID)
         persistAndPublishMessages(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
         return merged
     }
 
     func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
+        storeRuntimeMessagesSnapshot(messages, for: sessionID)
         let persisted = normalizedMessagesForPersistence(messages)
         Persistence.saveMessages(persisted, for: sessionID)
     }

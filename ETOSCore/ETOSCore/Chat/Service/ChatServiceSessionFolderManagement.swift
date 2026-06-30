@@ -123,7 +123,9 @@ extension ChatService {
 
     public func reloadCurrentSessionMessagesFromPersistence() {
         guard let currentSession = currentSessionSubject.value else { return }
+        Persistence.flushPendingMessageWritesForSyncSnapshot()
         let reloadedMessages = Persistence.loadMessages(for: currentSession.id)
+        storeRuntimeMessagesSnapshot(reloadedMessages, for: currentSession.id)
         publishMessages(reloadedMessages)
         logger.info("已从持久化层刷新当前会话消息: \(currentSession.id.uuidString)")
     }
@@ -155,6 +157,7 @@ extension ChatService {
         let resolvedMessages = resolvedCurrentSession.isTemporary
             ? []
             : Persistence.loadMessages(for: resolvedCurrentSession.id)
+        storeRuntimeMessagesSnapshot(resolvedMessages, for: resolvedCurrentSession.id)
         publishMessages(resolvedMessages)
 
         logger.info("JSON→SQLite 迁移后已刷新会话状态: sessions=\(persistedSessions.count), folders=\(persistedFolders.count), tags=\(persistedTags.count)")
@@ -184,7 +187,10 @@ extension ChatService {
         }
 
         currentSessionSubject.send(session)
-        let messages = session != nil ? Persistence.loadMessages(for: session!.id) : []
+        let messages = session.map { messagesForSessionActivation($0.id) } ?? []
+        if let session {
+            storeRuntimeMessagesSnapshot(messages, for: session.id)
+        }
         publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
     }

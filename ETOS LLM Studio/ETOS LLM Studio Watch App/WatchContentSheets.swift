@@ -10,6 +10,97 @@ import SwiftUI
 import Foundation
 import ETOSCore
 
+struct WatchGlobalToolPermissionView: View {
+    let request: ToolPermissionRequest
+    let onDecision: (ToolPermissionDecision) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
+
+    private var toolName: String {
+        request.displayName ?? request.toolName
+    }
+
+    private var argumentText: String {
+        prettyPrintedJSONOrRaw(request.arguments)
+    }
+
+    private var decisionItems: [(decision: ToolPermissionDecision, label: String, iconName: String)] {
+        [
+            (.allowOnce, NSLocalizedString("允许", comment: ""), "checkmark.circle.fill"),
+            (.deny, NSLocalizedString("拒绝", comment: ""), "xmark.circle.fill"),
+            (.supplement, NSLocalizedString("补充提示", comment: ""), "text.badge.plus"),
+            (.allowForTool, NSLocalizedString("保持允许", comment: ""), "checkmark.shield.fill"),
+            (.allowAll, NSLocalizedString("完全权限", comment: ""), "shield.fill")
+        ]
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(toolName)
+                                .font(.headline)
+                            Text(NSLocalizedString("等待你的审批后继续执行。", comment: ""))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            if let countdownText {
+                                Text(countdownText)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "hand.raised.circle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Section(NSLocalizedString("工具参数", comment: "Tool detail arguments section title")) {
+                    Text(argumentText)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(6)
+                }
+
+                Section(NSLocalizedString("审批操作", comment: "")) {
+                    ForEach(Array(decisionItems.enumerated()), id: \.offset) { _, item in
+                        Button {
+                            onDecision(item.decision)
+                            dismiss()
+                        } label: {
+                            Label(item.label, systemImage: item.iconName)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("调用工具", comment: ""))
+        }
+    }
+
+    private var countdownText: String? {
+        guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
+            return nil
+        }
+        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
+    }
+
+    private func prettyPrintedJSONOrRaw(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "{}" }
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(object),
+              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let prettyText = String(data: prettyData, encoding: .utf8) else {
+            return trimmed
+        }
+        return prettyText
+    }
+}
+
 struct WatchImportSourceView: View {
     @Binding var source: String
     let history: [String]

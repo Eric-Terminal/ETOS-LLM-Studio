@@ -190,6 +190,12 @@ struct ContentView: View {
 
     private var contentWithNewAPIImportAlerts: some View {
         baseContent
+            .sheet(item: globalToolPermissionRequestBinding) { request in
+                GlobalToolPermissionSheet(request: request) { decision in
+                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                }
+                .interactiveDismissDisabled(true)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .newAPIProviderImportDidFinish)) { notification in
                 newAPIProviderImportNoticeMessage = notification.object as? String
                     ?? NSLocalizedString("已导入 New API 连接信息。", comment: "New API deeplink import fallback success message")
@@ -255,6 +261,23 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .legacyJSONMigrationDidFinish)) { _ in
                 viewModel.reloadPersistedDataAfterLegacyJSONMigration()
             }
+    }
+
+    private var globalToolPermissionRequestBinding: Binding<ToolPermissionRequest?> {
+        Binding(
+            get: { globalToolPermissionRequest },
+            set: { _ in }
+        )
+    }
+
+    private var globalToolPermissionRequest: ToolPermissionRequest? {
+        guard toolPermissionCenter.canAutoPresentRequestDetails,
+              let request = toolPermissionCenter.activeRequest,
+              let sourceSessionID = request.sourceSessionID,
+              sourceSessionID != viewModel.currentSession?.id else {
+            return nil
+        }
+        return request
     }
 
     private var rootToolPermissionAutoPresentationBlocked: Bool {

@@ -60,6 +60,13 @@ extension ContentView {
             )
             .appLockOverlayLayer()
         }
+        .sheet(item: watchGlobalToolPermissionRequestBinding) { request in
+            WatchGlobalToolPermissionView(request: request) { decision in
+                toolPermissionCenter.resolveActiveRequest(with: decision)
+            }
+            .interactiveDismissDisabled(true)
+            .appLockOverlayLayer()
+        }
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
@@ -206,6 +213,23 @@ extension ContentView {
     var watchToolPermissionAutoPresentationBlocked: Bool {
         watchModalBlocksAskUserInputPresentation
             || presentedAskUserInputRequest != nil
+    }
+
+    var watchGlobalToolPermissionRequestBinding: Binding<ToolPermissionRequest?> {
+        Binding(
+            get: { watchGlobalToolPermissionRequest },
+            set: { _ in }
+        )
+    }
+
+    var watchGlobalToolPermissionRequest: ToolPermissionRequest? {
+        guard toolPermissionCenter.canAutoPresentRequestDetails,
+              let request = toolPermissionCenter.activeRequest,
+              let sourceSessionID = request.sourceSessionID,
+              sourceSessionID != viewModel.currentSession?.id else {
+            return nil
+        }
+        return request
     }
 
     func setWatchToolPermissionAutoPresentationBlocked(_ blocked: Bool) {
