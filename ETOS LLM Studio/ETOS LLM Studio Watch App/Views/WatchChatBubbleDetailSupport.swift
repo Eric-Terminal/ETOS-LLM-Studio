@@ -10,6 +10,29 @@ import Foundation
 import ETOSCore
 import SwiftUI
 
+enum WatchToolCallTextPreviewConstants {
+    static let previewLimit = 3_000
+}
+
+func watchFormattedToolCallJSONOrRaw(_ raw: String) -> String {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "{}" }
+
+    // 手表端优先保证详情页打开速度，超长参数留到二级页按需查看。
+    guard trimmed.count <= WatchToolCallTextPreviewConstants.previewLimit else {
+        return trimmed
+    }
+
+    guard let data = trimmed.data(using: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: data),
+          JSONSerialization.isValidJSONObject(object),
+          let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+          let prettyText = String(data: prettyData, encoding: .utf8) else {
+        return trimmed
+    }
+    return prettyText
+}
+
 struct ToolCallDetailSheetItem: Identifiable, Equatable {
     let messageID: UUID
     let toolCallID: String
@@ -216,10 +239,10 @@ extension ChatBubble {
         let call = resolvedToolCall(for: item)
         let displayName = toolDisplayLabel(for: call.toolName)
         let status = toolCallStatus(for: call)
-        let argumentText = prettyPrintedJSONOrRaw(call.arguments)
+        let argumentText = watchFormattedToolCallJSONOrRaw(call.arguments)
         let resultText = resolvedToolResultText(for: call)
-        let displayModel = MCPToolResultFormatter.displayModel(from: resultText)
         let permissionRequest = activeToolPermissionRequest(for: call)
+        let argumentSectionTitle = NSLocalizedString("工具参数", comment: "工具详情小节标题")
 
         NavigationStack {
             List {
@@ -244,19 +267,19 @@ extension ChatBubble {
                     }
                 }
 
-                Section(NSLocalizedString("工具参数", comment: "工具详情小节标题")) {
-                    Text(argumentText)
-                        .etFont(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                Section(argumentSectionTitle) {
+                    WatchToolCallLongTextPreview(
+                        title: argumentSectionTitle,
+                        text: argumentText,
+                        usesMonospacedFont: true
+                    )
                 }
 
                 if permissionRequest == nil {
                     Section(NSLocalizedString("工具结果", comment: "工具详情小节标题")) {
                         toolResultSheetContent(
                             status: status,
-                            resultText: resultText,
-                            displayModel: displayModel
+                            resultText: resultText
                         )
                     }
                 }
@@ -352,14 +375,20 @@ extension ChatBubble {
     @ViewBuilder
     private func toolResultSheetContent(
         status: ToolCallBubbleStatus,
-        resultText: String,
-        displayModel: MCPToolResultDisplayModel
+        resultText: String
     ) -> some View {
         if resultText.isEmpty {
             Text(status == .pendingApproval ? NSLocalizedString("等待你的审批后继续执行。", comment: "") : NSLocalizedString("暂无返回结果。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+        } else if resultText.count > WatchToolCallTextPreviewConstants.previewLimit {
+            WatchToolCallLongTextPreview(
+                title: NSLocalizedString("工具结果", comment: "工具详情小节标题"),
+                text: resultText,
+                usesMonospacedFont: true
+            )
         } else if enableExperimentalToolResultDisplay {
+            let displayModel = MCPToolResultFormatter.displayModel(from: resultText)
             let primaryContent = displayModel.primaryContentText?.trimmingCharacters(in: .whitespacesAndNewlines)
             let hasPrimaryContent = !(primaryContent ?? "").isEmpty
             let canToggleRaw = hasPrimaryContent && displayModel.shouldShowRawSection
@@ -367,15 +396,17 @@ extension ChatBubble {
 
             VStack(alignment: .leading, spacing: 6) {
                 if showRaw || !hasPrimaryContent {
-                    Text(displayModel.rawDisplayText)
-                        .etFont(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    WatchToolCallLongTextPreview(
+                        title: NSLocalizedString("工具结果", comment: "工具详情小节标题"),
+                        text: displayModel.rawDisplayText,
+                        usesMonospacedFont: true
+                    )
                 } else if let primaryContent {
-                    Text(primaryContent)
-                        .etFont(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    WatchToolCallLongTextPreview(
+                        title: NSLocalizedString("工具结果", comment: "工具详情小节标题"),
+                        text: primaryContent,
+                        usesMonospacedFont: false
+                    )
                 }
 
                 if canToggleRaw {
@@ -387,10 +418,11 @@ extension ChatBubble {
                 }
             }
         } else {
-            Text(resultText)
-                .etFont(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            WatchToolCallLongTextPreview(
+                title: NSLocalizedString("工具结果", comment: "工具详情小节标题"),
+                text: resultText,
+                usesMonospacedFont: true
+            )
         }
     }
 
@@ -435,16 +467,186 @@ extension ChatBubble {
         return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
-    func prettyPrintedJSONOrRaw(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "{}" }
-        guard let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              JSONSerialization.isValidJSONObject(object),
-              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
-              let prettyText = String(data: prettyData, encoding: .utf8) else {
-            return trimmed
+}
+
+struct WatchToolCallLongTextPreview: View {
+    let title: String
+    let text: String
+    let usesMonospacedFont: Bool
+    let displayedText: String
+    let textCharacterCount: Int
+    let needsExpansion: Bool
+    let lineLimit: Int?
+
+    init(
+        title: String,
+        text: String,
+        usesMonospacedFont: Bool,
+        lineLimit: Int? = nil
+    ) {
+        self.title = title
+        self.text = text
+        self.usesMonospacedFont = usesMonospacedFont
+        self.lineLimit = lineLimit
+        let characterCount = text.count
+        let expands = characterCount > WatchToolCallTextPreviewConstants.previewLimit
+        self.textCharacterCount = characterCount
+        self.needsExpansion = expands
+        self.displayedText = expands ? String(text.prefix(WatchToolCallTextPreviewConstants.previewLimit)) : text
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            previewText
+
+            if needsExpansion {
+                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), WatchToolCallTextPreviewConstants.previewLimit, textCharacterCount))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+
+                NavigationLink {
+                    WatchToolCallPagedTextView(title: title, text: text)
+                } label: {
+                    Text(NSLocalizedString("显示完整内容", comment: ""))
+                }
+                .buttonStyle(.plain)
+            }
         }
-        return prettyText
+    }
+
+    @ViewBuilder
+    private var previewText: some View {
+        if usesMonospacedFont {
+            Text(displayedText)
+                .etFont(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(displayedText)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct WatchToolCallPagedTextView: View {
+    let title: String
+    let pages: [AppLogTextPage]
+    let textCharacterCount: Int
+
+    @State private var selectedPageIndex = 0
+
+    init(title: String, text: String) {
+        self.title = title
+        self.pages = AppLogTextPaginator.paginate(text, pageSize: WatchToolCallTextPreviewConstants.previewLimit)
+        self.textCharacterCount = text.count
+    }
+
+    private var currentPage: AppLogTextPage {
+        let clampedIndex = min(max(selectedPageIndex, 0), pages.count - 1)
+        return pages[clampedIndex]
+    }
+
+    private var hasMultiplePages: Bool {
+        pages.count > 1
+    }
+
+    private var canGoToPreviousPage: Bool {
+        selectedPageIndex > 0
+    }
+
+    private var canGoToNextPage: Bool {
+        selectedPageIndex + 1 < pages.count
+    }
+
+    private var paginationSummaryText: String {
+        String(format: NSLocalizedString("当前显示%d-%d条结果(总共%d)", comment: ""), currentPage.startCharacterNumber, currentPage.endCharacterNumber, textCharacterCount)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(format: NSLocalizedString("第 %d / %d 页", comment: ""), currentPage.index + 1, currentPage.totalCount))
+                        .etFont(.caption.weight(.semibold))
+                    Text(paginationSummaryText)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.orange.opacity(0.12))
+                )
+
+                Text(currentPage.content)
+                    .etFont(.system(size: 9, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                    )
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+        .navigationTitle(title)
+        .toolbar {
+            if hasMultiplePages {
+                ToolbarItem(placement: .bottomBar) {
+                    paginationBottomBar
+                }
+            }
+        }
+    }
+
+    private var paginationBottomBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                goToPreviousPage()
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(!canGoToPreviousPage)
+            .accessibilityLabel(NSLocalizedString("上一页", comment: ""))
+
+            Spacer(minLength: 4)
+
+            MarqueeText(
+                content: paginationSummaryText,
+                uiFont: .preferredFont(forTextStyle: .footnote),
+                speed: 28,
+                delay: 0.8,
+                spacing: 24
+            )
+            .multilineTextAlignment(.center)
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 4)
+
+            Button {
+                goToNextPage()
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!canGoToNextPage)
+            .accessibilityLabel(NSLocalizedString("下一页", comment: ""))
+        }
+    }
+
+    private func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        selectedPageIndex -= 1
+    }
+
+    private func goToNextPage() {
+        guard canGoToNextPage else { return }
+        selectedPageIndex += 1
     }
 }

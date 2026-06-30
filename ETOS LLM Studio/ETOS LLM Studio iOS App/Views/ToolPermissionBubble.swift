@@ -21,7 +21,11 @@ struct ToolPermissionBubble: View {
     }
 
     private var trimmedArguments: String {
-        request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > ToolCallTextPreviewConstants.previewLimit else {
+            return trimmed
+        }
+        return String(trimmed.prefix(ToolCallTextPreviewConstants.previewLimit))
     }
 
     private var bubbleShape: TelegramBubbleShape {
@@ -138,7 +142,7 @@ struct GlobalToolPermissionSheet: View {
     }
 
     private var argumentText: String {
-        prettyPrintedJSONOrRaw(request.arguments)
+        formattedToolCallJSONOrRaw(request.arguments)
     }
 
     var body: some View {
@@ -164,11 +168,14 @@ struct GlobalToolPermissionSheet: View {
                     }
                 }
 
-                Section(NSLocalizedString("工具参数", comment: "Tool detail arguments section title")) {
-                    Text(argumentText)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                Section {
+                    ToolCallLongTextPreview(
+                        title: NSLocalizedString("工具参数", comment: "Tool detail arguments section title"),
+                        text: argumentText,
+                        usesMonospacedFont: true
+                    )
+                } header: {
+                    Text(NSLocalizedString("工具参数", comment: "Tool detail arguments section title"))
                 }
 
                 Section(NSLocalizedString("审批操作", comment: "")) {
@@ -187,16 +194,4 @@ struct GlobalToolPermissionSheet: View {
         return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
-    private func prettyPrintedJSONOrRaw(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "{}" }
-        guard let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              JSONSerialization.isValidJSONObject(object),
-              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
-              let prettyText = String(data: prettyData, encoding: .utf8) else {
-            return trimmed
-        }
-        return prettyText
-    }
 }

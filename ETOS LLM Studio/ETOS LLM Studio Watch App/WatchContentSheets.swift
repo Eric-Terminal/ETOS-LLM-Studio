@@ -22,7 +22,7 @@ struct WatchGlobalToolPermissionView: View {
     }
 
     private var argumentText: String {
-        prettyPrintedJSONOrRaw(request.arguments)
+        watchFormattedToolCallJSONOrRaw(request.arguments)
     }
 
     private var decisionItems: [(decision: ToolPermissionDecision, label: String, iconName: String)] {
@@ -59,10 +59,12 @@ struct WatchGlobalToolPermissionView: View {
                 }
 
                 Section(NSLocalizedString("工具参数", comment: "Tool detail arguments section title")) {
-                    Text(argumentText)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(6)
+                    WatchToolCallLongTextPreview(
+                        title: NSLocalizedString("工具参数", comment: "Tool detail arguments section title"),
+                        text: argumentText,
+                        usesMonospacedFont: true,
+                        lineLimit: 6
+                    )
                 }
 
                 Section(NSLocalizedString("审批操作", comment: "")) {
@@ -87,18 +89,6 @@ struct WatchGlobalToolPermissionView: View {
         return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
     }
 
-    private func prettyPrintedJSONOrRaw(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "{}" }
-        guard let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              JSONSerialization.isValidJSONObject(object),
-              let prettyData = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
-              let prettyText = String(data: prettyData, encoding: .utf8) else {
-            return trimmed
-        }
-        return prettyText
-    }
 }
 
 struct WatchImportSourceView: View {
