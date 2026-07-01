@@ -137,7 +137,7 @@ public final class AppLockManager: ObservableObject {
 
     public var isEnabled: Bool {
         guard !DatabaseEncryptionManager.shared.isManualUnlockModeEnabled else { return false }
-        appConfig.appLockEnabled && credentialStore.loadCredential() != nil
+        return appConfig.appLockEnabled && credentialStore.loadCredential() != nil
     }
 
     public var timeoutSeconds: Int {

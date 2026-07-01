@@ -732,7 +732,7 @@ public class ChatService {
             }
         }
 
-        _ = withRequestStateLock {
+        withRequestStateLock {
             guard let context = requestContextBySessionID[sessionID],
                   context.token == activeContext.token else {
                 return
