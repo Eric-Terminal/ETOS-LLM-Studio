@@ -57,6 +57,9 @@ extension OpenAIAdapter {
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedOpenAISchemaPropertiesMap(properties)
         }
+        if let required = normalized["required"] as? [Any] {
+            normalized["required"] = stableJSONSchemaRequiredArray(required)
+        }
         if normalized["default"] is NSNull {
             normalized.removeValue(forKey: "default")
         }

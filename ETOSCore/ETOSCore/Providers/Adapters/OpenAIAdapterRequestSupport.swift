@@ -187,7 +187,7 @@ extension OpenAIAdapter {
         }
 
         if let tools, !tools.isEmpty {
-            let apiTools = tools.map { tool -> [String: Any] in
+            let apiTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
                 let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
                 let function: [String: Any] = [
@@ -204,10 +204,10 @@ extension OpenAIAdapter {
         }
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
+            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             if let httpBody = request.httpBody {
                 let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
                    let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
                     logger.debug("构建的聊天请求体:\n---\n\(sanitizedString)\n---")
                 } else if let jsonString = String(data: httpBody, encoding: .utf8) {
@@ -272,7 +272,7 @@ extension OpenAIAdapter {
         finalPayload["input"] = inputItems
 
         if let tools, !tools.isEmpty {
-            let apiTools = tools.map { tool -> [String: Any] in
+            let apiTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
                 let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
                 return [
@@ -295,10 +295,10 @@ extension OpenAIAdapter {
         }
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [])
+            request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             if let httpBody = request.httpBody {
                 let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: []),
+                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
                    let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
                     logger.debug("构建的 Responses 请求体:\n---\n\(sanitizedString)\n---")
                 } else if let jsonString = String(data: httpBody, encoding: .utf8) {

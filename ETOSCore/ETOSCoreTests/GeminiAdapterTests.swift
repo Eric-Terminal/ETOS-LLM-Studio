@@ -611,6 +611,20 @@ struct GeminiAdapterTests {
         #expect((toolsPayload.last?["googleSearch"] as? [String: Any]) != nil)
     }
 
+    @Test("Gemini 工具请求体对工具和 schema 使用稳定排序")
+    func testGeminiToolPayloadStableOrderingForPromptCache() throws {
+        let messages = [ChatMessage(role: .user, content: "缓存测试")]
+        let alphaTool = stableOrderingTool(name: "alpha_tool", description: "Alpha tool")
+        let zetaTool = stableOrderingTool(name: "zeta_tool", description: "Zeta tool")
+
+        let first = try geminiToolPayload(for: [zetaTool, alphaTool], messages: messages)
+        let second = try geminiToolPayload(for: [alphaTool, zetaTool], messages: messages)
+
+        #expect(first.body == second.body)
+        #expect(first.names == ["alpha_tool", "zeta_tool"])
+        #expect(first.required == ["a", "b"])
+    }
+
     @Test("Gemini 流式增量保留 thought_signature")
     func testGeminiStreamingDeltaPreservesThoughtSignature() throws {
         let line = """
@@ -672,5 +686,44 @@ struct GeminiAdapterTests {
         #expect(parts[0]["inline_data"] != nil)
         #expect(parts[1]["inline_data"] != nil)
         #expect(parts[2]["text"] as? String == "把第一张图的风格应用到第二张图")
+    }
+
+    private func stableOrderingTool(name: String, description: String) -> InternalToolDefinition {
+        InternalToolDefinition(
+            name: name,
+            description: description,
+            parameters: .dictionary([
+                "required": .array([.string("b"), .string("a")]),
+                "properties": .dictionary([
+                    "b": .dictionary(["type": .string("string")]),
+                    "a": .dictionary(["type": .string("string")])
+                ]),
+                "type": .string("object")
+            ])
+        )
+    }
+
+    private func geminiToolPayload(
+        for tools: [InternalToolDefinition],
+        messages: [ChatMessage]
+    ) throws -> (body: String, names: [String], required: [String]) {
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let bodyData = try #require(request.httpBody)
+        let body = try #require(String(data: bodyData, encoding: .utf8))
+        let payload = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let toolsPayload = try #require(payload["tools"] as? [[String: Any]])
+        let declarations = try #require(toolsPayload.first?["function_declarations"] as? [[String: Any]])
+        let names = declarations.compactMap { $0["name"] as? String }
+        let parameters = try #require(declarations.first?["parameters"] as? [String: Any])
+        let required = try #require(parameters["required"] as? [String])
+        return (body, names, required)
     }
 }

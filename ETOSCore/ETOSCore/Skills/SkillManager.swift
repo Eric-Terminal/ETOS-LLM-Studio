@@ -496,7 +496,16 @@ public final class SkillManager: ObservableObject {
 
     public func chatToolsForLLM() -> [InternalToolDefinition] {
         guard chatToolsEnabled else { return [] }
-        let available = skills.filter { enabledSkillNames.contains($0.name) }
+        let available = skills
+            .filter { enabledSkillNames.contains($0.name) }
+            .sorted { lhs, rhs in
+                let lhsName = lhs.name.lowercased()
+                let rhsName = rhs.name.lowercased()
+                if lhsName != rhsName {
+                    return lhsName < rhsName
+                }
+                return lhs.name < rhs.name
+            }
         guard !available.isEmpty else { return [] }
         let actionDescription = [
             "\(SkillToolAction.readInstructions.rawValue): \(NSLocalizedString("读取 SKILL.md 正文说明。", comment: "Skill tool action description sent to model"))",

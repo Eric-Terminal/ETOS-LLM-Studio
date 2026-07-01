@@ -54,6 +54,19 @@ struct LocalLLMChatTemplatePayloadTests {
         #expect(parameters["type"] as? String == "object")
     }
 
+    @Test("本地 LLM 工具定义会按稳定顺序编码")
+    func toolDefinitionsUseStableOrdering() throws {
+        let alphaTool = stableLocalOrderingTool(name: "alpha_tool")
+        let zetaTool = stableLocalOrderingTool(name: "zeta_tool")
+
+        let tools = LocalLLMChatMessageBuilder.toolDefinitions(from: [zetaTool, alphaTool])
+
+        #expect(tools.map(\.name) == ["alpha_tool", "zeta_tool"])
+        let parametersData = try #require(tools.first?.parametersJSON.data(using: .utf8))
+        let parameters = try #require(JSONSerialization.jsonObject(with: parametersData) as? [String: Any])
+        #expect(parameters["required"] as? [String] == ["a", "b"])
+    }
+
     @Test("无效工具调用历史 JSON 会在 Swift 边界失败")
     func invalidToolCallHistoryJSONFailsBeforeCBridge() throws {
         #expect(throws: LocalLLMEngineError.self) {
@@ -88,4 +101,19 @@ struct LocalLLMChatTemplatePayloadTests {
 private func decodedJSONArray(_ json: String) throws -> [[String: Any]] {
     let data = try #require(json.data(using: .utf8))
     return try #require(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+}
+
+private func stableLocalOrderingTool(name: String) -> InternalToolDefinition {
+    InternalToolDefinition(
+        name: name,
+        description: "稳定排序测试工具",
+        parameters: .dictionary([
+            "required": .array([.string("b"), .string("a")]),
+            "properties": .dictionary([
+                "b": .dictionary(["type": .string("string")]),
+                "a": .dictionary(["type": .string("string")])
+            ]),
+            "type": .string("object")
+        ])
+    )
 }

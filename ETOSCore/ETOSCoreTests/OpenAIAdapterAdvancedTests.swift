@@ -71,6 +71,17 @@ struct OpenAIAdapterAdvancedTests {
         #expect(part.reasoningContent == nil)
     }
 
+    @Test("OpenAI 流式 usage-only 片段可解析 DeepSeek prompt cache 字段")
+    func testStreamingUsageOnlyChunkParsesDeepSeekPromptCacheHitTokens() throws {
+        let line = """
+        data: {"id":"chatcmpl-usage","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":29,"total_tokens":40,"prompt_cache_hit_tokens":8,"prompt_cache_miss_tokens":3}}
+        """
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        let usage = try #require(part.tokenUsage)
+        #expect(usage.promptTokens == 11)
+        #expect(usage.cacheReadTokens == 8)
+    }
+
     @Test("OpenAI 流式请求默认附带 include_usage")
     func testStreamingRequestIncludesUsageByDefault() throws {
         let messages = [ChatMessage(role: .user, content: "你好")]

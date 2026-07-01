@@ -53,6 +53,7 @@ extension OpenAIAdapter {
             && usage.completion_tokens == nil
             && usage.total_tokens == nil
             && usage.prompt_tokens_details?.cached_tokens == nil
+            && usage.prompt_cache_hit_tokens == nil
             && usage.completion_tokens_details?.reasoning_tokens == nil {
             return nil
         }
@@ -62,7 +63,7 @@ extension OpenAIAdapter {
             totalTokens: usage.total_tokens,
             thinkingTokens: usage.completion_tokens_details?.reasoning_tokens,
             cacheWriteTokens: nil,
-            cacheReadTokens: usage.prompt_tokens_details?.cached_tokens
+            cacheReadTokens: usage.prompt_tokens_details?.cached_tokens ?? usage.prompt_cache_hit_tokens
         )
     }
 }

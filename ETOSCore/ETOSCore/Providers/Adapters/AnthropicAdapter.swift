@@ -362,13 +362,13 @@ public class AnthropicAdapter: APIAdapter {
         }
         
         if let tools = tools, !tools.isEmpty {
-            let anthropicTools = tools.map { tool -> [String: Any] in
+            let anthropicTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
                 var toolDef: [String: Any] = [
                     "name": sanitizedToolName(tool.name),
                     "description": tool.description
                 ]
                 if let params = tool.parameters.toAny() as? [String: Any] {
-                    toolDef["input_schema"] = params
+                    toolDef["input_schema"] = stableJSONSchemaValueForTransport(params)
                 }
                 return toolDef
             }
@@ -378,7 +378,7 @@ public class AnthropicAdapter: APIAdapter {
         payload = mergedRequestPayload(payload, with: passthroughAnthropicRequestOverrides(overrides))
         
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
                 logger.debug("构建的 Anthropic 聊天请求体:\n---\n\(jsonString)\n---")
             }

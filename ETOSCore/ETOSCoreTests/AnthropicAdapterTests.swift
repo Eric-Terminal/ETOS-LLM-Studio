@@ -214,6 +214,20 @@ struct AnthropicAdapterTests {
         #expect(metadata["trace"] as? String == "manual")
     }
 
+    @Test("Anthropic 工具请求体对工具和 schema 使用稳定排序")
+    func testAnthropicToolPayloadStableOrderingForPromptCache() throws {
+        let messages = [ChatMessage(role: .user, content: "缓存测试")]
+        let alphaTool = stableOrderingTool(name: "alpha_tool", description: "Alpha tool")
+        let zetaTool = stableOrderingTool(name: "zeta_tool", description: "Zeta tool")
+
+        let first = try anthropicToolPayload(for: [zetaTool, alphaTool], messages: messages)
+        let second = try anthropicToolPayload(for: [alphaTool, zetaTool], messages: messages)
+
+        #expect(first.body == second.body)
+        #expect(first.names == ["alpha_tool", "zeta_tool"])
+        #expect(first.required == ["a", "b"])
+    }
+
     @Test("Anthropic 请求体在不回传模式下移除 thinking block")
     func testAnthropicBuildRequestOmitsThinkingBlockWhenDisabled() throws {
         let message = ChatMessage(
@@ -266,5 +280,57 @@ struct AnthropicAdapterTests {
 
         #expect(content.contains { $0["type"] as? String == "thinking" } == false)
         #expect(content.contains { $0["type"] as? String == "text" } == true)
+    }
+
+    private func stableOrderingTool(name: String, description: String) -> InternalToolDefinition {
+        InternalToolDefinition(
+            name: name,
+            description: description,
+            parameters: .dictionary([
+                "required": .array([.string("b"), .string("a")]),
+                "properties": .dictionary([
+                    "b": .dictionary(["type": .string("string")]),
+                    "a": .dictionary(["type": .string("string")])
+                ]),
+                "type": .string("object")
+            ])
+        )
+    }
+
+    private func anthropicToolPayload(
+        for tools: [InternalToolDefinition],
+        messages: [ChatMessage]
+    ) throws -> (body: String, names: [String], required: [String]) {
+        let request = try #require(adapter.buildChatRequest(
+            for: makeAnthropicModel(),
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let bodyData = try #require(request.httpBody)
+        let body = try #require(String(data: bodyData, encoding: .utf8))
+        let payload = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let toolsPayload = try #require(payload["tools"] as? [[String: Any]])
+        let names = toolsPayload.compactMap { $0["name"] as? String }
+        let inputSchema = try #require(toolsPayload.first?["input_schema"] as? [String: Any])
+        let required = try #require(inputSchema["required"] as? [String])
+        return (body, names, required)
+    }
+
+    private func makeAnthropicModel() -> RunnableModel {
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        return RunnableModel(
+            provider: provider,
+            model: Model(modelName: "claude-sonnet-4-6")
+        )
     }
 }

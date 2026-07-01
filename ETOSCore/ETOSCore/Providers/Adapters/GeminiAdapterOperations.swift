@@ -224,7 +224,7 @@ extension GeminiAdapter {
         
         // 工具定义
         if let tools = tools, !tools.isEmpty {
-            let functionDeclarations = tools.map { tool -> [String: Any] in
+            let functionDeclarations = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
                 let sanitizedName = sanitizedToolName(tool.name)
                 var funcDef: [String: Any] = [
                     "name": sanitizedName,
@@ -246,7 +246,7 @@ extension GeminiAdapter {
         payload = mergedRequestPayload(payload, with: overrides)
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
                 logger.debug("构建的 Gemini 聊天请求体:\n---\n\(jsonString)\n---")
             }

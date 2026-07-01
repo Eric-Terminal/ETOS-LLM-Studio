@@ -78,6 +78,9 @@ public class GeminiAdapter: APIAdapter {
         if let properties = normalized["properties"] as? [String: Any] {
             normalized["properties"] = normalizedGeminiSchemaPropertiesMap(properties)
         }
+        if let required = normalized["required"] as? [Any] {
+            normalized["required"] = stableJSONSchemaRequiredArray(required)
+        }
         if normalized["default"] is NSNull {
             normalized.removeValue(forKey: "default")
         }

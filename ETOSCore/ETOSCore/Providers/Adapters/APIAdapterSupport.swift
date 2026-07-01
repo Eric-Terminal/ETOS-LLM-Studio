@@ -88,6 +88,62 @@ func mergedRequestPayload(_ base: [String: Any], with overlay: [String: Any]) ->
     return result
 }
 
+func stableToolDefinitions(
+    _ tools: [InternalToolDefinition],
+    sanitizedName: (String) -> String
+) -> [InternalToolDefinition] {
+    tools.sorted { lhs, rhs in
+        let lhsFields = stableToolSortFields(for: lhs, sanitizedName: sanitizedName)
+        let rhsFields = stableToolSortFields(for: rhs, sanitizedName: sanitizedName)
+        for index in lhsFields.indices {
+            guard lhsFields[index] != rhsFields[index] else { continue }
+            return lhsFields[index] < rhsFields[index]
+        }
+        return false
+    }
+}
+
+private func stableToolSortFields(
+    for tool: InternalToolDefinition,
+    sanitizedName: (String) -> String
+) -> [String] {
+    let sanitizedToolName = sanitizedName(tool.name)
+    return [
+        sanitizedToolName.lowercased(),
+        sanitizedToolName,
+        tool.name.lowercased(),
+        tool.name,
+        tool.description,
+        tool.parameters.prettyPrintedCompact(),
+        tool.isBlocking ? "1" : "0"
+    ]
+}
+
+func stableJSONSchemaRequiredArray(_ required: [Any]) -> [Any] {
+    let stringValues = required.compactMap { $0 as? String }
+    guard stringValues.count == required.count else { return required }
+    return stringValues.sorted()
+}
+
+func stableJSONSchemaValueForTransport(_ value: Any) -> Any {
+    if let dictionary = value as? [String: Any] {
+        var stable: [String: Any] = [:]
+        stable.reserveCapacity(dictionary.count)
+        for (key, rawValue) in dictionary {
+            if key == "required", let required = rawValue as? [Any] {
+                stable[key] = stableJSONSchemaRequiredArray(required)
+            } else {
+                stable[key] = stableJSONSchemaValueForTransport(rawValue)
+            }
+        }
+        return stable
+    }
+    if let array = value as? [Any] {
+        return array.map { stableJSONSchemaValueForTransport($0) }
+    }
+    return value
+}
+
 func inferredImageMimeType(from data: Data) -> String {
     guard data.count >= 12 else { return "image/png" }
     let bytes = [UInt8](data.prefix(12))

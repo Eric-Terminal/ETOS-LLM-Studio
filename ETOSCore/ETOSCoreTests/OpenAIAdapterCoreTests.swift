@@ -111,6 +111,30 @@ struct OpenAIAdapterCoreTests {
         #expect(properties["content"] != nil)
     }
 
+    @Test("OpenAI 工具请求体对工具和 schema 使用稳定排序")
+    func testOpenAIToolPayloadStableOrderingForPromptCache() throws {
+        let messages = [ChatMessage(role: .user, content: "缓存测试")]
+        let alphaTool = stableOrderingTool(
+            name: "alpha_tool",
+            description: "Alpha tool"
+        )
+        let zetaTool = stableOrderingTool(
+            name: "zeta_tool",
+            description: "Zeta tool"
+        )
+
+        let firstBody = try requestBodyString(for: [zetaTool, alphaTool], messages: messages)
+        let secondBody = try requestBodyString(for: [alphaTool, zetaTool], messages: messages)
+
+        #expect(firstBody == secondBody)
+        let alphaRange = try #require(firstBody.range(of: #""name":"alpha_tool""#))
+        let zetaRange = try #require(firstBody.range(of: #""name":"zeta_tool""#))
+        #expect(alphaRange.lowerBound < zetaRange.lowerBound)
+        #expect(firstBody.contains(#""properties":{"a":{"type":"string"},"b":{"type":"string"}}"#))
+        #expect(firstBody.contains(#""required":["a","b"]"#))
+        #expect(firstBody.contains(#""function":{"description":"Alpha tool","name":"alpha_tool","parameters":"#))
+    }
+
     @Test("OpenAI 工具 schema 缺失 type 时自动补全")
     func testOpenAIToolSchemaTypeInferenceForEnumField() throws {
         let tools = [
@@ -752,6 +776,36 @@ struct OpenAIAdapterCoreTests {
         #expect(usage.thinkingTokens == 7)
     }
 
+    @Test("OpenAI 兼容解析 DeepSeek prompt cache 命中字段")
+    func testParseResponseParsesDeepSeekPromptCacheHitTokens() throws {
+        let json = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "完成"
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
+            "prompt_cache_hit_tokens": 96,
+            "prompt_cache_miss_tokens": 24
+          }
+        }
+        """
+
+        let data = try #require(json.data(using: .utf8))
+        let message = try adapter.parseResponse(data: data)
+        let usage = try #require(message.tokenUsage)
+
+        #expect(usage.promptTokens == 120)
+        #expect(usage.cacheReadTokens == 96)
+    }
+
     @Test("OpenAI 请求会镜像 thought_signature 到 Gemini extra_content")
     func testBuildRequestIncludesGeminiExtraContentThoughtSignature() throws {
         let toolCall = InternalToolCall(
@@ -779,5 +833,41 @@ struct OpenAIAdapterCoreTests {
         }
 
         #expect(thoughtSignature == "sig-gemini-1")
+    }
+
+    private func stableOrderingTool(name: String, description: String) -> InternalToolDefinition {
+        InternalToolDefinition(
+            name: name,
+            description: description,
+            parameters: .dictionary([
+                "required": .array([.string("b"), .string("a")]),
+                "properties": .dictionary([
+                    "b": .dictionary([
+                        "type": .string("string")
+                    ]),
+                    "a": .dictionary([
+                        "type": .string("string")
+                    ])
+                ]),
+                "type": .string("object")
+            ])
+        )
+    }
+
+    private func requestBodyString(
+        for tools: [InternalToolDefinition],
+        messages: [ChatMessage]
+    ) throws -> String {
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: tools,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        return try #require(String(data: body, encoding: .utf8))
     }
 }

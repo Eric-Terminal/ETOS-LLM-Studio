@@ -76,6 +76,8 @@ extension OpenAIAdapter {
             let prompt_tokens: Int?
             let completion_tokens: Int?
             let total_tokens: Int?
+            let prompt_cache_hit_tokens: Int?
+            let prompt_cache_miss_tokens: Int?
             let prompt_tokens_details: PromptTokensDetails?
             let completion_tokens_details: CompletionTokensDetails?
         }

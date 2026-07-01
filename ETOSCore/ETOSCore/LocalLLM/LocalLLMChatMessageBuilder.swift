@@ -103,15 +103,27 @@ public enum LocalLLMChatMessageBuilder {
 
     public static func toolDefinitions(from tools: [InternalToolDefinition]?) -> [LocalLLMToolDefinition] {
         guard let tools else { return [] }
-        return tools.compactMap { tool in
+        return stableToolDefinitions(tools) { name in
+            name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.compactMap { tool in
             let name = tool.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
             return LocalLLMToolDefinition(
                 name: name,
                 description: tool.description,
-                parametersJSON: tool.parameters.prettyPrintedCompact()
+                parametersJSON: stableParametersJSON(for: tool.parameters)
             )
         }
+    }
+
+    private static func stableParametersJSON(for parameters: JSONValue) -> String {
+        let stableParameters = stableJSONSchemaValueForTransport(parameters.toAny())
+        if JSONSerialization.isValidJSONObject(stableParameters),
+           let data = try? JSONSerialization.data(withJSONObject: stableParameters, options: [.sortedKeys]),
+           let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+        return parameters.prettyPrintedCompact()
     }
 
     private static func roleName(for role: MessageRole) -> String {
