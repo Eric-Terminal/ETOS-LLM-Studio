@@ -189,7 +189,9 @@ public enum FeedbackStore {
                 submittedExtraContext: row.submittedExtraContext,
                 lastKnownCommentCount: row.lastKnownCommentCount,
                 lastKnownDeveloperCommentID: row.lastKnownDeveloperCommentID,
-                lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:))
+                lastKnownDeveloperCommentAt: row.lastKnownDeveloperCommentAt.map(Date.init(timeIntervalSince1970:)),
+                lastKnownComments: decodeJSON([FeedbackComment].self, from: row.lastKnownCommentsJSON),
+                lastKnownTimelineEvents: decodeJSON([FeedbackTimelineEvent].self, from: row.lastKnownTimelineEventsJSON)
             )
         }.sorted { lhs, rhs in
             let lhsDate = lhs.lastCheckedAt ?? lhs.createdAt
@@ -227,7 +229,9 @@ public enum FeedbackStore {
                     submittedExtraContext: ticket.submittedExtraContext,
                     lastKnownCommentCount: ticket.lastKnownCommentCount,
                     lastKnownDeveloperCommentID: ticket.lastKnownDeveloperCommentID,
-                    lastKnownDeveloperCommentAt: ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970
+                    lastKnownDeveloperCommentAt: ticket.lastKnownDeveloperCommentAt?.timeIntervalSince1970,
+                    lastKnownCommentsJSON: encodeJSON(ticket.lastKnownComments),
+                    lastKnownTimelineEventsJSON: encodeJSON(ticket.lastKnownTimelineEvents)
                 )
                 try record.insert(db)
             }
@@ -312,6 +316,31 @@ public enum FeedbackStore {
         }
     }
 
+    private static func encodeJSON<T: Encodable>(_ value: T?) -> String? {
+        guard let value else { return nil }
+        do {
+            let data = try FeedbackDateCodec.makeJSONEncoder().encode(value)
+            return String(data: data, encoding: .utf8)
+        } catch {
+            feedbackStoreLogger.error("编码反馈工单缓存 JSON 失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private static func decodeJSON<T: Decodable>(_ type: T.Type, from json: String?) -> T? {
+        guard let json = json?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !json.isEmpty,
+              let data = json.data(using: .utf8) else {
+            return nil
+        }
+        do {
+            return try FeedbackDateCodec.makeJSONDecoder().decode(type, from: data)
+        } catch {
+            feedbackStoreLogger.error("解码反馈工单缓存 JSON 失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     // MARK: - GRDB 关系模型
 
     private struct RelationalFeedbackTicketRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
@@ -339,6 +368,8 @@ public enum FeedbackStore {
             case lastKnownCommentCount = "last_known_comment_count"
             case lastKnownDeveloperCommentID = "last_known_developer_comment_id"
             case lastKnownDeveloperCommentAt = "last_known_developer_comment_at"
+            case lastKnownCommentsJSON = "last_known_comments_json"
+            case lastKnownTimelineEventsJSON = "last_known_timeline_events_json"
         }
 
         var issueNumber: Int
@@ -362,6 +393,8 @@ public enum FeedbackStore {
         var lastKnownCommentCount: Int?
         var lastKnownDeveloperCommentID: String?
         var lastKnownDeveloperCommentAt: Double?
+        var lastKnownCommentsJSON: String?
+        var lastKnownTimelineEventsJSON: String?
     }
 }
 

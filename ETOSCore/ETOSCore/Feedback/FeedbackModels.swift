@@ -424,6 +424,8 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
     public var lastKnownCommentCount: Int?
     public var lastKnownDeveloperCommentID: String?
     public var lastKnownDeveloperCommentAt: Date?
+    public var lastKnownComments: [FeedbackComment]?
+    public var lastKnownTimelineEvents: [FeedbackTimelineEvent]?
 
     public init(
         issueNumber: Int,
@@ -446,7 +448,9 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         submittedExtraContext: String? = nil,
         lastKnownCommentCount: Int? = nil,
         lastKnownDeveloperCommentID: String? = nil,
-        lastKnownDeveloperCommentAt: Date? = nil
+        lastKnownDeveloperCommentAt: Date? = nil,
+        lastKnownComments: [FeedbackComment]? = nil,
+        lastKnownTimelineEvents: [FeedbackTimelineEvent]? = nil
     ) {
         self.issueNumber = issueNumber
         self.ticketToken = ticketToken
@@ -469,6 +473,8 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         self.lastKnownCommentCount = lastKnownCommentCount
         self.lastKnownDeveloperCommentID = lastKnownDeveloperCommentID
         self.lastKnownDeveloperCommentAt = lastKnownDeveloperCommentAt
+        self.lastKnownComments = lastKnownComments
+        self.lastKnownTimelineEvents = lastKnownTimelineEvents
     }
 
     public func merged(with snapshot: FeedbackStatusSnapshot, checkedAt: Date = Date()) -> FeedbackTicket {
@@ -479,6 +485,8 @@ public struct FeedbackTicket: Codable, Hashable, Identifiable, Sendable {
         updated.lastKnownUpdatedAt = snapshot.updatedAt
         updated.publicURL = snapshot.publicURL
         updated.lastKnownCommentCount = snapshot.comments.count
+        updated.lastKnownComments = snapshot.comments
+        updated.lastKnownTimelineEvents = snapshot.timelineEvents
         if let latestDeveloperComment = snapshot.comments
             .filter({ $0.isDeveloper })
             .max(by: { lhs, rhs in
