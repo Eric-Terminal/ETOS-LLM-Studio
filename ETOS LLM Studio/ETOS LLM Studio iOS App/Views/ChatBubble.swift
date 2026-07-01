@@ -193,16 +193,10 @@ struct ChatBubble: View {
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
         .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: openMoreAction))
-        .sheet(item: $imagePreview, onDismiss: {
+        .fullScreenCover(item: $imagePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in
-            ZStack {
-                Color.black.ignoresSafeArea()
-                Image(uiImage: payload.image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(24)
-            }
+            ChatAttachmentImagePreview(payload: payload)
         }
         .sheet(item: $filePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()

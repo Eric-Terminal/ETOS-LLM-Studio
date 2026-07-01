@@ -21,6 +21,178 @@ struct ImagePreviewPayload: Identifiable {
     let image: UIImage
 }
 
+struct ChatAttachmentImagePreview: View {
+    let payload: ImagePreviewPayload
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            ZoomableUIImageScrollView(image: payload.image)
+                .ignoresSafeArea()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(NSLocalizedString("关闭", comment: ""))
+            .padding(.top)
+            .padding(.trailing)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .statusBarHidden()
+    }
+}
+
+private struct ZoomableUIImageScrollView: UIViewRepresentable {
+    let image: UIImage
+
+    func makeUIView(context: Context) -> ZoomableUIImageScrollContainerView {
+        ZoomableUIImageScrollContainerView(image: image)
+    }
+
+    func updateUIView(_ uiView: ZoomableUIImageScrollContainerView, context: Context) {
+        uiView.image = image
+    }
+}
+
+private final class ZoomableUIImageScrollContainerView: UIView, UIScrollViewDelegate {
+    var image: UIImage {
+        didSet {
+            guard oldValue !== image else { return }
+            imageView.image = image
+            needsZoomReset = true
+            setNeedsLayout()
+        }
+    }
+
+    private let scrollView = UIScrollView()
+    private let imageView = UIImageView()
+    private var fittedImageSize: CGSize = .zero
+    private var needsZoomReset = true
+
+    init(image: UIImage) {
+        self.image = image
+        super.init(frame: .zero)
+        configureViews()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        scrollView.frame = bounds
+        updateImageFrame()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        imageView
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerImage()
+    }
+
+    private func configureViews() {
+        backgroundColor = .black
+        scrollView.backgroundColor = .black
+        scrollView.delegate = self
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 6
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.bouncesZoom = true
+        scrollView.decelerationRate = .fast
+        addSubview(scrollView)
+
+        imageView.image = image
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        scrollView.addSubview(imageView)
+
+        let doubleTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTapGesture.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTapGesture)
+    }
+
+    private func updateImageFrame() {
+        guard bounds.width > 0,
+              bounds.height > 0,
+              image.size.width > 0,
+              image.size.height > 0 else {
+            return
+        }
+
+        let fitScale = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let targetSize = CGSize(
+            width: image.size.width * fitScale,
+            height: image.size.height * fitScale
+        )
+        let previousZoomScale = scrollView.zoomScale
+        let shouldReframe = fittedImageSize != targetSize || needsZoomReset
+        guard shouldReframe else {
+            centerImage()
+            return
+        }
+
+        scrollView.setZoomScale(1, animated: false)
+        imageView.frame = CGRect(origin: .zero, size: targetSize)
+        scrollView.contentSize = targetSize
+        fittedImageSize = targetSize
+
+        if needsZoomReset {
+            needsZoomReset = false
+        } else {
+            scrollView.setZoomScale(min(max(previousZoomScale, 1), scrollView.maximumZoomScale), animated: false)
+        }
+        centerImage()
+    }
+
+    private func centerImage() {
+        let horizontalInset = max((bounds.width - scrollView.contentSize.width) / 2, 0)
+        let verticalInset = max((bounds.height - scrollView.contentSize.height) / 2, 0)
+        scrollView.contentInset = UIEdgeInsets(
+            top: verticalInset,
+            left: horizontalInset,
+            bottom: verticalInset,
+            right: horizontalInset
+        )
+    }
+
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        guard scrollView.maximumZoomScale > scrollView.minimumZoomScale else { return }
+        if scrollView.zoomScale > 1.01 {
+            scrollView.setZoomScale(1, animated: true)
+            return
+        }
+
+        let targetScale = min(3, scrollView.maximumZoomScale)
+        let tapPoint = gesture.location(in: imageView)
+        let zoomRectSize = CGSize(
+            width: scrollView.bounds.width / targetScale,
+            height: scrollView.bounds.height / targetScale
+        )
+        let zoomRect = CGRect(
+            x: tapPoint.x - zoomRectSize.width / 2,
+            y: tapPoint.y - zoomRectSize.height / 2,
+            width: zoomRectSize.width,
+            height: zoomRectSize.height
+        )
+        scrollView.zoom(to: zoomRect, animated: true)
+    }
+}
+
 private enum ChatAttachmentImageCache {
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()

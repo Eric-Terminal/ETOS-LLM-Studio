@@ -217,13 +217,7 @@ struct ChatBubble: View {
         .sheet(item: $imagePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in
-            ZStack {
-                Color.black.ignoresSafeArea()
-                Image(uiImage: payload.image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(12)
-            }
+            WatchAttachmentImagePreviewSheet(payload: payload)
         }
         .sheet(item: $filePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()

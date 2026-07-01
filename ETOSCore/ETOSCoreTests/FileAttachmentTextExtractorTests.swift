@@ -56,6 +56,25 @@ struct FileAttachmentTextExtractorTests {
         #expect(payload.lineCount == 2)
     }
 
+    @Test("本地文件预览会按字符截断超长文本")
+    func localFilePreviewTruncatesLongText() throws {
+        let limit = FileAttachmentPreviewLimits.textCharacterLimit
+        let text = String(repeating: "长", count: limit + 12)
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("preview-long-\(UUID().uuidString)")
+            .appendingPathExtension("txt")
+        try Data(text.utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let payload = FileAttachmentPreviewLoader.load(fileURL: fileURL)
+
+        #expect(payload.canPreview)
+        #expect(payload.isTextTruncated)
+        #expect(payload.text?.count == limit)
+        #expect(payload.originalCharacterCount == limit + 12)
+        #expect(payload.previewCharacterLimit == limit)
+    }
+
     @Test("DOCX 附件会抽取主文档文本")
     func docxAttachmentCanBeExtracted() throws {
         let extractor = FileAttachmentTextExtractor()

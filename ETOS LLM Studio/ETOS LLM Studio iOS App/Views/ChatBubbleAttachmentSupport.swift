@@ -208,6 +208,12 @@ struct ChatFileAttachmentPreviewSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             fileInfoView
 
+                            if payload.isTextTruncated {
+                                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
                             Text(text)
                                 .etFont(.system(.caption, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)

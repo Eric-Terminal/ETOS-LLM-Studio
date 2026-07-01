@@ -47,6 +47,12 @@ struct FilePreviewSheet: View {
                                     .etFont(.footnote.monospaced())
                             }
 
+                            if payload.isTextTruncated {
+                                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
+                                    .etFont(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
                             Text(content)
                                 .etFont(.system(.caption, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)

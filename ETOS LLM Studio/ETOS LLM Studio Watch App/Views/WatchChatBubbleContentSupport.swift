@@ -706,6 +706,13 @@ struct WatchFileAttachmentPreviewSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
+                            if payload.isTextTruncated {
+                                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
+                                    .etFont(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
                             Text(text)
                                 .etFont(.system(size: 10, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)

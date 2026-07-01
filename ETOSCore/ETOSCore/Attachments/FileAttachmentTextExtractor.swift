@@ -306,6 +306,10 @@ public struct FileAttachmentTextExtractor {
     }
 }
 
+public enum FileAttachmentPreviewLimits {
+    public static let textCharacterLimit = AppLogTextPaginator.defaultPageSize
+}
+
 public struct FileAttachmentPreviewPayload: Identifiable {
     public let id = UUID()
     public let fileName: String
@@ -313,6 +317,29 @@ public struct FileAttachmentPreviewPayload: Identifiable {
     public let text: String?
     public let errorMessage: String?
     public let lineCount: Int
+    public let isTextTruncated: Bool
+    public let originalCharacterCount: Int
+    public let previewCharacterLimit: Int
+
+    public init(
+        fileName: String,
+        fileSize: Int64,
+        text: String?,
+        errorMessage: String?,
+        lineCount: Int,
+        isTextTruncated: Bool = false,
+        originalCharacterCount: Int? = nil,
+        previewCharacterLimit: Int = FileAttachmentPreviewLimits.textCharacterLimit
+    ) {
+        self.fileName = fileName
+        self.fileSize = fileSize
+        self.text = text
+        self.errorMessage = errorMessage
+        self.lineCount = lineCount
+        self.isTextTruncated = isTextTruncated
+        self.originalCharacterCount = originalCharacterCount ?? text?.count ?? 0
+        self.previewCharacterLimit = previewCharacterLimit
+    }
 
     public var canPreview: Bool {
         text != nil
@@ -362,12 +389,16 @@ public enum FileAttachmentPreviewLoader {
 
         do {
             let text = try extractor.extractText(from: attachment)
+            let preview = previewText(from: text)
             return FileAttachmentPreviewPayload(
                 fileName: fileName,
                 fileSize: Int64(data.count),
-                text: text,
+                text: preview.text,
                 errorMessage: nil,
-                lineCount: lineCount(in: text)
+                lineCount: lineCount(in: text),
+                isTextTruncated: preview.isTruncated,
+                originalCharacterCount: preview.originalCharacterCount,
+                previewCharacterLimit: FileAttachmentPreviewLimits.textCharacterLimit
             )
         } catch {
             return FileAttachmentPreviewPayload(
@@ -378,6 +409,18 @@ public enum FileAttachmentPreviewLoader {
                 lineCount: 0
             )
         }
+    }
+
+    private static func previewText(from text: String) -> (text: String, isTruncated: Bool, originalCharacterCount: Int) {
+        let characterCount = text.count
+        guard characterCount > FileAttachmentPreviewLimits.textCharacterLimit else {
+            return (text, false, characterCount)
+        }
+        return (
+            String(text.prefix(FileAttachmentPreviewLimits.textCharacterLimit)),
+            true,
+            characterCount
+        )
     }
 
     private static func lineCount(in text: String) -> Int {
