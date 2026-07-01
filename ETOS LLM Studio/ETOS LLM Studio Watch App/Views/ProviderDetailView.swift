@@ -18,6 +18,7 @@ struct ProviderDetailView: View {
     @State private var provider: Provider
     let onSave: (Provider) -> Void
     let allowsRemoteModelFetch: Bool
+    let allowsModelTesting: Bool
     let allowsManualModelAdd: Bool
     @State private var isApplyingProviderUpdateFromParent = false
     @State private var isAddingModel = false
@@ -44,12 +45,14 @@ struct ProviderDetailView: View {
     init(
         provider: Provider,
         allowsRemoteModelFetch: Bool = true,
+        allowsModelTesting: Bool = true,
         allowsManualModelAdd: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self.sourceProvider = provider
         _provider = State(initialValue: provider)
         self.allowsRemoteModelFetch = allowsRemoteModelFetch
+        self.allowsModelTesting = allowsModelTesting
         self.allowsManualModelAdd = allowsManualModelAdd
         self.onSave = onSave
     }
@@ -94,6 +97,23 @@ struct ProviderDetailView: View {
                         .foregroundColor(.secondary)
                 } else {
                     Text(NSLocalizedString("将按已添加/未添加展示。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if allowsModelTesting {
+                Section {
+                    NavigationLink {
+                        ModelConnectivityTestView(provider: provider)
+                    } label: {
+                        Label(
+                            NSLocalizedString("模型测试", comment: "Model connectivity test entry"),
+                            systemImage: "checkmark.seal"
+                        )
+                    }
+                } footer: {
+                    Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Watch model test explanation"))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }

@@ -32,6 +32,7 @@ struct ProviderActionsView: View {
                     ProviderDetailView(
                         provider: provider,
                         allowsRemoteModelFetch: !isLocalProvider && provider.apiFormat.lowercased() != "anthropic",
+                        allowsModelTesting: !isLocalProvider,
                         allowsManualModelAdd: !isLocalProvider
                     ) { updatedProvider in
                         updateProvider(updatedProvider)
