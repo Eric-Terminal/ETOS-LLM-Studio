@@ -217,13 +217,6 @@ struct FeedbackTicketTests {
     @Test("审核字段可正常编码与解码")
     func moderationFieldsRoundTrip() throws {
         let now = Date(timeIntervalSince1970: 1_730_000_000)
-        let cachedComment = FeedbackComment(
-            id: "comment-1",
-            author: "YzmmQwQ",
-            body: "API维护这一部分不是Eric本人在负责。",
-            createdAt: now.addingTimeInterval(60),
-            isDeveloper: false
-        )
         let ticket = FeedbackTicket(
             issueNumber: 100,
             ticketToken: "token-abc",
@@ -245,9 +238,7 @@ struct FeedbackTicketTests {
             submittedExtraContext: "仅在预览卡片可见",
             lastKnownCommentCount: 5,
             lastKnownDeveloperCommentID: "999",
-            lastKnownDeveloperCommentAt: now,
-            lastKnownComments: [cachedComment],
-            lastKnownTimelineEvents: [.comment(cachedComment)]
+            lastKnownDeveloperCommentAt: now
         )
 
         let encoder = FeedbackDateCodec.makeJSONEncoder()
@@ -268,8 +259,6 @@ struct FeedbackTicketTests {
         #expect(decoded[0].lastKnownCommentCount == 5)
         #expect(decoded[0].lastKnownDeveloperCommentID == "999")
         #expect(decoded[0].lastKnownDeveloperCommentAt == now)
-        #expect(decoded[0].lastKnownComments?.first?.author == "YzmmQwQ")
-        #expect(decoded[0].lastKnownTimelineEvents?.count == 1)
     }
 
     @Test("兼容旧工单数据解码")
@@ -300,8 +289,6 @@ struct FeedbackTicketTests {
         #expect(decoded[0].lastKnownCommentCount == nil)
         #expect(decoded[0].lastKnownDeveloperCommentID == nil)
         #expect(decoded[0].lastKnownDeveloperCommentAt == nil)
-        #expect(decoded[0].lastKnownComments == nil)
-        #expect(decoded[0].lastKnownTimelineEvents == nil)
     }
 
     @Test("工单合并状态快照时会更新评论追踪标记")
@@ -336,8 +323,6 @@ struct FeedbackTicketTests {
         #expect(merged.lastKnownCommentCount == 2)
         #expect(merged.lastKnownDeveloperCommentID == "2")
         #expect(merged.lastKnownDeveloperCommentAt == baseDate.addingTimeInterval(60))
-        #expect(merged.lastKnownComments?.count == 2)
-        #expect(merged.lastKnownTimelineEvents?.count == 2)
     }
 }
 

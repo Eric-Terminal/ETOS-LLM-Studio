@@ -410,7 +410,7 @@ struct FeedbackDetailView: View {
     }
 
     private var displayedComments: [FeedbackComment] {
-        (snapshot?.comments ?? ticket?.lastKnownComments ?? []).sorted { lhs, rhs in
+        (snapshot?.comments ?? []).sorted { lhs, rhs in
             if lhs.createdAt != rhs.createdAt {
                 return lhs.createdAt < rhs.createdAt
             }
@@ -419,7 +419,7 @@ struct FeedbackDetailView: View {
     }
 
     private var displayedTimelineEvents: [FeedbackTimelineEvent] {
-        let events = snapshot?.timelineEvents ?? ticket?.lastKnownTimelineEvents ?? []
+        let events = snapshot?.timelineEvents ?? []
         if events.isEmpty {
             return displayedComments.map(FeedbackTimelineEvent.comment)
         }

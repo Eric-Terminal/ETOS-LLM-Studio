@@ -304,9 +304,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         submitted_extra_context TEXT,
                         last_known_comment_count INTEGER,
                         last_known_developer_comment_id TEXT,
-                        last_known_developer_comment_at REAL,
-                        last_known_comments_json TEXT,
-                        last_known_timeline_events_json TEXT
+                        last_known_developer_comment_at REAL
                     )
                 """)
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_feedback_tickets_checked ON feedback_tickets(last_checked_at DESC)")
@@ -839,32 +837,6 @@ extension PersistenceAuxiliaryGRDBStore {
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
-            }
-
-            migrator.registerMigration("v5_cache_feedback_ticket_timeline") { db in
-                func tableExists(_ name: String) throws -> Bool {
-                    (try Int.fetchOne(
-                        db,
-                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
-                        arguments: [name]
-                    ) ?? 0) > 0
-                }
-
-                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
-                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
-                    return columns.contains { row in
-                        let name: String = row["name"]
-                        return name == columnName
-                    }
-                }
-
-                guard try tableExists("feedback_tickets") else { return }
-                if !(try tableHasColumn("feedback_tickets", columnName: "last_known_comments_json")) {
-                    try db.execute(sql: "ALTER TABLE feedback_tickets ADD COLUMN last_known_comments_json TEXT")
-                }
-                if !(try tableHasColumn("feedback_tickets", columnName: "last_known_timeline_events_json")) {
-                    try db.execute(sql: "ALTER TABLE feedback_tickets ADD COLUMN last_known_timeline_events_json TEXT")
-                }
             }
         }
 
