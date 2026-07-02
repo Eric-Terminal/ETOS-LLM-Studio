@@ -259,7 +259,7 @@ extension MCPManager {
                 "type": .string("object"),
                 "additionalProperties": .bool(true)
             ])
-            return InternalToolDefinition(name: available.internalName, description: ModelPromptLanguage.appendingToolArgumentInstruction(to: description), parameters: parameters, isBlocking: true)
+            return InternalToolDefinition(name: available.internalName, description: description, parameters: parameters, isBlocking: true)
         }
         return chatTools
     }

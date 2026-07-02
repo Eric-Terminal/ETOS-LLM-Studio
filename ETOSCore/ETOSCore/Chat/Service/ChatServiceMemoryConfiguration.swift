@@ -14,9 +14,7 @@ extension ChatService {
     internal var saveMemoryTool: InternalToolDefinition {
         let toolDescription = BuiltInPromptStore.render(.saveMemoryToolDescription)
         
-        let contentDescription = ModelPromptLanguage.appendingToolArgumentInstruction(
-            to: BuiltInPromptStore.render(.saveMemoryContentDescription)
-        )
+        let contentDescription = BuiltInPromptStore.render(.saveMemoryContentDescription)
         
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
@@ -28,7 +26,7 @@ extension ChatService {
             ]),
             "required": .array([.string("content")])
         ])
-        return InternalToolDefinition(name: "save_memory", description: ModelPromptLanguage.appendingToolArgumentInstruction(to: toolDescription), parameters: parameters, isBlocking: false)
+        return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
     }
 
     /// 定义 `search_memory` 工具
@@ -55,7 +53,7 @@ extension ChatService {
             "required": .array([.string("mode"), .string("query")])
         ])
 
-        return InternalToolDefinition(name: "search_memory", description: ModelPromptLanguage.appendingToolArgumentInstruction(to: toolDescription), parameters: parameters)
+        return InternalToolDefinition(name: "search_memory", description: toolDescription, parameters: parameters)
     }
 
     /// 解析长期记忆检索的 Top K 配置，支持旧版本留下的字符串/浮点数形式。

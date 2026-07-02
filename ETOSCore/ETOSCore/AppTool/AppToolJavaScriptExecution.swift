@@ -140,7 +140,7 @@ extension AppToolManager {
         )
         return InternalToolDefinition(
             name: tool.toolName,
-            description: ModelPromptLanguage.appendingToolArgumentInstruction(to: description),
+            description: description,
             parameters: tool.parameters,
             isBlocking: true
         )

@@ -709,7 +709,7 @@ public final class SkillManager: ObservableObject {
             lines.append("  </skill>")
         }
         lines.append("</available_skills>")
-        return ModelPromptLanguage.appendingToolArgumentInstruction(to: lines.joined(separator: "\n"))
+        return lines.joined(separator: "\n")
     }
 
     private nonisolated static func escapeXMLText(_ value: String) -> String {

@@ -681,8 +681,7 @@ extension ChatServiceTests {
         let storedMessage = chatService.messagesForSessionSubject.value.first { $0.id == loadingMessage.id }
         let reasoningSummaryUserPrompt = mockAdapter.receivedReasoningSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
         #expect(mockAdapter.receivedReasoningSummaryModel?.id == dedicatedSummaryModel.id)
-        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("中文输出 6~18 字") == true)
-        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains(ModelPromptLanguage.current.outputInstruction) == true)
+        #expect(mockAdapter.receivedReasoningSummaryMessages?.first?.content.contains("输出一个短标签") == true)
         #expect(reasoningSummaryUserPrompt.contains("```\n\(reasoningContent)"))
         #expect(reasoningSummaryUserPrompt.hasSuffix("```"))
         #expect(storedMessage?.responseMetrics?.reasoningSummary == "比较成本后选稳妥方案")

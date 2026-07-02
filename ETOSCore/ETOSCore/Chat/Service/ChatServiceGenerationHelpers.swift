@@ -329,8 +329,7 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil,
-        appendOutputLanguageInstruction: Bool = true
+        sessionID: UUID? = nil
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
@@ -340,24 +339,16 @@ extension ChatService {
         }
 
         var requestMessages: [ChatMessage] = []
-        var didAttachLanguageInstruction = false
         if let systemPrompt {
             let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedSystemPrompt.isEmpty {
-                let systemContent = appendOutputLanguageInstruction
-                    ? ModelPromptLanguage.appendingOutputInstruction(to: trimmedSystemPrompt)
-                    : trimmedSystemPrompt
                 requestMessages.append(ChatMessage(
                     role: .system,
-                    content: systemContent
+                    content: trimmedSystemPrompt
                 ))
-                didAttachLanguageInstruction = appendOutputLanguageInstruction
             }
         }
-        let finalUserPrompt = didAttachLanguageInstruction || !appendOutputLanguageInstruction
-            ? trimmedUserPrompt
-            : ModelPromptLanguage.appendingOutputInstruction(to: trimmedUserPrompt)
-        requestMessages.append(ChatMessage(role: .user, content: finalUserPrompt))
+        requestMessages.append(ChatMessage(role: .user, content: trimmedUserPrompt))
 
         let requestContext = RequestLogContext(
             requestID: UUID(),

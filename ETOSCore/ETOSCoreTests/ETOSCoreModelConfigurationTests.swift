@@ -11,31 +11,6 @@ import Foundation
 import SwiftUI
 @testable import ETOSCore
 
-@Suite("模型提示词语言适配测试")
-struct ModelPromptLanguageTests {
-    @Test("根据语言标识解析模型提示词目标语言")
-    func resolvesSupportedLanguageIdentifiers() {
-        #expect(ModelPromptLanguage.resolve(identifier: "en-US") == .english)
-        #expect(ModelPromptLanguage.resolve(identifier: "zh-Hant-HK") == .traditionalChinese)
-        #expect(ModelPromptLanguage.resolve(identifier: "ja-JP") == .japanese)
-        #expect(ModelPromptLanguage.resolve(identifier: "ar") == .arabic)
-    }
-
-    @Test("不支持的语言标识会按英语策略处理")
-    func treatsUnsupportedLanguageIdentifiersAsEnglish() {
-        let identifiers = ["de-DE", "ko-KR", "pt-BR"]
-        let language = ModelPromptLanguage.resolve(identifiers: identifiers)
-        #expect(language == .english)
-    }
-
-    @Test("追加模型语言约束时保留原始提示词")
-    func appendsInstructionWithoutDroppingPrompt() {
-        let prompt = ModelPromptLanguage.appendingOutputInstruction(to: "生成标题", language: .english)
-        #expect(prompt.contains("生成标题"))
-        #expect(prompt.contains("Output language: English"))
-    }
-}
-
 @Suite("聊天颜色偏好编解码")
 struct ChatAppearanceColorCodecTests {
     @Test("支持解析 6 位十六进制并默认不透明")

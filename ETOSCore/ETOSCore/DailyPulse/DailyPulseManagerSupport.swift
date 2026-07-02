@@ -263,7 +263,7 @@ extension DailyPulseManager {
         if !suggested.isEmpty {
             return suggested
         }
-        return ModelPromptLanguage.appendingOutputInstruction(to: BuiltInPromptStore.render(.dailyPulseContinuation))
+        return BuiltInPromptStore.render(.dailyPulseContinuation)
     }
 
     internal nonisolated static func resolveGenerationModel(

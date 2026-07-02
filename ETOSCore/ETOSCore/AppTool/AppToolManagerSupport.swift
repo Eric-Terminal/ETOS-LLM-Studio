@@ -14,7 +14,7 @@ extension AppToolManager {
     func toolDefinition(for kind: AppToolKind) -> InternalToolDefinition {
         InternalToolDefinition(
             name: kind.toolName,
-            description: ModelPromptLanguage.appendingToolArgumentInstruction(to: kind.toolDescription),
+            description: kind.toolDescription,
             parameters: kind.parameters,
             isBlocking: true
         )

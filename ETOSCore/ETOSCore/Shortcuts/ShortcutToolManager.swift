@@ -397,7 +397,7 @@ public final class ShortcutToolManager: ObservableObject {
             .map { tool in
                 let alias = ShortcutToolNaming.alias(for: tool)
                 let prefix = NSLocalizedString("[快捷指令]", comment: "Shortcut tool description prefix sent to model")
-                let description = ModelPromptLanguage.appendingToolArgumentInstruction(to: "\(prefix) \(tool.effectiveDescription)")
+                let description = "\(prefix) \(tool.effectiveDescription)"
                 let parameters: JSONValue
                 if let schema = tool.metadata["inputSchema"] {
                     parameters = schema

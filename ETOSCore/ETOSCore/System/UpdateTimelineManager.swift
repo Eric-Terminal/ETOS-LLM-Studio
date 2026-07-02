@@ -853,7 +853,7 @@ public final class UpdateTimelineManager: ObservableObject {
         } else {
             commitContext = commitText(for: commits)
         }
-        let outputInstruction = NSLocalizedString("请使用项目当前界面语言输出，避免逐条复述 SHA，保留重要功能变化、修复和潜在影响。", comment: "Update timeline prompt output instruction")
+        let outputInstruction = NSLocalizedString("避免逐条复述 SHA，保留重要功能变化、修复和潜在影响。", comment: "Update timeline prompt output instruction")
         let commitsLabel = NSLocalizedString("Commit", comment: "Update timeline prompt commits label")
 
         return """

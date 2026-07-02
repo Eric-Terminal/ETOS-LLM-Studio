@@ -226,8 +226,7 @@ extension ChatService {
             temperature: aiTemperature,
             runnableModel: runnableModel,
             requestSource: .messageRewrite,
-            sessionID: sessionID,
-            appendOutputLanguageInstruction: false
+            sessionID: sessionID
         )
     }
 
