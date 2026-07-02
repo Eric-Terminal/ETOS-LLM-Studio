@@ -218,6 +218,7 @@ extension ChatService {
                     aiTopP: aiTopP,
                     systemPrompt: systemPrompt,
                     maxChatHistory: maxChatHistory,
+                    enableStreaming: false,
                     enableMemory: enableMemory,
                     enableMemoryWrite: enableMemoryWrite,
                     enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,

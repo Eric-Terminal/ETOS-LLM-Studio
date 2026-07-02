@@ -115,6 +115,7 @@ struct ChatServiceTests {
         mockAdapter.receivedChatModel = nil
         mockAdapter.receivedTitleModel = nil
         mockAdapter.receivedReasoningSummaryModel = nil
+        mockAdapter.receivedChatStreamFlags = []
         ShortcutToolStore.saveTools([])
         await MainActor.run {
             ShortcutToolManager.shared.reloadFromDisk()

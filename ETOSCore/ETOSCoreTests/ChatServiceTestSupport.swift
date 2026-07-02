@@ -23,6 +23,7 @@ final class MockAPIAdapter: APIAdapter {
     var receivedChatModel: RunnableModel?
     var receivedTitleModel: RunnableModel?
     var receivedReasoningSummaryModel: RunnableModel?
+    var receivedChatStreamFlags: [Bool] = []
 
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         if messages.first?.content.contains("思考摘要助手") == true {
@@ -47,6 +48,9 @@ final class MockAPIAdapter: APIAdapter {
             receivedImageAttachments = imageAttachments
             receivedFileAttachments = fileAttachments
             receivedChatModel = model
+            if let stream = commonPayload["stream"] as? Bool {
+                receivedChatStreamFlags.append(stream)
+            }
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
         }
     }

@@ -584,6 +584,45 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("工具结果二次请求沿用流式设置")
+    func testToolFollowUpRequestKeepsStreamingPreference() async throws {
+        await cleanup()
+        await memoryManager.addMemory(content: "用户喜欢喝抹茶拿铁。")
+        setupMockResponsesForChatAndTitle()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
+        chatService.updateMessages([loadingMessage], for: sessionID)
+
+        let toolCall = InternalToolCall(
+            id: "call_search_stream",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"抹茶","count":1}"#
+        )
+
+        await chatService.processResponseMessage(
+            responseMessage: ChatMessage(role: .assistant, content: "", toolCalls: [toolCall]),
+            loadingMessageID: loadingMessage.id,
+            currentSessionID: sessionID,
+            userMessage: nil,
+            wasTemporarySession: false,
+            availableTools: [chatService.searchMemoryTool],
+            aiTemperature: 0,
+            aiTopP: 0,
+            systemPrompt: "",
+            maxChatHistory: 0,
+            enableStreaming: true,
+            enableMemory: true,
+            enableMemoryWrite: false,
+            enableMemoryActiveRetrieval: true,
+            includeSystemTime: false
+        )
+
+        #expect(mockAdapter.receivedChatStreamFlags.last == true)
+
+        await cleanup()
+    }
+
     @Test("Worldbook prompt injection order and depth insertion")
     func testWorldbookInjectionOrderAndDepth() async throws {
         await cleanup()

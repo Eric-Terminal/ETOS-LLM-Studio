@@ -11,7 +11,7 @@ import Foundation
 extension OpenAIAdapter {
     struct OpenAIToolCall: Decodable {
         let id: String?
-        let type: String
+        let type: String?
         let index: Int?
         let providerSpecificFields: [String: JSONValue]?
         struct Function: Decodable {
@@ -34,7 +34,7 @@ extension OpenAIAdapter {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(String.self, forKey: .id)
-            type = try container.decode(String.self, forKey: .type)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
             index = try container.decodeIfPresent(Int.self, forKey: .index)
             function = try container.decode(Function.self, forKey: .function)
             var mergedProviderSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerSpecificFields)

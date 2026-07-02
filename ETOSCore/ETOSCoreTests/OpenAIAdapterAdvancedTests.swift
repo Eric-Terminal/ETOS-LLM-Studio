@@ -55,6 +55,18 @@ struct OpenAIAdapterAdvancedTests {
         #expect(firstDelta.providerSpecificFields?["thought_signature"] == .string("sig-stream-extra"))
     }
 
+    @Test("OpenAI 流式工具参数片段允许省略 type")
+    func testStreamingToolArgumentDeltaAllowsMissingType() throws {
+        let line = """
+        data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}}]}
+        """
+
+        let part = adapter.parseStreamingResponse(line: line)
+        let firstDelta = try #require(part?.toolCallDeltas?.first)
+        #expect(firstDelta.index == 0)
+        #expect(firstDelta.argumentsFragment == "{")
+    }
+
     @Test("OpenAI 流式 usage-only 片段可解析 token 用量")
     func testStreamingUsageOnlyChunkParsesTokenUsage() throws {
         let line = """
