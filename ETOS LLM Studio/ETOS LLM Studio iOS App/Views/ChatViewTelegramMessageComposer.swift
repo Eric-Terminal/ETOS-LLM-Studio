@@ -37,6 +37,7 @@ struct TelegramMessageComposer: View {
     @State private var compactInputWidth: CGFloat = 0
     @StateObject private var inlineSpeechRecorder = InlineSpeechRecorderController()
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
+    @State private var inlineSpeechPreparedTranscript: String?
     @State private var showInlineSpeechError = false
     @State private var inlineSpeechErrorMessage: String?
 
@@ -152,6 +153,7 @@ struct TelegramMessageComposer: View {
         .onDisappear {
             inlineSpeechFinalizeTask?.cancel()
             inlineSpeechFinalizeTask = nil
+            inlineSpeechPreparedTranscript = nil
             inlineSpeechRecorder.cancel()
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -413,6 +415,7 @@ struct TelegramMessageComposer: View {
             duration: inlineSpeechRecorder.recordingDuration,
             isPlayingPreview: inlineSpeechRecorder.isPlayingPreview,
             sendsAudioAttachment: viewModel.sendSpeechAsAudio,
+            transcriptPreview: inlineSpeechPreparedTranscript,
             cancelAction: cancelInlineSpeechRecording,
             stopAction: stopInlineSpeechRecording,
             confirmAction: confirmInlineSpeechRecording,
@@ -426,6 +429,7 @@ struct TelegramMessageComposer: View {
     private func startInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
+        inlineSpeechPreparedTranscript = nil
         audioRecorderEntryMode = .speechInput
         inlineSpeechRecorder.prepareForRecording()
         focus.wrappedValue = false
@@ -456,6 +460,10 @@ struct TelegramMessageComposer: View {
         inlineSpeechFinalizeTask = nil
         if viewModel.sendSpeechAsAudio {
             completeInlineAudioAttachment()
+        } else if let preparedTranscript = inlineSpeechPreparedTranscript, !preparedTranscript.isEmpty {
+            appendTranscribedTextToComposer(preparedTranscript)
+            inlineSpeechPreparedTranscript = nil
+            inlineSpeechRecorder.cancel()
         } else {
             transcribeInlineSpeechRecording()
         }
@@ -464,6 +472,7 @@ struct TelegramMessageComposer: View {
     private func cancelInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
+        inlineSpeechPreparedTranscript = nil
         inlineSpeechRecorder.cancel()
     }
 
@@ -483,10 +492,12 @@ struct TelegramMessageComposer: View {
             }
             let attachment = try inlineSpeechRecorder.makeAttachment(format: viewModel.audioRecordingFormat)
             viewModel.setAudioAttachment(attachment)
+            inlineSpeechPreparedTranscript = nil
             inlineSpeechRecorder.cancel()
         } catch {
             inlineSpeechErrorMessage = error.localizedDescription
             showInlineSpeechError = true
+            inlineSpeechPreparedTranscript = nil
             inlineSpeechRecorder.cancel()
         }
     }
@@ -494,6 +505,7 @@ struct TelegramMessageComposer: View {
     private func transcribeInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
+        inlineSpeechPreparedTranscript = nil
         inlineSpeechRecorder.beginTranscribing()
         Task { @MainActor in
             do {
@@ -516,11 +528,12 @@ struct TelegramMessageComposer: View {
                         userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")]
                     )
                 }
-                appendTranscribedTextToComposer(trimmedTranscript)
-                inlineSpeechRecorder.cancel()
+                inlineSpeechPreparedTranscript = trimmedTranscript
+                inlineSpeechRecorder.showTranscriptPreview()
             } catch {
                 inlineSpeechErrorMessage = error.localizedDescription
                 showInlineSpeechError = true
+                inlineSpeechPreparedTranscript = nil
                 inlineSpeechRecorder.cancel()
             }
         }

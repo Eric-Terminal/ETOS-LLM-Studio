@@ -537,7 +537,7 @@ struct WatchInputBubbleView: View {
         if viewModel.sendSpeechAsAudio {
             scheduleInlineAudioAttachment()
         } else {
-            viewModel.finishSpeechRecording()
+            viewModel.prepareSpeechTranscriptPreview()
         }
     }
 

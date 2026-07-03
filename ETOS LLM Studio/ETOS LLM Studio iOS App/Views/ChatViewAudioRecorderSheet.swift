@@ -48,6 +48,25 @@ struct AudioRecorderSheet: View {
                     Text(NSLocalizedString("请稍候，正在将语音转换为文本。", comment: ""))
                         .etFont(.callout)
                         .foregroundStyle(.secondary)
+                } else if isSpeechToTextMode, let preparedTranscript, !preparedTranscript.isEmpty {
+                    Image(systemName: "text.bubble")
+                        .etFont(.system(size: 34))
+                        .foregroundStyle(Color.accentColor)
+
+                    Text(NSLocalizedString("预览", comment: ""))
+                        .etFont(.headline)
+
+                    ScrollView {
+                        Text(preparedTranscript)
+                            .etFont(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .frame(maxHeight: 180)
+                    .padding(.horizontal)
                 } else {
                     Text(formatDuration(recordingDuration))
                         .etFont(.system(size: 48, weight: .light, design: .monospaced))
@@ -227,8 +246,9 @@ struct AudioRecorderSheet: View {
     private func stopRecording() {
         stopTimer()
         if usesSystemStreamingRecognizer {
-            let transcript = streamingSession?.finish() ?? liveTranscript
+            let transcript = (streamingSession?.finish() ?? liveTranscript).trimmingCharacters(in: .whitespacesAndNewlines)
             liveTranscript = transcript
+            preparedTranscript = transcript.isEmpty ? nil : transcript
             streamingSession = nil
             isRecording = false
             return
@@ -260,19 +280,12 @@ struct AudioRecorderSheet: View {
 
     private func finishRecording() {
         processingErrorMessage = nil
+        let shouldStopForSystemPreview = isRecording && usesSystemStreamingRecognizer
         if isRecording {
             stopRecording()
-        }
-
-        if usesSystemStreamingRecognizer {
-            let transcript = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !transcript.isEmpty else {
-                processingErrorMessage = NSLocalizedString("未识别到有效语音内容。", comment: "")
+            if shouldStopForSystemPreview {
                 return
             }
-            onCompleteTranscript(transcript)
-            dismiss()
-            return
         }
 
         if case .speechToText = mode,
@@ -334,10 +347,6 @@ struct AudioRecorderSheet: View {
                         }
                         liveTranscript = trimmedTranscript
                         preparedTranscript = trimmedTranscript
-                        if !hasAppliedPreparedTranscript {
-                            onCompleteTranscript(trimmedTranscript)
-                            hasAppliedPreparedTranscript = true
-                        }
                         isTranscriptionInProgress = false
                     }
                 } catch {

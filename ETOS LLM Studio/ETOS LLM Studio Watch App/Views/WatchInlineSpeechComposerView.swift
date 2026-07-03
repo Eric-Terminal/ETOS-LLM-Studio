@@ -85,23 +85,31 @@ struct WatchInlineSpeechComposerView: View {
             .disabled(viewModel.speechTranscriptionInProgress)
 
             HStack(spacing: 6) {
-                Image(systemName: "waveform")
-                    .etFont(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: inputControlHeight * 0.72, height: inputControlHeight)
+                if viewModel.speechStreamingTranscript.isEmpty {
+                    Image(systemName: "waveform")
+                        .etFont(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: inputControlHeight * 0.72, height: inputControlHeight)
 
-                WatchInlineVoiceWaveformView(
-                    samples: viewModel.waveformSamples,
-                    tint: .secondary,
-                    minimumBarOpacity: 0.55,
-                    isProcessing: viewModel.speechTranscriptionInProgress
-                )
-                .frame(height: inputControlHeight * 0.58)
+                    WatchInlineVoiceWaveformView(
+                        samples: viewModel.waveformSamples,
+                        tint: .secondary,
+                        minimumBarOpacity: 0.55,
+                        isProcessing: viewModel.speechTranscriptionInProgress
+                    )
+                    .frame(height: inputControlHeight * 0.58)
 
-                Text(formattedDuration(viewModel.recordingDuration, prefix: "+ "))
-                    .etFont(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    Text(formattedDuration(viewModel.recordingDuration, prefix: "+ "))
+                        .etFont(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(viewModel.speechStreamingTranscript)
+                        .etFont(.caption)
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 if viewModel.speechTranscriptionInProgress {
                     ProgressView()
@@ -117,7 +125,7 @@ struct WatchInlineSpeechComposerView: View {
                             .background(Circle().fill(Color.blue))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(viewModel.sendSpeechAsAudio ? NSLocalizedString("添加语音附件", comment: "") : NSLocalizedString("开始语音转写", comment: ""))
+                    .accessibilityLabel(confirmAccessibilityLabel)
                 }
             }
             .padding(.leading, 4)
@@ -136,6 +144,16 @@ struct WatchInlineSpeechComposerView: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "\(prefix)%d:%02d", minutes, seconds)
+    }
+
+    private var confirmAccessibilityLabel: String {
+        if viewModel.sendSpeechAsAudio {
+            return NSLocalizedString("添加语音附件", comment: "")
+        }
+        if !viewModel.speechStreamingTranscript.isEmpty {
+            return NSLocalizedString("完成", comment: "")
+        }
+        return NSLocalizedString("开始语音转写", comment: "")
     }
 }
 

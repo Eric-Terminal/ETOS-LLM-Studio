@@ -51,7 +51,7 @@ struct SpeechRecorderView: View {
                         .etFont(.system(size: 34))
                         .foregroundColor(.accentColor)
                         .padding(.top, 6)
-                    Text(viewModel.sendSpeechAsAudio ? NSLocalizedString("录音后将直接发送", comment: "") : NSLocalizedString("准备录音", comment: ""))
+                    Text(recorderStateTitle)
                         .etFont(.headline)
 
                     if !viewModel.speechStreamingTranscript.isEmpty {
@@ -74,7 +74,7 @@ struct SpeechRecorderView: View {
                 .disabled(viewModel.speechTranscriptionInProgress)
                 .frame(maxWidth: .infinity)
                 
-                Button(NSLocalizedString("完成录音", comment: "")) {
+                Button(doneButtonTitle) {
                     viewModel.finishSpeechRecording()
                 }
                 .buttonStyle(.borderedProminent)
@@ -108,6 +108,17 @@ struct SpeechRecorderView: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private var recorderStateTitle: String {
+        if !viewModel.speechStreamingTranscript.isEmpty {
+            return NSLocalizedString("预览", comment: "")
+        }
+        return viewModel.sendSpeechAsAudio ? NSLocalizedString("录音后将直接发送", comment: "") : NSLocalizedString("准备录音", comment: "")
+    }
+
+    private var doneButtonTitle: String {
+        viewModel.speechStreamingTranscript.isEmpty ? NSLocalizedString("完成录音", comment: "") : NSLocalizedString("完成", comment: "")
     }
 }
 

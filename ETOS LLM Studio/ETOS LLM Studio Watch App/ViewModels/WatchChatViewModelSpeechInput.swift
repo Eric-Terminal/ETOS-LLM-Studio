@@ -215,7 +215,12 @@ extension ChatViewModel {
 
     func finishSpeechRecording() {
         if isRecordingSpeech {
-            stopSpeechRecordingForPreview()
+            if sendSpeechAsAudio {
+                stopSpeechRecordingForPreview()
+            } else {
+                prepareSpeechTranscriptPreview()
+                return
+            }
         }
 
         if !sendSpeechAsAudio,
@@ -228,15 +233,11 @@ extension ChatViewModel {
                 resetRecordingVisuals()
                 return
             }
-            speechTranscriptionInProgress = true
-            Task {
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                appendTranscribedText(transcript)
-                speechStreamingTranscript = ""
-                speechTranscriptionInProgress = false
-                isSpeechRecorderPresented = false
-                resetRecordingVisuals()
-            }
+            appendTranscribedText(transcript)
+            speechStreamingTranscript = ""
+            speechTranscriptionInProgress = false
+            isSpeechRecorderPresented = false
+            resetRecordingVisuals()
             return
         }
 
@@ -250,10 +251,13 @@ extension ChatViewModel {
             return
         }
 
-        speechTranscriptionInProgress = true
-        if sendSpeechAsAudio {
-            isSpeechRecorderPresented = false
+        if !sendSpeechAsAudio {
+            prepareSpeechTranscriptPreview()
+            return
         }
+
+        speechTranscriptionInProgress = true
+        isSpeechRecorderPresented = false
         Task {
             defer {
                 speechTranscriptionInProgress = false
@@ -265,33 +269,14 @@ extension ChatViewModel {
             }
             do {
                 let data = try Data(contentsOf: url)
-                if sendSpeechAsAudio {
-                    let attachment = AudioAttachment(
-                        data: data,
-                        mimeType: audioRecordingFormat.mimeType,
-                        format: audioRecordingFormat.fileExtension,
-                        fileName: url.lastPathComponent
-                    )
-                    await MainActor.run {
-                        pendingAudioAttachment = attachment
-                        isSpeechRecorderPresented = false
-                    }
-                } else {
-                    guard let speechModel = selectedSpeechModel else {
-                        throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("尚未选择语音转文字模型。", comment: "")])
-                    }
-                    let transcript = try await chatService.transcribeAudio(
-                        using: speechModel,
-                        audioData: data,
-                        fileName: url.lastPathComponent,
-                        mimeType: audioRecordingFormat.mimeType
-                    )
-                    let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmedTranscript.isEmpty else {
-                        throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")])
-                    }
-                    speechStreamingTranscript = trimmedTranscript
-                    appendTranscribedText(trimmedTranscript)
+                let attachment = AudioAttachment(
+                    data: data,
+                    mimeType: audioRecordingFormat.mimeType,
+                    format: audioRecordingFormat.fileExtension,
+                    fileName: url.lastPathComponent
+                )
+                await MainActor.run {
+                    pendingAudioAttachment = attachment
                     isSpeechRecorderPresented = false
                 }
             } catch {
@@ -299,6 +284,29 @@ extension ChatViewModel {
                 isSpeechRecorderPresented = false
             }
         }
+    }
+
+    func prepareSpeechTranscriptPreview() {
+        guard !sendSpeechAsAudio,
+              !speechTranscriptionInProgress else { return }
+        if isRecordingSpeech {
+            stopSpeechRecordingForPreview()
+        }
+
+        if speechRecordingURL == nil {
+            let transcript = speechStreamingTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !transcript.isEmpty else {
+                presentSpeechError(NSLocalizedString("未识别到有效语音内容。", comment: ""))
+                isSpeechRecordingPreparing = false
+                isSpeechRecorderPresented = false
+                resetRecordingVisuals()
+                return
+            }
+            speechStreamingTranscript = transcript
+            return
+        }
+
+        transcribeRecordedSpeechForPreview()
     }
 
     func cancelSpeechRecording() {
@@ -370,6 +378,46 @@ extension ChatViewModel {
     private func resetRecordingVisuals() {
         recordingDuration = 0
         waveformSamples = Array(repeating: 0, count: waveformSampleCount)
+    }
+
+    private func transcribeRecordedSpeechForPreview() {
+        guard let url = speechRecordingURL else { return }
+        speechTranscriptionInProgress = true
+        Task {
+            var preparedSuccessfully = false
+            defer {
+                speechTranscriptionInProgress = false
+                isSpeechRecordingPreparing = false
+                audioRecorder = nil
+                speechRecordingURL = nil
+                try? FileManager.default.removeItem(at: url)
+                if !preparedSuccessfully {
+                    resetRecordingVisuals()
+                }
+            }
+            do {
+                let data = try Data(contentsOf: url)
+                guard let speechModel = selectedSpeechModel else {
+                    throw NSError(domain: "SpeechRecorder", code: -2, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("尚未选择语音转文字模型。", comment: "")])
+                }
+                let transcript = try await chatService.transcribeAudio(
+                    using: speechModel,
+                    audioData: data,
+                    fileName: url.lastPathComponent,
+                    mimeType: audioRecordingFormat.mimeType
+                )
+                let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedTranscript.isEmpty else {
+                    throw NSError(domain: "SpeechRecorder", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未识别到有效语音内容。", comment: "")])
+                }
+                speechStreamingTranscript = trimmedTranscript
+                preparedSuccessfully = true
+            } catch {
+                presentSpeechError(error.localizedDescription)
+                isSpeechRecorderPresented = false
+                speechStreamingTranscript = ""
+            }
+        }
     }
 
     private func startRecordingTimer() {

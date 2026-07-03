@@ -99,6 +99,12 @@ final class InlineSpeechRecorderController: ObservableObject {
         }
     }
 
+    func showTranscriptPreview() {
+        withAnimation(Self.phaseAnimation) {
+            phase = .preview
+        }
+    }
+
     func makeAttachment(format: AudioRecordingFormat) throws -> AudioAttachment {
         guard let recordingURL,
               let data = try? Data(contentsOf: recordingURL) else {
@@ -262,6 +268,7 @@ struct InlineSpeechComposerBar: View {
     let duration: TimeInterval
     let isPlayingPreview: Bool
     let sendsAudioAttachment: Bool
+    let transcriptPreview: String?
     let cancelAction: () -> Void
     let stopAction: () -> Void
     let confirmAction: () -> Void
@@ -341,19 +348,27 @@ struct InlineSpeechComposerBar: View {
                 .accessibilityLabel(NSLocalizedString("播放录音", comment: ""))
                 .disabled(phase == .transcribing)
 
-                InlineVoiceWaveformView(
-                    samples: samples,
-                    tint: .secondary,
-                    minimumBarOpacity: 0.55,
-                    isProcessing: phase == .transcribing
-                )
-                .frame(height: 34)
+                if let transcriptPreview, !transcriptPreview.isEmpty {
+                    Text(transcriptPreview)
+                        .etFont(.callout)
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    InlineVoiceWaveformView(
+                        samples: samples,
+                        tint: .secondary,
+                        minimumBarOpacity: 0.55,
+                        isProcessing: phase == .transcribing
+                    )
+                    .frame(height: 34)
 
-                Text(previewDurationText)
-                    .etFont(.system(size: 14, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 44, alignment: .trailing)
+                    Text(previewDurationText)
+                        .etFont(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
 
                 if phase == .transcribing {
                     ProgressView()
@@ -369,7 +384,7 @@ struct InlineSpeechComposerBar: View {
                             .background(Circle().fill(Color.blue))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(sendsAudioAttachment ? NSLocalizedString("添加语音附件", comment: "") : NSLocalizedString("开始语音转写", comment: ""))
+                    .accessibilityLabel(confirmAccessibilityLabel)
                 }
             }
             .padding(.leading, 8)
@@ -404,6 +419,16 @@ struct InlineSpeechComposerBar: View {
 
     private var previewDurationText: String {
         formattedDuration(prefix: "+ ")
+    }
+
+    private var confirmAccessibilityLabel: String {
+        if sendsAudioAttachment {
+            return NSLocalizedString("添加语音附件", comment: "")
+        }
+        if let transcriptPreview, !transcriptPreview.isEmpty {
+            return NSLocalizedString("完成", comment: "")
+        }
+        return NSLocalizedString("开始语音转写", comment: "")
     }
 
     private func formattedDuration(prefix: String) -> String {
