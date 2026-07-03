@@ -269,6 +269,7 @@ extension SyncEngine {
         hasher.combine(pricing.outputPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
         hasher.combine(pricing.cacheReadPerMillionTokens ?? -1)
+        hasher.combine(pricing.timeOverridesEnabled)
         for tier in pricing.tiers {
             hasher.combine(tier.id.uuidString)
             hasher.combine(tier.minimumTokens)
@@ -276,6 +277,15 @@ extension SyncEngine {
             hasher.combine(tier.outputPerMillionTokens ?? -1)
             hasher.combine(tier.cacheWritePerMillionTokens ?? -1)
             hasher.combine(tier.cacheReadPerMillionTokens ?? -1)
+        }
+        for timeOverride in pricing.timeOverrides {
+            hasher.combine(timeOverride.id.uuidString)
+            hasher.combine(timeOverride.startMinuteOfDay)
+            hasher.combine(timeOverride.endMinuteOfDay)
+            hasher.combine(timeOverride.inputPerMillionTokens ?? -1)
+            hasher.combine(timeOverride.outputPerMillionTokens ?? -1)
+            hasher.combine(timeOverride.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(timeOverride.cacheReadPerMillionTokens ?? -1)
         }
     }
 
@@ -381,6 +391,9 @@ extension SyncEngine {
         hasher.combine(message.costEstimate?.totalCost ?? -1)
         hasher.combine(message.costEstimate?.tierBasisTokens ?? -1)
         hasher.combine(message.costEstimate?.tierMinimumTokens ?? -1)
+        hasher.combine(message.costEstimate?.timeOverrideID?.uuidString ?? "")
+        hasher.combine(message.costEstimate?.timeOverrideStartMinuteOfDay ?? -1)
+        hasher.combine(message.costEstimate?.timeOverrideEndMinuteOfDay ?? -1)
         hasher.combine(message.costEstimate?.isEstimatedFromCurrentPricing ?? false)
         for component in message.costEstimate?.components ?? [] {
             hasher.combine(component.kind.rawValue)

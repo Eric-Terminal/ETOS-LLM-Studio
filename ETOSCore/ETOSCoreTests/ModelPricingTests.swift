@@ -78,6 +78,107 @@ struct ModelPricingTests {
         #expect(abs(estimate.totalCost - 0.0127) < 0.000001)
     }
 
+    @Test("峰谷定价命中时间段时覆盖填写的价格")
+    func peakValleyPricingOverridesConfiguredPricesInWindow() throws {
+        let calendar = utcCalendar()
+        let usage = MessageTokenUsage(promptTokens: 1_000, completionTokens: 1_000, totalTokens: 2_000)
+        let timeOverrideID = UUID(uuidString: "00000000-0000-0000-0000-000000000095")!
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 1,
+            outputPerMillionTokens: 2,
+            timeOverridesEnabled: true,
+            timeOverrides: [
+                ModelPricingTimeOverride(
+                    id: timeOverrideID,
+                    startMinuteOfDay: 10 * 60,
+                    endMinuteOfDay: 12 * 60,
+                    inputPerMillionTokens: 0.5,
+                    outputPerMillionTokens: 1
+                )
+            ]
+        )
+
+        let estimate = try #require(
+            ModelCostCalculator.estimateCost(
+                usage: usage,
+                pricing: pricing,
+                requestedAt: date(hour: 10, minute: 30, calendar: calendar),
+                calendar: calendar
+            )
+        )
+
+        #expect(estimate.timeOverrideID == timeOverrideID)
+        #expect(estimate.timeOverrideStartMinuteOfDay == 10 * 60)
+        #expect(estimate.timeOverrideEndMinuteOfDay == 12 * 60)
+        #expect(estimate.components.first(where: { $0.kind == .input })?.pricePerMillionTokens == 0.5)
+        #expect(estimate.components.first(where: { $0.kind == .output })?.pricePerMillionTokens == 1)
+        #expect(abs(estimate.totalCost - 0.0015) < 0.000001)
+    }
+
+    @Test("峰谷定价未命中时间段时使用外层价格")
+    func peakValleyPricingFallsBackOutsideWindow() throws {
+        let calendar = utcCalendar()
+        let usage = MessageTokenUsage(promptTokens: 1_000, completionTokens: 1_000, totalTokens: 2_000)
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 1,
+            outputPerMillionTokens: 2,
+            timeOverridesEnabled: true,
+            timeOverrides: [
+                ModelPricingTimeOverride(
+                    startMinuteOfDay: 10 * 60,
+                    endMinuteOfDay: 12 * 60,
+                    inputPerMillionTokens: 0.5,
+                    outputPerMillionTokens: 1
+                )
+            ]
+        )
+
+        let estimate = try #require(
+            ModelCostCalculator.estimateCost(
+                usage: usage,
+                pricing: pricing,
+                requestedAt: date(hour: 14, minute: 0, calendar: calendar),
+                calendar: calendar
+            )
+        )
+
+        #expect(estimate.timeOverrideID == nil)
+        #expect(estimate.components.first(where: { $0.kind == .input })?.pricePerMillionTokens == 1)
+        #expect(estimate.components.first(where: { $0.kind == .output })?.pricePerMillionTokens == 2)
+        #expect(abs(estimate.totalCost - 0.003) < 0.000001)
+    }
+
+    @Test("峰谷定价支持跨午夜并继承未填写价格")
+    func peakValleyPricingSupportsCrossMidnightAndInheritance() throws {
+        let calendar = utcCalendar()
+        let usage = MessageTokenUsage(promptTokens: 2_000, completionTokens: 1_000, totalTokens: 3_000)
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 1,
+            outputPerMillionTokens: 2,
+            timeOverridesEnabled: true,
+            timeOverrides: [
+                ModelPricingTimeOverride(
+                    startMinuteOfDay: 23 * 60,
+                    endMinuteOfDay: 2 * 60,
+                    inputPerMillionTokens: 0.25
+                )
+            ]
+        )
+
+        let estimate = try #require(
+            ModelCostCalculator.estimateCost(
+                usage: usage,
+                pricing: pricing,
+                requestedAt: date(hour: 1, minute: 30, calendar: calendar),
+                calendar: calendar
+            )
+        )
+
+        #expect(estimate.components.first(where: { $0.kind == .input })?.pricePerMillionTokens == 0.25)
+        #expect(estimate.components.first(where: { $0.kind == .output })?.pricePerMillionTokens == 2)
+        #expect(abs(estimate.totalCost - 0.0025) < 0.000001)
+    }
+
     @Test("阶梯范围文本使用紧凑 token 边界")
     func tierRangeTextUsesCompactBoundaries() {
         #expect(ModelPricingTierRangeText.text(minimumTokens: 0, nextMinimumTokens: 200_001).contains("200K"))
@@ -100,6 +201,20 @@ struct ModelPricingTests {
         #expect(model.pricing == nil)
     }
 
+    @Test("旧价格配置解码时峰谷定价默认关闭")
+    func legacyPricingDecodesWithPeakValleyDisabled() throws {
+        let data = try #require(
+            #"{"inputPerMillionTokens":1,"outputPerMillionTokens":2}"#
+                .data(using: .utf8)
+        )
+
+        let pricing = try JSONDecoder().decode(ModelPricing.self, from: data)
+
+        #expect(pricing.inputPerMillionTokens == 1)
+        #expect(!pricing.timeOverridesEnabled)
+        #expect(pricing.timeOverrides.isEmpty)
+    }
+
     @Test("非空价格配置可以 Codable 往返")
     func pricingCodableRoundTrip() throws {
         let model = Model(
@@ -115,6 +230,15 @@ struct ModelPricingTests {
                         minimumTokens: 10_000,
                         inputPerMillionTokens: 0.4
                     )
+                ],
+                timeOverridesEnabled: true,
+                timeOverrides: [
+                    ModelPricingTimeOverride(
+                        id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+                        startMinuteOfDay: 10 * 60,
+                        endMinuteOfDay: 12 * 60,
+                        outputPerMillionTokens: 1.5
+                    )
                 ]
             )
         )
@@ -126,6 +250,9 @@ struct ModelPricingTests {
         #expect(decoded.pricing?.outputPerMillionTokens == 3)
         #expect(decoded.pricing?.tiers.first?.minimumTokens == 10_000)
         #expect(decoded.pricing?.tiers.first?.inputPerMillionTokens == 0.4)
+        #expect(decoded.pricing?.timeOverridesEnabled == true)
+        #expect(decoded.pricing?.timeOverrides.first?.startMinuteOfDay == 10 * 60)
+        #expect(decoded.pricing?.timeOverrides.first?.outputPerMillionTokens == 1.5)
     }
 
     @Test("Provider SQLite 可以保存并加载模型价格")
@@ -281,5 +408,15 @@ struct ModelPricingTests {
     private func resetProviders(to providers: [Provider]) {
         ConfigLoader.loadProviders().forEach { ConfigLoader.deleteProvider($0) }
         providers.forEach { ConfigLoader.saveProvider($0) }
+    }
+
+    private func utcCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func date(hour: Int, minute: Int, calendar: Calendar) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: hour, minute: minute))!
     }
 }

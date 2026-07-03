@@ -246,14 +246,21 @@ extension ModelSettingsView {
             pricing.cacheWritePerMillionTokens,
             pricing.cacheReadPerMillionTokens
         ].compactMap { $0 }.count
-        if pricing.tiers.isEmpty {
-            return String(format: NSLocalizedString("已填写 %d 项", comment: "Model pricing configured fields summary"), baseCount)
+        var parts: [String] = []
+        if baseCount > 0 {
+            parts.append(String(format: NSLocalizedString("已填写 %d 项", comment: "Model pricing configured fields summary"), baseCount))
         }
-        return String(
-            format: NSLocalizedString("已填写 %d 项，%d 个阶梯", comment: "Model pricing configured fields and tiers summary"),
-            baseCount,
-            pricing.tiers.count
-        )
+        if !pricing.tiers.isEmpty {
+            parts.append(String(format: NSLocalizedString("%d 个阶梯", comment: "Model pricing tiers summary"), pricing.tiers.count))
+        }
+        if pricing.timeOverridesEnabled, !pricing.timeOverrides.isEmpty {
+            parts.append(String(format: NSLocalizedString("%d 个峰谷时段", comment: "Peak valley pricing ranges summary"), pricing.timeOverrides.count))
+        } else if !pricing.timeOverrides.isEmpty {
+            parts.append(NSLocalizedString("峰谷已关闭", comment: "Peak valley pricing disabled summary"))
+        }
+        return parts.isEmpty
+            ? NSLocalizedString("未配置", comment: "Model pricing not configured summary")
+            : parts.joined(separator: NSLocalizedString("，", comment: "List separator"))
     }
 
     @ViewBuilder

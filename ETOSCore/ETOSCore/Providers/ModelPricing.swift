@@ -14,19 +14,25 @@ public struct ModelPricing: Codable, Hashable, Sendable {
     public var cacheWritePerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
     public var tiers: [ModelPricingTier]
+    public var timeOverridesEnabled: Bool
+    public var timeOverrides: [ModelPricingTimeOverride]
 
     public init(
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
         cacheReadPerMillionTokens: Double? = nil,
-        tiers: [ModelPricingTier] = []
+        tiers: [ModelPricingTier] = [],
+        timeOverridesEnabled: Bool = false,
+        timeOverrides: [ModelPricingTimeOverride] = []
     ) {
         self.inputPerMillionTokens = Self.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = Self.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = Self.normalizedPrice(cacheWritePerMillionTokens)
         self.cacheReadPerMillionTokens = Self.normalizedPrice(cacheReadPerMillionTokens)
         self.tiers = Self.normalizedTiers(tiers)
+        self.timeOverridesEnabled = timeOverridesEnabled
+        self.timeOverrides = Self.normalizedTimeOverrides(timeOverrides)
     }
 
     public var isEffectivelyEmpty: Bool {
@@ -35,6 +41,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             && cacheWritePerMillionTokens == nil
             && cacheReadPerMillionTokens == nil
             && tiers.isEmpty
+            && (!timeOverridesEnabled || timeOverrides.isEmpty)
     }
 
     public var normalized: ModelPricing {
@@ -43,11 +50,17 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
             cacheReadPerMillionTokens: cacheReadPerMillionTokens,
-            tiers: tiers
+            tiers: tiers,
+            timeOverridesEnabled: timeOverridesEnabled,
+            timeOverrides: timeOverrides
         )
     }
 
-    public func effectivePrices(for usage: MessageTokenUsage) -> ModelPricingEffectivePrices {
+    public func effectivePrices(
+        for usage: MessageTokenUsage,
+        requestedAt: Date? = nil,
+        calendar: Calendar = .current
+    ) -> ModelPricingEffectivePrices {
         let basisTokens = ModelCostCalculator.tierBasisTokens(for: usage)
         let selectedTier = tiers
             .filter { $0.minimumTokens <= basisTokens }
@@ -58,14 +71,27 @@ public struct ModelPricing: Codable, Hashable, Sendable {
                 return lhs.minimumTokens < rhs.minimumTokens
             }
 
+        let timeOverride = matchingTimeOverride(requestedAt: requestedAt, calendar: calendar)
         return ModelPricingEffectivePrices(
             tierBasisTokens: basisTokens,
             tierMinimumTokens: selectedTier?.minimumTokens,
-            inputPerMillionTokens: selectedTier?.inputPerMillionTokens ?? inputPerMillionTokens,
-            outputPerMillionTokens: selectedTier?.outputPerMillionTokens ?? outputPerMillionTokens,
-            cacheWritePerMillionTokens: selectedTier?.cacheWritePerMillionTokens ?? cacheWritePerMillionTokens,
-            cacheReadPerMillionTokens: selectedTier?.cacheReadPerMillionTokens ?? cacheReadPerMillionTokens
+            timeOverrideID: timeOverride?.id,
+            timeOverrideStartMinuteOfDay: timeOverride?.startMinuteOfDay,
+            timeOverrideEndMinuteOfDay: timeOverride?.endMinuteOfDay,
+            inputPerMillionTokens: timeOverride?.inputPerMillionTokens ?? selectedTier?.inputPerMillionTokens ?? inputPerMillionTokens,
+            outputPerMillionTokens: timeOverride?.outputPerMillionTokens ?? selectedTier?.outputPerMillionTokens ?? outputPerMillionTokens,
+            cacheWritePerMillionTokens: timeOverride?.cacheWritePerMillionTokens ?? selectedTier?.cacheWritePerMillionTokens ?? cacheWritePerMillionTokens,
+            cacheReadPerMillionTokens: timeOverride?.cacheReadPerMillionTokens ?? selectedTier?.cacheReadPerMillionTokens ?? cacheReadPerMillionTokens
         )
+    }
+
+    public func matchingTimeOverride(
+        requestedAt: Date?,
+        calendar: Calendar = .current
+    ) -> ModelPricingTimeOverride? {
+        guard timeOverridesEnabled, let requestedAt else { return nil }
+        let minute = Self.minuteOfDay(for: requestedAt, calendar: calendar)
+        return timeOverrides.first { $0.contains(minuteOfDay: minute) }
     }
 
     public static func normalizedPrice(_ value: Double?) -> Double? {
@@ -83,6 +109,70 @@ public struct ModelPricing: Codable, Hashable, Sendable {
                 }
                 return $0.minimumTokens < $1.minimumTokens
             }
+    }
+
+    public static func normalizedTimeOverrides(_ timeOverrides: [ModelPricingTimeOverride]) -> [ModelPricingTimeOverride] {
+        timeOverrides
+            .map(\.normalized)
+            .filter { $0.isValidTimeWindow && !$0.isEffectivelyEmpty }
+            .sorted {
+                if $0.startMinuteOfDay == $1.startMinuteOfDay {
+                    if $0.endMinuteOfDay == $1.endMinuteOfDay {
+                        return $0.id.uuidString < $1.id.uuidString
+                    }
+                    return $0.endMinuteOfDay < $1.endMinuteOfDay
+                }
+                return $0.startMinuteOfDay < $1.startMinuteOfDay
+            }
+    }
+
+    public static func minuteOfDay(for date: Date, calendar: Calendar = .current) -> Int {
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        return ModelPricingTimeOverride.normalizedMinute(
+            (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        )
+    }
+}
+
+extension ModelPricing {
+    private enum CodingKeys: String, CodingKey {
+        case inputPerMillionTokens
+        case outputPerMillionTokens
+        case cacheWritePerMillionTokens
+        case cacheReadPerMillionTokens
+        case tiers
+        case timeOverridesEnabled
+        case timeOverrides
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            inputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens),
+            outputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens),
+            cacheWritePerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens),
+            cacheReadPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens),
+            tiers: try container.decodeIfPresent([ModelPricingTier].self, forKey: .tiers) ?? [],
+            timeOverridesEnabled: try container.decodeIfPresent(Bool.self, forKey: .timeOverridesEnabled) ?? false,
+            timeOverrides: try container.decodeIfPresent([ModelPricingTimeOverride].self, forKey: .timeOverrides) ?? []
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(inputPerMillionTokens, forKey: .inputPerMillionTokens)
+        try container.encodeIfPresent(outputPerMillionTokens, forKey: .outputPerMillionTokens)
+        try container.encodeIfPresent(cacheWritePerMillionTokens, forKey: .cacheWritePerMillionTokens)
+        try container.encodeIfPresent(cacheReadPerMillionTokens, forKey: .cacheReadPerMillionTokens)
+        if !tiers.isEmpty {
+            try container.encode(tiers, forKey: .tiers)
+        }
+        if timeOverridesEnabled {
+            try container.encode(timeOverridesEnabled, forKey: .timeOverridesEnabled)
+        }
+        if !timeOverrides.isEmpty {
+            try container.encode(timeOverrides, forKey: .timeOverrides)
+        }
     }
 }
 
@@ -132,10 +222,98 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
 public struct ModelPricingEffectivePrices: Hashable, Sendable {
     public var tierBasisTokens: Int
     public var tierMinimumTokens: Int?
+    public var timeOverrideID: UUID?
+    public var timeOverrideStartMinuteOfDay: Int?
+    public var timeOverrideEndMinuteOfDay: Int?
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
+}
+
+public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID
+    public var startMinuteOfDay: Int
+    public var endMinuteOfDay: Int
+    public var inputPerMillionTokens: Double?
+    public var outputPerMillionTokens: Double?
+    public var cacheWritePerMillionTokens: Double?
+    public var cacheReadPerMillionTokens: Double?
+
+    public init(
+        id: UUID = UUID(),
+        startMinuteOfDay: Int,
+        endMinuteOfDay: Int,
+        inputPerMillionTokens: Double? = nil,
+        outputPerMillionTokens: Double? = nil,
+        cacheWritePerMillionTokens: Double? = nil,
+        cacheReadPerMillionTokens: Double? = nil
+    ) {
+        self.id = id
+        self.startMinuteOfDay = Self.normalizedMinute(startMinuteOfDay)
+        self.endMinuteOfDay = Self.normalizedMinute(endMinuteOfDay)
+        self.inputPerMillionTokens = ModelPricing.normalizedPrice(inputPerMillionTokens)
+        self.outputPerMillionTokens = ModelPricing.normalizedPrice(outputPerMillionTokens)
+        self.cacheWritePerMillionTokens = ModelPricing.normalizedPrice(cacheWritePerMillionTokens)
+        self.cacheReadPerMillionTokens = ModelPricing.normalizedPrice(cacheReadPerMillionTokens)
+    }
+
+    public var isEffectivelyEmpty: Bool {
+        inputPerMillionTokens == nil
+            && outputPerMillionTokens == nil
+            && cacheWritePerMillionTokens == nil
+            && cacheReadPerMillionTokens == nil
+    }
+
+    public var isValidTimeWindow: Bool {
+        startMinuteOfDay != endMinuteOfDay
+    }
+
+    public var isCrossMidnight: Bool {
+        startMinuteOfDay > endMinuteOfDay
+    }
+
+    public var normalized: ModelPricingTimeOverride {
+        ModelPricingTimeOverride(
+            id: id,
+            startMinuteOfDay: startMinuteOfDay,
+            endMinuteOfDay: endMinuteOfDay,
+            inputPerMillionTokens: inputPerMillionTokens,
+            outputPerMillionTokens: outputPerMillionTokens,
+            cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheReadPerMillionTokens: cacheReadPerMillionTokens
+        )
+    }
+
+    public func contains(minuteOfDay minute: Int) -> Bool {
+        let minute = Self.normalizedMinute(minute)
+        if startMinuteOfDay < endMinuteOfDay {
+            return minute >= startMinuteOfDay && minute < endMinuteOfDay
+        }
+        if startMinuteOfDay > endMinuteOfDay {
+            return minute >= startMinuteOfDay || minute < endMinuteOfDay
+        }
+        return false
+    }
+
+    public static func normalizedMinute(_ minute: Int) -> Int {
+        let dayMinutes = 24 * 60
+        return ((minute % dayMinutes) + dayMinutes) % dayMinutes
+    }
+}
+
+public enum ModelPricingTimeRangeText {
+    nonisolated public static func text(
+        startMinuteOfDay: Int,
+        endMinuteOfDay: Int
+    ) -> String {
+        "\(displayTime(minuteOfDay: startMinuteOfDay)) - \(displayTime(minuteOfDay: endMinuteOfDay))"
+    }
+
+    nonisolated public static func displayTime(minuteOfDay minute: Int) -> String {
+        let minute = ModelPricingTimeOverride.normalizedMinute(minute)
+        return String(format: "%02d:%02d", minute / 60, minute % 60)
+    }
 }
 
 public enum ModelPricingTierRangeText {
@@ -255,6 +433,9 @@ public struct MessageCostEstimate: Codable, Hashable, Sendable {
     public var totalCost: Double
     public var tierBasisTokens: Int
     public var tierMinimumTokens: Int?
+    public var timeOverrideID: UUID?
+    public var timeOverrideStartMinuteOfDay: Int?
+    public var timeOverrideEndMinuteOfDay: Int?
     public var components: [MessageCostComponent]
     public var isEstimatedFromCurrentPricing: Bool
 
@@ -262,12 +443,18 @@ public struct MessageCostEstimate: Codable, Hashable, Sendable {
         totalCost: Double,
         tierBasisTokens: Int,
         tierMinimumTokens: Int?,
+        timeOverrideID: UUID? = nil,
+        timeOverrideStartMinuteOfDay: Int? = nil,
+        timeOverrideEndMinuteOfDay: Int? = nil,
         components: [MessageCostComponent],
         isEstimatedFromCurrentPricing: Bool = false
     ) {
         self.totalCost = max(0, totalCost)
         self.tierBasisTokens = max(0, tierBasisTokens)
         self.tierMinimumTokens = tierMinimumTokens.map { max(0, $0) }
+        self.timeOverrideID = timeOverrideID
+        self.timeOverrideStartMinuteOfDay = timeOverrideStartMinuteOfDay.map(ModelPricingTimeOverride.normalizedMinute)
+        self.timeOverrideEndMinuteOfDay = timeOverrideEndMinuteOfDay.map(ModelPricingTimeOverride.normalizedMinute)
         self.components = components.filter { $0.tokens > 0 && $0.pricePerMillionTokens >= 0 }
         self.isEstimatedFromCurrentPricing = isEstimatedFromCurrentPricing
     }
@@ -287,13 +474,15 @@ public enum ModelCostCalculator {
     public static func estimateCost(
         usage: MessageTokenUsage?,
         pricing: ModelPricing?,
+        requestedAt: Date? = nil,
+        calendar: Calendar = .current,
         isEstimatedFromCurrentPricing: Bool = false
     ) -> MessageCostEstimate? {
         guard let usage, usage.hasAnyData, let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty else {
             return nil
         }
 
-        let effective = pricing.effectivePrices(for: usage)
+        let effective = pricing.effectivePrices(for: usage, requestedAt: requestedAt, calendar: calendar)
         var components: [MessageCostComponent] = []
 
         appendComponent(
@@ -327,6 +516,9 @@ public enum ModelCostCalculator {
             totalCost: total,
             tierBasisTokens: effective.tierBasisTokens,
             tierMinimumTokens: effective.tierMinimumTokens,
+            timeOverrideID: effective.timeOverrideID,
+            timeOverrideStartMinuteOfDay: effective.timeOverrideStartMinuteOfDay,
+            timeOverrideEndMinuteOfDay: effective.timeOverrideEndMinuteOfDay,
             components: components,
             isEstimatedFromCurrentPricing: isEstimatedFromCurrentPricing
         )
@@ -373,6 +565,7 @@ public enum MessageCostResolver {
         return ModelCostCalculator.estimateCost(
             usage: usage,
             pricing: pricing,
+            requestedAt: message.requestedAt ?? message.responseMetrics?.requestStartedAt,
             isEstimatedFromCurrentPricing: true
         )
     }

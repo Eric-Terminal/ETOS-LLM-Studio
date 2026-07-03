@@ -874,6 +874,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             providerName: event.providerName,
             modelID: event.modelID,
             tokenTotals: tokenTotals(for: event.tokenUsage),
+            requestedAt: event.requestedAt,
             pricingByModelKey: pricingByModelKey
         )
     }
@@ -882,12 +883,14 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         providerName: String,
         modelID: String,
         tokenTotals: RequestLogTokenTotals,
+        requestedAt: Date? = nil,
         pricingByModelKey: [String: ModelPricing]
     ) -> UsageAnalyticsCostSummary {
         guard let pricing = pricingByModelKey[modelKey(providerName: providerName, modelID: modelID)],
               let estimate = ModelCostCalculator.estimateCost(
                 usage: tokenUsage(for: tokenTotals),
                 pricing: pricing,
+                requestedAt: requestedAt,
                 isEstimatedFromCurrentPricing: true
               ) else {
             return .init()

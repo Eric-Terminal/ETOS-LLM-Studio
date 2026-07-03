@@ -67,6 +67,13 @@ struct MessageCostDetailRows: View {
             }
         }
 
+        if let startMinute = estimate.timeOverrideStartMinuteOfDay,
+           let endMinute = estimate.timeOverrideEndMinuteOfDay {
+            LabeledContent(NSLocalizedString("命中时间段", comment: "Matched peak valley pricing time range label")) {
+                Text(timeRangeText(startMinute: startMinute, endMinute: endMinute))
+            }
+        }
+
         ForEach(estimate.components) { component in
             VStack(alignment: .leading, spacing: 3) {
                 LabeledContent(component.kind.localizedTitle) {
@@ -96,5 +103,9 @@ struct MessageCostDetailRows: View {
 
     private func tierRangeText(minimumTokens: Int) -> String {
         ModelPricingTierRangeText.text(minimumTokens: minimumTokens)
+    }
+
+    private func timeRangeText(startMinute: Int, endMinute: Int) -> String {
+        ModelPricingTimeRangeText.text(startMinuteOfDay: startMinute, endMinuteOfDay: endMinute)
     }
 }

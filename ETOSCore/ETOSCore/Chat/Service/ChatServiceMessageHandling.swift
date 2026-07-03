@@ -283,7 +283,8 @@ extension ChatService {
         message.modelReference = message.modelReference ?? context.modelReference
         message.costEstimate = ModelCostCalculator.estimateCost(
             usage: message.tokenUsage,
-            pricing: context.modelPricing
+            pricing: context.modelPricing,
+            requestedAt: message.requestedAt ?? context.requestedAt
         )
     }
 
