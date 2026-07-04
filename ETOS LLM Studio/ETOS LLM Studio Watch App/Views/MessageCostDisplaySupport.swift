@@ -57,20 +57,22 @@ struct MessageCostDetailRows: View {
                 .monospacedDigit()
         }
 
-        LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
-            Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
-        }
-
-        if let tierMinimumTokens = estimate.tierMinimumTokens {
-            LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
-                Text(tierRangeText(minimumTokens: tierMinimumTokens))
+        if hasTokenComponents {
+            LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
+                Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
             }
-        }
 
-        if let startMinute = estimate.timeOverrideStartMinuteOfDay,
-           let endMinute = estimate.timeOverrideEndMinuteOfDay {
-            LabeledContent(NSLocalizedString("命中时间段", comment: "Matched peak valley pricing time range label")) {
-                Text(timeRangeText(startMinute: startMinute, endMinute: endMinute))
+            if let tierMinimumTokens = estimate.tierMinimumTokens {
+                LabeledContent(NSLocalizedString("命中阶梯", comment: "Matched pricing tier label")) {
+                    Text(tierRangeText(minimumTokens: tierMinimumTokens))
+                }
+            }
+
+            if let startMinute = estimate.timeOverrideStartMinuteOfDay,
+               let endMinute = estimate.timeOverrideEndMinuteOfDay {
+                LabeledContent(NSLocalizedString("命中时间段", comment: "Matched peak valley pricing time range label")) {
+                    Text(timeRangeText(startMinute: startMinute, endMinute: endMinute))
+                }
             }
         }
 
@@ -93,8 +95,19 @@ struct MessageCostDetailRows: View {
             .foregroundStyle(.secondary)
     }
 
+    private var hasTokenComponents: Bool {
+        estimate.components.contains { $0.kind != .request }
+    }
+
     private func componentFormula(_ component: MessageCostComponent) -> String {
-        String(
+        if component.kind == .request {
+            return String(
+                format: NSLocalizedString("%d 次 × %@/次", comment: "Per-request cost component calculation formula"),
+                component.tokens,
+                MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens)
+            )
+        }
+        return String(
             format: NSLocalizedString("%d tokens / 1M tokens × %@", comment: "Cost component calculation formula"),
             component.tokens,
             MessageCostFormatter.formatPriceValue(component.pricePerMillionTokens)

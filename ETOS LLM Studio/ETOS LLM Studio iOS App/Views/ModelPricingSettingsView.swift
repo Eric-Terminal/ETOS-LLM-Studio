@@ -17,77 +17,102 @@ struct ModelPricingSettingsView: View {
     var body: some View {
         Form {
             Section(
-                header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
-                footer: Text(NSLocalizedString("价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。", comment: "Model pricing unit hint"))
+                header: Text(NSLocalizedString("计费方式", comment: "Model pricing billing mode section")),
+                footer: Text(NSLocalizedString("按 Token 时继续使用输入、输出和缓存 token 单价；按次时每条模型请求使用固定价格。", comment: "Model pricing billing mode footer"))
             ) {
-                ModelPricingTextField(
-                    title: NSLocalizedString("输入价格", comment: "Input token price"),
-                    text: $draft.inputPrice
-                )
-                ModelPricingTextField(
-                    title: NSLocalizedString("输出价格", comment: "Output token price"),
-                    text: $draft.outputPrice
-                )
-                ModelPricingTextField(
-                    title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"),
-                    text: $draft.cacheWritePrice
-                )
-                ModelPricingTextField(
-                    title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"),
-                    text: $draft.cacheReadPrice
-                )
+                Picker(NSLocalizedString("计费方式", comment: "Model pricing billing mode picker"), selection: $draft.billingMode) {
+                    ForEach(ModelPricingBillingMode.allCases, id: \.self) { mode in
+                        Text(mode.localizedTitle)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
             }
 
-            Section(
-                header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
-                footer: Text(NSLocalizedString("阶梯依据为输入 Tokens + 缓存创建 Tokens + 缓存命中 Tokens。命中某个起始值后，整条请求使用该档位价格；阶梯留空的价格继承基础价格。", comment: "Tiered pricing rule hint"))
-            ) {
-                if draft.tiers.isEmpty {
-                    Text(NSLocalizedString("当前没有阶梯价格。", comment: "No tiered pricing empty state"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
+            if draft.billingMode == .perRequest {
+                Section(
+                    header: Text(NSLocalizedString("按次价格", comment: "Per-request pricing section")),
+                    footer: Text(NSLocalizedString("按次计费每条模型请求只计算一次固定价格，不依赖服务商是否返回 token 用量。", comment: "Per-request pricing footer"))
+                ) {
+                    ModelPricingTextField(
+                        title: NSLocalizedString("每次请求价格", comment: "Per-request price field"),
+                        text: $draft.perRequestPrice
+                    )
+                }
+            } else {
+                Section(
+                    header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
+                    footer: Text(NSLocalizedString("价格单位为每 1M tokens。留空表示这类 token 不参与费用估算。", comment: "Model pricing unit hint"))
+                ) {
+                    ModelPricingTextField(
+                        title: NSLocalizedString("输入价格", comment: "Input token price"),
+                        text: $draft.inputPrice
+                    )
+                    ModelPricingTextField(
+                        title: NSLocalizedString("输出价格", comment: "Output token price"),
+                        text: $draft.outputPrice
+                    )
+                    ModelPricingTextField(
+                        title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"),
+                        text: $draft.cacheWritePrice
+                    )
+                    ModelPricingTextField(
+                        title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"),
+                        text: $draft.cacheReadPrice
+                    )
+                }
+
+                Section(
+                    header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
+                    footer: Text(NSLocalizedString("阶梯依据为输入 Tokens + 缓存创建 Tokens + 缓存命中 Tokens。命中某个起始值后，整条请求使用该档位价格；阶梯留空的价格继承基础价格。", comment: "Tiered pricing rule hint"))
+                ) {
+                    if draft.tiers.isEmpty {
+                        Text(NSLocalizedString("当前没有阶梯价格。", comment: "No tiered pricing empty state"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
+                            NavigationLink {
+                                ModelPricingTierSettingsView(tier: tierBinding)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    let tier = tierBinding.wrappedValue
+                                    Text(tierRangeTitle(tier))
+                                    Text(tierSubtitle(tier))
+                                        .etFont(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .onDelete(perform: deleteTiers)
+                    }
+
+                    Button {
+                        draft.tiers.append(ModelPricingTierDraft())
+                    } label: {
+                        Label(NSLocalizedString("添加阶梯", comment: "Add pricing tier button"), systemImage: "plus")
+                    }
+                }
+
+                Section(
+                    header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
+                    footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的每日时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
+                ) {
+                    Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
+
+                    if draft.timeOverridesEnabled {
                         NavigationLink {
-                            ModelPricingTierSettingsView(tier: tierBinding)
+                            ModelPricingTimeOverridesView(draft: $draft)
                         } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                let tier = tierBinding.wrappedValue
-                                Text(tierRangeTitle(tier))
-                                Text(tierSubtitle(tier))
-                                    .etFont(.caption)
+                            LabeledContent(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row")) {
+                                Text(timeOverridesSummary)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                    }
-                    .onDelete(perform: deleteTiers)
-                }
-
-                Button {
-                    draft.tiers.append(ModelPricingTierDraft())
-                } label: {
-                    Label(NSLocalizedString("添加阶梯", comment: "Add pricing tier button"), systemImage: "plus")
-                }
-            }
-
-            Section(
-                header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
-                footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的每日时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
-            ) {
-                Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
-
-                if draft.timeOverridesEnabled {
-                    NavigationLink {
-                        ModelPricingTimeOverridesView(draft: $draft)
-                    } label: {
+                    } else if !draft.timeOverrides.isEmpty {
                         LabeledContent(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row")) {
-                            Text(timeOverridesSummary)
+                            Text(NSLocalizedString("峰谷已关闭", comment: "Peak valley pricing disabled summary"))
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                } else if !draft.timeOverrides.isEmpty {
-                    LabeledContent(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row")) {
-                        Text(NSLocalizedString("峰谷已关闭", comment: "Peak valley pricing disabled summary"))
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -415,6 +440,8 @@ private struct ModelPricingTimeOverrideSettingsView: View {
 }
 
 struct ModelPricingDraft: Equatable {
+    var billingMode: ModelPricingBillingMode = .token
+    var perRequestPrice: String = ""
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
@@ -427,6 +454,8 @@ struct ModelPricingDraft: Equatable {
 
     nonisolated init(pricing: ModelPricing?) {
         let pricing = pricing?.normalized
+        billingMode = pricing?.billingMode ?? .token
+        perRequestPrice = Self.string(from: pricing?.perRequestPrice)
         inputPrice = Self.string(from: pricing?.inputPerMillionTokens)
         outputPrice = Self.string(from: pricing?.outputPerMillionTokens)
         cacheWritePrice = Self.string(from: pricing?.cacheWritePerMillionTokens)
@@ -437,7 +466,9 @@ struct ModelPricingDraft: Equatable {
     }
 
     nonisolated var isEmpty: Bool {
-        inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        billingMode == .token
+            && perRequestPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -454,7 +485,9 @@ struct ModelPricingDraft: Equatable {
             cacheReadPerMillionTokens: Self.double(from: cacheReadPrice),
             tiers: tiers.compactMap(\.modelPricingTier),
             timeOverridesEnabled: timeOverridesEnabled,
-            timeOverrides: timeOverrides.compactMap(\.modelPricingTimeOverride)
+            timeOverrides: timeOverrides.compactMap(\.modelPricingTimeOverride),
+            billingMode: billingMode,
+            perRequestPrice: Self.double(from: perRequestPrice)
         )
         return normalized.isEffectivelyEmpty ? nil : normalized
     }

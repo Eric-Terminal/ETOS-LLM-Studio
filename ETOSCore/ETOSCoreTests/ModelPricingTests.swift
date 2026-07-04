@@ -21,6 +21,64 @@ struct ModelPricingTests {
         #expect(estimate == nil)
     }
 
+    @Test("按次价格不依赖 token 用量并按请求数量累计")
+    func perRequestPricingAddsFixedRequestCost() throws {
+        let pricing = ModelPricing(billingMode: .perRequest, perRequestPrice: 0.03)
+
+        let estimate = try #require(
+            ModelCostCalculator.estimateCost(
+                usage: nil,
+                pricing: pricing,
+                requestCount: 3
+            )
+        )
+
+        #expect(estimate.tierBasisTokens == 0)
+        #expect(estimate.components.count == 1)
+        #expect(estimate.components.first?.kind == .request)
+        #expect(estimate.components.first?.tokens == 3)
+        #expect(estimate.components.first?.pricePerMillionTokens == 0.03)
+        #expect(abs(estimate.totalCost - 0.09) < 0.000001)
+    }
+
+    @Test("按次价格可以估算没有 token 用量的旧消息")
+    func resolverUsesPerRequestPricingWithoutTokenUsage() throws {
+        let providerID = UUID()
+        let modelID = UUID()
+        let reference = MessageModelReference(
+            providerID: providerID,
+            providerName: "Per Request Provider",
+            modelUUID: modelID,
+            modelName: "per-request",
+            modelDisplayName: "Per Request"
+        )
+        let provider = Provider(
+            id: providerID,
+            name: "Per Request Provider",
+            baseURL: "https://per-request.example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(
+                    id: modelID,
+                    modelName: "per-request",
+                    pricing: ModelPricing(billingMode: .perRequest, perRequestPrice: 0.05)
+                )
+            ]
+        )
+        let message = ChatMessage(
+            role: .assistant,
+            content: "旧消息",
+            modelReference: reference
+        )
+
+        let estimate = try #require(MessageCostResolver.resolvedCost(for: message, providers: [provider]))
+
+        #expect(estimate.isEstimatedFromCurrentPricing)
+        #expect(estimate.components.first?.kind == .request)
+        #expect(abs(estimate.totalCost - 0.05) < 0.000001)
+    }
+
     @Test("基础价格会按未命中输入输出和缓存费用累计")
     func basePricingAddsAllConfiguredComponents() throws {
         let usage = MessageTokenUsage(
@@ -213,6 +271,19 @@ struct ModelPricingTests {
         #expect(pricing.inputPerMillionTokens == 1)
         #expect(!pricing.timeOverridesEnabled)
         #expect(pricing.timeOverrides.isEmpty)
+    }
+
+    @Test("只有每次请求价格的配置会按按次模式解码")
+    func perRequestOnlyPricingDecodesAsPerRequestMode() throws {
+        let data = try #require(
+            #"{"perRequestPrice":0.03}"#
+                .data(using: .utf8)
+        )
+
+        let pricing = try JSONDecoder().decode(ModelPricing.self, from: data)
+
+        #expect(pricing.billingMode == .perRequest)
+        #expect(pricing.perRequestPrice == 0.03)
     }
 
     @Test("非空价格配置可以 Codable 往返")

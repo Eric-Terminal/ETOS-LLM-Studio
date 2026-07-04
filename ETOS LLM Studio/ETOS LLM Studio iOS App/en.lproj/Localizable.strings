@@ -4672,3 +4672,14 @@
 "留空时继承基础价格和已命中的阶梯价格。" = "Leave blank to inherit base prices and the matched tier.";
 "峰谷价格" = "Peak-Valley Price";
 "命中时间段" = "Matched Time Range";
+"计费方式" = "Billing Method";
+"按 Token" = "By Token";
+"按次" = "Per Request";
+"按 Token 时继续使用输入、输出和缓存 token 单价；按次时每条模型请求使用固定价格。" = "By token uses input, output, and cache token rates. Per request uses one fixed price for each model request.";
+"按次价格" = "Per-Request Price";
+"按次计费每条模型请求只计算一次固定价格，不依赖服务商是否返回 token 用量。" = "Per-request billing applies one fixed price to each model request and does not depend on returned token usage.";
+"每次请求价格" = "Price per Request";
+"按次计费" = "Per-request billing";
+"未填写价格" = "Price missing";
+"每次 %@" = "%@ each";
+"%d 次 × %@/次" = "%d requests × %@/request";

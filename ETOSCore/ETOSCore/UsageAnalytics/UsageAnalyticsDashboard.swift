@@ -862,6 +862,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             providerName: item.providerName,
             modelID: item.modelID,
             tokenTotals: item.tokenTotals,
+            requestCount: item.requestCount,
             pricingByModelKey: pricingByModelKey
         )
     }
@@ -874,6 +875,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
             providerName: event.providerName,
             modelID: event.modelID,
             tokenTotals: tokenTotals(for: event.tokenUsage),
+            requestCount: 1,
             requestedAt: event.requestedAt,
             pricingByModelKey: pricingByModelKey
         )
@@ -883,6 +885,7 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
         providerName: String,
         modelID: String,
         tokenTotals: RequestLogTokenTotals,
+        requestCount: Int,
         requestedAt: Date? = nil,
         pricingByModelKey: [String: ModelPricing]
     ) -> UsageAnalyticsCostSummary {
@@ -891,7 +894,8 @@ public final class UsageAnalyticsDashboardViewModel: ObservableObject {
                 usage: tokenUsage(for: tokenTotals),
                 pricing: pricing,
                 requestedAt: requestedAt,
-                isEstimatedFromCurrentPricing: true
+                isEstimatedFromCurrentPricing: true,
+                requestCount: requestCount
               ) else {
             return .init()
         }

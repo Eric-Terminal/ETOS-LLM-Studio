@@ -240,6 +240,18 @@ extension ModelSettingsView {
         guard let pricing = model.pricing?.normalized, !pricing.isEffectivelyEmpty else {
             return NSLocalizedString("未配置", comment: "Model pricing not configured summary")
         }
+        if pricing.billingMode == .perRequest {
+            var parts = [NSLocalizedString("按次计费", comment: "Per-request pricing summary")]
+            if let perRequestPrice = pricing.perRequestPrice {
+                parts.append(String(
+                    format: NSLocalizedString("每次 %@", comment: "Per-request pricing value summary"),
+                    MessageCostFormatter.formatPriceValue(perRequestPrice)
+                ))
+            } else {
+                parts.append(NSLocalizedString("未填写价格", comment: "Pricing value missing summary"))
+            }
+            return parts.joined(separator: NSLocalizedString("，", comment: "List separator"))
+        }
         let baseCount = [
             pricing.inputPerMillionTokens,
             pricing.outputPerMillionTokens,

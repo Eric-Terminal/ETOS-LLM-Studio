@@ -15,62 +15,83 @@ struct ModelPricingSettingsView: View {
     var body: some View {
         List {
             Section(
-                header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
-                footer: Text(NSLocalizedString("单位为每 1M tokens，留空表示不参与估算。", comment: "Watch model pricing unit hint"))
+                header: Text(NSLocalizedString("计费方式", comment: "Model pricing billing mode section")),
+                footer: Text(NSLocalizedString("按 Token 时继续使用输入、输出和缓存 token 单价；按次时每条模型请求使用固定价格。", comment: "Model pricing billing mode footer"))
             ) {
-                ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $draft.inputPrice)
-                ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $draft.outputPrice)
-                ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $draft.cacheWritePrice)
-                ModelPricingTextField(title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"), text: $draft.cacheReadPrice)
-            }
-
-            Section(
-                header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
-                footer: Text(NSLocalizedString("阶梯依据为输入 + 缓存创建 + 缓存命中。阶梯空价格继承基础价格。", comment: "Watch tiered pricing rule hint"))
-            ) {
-                ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
-                    NavigationLink {
-                        ModelPricingTierSettingsView(tier: tierBinding)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            let tier = tierBinding.wrappedValue
-                            Text(tierRangeTitle(tier))
-                            Text(tierSubtitle(tier))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                Picker(NSLocalizedString("计费方式", comment: "Model pricing billing mode picker"), selection: $draft.billingMode) {
+                    ForEach(ModelPricingBillingMode.allCases, id: \.self) { mode in
+                        Text(mode.localizedTitle)
+                            .tag(mode)
                     }
-                }
-                .onDelete(perform: deleteTiers)
-
-                Button {
-                    draft.tiers.append(ModelPricingTierDraft())
-                } label: {
-                    Label(NSLocalizedString("添加阶梯", comment: "Add pricing tier button"), systemImage: "plus")
                 }
             }
 
-            Section(
-                header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
-                footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的每日时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
-            ) {
-                Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
+            if draft.billingMode == .perRequest {
+                Section(
+                    header: Text(NSLocalizedString("按次价格", comment: "Per-request pricing section")),
+                    footer: Text(NSLocalizedString("按次计费每条模型请求只计算一次固定价格，不依赖服务商是否返回 token 用量。", comment: "Per-request pricing footer"))
+                ) {
+                    ModelPricingTextField(title: NSLocalizedString("每次请求价格", comment: "Per-request price field"), text: $draft.perRequestPrice)
+                }
+            } else {
+                Section(
+                    header: Text(NSLocalizedString("基础价格", comment: "Model pricing base price section")),
+                    footer: Text(NSLocalizedString("单位为每 1M tokens，留空表示不参与估算。", comment: "Watch model pricing unit hint"))
+                ) {
+                    ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $draft.inputPrice)
+                    ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $draft.outputPrice)
+                    ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $draft.cacheWritePrice)
+                    ModelPricingTextField(title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"), text: $draft.cacheReadPrice)
+                }
 
-                if draft.timeOverridesEnabled {
-                    NavigationLink {
-                        ModelPricingTimeOverridesView(draft: $draft)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row"))
-                            Text(timeOverridesSummary)
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
+                Section(
+                    header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
+                    footer: Text(NSLocalizedString("阶梯依据为输入 + 缓存创建 + 缓存命中。阶梯空价格继承基础价格。", comment: "Watch tiered pricing rule hint"))
+                ) {
+                    ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
+                        NavigationLink {
+                            ModelPricingTierSettingsView(tier: tierBinding)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                let tier = tierBinding.wrappedValue
+                                Text(tierRangeTitle(tier))
+                                Text(tierSubtitle(tier))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                } else if !draft.timeOverrides.isEmpty {
-                    LabeledContent(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row")) {
-                        Text(NSLocalizedString("峰谷已关闭", comment: "Peak valley pricing disabled summary"))
-                            .foregroundStyle(.secondary)
+                    .onDelete(perform: deleteTiers)
+
+                    Button {
+                        draft.tiers.append(ModelPricingTierDraft())
+                    } label: {
+                        Label(NSLocalizedString("添加阶梯", comment: "Add pricing tier button"), systemImage: "plus")
+                    }
+                }
+
+                Section(
+                    header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
+                    footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的每日时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
+                ) {
+                    Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
+
+                    if draft.timeOverridesEnabled {
+                        NavigationLink {
+                            ModelPricingTimeOverridesView(draft: $draft)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row"))
+                                Text(timeOverridesSummary)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else if !draft.timeOverrides.isEmpty {
+                        LabeledContent(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row")) {
+                            Text(NSLocalizedString("峰谷已关闭", comment: "Peak valley pricing disabled summary"))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -369,6 +390,8 @@ private struct ModelPricingTimeOverrideSettingsView: View {
 }
 
 struct ModelPricingDraft: Equatable {
+    var billingMode: ModelPricingBillingMode = .token
+    var perRequestPrice: String = ""
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
@@ -381,6 +404,8 @@ struct ModelPricingDraft: Equatable {
 
     nonisolated init(pricing: ModelPricing?) {
         let pricing = pricing?.normalized
+        billingMode = pricing?.billingMode ?? .token
+        perRequestPrice = Self.string(from: pricing?.perRequestPrice)
         inputPrice = Self.string(from: pricing?.inputPerMillionTokens)
         outputPrice = Self.string(from: pricing?.outputPerMillionTokens)
         cacheWritePrice = Self.string(from: pricing?.cacheWritePerMillionTokens)
@@ -391,7 +416,9 @@ struct ModelPricingDraft: Equatable {
     }
 
     nonisolated var isEmpty: Bool {
-        inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        billingMode == .token
+            && perRequestPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -408,7 +435,9 @@ struct ModelPricingDraft: Equatable {
             cacheReadPerMillionTokens: Self.double(from: cacheReadPrice),
             tiers: tiers.compactMap(\.modelPricingTier),
             timeOverridesEnabled: timeOverridesEnabled,
-            timeOverrides: timeOverrides.compactMap(\.modelPricingTimeOverride)
+            timeOverrides: timeOverrides.compactMap(\.modelPricingTimeOverride),
+            billingMode: billingMode,
+            perRequestPrice: Self.double(from: perRequestPrice)
         )
         return normalized.isEffectivelyEmpty ? nil : normalized
     }

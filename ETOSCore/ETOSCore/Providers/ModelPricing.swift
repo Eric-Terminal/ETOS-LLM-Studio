@@ -8,6 +8,20 @@
 
 import Foundation
 
+public enum ModelPricingBillingMode: String, Codable, CaseIterable, Hashable, Sendable {
+    case token
+    case perRequest
+
+    public var localizedTitle: String {
+        switch self {
+        case .token:
+            return NSLocalizedString("按 Token", comment: "Token-based pricing mode")
+        case .perRequest:
+            return NSLocalizedString("按次", comment: "Per-request pricing mode")
+        }
+    }
+}
+
 public struct ModelPricing: Codable, Hashable, Sendable {
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
@@ -16,6 +30,8 @@ public struct ModelPricing: Codable, Hashable, Sendable {
     public var tiers: [ModelPricingTier]
     public var timeOverridesEnabled: Bool
     public var timeOverrides: [ModelPricingTimeOverride]
+    public var billingMode: ModelPricingBillingMode
+    public var perRequestPrice: Double?
 
     public init(
         inputPerMillionTokens: Double? = nil,
@@ -24,7 +40,9 @@ public struct ModelPricing: Codable, Hashable, Sendable {
         cacheReadPerMillionTokens: Double? = nil,
         tiers: [ModelPricingTier] = [],
         timeOverridesEnabled: Bool = false,
-        timeOverrides: [ModelPricingTimeOverride] = []
+        timeOverrides: [ModelPricingTimeOverride] = [],
+        billingMode: ModelPricingBillingMode = .token,
+        perRequestPrice: Double? = nil
     ) {
         self.inputPerMillionTokens = Self.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = Self.normalizedPrice(outputPerMillionTokens)
@@ -33,13 +51,17 @@ public struct ModelPricing: Codable, Hashable, Sendable {
         self.tiers = Self.normalizedTiers(tiers)
         self.timeOverridesEnabled = timeOverridesEnabled
         self.timeOverrides = Self.normalizedTimeOverrides(timeOverrides)
+        self.billingMode = billingMode
+        self.perRequestPrice = Self.normalizedPrice(perRequestPrice)
     }
 
     public var isEffectivelyEmpty: Bool {
-        inputPerMillionTokens == nil
+        billingMode == .token
+            && inputPerMillionTokens == nil
             && outputPerMillionTokens == nil
             && cacheWritePerMillionTokens == nil
             && cacheReadPerMillionTokens == nil
+            && perRequestPrice == nil
             && tiers.isEmpty
             && (!timeOverridesEnabled || timeOverrides.isEmpty)
     }
@@ -52,7 +74,9 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             cacheReadPerMillionTokens: cacheReadPerMillionTokens,
             tiers: tiers,
             timeOverridesEnabled: timeOverridesEnabled,
-            timeOverrides: timeOverrides
+            timeOverrides: timeOverrides,
+            billingMode: billingMode,
+            perRequestPrice: perRequestPrice
         )
     }
 
@@ -143,18 +167,40 @@ extension ModelPricing {
         case tiers
         case timeOverridesEnabled
         case timeOverrides
+        case billingMode
+        case perRequestPrice
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let inputPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens)
+        let outputPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens)
+        let cacheWritePerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens)
+        let cacheReadPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens)
+        let tiers = try container.decodeIfPresent([ModelPricingTier].self, forKey: .tiers) ?? []
+        let timeOverridesEnabled = try container.decodeIfPresent(Bool.self, forKey: .timeOverridesEnabled) ?? false
+        let timeOverrides = try container.decodeIfPresent([ModelPricingTimeOverride].self, forKey: .timeOverrides) ?? []
+        let perRequestPrice = try container.decodeIfPresent(Double.self, forKey: .perRequestPrice)
+        let billingMode = try container.decodeIfPresent(ModelPricingBillingMode.self, forKey: .billingMode)
+            ?? Self.inferredBillingMode(
+                perRequestPrice: perRequestPrice,
+                inputPerMillionTokens: inputPerMillionTokens,
+                outputPerMillionTokens: outputPerMillionTokens,
+                cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+                cacheReadPerMillionTokens: cacheReadPerMillionTokens,
+                tiers: tiers,
+                timeOverrides: timeOverrides
+            )
         self.init(
-            inputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens),
-            outputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens),
-            cacheWritePerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens),
-            cacheReadPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens),
-            tiers: try container.decodeIfPresent([ModelPricingTier].self, forKey: .tiers) ?? [],
-            timeOverridesEnabled: try container.decodeIfPresent(Bool.self, forKey: .timeOverridesEnabled) ?? false,
-            timeOverrides: try container.decodeIfPresent([ModelPricingTimeOverride].self, forKey: .timeOverrides) ?? []
+            inputPerMillionTokens: inputPerMillionTokens,
+            outputPerMillionTokens: outputPerMillionTokens,
+            cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheReadPerMillionTokens: cacheReadPerMillionTokens,
+            tiers: tiers,
+            timeOverridesEnabled: timeOverridesEnabled,
+            timeOverrides: timeOverrides,
+            billingMode: billingMode,
+            perRequestPrice: perRequestPrice
         )
     }
 
@@ -173,6 +219,31 @@ extension ModelPricing {
         if !timeOverrides.isEmpty {
             try container.encode(timeOverrides, forKey: .timeOverrides)
         }
+        if billingMode != .token {
+            try container.encode(billingMode, forKey: .billingMode)
+        }
+        try container.encodeIfPresent(perRequestPrice, forKey: .perRequestPrice)
+    }
+
+    private static func inferredBillingMode(
+        perRequestPrice: Double?,
+        inputPerMillionTokens: Double?,
+        outputPerMillionTokens: Double?,
+        cacheWritePerMillionTokens: Double?,
+        cacheReadPerMillionTokens: Double?,
+        tiers: [ModelPricingTier],
+        timeOverrides: [ModelPricingTimeOverride]
+    ) -> ModelPricingBillingMode {
+        if perRequestPrice != nil,
+           inputPerMillionTokens == nil,
+           outputPerMillionTokens == nil,
+           cacheWritePerMillionTokens == nil,
+           cacheReadPerMillionTokens == nil,
+           tiers.isEmpty,
+           timeOverrides.isEmpty {
+            return .perRequest
+        }
+        return .token
     }
 }
 
@@ -390,6 +461,7 @@ public struct MessageModelReference: Codable, Hashable, Sendable {
 }
 
 public enum MessageCostComponentKind: String, Codable, CaseIterable, Hashable, Sendable {
+    case request
     case input
     case output
     case cacheWrite
@@ -397,6 +469,8 @@ public enum MessageCostComponentKind: String, Codable, CaseIterable, Hashable, S
 
     public var localizedTitle: String {
         switch self {
+        case .request:
+            return NSLocalizedString("请求", comment: "Cost component request title")
         case .input:
             return NSLocalizedString("输入", comment: "Cost component input title")
         case .output:
@@ -476,11 +550,23 @@ public enum ModelCostCalculator {
         pricing: ModelPricing?,
         requestedAt: Date? = nil,
         calendar: Calendar = .current,
-        isEstimatedFromCurrentPricing: Bool = false
+        isEstimatedFromCurrentPricing: Bool = false,
+        requestCount: Int = 1
     ) -> MessageCostEstimate? {
-        guard let usage, usage.hasAnyData, let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty else {
+        guard let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty else {
             return nil
         }
+
+        if pricing.billingMode == .perRequest {
+            return estimatePerRequestCost(
+                usage: usage,
+                pricing: pricing,
+                isEstimatedFromCurrentPricing: isEstimatedFromCurrentPricing,
+                requestCount: requestCount
+            )
+        }
+
+        guard let usage, usage.hasAnyData else { return nil }
 
         let effective = pricing.effectivePrices(for: usage, requestedAt: requestedAt, calendar: calendar)
         var components: [MessageCostComponent] = []
@@ -524,6 +610,29 @@ public enum ModelCostCalculator {
         )
     }
 
+    private static func estimatePerRequestCost(
+        usage: MessageTokenUsage?,
+        pricing: ModelPricing,
+        isEstimatedFromCurrentPricing: Bool,
+        requestCount: Int
+    ) -> MessageCostEstimate? {
+        guard let perRequestPrice = pricing.perRequestPrice else { return nil }
+        let normalizedRequestCount = max(1, requestCount)
+        let component = MessageCostComponent(
+            kind: .request,
+            tokens: normalizedRequestCount,
+            pricePerMillionTokens: perRequestPrice,
+            subtotal: Double(normalizedRequestCount) * perRequestPrice
+        )
+        return MessageCostEstimate(
+            totalCost: component.subtotal,
+            tierBasisTokens: usage.map { tierBasisTokens(for: $0) } ?? 0,
+            tierMinimumTokens: nil,
+            components: [component],
+            isEstimatedFromCurrentPricing: isEstimatedFromCurrentPricing
+        )
+    }
+
     private static func appendComponent(
         kind: MessageCostComponentKind,
         tokens: Int?,
@@ -557,13 +666,12 @@ public enum MessageCostResolver {
         if let snapshot = message.costEstimate, snapshot.hasCost {
             return snapshot
         }
-        guard let usage = message.tokenUsage,
-              let modelReference = message.modelReference,
+        guard let modelReference = message.modelReference,
               let pricing = matchingPricing(for: modelReference, providers: providers) else {
             return nil
         }
         return ModelCostCalculator.estimateCost(
-            usage: usage,
+            usage: message.tokenUsage,
             pricing: pricing,
             requestedAt: message.requestedAt ?? message.responseMetrics?.requestStartedAt,
             isEstimatedFromCurrentPricing: true

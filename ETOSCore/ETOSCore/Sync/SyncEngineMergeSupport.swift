@@ -269,6 +269,8 @@ extension SyncEngine {
         hasher.combine(pricing.outputPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
         hasher.combine(pricing.cacheReadPerMillionTokens ?? -1)
+        hasher.combine(pricing.billingMode.rawValue)
+        hasher.combine(pricing.perRequestPrice ?? -1)
         hasher.combine(pricing.timeOverridesEnabled)
         for tier in pricing.tiers {
             hasher.combine(tier.id.uuidString)
