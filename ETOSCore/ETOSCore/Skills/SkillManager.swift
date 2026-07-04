@@ -143,9 +143,14 @@ public final class SkillManager: ObservableObject {
     @Published public private(set) var lastErrorMessage: String?
 
     private init(defaults: UserDefaults = .standard) {
+        let newlyInstalledBuiltInSkillNames = SkillStore.installBuiltInSkillsIfNeeded()
         self.defaults = defaults
         self.enabledSkillNames = Set(Self.stringArrayValue(forKey: DefaultsKey.enabledSkillNames, defaults: defaults))
         self.chatToolsEnabled = Self.boolValue(forKey: DefaultsKey.chatToolsEnabled, defaults: defaults, defaultValue: true)
+        if !newlyInstalledBuiltInSkillNames.isEmpty {
+            enabledSkillNames.formUnion(newlyInstalledBuiltInSkillNames)
+            persistEnabledSkillNames()
+        }
         reloadFromDisk()
     }
 

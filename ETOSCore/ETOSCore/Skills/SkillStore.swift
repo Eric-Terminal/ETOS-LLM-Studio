@@ -17,6 +17,10 @@ public enum SkillStore {
     public static let directoryName = "Skills"
     public static let defaultSkillFileName = "SKILL.md"
 
+    public static var builtInSkillNames: [String] {
+        builtInSkillSeeds.map(\.name)
+    }
+
     private static var documentsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
@@ -38,6 +42,18 @@ public enum SkillStore {
             }
         }
         return dir
+    }
+
+    @discardableResult
+    public static func installBuiltInSkillsIfNeeded() -> [String] {
+        var installedNames: [String] = []
+        for seed in builtInSkillSeeds {
+            guard !skillExists(seed.name) else { continue }
+            if saveSkillDataFilesAtomically(skillName: seed.name, files: seed.files) {
+                installedNames.append(seed.name)
+            }
+        }
+        return installedNames
     }
 
     public static func listSkills() -> [SkillMetadata] {
@@ -443,6 +459,10 @@ public enum SkillStore {
         return files
     }
 
+    static func builtInSkillContentForTests(name: String) -> String? {
+        builtInSkillSeeds.first { $0.name == name }?.content
+    }
+
     private static func parseMetadata(from skillFile: URL) -> SkillMetadata? {
         guard let content = try? String(contentsOf: skillFile, encoding: .utf8) else { return nil }
         let fallbackName = skillFile.deletingLastPathComponent().lastPathComponent
@@ -734,6 +754,65 @@ public enum SkillStore {
         String(decoding: bytes, as: UTF8.self)
     }
 }
+
+private struct BuiltInSkillSeed {
+    let name: String
+    let content: String
+
+    var files: [String: Data] {
+        [SkillStore.defaultSkillFileName: Data(content.utf8)]
+    }
+}
+
+private let builtInSkillSeeds: [BuiltInSkillSeed] = [
+    BuiltInSkillSeed(
+        name: "create-skill",
+        content: #"""
+        ---
+        name: create-skill
+        description: Extract workflows and create reusable Agent Skills for ETOS LLM Studio (ELS). Trigger this when the user asks to create a skill, package a workflow, or save the current logic as a skill.
+        allowed-tools:
+          - app_create_sandbox_directory
+          - app_write_sandbox_file
+        ---
+
+        # ELS Skill Creator Guide
+        You are an advanced skill-building agent within the ELS framework. Your task is to extract user requirements, complex workflows, or specific interaction logic, package them into a standardized skill file, and save them to the local file system.
+
+        ## 1. Extract
+        - Carefully review the current conversation history. If the user has been following a multi-step workflow, debugging methodology, or specific standards, distill these into reusable skill components.
+        - Key elements to extract: step-by-step execution processes, decision points, and final quality check criteria.
+
+        ## 2. Clarify if Needed
+        - If a clear workflow cannot be derived from the conversation, or if the user only provides a vague concept, you must ask questions to clarify.
+        - Directions for clarification include, but are not limited to: What is the expected final output of this skill? Is it a simple checklist or a complex multi-step reasoning flow? What is the expected interaction style?
+        - Do not call tools to generate files until the requirements are completely clear.
+
+        ## 3. Drafting
+        - The skill directory name (`skill-name`) must contain only lowercase letters and hyphens.
+        - The top of the file MUST contain YAML metadata wrapped in `---`.
+          ```yaml
+          ---
+          name: [skill-name]
+          description: [Detailed explanation of the skill's use case and trigger conditions to improve intent recognition recall]
+          ---
+          ```
+        - Below the YAML header, write the Markdown body of the skill, ensuring the content allows other Agents to accurately understand and execute the task.
+
+        ## 4. Execution (Tool Permission Check)
+        Before attempting to generate and write the skill file, you must first check your available tools.
+        - Pre-check: Verify if you have the `app_create_sandbox_directory` and `app_write_sandbox_file` tools.
+        - Missing Permissions: If these tools are unavailable or not displayed, you must immediately abort the creation process and inform the user: "To automatically package and write the skill, please first enable the built-in file/sandbox operation tools in ELS Settings."
+        - Execute Writing: If the tools are available, strictly follow these steps to call them:
+          1. Call `app_create_sandbox_directory` to create the directory `Skills/<skill-name>`.
+          2. Call `app_write_sandbox_file` to write the complete skill content into `Skills/<skill-name>/SKILL.md`.
+
+        ## 5. Delivery
+        - Upon successful writing, briefly summarize the core function of the skill to the user, and provide 1-2 example prompts that can directly trigger this skill.
+        - Important Reminder: Inform the user that the newly created skill is saved but disabled by default. They need to go to ELS Settings and manually enable it for the system to recognize and trigger it. No restart is required.
+        """#
+    )
+]
 
 private extension URL {
     func createDirectoryIfNeeded() throws {

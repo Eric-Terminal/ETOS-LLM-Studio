@@ -95,6 +95,18 @@ when_to_use: 用户需要整理导入资料时使用。
         #expect(manifest.allowedTools == ["read_file", "search_web"])
     }
 
+    @Test("内置 Skill 创建指南可解析并使用 ELS 沙盒工具名")
+    func testBuiltInCreateSkillGuideUsesAppSandboxTools() throws {
+        let content = try #require(SkillStore.builtInSkillContentForTests(name: "create-skill"))
+        let manifest = try SkillManifestResolver.resolve(content: content, fallbackName: nil)
+
+        #expect(manifest.name == "create-skill")
+        #expect(manifest.allowedTools == ["app_create_sandbox_directory", "app_write_sandbox_file"])
+        #expect(content.contains("Skills/<skill-name>/SKILL.md"))
+        #expect(!content.contains("mcp_app_create_sandbox_directory"))
+        #expect(!content.contains("mcp_app_write_sandbox_file"))
+    }
+
     @Test("use_skill 工具描述包含元数据且会转义 XML 文本")
     func testUseSkillToolDescriptionIncludesMetadataAndEscapesXML() {
         let description = SkillManager.makeToolDescriptionForTests(availableSkills: [
