@@ -13,6 +13,28 @@
 
 namespace etos_local_llm_bridge {
 
+namespace {
+
+constexpr int32_t default_prompt_batch_size = 128;
+
+std::string context_creation_failure_message(
+    const llama_context_params & ctx_params,
+    const local_generation_params & generation_params
+) {
+    std::ostringstream stream;
+    stream
+        << "无法创建本地模型上下文（n_ctx=" << ctx_params.n_ctx
+        << "，n_batch=" << ctx_params.n_batch
+        << "，n_ubatch=" << ctx_params.n_ubatch
+        << "，GPU层=" << generation_params.gpu_layers
+        << "，KV offload=" << (generation_params.kv_offload ? 1 : 0)
+        << "，Flash Attention=" << generation_params.flash_attention
+        << "）。";
+    return stream.str();
+}
+
+} // namespace
+
 std::once_flag backend_init_once;
 std::mutex model_cache_mutex;
 llama_model_shared_handle cached_model;
@@ -215,9 +237,13 @@ int32_t generate(
 
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = requested_context;
+    const int32_t prompt_token_count_int = static_cast<int32_t>(prompt_token_count);
     const int32_t decode_batch_size = generation_params.batch_size > 0
         ? std::min<int32_t>(requested_context, generation_params.batch_size)
-        : static_cast<int32_t>(prompt_token_count);
+        : std::min<int32_t>(
+            prompt_token_count_int,
+            std::min<int32_t>(requested_context, default_prompt_batch_size)
+        );
     ctx_params.n_batch = static_cast<uint32_t>(std::max<int32_t>(1, decode_batch_size));
     if (generation_params.ubatch_size > 0) {
         ctx_params.n_ubatch = static_cast<uint32_t>(std::min<int32_t>(
@@ -233,7 +259,7 @@ int32_t generate(
 
     llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
-        return fail("无法创建本地模型上下文。", error_message);
+        return fail(context_creation_failure_message(ctx_params, generation_params), error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);

@@ -231,7 +231,31 @@ std::vector<llama_token> tokenize(const llama_vocab * vocab, const std::string &
 }
 
 std::vector<llama_token> tokenize_prompt(const llama_vocab * vocab, const std::string & prompt) {
-    return tokenize(vocab, prompt, true);
+    std::vector<llama_token> tokens = tokenize(vocab, prompt, true);
+    if (tokens.empty()) {
+        return tokens;
+    }
+
+    // GGUF 记录了是否由 tokenizer 自动补 BOS/EOS；模板里已经展开时只折叠重复项。
+    const llama_token bos = llama_vocab_bos(vocab);
+    if (llama_vocab_get_add_bos(vocab)
+        && bos != LLAMA_TOKEN_NULL
+        && tokens.size() >= 2
+        && tokens[0] == bos
+        && tokens[1] == bos) {
+        tokens.erase(tokens.begin());
+    }
+
+    const llama_token eos = llama_vocab_eos(vocab);
+    if (llama_vocab_get_add_eos(vocab)
+        && eos != LLAMA_TOKEN_NULL
+        && tokens.size() >= 2
+        && tokens[tokens.size() - 1] == eos
+        && tokens[tokens.size() - 2] == eos) {
+        tokens.pop_back();
+    }
+
+    return tokens;
 }
 
 std::string token_to_piece(const llama_vocab * vocab, llama_token token) {
@@ -267,9 +291,10 @@ llama_sampler_handle create_sampler(
         return {};
     }
 
-    if (params.ignore_eos) {
+    const llama_token eos_token = llama_vocab_eos(vocab);
+    if (params.ignore_eos && eos_token != LLAMA_TOKEN_NULL) {
         llama_logit_bias eos_bias = {
-            llama_vocab_eos(vocab),
+            eos_token,
             -INFINITY
         };
         llama_sampler_chain_add(sampler.get(), llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), 1, &eos_bias));
