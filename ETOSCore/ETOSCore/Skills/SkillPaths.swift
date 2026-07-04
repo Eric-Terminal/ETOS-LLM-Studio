@@ -52,4 +52,26 @@ public enum SkillPaths {
         }
         return target
     }
+
+    public static func relativePath(for fileURL: URL, baseURL: URL) -> String? {
+        let pathPairs = [
+            (
+                fileURL.standardizedFileURL.resolvingSymlinksInPath().path,
+                baseURL.standardizedFileURL.resolvingSymlinksInPath().path
+            ),
+            (
+                fileURL.standardizedFileURL.path,
+                baseURL.standardizedFileURL.path
+            )
+        ]
+
+        for (filePath, basePath) in pathPairs {
+            let prefix = basePath + "/"
+            guard filePath.hasPrefix(prefix) else { continue }
+            let relativePath = String(filePath.dropFirst(prefix.count))
+            return relativePath.isEmpty ? nil : relativePath
+        }
+
+        return nil
+    }
 }

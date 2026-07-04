@@ -108,7 +108,9 @@ public enum SkillStore {
                   values.isDirectory != true else {
                 continue
             }
-            let relativePath = fileURL.path.replacingOccurrences(of: skillDir.path + "/", with: "")
+            guard let relativePath = SkillPaths.relativePath(for: fileURL, baseURL: skillDir) else {
+                continue
+            }
             let size = Int64(values.fileSize ?? 0)
             let readability = textReadability(fileURL: fileURL, relativePath: relativePath, size: size)
             files.append(

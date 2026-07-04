@@ -55,7 +55,7 @@ public enum SkillBundleImporter {
             let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
             guard values.isSymbolicLink != true else { continue }
             guard values.isDirectory != true else { continue }
-            let relativePath = relativePath(for: fileURL, baseURL: directoryURL)
+            guard let relativePath = SkillPaths.relativePath(for: fileURL, baseURL: directoryURL) else { continue }
             guard let normalizedPath = normalizeSourceBundlePath(relativePath) else { continue }
             files[normalizedPath] = try Data(contentsOf: fileURL)
         }
@@ -158,15 +158,6 @@ public enum SkillBundleImporter {
         }
         guard !hasURLScheme(normalized) else { return nil }
         return normalized
-    }
-
-    private static func relativePath(for fileURL: URL, baseURL: URL) -> String {
-        let basePath = baseURL.standardizedFileURL.path
-        let filePath = fileURL.standardizedFileURL.path
-        guard filePath.hasPrefix(basePath + "/") else {
-            return fileURL.lastPathComponent
-        }
-        return String(filePath.dropFirst(basePath.count + 1))
     }
 
     private static func isLikelyZipData(_ data: Data) -> Bool {

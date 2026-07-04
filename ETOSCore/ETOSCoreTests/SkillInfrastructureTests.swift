@@ -150,6 +150,27 @@ when_to_use: 用户需要整理导入资料时使用。
         }
     }
 
+    @Test("SkillPaths 相对路径计算兼容符号链接前缀")
+    func testSkillPathRelativePathSupportsSymlinkedPrefixes() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("skill-paths-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let realRoot = root.appendingPathComponent("real", isDirectory: true)
+        let realSkillDir = realRoot.appendingPathComponent("demo", isDirectory: true)
+        let linkedRoot = root.appendingPathComponent("linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: realSkillDir, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: linkedRoot, withDestinationURL: realRoot)
+
+        let realSkillFile = realSkillDir.appendingPathComponent("SKILL.md", isDirectory: false)
+        try "demo".write(to: realSkillFile, atomically: true, encoding: .utf8)
+
+        let linkedSkillDir = linkedRoot.appendingPathComponent("demo", isDirectory: true)
+        let linkedSkillFile = linkedSkillDir.appendingPathComponent("SKILL.md", isDirectory: false)
+
+        #expect(SkillPaths.relativePath(for: realSkillFile, baseURL: linkedSkillDir) == "SKILL.md")
+        #expect(SkillPaths.relativePath(for: linkedSkillFile, baseURL: realSkillDir) == "SKILL.md")
+    }
+
     @Test("SyncedSkillBundle 校验和与文件顺序无关")
     func testSyncedSkillBundleChecksumIsOrderIndependent() {
         let filesA = [
