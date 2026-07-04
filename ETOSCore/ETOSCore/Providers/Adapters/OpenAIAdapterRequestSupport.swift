@@ -257,7 +257,7 @@ extension OpenAIAdapter {
         request.setValue("Bearer \(randomApiKey)", forHTTPHeaderField: "Authorization")
         applyHeaderOverrides(model.provider.headerOverrides, apiKey: randomApiKey, to: &request)
 
-        let inputItems = buildResponsesInputItems(
+        let inputAssembly = buildResponsesInputAssembly(
             from: messages,
             reasoningContentEchoMode: reasoningContentEchoMode,
             audioAttachments: audioAttachments,
@@ -265,11 +265,33 @@ extension OpenAIAdapter {
             fileAttachments: fileAttachments
         )
 
+        let forceFullInput = boolValue(from: commonPayload[Self.responsesForceFullInputControlKey])
+            ?? boolValue(from: overrides[Self.responsesForceFullInputControlKey])
+            ?? false
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
+        finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
-        finalPayload["input"] = inputItems
+        finalPayload["input"] = inputAssembly.items
+        if forceFullInput {
+            finalPayload.removeValue(forKey: "previous_response_id")
+        }
+
+        if model.model.supportsReasoning {
+            let encryptedReasoningInclude = "reasoning.encrypted_content"
+            if var include = finalPayload["include"] as? [Any] {
+                let alreadyIncluded = include.contains {
+                    ($0 as? String) == encryptedReasoningInclude
+                }
+                if !alreadyIncluded {
+                    include.append(encryptedReasoningInclude)
+                    finalPayload["include"] = include
+                }
+            } else if finalPayload["include"] == nil {
+                finalPayload["include"] = [encryptedReasoningInclude]
+            }
+        }
 
         if let tools, !tools.isEmpty {
             let apiTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
@@ -292,6 +314,18 @@ extension OpenAIAdapter {
         } else if finalPayload["tools"] != nil,
                   let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {
             finalPayload["tool_choice"] = normalizedChoice
+        }
+
+        if !forceFullInput,
+           finalPayload["previous_response_id"] == nil,
+           let requestSignature = responsesRequestSignature(from: finalPayload),
+           let incremental = responsesIncrementalInput(
+                assembly: inputAssembly,
+                messages: messages,
+                requestSignature: requestSignature
+           ) {
+            finalPayload["previous_response_id"] = incremental.previousResponseID
+            finalPayload["input"] = incremental.inputItems
         }
 
         do {

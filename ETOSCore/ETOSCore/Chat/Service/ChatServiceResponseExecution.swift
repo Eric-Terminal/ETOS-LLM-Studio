@@ -165,7 +165,8 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
-        requestLogContext: RequestLogContext
+        requestLogContext: RequestLogContext,
+        responsesFullInputFallbackRequest: URLRequest? = nil
     ) async {
         do {
             let data = try await fetchData(for: request, provider: provider)
@@ -179,6 +180,7 @@ extension ChatService {
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
+                attachOpenAIResponsesRequestMetadata(to: &parsedMessage, request: request)
                 let responseCompletedAt = Date()
                 let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {
@@ -267,6 +269,36 @@ extension ChatService {
                 bodyData: bodyData,
                 httpStatusCode: code
             )
+            if let fallbackRequest = responsesFullInputFallbackRequest,
+               isOpenAIResponsesPreviousResponseMissing(statusCode: code, bodyData: bodyData) {
+                logger.info("Responses previous_response_id 已失效，正在改用完整 input 重试。")
+                await handleStandardResponse(
+                    request: fallbackRequest,
+                    provider: provider,
+                    adapter: adapter,
+                    loadingMessageID: loadingMessageID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    availableTools: availableTools,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                    includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                    requestStartedAt: requestStartedAt,
+                    requestLogContext: requestLogContext,
+                    responsesFullInputFallbackRequest: nil
+                )
+                return
+            }
             let bodyString: String
             if let bodyData, let utf8Text = String(data: bodyData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !utf8Text.isEmpty {
                 bodyString = utf8Text

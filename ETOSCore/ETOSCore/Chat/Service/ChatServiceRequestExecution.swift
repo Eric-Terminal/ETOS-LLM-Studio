@@ -358,6 +358,21 @@ extension ChatService {
             return
         }
 
+        let responsesFullInputFallbackRequest: URLRequest? = {
+            guard openAIResponsesRequestUsesPreviousResponseID(request) else { return nil }
+            var fallbackPayload = commonPayload
+            fallbackPayload[OpenAIAdapter.responsesForceFullInputControlKey] = true
+            return adapter.buildChatRequest(
+                for: runnableModel,
+                commonPayload: fallbackPayload,
+                messages: messagesToSend,
+                tools: effectiveTools,
+                audioAttachments: audioAttachments,
+                imageAttachments: imageAttachments,
+                fileAttachments: fileAttachments
+            )
+        }()
+
         if enableStreaming {
             await handleStreamedResponse(
                 request: request,
@@ -381,7 +396,8 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
-                requestLogContext: requestLogContext
+                requestLogContext: requestLogContext,
+                responsesFullInputFallbackRequest: responsesFullInputFallbackRequest
             )
         } else {
             await handleStandardResponse(
@@ -406,7 +422,8 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
-                requestLogContext: requestLogContext
+                requestLogContext: requestLogContext,
+                responsesFullInputFallbackRequest: responsesFullInputFallbackRequest
             )
         }
     }

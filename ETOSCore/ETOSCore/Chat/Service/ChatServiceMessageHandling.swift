@@ -369,6 +369,9 @@ extension ChatService {
             if let newReasoningFields = newMessage.reasoningProviderSpecificFields {
                 targetMessage.reasoningProviderSpecificFields = newReasoningFields
             }
+            if let newProviderResponseMetadata = newMessage.providerResponseMetadata {
+                targetMessage.providerResponseMetadata = newProviderResponseMetadata
+            }
             targetMessage.audioFileName = newMessage.audioFileName
             targetMessage.imageFileNames = newMessage.imageFileNames
             targetMessage.fileFileNames = newMessage.fileFileNames
@@ -425,6 +428,7 @@ extension ChatService {
                 requestedAt: messages[index].requestedAt ?? newMessage.requestedAt,
                 reasoningContent: newMessage.reasoningContent,
                 reasoningProviderSpecificFields: newMessage.reasoningProviderSpecificFields ?? messages[index].reasoningProviderSpecificFields,
+                providerResponseMetadata: newMessage.providerResponseMetadata ?? messages[index].providerResponseMetadata,
                 toolCalls: mergedToolCalls, // 确保 toolCalls 保持最新或沿用历史数据
                 toolCallsPlacement: newMessage.toolCallsPlacement ?? messages[index].toolCallsPlacement,
                 tokenUsage: newMessage.tokenUsage ?? messages[index].tokenUsage,

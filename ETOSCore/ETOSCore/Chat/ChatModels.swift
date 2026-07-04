@@ -186,6 +186,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 
     public var reasoningContent: String? // 用于存放推理过程等附加信息
     public var reasoningProviderSpecificFields: [String: JSONValue]? // 推理延续所需的协议元数据
+    public var providerResponseMetadata: [String: JSONValue]? // 响应级协议元数据，例如 Responses 的 ID 与 output items
     public var toolCalls: [InternalToolCall]? // AI发出的工具调用指令
     public var toolCallsPlacement: ToolCallsPlacement? // 工具调用在正文前/后显示
     public var tokenUsage: MessageTokenUsage? // 最近一次调用消耗的 Token 统计
@@ -208,6 +209,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         requestedAt: Date? = nil,
         reasoningContent: String? = nil,
         reasoningProviderSpecificFields: [String: JSONValue]? = nil,
+        providerResponseMetadata: [String: JSONValue]? = nil,
         toolCalls: [InternalToolCall]? = nil,
         toolCallsPlacement: ToolCallsPlacement? = nil,
         tokenUsage: MessageTokenUsage? = nil,
@@ -230,6 +232,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.currentVersionIndex = 0
         self.reasoningContent = reasoningContent
         self.reasoningProviderSpecificFields = reasoningProviderSpecificFields
+        self.providerResponseMetadata = providerResponseMetadata
         self.toolCalls = toolCalls
         self.toolCallsPlacement = toolCallsPlacement
         self.tokenUsage = tokenUsage
@@ -287,7 +290,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, role, requestedAt, content, currentVersionIndex
-        case reasoningContent, reasoningProviderSpecificFields, toolCalls, toolCallsPlacement, tokenUsage
+        case reasoningContent, reasoningProviderSpecificFields, providerResponseMetadata, toolCalls, toolCallsPlacement, tokenUsage
         case modelReference, costEstimate
         case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
@@ -318,6 +321,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 
         self.reasoningContent = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
         self.reasoningProviderSpecificFields = try container.decodeIfPresent([String: JSONValue].self, forKey: .reasoningProviderSpecificFields)
+        self.providerResponseMetadata = try container.decodeIfPresent([String: JSONValue].self, forKey: .providerResponseMetadata)
         self.toolCalls = try container.decodeIfPresent([InternalToolCall].self, forKey: .toolCalls)
         self.toolCallsPlacement = try container.decodeIfPresent(ToolCallsPlacement.self, forKey: .toolCallsPlacement)
         self.tokenUsage = try container.decodeIfPresent(MessageTokenUsage.self, forKey: .tokenUsage)
@@ -350,6 +354,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
 
         try container.encodeIfPresent(reasoningContent, forKey: .reasoningContent)
         try container.encodeIfPresent(reasoningProviderSpecificFields, forKey: .reasoningProviderSpecificFields)
+        try container.encodeIfPresent(providerResponseMetadata, forKey: .providerResponseMetadata)
         try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
         try container.encodeIfPresent(toolCallsPlacement, forKey: .toolCallsPlacement)
         try container.encodeIfPresent(tokenUsage, forKey: .tokenUsage)

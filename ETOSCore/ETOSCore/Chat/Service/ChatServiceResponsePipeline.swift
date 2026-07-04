@@ -32,7 +32,8 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
-        requestLogContext: RequestLogContext
+        requestLogContext: RequestLogContext,
+        responsesFullInputFallbackRequest: URLRequest? = nil
     ) async {
         var latestTokenUsage: MessageTokenUsage?
         var trailingUnparsedResponseBody = ""
@@ -170,6 +171,12 @@ extension ChatService {
                             incoming: reasoningProviderSpecificFields
                         )
                     }
+                    if let providerResponseMetadata = part.providerResponseMetadata {
+                        messages[index].providerResponseMetadata = mergeProviderResponseMetadata(
+                            existing: messages[index].providerResponseMetadata,
+                            incoming: providerResponseMetadata
+                        )
+                    }
                     if let toolDeltas = part.toolCallDeltas, !toolDeltas.isEmpty {
                         didReceiveGeneratedDelta = true
                         for delta in toolDeltas {
@@ -190,9 +197,16 @@ extension ChatService {
                             var builder = toolCallBuilders[resolvedIndex] ?? (id: nil, name: nil, arguments: "", providerSpecificFields: nil)
                             if let id = delta.id { builder.id = id }
                             if let nameFragment = delta.nameFragment, !nameFragment.isEmpty { builder.name = nameFragment }
-                            if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty { builder.arguments += argsFragment }
+                            if let argumentsReplacement = delta.argumentsReplacement {
+                                builder.arguments = argumentsReplacement
+                            } else if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty {
+                                builder.arguments += argsFragment
+                            }
                             if let providerSpecificFields = delta.providerSpecificFields, !providerSpecificFields.isEmpty {
-                                builder.providerSpecificFields = providerSpecificFields
+                                builder.providerSpecificFields = mergeProviderResponseMetadata(
+                                    existing: builder.providerSpecificFields,
+                                    incoming: providerSpecificFields
+                                )
                             }
                             toolCallBuilders[resolvedIndex] = builder
                             if !toolCallOrder.contains(resolvedIndex) {
@@ -386,6 +400,7 @@ extension ChatService {
                         speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
+                attachOpenAIResponsesRequestMetadata(to: &messages[index], request: request)
                 attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
                 messages = persistAndPublishStreamingMessages(
@@ -469,6 +484,36 @@ extension ChatService {
                 bodyData: bodyData,
                 httpStatusCode: code
             )
+            if let fallbackRequest = responsesFullInputFallbackRequest,
+               isOpenAIResponsesPreviousResponseMissing(statusCode: code, bodyData: bodyData) {
+                logger.info("Responses previous_response_id 已失效，正在改用完整 input 重试。")
+                await handleStreamedResponse(
+                    request: fallbackRequest,
+                    provider: provider,
+                    adapter: adapter,
+                    loadingMessageID: loadingMessageID,
+                    currentSessionID: currentSessionID,
+                    userMessage: userMessage,
+                    wasTemporarySession: wasTemporarySession,
+                    aiTemperature: aiTemperature,
+                    aiTopP: aiTopP,
+                    systemPrompt: systemPrompt,
+                    maxChatHistory: maxChatHistory,
+                    availableTools: availableTools,
+                    enableMemory: enableMemory,
+                    enableMemoryWrite: enableMemoryWrite,
+                    enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                    includeSystemTime: includeSystemTime,
+                    systemTimeInjectionPosition: systemTimeInjectionPosition,
+                    enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                    periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                    enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                    requestStartedAt: requestStartedAt,
+                    requestLogContext: requestLogContext,
+                    responsesFullInputFallbackRequest: nil
+                )
+                return
+            }
             messages = flushPendingStreamingMessages(
                 messages,
                 loadingMessageID: loadingMessageID,

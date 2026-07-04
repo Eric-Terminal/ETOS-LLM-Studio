@@ -66,6 +66,124 @@ extension ChatService {
         return NSLocalizedString("响应体为空。", comment: "Empty response body")
     }
 
+    func isOpenAIResponsesRequest(_ request: URLRequest) -> Bool {
+        guard let lastPathComponent = request.url?.path.split(separator: "/").last else {
+            return false
+        }
+        return lastPathComponent == "responses"
+    }
+
+    func openAIResponsesRequestUsesPreviousResponseID(_ request: URLRequest) -> Bool {
+        guard isOpenAIResponsesRequest(request),
+              let payload = jsonObjectBody(from: request),
+              let previousResponseID = payload["previous_response_id"] as? String else {
+            return false
+        }
+        return !previousResponseID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func openAIResponsesRequestSignature(from request: URLRequest) -> JSONValue? {
+        guard isOpenAIResponsesRequest(request),
+              var payload = jsonObjectBody(from: request) else {
+            return nil
+        }
+        payload.removeValue(forKey: "input")
+        payload.removeValue(forKey: "previous_response_id")
+        payload.removeValue(forKey: OpenAIAdapter.responsesForceFullInputControlKey)
+        return jsonValueForRequestMetadata(from: payload)
+    }
+
+    func attachOpenAIResponsesRequestMetadata(to message: inout ChatMessage, request: URLRequest) {
+        guard let requestSignature = openAIResponsesRequestSignature(from: request) else { return }
+        var metadata = message.providerResponseMetadata ?? [:]
+        metadata[OpenAIAdapter.responsesRequestSignatureKey] = requestSignature
+        message.providerResponseMetadata = metadata
+    }
+
+    func isOpenAIResponsesPreviousResponseMissing(statusCode: Int, bodyData: Data?) -> Bool {
+        guard statusCode == 400 || statusCode == 404 else { return false }
+        guard let bodyData,
+              let text = String(data: bodyData, encoding: .utf8)?.lowercased() else {
+            return false
+        }
+
+        if let object = try? JSONSerialization.jsonObject(with: bodyData),
+           let payload = object as? [String: Any],
+           let error = payload["error"] as? [String: Any] {
+            let code = (error["code"] as? String)?.lowercased() ?? ""
+            let message = (error["message"] as? String)?.lowercased() ?? ""
+            if code.contains("previous_response") || code.contains("response_not_found") {
+                return true
+            }
+            if message.contains("previous_response_id")
+                && (message.contains("not found")
+                    || message.contains("not exist")
+                    || message.contains("could not find")
+                    || message.contains("missing")) {
+                return true
+            }
+        }
+
+        return text.contains("previous_response_not_found")
+            || (text.contains("previous_response_id")
+                && (text.contains("not found")
+                    || text.contains("not exist")
+                    || text.contains("could not find")
+                    || text.contains("missing")))
+    }
+
+    func jsonObjectBody(from request: URLRequest) -> [String: Any]? {
+        guard let body = request.httpBody,
+              let object = try? JSONSerialization.jsonObject(with: body) else {
+            return nil
+        }
+        return object as? [String: Any]
+    }
+
+    func jsonValueForRequestMetadata(from object: Any) -> JSONValue? {
+        switch object {
+        case let string as String:
+            return .string(string)
+        case let bool as Bool:
+            return .bool(bool)
+        case let int as Int:
+            return .int(int)
+        case let double as Double:
+            return .double(double)
+        case let number as NSNumber:
+            let objCType = String(cString: number.objCType)
+            if objCType == "c" || objCType == "B" {
+                return .bool(number.boolValue)
+            }
+            let doubleValue = number.doubleValue
+            if doubleValue.isFinite,
+               floor(doubleValue) == doubleValue,
+               doubleValue >= Double(Int.min),
+               doubleValue <= Double(Int.max) {
+                return .int(number.intValue)
+            }
+            return .double(doubleValue)
+        case let dictionary as [String: Any]:
+            var result: [String: JSONValue] = [:]
+            for (key, value) in dictionary {
+                guard let jsonValue = jsonValueForRequestMetadata(from: value) else { return nil }
+                result[key] = jsonValue
+            }
+            return .dictionary(result)
+        case let array as [Any]:
+            var result: [JSONValue] = []
+            for value in array {
+                guard let jsonValue = jsonValueForRequestMetadata(from: value) else { return nil }
+                result.append(jsonValue)
+            }
+            return .array(result)
+        case _ as NSNull:
+            return .null
+        default:
+            return nil
+        }
+    }
+
     func providerConfigurationValidationErrorMessage(for provider: Provider, action: String) -> String? {
         let providerName = provider.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? NSLocalizedString("未命名提供商", comment: "Unnamed provider fallback name")

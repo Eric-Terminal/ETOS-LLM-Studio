@@ -9,6 +9,11 @@
 import Foundation
 
 extension OpenAIAdapter {
+    struct ResponsesInputAssembly {
+        let items: [[String: Any]]
+        let messageEndIndexes: [UUID: Int]
+    }
+
     func buildResponsesMessageInput(
         for message: ChatMessage,
         audioAttachments: [UUID: AudioAttachment],
@@ -65,13 +70,24 @@ extension OpenAIAdapter {
     }
 
     func buildResponsesFunctionCallItem(from toolCall: InternalToolCall) -> [String: Any] {
-        [
+        var item: [String: Any] = [
             "type": "function_call",
             "call_id": toolCall.id,
             "name": sanitizedToolName(toolCall.toolName),
             "arguments": toolCall.arguments,
             "status": "completed"
         ]
+        if let rawItemID = toolCall.providerSpecificFields?[Self.responsesOutputItemIDKey],
+           case let .string(itemID) = rawItemID,
+           !itemID.isEmpty {
+            item["id"] = itemID
+        }
+        if let rawStatus = toolCall.providerSpecificFields?[Self.responsesOutputItemStatusKey],
+           case let .string(status) = rawStatus,
+           !status.isEmpty {
+            item["status"] = status
+        }
+        return item
     }
 
     func buildResponsesFunctionCallOutputItem(from message: ChatMessage) -> [String: Any]? {
@@ -133,6 +149,110 @@ extension OpenAIAdapter {
         return result
     }
 
+    func buildResponsesOutputInputItems(from message: ChatMessage, mode: ReasoningContentEchoMode) -> [[String: Any]] {
+        guard message.role == .assistant,
+              let rawItems = message.providerResponseMetadata?[Self.responsesOutputItemsKey],
+              case let .array(items) = rawItems else {
+            return []
+        }
+
+        var result: [[String: Any]] = []
+        for item in items {
+            guard let dictionary = item.toAny() as? [String: Any],
+                  let type = dictionary["type"] as? String else {
+                continue
+            }
+            if type == "reasoning", !Self.shouldEchoReasoningContent(for: message, mode: mode) {
+                continue
+            }
+            result.append(dictionary)
+        }
+        return deduplicatedResponsesOutputItems(result)
+    }
+
+    func deduplicatedResponsesOutputItems(_ items: [[String: Any]]) -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        var indexByKey: [String: Int] = [:]
+
+        for item in items {
+            let keys = responsesOutputItemMergeKeys(item)
+            if !keys.isEmpty {
+                if let existingIndex = keys.compactMap({ indexByKey[$0] }).first {
+                    result[existingIndex] = item
+                    for key in keys {
+                        indexByKey[key] = existingIndex
+                    }
+                } else {
+                    for key in keys {
+                        indexByKey[key] = result.count
+                    }
+                    result.append(item)
+                }
+            } else {
+                result.append(item)
+            }
+        }
+
+        return result
+    }
+
+    func responsesOutputItemMergeKeys(_ item: [String: Any]) -> [String] {
+        var keys: [String] = []
+        if let id = item["id"] as? String, !id.isEmpty {
+            keys.append("id:\(id)")
+        }
+        if let type = item["type"] as? String,
+           let callID = item["call_id"] as? String,
+           !callID.isEmpty {
+            keys.append("\(type):\(callID)")
+        }
+        return keys
+    }
+
+    func responsesRequestSignature(from payload: [String: Any]) -> JSONValue? {
+        var signaturePayload = payload
+        signaturePayload.removeValue(forKey: "input")
+        signaturePayload.removeValue(forKey: "previous_response_id")
+        signaturePayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
+        return jsonValue(fromJSONObject: signaturePayload)
+    }
+
+    func responsesPreviousResponseID(from message: ChatMessage) -> String? {
+        guard let rawValue = message.providerResponseMetadata?[Self.responsesResponseIDKey],
+              case let .string(responseID) = rawValue,
+              !responseID.isEmpty else {
+            return nil
+        }
+        return responseID
+    }
+
+    func responsesRequestSignatureMatches(_ message: ChatMessage, signature: JSONValue) -> Bool {
+        guard let storedSignature = message.providerResponseMetadata?[Self.responsesRequestSignatureKey] else {
+            return false
+        }
+        return storedSignature == signature
+    }
+
+    func responsesIncrementalInput(
+        assembly: ResponsesInputAssembly,
+        messages: [ChatMessage],
+        requestSignature: JSONValue
+    ) -> (previousResponseID: String, inputItems: [[String: Any]])? {
+        for message in messages.reversed() where message.role == .assistant {
+            guard let previousResponseID = responsesPreviousResponseID(from: message),
+                  responsesRequestSignatureMatches(message, signature: requestSignature),
+                  let endIndex = assembly.messageEndIndexes[message.id],
+                  endIndex < assembly.items.count else {
+                continue
+            }
+
+            let incrementalItems = Array(assembly.items[endIndex...])
+            guard !incrementalItems.isEmpty else { continue }
+            return (previousResponseID, incrementalItems)
+        }
+        return nil
+    }
+
     func buildResponsesInputItems(
         from messages: [ChatMessage],
         reasoningContentEchoMode: ReasoningContentEchoMode,
@@ -140,10 +260,38 @@ extension OpenAIAdapter {
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]]
     ) -> [[String: Any]] {
+        buildResponsesInputAssembly(
+            from: messages,
+            reasoningContentEchoMode: reasoningContentEchoMode,
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
+        ).items
+    }
+
+    func buildResponsesInputAssembly(
+        from messages: [ChatMessage],
+        reasoningContentEchoMode: ReasoningContentEchoMode,
+        audioAttachments: [UUID: AudioAttachment],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]]
+    ) -> ResponsesInputAssembly {
         var items: [[String: Any]] = []
         items.reserveCapacity(messages.count)
+        var messageEndIndexes: [UUID: Int] = [:]
 
         for message in messages {
+            let startIndex = items.count
+
+            if message.role == .assistant {
+                let outputItems = buildResponsesOutputInputItems(from: message, mode: reasoningContentEchoMode)
+                if !outputItems.isEmpty {
+                    items.append(contentsOf: outputItems)
+                    messageEndIndexes[message.id] = items.count
+                    continue
+                }
+            }
+
             if message.role == .assistant {
                 items.append(contentsOf: buildResponsesReasoningInputItems(from: message, mode: reasoningContentEchoMode))
             }
@@ -162,9 +310,13 @@ extension OpenAIAdapter {
             } else if message.role == .tool, let outputItem = buildResponsesFunctionCallOutputItem(from: message) {
                 items.append(outputItem)
             }
+
+            if items.count > startIndex {
+                messageEndIndexes[message.id] = items.count
+            }
         }
 
-        return items
+        return ResponsesInputAssembly(items: items, messageEndIndexes: messageEndIndexes)
     }
 
     func makeResponsesToolChoicePayload(_ rawValue: Any?) -> Any? {
@@ -251,11 +403,15 @@ extension OpenAIAdapter {
         var textContent = ""
         var reasoningContent: String? = nil
         var reasoningItems: [JSONValue] = []
+        var responseOutputItems: [JSONValue] = []
         var internalToolCalls: [InternalToolCall] = []
 
         for rawItem in outputItems {
             guard let item = rawItem as? [String: Any],
                   let type = item["type"] as? String else { continue }
+            if let outputItem = jsonValue(fromJSONObject: item) {
+                responseOutputItems.append(outputItem)
+            }
             switch type {
             case "message":
                 if let content = item["content"] as? [Any] {
@@ -267,11 +423,19 @@ extension OpenAIAdapter {
                     ?? "tool-\(UUID().uuidString)"
                 guard let name = item["name"] as? String else { continue }
                 let arguments = item["arguments"] as? String ?? ""
+                var providerSpecificFields: [String: JSONValue] = [:]
+                if let itemID = item["id"] as? String, !itemID.isEmpty {
+                    providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
+                }
+                if let status = item["status"] as? String, !status.isEmpty {
+                    providerSpecificFields[Self.responsesOutputItemStatusKey] = .string(status)
+                }
                 internalToolCalls.append(
                     InternalToolCall(
                         id: callID,
                         toolName: name,
-                        arguments: arguments
+                        arguments: arguments,
+                        providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
                     )
                 )
             case "reasoning":
@@ -289,6 +453,13 @@ extension OpenAIAdapter {
         let reasoningProviderSpecificFields: [String: JSONValue]? = reasoningItems.isEmpty
             ? nil
             : [Self.responsesReasoningItemsKey: .array(reasoningItems)]
+        var providerResponseMetadata: [String: JSONValue] = [:]
+        if let responseID = payload["id"] as? String, !responseID.isEmpty {
+            providerResponseMetadata[Self.responsesResponseIDKey] = .string(responseID)
+        }
+        if !responseOutputItems.isEmpty {
+            providerResponseMetadata[Self.responsesOutputItemsKey] = .array(responseOutputItems)
+        }
 
         return ChatMessage(
             id: UUID(),
@@ -296,9 +467,36 @@ extension OpenAIAdapter {
             content: textContent,
             reasoningContent: reasoningContent,
             reasoningProviderSpecificFields: reasoningProviderSpecificFields,
+            providerResponseMetadata: providerResponseMetadata.isEmpty ? nil : providerResponseMetadata,
             toolCalls: internalToolCalls.isEmpty ? nil : internalToolCalls,
             tokenUsage: makeResponsesTokenUsage(from: payload["usage"])
         )
+    }
+
+    func responsesProviderMetadata(response: [String: Any]? = nil, outputItem: [String: Any]? = nil) -> [String: JSONValue]? {
+        var metadata: [String: JSONValue] = [:]
+
+        if let responseID = response?["id"] as? String, !responseID.isEmpty {
+            metadata[Self.responsesResponseIDKey] = .string(responseID)
+        }
+
+        var outputItems: [JSONValue] = []
+        if let responseOutput = response?["output"] as? [Any] {
+            for rawItem in responseOutput {
+                if let item = jsonValue(fromJSONObject: rawItem) {
+                    outputItems.append(item)
+                }
+            }
+        }
+        if let outputItem,
+           let item = jsonValue(fromJSONObject: outputItem) {
+            outputItems.append(item)
+        }
+        if !outputItems.isEmpty {
+            metadata[Self.responsesOutputItemsKey] = .array(outputItems)
+        }
+
+        return metadata.isEmpty ? nil : metadata
     }
 
     func parseResponsesStreamingEvent(_ payload: [String: Any]) -> ChatMessagePart? {
@@ -318,14 +516,38 @@ extension OpenAIAdapter {
 
         case "response.function_call_arguments.delta":
             guard let delta = payload["delta"] as? String else { return nil }
-            let callID = (payload["call_id"] as? String) ?? (payload["item_id"] as? String)
+            let callID = payload["call_id"] as? String
+            var providerSpecificFields: [String: JSONValue] = [:]
+            if let itemID = payload["item_id"] as? String, !itemID.isEmpty {
+                providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
+            }
             return ChatMessagePart(
                 toolCallDeltas: [
                     ChatMessagePart.ToolCallDelta(
                         id: callID,
                         index: payload["output_index"] as? Int,
                         nameFragment: nil,
-                        argumentsFragment: delta
+                        argumentsFragment: delta,
+                        providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
+                    )
+                ]
+            )
+
+        case "response.function_call_arguments.done":
+            let callID = payload["call_id"] as? String
+            var providerSpecificFields: [String: JSONValue] = [:]
+            if let itemID = payload["item_id"] as? String, !itemID.isEmpty {
+                providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
+            }
+            return ChatMessagePart(
+                toolCallDeltas: [
+                    ChatMessagePart.ToolCallDelta(
+                        id: callID,
+                        index: payload["output_index"] as? Int,
+                        nameFragment: nil,
+                        argumentsFragment: nil,
+                        argumentsReplacement: payload["arguments"] as? String,
+                        providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
                     )
                 ]
             )
@@ -335,35 +557,82 @@ extension OpenAIAdapter {
                   let itemType = item["type"] as? String else {
                 return nil
             }
+            let responseMetadata = responsesProviderMetadata(outputItem: item)
             if itemType == "reasoning",
                let reasoningItem = jsonValue(fromJSONObject: item) {
-                return ChatMessagePart(reasoningProviderSpecificFields: [
-                    Self.responsesReasoningItemsKey: .array([reasoningItem])
-                ])
+                return ChatMessagePart(
+                    reasoningProviderSpecificFields: [
+                        Self.responsesReasoningItemsKey: .array([reasoningItem])
+                    ],
+                    providerResponseMetadata: responseMetadata
+                )
             }
-            guard itemType == "function_call" else { return nil }
+            guard itemType == "function_call" else {
+                return ChatMessagePart(providerResponseMetadata: responseMetadata)
+            }
             let callID = (item["call_id"] as? String) ?? (item["id"] as? String)
             let arguments = item["arguments"] as? String
+            var providerSpecificFields: [String: JSONValue] = [:]
+            if let itemID = item["id"] as? String, !itemID.isEmpty {
+                providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
+            }
+            if let status = item["status"] as? String, !status.isEmpty {
+                providerSpecificFields[Self.responsesOutputItemStatusKey] = .string(status)
+            }
             return ChatMessagePart(
+                providerResponseMetadata: responseMetadata,
                 toolCallDeltas: [
                     ChatMessagePart.ToolCallDelta(
                         id: callID,
                         index: payload["output_index"] as? Int,
                         nameFragment: item["name"] as? String,
-                        argumentsFragment: arguments
+                        argumentsFragment: arguments,
+                        providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
                     )
                 ]
             )
 
         case "response.output_item.done":
             guard let item = payload["item"] as? [String: Any],
-                  item["type"] as? String == "reasoning",
-                  let reasoningItem = jsonValue(fromJSONObject: item) else {
+                  let itemType = item["type"] as? String else {
                 return nil
             }
-            return ChatMessagePart(reasoningProviderSpecificFields: [
-                Self.responsesReasoningItemsKey: .array([reasoningItem])
-            ])
+            let responseMetadata = responsesProviderMetadata(outputItem: item)
+            guard itemType == "reasoning" else {
+                guard itemType == "function_call" else {
+                    return ChatMessagePart(providerResponseMetadata: responseMetadata)
+                }
+                let callID = item["call_id"] as? String
+                var providerSpecificFields: [String: JSONValue] = [:]
+                if let itemID = item["id"] as? String, !itemID.isEmpty {
+                    providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
+                }
+                if let status = item["status"] as? String, !status.isEmpty {
+                    providerSpecificFields[Self.responsesOutputItemStatusKey] = .string(status)
+                }
+                return ChatMessagePart(
+                    providerResponseMetadata: responseMetadata,
+                    toolCallDeltas: [
+                        ChatMessagePart.ToolCallDelta(
+                            id: callID,
+                            index: payload["output_index"] as? Int,
+                            nameFragment: item["name"] as? String,
+                            argumentsFragment: nil,
+                            argumentsReplacement: item["arguments"] as? String,
+                            providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
+                        )
+                    ]
+                )
+            }
+            guard let reasoningItem = jsonValue(fromJSONObject: item) else {
+                return ChatMessagePart(providerResponseMetadata: responseMetadata)
+            }
+            return ChatMessagePart(
+                reasoningProviderSpecificFields: [
+                    Self.responsesReasoningItemsKey: .array([reasoningItem])
+                ],
+                providerResponseMetadata: responseMetadata
+            )
 
         case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
             if let delta = payload["delta"] as? String {
@@ -371,12 +640,16 @@ extension OpenAIAdapter {
             }
             return nil
 
-        case "response.completed", "response.incomplete":
-            guard let response = payload["response"] as? [String: Any],
-                  let usage = makeResponsesTokenUsage(from: response["usage"]) else {
+        case "response.created", "response.completed", "response.incomplete":
+            guard let response = payload["response"] as? [String: Any] else {
                 return nil
             }
-            return ChatMessagePart(tokenUsage: usage)
+            let metadata = responsesProviderMetadata(response: response)
+            let usage = makeResponsesTokenUsage(from: response["usage"])
+            if metadata == nil, usage == nil {
+                return nil
+            }
+            return ChatMessagePart(providerResponseMetadata: metadata, tokenUsage: usage)
 
         default:
             return nil

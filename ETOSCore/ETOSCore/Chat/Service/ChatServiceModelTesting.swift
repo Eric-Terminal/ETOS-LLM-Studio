@@ -381,9 +381,16 @@ extension ChatService {
                     var builder = toolCallBuilders[resolvedIndex] ?? (id: nil, name: nil, arguments: "", providerSpecificFields: nil)
                     if let id = delta.id { builder.id = id }
                     if let nameFragment = delta.nameFragment, !nameFragment.isEmpty { builder.name = nameFragment }
-                    if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty { builder.arguments += argsFragment }
+                    if let argumentsReplacement = delta.argumentsReplacement {
+                        builder.arguments = argumentsReplacement
+                    } else if let argsFragment = delta.argumentsFragment, !argsFragment.isEmpty {
+                        builder.arguments += argsFragment
+                    }
                     if let providerSpecificFields = delta.providerSpecificFields, !providerSpecificFields.isEmpty {
-                        builder.providerSpecificFields = providerSpecificFields
+                        builder.providerSpecificFields = mergeProviderResponseMetadata(
+                            existing: builder.providerSpecificFields,
+                            incoming: providerSpecificFields
+                        )
                     }
                     toolCallBuilders[resolvedIndex] = builder
                     if !toolCallOrder.contains(resolvedIndex) {

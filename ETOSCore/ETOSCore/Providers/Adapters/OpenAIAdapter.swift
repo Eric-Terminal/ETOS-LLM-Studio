@@ -20,6 +20,12 @@ public class OpenAIAdapter: APIAdapter {
     public static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     public static let reasoningContentEchoModeControlKey = ReasoningContentEchoPayload.key
     static let responsesReasoningItemsKey = "openai_responses_reasoning_items"
+    static let responsesResponseIDKey = "openai_responses_response_id"
+    static let responsesOutputItemsKey = "openai_responses_output_items"
+    static let responsesRequestSignatureKey = "openai_responses_request_signature"
+    static let responsesForceFullInputControlKey = "openai_responses_force_full_input"
+    static let responsesOutputItemIDKey = "openai_responses_output_item_id"
+    static let responsesOutputItemStatusKey = "openai_responses_output_item_status"
     static let responsesModeSignalKeys: Set<String> = [
         "background",
         "context_management",
@@ -37,7 +43,8 @@ public class OpenAIAdapter: APIAdapter {
         "openai_api_mode",
         "use_responses_api",
         streamIncludeUsageControlKey,
-        reasoningContentEchoModeControlKey
+        reasoningContentEchoModeControlKey,
+        responsesForceFullInputControlKey
     ]
     static let chatCompletionsOnlyKeys: Set<String> = [
         "functions",

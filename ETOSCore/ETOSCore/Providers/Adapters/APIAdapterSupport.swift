@@ -207,12 +207,14 @@ public struct ChatMessagePart {
         public var index: Int?
         public var nameFragment: String?
         public var argumentsFragment: String?
+        public var argumentsReplacement: String? = nil
         public var providerSpecificFields: [String: JSONValue]? = nil
     }
 
     public var content: String?
     public var reasoningContent: String?
     public var reasoningProviderSpecificFields: [String: JSONValue]?
+    public var providerResponseMetadata: [String: JSONValue]?
     public var toolCallDeltas: [ToolCallDelta]?
     public var tokenUsage: MessageTokenUsage?
 }
