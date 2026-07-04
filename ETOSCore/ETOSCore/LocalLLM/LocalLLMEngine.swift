@@ -8,6 +8,7 @@
 
 import Foundation
 import Darwin
+import Dispatch
 
 public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var contextSize: Int
@@ -291,6 +292,16 @@ public final class LocalLLMEngine: @unchecked Sendable {
     }
 }
 
+private enum LocalLLMExecutionGate {
+    private static let semaphore = DispatchSemaphore(value: 1)
+
+    static func withExclusiveAccess<Result>(_ operation: () throws -> Result) rethrows -> Result {
+        semaphore.wait()
+        defer { semaphore.signal() }
+        return try operation()
+    }
+}
+
 private enum LocalLLMBridge {
     private static let cancelledStatus: Int32 = -2
 
@@ -315,19 +326,21 @@ private enum LocalLLMBridge {
         let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
         let payload = try LocalLLMChatTemplatePayload(messages: messages, tools: tools)
         let statePointer = Unmanaged.passUnretained(cancellationState).toOpaque()
-        let status = modelPath.withCString { modelPathCString in
-            payload.withUnsafeCStrings { messagesJSON, toolsJSON in
-                preparedConfig.withUnsafePointer { configPointer in
-                    etos_local_llm_generate_chat(
-                        modelPathCString,
-                        messagesJSON,
-                        toolsJSON,
-                        configPointer,
-                        localLLMGenerationShouldCancel,
-                        statePointer,
-                        &outputPointer,
-                        &errorPointer
-                    )
+        let status = LocalLLMExecutionGate.withExclusiveAccess {
+            modelPath.withCString { modelPathCString in
+                payload.withUnsafeCStrings { messagesJSON, toolsJSON in
+                    preparedConfig.withUnsafePointer { configPointer in
+                        etos_local_llm_generate_chat(
+                            modelPathCString,
+                            messagesJSON,
+                            toolsJSON,
+                            configPointer,
+                            localLLMGenerationShouldCancel,
+                            statePointer,
+                            &outputPointer,
+                            &errorPointer
+                        )
+                    }
                 }
             }
         }
@@ -367,19 +380,21 @@ private enum LocalLLMBridge {
         let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
         let payload = try LocalLLMChatTemplatePayload(messages: messages, tools: tools)
         let statePointer = Unmanaged.passUnretained(cancellationState).toOpaque()
-        let status = modelPath.withCString { modelPathCString in
-            payload.withUnsafeCStrings { messagesJSON, toolsJSON in
-                preparedConfig.withUnsafePointer { configPointer in
-                    etos_local_llm_generate_chat_response(
-                        modelPathCString,
-                        messagesJSON,
-                        toolsJSON,
-                        configPointer,
-                        localLLMGenerationShouldCancel,
-                        statePointer,
-                        &outputPointer,
-                        &errorPointer
-                    )
+        let status = LocalLLMExecutionGate.withExclusiveAccess {
+            modelPath.withCString { modelPathCString in
+                payload.withUnsafeCStrings { messagesJSON, toolsJSON in
+                    preparedConfig.withUnsafePointer { configPointer in
+                        etos_local_llm_generate_chat_response(
+                            modelPathCString,
+                            messagesJSON,
+                            toolsJSON,
+                            configPointer,
+                            localLLMGenerationShouldCancel,
+                            statePointer,
+                            &outputPointer,
+                            &errorPointer
+                        )
+                    }
                 }
             }
         }
@@ -430,19 +445,21 @@ private enum LocalLLMBridge {
                 do {
                     let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
                     let payload = try LocalLLMChatTemplatePayload(messages: messages, tools: tools)
-                    let status = modelPath.withCString { modelPathCString in
-                        payload.withUnsafeCStrings { messagesJSON, toolsJSON in
-                            preparedConfig.withUnsafePointer { configPointer in
-                                etos_local_llm_generate_chat_stream(
-                                    modelPathCString,
-                                    messagesJSON,
-                                    toolsJSON,
-                                    configPointer,
-                                    localLLMStreamCallback,
-                                    localLLMStreamShouldCancel,
-                                    statePointer,
-                                    &errorPointer
-                                )
+                    let status = LocalLLMExecutionGate.withExclusiveAccess {
+                        modelPath.withCString { modelPathCString in
+                            payload.withUnsafeCStrings { messagesJSON, toolsJSON in
+                                preparedConfig.withUnsafePointer { configPointer in
+                                    etos_local_llm_generate_chat_stream(
+                                        modelPathCString,
+                                        messagesJSON,
+                                        toolsJSON,
+                                        configPointer,
+                                        localLLMStreamCallback,
+                                        localLLMStreamShouldCancel,
+                                        statePointer,
+                                        &errorPointer
+                                    )
+                                }
                             }
                         }
                     }
@@ -497,19 +514,21 @@ private enum LocalLLMBridge {
                 do {
                     let preparedConfig = try PreparedLocalLLMGenerationConfig(generationConfig)
                     let payload = try LocalLLMChatTemplatePayload(messages: messages, tools: tools)
-                    let status = modelPath.withCString { modelPathCString in
-                        payload.withUnsafeCStrings { messagesJSON, toolsJSON in
-                            preparedConfig.withUnsafePointer { configPointer in
-                                etos_local_llm_generate_chat_response_stream(
-                                    modelPathCString,
-                                    messagesJSON,
-                                    toolsJSON,
-                                    configPointer,
-                                    localLLMParsedStreamCallback,
-                                    localLLMParsedStreamShouldCancel,
-                                    statePointer,
-                                    &errorPointer
-                                )
+                    let status = LocalLLMExecutionGate.withExclusiveAccess {
+                        modelPath.withCString { modelPathCString in
+                            payload.withUnsafeCStrings { messagesJSON, toolsJSON in
+                                preparedConfig.withUnsafePointer { configPointer in
+                                    etos_local_llm_generate_chat_response_stream(
+                                        modelPathCString,
+                                        messagesJSON,
+                                        toolsJSON,
+                                        configPointer,
+                                        localLLMParsedStreamCallback,
+                                        localLLMParsedStreamShouldCancel,
+                                        statePointer,
+                                        &errorPointer
+                                    )
+                                }
                             }
                         }
                     }
@@ -605,19 +624,21 @@ private enum LocalLLMBridge {
         var errorPointer: UnsafeMutablePointer<CChar>?
         var embeddingCount: Int32 = 0
         var embeddingDimension: Int32 = 0
-        let status = modelPath.withCString { modelPathCString in
-            bridgedTextPointers.withUnsafeBufferPointer { textsPointer in
-                etos_local_llm_embed(
-                    modelPathCString,
-                    textsPointer.baseAddress,
-                    Int32(textsPointer.count),
-                    Int32(max(1, contextSize)),
-                    Int32(gpuLayers),
-                    &outputPointer,
-                    &embeddingCount,
-                    &embeddingDimension,
-                    &errorPointer
-                )
+        let status = LocalLLMExecutionGate.withExclusiveAccess {
+            modelPath.withCString { modelPathCString in
+                bridgedTextPointers.withUnsafeBufferPointer { textsPointer in
+                    etos_local_llm_embed(
+                        modelPathCString,
+                        textsPointer.baseAddress,
+                        Int32(textsPointer.count),
+                        Int32(max(1, contextSize)),
+                        Int32(gpuLayers),
+                        &outputPointer,
+                        &embeddingCount,
+                        &embeddingDimension,
+                        &errorPointer
+                    )
+                }
             }
         }
         defer {
