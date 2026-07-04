@@ -58,10 +58,6 @@ struct ToolWidgetRendererCard: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
-            )
         }
     }
 }
