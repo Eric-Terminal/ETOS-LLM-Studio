@@ -423,6 +423,7 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext,
+                messagesBeforeResponse: messagesToSend,
                 responsesFullInputFallbackRequest: responsesFullInputFallbackRequest
             )
         }

@@ -7,8 +7,11 @@
 // ============================================================================
 
 import Foundation
+import CryptoKit
 
 extension OpenAIAdapter {
+    private static let responsesContextSignatureRoot = "openai-responses-context-v1"
+
     struct ResponsesInputAssembly {
         let items: [[String: Any]]
         let messageEndIndexes: [UUID: Int]
@@ -233,6 +236,29 @@ extension OpenAIAdapter {
         return storedSignature == signature
     }
 
+    static func responsesContextSignature(previousSignature: String? = nil, appending items: [[String: Any]]) -> JSONValue? {
+        var signature = previousSignature ?? responsesContextSignatureRoot
+        for item in items {
+            guard JSONSerialization.isValidJSONObject(item),
+                  let data = try? JSONSerialization.data(withJSONObject: item, options: [.sortedKeys]) else {
+                return nil
+            }
+            var material = Data(signature.utf8)
+            material.append(0x0A)
+            material.append(data)
+            let digest = SHA256.hash(data: material)
+            signature = digest.map { String(format: "%02x", $0) }.joined()
+        }
+        return .string(signature)
+    }
+
+    func responsesContextSignatureMatches(_ message: ChatMessage, signature: JSONValue) -> Bool {
+        guard let storedSignature = message.providerResponseMetadata?[Self.responsesContextSignatureKey] else {
+            return false
+        }
+        return storedSignature == signature
+    }
+
     func responsesIncrementalInput(
         assembly: ResponsesInputAssembly,
         messages: [ChatMessage],
@@ -242,7 +268,9 @@ extension OpenAIAdapter {
             guard let previousResponseID = responsesPreviousResponseID(from: message),
                   responsesRequestSignatureMatches(message, signature: requestSignature),
                   let endIndex = assembly.messageEndIndexes[message.id],
-                  endIndex < assembly.items.count else {
+                  endIndex < assembly.items.count,
+                  let contextSignature = Self.responsesContextSignature(appending: Array(assembly.items[..<endIndex])),
+                  responsesContextSignatureMatches(message, signature: contextSignature) else {
                 continue
             }
 
@@ -534,19 +562,25 @@ extension OpenAIAdapter {
             )
 
         case "response.function_call_arguments.done":
-            let callID = payload["call_id"] as? String
+            let item = payload["item"] as? [String: Any]
+            let callID = (payload["call_id"] as? String) ?? (item?["call_id"] as? String)
             var providerSpecificFields: [String: JSONValue] = [:]
-            if let itemID = payload["item_id"] as? String, !itemID.isEmpty {
+            if let itemID = (payload["item_id"] as? String) ?? (item?["id"] as? String), !itemID.isEmpty {
                 providerSpecificFields[Self.responsesOutputItemIDKey] = .string(itemID)
             }
+            if let status = item?["status"] as? String, !status.isEmpty {
+                providerSpecificFields[Self.responsesOutputItemStatusKey] = .string(status)
+            }
+            let responseMetadata = item.flatMap { responsesProviderMetadata(outputItem: $0) }
             return ChatMessagePart(
+                providerResponseMetadata: responseMetadata,
                 toolCallDeltas: [
                     ChatMessagePart.ToolCallDelta(
                         id: callID,
                         index: payload["output_index"] as? Int,
-                        nameFragment: nil,
+                        nameFragment: item?["name"] as? String,
                         argumentsFragment: nil,
-                        argumentsReplacement: payload["arguments"] as? String,
+                        argumentsReplacement: (payload["arguments"] as? String) ?? (item?["arguments"] as? String),
                         providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
                     )
                 ]

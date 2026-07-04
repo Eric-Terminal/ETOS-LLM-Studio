@@ -400,7 +400,11 @@ extension ChatService {
                         speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
-                attachOpenAIResponsesRequestMetadata(to: &messages[index], request: request)
+                attachOpenAIResponsesRequestMetadata(
+                    to: &messages[index],
+                    request: request,
+                    messagesBeforeResponse: messages
+                )
                 attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
                 messages = persistAndPublishStreamingMessages(

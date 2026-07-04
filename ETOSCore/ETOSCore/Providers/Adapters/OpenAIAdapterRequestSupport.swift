@@ -318,6 +318,7 @@ extension OpenAIAdapter {
 
         if !forceFullInput,
            finalPayload["previous_response_id"] == nil,
+           finalPayload["conversation"] == nil,
            let requestSignature = responsesRequestSignature(from: finalPayload),
            let incremental = responsesIncrementalInput(
                 assembly: inputAssembly,

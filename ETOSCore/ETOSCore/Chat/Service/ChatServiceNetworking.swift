@@ -93,11 +93,74 @@ extension ChatService {
         return jsonValueForRequestMetadata(from: payload)
     }
 
-    func attachOpenAIResponsesRequestMetadata(to message: inout ChatMessage, request: URLRequest) {
+    func attachOpenAIResponsesRequestMetadata(
+        to message: inout ChatMessage,
+        request: URLRequest,
+        messagesBeforeResponse: [ChatMessage] = []
+    ) {
         guard let requestSignature = openAIResponsesRequestSignature(from: request) else { return }
         var metadata = message.providerResponseMetadata ?? [:]
         metadata[OpenAIAdapter.responsesRequestSignatureKey] = requestSignature
+        if let contextSignature = openAIResponsesContextSignature(
+            for: message,
+            request: request,
+            messagesBeforeResponse: messagesBeforeResponse
+        ) {
+            metadata[OpenAIAdapter.responsesContextSignatureKey] = contextSignature
+        }
         message.providerResponseMetadata = metadata
+    }
+
+    func openAIResponsesContextSignature(
+        for message: ChatMessage,
+        request: URLRequest,
+        messagesBeforeResponse: [ChatMessage]
+    ) -> JSONValue? {
+        guard isOpenAIResponsesRequest(request),
+              let payload = jsonObjectBody(from: request),
+              let inputItems = payload["input"] as? [[String: Any]] else {
+            return nil
+        }
+
+        let previousSignature: String?
+        if let previousResponseID = payload["previous_response_id"] as? String,
+           !previousResponseID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            previousSignature = openAIResponsesStoredContextSignature(
+                responseID: previousResponseID,
+                messages: messagesBeforeResponse
+            )
+            guard previousSignature != nil else { return nil }
+        } else {
+            previousSignature = nil
+        }
+
+        let outputItems = openAIResponsesOutputItems(from: message)
+        return OpenAIAdapter.responsesContextSignature(
+            previousSignature: previousSignature,
+            appending: inputItems + outputItems
+        )
+    }
+
+    func openAIResponsesStoredContextSignature(responseID: String, messages: [ChatMessage]) -> String? {
+        for message in messages.reversed() where message.role == .assistant {
+            guard let metadata = message.providerResponseMetadata,
+                  case let .string(storedResponseID)? = metadata[OpenAIAdapter.responsesResponseIDKey],
+                  storedResponseID == responseID,
+                  case let .string(contextSignature)? = metadata[OpenAIAdapter.responsesContextSignatureKey],
+                  !contextSignature.isEmpty else {
+                continue
+            }
+            return contextSignature
+        }
+        return nil
+    }
+
+    func openAIResponsesOutputItems(from message: ChatMessage) -> [[String: Any]] {
+        guard let metadata = message.providerResponseMetadata,
+              case let .array(items)? = metadata[OpenAIAdapter.responsesOutputItemsKey] else {
+            return []
+        }
+        return items.compactMap { $0.toAny() as? [String: Any] }
     }
 
     func isOpenAIResponsesPreviousResponseMissing(statusCode: Int, bodyData: Data?) -> Bool {

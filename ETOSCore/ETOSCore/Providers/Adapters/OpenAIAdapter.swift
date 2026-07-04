@@ -23,6 +23,7 @@ public class OpenAIAdapter: APIAdapter {
     static let responsesResponseIDKey = "openai_responses_response_id"
     static let responsesOutputItemsKey = "openai_responses_output_items"
     static let responsesRequestSignatureKey = "openai_responses_request_signature"
+    static let responsesContextSignatureKey = "openai_responses_context_signature"
     static let responsesForceFullInputControlKey = "openai_responses_force_full_input"
     static let responsesOutputItemIDKey = "openai_responses_output_item_id"
     static let responsesOutputItemStatusKey = "openai_responses_output_item_status"

@@ -166,6 +166,7 @@ extension ChatService {
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
         requestLogContext: RequestLogContext,
+        messagesBeforeResponse: [ChatMessage] = [],
         responsesFullInputFallbackRequest: URLRequest? = nil
     ) async {
         do {
@@ -180,7 +181,11 @@ extension ChatService {
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
-                attachOpenAIResponsesRequestMetadata(to: &parsedMessage, request: request)
+                attachOpenAIResponsesRequestMetadata(
+                    to: &parsedMessage,
+                    request: request,
+                    messagesBeforeResponse: messagesBeforeResponse
+                )
                 let responseCompletedAt = Date()
                 let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {
@@ -295,6 +300,7 @@ extension ChatService {
                     enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                     requestStartedAt: requestStartedAt,
                     requestLogContext: requestLogContext,
+                    messagesBeforeResponse: messagesBeforeResponse,
                     responsesFullInputFallbackRequest: nil
                 )
                 return

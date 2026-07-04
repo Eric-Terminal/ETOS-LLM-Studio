@@ -653,12 +653,31 @@ struct OpenAIAdapterAdvancedTests {
         let requestSignature = try #require(adapter.responsesRequestSignature(from: [
             "model": "gpt-5.4"
         ]))
+        let previousContextSignature = try #require(OpenAIAdapter.responsesContextSignature(appending: [
+            [
+                "type": "message",
+                "role": "user",
+                "content": "第一轮问题"
+            ],
+            [
+                "type": "message",
+                "id": "msg_prev_1",
+                "role": "assistant",
+                "content": [
+                    [
+                        "type": "output_text",
+                        "text": "第一轮回答。"
+                    ]
+                ]
+            ]
+        ]))
         let previousAssistant = ChatMessage(
             role: .assistant,
             content: "第一轮回答。",
             providerResponseMetadata: [
                 "openai_responses_response_id": .string("resp_prev_1"),
                 "openai_responses_request_signature": requestSignature,
+                "openai_responses_context_signature": previousContextSignature,
                 "openai_responses_output_items": .array([
                     .dictionary([
                         "type": .string("message"),
@@ -696,6 +715,250 @@ struct OpenAIAdapterAdvancedTests {
         #expect(inputItems.count == 1)
         #expect(inputItems.first?["role"] as? String == "user")
         #expect(inputItems.first?["content"] as? String == "继续")
+    }
+
+    @Test("OpenAI Responses 前文变更时不会复用 previous_response_id")
+    func testBuildResponsesAPIRequestSkipsPreviousResponseIDWhenHistoryPrefixChanged() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses")
+                ]
+            )
+        )
+        let requestSignature = try #require(adapter.responsesRequestSignature(from: [
+            "model": "gpt-5.4"
+        ]))
+        let oldContextSignature = try #require(OpenAIAdapter.responsesContextSignature(appending: [
+            [
+                "type": "message",
+                "role": "user",
+                "content": "第一轮问题"
+            ],
+            [
+                "type": "message",
+                "id": "msg_prev_changed",
+                "role": "assistant",
+                "content": [
+                    [
+                        "type": "output_text",
+                        "text": "第一轮回答。"
+                    ]
+                ]
+            ]
+        ]))
+        let previousAssistant = ChatMessage(
+            role: .assistant,
+            content: "第一轮回答。",
+            providerResponseMetadata: [
+                "openai_responses_response_id": .string("resp_prev_changed"),
+                "openai_responses_request_signature": requestSignature,
+                "openai_responses_context_signature": oldContextSignature,
+                "openai_responses_output_items": .array([
+                    .dictionary([
+                        "type": .string("message"),
+                        "id": .string("msg_prev_changed"),
+                        "role": .string("assistant"),
+                        "content": .array([
+                            .dictionary([
+                                "type": .string("output_text"),
+                                "text": .string("第一轮回答。")
+                            ])
+                        ])
+                    ])
+                ])
+            ]
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: [:],
+            messages: [
+                ChatMessage(role: .user, content: "第一轮问题（已编辑）"),
+                previousAssistant,
+                ChatMessage(role: .user, content: "继续")
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let inputItems = try #require(jsonPayload["input"] as? [[String: Any]])
+
+        #expect(jsonPayload["previous_response_id"] == nil)
+        #expect(inputItems.count == 3)
+        #expect(inputItems[0]["content"] as? String == "第一轮问题（已编辑）")
+        #expect(inputItems[1]["id"] as? String == "msg_prev_changed")
+        #expect(inputItems[2]["content"] as? String == "继续")
+    }
+
+    @Test("OpenAI Responses 工具结果增量只回传 function_call_output")
+    func testBuildResponsesAPIRequestUsesPreviousResponseIDForToolOutputOnly() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses")
+                ]
+            )
+        )
+        let requestSignature = try #require(adapter.responsesRequestSignature(from: [
+            "model": "gpt-5.4"
+        ]))
+        let functionCallItem: [String: Any] = [
+            "type": "function_call",
+            "id": "fc_prev_tool",
+            "call_id": "call_prev_tool",
+            "name": "save_memory",
+            "arguments": "{\"content\":\"记住这个\"}",
+            "status": "completed"
+        ]
+        let previousContextSignature = try #require(OpenAIAdapter.responsesContextSignature(appending: [
+            [
+                "type": "message",
+                "role": "user",
+                "content": "记住这个"
+            ],
+            functionCallItem
+        ]))
+        let previousAssistant = ChatMessage(
+            role: .assistant,
+            content: "",
+            providerResponseMetadata: [
+                "openai_responses_response_id": .string("resp_prev_tool"),
+                "openai_responses_request_signature": requestSignature,
+                "openai_responses_context_signature": previousContextSignature,
+                "openai_responses_output_items": .array([
+                    .dictionary([
+                        "type": .string("function_call"),
+                        "id": .string("fc_prev_tool"),
+                        "call_id": .string("call_prev_tool"),
+                        "name": .string("save_memory"),
+                        "arguments": .string("{\"content\":\"记住这个\"}"),
+                        "status": .string("completed")
+                    ])
+                ])
+            ]
+        )
+        let toolMessage = ChatMessage(
+            role: .tool,
+            content: "{\"saved\":true}",
+            toolCalls: [
+                InternalToolCall(
+                    id: "call_prev_tool",
+                    toolName: "save_memory",
+                    arguments: "{}"
+                )
+            ]
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: [:],
+            messages: [
+                ChatMessage(role: .user, content: "记住这个"),
+                previousAssistant,
+                toolMessage
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let inputItems = try #require(jsonPayload["input"] as? [[String: Any]])
+
+        #expect(jsonPayload["previous_response_id"] as? String == "resp_prev_tool")
+        #expect(inputItems.count == 1)
+        #expect(inputItems.first?["type"] as? String == "function_call_output")
+        #expect(inputItems.first?["call_id"] as? String == "call_prev_tool")
+        #expect(inputItems.first?["output"] as? String == "{\"saved\":true}")
+    }
+
+    @Test("OpenAI Responses conversation 模式不会自动叠加 previous_response_id")
+    func testBuildResponsesAPIRequestDoesNotAutoPreviousResponseIDWithConversation() throws {
+        let responseModel = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                overrideParameters: [
+                    "openai_api": .string("responses")
+                ]
+            )
+        )
+        let requestSignature = try #require(adapter.responsesRequestSignature(from: [
+            "conversation": "conv_1",
+            "model": "gpt-5.4"
+        ]))
+        let previousContextSignature = try #require(OpenAIAdapter.responsesContextSignature(appending: [
+            [
+                "type": "message",
+                "role": "user",
+                "content": "第一轮问题"
+            ],
+            [
+                "type": "message",
+                "id": "msg_prev_conversation",
+                "role": "assistant",
+                "content": [
+                    [
+                        "type": "output_text",
+                        "text": "第一轮回答。"
+                    ]
+                ]
+            ]
+        ]))
+        let previousAssistant = ChatMessage(
+            role: .assistant,
+            content: "第一轮回答。",
+            providerResponseMetadata: [
+                "openai_responses_response_id": .string("resp_prev_conversation"),
+                "openai_responses_request_signature": requestSignature,
+                "openai_responses_context_signature": previousContextSignature,
+                "openai_responses_output_items": .array([
+                    .dictionary([
+                        "type": .string("message"),
+                        "id": .string("msg_prev_conversation"),
+                        "role": .string("assistant"),
+                        "content": .array([
+                            .dictionary([
+                                "type": .string("output_text"),
+                                "text": .string("第一轮回答。")
+                            ])
+                        ])
+                    ])
+                ])
+            ]
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: responseModel,
+            commonPayload: [
+                "conversation": "conv_1"
+            ],
+            messages: [
+                ChatMessage(role: .user, content: "第一轮问题"),
+                previousAssistant,
+                ChatMessage(role: .user, content: "继续")
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let inputItems = try #require(jsonPayload["input"] as? [[String: Any]])
+
+        #expect(jsonPayload["conversation"] as? String == "conv_1")
+        #expect(jsonPayload["previous_response_id"] == nil)
+        #expect(inputItems.count == 3)
     }
 
     @Test("OpenAI Responses 强制全量 input 会移除 previous_response_id 控制状态")
@@ -759,6 +1022,25 @@ struct OpenAIAdapterAdvancedTests {
         #expect(inputItems[0]["role"] as? String == "user")
         #expect(inputItems[1]["id"] as? String == "msg_prev_2")
         #expect(inputItems[2]["role"] as? String == "user")
+    }
+
+    @Test("OpenAI Responses previous_response_id miss 可识别为全量回退条件")
+    func testOpenAIResponsesPreviousResponseMissingDetection() throws {
+        let service = ChatService()
+        let missingBody = """
+        {"error":{"code":"response_not_found","message":"Could not find previous_response_id resp_missing"}}
+        """.data(using: .utf8)
+        let plainMissingBody = """
+        previous_response_id resp_missing not found
+        """.data(using: .utf8)
+        let unrelatedBody = """
+        {"error":{"code":"invalid_request_error","message":"model is required"}}
+        """.data(using: .utf8)
+
+        #expect(service.isOpenAIResponsesPreviousResponseMissing(statusCode: 400, bodyData: missingBody))
+        #expect(service.isOpenAIResponsesPreviousResponseMissing(statusCode: 404, bodyData: plainMissingBody))
+        #expect(service.isOpenAIResponsesPreviousResponseMissing(statusCode: 400, bodyData: unrelatedBody) == false)
+        #expect(service.isOpenAIResponsesPreviousResponseMissing(statusCode: 500, bodyData: missingBody) == false)
     }
 
     @Test("OpenAI Responses 不回传模式会移除 reasoning item")
@@ -911,6 +1193,31 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.cacheReadTokens == 4)
         #expect(usage.totalTokens == 16)
+    }
+
+    @Test("OpenAI Responses 流式工具参数完成事件可从 item 补齐工具信息")
+    func testParseResponsesFunctionCallArgumentsDoneUsesNestedItem() throws {
+        let line = """
+        data: {"type":"response.function_call_arguments.done","output_index":1,"item":{"type":"function_call","id":"fc_done_1","call_id":"call_done_1","name":"save_memory","arguments":"{\\"content\\":\\"你好\\"}","status":"completed"}}
+        """
+
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        let delta = try #require(part.toolCallDeltas?.first)
+        let rawOutputItems = try #require(part.providerResponseMetadata?["openai_responses_output_items"])
+
+        #expect(delta.id == "call_done_1")
+        #expect(delta.nameFragment == "save_memory")
+        #expect(delta.argumentsReplacement == "{\"content\":\"你好\"}")
+        #expect(delta.providerSpecificFields?["openai_responses_output_item_id"] == .string("fc_done_1"))
+        #expect(delta.providerSpecificFields?["openai_responses_output_item_status"] == .string("completed"))
+        if case let .array(outputItems) = rawOutputItems,
+           let firstOutputItem = outputItems.first,
+           case let .dictionary(outputItem) = firstOutputItem {
+            #expect(outputItem["id"] == .string("fc_done_1"))
+            #expect(outputItem["call_id"] == .string("call_done_1"))
+        } else {
+            Issue.record("Responses API 流式工具参数完成事件未保留 output item。")
+        }
     }
 
     @Test("OpenAI Responses 独立适配器可解析 Responses 流式事件")
