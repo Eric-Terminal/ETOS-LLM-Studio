@@ -61,6 +61,37 @@ struct MessageCostDetailRows: View {
                 .monospacedDigit()
         }
 
+        NavigationLink {
+            MessageCostCalculationDetailView(estimate: estimate, showsEstimatedHint: showsEstimatedHint)
+        } label: {
+            Label(NSLocalizedString("详情", comment: ""), systemImage: "function")
+        }
+    }
+}
+
+private struct MessageCostCalculationDetailView: View {
+    let estimate: MessageCostEstimate
+    var showsEstimatedHint: Bool
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("费用", comment: "Message cost section title")) {
+                LabeledContent(NSLocalizedString("估算费用", comment: "Estimated cost label")) {
+                    Text(MessageCostFormatter.formatTotal(estimate.totalCost))
+                        .monospacedDigit()
+                }
+            }
+
+            Section(NSLocalizedString("详情", comment: "")) {
+                calculationRows
+            }
+        }
+        .navigationTitle(NSLocalizedString("详情", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var calculationRows: some View {
         if hasTokenComponents {
             LabeledContent(NSLocalizedString("阶梯依据", comment: "Tier basis label")) {
                 Text(String(format: NSLocalizedString("%d tokens", comment: "Token count with unit"), estimate.tierBasisTokens))
