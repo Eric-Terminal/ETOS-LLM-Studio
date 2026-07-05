@@ -273,3 +273,69 @@ public final class BatchJobStore: @unchecked Sendable {
         }
     }
 }
+
+
+// MARK: - BatchJobStore
+import Foundation
+import os.log
+
+public final class BatchJobStore: @unchecked Sendable {
+    public static let shared = BatchJobStore()
+    private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "BatchJobStore")
+    
+    private var jobs: [String: BatchJob] = [:]
+    private let queue = DispatchQueue(label: "com.ETOS.LLM.Studio.BatchJobStore")
+    
+    private var fileURL: URL {
+        Persistence.documentsDirectory.appendingPathComponent("batch_jobs.json")
+    }
+    
+    private init() {
+        load()
+    }
+    
+    private func load() {
+        queue.sync {
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+            do {
+                let data = try Data(contentsOf: fileURL)
+                let decoded = try JSONDecoder().decode([String: BatchJob].self, from: data)
+                self.jobs = decoded
+            } catch {
+                logger.error("Failed to load Batch Jobs: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func persist() {
+        do {
+            let data = try JSONEncoder().encode(self.jobs)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            logger.error("Failed to save Batch Jobs: \(error.localizedDescription)")
+        }
+    }
+    
+    public func saveJob(_ job: BatchJob) {
+        queue.async {
+            self.jobs[job.id] = job
+            self.persist()
+        }
+    }
+    
+    public func getJob(id: String) -> BatchJob? {
+        queue.sync { self.jobs[id] }
+    }
+    
+    public func getAllJobs() -> [BatchJob] {
+        queue.sync { Array(self.jobs.values).sorted(by: { $0.createdAt > $1.createdAt }) }
+    }
+    
+    public func removeJob(id: String) {
+        queue.async {
+            self.jobs.removeValue(forKey: id)
+            self.persist()
+        }
+    }
+}
+
