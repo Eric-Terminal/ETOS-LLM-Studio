@@ -101,4 +101,18 @@ extension OpenAIAdapter {
         }
         let data: [DataEntry]
     }
+    
+    struct OpenAIFileUploadResponse: Decodable {
+        let id: String
+        let object: String?
+    }
+    
+    struct OpenAIBatchJobResponse: Decodable {
+        let id: String
+        let status: String
+        let input_file_id: String?
+        let output_file_id: String?
+        let error_file_id: String?
+        let endpoint: String?
+    }
 }

@@ -173,6 +173,19 @@ public protocol APIAdapter {
     func parseEmbeddingResponse(data: Data) throws -> [[Float]]
     func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest?
     func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult]
+
+    // MARK: - Batch API
+    func buildBatchFileUploadRequest(for model: RunnableModel, jsonlData: Data, purpose: String) -> URLRequest?
+    func parseBatchFileUploadResponse(data: Data) throws -> String
+    
+    func buildBatchCreateRequest(for model: RunnableModel, fileId: String, endpoint: String, metadata: [String: String]?) -> URLRequest?
+    func parseBatchCreateResponse(data: Data) throws -> BatchJob
+    
+    func buildBatchStatusRequest(for model: RunnableModel, batchId: String) -> URLRequest?
+    func parseBatchStatusResponse(data: Data) throws -> BatchJob
+    
+    func buildBatchResultDownloadRequest(for model: RunnableModel, fileId: String) -> URLRequest?
+    func parseBatchResultDownloadResponse(data: Data) throws -> Data
 }
 
 public extension APIAdapter {
@@ -203,6 +216,26 @@ public extension APIAdapter {
     func parseModelListResponse(data: Data) throws -> [Model] {
         let modelResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
         return modelResponse.data.map { Model(modelName: $0.id) }
+    }
+
+    func buildBatchFileUploadRequest(for model: RunnableModel, jsonlData: Data, purpose: String) -> URLRequest? { nil }
+    func parseBatchFileUploadResponse(data: Data) throws -> String {
+        throw NSError(domain: "APIAdapter", code: -13, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现 Batch 上传 API。", comment: "Adapter unsupported batch error")])
+    }
+    
+    func buildBatchCreateRequest(for model: RunnableModel, fileId: String, endpoint: String, metadata: [String: String]?) -> URLRequest? { nil }
+    func parseBatchCreateResponse(data: Data) throws -> BatchJob {
+        throw NSError(domain: "APIAdapter", code: -13, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现 Batch 创建 API。", comment: "Adapter unsupported batch error")])
+    }
+    
+    func buildBatchStatusRequest(for model: RunnableModel, batchId: String) -> URLRequest? { nil }
+    func parseBatchStatusResponse(data: Data) throws -> BatchJob {
+        throw NSError(domain: "APIAdapter", code: -13, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现 Batch 状态 API。", comment: "Adapter unsupported batch error")])
+    }
+    
+    func buildBatchResultDownloadRequest(for model: RunnableModel, fileId: String) -> URLRequest? { nil }
+    func parseBatchResultDownloadResponse(data: Data) throws -> Data {
+        throw NSError(domain: "APIAdapter", code: -13, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前适配器未实现 Batch 下载 API。", comment: "Adapter unsupported batch error")])
     }
 }
 
