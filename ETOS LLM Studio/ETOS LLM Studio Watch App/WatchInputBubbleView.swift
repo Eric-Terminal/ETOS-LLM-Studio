@@ -39,10 +39,6 @@ struct WatchInputBubbleView: View {
             || !viewModel.pendingFileAttachments.isEmpty
     }
 
-    private var hasAttachmentImportProgress: Bool {
-        viewModel.attachmentImportProgress != nil || viewModel.attachmentImportInProgress
-    }
-
     private var inputLocalPresentationBlocked: Bool {
         isRequestControlsPresented
             || isAttachmentImportPresented
@@ -127,149 +123,6 @@ struct WatchInputBubbleView: View {
         }
     }
 
-    @ViewBuilder
-    private var pendingAttachmentPreview: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let progress = viewModel.attachmentImportProgress {
-                attachmentImportProgressRow(progress)
-            }
-
-            if !viewModel.pendingImageAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(viewModel.pendingImageAttachments) { attachment in
-                            attachmentPreviewRow(
-                                systemImage: "photo",
-                                title: NSLocalizedString("图片文件", comment: ""),
-                                fileName: attachment.fileName,
-                                tint: .green,
-                                onRemove: {
-                                    viewModel.removePendingImageAttachment(attachment)
-                                }
-                            )
-                            .frame(width: 140, alignment: .leading)
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                }
-            }
-
-            if let audio = viewModel.pendingAudioAttachment {
-                attachmentPreviewRow(
-                    systemImage: "waveform",
-                    title: NSLocalizedString("语音文件", comment: ""),
-                    fileName: audio.fileName,
-                    tint: .blue,
-                    onRemove: {
-                        viewModel.clearPendingAudioAttachment()
-                    }
-                )
-            }
-
-            ForEach(viewModel.pendingFileAttachments) { attachment in
-                attachmentPreviewRow(
-                    systemImage: "doc",
-                    title: NSLocalizedString("文件", comment: ""),
-                    fileName: attachment.fileName,
-                    tint: .cyan,
-                    onRemove: {
-                        viewModel.removePendingFileAttachment(attachment)
-                    }
-                )
-            }
-        }
-    }
-
-    private func attachmentPreviewRow(
-        systemImage: String,
-        title: String,
-        fileName: String,
-        tint: Color,
-        onRemove: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .etFont(.system(size: 12))
-                .foregroundStyle(tint)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .etFont(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(fileName)
-                    .etFont(.system(size: 10))
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-            }
-
-            Spacer()
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .etFont(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.2))
-        .cornerRadius(8)
-    }
-
-    private func attachmentImportProgressRow(_ progress: WatchAttachmentImportProgress) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.down.circle")
-                    .etFont(.system(size: 12))
-                    .foregroundStyle(.blue)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(NSLocalizedString("正在下载附件", comment: "Watch attachment import progress title"))
-                        .etFont(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Text(progress.sourceName)
-                        .etFont(.system(size: 10))
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                }
-
-                Spacer()
-
-                if progress.isDeterminate {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
-                        .etFont(.system(size: 10, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.blue)
-                } else {
-                    ProgressView()
-                }
-            }
-
-            if progress.isDeterminate {
-                ProgressView(value: progress.fractionCompleted)
-                    .progressViewStyle(.linear)
-                Text(
-                    String(
-                        format: NSLocalizedString("已下载 %@ / %@", comment: "Watch attachment import downloaded bytes"),
-                        StorageUtility.formatSize(progress.bytesReceived),
-                        StorageUtility.formatSize(progress.totalBytes)
-                    )
-                )
-                .etFont(.system(size: 9))
-                .foregroundStyle(.secondary)
-            } else {
-                ProgressView()
-                    .progressViewStyle(.linear)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(white: 0.2))
-        .cornerRadius(8)
-    }
-
     var body: some View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || hasPendingAttachments
@@ -282,10 +135,6 @@ struct WatchInputBubbleView: View {
 
         let coreBubble = Group {
             VStack(spacing: 6) {
-                if hasPendingAttachments || hasAttachmentImportProgress {
-                    pendingAttachmentPreview
-                }
-
                 if isInlineSpeechComposerPresented {
                     inlineSpeechComposer
                 } else if isLiquidGlassEnabled {
@@ -593,6 +442,100 @@ struct WatchInputBubbleView: View {
     private func stopResourceUsageSampling() {
         resourceUsageTask?.cancel()
         resourceUsageTask = nil
+    }
+}
+
+struct WatchPendingAttachmentRowView: View {
+    let systemImage: String
+    let title: String
+    let fileName: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .etFont(.system(size: 13))
+                .foregroundStyle(tint)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .etFont(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(fileName)
+                    .etFont(.system(size: 10))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(white: 0.2))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct WatchAttachmentImportProgressRowView: View {
+    let progress: WatchAttachmentImportProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle")
+                    .etFont(.system(size: 13))
+                    .foregroundStyle(.blue)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(NSLocalizedString("正在下载附件", comment: "Watch attachment import progress title"))
+                        .etFont(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(progress.sourceName)
+                        .etFont(.system(size: 10))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                }
+
+                Spacer(minLength: 4)
+
+                if progress.isDeterminate {
+                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                        .etFont(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.blue)
+                } else {
+                    ProgressView()
+                }
+            }
+
+            if progress.isDeterminate {
+                ProgressView(value: progress.fractionCompleted)
+                    .progressViewStyle(.linear)
+                Text(
+                    String(
+                        format: NSLocalizedString("已下载 %@ / %@", comment: "Watch attachment import downloaded bytes"),
+                        StorageUtility.formatSize(progress.bytesReceived),
+                        StorageUtility.formatSize(progress.totalBytes)
+                    )
+                )
+                .etFont(.system(size: 9))
+                .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(white: 0.2))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

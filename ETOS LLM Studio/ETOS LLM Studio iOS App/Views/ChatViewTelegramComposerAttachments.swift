@@ -41,16 +41,11 @@ extension TelegramMessageComposer {
                                 Button {
                                     viewModel.removePendingImageAttachment(attachment)
                                 } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.black.opacity(0.5))
-                                            .frame(width: 22, height: 22)
-                                        Image(systemName: "xmark")
-                                            .etFont(.system(size: 10, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
+                                    removeAttachmentButtonLabel
                                 }
-                                .offset(x: 6, y: -6)
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(String(format: NSLocalizedString("移除附件 %@", comment: "Remove pending attachment accessibility label"), attachment.fileName))
+                                .padding(4)
                             }
                         }
                     }
@@ -60,30 +55,36 @@ extension TelegramMessageComposer {
             }
 
             if let audio = viewModel.pendingAudioAttachment {
-                HStack(spacing: 8) {
-                    Image(systemName: "waveform")
-                        .etFont(.system(size: 18))
-                        .foregroundColor(TelegramColors.attachButtonColor)
+                ZStack(alignment: .topTrailing) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform")
+                            .etFont(.system(size: 18))
+                            .foregroundColor(TelegramColors.attachButtonColor)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(NSLocalizedString("语音消息", comment: ""))
-                            .etFont(.system(size: 13, weight: .medium))
-                        Text(audio.fileName)
-                            .etFont(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(NSLocalizedString("语音消息", comment: ""))
+                                .etFont(.system(size: 13, weight: .medium))
+                            Text(audio.fileName)
+                                .etFont(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .padding(.trailing, 26)
 
                     Button {
                         viewModel.clearPendingAudioAttachment()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(.secondary)
+                        removeAttachmentButtonLabel
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(format: NSLocalizedString("移除附件 %@", comment: "Remove pending attachment accessibility label"), audio.fileName))
+                    .padding(4)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color(uiColor: .secondarySystemBackground))
@@ -91,30 +92,36 @@ extension TelegramMessageComposer {
             }
 
             ForEach(viewModel.pendingFileAttachments) { attachment in
-                HStack(spacing: 8) {
-                    Image(systemName: "doc")
-                        .etFont(.system(size: 18))
-                        .foregroundColor(TelegramColors.attachButtonColor)
+                ZStack(alignment: .topTrailing) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc")
+                            .etFont(.system(size: 18))
+                            .foregroundColor(TelegramColors.attachButtonColor)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(NSLocalizedString("文件", comment: ""))
-                            .etFont(.system(size: 13, weight: .medium))
-                        Text(attachment.fileName)
-                            .etFont(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(NSLocalizedString("文件", comment: ""))
+                                .etFont(.system(size: 13, weight: .medium))
+                            Text(attachment.fileName)
+                                .etFont(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .padding(.trailing, 26)
 
                     Button {
                         viewModel.removePendingFileAttachment(attachment)
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .etFont(.system(size: 18))
-                            .foregroundColor(.secondary)
+                        removeAttachmentButtonLabel
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(format: NSLocalizedString("移除附件 %@", comment: "Remove pending attachment accessibility label"), attachment.fileName))
+                    .padding(4)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color(uiColor: .secondarySystemBackground))
@@ -125,6 +132,18 @@ extension TelegramMessageComposer {
         .background(
             glassRoundedBackground(cornerRadius: 18)
         )
+    }
+
+    private var removeAttachmentButtonLabel: some View {
+        ZStack {
+            Circle()
+                .fill(Color.black.opacity(0.58))
+            Image(systemName: "xmark")
+                .etFont(.system(size: 10, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .frame(width: 24, height: 24)
+        .contentShape(Circle())
     }
 
     func importAudioAttachment(from url: URL) {

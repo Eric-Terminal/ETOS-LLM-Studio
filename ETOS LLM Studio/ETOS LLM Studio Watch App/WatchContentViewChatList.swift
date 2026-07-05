@@ -90,6 +90,66 @@ extension ContentView {
                 }
             }
 
+            if let progress = viewModel.attachmentImportProgress {
+                WatchAttachmentImportProgressRowView(progress: progress)
+                    .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                    .listRowBackground(Color.clear)
+            }
+
+            ForEach(viewModel.pendingImageAttachments) { attachment in
+                WatchPendingAttachmentRowView(
+                    systemImage: "photo",
+                    title: NSLocalizedString("图片文件", comment: ""),
+                    fileName: attachment.fileName,
+                    tint: .green
+                )
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        viewModel.removePendingImageAttachment(attachment)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: "Delete pending attachment action"), systemImage: "trash")
+                    }
+                }
+            }
+
+            if let audio = viewModel.pendingAudioAttachment {
+                WatchPendingAttachmentRowView(
+                    systemImage: "waveform",
+                    title: NSLocalizedString("语音文件", comment: ""),
+                    fileName: audio.fileName,
+                    tint: .blue
+                )
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        viewModel.clearPendingAudioAttachment()
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: "Delete pending attachment action"), systemImage: "trash")
+                    }
+                }
+            }
+
+            ForEach(viewModel.pendingFileAttachments) { attachment in
+                WatchPendingAttachmentRowView(
+                    systemImage: "doc",
+                    title: NSLocalizedString("文件", comment: ""),
+                    fileName: attachment.fileName,
+                    tint: .cyan
+                )
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        viewModel.removePendingFileAttachment(attachment)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: "Delete pending attachment action"), systemImage: "trash")
+                    }
+                }
+            }
+
             if viewModel.activeAskUserInputRequest == nil {
                 WatchInputBubbleView(
                     viewModel: viewModel,
