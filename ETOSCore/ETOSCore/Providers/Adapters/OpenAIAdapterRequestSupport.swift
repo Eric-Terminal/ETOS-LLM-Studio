@@ -628,6 +628,11 @@ extension OpenAIAdapter {
 
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+                logImageGenerationRequestSnapshot(
+                    adapterName: NSLocalizedString("OpenAI 兼容生图", comment: "OpenAI compatible image generation adapter log name"),
+                    request: request,
+                    payload: payload
+                )
                 return request
             } catch {
                 logger.error("构建生图请求失败: 无法编码 JSON - \(error.localizedDescription)")
@@ -688,6 +693,12 @@ extension OpenAIAdapter {
 
         body.appendString("--\(boundary)--\r\n")
         request.httpBody = body
+        logImageGenerationRequestSnapshot(
+            adapterName: NSLocalizedString("OpenAI 兼容图片编辑", comment: "OpenAI compatible image edit adapter log name"),
+            request: request,
+            prompt: prompt,
+            referenceImageCount: referenceImages.count
+        )
         return request
     }
 

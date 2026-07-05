@@ -200,13 +200,33 @@ extension ChatService {
                 }
             }
             let effectiveRunnableModel = RunnableModel(provider: runnableModel.provider, model: effectiveModel)
+            let modelReference = MessageModelReference(
+                providerID: effectiveRunnableModel.provider.id,
+                providerName: effectiveRunnableModel.provider.name,
+                modelUUID: effectiveRunnableModel.model.id,
+                modelName: effectiveRunnableModel.model.modelName,
+                modelDisplayName: effectiveRunnableModel.model.displayName
+            )
+            let requestLogContext = RequestLogContext(
+                requestID: UUID(),
+                sessionID: currentSession.id,
+                providerID: effectiveRunnableModel.provider.id,
+                providerName: effectiveRunnableModel.provider.name,
+                modelID: effectiveRunnableModel.model.modelName,
+                requestSource: .imageGeneration,
+                isStreaming: false,
+                requestedAt: Date(),
+                modelReference: modelReference,
+                modelPricing: effectiveRunnableModel.model.pricing
+            )
             await self.executeImageGenerationRequest(
                 adapter: adapter,
                 runnableModel: effectiveRunnableModel,
                 prompt: trimmedPrompt,
                 referenceImages: imageAttachments,
                 loadingMessageID: loadingMessage.id,
-                currentSessionID: currentSession.id
+                currentSessionID: currentSession.id,
+                requestLogContext: requestLogContext
             )
         }
         updateRequestTask(requestTask, for: currentSession.id, token: requestToken)
@@ -232,13 +252,14 @@ extension ChatService {
         runnableModel.model.supportsImageGeneration
     }
 
-    private func executeImageGenerationRequest(
+    func executeImageGenerationRequest(
         adapter: APIAdapter,
         runnableModel: RunnableModel,
         prompt: String,
         referenceImages: [ImageAttachment],
         loadingMessageID: UUID,
-        currentSessionID: UUID
+        currentSessionID: UUID,
+        requestLogContext: RequestLogContext
     ) async {
         logger.info(
             "构建生图请求: session=\(currentSessionID.uuidString), model=\(runnableModel.model.modelName), referenceCount=\(referenceImages.count)"
@@ -247,6 +268,13 @@ extension ChatService {
             for: runnableModel.provider,
             action: NSLocalizedString("发送生图请求", comment: "Send image generation request action")
         ) {
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "invalid_provider_configuration"
+            )
             addErrorMessage(configurationError, sessionID: currentSessionID)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
@@ -268,6 +296,13 @@ extension ChatService {
         ) else {
             logger.error("生图请求构建失败: session=\(currentSessionID.uuidString)")
             let reason = NSLocalizedString("错误: 无法构建生图请求。", comment: "Failed to build image generation request")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "build_request_failed"
+            )
             addErrorMessage(reason, sessionID: currentSessionID)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
@@ -287,6 +322,11 @@ extension ChatService {
         do {
             logger.info("生图请求发送中: session=\(currentSessionID.uuidString)")
             let data = try await fetchData(for: request, provider: runnableModel.provider)
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                bodyData: data
+            )
             logger.info("生图响应已返回: session=\(currentSessionID.uuidString), bytes=\(data.count)")
             let imageResults = try adapter.parseImageGenerationResponse(data: data)
             logger.info("生图响应解析完成: session=\(currentSessionID.uuidString), results=\(imageResults.count)")
@@ -321,6 +361,13 @@ extension ChatService {
             guard !generatedImageFileNames.isEmpty else {
                 logger.error("生图响应中没有可保存图片: session=\(currentSessionID.uuidString)")
                 let reason = NSLocalizedString("生图响应中没有可保存的图片。", comment: "No generated image could be saved")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "image_generation_no_image"
+                )
                 addErrorMessage(reason, sessionID: currentSessionID)
                 emitSessionRequestStatus(.error, sessionID: currentSessionID)
                 imageGenerationStatusSubject.send(
@@ -355,6 +402,12 @@ extension ChatService {
             }
 
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .success,
+                tokenUsage: nil,
+                finishedAt: Date()
+            )
             imageGenerationStatusSubject.send(
                 .succeeded(
                     sessionID: currentSessionID,
@@ -367,9 +420,30 @@ extension ChatService {
             logger.info("生图流程完成: session=\(currentSessionID.uuidString), imageCount=\(generatedImageFileNames.count)")
         } catch is CancellationError {
             logger.info("生图请求在处理中被取消。")
+            persistRequestLog(
+                context: requestLogContext,
+                status: .cancelled,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                errorKind: "cancelled"
+            )
         } catch NetworkError.badStatusCode(let code, let bodyData) {
             let snippet = responseBodySnippet(from: bodyData)
             logger.error("生图请求失败(HTTP \(code)): \(snippet)")
+            logResponseBodySnapshot(
+                context: requestLogContext,
+                request: request,
+                bodyData: bodyData,
+                httpStatusCode: code
+            )
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                httpStatusCode: code,
+                errorKind: "bad_status_code"
+            )
             addErrorMessage(snippet, sessionID: currentSessionID, httpStatusCode: code)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             imageGenerationStatusSubject.send(
@@ -384,11 +458,25 @@ extension ChatService {
         } catch {
             if isCancellationError(error) {
                 logger.info("生图请求在处理中被取消 (URLError)。")
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
+                )
             } else {
                 logger.error("生图请求失败: \(error.localizedDescription)")
                 let reason = String(
                     format: NSLocalizedString("生图请求失败: %@", comment: "Image generation request failed with reason"),
                     error.localizedDescription
+                )
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "request_failed"
                 )
                 addErrorMessage(reason, sessionID: currentSessionID)
                 emitSessionRequestStatus(.error, sessionID: currentSessionID)

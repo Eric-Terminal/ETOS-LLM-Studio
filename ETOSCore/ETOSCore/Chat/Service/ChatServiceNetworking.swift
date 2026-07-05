@@ -305,7 +305,7 @@ extension ChatService {
         errorKind: String? = nil
     ) {
         let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
-        if context.requestSource == .chat,
+        if (context.requestSource == .chat || context.requestSource == .imageGeneration),
            AppConfigStore.boolValue(for: .requestLogEnabled) {
             let logEntry = RequestLogEntry(
                 requestID: context.requestID,
