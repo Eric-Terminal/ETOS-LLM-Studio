@@ -200,6 +200,7 @@ extension SyncEngine {
         let canonicalAPIFormat = canonicalProviderAPIFormat(provider.apiFormat)
         hasher.combine(provider.baseNameWithoutSyncSuffix.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
         hasher.combine(normalizeProviderBaseURL(provider.baseURL, apiFormat: canonicalAPIFormat))
+        hasher.combine(provider.normalizedChatEndpointPath)
         hasher.combine(canonicalAPIFormat)
         for (key, value) in provider.headerOverrides.sorted(by: { $0.key < $1.key }) {
             hasher.combine(key)

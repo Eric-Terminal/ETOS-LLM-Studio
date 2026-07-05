@@ -301,6 +301,7 @@ extension ConfigLoader {
         let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
         var persistedProvider = provider
         persistedProvider.apiKeys = normalizedAPIKeys
+        persistedProvider.chatEndpointPath = persistedProvider.normalizedChatEndpointPath
 
         var providers = loadProviders()
         let previousProvider = providers.first(where: { $0.id == persistedProvider.id })
@@ -327,6 +328,7 @@ extension ConfigLoader {
             "providerName": persistedProvider.name,
             "apiFormat": persistedProvider.apiFormat,
             "baseURL": persistedProvider.baseURL,
+            "chatEndpointPath": persistedProvider.normalizedChatEndpointPath,
             "modelCount": "\(persistedProvider.models.count)",
             "headerCount": "\(persistedProvider.headerOverrides.count)",
             "apiKeyCount": "\(normalizedAPIKeys.count)",
@@ -395,6 +397,9 @@ extension ConfigLoader {
         if old.baseURL != new.baseURL {
             fields.append("Base URL")
         }
+        if old.normalizedChatEndpointPath != new.normalizedChatEndpointPath {
+            fields.append(NSLocalizedString("聊天端点后缀", comment: "App log changed field"))
+        }
         if old.apiFormat != new.apiFormat {
             fields.append(NSLocalizedString("API 格式", comment: "App log changed field"))
         }
@@ -417,6 +422,7 @@ extension ConfigLoader {
     static func providersShareSamePersistentConfiguration(_ lhs: Provider, _ rhs: Provider) -> Bool {
         lhs.name == rhs.name &&
         lhs.baseURL == rhs.baseURL &&
+        lhs.normalizedChatEndpointPath == rhs.normalizedChatEndpointPath &&
         lhs.apiFormat == rhs.apiFormat &&
         lhs.models == rhs.models &&
         lhs.headerOverrides == rhs.headerOverrides &&

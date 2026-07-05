@@ -4683,3 +4683,5 @@
 "未填写价格" = "Price missing";
 "每次 %@" = "%@ each";
 "%d 次 × %@/次" = "%d requests × %@/request";
+"聊天端点后缀" = "Chat Endpoint Suffix";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天端点后缀会拼接在其后。" = "API base URL example: https://api.openai.com/v1; the chat endpoint suffix is appended after it.";

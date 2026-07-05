@@ -25,6 +25,49 @@ struct OpenAIAdapterCoreTests {
         model: Model(modelName: "test-model")
     )
 
+    @Test("OpenAI 兼容请求默认使用 Chat Completions 端点")
+    func testOpenAIChatRequestUsesDefaultChatEndpointPath() throws {
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/chat/completions")
+    }
+
+    @Test("OpenAI 兼容请求支持自定义聊天端点后缀")
+    func testOpenAIChatRequestUsesCustomChatEndpointPath() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Proxy Provider",
+            baseURL: "https://api.test.com/v1/",
+            chatEndpointPath: "proxy/chat/",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible"
+        )
+        let model = RunnableModel(provider: provider, model: Model(modelName: "test-model"))
+        let messages = [ChatMessage(role: .user, content: "你好")]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+
+        #expect(request.url?.absoluteString == "https://api.test.com/v1/proxy/chat")
+    }
+
     @Test("OpenAI 兼容模型列表会识别嵌入模型")
     func testOpenAIModelListInfersEmbeddingCapability() throws {
         let data = Data("""

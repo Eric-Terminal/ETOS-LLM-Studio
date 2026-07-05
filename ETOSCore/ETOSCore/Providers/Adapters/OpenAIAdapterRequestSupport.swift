@@ -56,7 +56,11 @@ extension OpenAIAdapter {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
         }
-        let chatURL = baseURL.appendingPathComponent("chat/completions")
+        let chatURL = Provider.appendingEndpointPath(
+            model.provider.normalizedChatEndpointPath,
+            to: baseURL,
+            defaultPath: Provider.defaultChatEndpointPath
+        )
 
         var request = URLRequest(url: chatURL)
         request.timeoutInterval = 600

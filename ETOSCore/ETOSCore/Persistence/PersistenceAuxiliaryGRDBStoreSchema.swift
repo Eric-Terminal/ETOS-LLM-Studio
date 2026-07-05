@@ -82,6 +82,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         id TEXT PRIMARY KEY NOT NULL,
                         name TEXT NOT NULL,
                         base_url TEXT NOT NULL,
+                        chat_endpoint_path TEXT NOT NULL DEFAULT '/chat/completions',
                         api_format TEXT NOT NULL,
                         proxy_is_enabled INTEGER,
                         proxy_type TEXT,
@@ -837,6 +838,29 @@ extension PersistenceAuxiliaryGRDBStore {
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_servers_display_name ON mcp_servers(display_name COLLATE NOCASE)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_server_sort ON mcp_tools(server_id, sort_index ASC)")
                 try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_mcp_tools_updated_at ON mcp_tools(updated_at DESC)")
+            }
+
+            migrator.registerMigration("v13_add_provider_chat_endpoint_path") { db in
+                func tableExists(_ name: String) throws -> Bool {
+                    (try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        arguments: [name]
+                    ) ?? 0) > 0
+                }
+
+                func tableHasColumn(_ tableName: String, columnName: String) throws -> Bool {
+                    let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+                    return columns.contains { row in
+                        let name: String = row["name"]
+                        return name == columnName
+                    }
+                }
+
+                guard try tableExists("providers") else { return }
+                if !(try tableHasColumn("providers", columnName: "chat_endpoint_path")) {
+                    try db.execute(sql: "ALTER TABLE providers ADD COLUMN chat_endpoint_path TEXT NOT NULL DEFAULT '/chat/completions'")
+                }
             }
         }
 

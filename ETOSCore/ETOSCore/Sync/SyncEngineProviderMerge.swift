@@ -67,6 +67,15 @@ extension SyncEngine {
             changed = true
         }
 
+        let mergedChatEndpointPath = mergeProviderChatEndpointPathConservatively(
+            merged.normalizedChatEndpointPath,
+            incoming.normalizedChatEndpointPath
+        )
+        if mergedChatEndpointPath != merged.normalizedChatEndpointPath {
+            merged.chatEndpointPath = mergedChatEndpointPath
+            changed = true
+        }
+
         let mergedHeaders = mergeStringDictionaryConservatively(merged.headerOverrides, incoming.headerOverrides)
         if mergedHeaders != merged.headerOverrides {
             merged.headerOverrides = mergedHeaders
@@ -332,6 +341,17 @@ extension SyncEngine {
             changed = true
         }
 
+        guard let mergedChatEndpointPath = mergeProviderChatEndpointPath(
+            local.normalizedChatEndpointPath,
+            incoming.normalizedChatEndpointPath
+        ) else {
+            return .conflict
+        }
+        if mergedChatEndpointPath != local.normalizedChatEndpointPath {
+            merged.chatEndpointPath = mergedChatEndpointPath
+            changed = true
+        }
+
         guard let mergedHeaders = mergeStringDictionary(local.headerOverrides, incoming.headerOverrides) else {
             return .conflict
         }
@@ -363,6 +383,25 @@ extension SyncEngine {
             return .merged(merged)
         }
         return .unchanged(merged)
+    }
+
+    static func mergeProviderChatEndpointPath(_ local: String, _ incoming: String) -> String? {
+        let localPath = Provider.normalizedChatEndpointPath(local)
+        let incomingPath = Provider.normalizedChatEndpointPath(incoming)
+        if localPath == incomingPath {
+            return localPath
+        }
+        if localPath == Provider.defaultChatEndpointPath {
+            return incomingPath
+        }
+        if incomingPath == Provider.defaultChatEndpointPath {
+            return localPath
+        }
+        return nil
+    }
+
+    static func mergeProviderChatEndpointPathConservatively(_ local: String, _ incoming: String) -> String {
+        mergeProviderChatEndpointPath(local, incoming) ?? Provider.normalizedChatEndpointPath(local)
     }
 
     static func mergeProviderModels(

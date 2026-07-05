@@ -17,6 +17,7 @@ extension ConfigLoader {
             case id
             case name
             case baseURL = "base_url"
+            case chatEndpointPath = "chat_endpoint_path"
             case apiFormat = "api_format"
             case proxyIsEnabled = "proxy_is_enabled"
             case proxyType = "proxy_type"
@@ -30,6 +31,7 @@ extension ConfigLoader {
         var id: String
         var name: String
         var baseURL: String
+        var chatEndpointPath: String
         var apiFormat: String
         var proxyIsEnabled: Int?
         var proxyType: String?

@@ -4734,3 +4734,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "未填写价格" = "Falta el precio";
 "每次 %@" = "%@ por solicitud";
 "%d 次 × %@/次" = "%d solicitudes × %@/solicitud";
+"聊天端点后缀" = "Sufijo del endpoint de chat";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天端点后缀会拼接在其后。" = "La dirección de API debe ser la URL base, por ejemplo: https://api.openai.com/v1; el sufijo del endpoint de chat se añadirá después.";

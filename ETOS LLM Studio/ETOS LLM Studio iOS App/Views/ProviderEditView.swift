@@ -89,6 +89,12 @@ struct ProviderEditView: View {
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                if showsChatEndpointPathField {
+                    TextField(NSLocalizedString("聊天端点后缀", comment: "Provider chat endpoint path field"), text: $provider.chatEndpointPath)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
                 Picker(NSLocalizedString("API 格式", comment: ""), selection: $provider.apiFormat) {
                     Text(NSLocalizedString("OpenAI 兼容", comment: "")).tag("openai-compatible")
                     Text(NSLocalizedString("OpenAI Responses", comment: "")).tag("openai-responses")
@@ -248,6 +254,7 @@ struct ProviderEditView: View {
             return
         }
         var updated = provider
+        updated.chatEndpointPath = Provider.normalizedChatEndpointPath(updated.chatEndpointPath)
         updated.apiKeys = parsedApiKeys
         updated.headerOverrides = headerOverrides
         updated.proxyConfiguration = useProviderProxyOverride ? normalizedProxyConfiguration(providerProxyConfiguration) : nil
@@ -292,9 +299,15 @@ struct ProviderEditView: View {
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.anthropic.com/v1", comment: "")
         case "openai-responses":
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1；聊天请求会使用 Responses API。", comment: "")
+        case "openai-compatible":
+            return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1；聊天端点后缀会拼接在其后。", comment: "OpenAI-compatible base URL hint")
         default:
             return NSLocalizedString("API 地址应为基础地址，例如: https://api.openai.com/v1", comment: "")
         }
+    }
+
+    private var showsChatEndpointPathField: Bool {
+        !isLocalProvider && provider.apiFormat == "openai-compatible"
     }
 
     private var apiKeysHint: String {

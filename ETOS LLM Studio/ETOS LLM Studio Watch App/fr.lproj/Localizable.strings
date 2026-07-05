@@ -4734,3 +4734,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "未填写价格" = "Prix manquant";
 "每次 %@" = "%@ par requête";
 "%d 次 × %@/次" = "%d requêtes × %@/requête";
+"聊天端点后缀" = "Suffixe du point de terminaison de chat";
+"API 地址应为基础地址，例如: https://api.openai.com/v1；聊天端点后缀会拼接在其后。" = "L'adresse API doit être l'URL de base, par exemple : https://api.openai.com/v1 ; le suffixe du point de terminaison de chat est ajouté à la suite.";

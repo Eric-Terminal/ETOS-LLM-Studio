@@ -170,6 +170,11 @@ public enum NewAPIProviderImportURLHandler {
             modelIDs: []
         )
         let normalizedBaseURL = ThirdPartyImportService.normalizeBaseURL(baseURL, for: apiFormat)
+        let chatEndpointPath = firstNonEmptyValue(
+            in: payload,
+            query: query,
+            keys: ["chatEndpointPath", "chat_endpoint_path", "chatCompletionsPath", "chat_completions_path", "apiPath", "api_path"]
+        ) ?? Provider.defaultChatEndpointPath
         let providerID = ThirdPartyImportService.stableUUID(
             from: "new-api-provider:\(providerName.lowercased()):\(normalizedBaseURL.lowercased())"
         ) ?? UUID()
@@ -178,6 +183,7 @@ public enum NewAPIProviderImportURLHandler {
             id: providerID,
             name: providerName,
             baseURL: normalizedBaseURL,
+            chatEndpointPath: Provider.normalizedChatEndpointPath(chatEndpointPath),
             apiKeys: ThirdPartyImportService.splitAPIKeys(apiKey),
             apiFormat: apiFormat
         )

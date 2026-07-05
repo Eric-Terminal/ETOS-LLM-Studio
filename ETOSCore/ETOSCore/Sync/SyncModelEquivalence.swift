@@ -30,6 +30,7 @@ extension Provider {
     func isEquivalent(to other: Provider) -> Bool {
         name == other.name &&
         baseURL == other.baseURL &&
+        normalizedChatEndpointPath == other.normalizedChatEndpointPath &&
         apiFormat == other.apiFormat &&
         headerOverrides == other.headerOverrides &&
         proxyConfiguration == other.proxyConfiguration &&

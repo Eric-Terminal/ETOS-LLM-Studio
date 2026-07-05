@@ -94,9 +94,13 @@ public struct NetworkProxyConfiguration: Codable, Hashable, Sendable {
 
 /// 代表一个用户自定义的 API 服务提供商
 public struct Provider: Codable, Identifiable, Hashable {
+    public static let defaultChatEndpointPath = "/chat/completions"
+
     public var id: UUID
     public var name: String
     public var baseURL: String
+    /// OpenAI 兼容聊天补全端点后缀。
+    public var chatEndpointPath: String
     /// 提供商 API Key，会随 Provider 一起持久化到 JSON（明文）。
     public var apiKeys: [String]
     public var apiFormat: String // 例如: "openai-compatible"
@@ -109,6 +113,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         id: UUID = UUID(),
         name: String,
         baseURL: String,
+        chatEndpointPath: String = Provider.defaultChatEndpointPath,
         apiKeys: [String],
         apiFormat: String,
         models: [Model] = [],
@@ -118,6 +123,7 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.id = id
         self.name = name
         self.baseURL = baseURL
+        self.chatEndpointPath = Self.normalizedChatEndpointPath(chatEndpointPath)
         self.apiKeys = apiKeys
         self.apiFormat = apiFormat
         self.models = models
@@ -126,7 +132,7 @@ public struct Provider: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, baseURL, apiKeys, apiFormat, models, headerOverrides, proxyConfiguration
+        case id, name, baseURL, chatEndpointPath, chatCompletionsPath, apiKeys, apiFormat, models, headerOverrides, proxyConfiguration
     }
 
     public init(from decoder: Decoder) throws {
@@ -134,6 +140,10 @@ public struct Provider: Codable, Identifiable, Hashable {
         self.id = try container.decode(UUID.self, forKey: .id)
         self.name = try container.decode(String.self, forKey: .name)
         self.baseURL = try container.decode(String.self, forKey: .baseURL)
+        let decodedChatEndpointPath = try container.decodeIfPresent(String.self, forKey: .chatEndpointPath)
+            ?? container.decodeIfPresent(String.self, forKey: .chatCompletionsPath)
+            ?? Self.defaultChatEndpointPath
+        self.chatEndpointPath = Self.normalizedChatEndpointPath(decodedChatEndpointPath)
         self.apiKeys = try container.decodeIfPresent([String].self, forKey: .apiKeys) ?? []
         self.apiFormat = try container.decode(String.self, forKey: .apiFormat)
         self.models = try container.decodeIfPresent([Model].self, forKey: .models) ?? []
@@ -146,6 +156,10 @@ public struct Provider: Codable, Identifiable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(baseURL, forKey: .baseURL)
+        let normalizedEndpoint = self.normalizedChatEndpointPath
+        if normalizedEndpoint != Self.defaultChatEndpointPath {
+            try container.encode(normalizedEndpoint, forKey: .chatEndpointPath)
+        }
         if !apiKeys.isEmpty {
             try container.encode(apiKeys, forKey: .apiKeys)
         }
@@ -157,6 +171,36 @@ public struct Provider: Codable, Identifiable, Hashable {
         if let proxyConfiguration {
             try container.encode(proxyConfiguration, forKey: .proxyConfiguration)
         }
+    }
+
+    public var normalizedChatEndpointPath: String {
+        Self.normalizedChatEndpointPath(chatEndpointPath)
+    }
+
+    public static func normalizedChatEndpointPath(_ value: String) -> String {
+        normalizedEndpointPath(value, defaultPath: defaultChatEndpointPath)
+    }
+
+    public static func normalizedEndpointPath(_ value: String, defaultPath: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPath = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmedPath.isEmpty else {
+            return defaultPath
+        }
+        return "/" + trimmedPath
+    }
+
+    public static func appendingEndpointPath(
+        _ endpointPath: String,
+        to baseURL: URL,
+        defaultPath: String
+    ) -> URL {
+        let normalizedPath = normalizedEndpointPath(endpointPath, defaultPath: defaultPath)
+        return normalizedPath
+            .split(separator: "/")
+            .reduce(baseURL) { url, component in
+                url.appendingPathComponent(String(component))
+            }
     }
 }
 

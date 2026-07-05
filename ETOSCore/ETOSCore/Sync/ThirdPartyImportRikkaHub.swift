@@ -58,6 +58,13 @@ extension ThirdPartyImportService {
                 ?? (type?.capitalized ?? "RikkaHub")
             let apiKey = nonEmpty(string(provider["apiKey"])) ?? ""
             let baseURL = normalizeBaseURL(string(provider["baseUrl"]), for: format)
+            let chatEndpointPath = Provider.normalizedChatEndpointPath(
+                nonEmpty(string(provider["chatCompletionsPath"]))
+                    ?? nonEmpty(string(provider["chat_completions_path"]))
+                    ?? nonEmpty(string(provider["apiPath"]))
+                    ?? nonEmpty(string(provider["api_path"]))
+                    ?? Provider.defaultChatEndpointPath
+            )
             let enabled = bool(provider["enabled"], defaultValue: true)
             let providerUsesResponsesAPI = format == "openai-compatible"
                 && bool(provider["useResponseApi"], defaultValue: false)
@@ -101,6 +108,7 @@ extension ThirdPartyImportService {
                 id: stableUUID(from: string(provider["id"])) ?? UUID(),
                 name: name,
                 baseURL: baseURL,
+                chatEndpointPath: chatEndpointPath,
                 apiKeys: apiKey.isEmpty ? [] : [apiKey],
                 apiFormat: format,
                 models: normalizeModelsForProviderFormat(models, apiFormat: format)

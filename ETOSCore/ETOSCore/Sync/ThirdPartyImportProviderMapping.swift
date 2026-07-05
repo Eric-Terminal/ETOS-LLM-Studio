@@ -453,6 +453,7 @@ extension ThirdPartyImportService {
             let key = [
                 provider.name.lowercased(),
                 provider.baseURL.lowercased(),
+                provider.normalizedChatEndpointPath.lowercased(),
                 provider.apiFormat.lowercased(),
                 provider.apiKeys.joined(separator: ","),
                 headerSignature,

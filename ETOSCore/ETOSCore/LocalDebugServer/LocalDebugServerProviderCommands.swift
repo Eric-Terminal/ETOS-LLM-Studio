@@ -13,6 +13,7 @@ extension LocalDebugServer {
         let providerID = parseDebugUUID(json["provider_id"] ?? json["id"])
         let name = trimmedDebugString(json["name"])
         let baseURL = trimmedDebugString(json["base_url"] ?? json["baseURL"])
+        let chatEndpointPath = trimmedDebugString(json["chat_endpoint_path"] ?? json["chatEndpointPath"] ?? json["chat_completions_path"] ?? json["chatCompletionsPath"])
         let apiFormat = trimmedDebugString(json["api_format"] ?? json["apiFormat"])
 
         var providers = ConfigLoader.loadProviders()
@@ -23,6 +24,7 @@ extension LocalDebugServer {
             provider = providers[existingIndex]
             if let name { provider.name = name }
             if let baseURL { provider.baseURL = baseURL }
+            if let chatEndpointPath { provider.chatEndpointPath = Provider.normalizedChatEndpointPath(chatEndpointPath) }
             if let apiFormat { provider.apiFormat = apiFormat }
         } else {
             guard let name, !name.isEmpty else {
@@ -32,6 +34,7 @@ extension LocalDebugServer {
                 id: providerID ?? UUID(),
                 name: name,
                 baseURL: baseURL ?? "",
+                chatEndpointPath: chatEndpointPath.map { Provider.normalizedChatEndpointPath($0) } ?? Provider.defaultChatEndpointPath,
                 apiKeys: [],
                 apiFormat: apiFormat ?? "openai-compatible"
             )
