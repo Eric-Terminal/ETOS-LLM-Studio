@@ -46,7 +46,6 @@ struct ProviderActionsView: View {
                     ProviderEditView(
                         provider: provider,
                         isNew: false,
-                        dismissAfterSave: false,
                         showsCancelButton: false,
                         navigationTitleOverride: NSLocalizedString("提供商配置", comment: "")
                     ) { updatedProvider in

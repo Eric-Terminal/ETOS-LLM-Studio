@@ -297,6 +297,7 @@ private struct ProviderConfigurationTabsView: View {
             } else {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("保存", comment: "")) {
+                        dismissAfterProviderSave = true
                         saveProviderRequest += 1
                     }
                     .disabled(!canSaveProviderConfiguration)
