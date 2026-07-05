@@ -71,6 +71,7 @@ struct FileAttachmentTextExtractorTests {
         #expect(payload.canPreview)
         #expect(payload.isTextTruncated)
         #expect(payload.text?.count == limit)
+        #expect(payload.fullText?.count == limit + 12)
         #expect(payload.originalCharacterCount == limit + 12)
         #expect(payload.previewCharacterLimit == limit)
     }

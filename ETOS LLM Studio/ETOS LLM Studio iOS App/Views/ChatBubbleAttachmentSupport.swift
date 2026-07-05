@@ -212,6 +212,15 @@ struct ChatFileAttachmentPreviewSheet: View {
                                 Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
+
+                                NavigationLink {
+                                    FileAttachmentPagedTextView(
+                                        title: payload.fileName,
+                                        text: payload.fullText ?? text
+                                    )
+                                } label: {
+                                    Label(NSLocalizedString("查看完整内容", comment: "Open full file attachment preview"), systemImage: "doc.text.magnifyingglass")
+                                }
                             }
 
                             Text(text)

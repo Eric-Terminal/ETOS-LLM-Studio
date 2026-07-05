@@ -690,6 +690,7 @@ struct WatchFileAttachmentPreviewSheet: View {
         NavigationStack {
             Group {
                 if let text = payload.text {
+                    let fullText = payload.fullText ?? text
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
                             VStack(alignment: .leading, spacing: 3) {
@@ -706,16 +707,11 @@ struct WatchFileAttachmentPreviewSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if payload.isTextTruncated {
-                                Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
-                                    .etFont(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-
-                            Text(text)
-                                .etFont(.system(size: 10, design: .monospaced))
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            WatchToolCallLongTextPreview(
+                                title: payload.fileName,
+                                text: fullText,
+                                usesMonospacedFont: true
+                            )
                         }
                         .padding(.vertical, 4)
                     }

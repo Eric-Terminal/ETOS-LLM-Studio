@@ -398,7 +398,7 @@ private struct WatchFilePreviewView: View {
         let fileURL = file.url
         let result = await Task.detached(priority: .userInitiated) {
             let payload = FileAttachmentPreviewLoader.load(fileURL: fileURL)
-            guard let content = payload.text else {
+            guard let content = payload.fullText ?? payload.text else {
                 return (pages: [StorageTextPage](), errorMessage: payload.errorMessage)
             }
             return (

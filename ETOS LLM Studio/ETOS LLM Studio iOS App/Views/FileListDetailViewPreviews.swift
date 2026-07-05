@@ -51,6 +51,15 @@ struct FilePreviewSheet: View {
                                 Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), payload.previewCharacterLimit, payload.originalCharacterCount))
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
+
+                                NavigationLink {
+                                    FileAttachmentPagedTextView(
+                                        title: file.name,
+                                        text: payload.fullText ?? content
+                                    )
+                                } label: {
+                                    Label(NSLocalizedString("查看完整内容", comment: "Open full file preview"), systemImage: "doc.text.magnifyingglass")
+                                }
                             }
 
                             Text(content)
@@ -84,6 +93,110 @@ struct FilePreviewSheet: View {
             }.value
             isLoading = false
         }
+    }
+}
+
+struct FileAttachmentPagedTextView: View {
+    let title: String
+    let pages: [AppLogTextPage]
+    let textCharacterCount: Int
+
+    @State private var selectedPageIndex = 0
+
+    init(title: String, text: String) {
+        self.title = title
+        self.pages = AppLogTextPaginator.paginate(text)
+        self.textCharacterCount = text.count
+    }
+
+    private var currentPage: AppLogTextPage {
+        let clampedIndex = min(max(selectedPageIndex, 0), pages.count - 1)
+        return pages[clampedIndex]
+    }
+
+    private var hasMultiplePages: Bool {
+        pages.count > 1
+    }
+
+    private var canGoToPreviousPage: Bool {
+        selectedPageIndex > 0
+    }
+
+    private var canGoToNextPage: Bool {
+        selectedPageIndex + 1 < pages.count
+    }
+
+    private var paginationSummaryText: String {
+        String(
+            format: NSLocalizedString("当前显示第 %d-%d 个字符，共 %d 个字符。", comment: "Paged text preview range summary"),
+            currentPage.startCharacterNumber,
+            currentPage.endCharacterNumber,
+            textCharacterCount
+        )
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Text(currentPage.content)
+                    .etFont(.footnote.monospaced())
+                    .textSelection(.enabled)
+            } header: {
+                Text(String(format: NSLocalizedString("第 %d / %d 页", comment: ""), currentPage.index + 1, currentPage.totalCount))
+            } footer: {
+                Text(paginationSummaryText)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if hasMultiplePages {
+                paginationBar
+            }
+        }
+    }
+
+    private var paginationBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                goToPreviousPage()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canGoToPreviousPage)
+            .accessibilityLabel(NSLocalizedString("上一页", comment: ""))
+
+            Text(paginationSummaryText)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+
+            Button {
+                goToNextPage()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canGoToNextPage)
+            .accessibilityLabel(NSLocalizedString("下一页", comment: ""))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private func goToPreviousPage() {
+        guard canGoToPreviousPage else { return }
+        selectedPageIndex -= 1
+    }
+
+    private func goToNextPage() {
+        guard canGoToNextPage else { return }
+        selectedPageIndex += 1
     }
 }
 

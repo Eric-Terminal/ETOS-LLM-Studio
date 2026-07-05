@@ -315,6 +315,7 @@ public struct FileAttachmentPreviewPayload: Identifiable {
     public let fileName: String
     public let fileSize: Int64
     public let text: String?
+    public let fullText: String?
     public let errorMessage: String?
     public let lineCount: Int
     public let isTextTruncated: Bool
@@ -325,6 +326,7 @@ public struct FileAttachmentPreviewPayload: Identifiable {
         fileName: String,
         fileSize: Int64,
         text: String?,
+        fullText: String? = nil,
         errorMessage: String?,
         lineCount: Int,
         isTextTruncated: Bool = false,
@@ -334,6 +336,7 @@ public struct FileAttachmentPreviewPayload: Identifiable {
         self.fileName = fileName
         self.fileSize = fileSize
         self.text = text
+        self.fullText = fullText ?? text
         self.errorMessage = errorMessage
         self.lineCount = lineCount
         self.isTextTruncated = isTextTruncated
@@ -394,6 +397,7 @@ public enum FileAttachmentPreviewLoader {
                 fileName: fileName,
                 fileSize: Int64(data.count),
                 text: preview.text,
+                fullText: text,
                 errorMessage: nil,
                 lineCount: lineCount(in: text),
                 isTextTruncated: preview.isTruncated,
