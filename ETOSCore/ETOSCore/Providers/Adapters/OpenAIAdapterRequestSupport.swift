@@ -80,7 +80,10 @@ extension OpenAIAdapter {
             let audioAttachment = audioAttachments[msg.id]
             let msgImageAttachments = imageAttachments[msg.id] ?? []
             let msgFileAttachments = fileAttachments[msg.id] ?? []
-            let hasMultiContent = (audioAttachment != nil || !msgImageAttachments.isEmpty || !msgFileAttachments.isEmpty) && msg.role == .user
+            let canSendImageContent = msg.role == .user || msg.role == .assistant
+            let canSendUserOnlyContent = msg.role == .user
+            let hasMultiContent = (canSendImageContent && !msgImageAttachments.isEmpty)
+                || (canSendUserOnlyContent && (audioAttachment != nil || !msgFileAttachments.isEmpty))
 
             if hasMultiContent {
                 var contentParts: [[String: Any]] = []
@@ -93,16 +96,18 @@ extension OpenAIAdapter {
                     ])
                 }
 
-                for imageAttachment in msgImageAttachments {
-                    contentParts.append([
-                        "type": "image_url",
-                        "image_url": [
-                            "url": imageAttachment.dataURL
-                        ]
-                    ])
+                if canSendImageContent {
+                    for imageAttachment in msgImageAttachments {
+                        contentParts.append([
+                            "type": "image_url",
+                            "image_url": [
+                                "url": imageAttachment.dataURL
+                            ]
+                        ])
+                    }
                 }
 
-                if let audioAttachment {
+                if let audioAttachment, canSendUserOnlyContent {
                     contentParts.append([
                         "type": "input_audio",
                         "input_audio": [
@@ -112,15 +117,17 @@ extension OpenAIAdapter {
                     ])
                 }
 
-                for fileAttachment in msgFileAttachments {
-                    contentParts.append([
-                        "type": "input_file",
-                        "input_file": [
-                            "data": fileAttachment.data.base64EncodedString(),
-                            "mime_type": fileAttachment.mimeType,
-                            "file_name": fileAttachment.fileName
-                        ]
-                    ])
+                if canSendUserOnlyContent {
+                    for fileAttachment in msgFileAttachments {
+                        contentParts.append([
+                            "type": "input_file",
+                            "input_file": [
+                                "data": fileAttachment.data.base64EncodedString(),
+                                "mime_type": fileAttachment.mimeType,
+                                "file_name": fileAttachment.fileName
+                            ]
+                        ])
+                    }
                 }
 
                 dict["content"] = contentParts.isEmpty ? msg.content : contentParts

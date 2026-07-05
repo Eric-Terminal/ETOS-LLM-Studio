@@ -186,6 +186,10 @@ extension ChatService {
                     request: request,
                     messagesBeforeResponse: messagesBeforeResponse
                 )
+                let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
+                if !embeddedImageFileNames.isEmpty {
+                    parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames
+                }
                 let responseCompletedAt = Date()
                 let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {

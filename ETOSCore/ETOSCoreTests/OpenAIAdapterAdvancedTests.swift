@@ -141,6 +141,67 @@ struct OpenAIAdapterAdvancedTests {
         #expect(jsonPayload[OpenAIAdapter.streamIncludeUsageControlKey] == nil)
     }
 
+    @Test("OpenAI Chat 响应支持数组 content")
+    func testOpenAIChatResponseParsesArrayContent() throws {
+        let pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+        let payload = """
+        {
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": [
+                  { "type": "text", "text": "图片已生成。" },
+                  { "type": "image", "image": "\(pngBase64)" }
+                ]
+              }
+            }
+          ]
+        }
+        """
+
+        let message = try adapter.parseResponse(data: Data(payload.utf8))
+
+        #expect(message.content == "图片已生成。")
+    }
+
+    @Test("OpenAI Chat 请求会回传 assistant 图片附件")
+    func testChatRequestIncludesAssistantImageAttachments() throws {
+        let imageData = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="))
+        let assistantMessage = ChatMessage(role: .assistant, content: "上一张图")
+        let imageAttachment = ImageAttachment(
+            data: imageData,
+            mimeType: "image/png",
+            fileName: "generated.png"
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: [assistantMessage],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [assistantMessage.id: [imageAttachment]],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let jsonPayload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let messages = try #require(jsonPayload["messages"] as? [[String: Any]])
+        let firstMessage = try #require(messages.first)
+        let contentParts = try #require(firstMessage["content"] as? [[String: Any]])
+
+        #expect(firstMessage["role"] as? String == MessageRole.assistant.rawValue)
+        #expect(contentParts.contains { $0["type"] as? String == "text" })
+        #expect(contentParts.contains { part in
+            guard part["type"] as? String == "image_url",
+                  let imageURL = part["image_url"] as? [String: Any],
+                  let url = imageURL["url"] as? String else {
+                return false
+            }
+            return url.hasPrefix("data:image/png;base64,")
+        })
+    }
+
     @Test("OpenAI 可切换为 Responses API 请求体")
     func testBuildResponsesAPIRequestPayload() throws {
         let responseModel = RunnableModel(

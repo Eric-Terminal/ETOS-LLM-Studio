@@ -20,6 +20,11 @@ extension ChatService {
         let mimeType: String
     }
 
+    private struct EmbeddedImagePayload {
+        let data: Data
+        let mimeType: String
+    }
+
     func extractInlineImagesFromMarkdown(_ content: String) async -> InlineImageExtractionResult {
         guard !content.isEmpty else {
             return InlineImageExtractionResult(cleanedContent: content, imageFileNames: [])
@@ -50,7 +55,11 @@ extension ChatService {
             let rawSource = String(content[sourceRange])
             guard let normalizedSource = normalizeMarkdownImageSource(rawSource) else { continue }
             guard let payload = await resolveInlineImagePayload(from: normalizedSource) else { continue }
-            guard let savedFileName = saveInlineImage(payload) else { continue }
+            guard let savedFileName = saveExtractedImage(
+                data: payload.data,
+                mimeType: payload.mimeType,
+                source: "markdown"
+            ) else { continue }
 
             if let replaceRange = Range(match.range(at: 0), in: workingContent) {
                 workingContent.replaceSubrange(replaceRange, with: "")
@@ -147,11 +156,220 @@ extension ChatService {
         return InlineImagePayload(data: data, mimeType: mimeType)
     }
 
-    private func saveInlineImage(_ payload: InlineImagePayload) -> String? {
-        let ext = imageFileExtension(for: payload.mimeType)
+    func extractGeneratedImagesFromAPIResponseBody(_ data: Data) -> [String] {
+        guard let object = try? JSONSerialization.jsonObject(with: data) else {
+            return []
+        }
+        return saveEmbeddedImages(from: object, source: "response_body")
+    }
+
+    func extractGeneratedImagesFromProviderResponseMetadata(_ metadata: [String: JSONValue]?) -> [String] {
+        guard let metadata,
+              case let .array(outputItems)? = metadata[OpenAIAdapter.responsesOutputItemsKey] else {
+            return []
+        }
+        let rawItems = outputItems.map { $0.toAny() }
+        return saveEmbeddedImages(from: rawItems, source: "provider_metadata")
+    }
+
+    private func saveEmbeddedImages(from object: Any, source: String) -> [String] {
+        var payloads: [EmbeddedImagePayload] = []
+        var seenImages = Set<String>()
+        collectEmbeddedImagePayloads(
+            from: object,
+            key: nil,
+            contextType: nil,
+            mimeTypeHint: nil,
+            into: &payloads,
+            seenImages: &seenImages
+        )
+
+        guard !payloads.isEmpty else { return [] }
+
+        let fileNames = payloads.compactMap { payload in
+            saveExtractedImage(data: payload.data, mimeType: payload.mimeType, source: source)
+        }
+        if !fileNames.isEmpty {
+            logger.info("已从响应内嵌图片字段保存 \(fileNames.count) 张图片附件。")
+        }
+        return fileNames
+    }
+
+    private func collectEmbeddedImagePayloads(
+        from value: Any,
+        key: String?,
+        contextType: String?,
+        mimeTypeHint: String?,
+        into payloads: inout [EmbeddedImagePayload],
+        seenImages: inout Set<String>
+    ) {
+        if let dictionary = value as? [String: Any] {
+            let itemType = (dictionary["type"] as? String) ?? contextType
+            let itemMimeType = (dictionary["mime_type"] as? String)
+                ?? (dictionary["mimeType"] as? String)
+                ?? mimeTypeHint
+            for (childKey, childValue) in dictionary {
+                collectEmbeddedImagePayloads(
+                    from: childValue,
+                    key: childKey,
+                    contextType: itemType,
+                    mimeTypeHint: itemMimeType,
+                    into: &payloads,
+                    seenImages: &seenImages
+                )
+            }
+            return
+        }
+
+        if let array = value as? [Any] {
+            for item in array {
+                collectEmbeddedImagePayloads(
+                    from: item,
+                    key: key,
+                    contextType: contextType,
+                    mimeTypeHint: mimeTypeHint,
+                    into: &payloads,
+                    seenImages: &seenImages
+                )
+            }
+            return
+        }
+
+        guard let string = value as? String,
+              let decoded = decodeEmbeddedImageString(
+                string,
+                key: key,
+                contextType: contextType,
+                mimeTypeHint: mimeTypeHint
+              ),
+              seenImages.insert(decoded.identity).inserted else {
+            return
+        }
+        payloads.append(decoded.payload)
+    }
+
+    private func decodeEmbeddedImageString(
+        _ source: String,
+        key: String?,
+        contextType: String?,
+        mimeTypeHint: String?
+    ) -> (payload: EmbeddedImagePayload, identity: String)? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let dataURL = decodeEmbeddedImageDataURL(trimmed) {
+            return (
+                EmbeddedImagePayload(data: dataURL.data, mimeType: dataURL.mimeType),
+                embeddedImageIdentity(for: dataURL.encoded)
+            )
+        }
+
+        guard shouldAttemptEmbeddedImageDecode(
+            key: key,
+            contextType: contextType,
+            mimeTypeHint: mimeTypeHint
+        ),
+              let data = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+              !data.isEmpty,
+              let signatureMimeType = imageSignatureMimeType(from: data) else {
+            return nil
+        }
+
+        let resolvedMimeType: String
+        if let mimeTypeHint, mimeTypeHint.lowercased().hasPrefix("image/") {
+            resolvedMimeType = mimeTypeHint
+        } else {
+            resolvedMimeType = signatureMimeType
+        }
+        return (
+            EmbeddedImagePayload(data: data, mimeType: resolvedMimeType),
+            embeddedImageIdentity(for: trimmed)
+        )
+    }
+
+    private func decodeEmbeddedImageDataURL(_ source: String) -> (data: Data, mimeType: String, encoded: String)? {
+        let lowercased = source.lowercased()
+        guard lowercased.hasPrefix("data:image/"),
+              let commaIndex = source.firstIndex(of: ",") else {
+            return nil
+        }
+
+        let header = String(source[source.index(source.startIndex, offsetBy: 5)..<commaIndex])
+        guard header.lowercased().contains(";base64") else {
+            return nil
+        }
+
+        let mimeType = header.split(separator: ";").first.map(String.init) ?? "image/png"
+        let encoded = String(source[source.index(after: commaIndex)...])
+        guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters),
+              imageSignatureMimeType(from: data) != nil else {
+            return nil
+        }
+        return (data, mimeType, encoded)
+    }
+
+    private func shouldAttemptEmbeddedImageDecode(
+        key: String?,
+        contextType: String?,
+        mimeTypeHint: String?
+    ) -> Bool {
+        let normalizedKey = key?
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+        let imageKeys: Set<String> = [
+            "b64_json",
+            "image",
+            "image_base64",
+            "base64",
+            "result",
+            "partial_image_b64"
+        ]
+        if let normalizedKey, imageKeys.contains(normalizedKey) {
+            return true
+        }
+
+        if normalizedKey == "data",
+           mimeTypeHint?.lowercased().hasPrefix("image/") == true {
+            return true
+        }
+
+        let loweredType = contextType?.lowercased() ?? ""
+        return loweredType.contains("image_generation")
+            || loweredType.contains("output_image")
+            || loweredType == "image"
+    }
+
+    private func imageSignatureMimeType(from data: Data) -> String? {
+        guard data.count >= 4 else { return nil }
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) {
+            return "image/png"
+        }
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) {
+            return "image/jpeg"
+        }
+        if bytes.count >= 12,
+           bytes.starts(with: [0x52, 0x49, 0x46, 0x46]),
+           bytes[8...11].elementsEqual([0x57, 0x45, 0x42, 0x50]) {
+            return "image/webp"
+        }
+        if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) {
+            return "image/gif"
+        }
+        return nil
+    }
+
+    private func embeddedImageIdentity(for encoded: String) -> String {
+        let prefix = encoded.prefix(128)
+        let suffix = encoded.suffix(128)
+        return "\(encoded.count):\(prefix):\(suffix)"
+    }
+
+    private func saveExtractedImage(data: Data, mimeType: String, source: String) -> String? {
+        let ext = imageFileExtension(for: mimeType)
         let fileName = "\(UUID().uuidString).\(ext)"
-        guard Persistence.saveImage(payload.data, fileName: fileName) != nil else {
-            logger.error("保存 markdown 提取图片失败: \(fileName)")
+        guard Persistence.saveImage(data, fileName: fileName) != nil else {
+            logger.error("保存提取图片失败: source=\(source), fileName=\(fileName)")
             return nil
         }
         return fileName

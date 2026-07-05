@@ -644,6 +644,13 @@ extension ChatService {
         }
         ensureReasoningTimingIfNeeded(for: &responseMessage)
 
+        if enableStreaming {
+            let generatedImageFileNames = extractGeneratedImagesFromProviderResponseMetadata(responseMessage.providerResponseMetadata)
+            if !generatedImageFileNames.isEmpty {
+                responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + generatedImageFileNames
+            }
+        }
+
         let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)
         if !inlineImageExtraction.imageFileNames.isEmpty {
             responseMessage.content = inlineImageExtraction.cleanedContent

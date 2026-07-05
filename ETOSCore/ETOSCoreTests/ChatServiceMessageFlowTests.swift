@@ -152,6 +152,31 @@ extension ChatServiceTests {
         #expect(disabledPayload == nil)
     }
 
+    @Test("Responses 生图结果会保存为助手图片附件")
+    func testResponsesImageGenerationResultSavesImageAttachment() async throws {
+        await cleanup()
+
+        let pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+        let payload = """
+        {
+          "id": "resp_image",
+          "output": [
+            {
+              "type": "image_generation_call",
+              "id": "ig_1",
+              "result": "\(pngBase64)"
+            }
+          ]
+        }
+        """
+
+        let imageFileNames = chatService.extractGeneratedImagesFromAPIResponseBody(Data(payload.utf8))
+
+        #expect(imageFileNames.count == 1)
+        let fileName = try #require(imageFileNames.first)
+        #expect(Persistence.loadImage(fileName: fileName)?.isEmpty == false)
+    }
+
     @Test("发送消息后会在会话 JSON 中保存请求时间")
     func testSendMessagePersistsRequestedAtInSessionJSON() async {
         await cleanup()
