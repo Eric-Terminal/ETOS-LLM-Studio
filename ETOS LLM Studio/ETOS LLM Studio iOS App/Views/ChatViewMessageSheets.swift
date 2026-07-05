@@ -233,6 +233,21 @@ struct MessageActionSheet: View {
                 }
             }
 
+            if let modelReference = message.modelReference {
+                LabeledContent(NSLocalizedString("提供商", comment: "")) {
+                    Text(modelReference.providerName)
+                        .textSelection(.enabled)
+                }
+                LabeledContent(NSLocalizedString("模型名称", comment: "")) {
+                    Text(modelReference.modelDisplayName)
+                        .textSelection(.enabled)
+                }
+                LabeledContent(NSLocalizedString("模型ID", comment: "")) {
+                    Text(modelReference.modelName)
+                        .textSelection(.enabled)
+                }
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(NSLocalizedString("唯一标识", comment: ""))
                     .etFont(.caption)

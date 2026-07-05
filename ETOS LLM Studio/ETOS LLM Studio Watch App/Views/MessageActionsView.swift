@@ -399,6 +399,32 @@ struct MessageActionsView: View {
                     }
                 }
 
+                if let modelReference = message.modelReference {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("提供商", comment: ""))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        Text(modelReference.providerName)
+                            .etFont(.caption2)
+                    }
+
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("模型名称", comment: ""))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        Text(modelReference.modelDisplayName)
+                            .etFont(.caption2)
+                    }
+
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("模型ID", comment: ""))
+                            .etFont(.caption)
+                            .foregroundColor(.secondary)
+                        Text(modelReference.modelName)
+                            .etFont(.caption2)
+                    }
+                }
+
                 VStack(alignment: .leading) {
                     Text(NSLocalizedString("消息 ID", comment: ""))
                         .etFont(.caption)
