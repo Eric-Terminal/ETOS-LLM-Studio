@@ -940,7 +940,8 @@ struct OpenAIAdapterAdvancedTests {
         let request = try #require(adapter.buildChatRequest(
             for: responseModel,
             commonPayload: [
-                "conversation": "conv_1"
+                "conversation": "conv_1",
+                "previous_response_id": "resp_manual_should_drop"
             ],
             messages: [
                 ChatMessage(role: .user, content: "第一轮问题"),

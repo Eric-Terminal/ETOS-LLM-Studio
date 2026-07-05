@@ -277,6 +277,9 @@ extension OpenAIAdapter {
         if forceFullInput {
             finalPayload.removeValue(forKey: "previous_response_id")
         }
+        if finalPayload["conversation"] != nil {
+            finalPayload.removeValue(forKey: "previous_response_id")
+        }
 
         if model.model.supportsReasoning {
             let encryptedReasoningInclude = "reasoning.encrypted_content"
