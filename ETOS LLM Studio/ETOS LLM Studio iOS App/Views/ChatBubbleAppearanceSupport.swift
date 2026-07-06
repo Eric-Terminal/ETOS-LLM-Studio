@@ -276,14 +276,25 @@ extension ChatBubble {
     }
 
     var customTextColorOverride: Color? {
-        if colorScheme == .dark {
-            let slot = activeAppearanceProfile.darkText
-            guard slot.isEnabled else { return nil }
-            return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .white)
+        let slot: ChatAppearanceColorSlot
+        let fallback: Color
+        if isOutgoing {
+            if colorScheme == .dark {
+                slot = activeAppearanceProfile.userDarkText
+                fallback = .white
+            } else {
+                slot = activeAppearanceProfile.userLightText
+                fallback = .white
+            }
+        } else if colorScheme == .dark {
+            slot = activeAppearanceProfile.assistantDarkText
+            fallback = .white
+        } else {
+            slot = activeAppearanceProfile.assistantLightText
+            fallback = .primary
         }
-        let slot = activeAppearanceProfile.lightText
         guard slot.isEnabled else { return nil }
-        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .primary)
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
     }
 
     var isOutgoing: Bool {

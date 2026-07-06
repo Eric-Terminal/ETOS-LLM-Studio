@@ -4685,3 +4685,15 @@
 "%d 次 × %@/次" = "%d requests × %@/request";
 "聊天端点后缀" = "Chat Endpoint Suffix";
 "API 地址应为基础地址，例如: https://api.openai.com/v1；聊天端点后缀会拼接在其后。" = "API base URL example: https://api.openai.com/v1; the chat endpoint suffix is appended after it.";
+"用户白天文字颜色" = "User light mode text color";
+"自定义用户白天文字颜色" = "Customize user light mode text color";
+"用户夜览文字颜色" = "User dark mode text color";
+"自定义用户夜览文字颜色" = "Customize user dark mode text color";
+"助手白天文字颜色" = "Assistant light mode text color";
+"自定义助手白天文字颜色" = "Customize assistant light mode text color";
+"助手夜览文字颜色" = "Assistant dark mode text color";
+"自定义助手夜览文字颜色" = "Customize assistant dark mode text color";
+"覆盖浅色外观下用户气泡的聊天文本颜色。" = "Overrides chat text color in user bubbles in light appearance.";
+"覆盖深色外观下用户气泡的聊天文本颜色。" = "Overrides chat text color in user bubbles in dark appearance.";
+"覆盖浅色外观下助手和 Tool 气泡的聊天文本颜色。" = "Overrides chat text color in assistant and Tool bubbles in light appearance.";
+"覆盖深色外观下助手和 Tool 气泡的聊天文本颜色。" = "Overrides chat text color in assistant and Tool bubbles in dark appearance.";

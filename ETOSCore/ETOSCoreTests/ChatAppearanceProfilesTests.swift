@@ -27,6 +27,10 @@ struct ChatAppearanceProfilesTests {
         defaults.set("AA112233", forKey: "customUserBubbleColorHex")
         defaults.set(true, forKey: "enableCustomAssistantBubbleColor")
         defaults.set("BB445566", forKey: "customAssistantBubbleColorHex")
+        defaults.set(true, forKey: "enableCustomLightTextColor")
+        defaults.set("CC778899", forKey: "customLightTextColorHex")
+        defaults.set(true, forKey: "enableCustomDarkTextColor")
+        defaults.set("DDAABBCC", forKey: "customDarkTextColorHex")
 
         let configuration = ChatAppearanceProfileStore.loadConfiguration(userDefaults: defaults)
         let defaultProfile = configuration.defaultProfile
@@ -36,6 +40,10 @@ struct ChatAppearanceProfilesTests {
         #expect(defaultProfile.userBubble.hex == "AA112233")
         #expect(defaultProfile.assistantBubble.isEnabled == true)
         #expect(defaultProfile.assistantBubble.hex == "BB445566")
+        #expect(defaultProfile.userLightText.hex == "CC778899")
+        #expect(defaultProfile.assistantLightText.hex == "CC778899")
+        #expect(defaultProfile.userDarkText.hex == "DDAABBCC")
+        #expect(defaultProfile.assistantDarkText.hex == "DDAABBCC")
         #expect(defaults.data(forKey: ChatAppearanceProfileStore.configurationStorageKey) != nil)
     }
 
@@ -71,8 +79,28 @@ struct ChatAppearanceProfilesTests {
 
         #expect(added.id != ChatAppearanceProfile.defaultProfileID)
         #expect(added.userBubble == defaultLoaded.userBubble)
-        #expect(added.lightText == defaultLoaded.lightText)
+        #expect(added.userLightText == defaultLoaded.userLightText)
+        #expect(added.assistantLightText == defaultLoaded.assistantLightText)
         #expect(added.name == "Profile 1")
+    }
+
+    @Test("用户和助手文字颜色会分别持久化")
+    func roleTextColorsPersistSeparately() throws {
+        let profile = ChatAppearanceProfile(
+            id: ChatAppearanceProfile.defaultProfileID,
+            name: "default",
+            userLightText: .init(isEnabled: true, hex: "111111FF"),
+            userDarkText: .init(isEnabled: true, hex: "222222FF"),
+            assistantLightText: .init(isEnabled: true, hex: "333333FF"),
+            assistantDarkText: .init(isEnabled: true, hex: "444444FF")
+        )
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(ChatAppearanceProfile.self, from: data)
+
+        #expect(decoded.userLightText.hex == "111111FF")
+        #expect(decoded.userDarkText.hex == "222222FF")
+        #expect(decoded.assistantLightText.hex == "333333FF")
+        #expect(decoded.assistantDarkText.hex == "444444FF")
     }
 
     @Test("默认配置名称可以修改并持久化")

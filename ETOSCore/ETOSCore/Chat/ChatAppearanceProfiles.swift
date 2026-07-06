@@ -26,23 +26,51 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
     public var name: String
     public var userBubble: ChatAppearanceColorSlot
     public var assistantBubble: ChatAppearanceColorSlot
-    public var lightText: ChatAppearanceColorSlot
-    public var darkText: ChatAppearanceColorSlot
+    public var userLightText: ChatAppearanceColorSlot
+    public var userDarkText: ChatAppearanceColorSlot
+    public var assistantLightText: ChatAppearanceColorSlot
+    public var assistantDarkText: ChatAppearanceColorSlot
 
     public init(
         id: String = UUID().uuidString,
         name: String,
         userBubble: ChatAppearanceColorSlot = .defaultUserBubble,
         assistantBubble: ChatAppearanceColorSlot = .defaultAssistantBubble,
-        lightText: ChatAppearanceColorSlot = .defaultLightText,
-        darkText: ChatAppearanceColorSlot = .defaultDarkText
+        lightText: ChatAppearanceColorSlot? = nil,
+        darkText: ChatAppearanceColorSlot? = nil,
+        userLightText: ChatAppearanceColorSlot? = nil,
+        userDarkText: ChatAppearanceColorSlot? = nil,
+        assistantLightText: ChatAppearanceColorSlot? = nil,
+        assistantDarkText: ChatAppearanceColorSlot? = nil
     ) {
         self.id = id
         self.name = name
         self.userBubble = userBubble
         self.assistantBubble = assistantBubble
-        self.lightText = lightText
-        self.darkText = darkText
+        self.userLightText = userLightText
+            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultUserLightText)
+        self.userDarkText = userDarkText
+            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultUserDarkText)
+        self.assistantLightText = assistantLightText
+            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultAssistantLightText)
+        self.assistantDarkText = assistantDarkText
+            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultAssistantDarkText)
+    }
+
+    public var lightText: ChatAppearanceColorSlot {
+        get { assistantLightText }
+        set {
+            userLightText = newValue
+            assistantLightText = newValue
+        }
+    }
+
+    public var darkText: ChatAppearanceColorSlot {
+        get { assistantDarkText }
+        set {
+            userDarkText = newValue
+            assistantDarkText = newValue
+        }
     }
 
     public var isDefaultProfile: Bool {
@@ -54,14 +82,74 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
             name: name ?? Self.nextDefaultName(after: self.name),
             userBubble: userBubble,
             assistantBubble: assistantBubble,
-            lightText: lightText,
-            darkText: darkText
+            userLightText: userLightText,
+            userDarkText: userDarkText,
+            assistantLightText: assistantLightText,
+            assistantDarkText: assistantDarkText
         )
     }
 
     static func nextDefaultName(after name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty || trimmed == Self.defaultProfileID ? "Profile" : "\(trimmed) Copy"
+    }
+
+    private static func legacyTextSlot(
+        _ legacySlot: ChatAppearanceColorSlot?,
+        legacyDefault: ChatAppearanceColorSlot,
+        roleDefault: ChatAppearanceColorSlot
+    ) -> ChatAppearanceColorSlot {
+        guard let legacySlot else { return roleDefault }
+        if legacySlot.isEnabled || legacySlot.hex != legacyDefault.hex {
+            return legacySlot
+        }
+        return roleDefault
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case userBubble
+        case assistantBubble
+        case lightText
+        case darkText
+        case userLightText
+        case userDarkText
+        case assistantLightText
+        case assistantDarkText
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        userBubble = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userBubble) ?? .defaultUserBubble
+        assistantBubble = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantBubble) ?? .defaultAssistantBubble
+
+        let legacyLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .lightText)
+        let legacyDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .darkText)
+        userLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userLightText)
+            ?? Self.legacyTextSlot(legacyLightText, legacyDefault: .defaultLightText, roleDefault: .defaultUserLightText)
+        userDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userDarkText)
+            ?? Self.legacyTextSlot(legacyDarkText, legacyDefault: .defaultDarkText, roleDefault: .defaultUserDarkText)
+        assistantLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantLightText)
+            ?? Self.legacyTextSlot(legacyLightText, legacyDefault: .defaultLightText, roleDefault: .defaultAssistantLightText)
+        assistantDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantDarkText)
+            ?? Self.legacyTextSlot(legacyDarkText, legacyDefault: .defaultDarkText, roleDefault: .defaultAssistantDarkText)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(userBubble, forKey: .userBubble)
+        try container.encode(assistantBubble, forKey: .assistantBubble)
+        try container.encode(assistantLightText, forKey: .lightText)
+        try container.encode(assistantDarkText, forKey: .darkText)
+        try container.encode(userLightText, forKey: .userLightText)
+        try container.encode(userDarkText, forKey: .userDarkText)
+        try container.encode(assistantLightText, forKey: .assistantLightText)
+        try container.encode(assistantDarkText, forKey: .assistantDarkText)
     }
 }
 
@@ -70,6 +158,10 @@ public extension ChatAppearanceColorSlot {
     static let defaultAssistantBubble = ChatAppearanceColorSlot(isEnabled: false, hex: "F2F2F7FF")
     static let defaultLightText = ChatAppearanceColorSlot(isEnabled: false, hex: "1C1C1EFF")
     static let defaultDarkText = ChatAppearanceColorSlot(isEnabled: false, hex: "FFFFFFFF")
+    static let defaultUserLightText = ChatAppearanceColorSlot(isEnabled: false, hex: "FFFFFFFF")
+    static let defaultUserDarkText = ChatAppearanceColorSlot(isEnabled: false, hex: "FFFFFFFF")
+    static let defaultAssistantLightText = defaultLightText
+    static let defaultAssistantDarkText = defaultDarkText
 }
 
 public struct ChatAppearanceScheduleRule: Codable, Identifiable, Equatable, Hashable, Sendable {
@@ -585,8 +677,10 @@ public final class ChatAppearanceProfileManager: ObservableObject {
         }
         profile.userBubble = .defaultUserBubble
         profile.assistantBubble = .defaultAssistantBubble
-        profile.lightText = .defaultLightText
-        profile.darkText = .defaultDarkText
+        profile.userLightText = .defaultUserLightText
+        profile.userDarkText = .defaultUserDarkText
+        profile.assistantLightText = .defaultAssistantLightText
+        profile.assistantDarkText = .defaultAssistantDarkText
         try updateProfile(profile)
     }
 
