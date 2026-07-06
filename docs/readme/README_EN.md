@@ -226,7 +226,7 @@ If you want to build it yourself:
 ## 📬 Contact
 
 *   **Developer**: Eric Terminal
-*   **Email**: ericterminal@gmail.com
+*   **Email**: ericterminal@ericterminal.com
 *   **GitHub**: [Eric-Terminal](https://github.com/Eric-Terminal)
 
 ---

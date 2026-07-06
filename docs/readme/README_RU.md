@@ -221,7 +221,7 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
 ## 📬 Контакты
 
 *   **Разработчик**: Eric Terminal
-*   **Email**: ericterminal@gmail.com
+*   **Email**: ericterminal@ericterminal.com
 *   **GitHub**: [Eric-Terminal](https://github.com/Eric-Terminal)
 
 ---

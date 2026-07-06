@@ -226,7 +226,7 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層テスト（102 
 ## 📬 連絡先
 
 *   **開発者**: Eric Terminal
-*   **Email**: ericterminal@gmail.com
+*   **Email**: ericterminal@ericterminal.com
 *   **GitHub**: [Eric-Terminal](https://github.com/Eric-Terminal)
 
 ---
