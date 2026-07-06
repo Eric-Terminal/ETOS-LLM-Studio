@@ -9,12 +9,15 @@
 import Foundation
 
 public struct LocalLLMChatMessage: Hashable, Sendable {
+    public static let mediaMarker = "<__media__>"
+
     public var role: String
     public var content: String
     public var reasoningContent: String?
     public var name: String?
     public var toolCallID: String?
     public var toolCallsJSON: String?
+    public var mediaAttachments: [LocalLLMMediaAttachment]
 
     public init(
         role: String,
@@ -22,7 +25,8 @@ public struct LocalLLMChatMessage: Hashable, Sendable {
         reasoningContent: String? = nil,
         name: String? = nil,
         toolCallID: String? = nil,
-        toolCallsJSON: String? = nil
+        toolCallsJSON: String? = nil,
+        mediaAttachments: [LocalLLMMediaAttachment] = []
     ) {
         self.role = role
         self.content = content
@@ -30,6 +34,7 @@ public struct LocalLLMChatMessage: Hashable, Sendable {
         self.name = name
         self.toolCallID = toolCallID
         self.toolCallsJSON = toolCallsJSON
+        self.mediaAttachments = mediaAttachments
     }
 }
 
@@ -46,26 +51,37 @@ public struct LocalLLMToolDefinition: Hashable, Sendable {
 }
 
 public enum LocalLLMChatMessageBuilder {
-    public static func messages(from messages: [ChatMessage]) -> [LocalLLMChatMessage] {
+    public static func messages(
+        from messages: [ChatMessage],
+        imageAttachments: [UUID: [ImageAttachment]] = [:]
+    ) -> [LocalLLMChatMessage] {
         messages.compactMap { message in
             let role = roleName(for: message.role)
-            let content = content(for: message).trimmingCharacters(in: .whitespacesAndNewlines)
+            let localMediaAttachments = mediaAttachmentsForMessage(message, imageAttachments: imageAttachments)
+            let content = contentWithMediaMarkers(
+                content(for: message).trimmingCharacters(in: .whitespacesAndNewlines),
+                mediaCount: localMediaAttachments.count
+            )
             let reasoningContent = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines)
             let toolCallsJSON = toolCallsJSON(for: message)
-            guard !content.isEmpty || reasoningContent?.isEmpty == false || toolCallsJSON != nil else { return nil }
+            guard !content.isEmpty || reasoningContent?.isEmpty == false || toolCallsJSON != nil || !localMediaAttachments.isEmpty else { return nil }
             return LocalLLMChatMessage(
                 role: role,
                 content: content,
                 reasoningContent: reasoningContent,
                 name: toolName(for: message),
                 toolCallID: toolCallID(for: message),
-                toolCallsJSON: toolCallsJSON
+                toolCallsJSON: toolCallsJSON,
+                mediaAttachments: localMediaAttachments
             )
         }
     }
 
-    public static func templateCompatibleMessages(from messages: [ChatMessage]) -> [LocalLLMChatMessage] {
-        templateCompatibleMessages(Self.messages(from: messages))
+    public static func templateCompatibleMessages(
+        from messages: [ChatMessage],
+        imageAttachments: [UUID: [ImageAttachment]] = [:]
+    ) -> [LocalLLMChatMessage] {
+        templateCompatibleMessages(Self.messages(from: messages, imageAttachments: imageAttachments))
     }
 
     public static func templateCompatibleMessages(_ messages: [LocalLLMChatMessage]) -> [LocalLLMChatMessage] {
@@ -147,6 +163,28 @@ public enum LocalLLMChatMessageBuilder {
             return ""
         default:
             return message.content
+        }
+    }
+
+    private static func contentWithMediaMarkers(_ content: String, mediaCount: Int) -> String {
+        guard mediaCount > 0 else { return content }
+        let markers = Array(repeating: LocalLLMChatMessage.mediaMarker, count: mediaCount).joined()
+        guard !content.isEmpty else { return markers }
+        return "\(markers)\n\(content)"
+    }
+
+    private static func mediaAttachmentsForMessage(
+        _ message: ChatMessage,
+        imageAttachments: [UUID: [ImageAttachment]]
+    ) -> [LocalLLMMediaAttachment] {
+        guard message.role == .user else { return [] }
+        return (imageAttachments[message.id] ?? []).enumerated().map { index, attachment in
+            LocalLLMMediaAttachment(
+                id: "\(message.id.uuidString.lowercased())-\(attachment.id.uuidString.lowercased())-\(index)",
+                data: attachment.data,
+                mimeType: attachment.mimeType,
+                fileName: attachment.fileName
+            )
         }
     }
 

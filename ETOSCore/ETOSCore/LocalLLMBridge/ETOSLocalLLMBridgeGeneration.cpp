@@ -33,6 +33,31 @@ std::string context_creation_failure_message(
     return stream.str();
 }
 
+bool mtmd_should_use_gpu(const local_generation_params & generation_params) {
+#if TARGET_OS_WATCH || TARGET_OS_SIMULATOR
+    return false;
+#else
+    return generation_params.gpu_layers != 0;
+#endif
+}
+
+int decode_token_with_position(llama_context * ctx, llama_token token, llama_pos position) {
+    int32_t n_seq_id[] = { 1 };
+    llama_seq_id seq_id = 0;
+    llama_seq_id * seq_ids[] = { &seq_id };
+    int8_t logits[] = { 1 };
+    llama_batch batch = {
+        1,
+        &token,
+        nullptr,
+        &position,
+        n_seq_id,
+        seq_ids,
+        logits,
+    };
+    return llama_decode(ctx, batch);
+}
+
 } // namespace
 
 std::once_flag backend_init_once;
@@ -218,21 +243,97 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    std::vector<llama_token> prompt_tokens = tokenize_prompt(vocab, prompt);
-    if (prompt_tokens.empty()) {
+    const bool uses_multimodal_prompt = !chat_template.media_ids.empty();
+    std::vector<llama_token> prompt_tokens;
+    size_t prompt_token_count = 0;
+    llama_pos prompt_position_count = 0;
+    mtmd_context_handle mtmd_ctx;
+    mtmd_input_chunks_handle mtmd_chunks;
+    std::vector<mtmd_bitmap_handle> media_bitmaps;
+    std::vector<const mtmd_bitmap *> media_bitmap_pointers;
+
+    if (uses_multimodal_prompt) {
+        if (generation_params.mmproj_path.empty()) {
+            return fail("当前本地模型包含图片输入，但尚未导入 mmproj 多模态投影器。", error_message);
+        }
+
+        mtmd_context_params mtmd_params = mtmd_context_params_default();
+        mtmd_params.use_gpu = mtmd_should_use_gpu(generation_params);
+        mtmd_params.print_timings = false;
+        mtmd_params.n_threads = thread_count();
+        mtmd_params.flash_attn_type = static_cast<llama_flash_attn_type>(generation_params.flash_attention);
+        mtmd_params.warmup = false;
+        mtmd_params.image_min_tokens = generation_params.image_min_tokens;
+        mtmd_params.image_max_tokens = generation_params.image_max_tokens;
+        mtmd_ctx.reset(mtmd_init_from_file(generation_params.mmproj_path.c_str(), model.get(), mtmd_params));
+        if (!mtmd_ctx) {
+            return fail("无法加载本地模型的 mmproj 多模态投影器。", error_message);
+        }
+
+        std::map<std::string, local_generation_params::media_attachment> media_by_id;
+        for (const auto & attachment : generation_params.media_attachments) {
+            media_by_id[attachment.id] = attachment;
+        }
+        media_bitmaps.reserve(chat_template.media_ids.size());
+        media_bitmap_pointers.reserve(chat_template.media_ids.size());
+        for (const std::string & media_id : chat_template.media_ids) {
+            const auto found = media_by_id.find(media_id);
+            if (found == media_by_id.end()) {
+                return fail("本地多模态提示词引用了不存在的图片附件。", error_message);
+            }
+            mtmd_bitmap_handle bitmap(mtmd_helper_bitmap_init_from_buf(
+                mtmd_ctx.get(),
+                found->second.data,
+                found->second.size
+            ));
+            if (!bitmap) {
+                return fail("本地多模态图片解码失败。", error_message);
+            }
+            mtmd_bitmap_set_id(bitmap.get(), media_id.c_str());
+            media_bitmap_pointers.push_back(bitmap.get());
+            media_bitmaps.push_back(std::move(bitmap));
+        }
+
+        mtmd_chunks.reset(mtmd_input_chunks_init());
+        if (!mtmd_chunks) {
+            return fail("本地多模态提示词内存分配失败。", error_message);
+        }
+        mtmd_input_text input_text = {
+            prompt,
+            true,
+            true,
+        };
+        const int32_t mtmd_status = mtmd_tokenize(
+            mtmd_ctx.get(),
+            mtmd_chunks.get(),
+            &input_text,
+            media_bitmap_pointers.data(),
+            media_bitmap_pointers.size()
+        );
+        if (mtmd_status != 0) {
+            return fail("本地多模态提示词解析失败，请确认图片数量和 mmproj 是否匹配当前模型。", error_message);
+        }
+        prompt_token_count = mtmd_helper_get_n_tokens(mtmd_chunks.get());
+        prompt_position_count = mtmd_helper_get_n_pos(mtmd_chunks.get());
+    } else {
+        prompt_tokens = tokenize_prompt(vocab, prompt);
+        prompt_token_count = prompt_tokens.size();
+        prompt_position_count = static_cast<llama_pos>(prompt_token_count);
+    }
+
+    if (prompt_token_count == 0) {
         return fail("本地模型无法解析提示词。", error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
     }
 
-    const size_t prompt_token_count = prompt_tokens.size();
-    if (prompt_token_count >= static_cast<size_t>(requested_context)) {
+    if (prompt_position_count >= requested_context) {
         return fail("本地模型提示词已占满上下文窗口。请缩短聊天内容或调大上下文。", error_message);
     }
     const int32_t output_limit = std::min<int32_t>(
         requested_output,
-        requested_context - static_cast<int32_t>(prompt_token_count)
+        requested_context - static_cast<int32_t>(prompt_position_count)
     );
 
     llama_context_params ctx_params = llama_context_default_params();
@@ -277,20 +378,43 @@ int32_t generate(
     std::string pending_text;
     const size_t retained_stop_suffix = longest_stop_length(generation_params.additional_stops);
     const int32_t prompt_chunk_size = static_cast<int32_t>(ctx_params.n_batch);
+    llama_pos n_past = 0;
 
-    for (size_t offset = 0; offset < prompt_tokens.size(); offset += static_cast<size_t>(prompt_chunk_size)) {
+    if (uses_multimodal_prompt) {
         if (should_cancel(cancel_callback, user_data)) {
             return cancelled(error_message);
         }
-        const int32_t chunk_size = static_cast<int32_t>(std::min<size_t>(
-            static_cast<size_t>(prompt_chunk_size),
-            prompt_tokens.size() - offset
-        ));
-        llama_batch prompt_batch = llama_batch_get_one(prompt_tokens.data() + offset, chunk_size);
-        const int status = llama_decode(ctx.get(), prompt_batch);
+        llama_pos new_n_past = 0;
+        const int status = mtmd_helper_eval_chunks(
+            mtmd_ctx.get(),
+            ctx.get(),
+            mtmd_chunks.get(),
+            0,
+            0,
+            prompt_chunk_size,
+            true,
+            &new_n_past
+        );
         if (status != 0) {
             return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
         }
+        n_past = new_n_past;
+    } else {
+        for (size_t offset = 0; offset < prompt_tokens.size(); offset += static_cast<size_t>(prompt_chunk_size)) {
+            if (should_cancel(cancel_callback, user_data)) {
+                return cancelled(error_message);
+            }
+            const int32_t chunk_size = static_cast<int32_t>(std::min<size_t>(
+                static_cast<size_t>(prompt_chunk_size),
+                prompt_tokens.size() - offset
+            ));
+            llama_batch prompt_batch = llama_batch_get_one(prompt_tokens.data() + offset, chunk_size);
+            const int status = llama_decode(ctx.get(), prompt_batch);
+            if (status != 0) {
+                return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+            }
+        }
+        n_past = static_cast<llama_pos>(prompt_token_count);
     }
 
     bool has_pending_decode = false;
@@ -301,8 +425,9 @@ int32_t generate(
             return cancelled(error_message);
         }
         if (has_pending_decode) {
-            llama_batch token_batch = llama_batch_get_one(&pending_decode_token, 1);
-            const int status = llama_decode(ctx.get(), token_batch);
+            const int status = uses_multimodal_prompt
+                ? decode_token_with_position(ctx.get(), pending_decode_token, n_past++)
+                : llama_decode(ctx.get(), llama_batch_get_one(&pending_decode_token, 1));
             if (status != 0) {
                 return fail(decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params), error_message);
             }

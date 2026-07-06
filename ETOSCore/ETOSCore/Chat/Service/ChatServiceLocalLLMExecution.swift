@@ -47,6 +47,7 @@ extension ChatService {
                 messages: LocalLLMChatMessageBuilder.templateCompatibleMessages(from: requestMessages),
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
+                    mmprojPath: localModelStore.mmprojURL(for: record)?.path,
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
@@ -66,6 +67,8 @@ extension ChatService {
                     presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
                     grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
                     ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                    imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
+                    imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
@@ -125,7 +128,8 @@ extension ChatService {
         enableResponseSpeedMetrics: Bool,
         requestStartedAt: Date,
         requestLogContext: RequestLogContext,
-        availableTools: [InternalToolDefinition]?
+        availableTools: [InternalToolDefinition]?,
+        imageAttachments: [UUID: [ImageAttachment]] = [:]
     ) async {
         guard let record = localModelRecord(for: runnableModel) else {
             let message = NSLocalizedString("本地模型文件不存在，请重新导入权重或停用该模型。", comment: "Local model missing error")
@@ -150,13 +154,17 @@ extension ChatService {
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let globalTopPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
-            let localMessagesToSend = LocalLLMChatMessageBuilder.templateCompatibleMessages(from: messagesToSend)
+            let localMessagesToSend = LocalLLMChatMessageBuilder.templateCompatibleMessages(
+                from: messagesToSend,
+                imageAttachments: imageAttachments
+            )
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let stream = try LocalLLMEngine.shared.streamParsed(
                 messages: localMessagesToSend,
                 tools: localTools,
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
+                    mmprojPath: localModelStore.mmprojURL(for: record)?.path,
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
@@ -176,6 +184,8 @@ extension ChatService {
                     presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
                     grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
                     ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                    imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
+                    imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments

@@ -143,6 +143,8 @@ bool parse_chat_template_payload(
     }
 }
 
+std::vector<std::string> media_ids_for_messages(const json & messages);
+
 local_chat_template_result render_chat_template(
     const llama_model * model,
     const parsed_chat_template_payload & payload,
@@ -182,6 +184,7 @@ local_chat_template_result render_chat_template(
             result.parser_params.parser.load(params.parser);
         }
         result.parser_enabled = true;
+        result.media_ids = media_ids_for_messages(payload.messages);
         return result;
     } catch (const std::exception & e) {
         fail(std::string("本地模型应用 GGUF Jinja 聊天模板失败：") + e.what(), error_message);
@@ -199,6 +202,30 @@ bool prompt_exceeds_context(
     }
     const std::vector<llama_token> tokens = tokenize_prompt(vocab, prompt);
     return !tokens.empty() && tokens.size() >= static_cast<size_t>(context_size);
+}
+
+std::vector<std::string> media_ids_for_messages(const json & messages) {
+    std::vector<std::string> media_ids;
+    if (!messages.is_array()) {
+        return media_ids;
+    }
+    for (const auto & message : messages) {
+        if (!message.is_object()
+            || !message.contains("etos_media_ids")
+            || !message.at("etos_media_ids").is_array()) {
+            continue;
+        }
+        for (const auto & media_id : message.at("etos_media_ids")) {
+            if (!media_id.is_string()) {
+                continue;
+            }
+            const std::string value = media_id.get<std::string>();
+            if (!value.empty()) {
+                media_ids.push_back(value);
+            }
+        }
+    }
+    return media_ids;
 }
 
 } // namespace

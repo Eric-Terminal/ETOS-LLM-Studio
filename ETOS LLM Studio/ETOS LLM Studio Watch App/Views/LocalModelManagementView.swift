@@ -214,6 +214,11 @@ private struct LocalModelRow: View {
             Text(StorageUtility.formatSize(record.fileSize))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+            if record.hasMultimodalProjector {
+                Label(NSLocalizedString("已配置 mmproj", comment: "Local model has mmproj"), systemImage: "photo")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if !record.isActivated {
                 Text(NSLocalizedString("未启用", comment: "Inactive local model"))
                     .etFont(.caption2)
@@ -246,6 +251,8 @@ private struct LocalModelDetailView: View {
     @State private var repeatPenaltyText: String
     @State private var frequencyPenaltyText: String
     @State private var presencePenaltyText: String
+    @State private var imageMinTokensText: String
+    @State private var imageMaxTokensText: String
 
     private static let watchOSGPULayers = 0
     private let savedSnapshot: LocalModelRecord
@@ -266,6 +273,8 @@ private struct LocalModelDetailView: View {
         _repeatPenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveRepeatPenalty))
         _frequencyPenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveFrequencyPenalty))
         _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectivePresencePenalty))
+        _imageMinTokensText = State(initialValue: "\(initialDraft.effectiveImageMinTokens)")
+        _imageMaxTokensText = State(initialValue: "\(initialDraft.effectiveImageMaxTokens)")
     }
 
     var body: some View {
@@ -288,6 +297,7 @@ private struct LocalModelDetailView: View {
             }
 
             runtimeSection
+            multimodalSection
             samplingSection
             grammarSection
             samplerChainSection
@@ -359,7 +369,7 @@ private struct LocalModelDetailView: View {
                 dismiss()
             }
         } message: {
-            Text(NSLocalizedString("会同时删除手表上保存的权重文件。", comment: "Watch delete local model alert message"))
+            Text(NSLocalizedString("会同时删除手表上保存的权重文件和 mmproj 投影器。", comment: "Watch delete local model alert message"))
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
@@ -401,6 +411,48 @@ private struct LocalModelDetailView: View {
             Text(NSLocalizedString("运行时", comment: "Local model runtime section"))
         } footer: {
             Text(NSLocalizedString("watchOS 本地推理只能使用 CPU 路径，GPU 层数固定为 0。", comment: "Watch fixed GPU layers footer"))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var multimodalSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(NSLocalizedString("mmproj 投影器", comment: "Local model mmproj label"))
+                Text(draft.mmprojFileName ?? NSLocalizedString("未导入", comment: "No local mmproj"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                if let size = draft.mmprojFileSize {
+                    Text(StorageUtility.formatSize(size))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if draft.hasMultimodalProjector {
+                Text(store.mmprojFileExists(for: draft)
+                    ? NSLocalizedString("投影器文件可用", comment: "Watch local mmproj exists")
+                    : NSLocalizedString("投影器文件缺失", comment: "Watch local mmproj missing"))
+                    .etFont(.caption2)
+                    .foregroundStyle(store.mmprojFileExists(for: draft) ? Color.secondary : Color.orange)
+            }
+
+            parameterEditorLink(
+                descriptorID: "imageMinTokens",
+                text: $imageMinTokensText,
+                isEnabled: overrideEnabledBinding(\.imageMinTokens, defaultValue: LocalModelRecord.defaultImageMinTokens)
+            )
+            parameterEditorLink(
+                descriptorID: "imageMaxTokens",
+                text: $imageMaxTokensText,
+                isEnabled: overrideEnabledBinding(\.imageMaxTokens, defaultValue: LocalModelRecord.defaultImageMaxTokens)
+            )
+        } header: {
+            Text(NSLocalizedString("多模态", comment: "Local model multimodal section"))
+        } footer: {
+            Text(NSLocalizedString("手表端不提供文件选择器；Image Token 仅影响支持动态分辨率的视觉模型。", comment: "Watch local multimodal footer"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -624,6 +676,12 @@ private struct LocalModelDetailView: View {
         if updatedDraft.presencePenalty != nil, let presencePenalty = Double(presencePenaltyText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             updatedDraft.presencePenalty = presencePenalty
         }
+        if updatedDraft.imageMinTokens != nil, let imageMinTokens = Int(imageMinTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.imageMinTokens = imageMinTokens
+        }
+        if updatedDraft.imageMaxTokens != nil, let imageMaxTokens = Int(imageMaxTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.imageMaxTokens = imageMaxTokens
+        }
         if clearsAdvancedArguments {
             updatedDraft.advancedArguments = ""
         }
@@ -644,6 +702,8 @@ private struct LocalModelDetailView: View {
         repeatPenaltyText = LocalModelFormat.decimal(draft.effectiveRepeatPenalty)
         frequencyPenaltyText = LocalModelFormat.decimal(draft.effectiveFrequencyPenalty)
         presencePenaltyText = LocalModelFormat.decimal(draft.effectivePresencePenalty)
+        imageMinTokensText = "\(draft.effectiveImageMinTokens)"
+        imageMaxTokensText = "\(draft.effectiveImageMaxTokens)"
     }
 
     private func parseSeed(_ rawValue: String) -> UInt32? {

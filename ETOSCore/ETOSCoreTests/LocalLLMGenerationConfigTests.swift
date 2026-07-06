@@ -30,6 +30,9 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.kvOffload)
         #expect(config.flashAttention == .auto)
         #expect(config.useModelCache)
+        #expect(config.mmprojPath.isEmpty)
+        #expect(config.imageMinTokens == -1)
+        #expect(config.imageMaxTokens == -1)
         #expect(config.samplerKinds == [.temperature])
         #expect(config.chatTemplateKwargs.isEmpty)
     }
@@ -42,7 +45,7 @@ struct LocalLLMGenerationConfigTests {
             temperature: 0.2,
             topP: 0.7,
             gpuLayers: 3,
-            advancedArguments: "--ctx-size 2048 --n-predict=128 --ngl 0 --n-batch 128 --n-ubatch 64 --no-kv-offload --flash-attn off --seed 42 --temp 0.9 --top-k 12 --top-p 0.8 --min-p 0.2 --typ-p 0.6 --repeat-last-n 32 --repeat-penalty 1.2 --frequency-penalty 0.3 --presence-penalty 0.4 --dry-sequence-breaker none --dry-sequence-breaker <stop> --sampler-seq kpt --ignore-eos"
+            advancedArguments: "--ctx-size 2048 --n-predict=128 --ngl 0 --n-batch 128 --n-ubatch 64 --no-kv-offload --flash-attn off --seed 42 --temp 0.9 --top-k 12 --top-p 0.8 --min-p 0.2 --typ-p 0.6 --repeat-last-n 32 --repeat-penalty 1.2 --frequency-penalty 0.3 --presence-penalty 0.4 --dry-sequence-breaker none --dry-sequence-breaker <stop> --sampler-seq kpt --ignore-eos --image-min-tokens 1000 --image-max-tokens 1120"
         )
 
         let config = try LocalLLMGenerationConfig(options: options)
@@ -67,6 +70,8 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.drySequenceBreakers == ["<stop>"])
         #expect(config.samplerKinds == [.topK, .topP, .temperature])
         #expect(config.ignoreEOS)
+        #expect(config.imageMinTokens == 1000)
+        #expect(config.imageMaxTokens == 1120)
     }
 
     @Test("grammar-file 不会直接读取任意本地路径")
@@ -93,6 +98,7 @@ struct LocalLLMGenerationConfigTests {
     @Test("结构化参数会直接进入生成配置")
     func structuredOptionsMapToGenerationConfig() throws {
         let options = LocalLLMGenerationOptions(
+            mmprojPath: " /tmp/mmproj.gguf ",
             contextSize: 4096,
             maxOutputTokens: 256,
             temperature: 0.65,
@@ -112,6 +118,8 @@ struct LocalLLMGenerationConfigTests {
             presencePenalty: 0.1,
             grammar: "root ::= \"ok\"",
             ignoreEOS: true,
+            imageMinTokens: 512,
+            imageMaxTokens: 1024,
             samplerKinds: [.penalties, .topK, .topP, .temperature],
             chatTemplateKwargs: [
                 "enable_thinking": .bool(false),
@@ -140,6 +148,9 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.presencePenalty == 0.1)
         #expect(config.grammar == "root ::= \"ok\"")
         #expect(config.ignoreEOS)
+        #expect(config.mmprojPath == "/tmp/mmproj.gguf")
+        #expect(config.imageMinTokens == 512)
+        #expect(config.imageMaxTokens == 1024)
         #expect(config.samplerKinds == [.penalties, .topK, .topP, .temperature])
         #expect(config.chatTemplateKwargs["enable_thinking"] == .bool(false))
         #expect(config.chatTemplateKwargs["reasoning_budget"] == .int(0))
@@ -156,7 +167,7 @@ struct LocalLLMGenerationConfigTests {
         )
 
         let result = LocalLLMCLIStyleArgumentImporter.importArguments(
-            "--temp 0.7 --top-p 0.9 --ctx-size 4096 --seed -1 --repeat-last-n -1 --ngl -1 --n-batch 256 --n-ubatch 128 --no-kv-offload --flash-attn auto --sampler-seq kpt --grammar-file /tmp/x.gbnf --bad-option 1 --top-k nope stray",
+            "--temp 0.7 --top-p 0.9 --ctx-size 4096 --seed -1 --repeat-last-n -1 --ngl -1 --n-batch 256 --n-ubatch 128 --no-kv-offload --flash-attn auto --image-min-tokens 1000 --image-max-tokens 1120 --sampler-seq kpt --grammar-file /tmp/x.gbnf --mmproj /tmp/mmproj.gguf --bad-option 1 --top-k nope stray",
             into: record
         )
 
@@ -170,10 +181,13 @@ struct LocalLLMGenerationConfigTests {
         #expect(result.updatedRecord.ubatchSize == 128)
         #expect(result.updatedRecord.kvOffload == false)
         #expect(result.updatedRecord.flashAttention == .auto)
+        #expect(result.updatedRecord.imageMinTokens == 1000)
+        #expect(result.updatedRecord.imageMaxTokens == 1120)
         #expect(result.updatedRecord.samplerKinds == [.topK, .topP, .temperature])
         #expect(result.updatedRecord.advancedArguments.isEmpty)
         #expect(result.appliedParameters.map(\.title).contains("温度"))
         #expect(result.unsupportedParameters.map(\.option).contains("--grammar-file"))
+        #expect(result.unsupportedParameters.map(\.option).contains("--mmproj"))
         #expect(result.unsupportedParameters.map(\.option).contains("--bad-option"))
         #expect(result.errorParameters.contains(where: { $0.option == "--top-k" }))
         #expect(result.errorParameters.contains(where: { $0.option == "stray" }))

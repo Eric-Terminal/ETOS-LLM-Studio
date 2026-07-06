@@ -14,6 +14,8 @@
 #include "chat.h"
 #include "ggml-backend.h"
 #include "llama.h"
+#include "../../../Dependencies/llama.cpp/tools/mtmd/mtmd.h"
+#include "../../../Dependencies/llama.cpp/tools/mtmd/mtmd-helper.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -58,10 +60,37 @@ struct llama_sampler_deleter {
     }
 };
 
+struct mtmd_context_deleter {
+    void operator()(mtmd_context * context) const {
+        if (context) {
+            mtmd_free(context);
+        }
+    }
+};
+
+struct mtmd_bitmap_deleter {
+    void operator()(mtmd_bitmap * bitmap) const {
+        if (bitmap) {
+            mtmd_bitmap_free(bitmap);
+        }
+    }
+};
+
+struct mtmd_input_chunks_deleter {
+    void operator()(mtmd_input_chunks * chunks) const {
+        if (chunks) {
+            mtmd_input_chunks_free(chunks);
+        }
+    }
+};
+
 using llama_model_handle = std::unique_ptr<llama_model, llama_model_deleter>;
 using llama_model_shared_handle = std::shared_ptr<llama_model>;
 using llama_context_handle = std::unique_ptr<llama_context, llama_context_deleter>;
 using llama_sampler_handle = std::unique_ptr<llama_sampler, llama_sampler_deleter>;
+using mtmd_context_handle = std::unique_ptr<mtmd_context, mtmd_context_deleter>;
+using mtmd_bitmap_handle = std::unique_ptr<mtmd_bitmap, mtmd_bitmap_deleter>;
+using mtmd_input_chunks_handle = std::unique_ptr<mtmd_input_chunks, mtmd_input_chunks_deleter>;
 
 char * copy_string(const std::string & value);
 int32_t fail(const std::string & message, char ** error_message);
@@ -75,6 +104,13 @@ llama_model_shared_handle load_model(
 );
 
 struct local_generation_params {
+    struct media_attachment {
+        std::string id;
+        const unsigned char * data = nullptr;
+        size_t size = 0;
+    };
+
+    std::string mmproj_path;
     int32_t context_size = 2048;
     int32_t max_output_tokens = 512;
     int32_t gpu_layers = -1;
@@ -119,7 +155,10 @@ struct local_generation_params {
     std::string generation_prompt;
     std::vector<std::string> additional_stops;
     bool ignore_eos = false;
+    int32_t image_min_tokens = -1;
+    int32_t image_max_tokens = -1;
     std::map<std::string, std::string> chat_template_kwargs;
+    std::vector<media_attachment> media_attachments;
 };
 
 struct local_chat_parser_state {
@@ -140,6 +179,7 @@ struct local_chat_template_result {
     std::vector<std::string> additional_stops;
     common_chat_parser_params parser_params;
     bool parser_enabled = false;
+    std::vector<std::string> media_ids;
 };
 
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config);

@@ -9,6 +9,7 @@
 import Foundation
 
 struct LocalLLMGenerationConfig: Hashable, Sendable {
+    var mmprojPath: String
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
@@ -46,9 +47,12 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
     var adaptiveDecay: Float
     var grammar: String
     var ignoreEOS: Bool
+    var imageMinTokens: Int32
+    var imageMaxTokens: Int32
     var chatTemplateKwargs: [String: JSONValue]
 
     init(options: LocalLLMGenerationOptions) throws {
+        self.mmprojPath = options.mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.contextSize = Int32(clamping: options.contextSize.clamped(to: 1...1_048_576))
         self.maxOutputTokens = Int32(clamping: options.maxOutputTokens.clamped(to: 1...131_072))
         self.gpuLayers = Int32(clamping: options.gpuLayers.clamped(to: -1...999))
@@ -86,6 +90,8 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
         self.adaptiveDecay = 0.9
         self.grammar = options.grammar.trimmingCharacters(in: .whitespacesAndNewlines)
         self.ignoreEOS = options.ignoreEOS
+        self.imageMinTokens = Int32(clamping: options.imageMinTokens.clamped(to: -1...1_048_576))
+        self.imageMaxTokens = Int32(clamping: options.imageMaxTokens.clamped(to: -1...1_048_576))
         self.chatTemplateKwargs = options.chatTemplateKwargs
 
         try applyAdvancedArguments(options.advancedArguments)
@@ -220,6 +226,13 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
                 throw LocalLLMEngineError.generationFailed(NSLocalizedString("暂不支持从本地高级参数读取 grammar-file；请在 App 表单中粘贴 grammar 文本。", comment: "Local LLM grammar file unsupported"))
             case "ignore-eos":
                 ignoreEOS = true
+            case "image-min-tokens":
+                imageMinTokens = (try parseInt32(nextValue(), option: rawName)).clamped(to: -1...1_048_576)
+            case "image-max-tokens":
+                imageMaxTokens = (try parseInt32(nextValue(), option: rawName)).clamped(to: -1...1_048_576)
+            case "mmproj", "mm":
+                _ = try nextValue()
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("请在本地模型详情页选择 mmproj 文件，不要把 --mmproj 写入高级参数。", comment: "Local LLM mmproj advanced arg unsupported"))
             default:
                 throw LocalLLMEngineError.generationFailed(String(
                     format: NSLocalizedString("暂不支持的本地 llama.cpp CLI 参数：%@", comment: "Local LLM unsupported advanced arg"),
@@ -625,6 +638,22 @@ public enum LocalLLMParameterCatalog {
             effectScope: samplerText
         ),
         LocalLLMParameterDescriptor(
+            id: "imageMinTokens",
+            title: NSLocalizedString("最小 Image Token", comment: "Local parameter image min tokens title"),
+            aliases: ["--image-min-tokens"],
+            summary: NSLocalizedString("限制动态分辨率视觉模型的最低图片 token；-1 表示读取 mmproj 元数据。", comment: "Local parameter image min tokens summary"),
+            defaultValue: "\(LocalModelRecord.defaultImageMinTokens)",
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
+            id: "imageMaxTokens",
+            title: NSLocalizedString("最大 Image Token", comment: "Local parameter image max tokens title"),
+            aliases: ["--image-max-tokens"],
+            summary: NSLocalizedString("限制动态分辨率视觉模型的最高图片 token；-1 表示读取 mmproj 元数据。", comment: "Local parameter image max tokens summary"),
+            defaultValue: "\(LocalModelRecord.defaultImageMaxTokens)",
+            effectScope: contextRebuildText
+        ),
+        LocalLLMParameterDescriptor(
             id: "samplerKinds",
             title: NSLocalizedString("采样链", comment: "Local parameter sampler chain title"),
             aliases: ["--samplers", "--sampler-seq", "--sampling-seq"],
@@ -871,6 +900,28 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "ignore-eos":
                 updatedRecord.ignoreEOS = true
                 appendApplied(rawName, "ignoreEOS", NSLocalizedString("开启", comment: "Enabled"))
+            case "image-min-tokens":
+                guard let value = requireValue() else { continue }
+                guard let parsedValue = Int(value) else {
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
+                    continue
+                }
+                updatedRecord.imageMinTokens = parsedValue.clamped(to: -1...1_048_576)
+                appendApplied(rawName, "imageMinTokens", "\(updatedRecord.imageMinTokens ?? LocalModelRecord.defaultImageMinTokens)")
+            case "image-max-tokens":
+                guard let value = requireValue() else { continue }
+                guard let parsedValue = Int(value) else {
+                    errors.append(LocalLLMCLIStyleImportIssue(option: rawName, message: String(
+                        format: NSLocalizedString("需要整数，收到 %@。", comment: "Local llama import integer error"),
+                        value
+                    )))
+                    continue
+                }
+                updatedRecord.imageMaxTokens = parsedValue.clamped(to: -1...1_048_576)
+                appendApplied(rawName, "imageMaxTokens", "\(updatedRecord.imageMaxTokens ?? LocalModelRecord.defaultImageMaxTokens)")
             case "samplers", "sampler-seq", "sampling-seq":
                 guard let value = requireValue() else { continue }
                 let samplerKinds = LocalLLMSamplerKind.parse(value)
@@ -883,6 +934,9 @@ public enum LocalLLMCLIStyleArgumentImporter {
             case "grammar-file":
                 _ = nextValue()
                 unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("iOS 沙盒下不导入任意路径文件，请改用 Grammar 文本。", comment: "Local llama import grammar file unsupported")))
+            case "mmproj", "mm":
+                _ = nextValue()
+                unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("请用本地模型详情页的 mmproj 文件选择器导入投影器。", comment: "Local llama import mmproj unsupported")))
             default:
                 _ = nextValue()
                 unsupported.append(LocalLLMCLIStyleImportIssue(option: rawName, message: NSLocalizedString("当前只支持常用 llama.cpp-style 参数子集。", comment: "Local llama import unsupported option")))

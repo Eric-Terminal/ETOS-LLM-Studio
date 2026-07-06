@@ -11,6 +11,7 @@ import Foundation
 struct LocalLLMChatTemplatePayload: Hashable, Sendable {
     var messagesJSON: String
     var toolsJSON: String
+    var mediaAttachments: [LocalLLMMediaAttachment]
 
     init(
         messages: [LocalLLMChatMessage],
@@ -18,6 +19,7 @@ struct LocalLLMChatTemplatePayload: Hashable, Sendable {
     ) throws {
         self.messagesJSON = try Self.encodeMessages(messages)
         self.toolsJSON = try Self.encodeTools(tools)
+        self.mediaAttachments = messages.flatMap(\.mediaAttachments)
     }
 
     func withUnsafeCStrings<Result>(
@@ -57,6 +59,9 @@ struct LocalLLMChatTemplatePayload: Hashable, Sendable {
                     toolCallsJSON,
                     failure: NSLocalizedString("本地工具调用历史 JSON 无效。", comment: "Local LLM invalid tool call history JSON")
                 )
+            }
+            if !message.mediaAttachments.isEmpty {
+                object["etos_media_ids"] = message.mediaAttachments.map(\.id)
             }
             return object
         }

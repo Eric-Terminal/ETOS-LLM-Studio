@@ -138,6 +138,7 @@ bool emit_text_chunk(
 
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config) {
     local_generation_params params;
+    params.mmproj_path = config.mmproj_path ? config.mmproj_path : "";
     params.context_size = std::max<int32_t>(1, config.context_size);
     params.max_output_tokens = std::max<int32_t>(1, config.max_output_tokens);
     params.gpu_layers = config.gpu_layers;
@@ -193,6 +194,8 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
     }
     params.grammar = config.grammar ? config.grammar : "";
     params.ignore_eos = config.ignore_eos != 0;
+    params.image_min_tokens = config.image_min_tokens;
+    params.image_max_tokens = config.image_max_tokens;
     params.chat_template_kwargs.clear();
     for (int32_t index = 0;
          config.chat_template_kwarg_keys
@@ -203,6 +206,24 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
         const char * value = config.chat_template_kwarg_values[index];
         if (key && key[0] != '\0' && value) {
             params.chat_template_kwargs[key] = value;
+        }
+    }
+    params.media_attachments.clear();
+    for (int32_t index = 0;
+         config.media_data
+            && config.media_data_sizes
+            && config.media_ids
+            && index < config.media_count;
+         ++index) {
+        const unsigned char * data = config.media_data[index];
+        const int64_t size = config.media_data_sizes[index];
+        const char * id = config.media_ids[index];
+        if (data && size > 0 && id && id[0] != '\0') {
+            params.media_attachments.push_back({
+                id,
+                data,
+                static_cast<size_t>(size),
+            });
         }
     }
     return params;

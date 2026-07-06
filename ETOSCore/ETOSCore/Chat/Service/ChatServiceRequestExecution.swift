@@ -288,7 +288,8 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext,
-                availableTools: nil
+                availableTools: nil,
+                imageAttachments: imageAttachments
             )
             return
         }

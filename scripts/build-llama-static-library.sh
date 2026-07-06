@@ -212,7 +212,7 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
 
 cleanup_intermediates() {
     if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
@@ -303,7 +303,7 @@ for arch in $REQUESTED_ARCHS; do
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED warnings=$LLAMA_WARNING_FLAGS"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||
@@ -331,7 +331,8 @@ for arch in $REQUESTED_ARCHS; do
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_COMMON=ON \
             -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TOOLS=ON \
+            -DLLAMA_TOOLS_INSTALL=OFF \
             -DLLAMA_BUILD_EXAMPLES=OFF \
             -DLLAMA_BUILD_SERVER=OFF \
             -DLLAMA_BUILD_APP=OFF \
@@ -348,8 +349,10 @@ for arch in $REQUESTED_ARCHS; do
 
         if [ "$PARALLEL_BUILD" = "1" ]; then
             cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target llama-common --parallel "$PARALLEL_JOBS"
+            cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target mtmd --parallel "$PARALLEL_JOBS"
         else
             cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target llama-common
+            cmake --build "$BUILD_DIR" --config "$CMAKE_BUILD_TYPE" --target mtmd
         fi
 
         set --
@@ -357,6 +360,7 @@ for arch in $REQUESTED_ARCHS; do
             "$BUILD_DIR/src/libllama.a" \
             "$BUILD_DIR/common/libllama-common.a" \
             "$BUILD_DIR/common/libllama-common-base.a" \
+            "$BUILD_DIR/tools/mtmd/libmtmd.a" \
             "$BUILD_DIR/ggml/src/libggml.a" \
             "$BUILD_DIR/ggml/src/libggml-base.a" \
             "$BUILD_DIR/ggml/src/libggml-cpu.a" \

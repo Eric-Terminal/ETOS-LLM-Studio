@@ -18,6 +18,13 @@ struct LocalLLMChatTemplatePayloadTests {
             messages: [
                 LocalLLMChatMessage(role: "system", content: "你是助手"),
                 LocalLLMChatMessage(
+                    role: "user",
+                    content: "\(LocalLLMChatMessage.mediaMarker)\n看图",
+                    mediaAttachments: [
+                        LocalLLMMediaAttachment(id: "media-1", data: Data([1, 2, 3]), mimeType: "image/png", fileName: "image.png")
+                    ]
+                ),
+                LocalLLMChatMessage(
                     role: "assistant",
                     content: "",
                     reasoningContent: "先查时间",
@@ -40,12 +47,14 @@ struct LocalLLMChatTemplatePayloadTests {
         )
 
         let messages = try decodedJSONArray(payload.messagesJSON)
-        #expect(messages.count == 3)
+        #expect(messages.count == 4)
         #expect(messages[0]["role"] as? String == "system")
-        #expect(messages[1]["reasoning_content"] as? String == "先查时间")
-        let toolCalls = try #require(messages[1]["tool_calls"] as? [[String: Any]])
+        #expect(messages[1]["etos_media_ids"] as? [String] == ["media-1"])
+        #expect(payload.mediaAttachments.map(\.id) == ["media-1"])
+        #expect(messages[2]["reasoning_content"] as? String == "先查时间")
+        let toolCalls = try #require(messages[2]["tool_calls"] as? [[String: Any]])
         #expect(toolCalls.first?["id"] as? String == "call_1")
-        #expect(messages[2]["tool_call_id"] as? String == "call_1")
+        #expect(messages[3]["tool_call_id"] as? String == "call_1")
 
         let tools = try decodedJSONArray(payload.toolsJSON)
         let function = try #require(tools.first?["function"] as? [String: Any])

@@ -33,6 +33,7 @@ typedef enum etos_local_llm_sampler_kind {
 } etos_local_llm_sampler_kind;
 
 typedef struct etos_local_llm_generation_config {
+    const char * mmproj_path;
     int32_t context_size;
     int32_t max_output_tokens;
     int32_t gpu_layers;
@@ -72,9 +73,15 @@ typedef struct etos_local_llm_generation_config {
     float adaptive_decay;
     const char * grammar;
     int32_t ignore_eos;
+    int32_t image_min_tokens;
+    int32_t image_max_tokens;
     const char * const * chat_template_kwarg_keys;
     const char * const * chat_template_kwarg_values;
     int32_t chat_template_kwarg_count;
+    const unsigned char * const * media_data;
+    const int64_t * media_data_sizes;
+    const char * const * media_ids;
+    int32_t media_count;
 } etos_local_llm_generation_config;
 
 int32_t etos_local_llm_generate(
