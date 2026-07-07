@@ -451,7 +451,7 @@ private final class MCPBuiltInWebSearchClient {
         return URLSession(configuration: configuration)
     }
 
-    init() {
+    convenience init() {
         self.init(session: Self.makeDefaultSession())
     }
 
