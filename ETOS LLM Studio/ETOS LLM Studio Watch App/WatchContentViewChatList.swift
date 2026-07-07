@@ -240,6 +240,7 @@ extension ContentView {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
+        .simultaneousGesture(watchStreamingAutoScrollDetachGesture)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -259,7 +260,7 @@ extension ContentView {
                 suppressAutoScrollOnce = false
                 return
             }
-            let shouldScroll = isAtBottom || shouldForceScrollToBottom || (viewModel.isSendingMessage && shouldKeepBottomPinned)
+            let shouldScroll = shouldForceScrollToBottom || (shouldKeepBottomPinned && (isAtBottom || viewModel.isSendingMessage))
             shouldForceScrollToBottom = false
             guard shouldScroll else { return }
             scrollToBottom(proxy: proxy, animated: false)
@@ -269,7 +270,7 @@ extension ContentView {
             scrollToBottom(proxy: proxy, animated: false)
         }
         .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
-            guard newValue != nil, isAtBottom else { return }
+            guard newValue != nil, isAtBottom, shouldKeepBottomPinned else { return }
             scrollToBottom(proxy: proxy, animated: false)
         }
         .onChange(of: pendingJumpRequest) { _, request in
@@ -325,6 +326,7 @@ extension ContentView {
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
+            isAtBottom = true
 
             let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
             guard shouldResetHistoryWindow else {
@@ -411,6 +413,7 @@ extension ContentView {
     }
 
     func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        shouldKeepBottomPinned = true
         let action = {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
@@ -430,6 +433,7 @@ extension ContentView {
     ) {
         guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
         suppressAutoScrollOnce = true
+        shouldKeepBottomPinned = false
         let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
         guard didLoad else { return }
         DispatchQueue.main.async {
@@ -504,6 +508,7 @@ extension ContentView {
 
     func scheduleImmediateBottomSnap(proxy: ScrollViewProxy) {
         pendingBottomSnapTask?.cancel()
+        shouldKeepBottomPinned = true
         pendingBottomSnapTask = Task { @MainActor in
             for _ in 0..<4 {
                 guard !Task.isCancelled else { return }
@@ -518,6 +523,7 @@ extension ContentView {
 
     func scheduleDeferredBottomSnap(proxy: ScrollViewProxy) {
         pendingBottomSnapTask?.cancel()
+        shouldKeepBottomPinned = true
         pendingBottomSnapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
             for _ in 0..<3 {
@@ -550,5 +556,15 @@ extension ContentView {
 
     var inputStrokeColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
+    }
+
+    var watchStreamingAutoScrollDetachGesture: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                guard viewModel.isSendingMessage else { return }
+                guard !isAtBottom || value.translation.height > 6 else { return }
+                shouldKeepBottomPinned = false
+                shouldForceScrollToBottom = false
+            }
     }
 }

@@ -119,7 +119,7 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
 }
 
 struct ScrollDistanceToBottomObserver: UIViewRepresentable {
-    let onDistanceChange: (CGFloat) -> Void
+    let onDistanceChange: (CGFloat, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onDistanceChange: onDistanceChange)
@@ -142,13 +142,13 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
     }
 
     final class Coordinator {
-        var onDistanceChange: (CGFloat) -> Void
+        var onDistanceChange: (CGFloat, Bool) -> Void
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
         private var boundsObservation: NSKeyValueObservation?
 
-        init(onDistanceChange: @escaping (CGFloat) -> Void) {
+        init(onDistanceChange: @escaping (CGFloat, Bool) -> Void) {
             self.onDistanceChange = onDistanceChange
         }
 
@@ -174,7 +174,8 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
             guard let scrollView else { return }
             let visibleMaxY = scrollView.contentOffset.y + scrollView.bounds.height - scrollView.adjustedContentInset.bottom
             let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
-            onDistanceChange(distanceToBottom)
+            let isUserInteracting = scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
+            onDistanceChange(distanceToBottom, isUserInteracting)
         }
     }
 

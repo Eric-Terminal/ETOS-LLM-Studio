@@ -48,6 +48,7 @@ extension ChatView {
         pendingBottomSnapTask = nil
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
+        shouldKeepBottomPinned = false
     }
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
@@ -92,6 +93,7 @@ extension ChatView {
         animated: Bool = true,
         animation: Animation = .easeOut(duration: 0.25)
     ) {
+        shouldKeepBottomPinned = true
         setScrollTarget(bottomScrollTarget, anchor: .bottom, animated: animated, animation: animation)
     }
 
@@ -101,6 +103,7 @@ extension ChatView {
         shouldRestorePendingJumpOnAppear = false
 
         let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
+        shouldKeepBottomPinned = true
         showScrollToBottom = false
 
         guard shouldResetHistoryWindow else {
@@ -131,6 +134,7 @@ extension ChatView {
     ) {
         guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
         suppressAutoScrollOnce = true
+        shouldKeepBottomPinned = false
         let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
         guard didLoad else { return }
         DispatchQueue.main.async {
@@ -140,6 +144,7 @@ extension ChatView {
 
     func scheduleImmediateBottomSnap() {
         pendingBottomSnapTask?.cancel()
+        shouldKeepBottomPinned = true
         pendingBottomSnapTask = Task { @MainActor in
             for _ in 0..<3 {
                 guard !Task.isCancelled else { return }
@@ -154,6 +159,7 @@ extension ChatView {
 
     func scheduleDeferredBottomSnap() {
         pendingBottomSnapTask?.cancel()
+        shouldKeepBottomPinned = true
         pendingBottomSnapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
             for _ in 0..<3 {
@@ -181,11 +187,12 @@ extension ChatView {
         return .bottom
     }
 
-    func updateScrollToBottomVisibility(distanceToBottom: CGFloat) {
+    func updateScrollToBottomVisibility(distanceToBottom: CGFloat, isUserInteracting: Bool) {
         let normalizedDistance = max(distanceToBottom, 0)
         DispatchQueue.main.async {
             scrollDistanceToBottom = normalizedDistance
             guard !viewModel.displayMessages.isEmpty else {
+                shouldKeepBottomPinned = true
                 if showScrollToBottom {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         showScrollToBottom = false
@@ -193,7 +200,13 @@ extension ChatView {
                 }
                 return
             }
-            let shouldShow = normalizedDistance > 48
+            if normalizedDistance < bottomPinnedDistanceThreshold {
+                shouldKeepBottomPinned = true
+            } else if isUserInteracting, !isChatLayoutSettling {
+                shouldKeepBottomPinned = false
+            }
+
+            let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
             if showScrollToBottom != shouldShow {
                 withAnimation(.easeInOut(duration: 0.18)) {
                     showScrollToBottom = shouldShow
@@ -214,7 +227,7 @@ extension ChatView {
             return
         }
 
-        let keepBottomPinned = scrollDistanceToBottom < 120
+        let keepBottomPinned = shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
         chatInputBarHeight = newHeight
         beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
     }
@@ -224,6 +237,7 @@ extension ChatView {
         isChatLayoutSettling = true
 
         if keepBottomPinned {
+            shouldKeepBottomPinned = true
             scrollToBottom(animated: false)
         }
 

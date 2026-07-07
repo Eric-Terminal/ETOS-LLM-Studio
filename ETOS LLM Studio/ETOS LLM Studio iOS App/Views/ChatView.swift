@@ -26,6 +26,7 @@ struct ChatView: View {
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var ttsManager = TTSManager.shared
     @State var showScrollToBottom = false
+    @State var shouldKeepBottomPinned = true
     @State var suppressAutoScrollOnce = false
     @State var navigationDestination: ChatNavigationDestination?
     @State var editingMessage: ChatMessage?
@@ -101,6 +102,8 @@ struct ChatView: View {
     let navBarBlurFadeHeightRatio: CGFloat = 0.06
     let chatPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
+    let bottomPinnedDistanceThreshold: CGFloat = 24
+    let scrollToBottomButtonRevealDistance: CGFloat = 48
     let landscapeSessionSidebarMinWidth: CGFloat = 220
     let landscapeSessionSidebarMaxWidth: CGFloat = 300
     let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
@@ -665,8 +668,11 @@ extension ChatView {
                 // Z-Index 1: 消息列表
                 ScrollView {
                     VStack(spacing: 0) {
-                        ScrollDistanceToBottomObserver { distanceToBottom in
-                            updateScrollToBottomVisibility(distanceToBottom: distanceToBottom)
+                        ScrollDistanceToBottomObserver { distanceToBottom, isUserInteracting in
+                            updateScrollToBottomVisibility(
+                                distanceToBottom: distanceToBottom,
+                                isUserInteracting: isUserInteracting
+                            )
                         }
                         .frame(width: 0, height: 0)
 
@@ -812,10 +818,11 @@ extension ChatView {
                         suppressAutoScrollOnce = false
                         return
                     }
+                    guard shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
                     scrollToBottom()
                 }
                 .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
-                    guard newValue != nil, !showScrollToBottom else { return }
+                    guard newValue != nil, shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
                     scrollToBottom()
                 }
                 .onChange(of: pendingJumpRequest) { _, request in
@@ -829,6 +836,7 @@ extension ChatView {
                     pendingHistoryResetWorkItem?.cancel()
                     pendingHistoryResetWorkItem = nil
                     shouldRestorePendingJumpOnAppear = false
+                    shouldKeepBottomPinned = true
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
                     scheduleImmediateBottomSnap()
@@ -841,7 +849,7 @@ extension ChatView {
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
-                    guard !showScrollToBottom || scrollDistanceToBottom < 80 else { return }
+                    guard viewModel.isSendingMessage, shouldKeepBottomPinned else { return }
                     scrollToBottom(animated: false)
                 }
                 .onAppear {
@@ -857,6 +865,7 @@ extension ChatView {
                     }
                     resolvePendingSearchJumpIfNeeded()
                     if needsImmediateBottomSnap {
+                        shouldKeepBottomPinned = true
                         scheduleImmediateBottomSnap()
                     }
                 }
@@ -951,13 +960,17 @@ extension ChatView {
                 bottomSafeAreaInset = newValue
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                beginChatLayoutSettling(keepBottomPinned: scrollDistanceToBottom < 120)
+                beginChatLayoutSettling(
+                    keepBottomPinned: shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
+                )
                 if !isKeyboardVisible {
                     isKeyboardVisible = true
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                beginChatLayoutSettling(keepBottomPinned: scrollDistanceToBottom < 120)
+                beginChatLayoutSettling(
+                    keepBottomPinned: shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
+                )
                 if isKeyboardVisible {
                     isKeyboardVisible = false
                 }
