@@ -81,7 +81,11 @@ public actor MCPBuiltInSearchTransport: Transport, MCPSDKTransportControl {
 
     public nonisolated var logger: Logger { loggerInstance }
 
-    public init(session: URLSession = NetworkSessionConfiguration.shared) {
+    public init() {
+        self.init(session: MCPBuiltInWebSearchClient.makeDefaultSession())
+    }
+
+    public init(session: URLSession) {
         self.engine = MCPBuiltInSearchServerEngine(session: session)
         var continuation: AsyncThrowingStream<Data, Error>.Continuation!
         self.stream = AsyncThrowingStream { continuation = $0 }
@@ -146,7 +150,11 @@ public final class MCPBuiltInSearchLegacyTransport: MCPTransport, MCPProtocolVer
     private let engine: MCPBuiltInSearchServerEngine
     private var protocolVersion: String?
 
-    public init(session: URLSession = NetworkSessionConfiguration.shared) {
+    public init() {
+        self.engine = MCPBuiltInSearchServerEngine()
+    }
+
+    public init(session: URLSession) {
         self.engine = MCPBuiltInSearchServerEngine(session: session)
     }
 
@@ -171,7 +179,11 @@ actor MCPBuiltInSearchServerEngine {
     private let jsonrpcVersion = "2.0"
     private let searchClient: MCPBuiltInWebSearchClient
 
-    init(session: URLSession = NetworkSessionConfiguration.shared) {
+    init() {
+        self.searchClient = MCPBuiltInWebSearchClient()
+    }
+
+    init(session: URLSession) {
         self.searchClient = MCPBuiltInWebSearchClient(session: session)
     }
 
@@ -237,7 +249,7 @@ actor MCPBuiltInSearchServerEngine {
             "tools": [
                 [
                     "name": MCPBuiltInSearchServer.toolID,
-                    "description": NSLocalizedString("使用设备网络搜索网页。如果 query 包含 URL 或域名，会优先抓取该页面标题和摘要，再补充搜索结果。", comment: "Built-in search MCP tool description"),
+                    "description": NSLocalizedString("使用设备网络搜索网页。如果 query 或 url 包含 URL / 域名，会优先抓取该页面标题和摘要，再补充搜索结果。", comment: "Built-in search MCP tool description"),
                     "inputSchema": [
                         "type": "object",
                         "properties": [
@@ -245,14 +257,24 @@ actor MCPBuiltInSearchServerEngine {
                                 "type": "string",
                                 "description": NSLocalizedString("要搜索的关键词或问题。", comment: "Built-in search query parameter description")
                             ],
+                            "url": [
+                                "type": "string",
+                                "description": NSLocalizedString("可选。要直接抓取的网页 URL；提供后会优先作为查询目标。", comment: "Built-in search url parameter description")
+                            ],
                             "max_results": [
                                 "type": "integer",
                                 "description": NSLocalizedString("返回结果数量，范围 1 到 8。", comment: "Built-in search max results parameter description"),
                                 "minimum": 1,
                                 "maximum": 8
+                            ],
+                            "timeout_seconds": [
+                                "type": "number",
+                                "description": NSLocalizedString("整次搜索或网页抓取最多等待的秒数，范围 3 到 30，默认 12。", comment: "Built-in search timeout parameter description"),
+                                "minimum": 3,
+                                "maximum": 30
                             ]
                         ],
-                        "required": ["query"],
+                        "required": [],
                         "additionalProperties": false
                     ]
                 ]
@@ -269,15 +291,26 @@ actor MCPBuiltInSearchServerEngine {
             return errorToolResult(message: "Unknown built-in search tool: \(name)")
         }
         let arguments = params["arguments"] as? [String: Any] ?? [:]
-        guard let query = (arguments["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !query.isEmpty else {
-            return errorToolResult(message: "query must be a non-empty string")
+        let queryArgument = normalizedTextArgument(arguments["query"])
+        let urlArgument = normalizedTextArgument(arguments["url"])
+        guard let query = queryArgument ?? urlArgument else {
+            return errorToolResult(message: "query or url must be a non-empty string")
+        }
+        let directURL = urlArgument.flatMap(MCPBuiltInWebSearchClient.urlCandidate(in:))
+        if queryArgument == nil, urlArgument != nil, directURL == nil {
+            return errorToolResult(message: "url must be a valid http or https URL")
         }
 
         let maxResults = normalizedMaxResults(from: arguments["max_results"])
+        let timeout = normalizedTimeout(from: arguments["timeout_seconds"])
         let structuredContent: [String: Any]
         do {
-            structuredContent = try await searchClient.search(query: query, maxResults: maxResults)
+            structuredContent = try await searchClient.search(
+                query: query,
+                directURL: directURL,
+                maxResults: maxResults,
+                timeout: timeout
+            )
         } catch {
             return errorToolResult(
                 message: String(
@@ -332,6 +365,30 @@ actor MCPBuiltInSearchServerEngine {
         return min(max(value, 1), 8)
     }
 
+    private func normalizedTimeout(from rawValue: Any?) -> TimeInterval {
+        let fallback = MCPBuiltInWebSearchClient.defaultTotalTimeout
+        let value: TimeInterval
+        if let rawValue = rawValue as? Double {
+            value = rawValue
+        } else if let rawValue = rawValue as? Int {
+            value = TimeInterval(rawValue)
+        } else if let rawValue = rawValue as? NSNumber {
+            value = rawValue.doubleValue
+        } else if let rawValue = rawValue as? String,
+                  let parsed = Double(rawValue) {
+            value = parsed
+        } else {
+            value = fallback
+        }
+        return min(max(value, 3), 30)
+    }
+
+    private func normalizedTextArgument(_ rawValue: Any?) -> String? {
+        guard let text = rawValue as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private func requestObject(from data: Data) throws -> [String: Any] {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw MCPClientError.invalidResponse
@@ -377,12 +434,28 @@ actor MCPBuiltInSearchServerEngine {
 
 private final class MCPBuiltInWebSearchClient {
     static let providerID = "etos_builtin_web_search"
+    static let defaultTotalTimeout: TimeInterval = 12
 
     private static let searchEndpoint = URL(string: "https://html.duckduckgo.com/html/")!
     private static let maximumHTMLBytes = 512 * 1024
+    private static let defaultRequestTimeout: TimeInterval = 8
+    private static let minimumRequestTimeout: TimeInterval = 0.5
     private let dataLoader: @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
-    init(session: URLSession = NetworkSessionConfiguration.shared) {
+    static func makeDefaultSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.waitsForConnectivity = false
+        configuration.timeoutIntervalForRequest = defaultRequestTimeout
+        configuration.timeoutIntervalForResource = defaultTotalTimeout
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }
+
+    init() {
+        self.init(session: Self.makeDefaultSession())
+    }
+
+    init(session: URLSession) {
         self.dataLoader = { request in
             try await session.data(for: request)
         }
@@ -392,18 +465,29 @@ private final class MCPBuiltInWebSearchClient {
         self.dataLoader = dataLoader
     }
 
-    func search(query: String, maxResults: Int) async throws -> [String: Any] {
+    func search(query: String, directURL: URL?, maxResults: Int, timeout: TimeInterval) async throws -> [String: Any] {
+        let deadline = Date().addingTimeInterval(timeout)
         var items: [SearchItem] = []
         var seenURLs = Set<String>()
 
-        if let directURL = Self.firstURLCandidate(in: query),
-           let pageItem = try? await fetchPage(url: directURL, id: "page01") {
+        if let directURL = directURL ?? Self.urlCandidate(in: query),
+           let pageItem = try? await fetchPage(
+               url: directURL,
+               id: "page01",
+               deadline: deadline,
+               totalTimeout: timeout
+           ) {
             items.append(pageItem)
             seenURLs.insert(Self.normalizedURLKey(pageItem.url))
         }
 
         if items.count < maxResults {
-            let searchItems = try await searchDuckDuckGo(query: query, remainingCount: maxResults - items.count)
+            let searchItems = try await searchDuckDuckGo(
+                query: query,
+                remainingCount: maxResults - items.count,
+                deadline: deadline,
+                totalTimeout: timeout
+            )
             for item in searchItems {
                 let key = Self.normalizedURLKey(item.url)
                 guard !seenURLs.contains(key) else { continue }
@@ -430,11 +514,17 @@ private final class MCPBuiltInWebSearchClient {
             "query": query,
             "provider": Self.providerID,
             "answer": answer,
+            "timeout_seconds": timeout,
             "items": items.map(\.jsonObject)
         ]
     }
 
-    private func searchDuckDuckGo(query: String, remainingCount: Int) async throws -> [SearchItem] {
+    private func searchDuckDuckGo(
+        query: String,
+        remainingCount: Int,
+        deadline: Date,
+        totalTimeout: TimeInterval
+    ) async throws -> [SearchItem] {
         guard remainingCount > 0 else { return [] }
 
         var components = URLComponents(url: Self.searchEndpoint, resolvingAgainstBaseURL: false)!
@@ -445,7 +535,12 @@ private final class MCPBuiltInWebSearchClient {
             throw SearchError.invalidURL
         }
 
-        let html = try await fetchHTML(url: url)
+        let html = try await fetchHTML(
+            url: url,
+            deadline: deadline,
+            totalTimeout: totalTimeout,
+            usesRangeRequest: false
+        )
         let parsedItems = Self.parseDuckDuckGoResults(from: html)
         return Array(parsedItems.prefix(remainingCount).enumerated().map { offset, item in
             SearchItem(
@@ -458,8 +553,13 @@ private final class MCPBuiltInWebSearchClient {
         })
     }
 
-    private func fetchPage(url: URL, id: String) async throws -> SearchItem {
-        let html = try await fetchHTML(url: url)
+    private func fetchPage(url: URL, id: String, deadline: Date, totalTimeout: TimeInterval) async throws -> SearchItem {
+        let html = try await fetchHTML(
+            url: url,
+            deadline: deadline,
+            totalTimeout: totalTimeout,
+            usesRangeRequest: true
+        )
         let title = Self.htmlTitle(from: html)
             ?? url.host
             ?? NSLocalizedString("网页没有可读取的标题。", comment: "Built-in search page without title")
@@ -475,16 +575,39 @@ private final class MCPBuiltInWebSearchClient {
         )
     }
 
-    private func fetchHTML(url: URL) async throws -> String {
+    private func fetchHTML(
+        url: URL,
+        deadline: Date,
+        totalTimeout: TimeInterval,
+        usesRangeRequest: Bool
+    ) async throws -> String {
+        do {
+            return try await loadHTML(
+                url: url,
+                timeout: Self.remainingRequestTimeout(until: deadline, totalTimeout: totalTimeout),
+                usesRangeRequest: usesRangeRequest
+            )
+        } catch SearchError.httpStatus(let statusCode, _) where usesRangeRequest && (statusCode == 400 || statusCode == 416) {
+            return try await loadHTML(
+                url: url,
+                timeout: Self.remainingRequestTimeout(until: deadline, totalTimeout: totalTimeout),
+                usesRangeRequest: false
+            )
+        }
+    }
+
+    private func loadHTML(url: URL, timeout: TimeInterval, usesRangeRequest: Bool) async throws -> String {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 30
+        request.timeoutInterval = timeout
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue(Locale.preferredLanguages.prefix(3).joined(separator: ","), forHTTPHeaderField: "Accept-Language")
-        request.setValue("bytes=0-\(Self.maximumHTMLBytes - 1)", forHTTPHeaderField: "Range")
+        if usesRangeRequest {
+            request.setValue("bytes=0-\(Self.maximumHTMLBytes - 1)", forHTTPHeaderField: "Range")
+        }
 
         let (data, response) = try await dataLoader(request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -500,6 +623,14 @@ private final class MCPBuiltInWebSearchClient {
         return Self.string(fromHTMLData: limitedData)
     }
 
+    private static func remainingRequestTimeout(until deadline: Date, totalTimeout: TimeInterval) throws -> TimeInterval {
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > minimumRequestTimeout else {
+            throw SearchError.timedOut(totalTimeout)
+        }
+        return min(defaultRequestTimeout, remaining)
+    }
+
     private static func string(fromHTMLData data: Data) -> String {
         if let text = String(data: data, encoding: .utf8) {
             return text
@@ -510,7 +641,7 @@ private final class MCPBuiltInWebSearchClient {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private static func firstURLCandidate(in query: String) -> URL? {
+    static func urlCandidate(in query: String) -> URL? {
         let separators = CharacterSet.whitespacesAndNewlines
             .union(CharacterSet(charactersIn: "\"'`()[]{}<>「」『』，,。；;"))
         return query
@@ -570,9 +701,11 @@ private final class MCPBuiltInWebSearchClient {
     }
 
     private static func normalizedResultURL(_ rawHref: String) -> String? {
-        var href = decodeHTMLEntities(rawHref)
+        var href = decodeHTMLEntities(rawHref).trimmingCharacters(in: .whitespacesAndNewlines)
         if href.hasPrefix("//") {
             href = "https:\(href)"
+        } else if href.hasPrefix("/") {
+            href = "https://duckduckgo.com\(href)"
         }
         guard let url = URL(string: href) else { return nil }
         if url.host?.localizedCaseInsensitiveContains("duckduckgo.com") == true,
@@ -733,6 +866,7 @@ private final class MCPBuiltInWebSearchClient {
         case invalidURL
         case invalidResponse(URL)
         case httpStatus(Int, URL)
+        case timedOut(TimeInterval)
 
         var errorDescription: String? {
             switch self {
@@ -748,6 +882,11 @@ private final class MCPBuiltInWebSearchClient {
                     format: NSLocalizedString("搜索请求返回 HTTP %d：%@", comment: "Built-in search HTTP status error"),
                     statusCode,
                     url.absoluteString
+                )
+            case .timedOut(let timeout):
+                return String(
+                    format: NSLocalizedString("搜索请求超时（%.1f 秒）。", comment: "Built-in search timeout error"),
+                    timeout
                 )
             }
         }

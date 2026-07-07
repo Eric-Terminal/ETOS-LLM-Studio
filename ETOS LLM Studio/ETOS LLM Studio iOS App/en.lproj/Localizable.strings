@@ -4719,3 +4719,7 @@
 "投影器文件缺失" = "Projector file missing";
 "手表端不提供文件选择器；Image Token 仅影响支持动态分辨率的视觉模型。" = "File picking is not available on Apple Watch. Image Token only affects vision models that support dynamic resolution.";
 "会同时删除手表上保存的权重文件和 mmproj 投影器。" = "This also deletes the weights file and mmproj projector saved on Apple Watch.";
+"使用设备网络搜索网页。如果 query 或 url 包含 URL / 域名，会优先抓取该页面标题和摘要，再补充搜索结果。" = "Search the web using the device network. If query or url contains a URL/domain, the page title and summary are fetched first, then search results are added.";
+"可选。要直接抓取的网页 URL；提供后会优先作为查询目标。" = "Optional. Webpage URL to fetch directly; when provided, it is prioritized as the query target.";
+"整次搜索或网页抓取最多等待的秒数，范围 3 到 30，默认 12。" = "Maximum seconds to wait for the whole search or webpage fetch, from 3 to 30. Default is 12.";
+"搜索请求超时（%.1f 秒）。" = "Search request timed out (%.1f seconds).";

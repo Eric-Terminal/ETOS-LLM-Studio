@@ -4770,3 +4770,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "投影器文件缺失" = "Fichier du projecteur manquant";
 "手表端不提供文件选择器；Image Token 仅影响支持动态分辨率的视觉模型。" = "Le sélecteur de fichiers n'est pas disponible sur Apple Watch. Image Token ne concerne que les modèles vision qui prennent en charge la résolution dynamique.";
 "会同时删除手表上保存的权重文件和 mmproj 投影器。" = "Cela supprime aussi le fichier de poids et le projecteur mmproj enregistrés sur Apple Watch.";
+"使用设备网络搜索网页。如果 query 或 url 包含 URL / 域名，会优先抓取该页面标题和摘要，再补充搜索结果。" = "Recherche sur le web avec le réseau de l’appareil. Si query ou url contient une URL ou un domaine, le titre et le résumé de la page sont récupérés d’abord, puis des résultats de recherche sont ajoutés.";
+"可选。要直接抓取的网页 URL；提供后会优先作为查询目标。" = "Facultatif. URL de la page web à récupérer directement ; si elle est fournie, elle est prioritaire comme cible de requête.";
+"整次搜索或网页抓取最多等待的秒数，范围 3 到 30，默认 12。" = "Nombre maximal de secondes à attendre pour toute la recherche ou récupération de page, de 3 à 30. La valeur par défaut est 12.";
+"搜索请求超时（%.1f 秒）。" = "La requête de recherche a expiré (%.1f secondes).";

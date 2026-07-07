@@ -23,6 +23,13 @@ struct MCPBuiltInSearchServerTests {
         let tools = try await client.listTools()
         #expect(tools.map(\.toolId) == [MCPBuiltInSearchServer.toolID])
         #expect(tools.first?.inputSchema != nil)
+        guard case let .dictionary(schema)? = tools.first?.inputSchema,
+              case let .dictionary(properties)? = schema["properties"] else {
+            Issue.record("工具 schema 应包含 properties。")
+            return
+        }
+        #expect(properties["url"] != nil)
+        #expect(properties["timeout_seconds"] != nil)
 
         let result = try await client.executeTool(
             toolId: MCPBuiltInSearchServer.toolID,
@@ -88,6 +95,81 @@ struct MCPBuiltInSearchServerTests {
         #expect(firstItem["title"] as? String == "Eric Terminal Blog")
         #expect(firstItem["url"] as? String == "https://blog.ericterminal.com")
         #expect((firstItem["text"] as? String)?.contains("技术笔记") == true)
+    }
+
+    @Test("url 参数可直接抓取网页并在 Range 不支持时重试")
+    func testBuiltInSearchURLArgumentFetchesPageWithRangeFallback() async throws {
+        let recorder = SearchRequestRecorder()
+        let engine = MCPBuiltInSearchServerEngine { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+            #expect(request.timeoutInterval > 0)
+            #expect(request.timeoutInterval <= 5)
+
+            if request.value(forHTTPHeaderField: "Range") != nil {
+                recorder.sawRangeRequest = true
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 416,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+                return (Data(), response)
+            }
+
+            recorder.sawPlainRequest = true
+            let html = """
+            <!doctype html>
+            <html>
+            <head>
+              <title>Range Fallback Page</title>
+              <meta name="description" content="Fallback fetch succeeded.">
+            </head>
+            <body><main>正文。</main></body>
+            </html>
+            """
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "text/html; charset=utf-8"]
+            )!
+            return (Data(html.utf8), response)
+        }
+
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": MCPBuiltInSearchServer.toolID,
+                "arguments": [
+                    "url": "https://example.com/fallback",
+                    "max_results": 1,
+                    "timeout_seconds": 5
+                ]
+            ]
+        ]
+
+        let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
+        guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let result = object["result"] as? [String: Any],
+              let structuredContent = result["structuredContent"] as? [String: Any],
+              let items = structuredContent["items"] as? [[String: Any]],
+              let firstItem = items.first else {
+            Issue.record("工具结果应包含 url 参数直接抓取的 structuredContent.items。")
+            return
+        }
+
+        #expect(recorder.sawRangeRequest)
+        #expect(recorder.sawPlainRequest)
+        #expect(structuredContent["query"] as? String == "https://example.com/fallback")
+        #expect(structuredContent["timeout_seconds"] as? Double == 5)
+        #expect(firstItem["source"] as? String == "direct_fetch")
+        #expect(firstItem["title"] as? String == "Range Fallback Page")
+        #expect(firstItem["url"] as? String == "https://example.com/fallback")
+        #expect((firstItem["text"] as? String)?.contains("Fallback fetch succeeded") == true)
     }
 
     @Test("内置搜索服务器配置可编码解码")
@@ -183,12 +265,13 @@ struct MCPBuiltInSearchServerTests {
             let html: String
             switch url.host {
             case "html.duckduckgo.com":
+                #expect(request.value(forHTTPHeaderField: "Range") == nil)
                 html = """
                 <html>
                 <body>
-                  <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fswift.org%2F&amp;rut=abc">Swift.org - Swift</a>
+                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fswift.org%2F&amp;rut=abc">Swift.org - Swift</a>
                   <div class="result__snippet">Swift is a powerful and intuitive programming language.</div>
-                  <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmodelcontextprotocol.io%2F&amp;rut=def">Model Context Protocol</a>
+                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fmodelcontextprotocol.io%2F&amp;rut=def">Model Context Protocol</a>
                   <div class="result__snippet">MCP is an open protocol for connecting AI applications.</div>
                 </body>
                 </html>
@@ -216,5 +299,10 @@ struct MCPBuiltInSearchServerTests {
             )!
             return (Data(html.utf8), response)
         }
+    }
+
+    private final class SearchRequestRecorder: @unchecked Sendable {
+        var sawRangeRequest = false
+        var sawPlainRequest = false
     }
 }
