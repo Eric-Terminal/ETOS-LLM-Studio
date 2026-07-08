@@ -240,7 +240,9 @@ extension ContentView {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .simultaneousGesture(watchStreamingAutoScrollDetachGesture)
+        .modifier(WatchChatScrollStateObserverModifier { distanceToBottom, isUserInteracting in
+            updateWatchScrollState(distanceToBottom: distanceToBottom, isUserInteracting: isUserInteracting)
+        })
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -558,13 +560,71 @@ extension ContentView {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
-    var watchStreamingAutoScrollDetachGesture: some Gesture {
-        DragGesture(minimumDistance: 6)
-            .onChanged { value in
-                guard viewModel.isSendingMessage else { return }
-                guard !isAtBottom || value.translation.height > 6 else { return }
-                shouldKeepBottomPinned = false
-                shouldForceScrollToBottom = false
+    func updateWatchScrollState(distanceToBottom: CGFloat, isUserInteracting: Bool) {
+        let normalizedDistance = max(distanceToBottom, 0)
+        let isNearBottom = normalizedDistance < watchBottomPinnedDistanceThreshold
+
+        if isNearBottom {
+            bottomAnchorVisibilityWorkItem?.cancel()
+            bottomAnchorVisibilityWorkItem = nil
+            isAtBottom = true
+            shouldKeepBottomPinned = true
+            if showScrollToBottomButton {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    showScrollToBottomButton = false
+                }
             }
+            return
+        }
+
+        isAtBottom = false
+        if isUserInteracting, !isWatchInputLayoutSettling {
+            shouldKeepBottomPinned = false
+            shouldForceScrollToBottom = false
+        }
+
+        let shouldShow = normalizedDistance > watchScrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
+        if showScrollToBottomButton != shouldShow {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showScrollToBottomButton = shouldShow
+            }
+        }
+    }
+}
+
+private struct WatchChatScrollStateObserverModifier: ViewModifier {
+    let onDistanceChange: (CGFloat, Bool) -> Void
+    @State private var isUserInteracting = false
+
+    func body(content: Content) -> some View {
+        if #available(watchOS 11.0, *) {
+            content
+                .onScrollPhaseChange { _, newPhase, context in
+                    isUserInteracting = Self.isUserInitiatedScrollPhase(newPhase)
+                    onDistanceChange(Self.distanceToBottom(from: context.geometry), isUserInteracting)
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    Self.distanceToBottom(from: geometry)
+                } action: { _, newDistance in
+                    onDistanceChange(newDistance, isUserInteracting)
+                }
+        } else {
+            content
+        }
+    }
+
+    @available(watchOS 11.0, *)
+    private static func distanceToBottom(from geometry: ScrollGeometry) -> CGFloat {
+        max(geometry.contentSize.height - geometry.visibleRect.maxY, 0)
+    }
+
+    @available(watchOS 11.0, *)
+    private static func isUserInitiatedScrollPhase(_ phase: ScrollPhase) -> Bool {
+        switch phase {
+        case .tracking, .interacting, .decelerating:
+            return true
+        case .idle, .animating:
+            return false
+        }
     }
 }

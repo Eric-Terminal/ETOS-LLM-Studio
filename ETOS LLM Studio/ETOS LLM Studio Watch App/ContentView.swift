@@ -62,6 +62,8 @@ struct ContentView: View {
     let inputBubbleVerticalPadding: CGFloat = 8
     let emptyStateSpacerHeight: CGFloat = 120
     let bottomAnchorID = "inputBubble"
+    let watchBottomPinnedDistanceThreshold: CGFloat = 24
+    let watchScrollToBottomButtonRevealDistance: CGFloat = 48
 
     var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
