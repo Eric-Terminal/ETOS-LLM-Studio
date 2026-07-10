@@ -27,6 +27,15 @@ extension ChatView {
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
+    func invertMessageSelection() {
+        let selectableIDs = Set(viewModel.displayMessages.map(\.message.id))
+        selectedMessageIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: selectableIDs,
+            selectedIDs: selectedMessageIDs
+        )
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
     func exitMessageSelection() {
         isMessageSelectionMode = false
         selectedMessageIDs.removeAll()

@@ -49,6 +49,12 @@ extension ChatView {
                 }
 
                 Button {
+                    invertMessageSelection()
+                } label: {
+                    Label(NSLocalizedString("反选", comment: "Invert message selection"), systemImage: "arrow.left.arrow.right.circle")
+                }
+
+                Button {
                     isSelectedMessagesExportPresented = true
                 } label: {
                     Label(NSLocalizedString("导出所选", comment: "Export selected messages"), systemImage: "square.and.arrow.up")

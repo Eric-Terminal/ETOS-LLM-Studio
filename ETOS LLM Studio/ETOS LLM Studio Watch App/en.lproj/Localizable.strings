@@ -4722,3 +4722,4 @@
 "将删除选中的 %d 个气泡。此操作无法撤销。" = "The %d selected bubbles will be deleted. This cannot be undone.";
 "-已选%d条" = "-selected-%d";
 "已选 %d / %d 条" = "Selected %d of %d";
+"反选" = "Invert Selection";

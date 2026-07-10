@@ -4800,3 +4800,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "将删除选中的 %d 个气泡。此操作无法撤销。" = "Se eliminarán las %d burbujas seleccionadas. Esta acción no se puede deshacer.";
 "-已选%d条" = "-%d-seleccionados";
 "已选 %d / %d 条" = "%d de %d seleccionados";
+"反选" = "Invertir selección";

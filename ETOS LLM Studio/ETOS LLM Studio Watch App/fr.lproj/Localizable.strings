@@ -4800,3 +4800,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "将删除选中的 %d 个气泡。此操作无法撤销。" = "Les %d bulles sélectionnées seront supprimées. Cette action est irréversible.";
 "-已选%d条" = "-%d-selectionnes";
 "已选 %d / %d 条" = "%d sur %d sélectionnés";
+"反选" = "Inverser la sélection";

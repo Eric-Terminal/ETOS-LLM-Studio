@@ -259,6 +259,12 @@ extension ContentView {
                         }
 
                         Button {
+                            invertMessageSelection()
+                        } label: {
+                            Label(NSLocalizedString("反选", comment: "Invert message selection"), systemImage: "arrow.left.arrow.right.circle")
+                        }
+
+                        Button {
                             selectedMessagesExportTarget = WatchSelectedMessagesExportNavigationTarget(
                                 messageIDs: selectedMessageIDs
                             )

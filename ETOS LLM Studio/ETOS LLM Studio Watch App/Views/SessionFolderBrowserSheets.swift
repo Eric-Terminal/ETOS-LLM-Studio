@@ -156,6 +156,14 @@ extension SessionFolderBrowserView {
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
 
+                        Button {
+                            dismissMoreActionsThen {
+                                invertBatchSelection()
+                            }
+                        } label: {
+                            Label(NSLocalizedString("反选", comment: "Invert batch selection"), systemImage: "arrow.left.arrow.right.circle")
+                        }
+
                         NavigationLink {
                             BatchMoveDestinationPickerView(moveTargets: batchMoveTargets) { targetFolderID in
                                 applyBatchMove(toFolderID: targetFolderID)

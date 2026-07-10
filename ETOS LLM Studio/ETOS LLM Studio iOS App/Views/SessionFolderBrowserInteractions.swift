@@ -465,6 +465,14 @@ extension SessionFolderBrowserView {
                 Label(NSLocalizedString("管理标签", comment: "Manage session tags"), systemImage: "tag")
             }
 
+            if isBatchSelecting {
+                Button {
+                    invertBatchSelection()
+                } label: {
+                    Label(NSLocalizedString("反选", comment: "Invert batch selection"), systemImage: "arrow.left.arrow.right.circle")
+                }
+            }
+
             Button {
                 toggleBatchMode()
             } label: {
@@ -617,6 +625,17 @@ extension SessionFolderBrowserView {
         } else {
             selectedFolderIDs.insert(folderID)
         }
+    }
+
+    func invertBatchSelection() {
+        selectedSessionIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: Set(pagedDirectSessions.map(\.id)),
+            selectedIDs: selectedSessionIDs
+        )
+        selectedFolderIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: Set(childFolders.map(\.id)),
+            selectedIDs: selectedFolderIDs
+        )
     }
 
     func toggleTagFilter(_ tagID: UUID) {

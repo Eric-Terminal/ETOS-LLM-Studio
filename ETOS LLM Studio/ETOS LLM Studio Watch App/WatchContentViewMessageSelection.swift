@@ -26,6 +26,15 @@ extension ContentView {
         WKInterfaceDevice.current().play(.click)
     }
 
+    func invertMessageSelection() {
+        let selectableIDs = Set(viewModel.displayMessages.map(\.message.id))
+        selectedMessageIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: selectableIDs,
+            selectedIDs: selectedMessageIDs
+        )
+        WKInterfaceDevice.current().play(.click)
+    }
+
     func exitMessageSelection() {
         isMessageSelectionMode = false
         selectedMessageIDs.removeAll()

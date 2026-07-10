@@ -160,6 +160,17 @@ extension SessionFolderBrowserView {
         }
     }
 
+    func invertBatchSelection() {
+        selectedSessionIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: Set(pagedDirectSessions.map(\.id)),
+            selectedIDs: selectedSessionIDs
+        )
+        selectedFolderIDs = BatchSelectionSupport.invertedIDs(
+            selectableIDs: Set(childFolders.map(\.id)),
+            selectedIDs: selectedFolderIDs
+        )
+    }
+
     func toggleTagFilter(_ tagID: UUID) {
         if selectedTagFilterIDs.contains(tagID) {
             selectedTagFilterIDs.remove(tagID)
