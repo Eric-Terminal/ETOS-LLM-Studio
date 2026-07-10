@@ -1451,7 +1451,7 @@
 /* Model-visible built-in prompts and tool descriptions */
 "主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。\n\n用法：\n1. mode=vector：语义相似检索，适合自然语言问题。\n2. mode=keyword：关键词命中检索，适合名称、术语、短语定位。\n3. count：希望返回的条数；未传时使用系统默认检索数量（Top K）。\n\n返回结果包含完整原文 content。若结果为空，表示当前记忆库无匹配项。" = "主動檢索長期記憶，用於在回答前補充使用者歷史偏好、長期背景和已記錄事實。\n\n用法：\n1. mode=vector：語義相似檢索，適合自然語言問題。\n2. mode=keyword：關鍵字命中檢索，適合名稱、術語、短語定位。\n3. count：希望返回的條數；未傳時使用系統預設檢索數量（Top K）。\n\n返回結果包含完整原文 content。若結果為空，表示目前記憶庫無匹配項。";
 "Widget 标题（可选）。" = "Widget 標題（可選）。";
-"用于渲染 Widget 的 HTML 片段，可包含 style/script。" = "用於渲染 Widget 的 HTML 片段，可包含 style/script。";
+"iOS 聊天内联 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主容器；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应使用响应式宽度与内容驱动高度，避免 vh、百分比高度或其他依赖视口高度的布局。" = "iOS 聊天內嵌 Widget 的 HTML 片段，可包含 style/script。片段會被插入 App 提供的宿主容器；不要包含 html、head、body 或 viewport meta，也不要修改宿主頁面。頂層內容應使用響應式寬度與內容驅動高度，避免 vh、百分比高度或其他依賴視口高度的佈局。";
 "渲染中提示文案列表（可选）。" = "渲染中提示文案列表（可選）。";
 "问答标题（可选）。" = "問答標題（可選）。";
 "问答说明（可选）。" = "問答說明（可選）。";
@@ -1508,7 +1508,7 @@
 "是否返回建表 SQL，默认 false。" = "是否返回建表 SQL，預設 false。";
 "只读 SQL，支持 SELECT / WITH / PRAGMA，且仅允许单条语句。" = "唯讀 SQL，支援 SELECT / WITH / PRAGMA，且僅允許單條語句。";
 "写入 SQL，仅支持 INSERT / UPDATE / DELETE / REPLACE，且仅允许单条语句。" = "寫入 SQL，僅支援 INSERT / UPDATE / DELETE / REPLACE，且僅允許單條語句。";
-"把传入的 HTML Widget 渲染为聊天内联网页卡片。title 可选，widget_code 必填，loading_messages 可选。" = "把傳入的 HTML Widget 渲染為聊天內嵌網頁卡片。title 可選，widget_code 必填，loading_messages 可選。";
+"在 iOS 聊天中把传入的 HTML Widget 渲染为内联网页卡片。App 会将 widget_code 作为 HTML 片段插入宿主管理的容器，并根据气泡可用宽度和片段内容确定卡片尺寸；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请使用响应式宽度和内容驱动高度，避免使用 vh、百分比高度或其他依赖视口高度的布局。title 可选，widget_code 必填，loading_messages 可选。" = "在 iOS 聊天中把傳入的 HTML Widget 渲染為內嵌網頁卡片。App 會將 widget_code 作為 HTML 片段插入由宿主管理的容器，並根據氣泡可用寬度和片段內容決定卡片尺寸；不要包含 html、head、body 或 viewport meta，也不要修改宿主頁面。請使用響應式寬度和內容驅動高度，避免使用 vh、百分比高度或其他依賴視口高度的佈局。title 可選，widget_code 必填，loading_messages 可選。";
 "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。" = "向使用者展示結構化問答面板。支援 single_select / multi_select、可選的「其他輸入」、必填校驗與自訂提交按鈕文案。此工具用於在回答前收集關鍵資訊，呼叫後應等待使用者補充。";
 "把文本放入用户当前聊天输入框。text 为要填入的内容；mode=replace 会覆盖输入框，mode=append 会追加到末尾。适合为用户准备可编辑的草稿，而不是直接代替用户发送。" = "把文字放入使用者目前聊天輸入框。text 為要填入的內容；mode=replace 會覆蓋輸入框，mode=append 會追加到末尾。適合為使用者準備可編輯草稿，而不是直接代替使用者傳送。";
 "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息。" = "向回饋助手提交一條問題或建議工單。title 和 detail 必填；category 可選 bug 或 suggestion（預設 bug）；可附帶重現步驟、預期行為、實際行為、補充資訊。";

@@ -69,6 +69,33 @@ struct AppToolManagerTests {
         #expect(kinds.contains(.deleteSandboxItem))
     }
 
+    @Test("显示网页卡片工具只暴露当前平台的 HTML 宿主契约")
+    func testShowWidgetToolUsesCurrentPlatformContract() {
+        guard case let .dictionary(schema) = AppToolKind.showWidget.parameters,
+              case let .dictionary(properties)? = schema["properties"],
+              case let .dictionary(widgetCode)? = properties["widget_code"],
+              case let .string(widgetCodeDescription)? = widgetCode["description"] else {
+            Issue.record("显示网页卡片工具缺少 widget_code 参数说明。")
+            return
+        }
+
+        let toolDescription = AppToolKind.showWidget.toolDescription
+        #if os(watchOS)
+        #expect(toolDescription.contains("watchOS"))
+        #expect(widgetCodeDescription.contains("watchOS"))
+        #expect(!toolDescription.contains("iOS"))
+        #expect(!widgetCodeDescription.contains("iOS"))
+        #elseif os(iOS)
+        #expect(toolDescription.contains("iOS"))
+        #expect(widgetCodeDescription.contains("iOS"))
+        #expect(!toolDescription.contains("watchOS"))
+        #expect(!widgetCodeDescription.contains("watchOS"))
+        #else
+        #expect(!toolDescription.isEmpty)
+        #expect(!widgetCodeDescription.isEmpty)
+        #endif
+    }
+
     @Test("创建自定义 JS 工具参数包含验证输入")
     func testCreateCustomJSToolParametersIncludeValidationInput() {
         guard case let .dictionary(schema) = AppToolKind.createCustomJSCJSTool.parameters,

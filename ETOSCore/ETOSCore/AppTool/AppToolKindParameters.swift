@@ -12,6 +12,17 @@ extension AppToolKind {
     public var parameters: JSONValue {
         switch self {
         case .showWidget:
+            #if os(watchOS)
+            let widgetCodeDescription = NSLocalizedString(
+                "watchOS 全屏 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应填满可用宽高，并适配手表的小尺寸圆角屏幕。",
+                comment: "Show widget tool html parameter description on watchOS"
+            )
+            #else
+            let widgetCodeDescription = NSLocalizedString(
+                "iOS 聊天内联 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主容器；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应使用响应式宽度与内容驱动高度，避免 vh、百分比高度或其他依赖视口高度的布局。",
+                comment: "Show widget tool html parameter description on iOS"
+            )
+            #endif
             return JSONValue.dictionary([
                 "type": .string("object"),
                 "properties": .dictionary([
@@ -21,7 +32,7 @@ extension AppToolKind {
                     ]),
                     "widget_code": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("用于渲染 Widget 的 HTML 片段，可包含 style/script。", comment: "Show widget tool html parameter description"))
+                        "description": .string(widgetCodeDescription)
                     ]),
                     "loading_messages": .dictionary([
                         "type": .string("array"),

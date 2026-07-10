@@ -12,10 +12,17 @@ extension AppToolKind {
     public var toolDescription: String {
         switch self {
         case .showWidget:
+            #if os(watchOS)
             return NSLocalizedString(
-                "把传入的 HTML Widget 渲染为聊天内联网页卡片。title 可选，widget_code 必填，loading_messages 可选。",
-                comment: "Show widget tool description sent to model"
+                "在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。title 可选，widget_code 必填，loading_messages 可选。",
+                comment: "Show widget tool description sent to model on watchOS"
             )
+            #else
+            return NSLocalizedString(
+                "在 iOS 聊天中把传入的 HTML Widget 渲染为内联网页卡片。App 会将 widget_code 作为 HTML 片段插入宿主管理的容器，并根据气泡可用宽度和片段内容确定卡片尺寸；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请使用响应式宽度和内容驱动高度，避免使用 vh、百分比高度或其他依赖视口高度的布局。title 可选，widget_code 必填，loading_messages 可选。",
+                comment: "Show widget tool description sent to model on iOS"
+            )
+            #endif
         case .askUserInput:
             return NSLocalizedString(
                 "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。",
