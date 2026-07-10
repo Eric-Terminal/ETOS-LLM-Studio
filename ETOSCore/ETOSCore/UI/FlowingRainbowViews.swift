@@ -145,13 +145,15 @@ public struct FlowingRainbowGradient: View {
     private let startDelay: TimeInterval
     private let rainbowColors: [Color]
     private let reversedRainbowColors: [Color]
+    private let cycleLengthMultiplier: CGFloat
 
     public init(
         axis: FlowingRainbowAxis = .horizontal,
         duration: TimeInterval = 2.8,
         phaseOrigin: Date? = nil,
         startDelay: TimeInterval = 0,
-        startingColor: Color? = nil
+        startingColor: Color? = nil,
+        cycleLengthMultiplier: CGFloat = 1
     ) {
         let rainbowColors = FlowingRainbowColorCycle.repeatingColors(startingAt: startingColor)
         self.axis = axis
@@ -160,6 +162,7 @@ public struct FlowingRainbowGradient: View {
         self.startDelay = startDelay
         self.rainbowColors = rainbowColors
         self.reversedRainbowColors = Array(rainbowColors.reversed())
+        self.cycleLengthMultiplier = max(cycleLengthMultiplier, 0.1)
     }
 
     public var body: some View {
@@ -180,21 +183,23 @@ public struct FlowingRainbowGradient: View {
     private func rainbowLayer(size: CGSize, phase: Double) -> some View {
         switch axis {
         case .horizontal:
+            let cycleLength = max(size.width * cycleLengthMultiplier, 1)
             LinearGradient(
                 colors: rainbowColors,
                 startPoint: .leading,
                 endPoint: .trailing
             )
-            .frame(width: max(size.width * 2, 1), height: max(size.height, 1))
-            .offset(x: -size.width * phase)
+            .frame(width: cycleLength * 2, height: max(size.height, 1))
+            .offset(x: -cycleLength * phase)
         case .vertical:
+            let cycleLength = max(size.height * cycleLengthMultiplier, 1)
             LinearGradient(
                 colors: reversedRainbowColors,
-                startPoint: .bottomLeading,
-                endPoint: .topTrailing
+                startPoint: .bottom,
+                endPoint: .top
             )
-            .frame(width: max(size.width, 1), height: max(size.height * 2, 1))
-            .offset(y: -size.height * phase)
+            .frame(width: max(size.width, 1), height: cycleLength * 2)
+            .offset(y: -cycleLength * phase)
         }
     }
 
@@ -223,8 +228,11 @@ public struct FlowingRainbowReveal: View {
     private let isActive: Bool
     private let axis: FlowingRainbowAxis
     private let flowDuration: TimeInterval
+    private let revealDuration: TimeInterval
     private let retractResponse: TimeInterval
     private let startingColor: Color?
+    private let cycleLengthMultiplier: CGFloat
+    private let animatesTransition: Bool
 
     @State private var revealProgress: CGFloat = 0
     @State private var phaseOrigin = Date()
@@ -235,14 +243,20 @@ public struct FlowingRainbowReveal: View {
         isActive: Bool,
         axis: FlowingRainbowAxis = .horizontal,
         flowDuration: TimeInterval = 2.8,
+        revealDuration: TimeInterval? = nil,
         retractResponse: TimeInterval = 0.55,
-        startingColor: Color? = nil
+        startingColor: Color? = nil,
+        cycleLengthMultiplier: CGFloat = 1,
+        animatesTransition: Bool = true
     ) {
         self.isActive = isActive
         self.axis = axis
         self.flowDuration = flowDuration
+        self.revealDuration = revealDuration ?? flowDuration
         self.retractResponse = retractResponse
         self.startingColor = startingColor
+        self.cycleLengthMultiplier = cycleLengthMultiplier
+        self.animatesTransition = animatesTransition
     }
 
     public var body: some View {
@@ -252,8 +266,9 @@ public struct FlowingRainbowReveal: View {
                     axis: axis,
                     duration: flowDuration,
                     phaseOrigin: phaseOrigin,
-                    startDelay: reduceMotion ? 0 : flowDuration,
-                    startingColor: startingColor
+                    startDelay: reduceMotion ? 0 : revealDuration,
+                    startingColor: startingColor,
+                    cycleLengthMultiplier: cycleLengthMultiplier
                 )
                 .offset(revealOffset(in: proxy.size))
                 .opacity(reduceMotion ? revealProgress : 1)
@@ -263,12 +278,7 @@ public struct FlowingRainbowReveal: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onAppear {
-            revealProgress = isActive ? 1 : 0
-            rendersRainbow = isActive
-            if isActive {
-                // 初次进入页面时已经在最高档，无需重复播放接管过程。
-                phaseOrigin = Date().addingTimeInterval(-flowDuration)
-            }
+            setRevealImmediately(isActive: isActive)
         }
         .onChange(of: isActive) { _, isActive in
             updateReveal(isActive: isActive)
@@ -294,6 +304,10 @@ public struct FlowingRainbowReveal: View {
 
     private func updateReveal(isActive: Bool) {
         cleanupTask?.cancel()
+        guard animatesTransition else {
+            setRevealImmediately(isActive: isActive)
+            return
+        }
         if isActive {
             phaseOrigin = Date()
             rendersRainbow = true
@@ -304,7 +318,7 @@ public struct FlowingRainbowReveal: View {
                 revealProgress = isActive ? 1 : 0
             }
         } else if isActive {
-            withAnimation(.linear(duration: flowDuration)) {
+            withAnimation(.linear(duration: revealDuration)) {
                 revealProgress = 1
             }
         } else {
@@ -321,23 +335,38 @@ public struct FlowingRainbowReveal: View {
             rendersRainbow = false
         }
     }
+
+    private func setRevealImmediately(isActive: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            revealProgress = isActive ? 1 : 0
+            rendersRainbow = isActive
+            if isActive {
+                phaseOrigin = Date().addingTimeInterval(-revealDuration)
+            }
+        }
+    }
 }
 
 public struct FlowingRainbowForeground<Content: View>: View {
     private let axis: FlowingRainbowAxis
     private let duration: TimeInterval
     private let startingColor: Color?
+    private let cycleLengthMultiplier: CGFloat
     private let content: Content
 
     public init(
         axis: FlowingRainbowAxis = .horizontal,
         duration: TimeInterval = 2.8,
         startingColor: Color? = nil,
+        cycleLengthMultiplier: CGFloat = 1,
         @ViewBuilder content: () -> Content
     ) {
         self.axis = axis
         self.duration = duration
         self.startingColor = startingColor
+        self.cycleLengthMultiplier = cycleLengthMultiplier
         self.content = content()
     }
 
@@ -348,7 +377,8 @@ public struct FlowingRainbowForeground<Content: View>: View {
                 FlowingRainbowGradient(
                     axis: axis,
                     duration: duration,
-                    startingColor: startingColor
+                    startingColor: startingColor,
+                    cycleLengthMultiplier: cycleLengthMultiplier
                 )
                     .mask { content }
             }

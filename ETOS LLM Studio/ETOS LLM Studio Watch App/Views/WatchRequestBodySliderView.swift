@@ -11,6 +11,15 @@ import WatchKit
 import Foundation
 import ETOSCore
 
+private enum WatchRainbowMotion {
+    // 拉长色谱后，小屏同一时刻只露出约两到三种相邻颜色。
+    static let liquidCycleLength: CGFloat = 3
+    static let liquidFlowDuration: TimeInterval = 9.6
+    static let liquidRevealDuration: TimeInterval = 3.2
+    static let labelCycleLength: CGFloat = 2.5
+    static let labelFlowDuration: TimeInterval = 8
+}
+
 struct WatchRequestBodySliderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -23,6 +32,7 @@ struct WatchRequestBodySliderView: View {
     @State private var position: Double
     @State private var isLoaded = false
     @State private var isDragging = false
+    @State private var hasUserAdjustedPosition = false
     @State private var lastAnchorIndex: Int
     @State private var lastPosition: Double
     @State private var settleTask: Task<Void, Never>?
@@ -113,8 +123,11 @@ struct WatchRequestBodySliderView: View {
             FlowingRainbowReveal(
                 isActive: showsFlowingRainbow,
                 axis: .vertical,
-                flowDuration: 3.2,
-                startingColor: palette.color(at: 1)
+                flowDuration: WatchRainbowMotion.liquidFlowDuration,
+                revealDuration: WatchRainbowMotion.liquidRevealDuration,
+                startingColor: palette.color(at: 1),
+                cycleLengthMultiplier: WatchRainbowMotion.liquidCycleLength,
+                animatesTransition: hasUserAdjustedPosition
             )
             .mask(alignment: .bottom) {
                 Rectangle()
@@ -201,6 +214,7 @@ struct WatchRequestBodySliderView: View {
 
     private func updatePosition(_ newPosition: Double, schedulesSettle: Bool) {
         guard isLoaded else { return }
+        hasUserAdjustedPosition = true
         let normalizedPosition = descriptor.normalized(newPosition)
         position = normalizedPosition
         let anchorIndex = descriptor.nearestAnchorIndex(at: normalizedPosition)
@@ -258,6 +272,7 @@ struct WatchRequestBodySliderView: View {
             )
         }.value
         guard !Task.isCancelled else { return }
+        hasUserAdjustedPosition = false
         position = descriptor.position(in: loadedState)
         lastAnchorIndex = descriptor.nearestAnchorIndex(at: position)
         lastPosition = position
@@ -465,9 +480,10 @@ private struct WatchLiquidValueLabel: View {
     var body: some View {
         if showsFlowingRainbow {
             FlowingRainbowForeground(
-                axis: .vertical,
-                duration: 3.2,
-                startingColor: rainbowStartingColor
+                axis: .horizontal,
+                duration: WatchRainbowMotion.labelFlowDuration,
+                startingColor: rainbowStartingColor,
+                cycleLengthMultiplier: WatchRainbowMotion.labelCycleLength
             ) {
                 valueLabel
             }
