@@ -57,7 +57,11 @@ struct WatchRequestBodySliderView: View {
                 liquidControl(size: controlSize)
                     .frame(width: controlSize.width, height: controlSize.height)
 
-                WatchLiquidValueLabel(text: descriptor.displayValue(at: position))
+                WatchLiquidValueLabel(
+                    text: descriptor.displayValue(at: position),
+                    position: position,
+                    isNumeric: descriptor.mode == .continuousNumeric
+                )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -287,7 +291,9 @@ struct WatchTemperatureSliderView: View {
                     .frame(width: controlSize.width, height: controlSize.height)
 
                 WatchLiquidValueLabel(
-                    text: value.formatted(.number.precision(.fractionLength(2)))
+                    text: value.formatted(.number.precision(.fractionLength(2))),
+                    position: currentPosition,
+                    isNumeric: true
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -433,9 +439,15 @@ private struct WatchLiquidScaleMarks: View {
 
 private struct WatchLiquidValueLabel: View {
     let text: String
+    let position: Double
+    let isNumeric: Bool
 
     var body: some View {
-        Text(text)
+        RequestBodySliderAnimatedValue(
+            text: text,
+            position: position,
+            isNumeric: isNumeric
+        )
             .etFont(.title3.monospaced().weight(.semibold))
             .foregroundStyle(.primary)
             .lineLimit(1)

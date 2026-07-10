@@ -252,7 +252,11 @@ private struct ChatRequestBodyControlRows: View {
                 Text(control.title)
                     .lineLimit(1)
                 Spacer()
-                Text(displayValue)
+                RequestBodySliderAnimatedValue(
+                    text: displayValue,
+                    position: position,
+                    isNumeric: descriptor.mode == .continuousNumeric
+                )
                     .etFont(.footnote.monospaced())
                     .foregroundStyle(palette.color(at: position))
                     .lineLimit(1)

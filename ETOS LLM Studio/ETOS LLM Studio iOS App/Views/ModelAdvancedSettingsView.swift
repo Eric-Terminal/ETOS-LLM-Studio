@@ -271,7 +271,12 @@ struct ModelAdvancedSettingsView: View {
                     Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                     if aiTemperatureEnabled {
                         Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
-                            Text(temperatureDisplayText)
+                            RequestBodySliderAnimatedValue(
+                                text: temperatureDisplayText,
+                                position: temperatureSliderPositionBinding.wrappedValue,
+                                isNumeric: true
+                            )
+                            .monospacedDigit()
                         }
 
                         RequestBodyGradientSlider(

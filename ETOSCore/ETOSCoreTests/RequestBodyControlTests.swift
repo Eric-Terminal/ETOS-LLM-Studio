@@ -359,6 +359,28 @@ struct RequestBodyControlTests {
         #expect(compiled["effort"] == .string("medium"))
     }
 
+    @Test("滑块文字差异会保留未变化字符的位置身份")
+    func testSliderTextDiffKeepsMatchingCharacters() {
+        #expect(
+            RequestBodySliderTextDiff.matchedPreviousIndices(
+                from: "high",
+                to: "xhigh"
+            ) == [nil, 0, 1, 2, 3]
+        )
+        #expect(
+            RequestBodySliderTextDiff.matchedPreviousIndices(
+                from: "1.1",
+                to: "1.2"
+            ) == [0, 1, nil]
+        )
+        #expect(
+            RequestBodySliderTextDiff.matchedPreviousIndices(
+                from: "xhigh",
+                to: "high"
+            ) == [1, 2, 3, 4]
+        )
+    }
+
     @Test("数字滑块会按等距锚点分段插值")
     func testNumericSliderUsesPiecewiseInterpolation() throws {
         let control = ModelRequestBodyControl(
