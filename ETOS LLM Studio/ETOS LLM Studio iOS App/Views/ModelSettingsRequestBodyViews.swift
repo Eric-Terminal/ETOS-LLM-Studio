@@ -54,6 +54,7 @@ struct RequestBodyControlRow: View {
 struct RequestBodyControlDetailView: View {
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
+    @State private var suggestedPayloadKeys: [String] = []
 
     var body: some View {
         Form {
@@ -73,7 +74,8 @@ struct RequestBodyControlDetailView: View {
 
                     RequestBodyPayloadEditor(
                         payloadDisplayMode: payloadDisplayMode,
-                        payload: $control.payload
+                        payload: $control.payload,
+                        suggestedPayloadKeys: []
                     )
                     .id("\(control.id)-toggle-payload")
                 }
@@ -89,7 +91,8 @@ struct RequestBodyControlDetailView: View {
                                 RequestBodyOptionDetailView(
                                     option: $option,
                                     defaultOptionID: $control.defaultOptionID,
-                                    payloadDisplayMode: payloadDisplayMode
+                                    payloadDisplayMode: payloadDisplayMode,
+                                    suggestedPayloadKeys: suggestedPayloadKeys
                                 )
                             } label: {
                                 RequestBodyOptionRow(
@@ -126,10 +129,12 @@ struct RequestBodyControlDetailView: View {
             }
         }
         .navigationTitle(displayTitle)
-        .onChange(of: control.options.count) { _, optionCount in
-            if optionCount < 2 {
+        .onAppear(perform: refreshSuggestedPayloadKeys)
+        .onChange(of: control.options) { _, options in
+            if options.count < 2 {
                 control.isSliderEnabled = false
             }
+            refreshSuggestedPayloadKeys()
         }
     }
 
@@ -143,6 +148,13 @@ struct RequestBodyControlDetailView: View {
             get: { control.options },
             set: { control.options = $0 }
         )
+    }
+
+    private func refreshSuggestedPayloadKeys() {
+        let keys = control.suggestedOptionPayloadKeys
+        if suggestedPayloadKeys != keys {
+            suggestedPayloadKeys = keys
+        }
     }
 
     private func addOption() {
@@ -207,6 +219,7 @@ struct RequestBodyOptionDetailView: View {
     @Binding var option: ModelRequestBodyControlOption
     @Binding var defaultOptionID: String?
     let payloadDisplayMode: Model.RequestBodyOverrideMode
+    let suggestedPayloadKeys: [String]
 
     var body: some View {
         Form {
@@ -222,7 +235,8 @@ struct RequestBodyOptionDetailView: View {
             Section(header: Text(NSLocalizedString("详情", comment: ""))) {
                 RequestBodyPayloadEditor(
                     payloadDisplayMode: payloadDisplayMode,
-                    payload: $option.payload
+                    payload: $option.payload,
+                    suggestedPayloadKeys: suggestedPayloadKeys
                 )
                 .id("\(option.id)-payload")
             }
@@ -251,6 +265,7 @@ struct RequestBodyOptionDetailView: View {
 struct RequestBodyPayloadEditor: View {
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     @Binding var payload: [String: JSONValue]
+    let suggestedPayloadKeys: [String]
     @State private var text: String = ""
     @State private var error: String?
 
@@ -258,7 +273,10 @@ struct RequestBodyPayloadEditor: View {
         VStack(alignment: .leading, spacing: 6) {
             switch payloadDisplayMode {
             case .keyValue:
-                RequestBodyPayloadKeyValueEditor(payload: $payload)
+                RequestBodyPayloadKeyValueEditor(
+                    payload: $payload,
+                    suggestedPayloadKeys: suggestedPayloadKeys
+                )
             case .rawJSON:
                 textPayloadEditor(
                     title: nil,
@@ -298,6 +316,11 @@ struct RequestBodyPayloadEditor: View {
                 .onChange(of: payloadDisplayMode) { _, _ in
                     syncTextFromPayload()
                 }
+                .onChange(of: suggestedPayloadKeys) { _, _ in
+                    if payload.isEmpty {
+                        syncTextFromPayload()
+                    }
+                }
 
             if let error {
                 Text(error)
@@ -308,6 +331,12 @@ struct RequestBodyPayloadEditor: View {
     }
 
     private func syncTextFromPayload() {
+        if payload.isEmpty, let suggestedText = suggestedText() {
+            text = suggestedText
+            error = nil
+            return
+        }
+
         switch payloadDisplayMode {
         case .rawJSON:
             text = ParameterExpressionParser.serializeRawJSONObject(parameters: payload)
@@ -319,6 +348,11 @@ struct RequestBodyPayloadEditor: View {
     }
 
     private func parse(_ rawText: String) {
+        if payload.isEmpty, rawText == suggestedText() {
+            error = nil
+            return
+        }
+
         do {
             switch payloadDisplayMode {
             case .rawJSON:
@@ -343,6 +377,21 @@ struct RequestBodyPayloadEditor: View {
             self.error = error.localizedDescription
         }
     }
+
+    private func suggestedText() -> String? {
+        guard !suggestedPayloadKeys.isEmpty else { return nil }
+        switch payloadDisplayMode {
+        case .rawJSON:
+            let placeholderPayload = Dictionary(
+                uniqueKeysWithValues: suggestedPayloadKeys.map { ($0, JSONValue.null) }
+            )
+            return ParameterExpressionParser.serializeRawJSONObject(parameters: placeholderPayload)
+        case .keyValue, .expression:
+            return suggestedPayloadKeys.map { "\($0) = " }.joined(separator: "\n")
+        @unknown default:
+            return suggestedPayloadKeys.map { "\($0) = " }.joined(separator: "\n")
+        }
+    }
 }
 
 struct RequestBodyPayloadKeyValueEntry: Identifiable, Equatable {
@@ -361,6 +410,7 @@ struct RequestBodyPayloadKeyValueEntry: Identifiable, Equatable {
 
 struct RequestBodyPayloadKeyValueEditor: View {
     @Binding var payload: [String: JSONValue]
+    let suggestedPayloadKeys: [String]
     @State private var entries: [RequestBodyPayloadKeyValueEntry] = []
 
     var body: some View {
@@ -383,13 +433,23 @@ struct RequestBodyPayloadKeyValueEditor: View {
             }
         }
         .onAppear(perform: syncEntriesFromPayload)
+        .onChange(of: suggestedPayloadKeys) { _, _ in
+            if payload.isEmpty {
+                syncEntriesFromPayload()
+            }
+        }
     }
 
     private func syncEntriesFromPayload() {
         let rows = payload
             .sorted(by: { $0.key < $1.key })
             .map { RequestBodyPayloadKeyValueEntry(key: $0.key, value: stringValue(for: $0.value)) }
-        entries = rows.isEmpty ? [RequestBodyPayloadKeyValueEntry(key: "", value: "")] : rows
+        let suggestedRows = suggestedPayloadKeys.map {
+            RequestBodyPayloadKeyValueEntry(key: $0, value: "")
+        }
+        entries = rows.isEmpty
+            ? (suggestedRows.isEmpty ? [RequestBodyPayloadKeyValueEntry(key: "", value: "")] : suggestedRows)
+            : rows
     }
 
     private func updatePayload() {

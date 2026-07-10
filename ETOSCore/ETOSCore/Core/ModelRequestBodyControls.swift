@@ -104,6 +104,17 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
     }
 }
 
+public extension ModelRequestBodyControl {
+    /// 从首个已填写选项推断同组空白选项应预填的参数键，不复制具体值。
+    var suggestedOptionPayloadKeys: [String] {
+        guard kind == .optionGroup else { return [] }
+        for option in options where !option.payload.isEmpty {
+            return option.payload.keys.sorted()
+        }
+        return []
+    }
+}
+
 public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {
     public var toggleValuesByControlID: [String: Bool]
     public var selectedOptionIDsByControlID: [String: String]

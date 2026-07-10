@@ -122,6 +122,33 @@ struct RequestBodyControlTests {
         #expect(compiled == ["budget": .string("high")])
     }
 
+    @Test("空白选项会沿用首个已填写选项的参数键")
+    func testOptionGroupSuggestsKeysFromFirstCompletedOption() {
+        let control = ModelRequestBodyControl(
+            id: "sampling",
+            title: "采样参数",
+            kind: .optionGroup,
+            options: [
+                ModelRequestBodyControlOption(id: "empty", title: "空白"),
+                ModelRequestBodyControlOption(
+                    id: "temperature",
+                    title: "温度",
+                    payload: [
+                        "top_p": .double(0.9),
+                        "temperature": .double(0.7)
+                    ]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "other",
+                    title: "其他",
+                    payload: ["max_tokens": .int(1024)]
+                )
+            ]
+        )
+
+        #expect(control.suggestedOptionPayloadKeys == ["temperature", "top_p"])
+    }
+
     @Test("运行态缓存优先按模型恢复，再按同结构继承")
     func testRuntimeStoreRestoresByModelThenSignature() {
         let suiteName = "RequestBodyControlTests.\(UUID().uuidString)"
