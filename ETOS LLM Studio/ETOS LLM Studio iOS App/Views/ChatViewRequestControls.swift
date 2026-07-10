@@ -10,15 +10,19 @@ import SwiftUI
 import ETOSCore
 
 struct ChatRequestBodyControlDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let runnableModel: RunnableModel
     let control: ModelRequestBodyControl
+    let onDone: () -> Void
     @State private var state: ModelRequestBodyControlState
 
-    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
+    init(
+        runnableModel: RunnableModel,
+        control: ModelRequestBodyControl,
+        onDone: @escaping () -> Void
+    ) {
         self.runnableModel = runnableModel
         self.control = control
+        self.onDone = onDone
         _state = State(initialValue: runnableModel.requestBodyControlState)
     }
 
@@ -55,9 +59,7 @@ struct ChatRequestBodyControlDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("完成", comment: "")) {
-                    dismiss()
-                }
+                Button(NSLocalizedString("完成", comment: ""), action: onDone)
             }
         }
     }

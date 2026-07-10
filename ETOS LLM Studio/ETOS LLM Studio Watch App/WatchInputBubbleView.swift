@@ -284,7 +284,10 @@ struct WatchInputBubbleView: View {
             .sheet(isPresented: $isRequestControlsPresented) {
                 if let selectedModel = viewModel.selectedModel {
                     NavigationStack {
-                        WatchQuickRequestControlsView(runnableModel: selectedModel)
+                        WatchQuickRequestControlsView(
+                            runnableModel: selectedModel,
+                            onDone: { isRequestControlsPresented = false }
+                        )
                     }
                 }
             }

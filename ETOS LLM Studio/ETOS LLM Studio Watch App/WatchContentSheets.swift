@@ -157,6 +157,7 @@ struct WatchImportSourceView: View {
 // 独立的请求控制快速面板，供输入框左划快捷入口使用
 struct WatchQuickRequestControlsView: View {
     let runnableModel: RunnableModel
+    let onDone: () -> Void
 
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
@@ -167,7 +168,11 @@ struct WatchQuickRequestControlsView: View {
             } else {
                 ForEach(controls) { control in
                     NavigationLink {
-                        WatchRequestBodyControlDetailView(runnableModel: runnableModel, control: control)
+                        WatchRequestBodyControlDetailView(
+                            runnableModel: runnableModel,
+                            control: control,
+                            onDone: onDone
+                        )
                     } label: {
                         Text(control.title)
                     }
@@ -180,15 +185,19 @@ struct WatchQuickRequestControlsView: View {
 }
 
 private struct WatchRequestBodyControlDetailView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let runnableModel: RunnableModel
     let control: ModelRequestBodyControl
+    let onDone: () -> Void
     @State private var state: ModelRequestBodyControlState
 
-    init(runnableModel: RunnableModel, control: ModelRequestBodyControl) {
+    init(
+        runnableModel: RunnableModel,
+        control: ModelRequestBodyControl,
+        onDone: @escaping () -> Void
+    ) {
         self.runnableModel = runnableModel
         self.control = control
+        self.onDone = onDone
         _state = State(initialValue: runnableModel.requestBodyControlState)
     }
 
@@ -225,9 +234,7 @@ private struct WatchRequestBodyControlDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("完成", comment: "")) {
-                    dismiss()
-                }
+                Button(NSLocalizedString("完成", comment: ""), action: onDone)
             }
         }
     }

@@ -104,7 +104,11 @@ extension ChatView {
         if let selectedModel = viewModel.selectedModel {
             ForEach(selectedModelRequestControls) { control in
                 NavigationLink {
-                    ChatRequestBodyControlDetailView(runnableModel: selectedModel, control: control)
+                    ChatRequestBodyControlDetailView(
+                        runnableModel: selectedModel,
+                        control: control,
+                        onDone: dismissModelPickerSheet
+                    )
                 } label: {
                     Text(control.title)
                 }
