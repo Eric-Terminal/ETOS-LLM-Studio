@@ -48,7 +48,13 @@ struct WatchRequestBodySliderView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            liquidControl(size: geometry.size)
+            let controlSize = CGSize(
+                width: min(geometry.size.width * 0.56, geometry.size.height * 0.52),
+                height: geometry.size.height
+            )
+            liquidControl(size: controlSize)
+                .frame(width: controlSize.width, height: controlSize.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding()
         .navigationTitle(control.title)
@@ -73,26 +79,22 @@ struct WatchRequestBodySliderView: View {
         let fillHeight = size.height * descriptor.normalized(position)
         let displayValue = descriptor.displayValue(at: position)
         let palette = sliderPalette
+        let shape = RoundedRectangle(
+            cornerRadius: min(size.width, size.height) * 0.12,
+            style: .continuous
+        )
 
         return ZStack(alignment: .bottom) {
-            Capsule()
+            shape
                 .fill(.thinMaterial)
 
             Rectangle()
-                .fill(palette.gradient)
+                .fill(palette.color(at: position))
                 .mask(alignment: .bottom) {
                     Rectangle()
                         .frame(height: fillHeight)
                 }
-                .mask(Capsule())
-
-            anchorMarks(color: Color.secondary.opacity(0.55))
-
-            anchorMarks(color: Color.white.opacity(0.82))
-                .mask(alignment: .bottom) {
-                    Rectangle()
-                        .frame(height: fillHeight)
-                }
+                .mask(shape)
 
             Text(displayValue)
                 .etFont(.title3.monospaced().weight(.semibold))
@@ -116,13 +118,13 @@ struct WatchRequestBodySliderView: View {
                 }
         }
         .overlay {
-            Capsule()
+            shape
                 .stroke(
                     palette.color(at: position).opacity(0.48),
                     lineWidth: 1
                 )
         }
-        .contentShape(Capsule())
+        .contentShape(shape)
         .opacity(isLoaded ? 1 : 0.65)
         .gesture(dragGesture(height: size.height))
         .focusable(true)
@@ -130,8 +132,8 @@ struct WatchRequestBodySliderView: View {
             crownBinding,
             from: 0,
             through: 1,
-            by: descriptor.crownStep,
-            sensitivity: .medium,
+            by: crownRotationStep,
+            sensitivity: .low,
             isContinuous: false,
             isHapticFeedbackEnabled: false
         )
@@ -156,21 +158,13 @@ struct WatchRequestBodySliderView: View {
             : .structured
     }
 
-    private func anchorMarks(color: Color) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array((0..<descriptor.optionCount).reversed()), id: \.self) { index in
-                Circle()
-                    .fill(color)
-                    .frame(width: 4, height: 4)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                if index > 0 {
-                    Spacer(minLength: 0)
-                }
-            }
+    private var crownRotationStep: Double {
+        switch descriptor.mode {
+        case .discrete:
+            return min(descriptor.anchorStep / 5, 0.025)
+        case .continuousNumeric:
+            return min(descriptor.crownStep / 2, 0.005)
         }
-        .padding()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     private var crownBinding: Binding<Double> {
@@ -291,7 +285,13 @@ struct WatchTemperatureSliderView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            liquidControl(size: geometry.size)
+            let controlSize = CGSize(
+                width: min(geometry.size.width * 0.56, geometry.size.height * 0.52),
+                height: geometry.size.height
+            )
+            liquidControl(size: controlSize)
+                .frame(width: controlSize.width, height: controlSize.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding()
         .navigationTitle(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
@@ -306,26 +306,22 @@ struct WatchTemperatureSliderView: View {
         let fillHeight = size.height * position
         let displayValue = value.formatted(.number.precision(.fractionLength(2)))
         let palette = WatchRequestBodySliderPalette.temperature
+        let shape = RoundedRectangle(
+            cornerRadius: min(size.width, size.height) * 0.12,
+            style: .continuous
+        )
 
         return ZStack(alignment: .bottom) {
-            Capsule()
+            shape
                 .fill(.thinMaterial)
 
             Rectangle()
-                .fill(palette.gradient)
+                .fill(palette.color(at: position))
                 .mask(alignment: .bottom) {
                     Rectangle()
                         .frame(height: fillHeight)
                 }
-                .mask(Capsule())
-
-            temperatureAnchorMarks(color: Color.secondary.opacity(0.55))
-
-            temperatureAnchorMarks(color: Color.white.opacity(0.82))
-                .mask(alignment: .bottom) {
-                    Rectangle()
-                        .frame(height: fillHeight)
-                }
+                .mask(shape)
 
             temperatureValue(displayValue, color: .primary)
 
@@ -337,10 +333,10 @@ struct WatchTemperatureSliderView: View {
                 }
         }
         .overlay {
-            Capsule()
+            shape
                 .stroke(palette.color(at: position).opacity(0.48), lineWidth: 1)
         }
-        .contentShape(Capsule())
+        .contentShape(shape)
         .gesture(dragGesture(height: size.height))
         .focusable(true)
         .digitalCrownRotation(
@@ -348,7 +344,7 @@ struct WatchTemperatureSliderView: View {
             from: 0,
             through: 1,
             by: step / (range.upperBound - range.lowerBound),
-            sensitivity: .medium,
+            sensitivity: .low,
             isContinuous: false,
             isHapticFeedbackEnabled: false
         )
@@ -376,23 +372,6 @@ struct WatchTemperatureSliderView: View {
             .minimumScaleFactor(0.5)
             .padding(.horizontal)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-    }
-
-    private func temperatureAnchorMarks(color: Color) -> some View {
-        VStack(spacing: 0) {
-            ForEach((0..<3).reversed(), id: \.self) { index in
-                Circle()
-                    .fill(color)
-                    .frame(width: 4, height: 4)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                if index > 0 {
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     private var normalizedPosition: Double {
@@ -441,19 +420,6 @@ enum WatchRequestBodySliderPalette {
     case structured
     case temperature
 
-    var gradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                color(at: 0),
-                color(at: 0.34),
-                color(at: 0.68),
-                color(at: 1)
-            ],
-            startPoint: .bottom,
-            endPoint: .top
-        )
-    }
-
     func color(at position: Double) -> Color {
         let normalizedPosition = min(max(position, 0), 1)
         switch self {
@@ -461,13 +427,13 @@ enum WatchRequestBodySliderPalette {
             return Color(
                 hue: 0.58 + normalizedPosition * 0.29,
                 saturation: 0.72,
-                brightness: 0.94
+                brightness: 0.96 - normalizedPosition * 0.12
             )
         case .temperature:
             return Color(
                 hue: 0.62 + normalizedPosition * 0.38,
                 saturation: 0.78,
-                brightness: 0.96
+                brightness: 0.98 - normalizedPosition * 0.1
             )
         }
     }
