@@ -8,6 +8,7 @@
 
 import SwiftUI
 import ETOSCore
+import UIKit
 
 extension ChatView {
     var nativeModelPickerSheet: some View {
@@ -54,7 +55,7 @@ extension ChatView {
                     } header: {
                         Text(NSLocalizedString("请求控制", comment: ""))
                     } footer: {
-                        Text(NSLocalizedString("开关可直接切换，点击选项组可选择具体参数。", comment: ""))
+                        Text(NSLocalizedString("开关与滑块可直接调整，其他选项组可进入详情选择。", comment: ""))
                     }
                 }
 
@@ -128,12 +129,17 @@ extension ChatView {
 }
 
 private struct ChatRequestBodyControlRows: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let runnableModel: RunnableModel
     let controls: [ModelRequestBodyControl]
     let onDone: () -> Void
 
     @State private var state: ModelRequestBodyControlState?
     @State private var pendingSaveTask: Task<Void, Never>?
+    @State private var lastAnchorIndices: [String: Int] = [:]
+    @State private var lastSliderPositions: [String: Double] = [:]
+    @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
 
     var body: some View {
         ForEach(controls) { control in
@@ -144,14 +150,24 @@ private struct ChatRequestBodyControlRows: View {
                 }
                 .disabled(state == nil)
             case .optionGroup:
-                NavigationLink {
-                    ChatRequestBodyControlDetailView(
-                        runnableModel: runnableModel,
-                        control: control,
-                        onDone: onDone
-                    )
-                } label: {
-                    Text(control.title)
+                if let descriptor = sliderDescriptors[control.id] {
+                    sliderRow(for: control, descriptor: descriptor)
+                } else if control.isSliderEnabled, state == nil {
+                    HStack {
+                        Text(control.title)
+                        Spacer()
+                        ProgressView()
+                    }
+                } else {
+                    NavigationLink {
+                        ChatRequestBodyControlDetailView(
+                            runnableModel: runnableModel,
+                            control: control,
+                            onDone: onDone
+                        )
+                    } label: {
+                        Text(control.title)
+                    }
                 }
             }
         }
@@ -178,14 +194,31 @@ private struct ChatRequestBodyControlRows: View {
         state = nil
         let modelKey = runnableModel.id
         let modelControls = runnableModel.model.requestBodyControls
-        let loadedState = await Task.detached(priority: .userInitiated) {
-            ModelRequestBodyControlRuntimeStore.state(
+        let loaded = await Task.detached(priority: .userInitiated) {
+            let loadedState = ModelRequestBodyControlRuntimeStore.state(
                 forModelKey: modelKey,
                 controls: modelControls
             )
+            let descriptors: [String: ModelRequestBodyControlSliderDescriptor] = Dictionary(
+                uniqueKeysWithValues: modelControls.compactMap { control in
+                    guard control.isSliderEnabled,
+                          let descriptor = ModelRequestBodyControlSliderDescriptor(control: control) else {
+                        return nil
+                    }
+                    return (control.id, descriptor)
+                }
+            )
+            return (loadedState, descriptors)
         }.value
         guard !Task.isCancelled else { return }
-        state = loadedState
+        state = loaded.0
+        sliderDescriptors = loaded.1
+        lastAnchorIndices = Dictionary(uniqueKeysWithValues: loaded.1.map { controlID, descriptor in
+            (controlID, descriptor.nearestAnchorIndex(at: descriptor.position(in: loaded.0)))
+        })
+        lastSliderPositions = Dictionary(uniqueKeysWithValues: loaded.1.map { controlID, descriptor in
+            (controlID, descriptor.position(in: loaded.0))
+        })
     }
 
     private func enqueueToggleSave(_ isActive: Bool, controlID: String) {
@@ -204,5 +237,158 @@ private struct ChatRequestBodyControlRows: View {
                 )
             }.value
         }
+    }
+
+    private func sliderRow(
+        for control: ModelRequestBodyControl,
+        descriptor: ModelRequestBodyControlSliderDescriptor
+    ) -> some View {
+        let position = descriptor.position(in: state ?? ModelRequestBodyControlState())
+        let displayValue = descriptor.displayValue(at: position)
+
+        return VStack {
+            HStack {
+                Text(control.title)
+                    .lineLimit(1)
+                Spacer()
+                Text(displayValue)
+                    .etFont(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            ZStack {
+                SliderAnchorMarks(count: descriptor.optionCount)
+                Slider(
+                    value: sliderBinding(for: control, descriptor: descriptor),
+                    in: 0...1,
+                    onEditingChanged: { isEditing in
+                        if !isEditing {
+                            settleAndSaveSlider(for: control, descriptor: descriptor)
+                        }
+                    }
+                )
+                .accessibilityLabel(Text(control.title))
+                .accessibilityValue(Text(displayValue))
+            }
+        }
+        .disabled(state == nil)
+    }
+
+    private func sliderBinding(
+        for control: ModelRequestBodyControl,
+        descriptor: ModelRequestBodyControlSliderDescriptor
+    ) -> Binding<Double> {
+        Binding(
+            get: {
+                descriptor.position(in: state ?? ModelRequestBodyControlState())
+            },
+            set: { position in
+                updateSliderPosition(
+                    position,
+                    for: control,
+                    descriptor: descriptor,
+                    providesFeedback: true
+                )
+            }
+        )
+    }
+
+    private func updateSliderPosition(
+        _ position: Double,
+        for control: ModelRequestBodyControl,
+        descriptor: ModelRequestBodyControlSliderDescriptor,
+        providesFeedback: Bool
+    ) {
+        guard var updatedState = state else { return }
+        let normalizedPosition = descriptor.normalized(position)
+        updatedState.sliderPositionsByControlID[control.id] = normalizedPosition
+        updatedState.selectedOptionIDsByControlID[control.id] = descriptor.nearestOptionID(
+            at: normalizedPosition
+        )
+        state = updatedState
+
+        let anchorIndex = descriptor.nearestAnchorIndex(at: normalizedPosition)
+        let previousPosition = lastSliderPositions[control.id] ?? normalizedPosition
+        let shouldProvideFeedback = switch descriptor.mode {
+        case .discrete:
+            lastAnchorIndices[control.id] != anchorIndex
+        case .continuousNumeric:
+            descriptor.crossesAnchor(from: previousPosition, to: normalizedPosition)
+        }
+        if providesFeedback,
+           shouldProvideFeedback {
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        lastAnchorIndices[control.id] = anchorIndex
+        lastSliderPositions[control.id] = normalizedPosition
+    }
+
+    private func settleAndSaveSlider(
+        for control: ModelRequestBodyControl,
+        descriptor: ModelRequestBodyControlSliderDescriptor
+    ) {
+        guard let state else { return }
+        let currentPosition = descriptor.position(in: state)
+        let restingPosition = descriptor.restingPosition(for: currentPosition)
+        if abs(restingPosition - currentPosition) > 0.000_001 {
+            UISelectionFeedbackGenerator().selectionChanged()
+            if reduceMotion {
+                updateSliderPosition(
+                    restingPosition,
+                    for: control,
+                    descriptor: descriptor,
+                    providesFeedback: false
+                )
+            } else {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                    updateSliderPosition(
+                        restingPosition,
+                        for: control,
+                        descriptor: descriptor,
+                        providesFeedback: false
+                    )
+                }
+            }
+        }
+        enqueueSliderSave(restingPosition, control: control)
+    }
+
+    private func enqueueSliderSave(_ position: Double, control: ModelRequestBodyControl) {
+        let previousSaveTask = pendingSaveTask
+        let modelKey = runnableModel.id
+        let modelControls = runnableModel.model.requestBodyControls
+        pendingSaveTask = Task(priority: .utility) {
+            await previousSaveTask?.value
+            guard !Task.isCancelled else { return }
+            await Task.detached(priority: .utility) {
+                ModelRequestBodyControlRuntimeStore.saveSliderPosition(
+                    position,
+                    for: control,
+                    forModelKey: modelKey,
+                    controls: modelControls
+                )
+            }.value
+        }
+    }
+}
+
+private struct SliderAnchorMarks: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(Color.secondary.opacity(0.45))
+                    .frame(width: 4, height: 4)
+                if index < count - 1 {
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

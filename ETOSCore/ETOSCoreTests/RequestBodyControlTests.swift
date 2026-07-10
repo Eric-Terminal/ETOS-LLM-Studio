@@ -229,6 +229,164 @@ struct RequestBodyControlTests {
         #expect(restored.selectedOptionIDsByControlID["budget"] == "high")
     }
 
+    @Test("旧版控制与运行态缺少滑块字段时仍可解码")
+    func testLegacySliderFieldsDecodeWithDefaults() throws {
+        let controlJSON = """
+        {
+          "id": "budget",
+          "title": "思考预算",
+          "kind": "optionGroup",
+          "isEnabled": true,
+          "defaultIsActive": false,
+          "defaultOptionID": "low",
+          "payload": {},
+          "options": []
+        }
+        """
+        let stateJSON = """
+        {
+          "toggleValuesByControlID": {},
+          "selectedOptionIDsByControlID": {"budget": "low"}
+        }
+        """
+
+        let control = try JSONDecoder().decode(ModelRequestBodyControl.self, from: Data(controlJSON.utf8))
+        let state = try JSONDecoder().decode(ModelRequestBodyControlState.self, from: Data(stateJSON.utf8))
+
+        #expect(!control.isSliderEnabled)
+        #expect(state.sliderPositionsByControlID.isEmpty)
+    }
+
+    @Test("字符串滑块会吸附并编译最近档位")
+    func testDiscreteSliderSnapsAndCompilesNearestOption() throws {
+        let control = ModelRequestBodyControl(
+            id: "effort",
+            title: "思考强度",
+            kind: .optionGroup,
+            defaultOptionID: "low",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(id: "low", title: "low", payload: ["effort": .string("low")]),
+                ModelRequestBodyControlOption(id: "medium", title: "medium", payload: ["effort": .string("medium")]),
+                ModelRequestBodyControlOption(id: "high", title: "high", payload: ["effort": .string("high")])
+            ]
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+        let state = ModelRequestBodyControlState(sliderPositionsByControlID: [control.id: 0.61])
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: state
+        )
+
+        #expect(descriptor.mode == .discrete)
+        #expect(descriptor.restingPosition(for: 0.61) == 0.5)
+        #expect(descriptor.displayValue(at: 0.61) == "medium")
+        #expect(compiled["effort"] == .string("medium"))
+    }
+
+    @Test("数字滑块会按等距锚点分段插值")
+    func testNumericSliderUsesPiecewiseInterpolation() throws {
+        let control = ModelRequestBodyControl(
+            id: "max-tokens",
+            title: "Max Tokens",
+            kind: .optionGroup,
+            defaultOptionID: "100",
+            isSliderEnabled: true,
+            options: [100, 200, 400, 800].map { value in
+                ModelRequestBodyControlOption(
+                    id: String(value),
+                    title: String(value),
+                    payload: ["max_tokens": .int(value)]
+                )
+            }
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+
+        #expect(descriptor.mode == .continuousNumeric)
+        #expect(descriptor.displayValue(at: 0.5) == "300")
+        #expect(descriptor.displayValue(at: 0.75) == "500")
+        #expect(descriptor.payload(for: 0.75)["max_tokens"] == .int(500))
+    }
+
+    @Test("浮点滑块会发送锚点之间的连续值")
+    func testFloatingSliderCompilesContinuousValue() throws {
+        let control = ModelRequestBodyControl(
+            id: "temperature",
+            title: "温度",
+            kind: .optionGroup,
+            defaultOptionID: "0",
+            isSliderEnabled: true,
+            options: [0.0, 1.0, 2.0].map { value in
+                ModelRequestBodyControlOption(
+                    id: String(value),
+                    title: String(value),
+                    payload: ["temperature": .double(value)]
+                )
+            }
+        )
+        let state = ModelRequestBodyControlState(sliderPositionsByControlID: [control.id: 0.35])
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: state
+        )
+        guard case .double(let temperature)? = compiled["temperature"] else {
+            Issue.record("连续温度没有编译为浮点参数。")
+            return
+        }
+
+        #expect(abs(temperature - 0.7) < 0.000_001)
+    }
+
+    @Test("单独保存滑块位置会保留其他控制状态")
+    func testSavingSliderPositionPreservesOtherControlState() throws {
+        let suiteName = "RequestBodyControlTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let sliderControl = ModelRequestBodyControl(
+            id: "effort",
+            title: "思考强度",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(id: "low", title: "low", payload: ["effort": .string("low")]),
+                ModelRequestBodyControlOption(id: "high", title: "high", payload: ["effort": .string("high")])
+            ]
+        )
+        let toggleControl = ModelRequestBodyControl(
+            id: "thinking",
+            title: "开启思考",
+            kind: .toggle
+        )
+        let controls = [sliderControl, toggleControl]
+        ModelRequestBodyControlRuntimeStore.save(
+            ModelRequestBodyControlState(toggleValuesByControlID: [toggleControl.id: true]),
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+
+        ModelRequestBodyControlRuntimeStore.saveSliderPosition(
+            0.8,
+            for: sliderControl,
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+
+        let restored = ModelRequestBodyControlRuntimeStore.state(
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+        #expect(restored.toggleValuesByControlID[toggleControl.id] == true)
+        #expect(restored.sliderPositionsByControlID[sliderControl.id] == 0.8)
+        #expect(restored.selectedOptionIDsByControlID[sliderControl.id] == "high")
+    }
+
     @Test("模型 effectiveOverrideParameters 使用运行态状态")
     func testModelEffectiveOverrideParametersUsesState() {
         let model = Model(

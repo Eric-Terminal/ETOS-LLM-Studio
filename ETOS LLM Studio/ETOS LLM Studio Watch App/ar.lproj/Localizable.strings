@@ -3061,7 +3061,9 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "源路径与目标路径相同，无需移动。" = "Source and destination paths are the same. No move is needed.";
 "点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。" = "Tap Edit in the top-right corner to drag the reorder handle. Swipe right to remove.";
 "点击开始识别" = "Tap to start recognition";
-"点击控制名称后选择具体参数。" = "Tap a control name, then choose specific parameters.";
+"滑块" = "شريط التمرير";
+"启用滑块" = "تمكين شريط التمرير";
+"启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。至少需要两个选项。" = "عند التمكين، تلتقط الخيارات النصية المحطات بينما تتغير الخيارات الرقمية باستمرار بينها. يلزم خياران على الأقل.";
 "点击文件夹继续浏览，点击 JSON 文件可预览内容。" = "Tap a folder to continue browsing. Tap a JSON file to preview its contents.";
 "点击类别可查看详细文件列表。" = "Tap a category to view file details.";
 "父路径“%@”不是目录，无法创建目录。" = "Parent path \"%@\" is not a directory, so the directory cannot be created.";

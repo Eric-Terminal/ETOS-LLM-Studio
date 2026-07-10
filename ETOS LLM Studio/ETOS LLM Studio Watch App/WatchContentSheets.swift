@@ -161,6 +161,7 @@ struct WatchQuickRequestControlsView: View {
 
     @State private var state: ModelRequestBodyControlState?
     @State private var pendingSaveTask: Task<Void, Never>?
+    @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
 
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
@@ -178,13 +179,39 @@ struct WatchQuickRequestControlsView: View {
                         .disabled(state == nil)
                     case .optionGroup:
                         NavigationLink {
-                            WatchRequestBodyControlDetailView(
-                                runnableModel: runnableModel,
-                                control: control,
-                                onDone: onDone
-                            )
+                            if let descriptor = sliderDescriptors[control.id] {
+                                WatchRequestBodySliderView(
+                                    runnableModel: runnableModel,
+                                    control: control,
+                                    descriptor: descriptor,
+                                    onCommit: { position in
+                                        updateSliderPosition(
+                                            position,
+                                            for: control,
+                                            descriptor: descriptor
+                                        )
+                                    },
+                                    onDone: onDone
+                                )
+                            } else {
+                                WatchRequestBodyControlDetailView(
+                                    runnableModel: runnableModel,
+                                    control: control,
+                                    onDone: onDone
+                                )
+                            }
                         } label: {
-                            Text(control.title)
+                            HStack {
+                                Text(control.title)
+                                if let descriptor = sliderDescriptors[control.id],
+                                   let state {
+                                    Spacer()
+                                    Text(descriptor.displayValue(at: descriptor.position(in: state)))
+                                        .etFont(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
                         }
                     }
                 }
@@ -192,6 +219,7 @@ struct WatchQuickRequestControlsView: View {
         }
         .navigationTitle(NSLocalizedString("请求控制", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .disabled(state == nil)
         .task(id: runnableModel.id) {
             await loadState()
         }
@@ -215,14 +243,25 @@ struct WatchQuickRequestControlsView: View {
         state = nil
         let modelKey = runnableModel.id
         let modelControls = runnableModel.model.requestBodyControls
-        let loadedState = await Task.detached(priority: .userInitiated) {
-            ModelRequestBodyControlRuntimeStore.state(
+        let loaded = await Task.detached(priority: .userInitiated) {
+            let loadedState = ModelRequestBodyControlRuntimeStore.state(
                 forModelKey: modelKey,
                 controls: modelControls
             )
+            let descriptors: [String: ModelRequestBodyControlSliderDescriptor] = Dictionary(
+                uniqueKeysWithValues: modelControls.compactMap { control in
+                    guard control.isSliderEnabled,
+                          let descriptor = ModelRequestBodyControlSliderDescriptor(control: control) else {
+                        return nil
+                    }
+                    return (control.id, descriptor)
+                }
+            )
+            return (loadedState, descriptors)
         }.value
         guard !Task.isCancelled else { return }
-        state = loadedState
+        state = loaded.0
+        sliderDescriptors = loaded.1
     }
 
     private func enqueueToggleSave(_ isActive: Bool, controlID: String) {
@@ -241,6 +280,20 @@ struct WatchQuickRequestControlsView: View {
                 )
             }.value
         }
+    }
+
+    private func updateSliderPosition(
+        _ position: Double,
+        for control: ModelRequestBodyControl,
+        descriptor: ModelRequestBodyControlSliderDescriptor
+    ) {
+        guard var updatedState = state else { return }
+        let normalizedPosition = descriptor.normalized(position)
+        updatedState.sliderPositionsByControlID[control.id] = normalizedPosition
+        updatedState.selectedOptionIDsByControlID[control.id] = descriptor.nearestOptionID(
+            at: normalizedPosition
+        )
+        state = updatedState
     }
 }
 

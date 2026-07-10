@@ -3139,7 +3139,10 @@
 "每次询问" = "Ask Every Time";
 "气泡功能栏" = "Bubble Action Bar";
 "源路径与目标路径相同，无需移动。" = "Source and destination paths are the same. No move is needed.";
-"开关可直接切换，点击选项组可选择具体参数。" = "Toggle switches directly; tap an option group to choose a value.";
+"开关与滑块可直接调整，其他选项组可进入详情选择。" = "Switches and sliders can be adjusted directly; open other option groups for more choices.";
+"滑块" = "Slider";
+"启用滑块" = "Enable Slider";
+"启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。至少需要两个选项。" = "When enabled, string options snap to stops, while numeric options adjust continuously between stops. At least two options are required.";
 "父路径“%@”不是目录，无法创建目录。" = "Parent path \"%@\" is not a directory, so the directory cannot be created.";
 "父路径“%@”不是目录，无法复制。" = "Parent path \"%@\" is not a directory, so the item cannot be copied.";
 "父路径“%@”不是目录，无法移动。" = "Parent path \"%@\" is not a directory, so the item cannot be moved.";

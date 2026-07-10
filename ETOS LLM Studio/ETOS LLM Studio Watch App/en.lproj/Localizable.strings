@@ -3087,7 +3087,9 @@
 "清空禁用列表" = "Clear Disabled List";
 "源路径与目标路径相同，无需移动。" = "Source and destination paths are the same. No move is needed.";
 "点击右上角“编辑”后，可拖拽右侧把手调整顺序；右滑可移除。" = "Tap Edit in the top-right corner to drag the reorder handle. Swipe right to remove.";
-"点击控制名称后选择具体参数。" = "Tap a control name, then choose specific parameters.";
+"滑块" = "Slider";
+"启用滑块" = "Enable Slider";
+"启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。至少需要两个选项。" = "When enabled, string options snap to stops, while numeric options adjust continuously between stops. At least two options are required.";
 "点击类别可查看详细文件列表。" = "Tap a category to view file details.";
 "父路径“%@”不是目录，无法创建目录。" = "Parent path \"%@\" is not a directory, so the directory cannot be created.";
 "父路径“%@”不是目录，无法复制。" = "Parent path \"%@\" is not a directory, so the item cannot be copied.";

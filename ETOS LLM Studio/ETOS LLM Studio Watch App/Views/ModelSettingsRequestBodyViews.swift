@@ -112,8 +112,23 @@ struct RequestBodyControlDetailView: View {
                     }
                 }
             }
+
+            if control.kind == .optionGroup {
+                Section(
+                    header: Text(NSLocalizedString("滑块", comment: "")),
+                    footer: Text(NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。至少需要两个选项。", comment: ""))
+                ) {
+                    Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
+                        .disabled(control.options.count < 2)
+                }
+            }
         }
         .navigationTitle(displayTitle)
+        .onChange(of: control.options.count) { _, optionCount in
+            if optionCount < 2 {
+                control.isSliderEnabled = false
+            }
+        }
     }
 
     private var displayTitle: String {

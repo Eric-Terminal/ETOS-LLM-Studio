@@ -39,6 +39,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
     public var isEnabled: Bool
     public var defaultIsActive: Bool
     public var defaultOptionID: String?
+    public var isSliderEnabled: Bool
     public var payload: [String: JSONValue]
     public var options: [ModelRequestBodyControlOption]
 
@@ -49,6 +50,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         isEnabled: Bool = true,
         defaultIsActive: Bool = false,
         defaultOptionID: String? = nil,
+        isSliderEnabled: Bool = false,
         payload: [String: JSONValue] = [:],
         options: [ModelRequestBodyControlOption] = []
     ) {
@@ -58,25 +60,98 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         self.isEnabled = isEnabled
         self.defaultIsActive = defaultIsActive
         self.defaultOptionID = defaultOptionID
+        self.isSliderEnabled = isSliderEnabled
         self.payload = payload
         self.options = options
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case kind
+        case isEnabled
+        case defaultIsActive
+        case defaultOptionID
+        case isSliderEnabled
+        case payload
+        case options
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        defaultIsActive = try container.decode(Bool.self, forKey: .defaultIsActive)
+        defaultOptionID = try container.decodeIfPresent(String.self, forKey: .defaultOptionID)
+        isSliderEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSliderEnabled) ?? false
+        payload = try container.decode([String: JSONValue].self, forKey: .payload)
+        options = try container.decode([ModelRequestBodyControlOption].self, forKey: .options)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(defaultIsActive, forKey: .defaultIsActive)
+        try container.encodeIfPresent(defaultOptionID, forKey: .defaultOptionID)
+        try container.encode(isSliderEnabled, forKey: .isSliderEnabled)
+        try container.encode(payload, forKey: .payload)
+        try container.encode(options, forKey: .options)
     }
 }
 
 public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {
     public var toggleValuesByControlID: [String: Bool]
     public var selectedOptionIDsByControlID: [String: String]
+    public var sliderPositionsByControlID: [String: Double]
 
     public init(
         toggleValuesByControlID: [String: Bool] = [:],
-        selectedOptionIDsByControlID: [String: String] = [:]
+        selectedOptionIDsByControlID: [String: String] = [:],
+        sliderPositionsByControlID: [String: Double] = [:]
     ) {
         self.toggleValuesByControlID = toggleValuesByControlID
         self.selectedOptionIDsByControlID = selectedOptionIDsByControlID
+        self.sliderPositionsByControlID = sliderPositionsByControlID
     }
 
     public var isEmpty: Bool {
-        toggleValuesByControlID.isEmpty && selectedOptionIDsByControlID.isEmpty
+        toggleValuesByControlID.isEmpty
+            && selectedOptionIDsByControlID.isEmpty
+            && sliderPositionsByControlID.isEmpty
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case toggleValuesByControlID
+        case selectedOptionIDsByControlID
+        case sliderPositionsByControlID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        toggleValuesByControlID = try container.decodeIfPresent(
+            [String: Bool].self,
+            forKey: .toggleValuesByControlID
+        ) ?? [:]
+        selectedOptionIDsByControlID = try container.decodeIfPresent(
+            [String: String].self,
+            forKey: .selectedOptionIDsByControlID
+        ) ?? [:]
+        sliderPositionsByControlID = try container.decodeIfPresent(
+            [String: Double].self,
+            forKey: .sliderPositionsByControlID
+        ) ?? [:]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(toggleValuesByControlID, forKey: .toggleValuesByControlID)
+        try container.encode(selectedOptionIDsByControlID, forKey: .selectedOptionIDsByControlID)
+        try container.encode(sliderPositionsByControlID, forKey: .sliderPositionsByControlID)
     }
 }
 
@@ -94,6 +169,11 @@ public enum ModelRequestBodyControlCompiler {
                 guard isActive else { continue }
                 result = merged(result, control.payload)
             case .optionGroup:
+                if control.isSliderEnabled,
+                   let descriptor = ModelRequestBodyControlSliderDescriptor(control: control) {
+                    result = merged(result, descriptor.payload(for: descriptor.position(in: state)))
+                    continue
+                }
                 guard let selectedOptionID = state.selectedOptionIDsByControlID[control.id] ?? control.defaultOptionID,
                       let option = control.options.first(where: { $0.id == selectedOptionID }) else {
                     continue
@@ -129,10 +209,17 @@ public enum ModelRequestBodyControlCompiler {
             guard let validOptionIDs = validOptionIDsByControlID[controlID] else { return false }
             return validOptionIDs.contains(optionID)
         }
+        let validSliderIDs = Set(controls.filter {
+            $0.kind == .optionGroup && $0.isSliderEnabled && $0.options.count >= 2
+        }.map(\.id))
+        let sliderPositionsByControlID = state.sliderPositionsByControlID.compactMapValues { position in
+            position.isFinite ? min(max(position, 0), 1) : nil
+        }.filter { validSliderIDs.contains($0.key) }
 
         return ModelRequestBodyControlState(
             toggleValuesByControlID: toggleValuesByControlID,
-            selectedOptionIDsByControlID: selectedOptionIDsByControlID
+            selectedOptionIDsByControlID: selectedOptionIDsByControlID,
+            sliderPositionsByControlID: sliderPositionsByControlID
         )
     }
 
@@ -320,6 +407,33 @@ public enum ModelRequestBodyControlRuntimeStore {
         )
     }
 
+    /// 更新滑块位置时同步最近档位，保证关闭滑块后仍能沿用当前选择。
+    public static func saveSliderPosition(
+        _ position: Double,
+        for control: ModelRequestBodyControl,
+        forModelKey modelKey: String,
+        controls: [ModelRequestBodyControl],
+        userDefaults: UserDefaults = .standard
+    ) {
+        guard let descriptor = ModelRequestBodyControlSliderDescriptor(control: control) else { return }
+        var currentState = state(
+            forModelKey: modelKey,
+            controls: controls,
+            userDefaults: userDefaults
+        )
+        let normalizedPosition = descriptor.normalized(position)
+        currentState.sliderPositionsByControlID[control.id] = normalizedPosition
+        currentState.selectedOptionIDsByControlID[control.id] = descriptor.nearestOptionID(
+            at: normalizedPosition
+        )
+        save(
+            currentState,
+            forModelKey: modelKey,
+            controls: controls,
+            userDefaults: userDefaults
+        )
+    }
+
     private static func loadState(forKey key: String, userDefaults: UserDefaults) -> ModelRequestBodyControlState? {
         guard let data = dataValue(forKey: key, userDefaults: userDefaults) else { return nil }
         return try? JSONDecoder().decode(ModelRequestBodyControlState.self, from: data)
@@ -366,6 +480,7 @@ public enum ModelRequestBodyControlRuntimeStore {
             components.append(control.id)
             components.append(control.kind.rawValue)
             components.append(control.isEnabled ? "1" : "0")
+            components.append(control.isSliderEnabled ? "slider-1" : "slider-0")
             for (key, value) in control.payload.sorted(by: { $0.key < $1.key }) {
                 components.append("payload")
                 components.append(key)
