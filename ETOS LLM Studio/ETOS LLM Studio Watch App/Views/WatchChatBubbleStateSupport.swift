@@ -467,7 +467,7 @@ extension ChatBubble {
         let rowWidth = max(WKInterfaceDevice.current().screenBounds.width, 1)
         if usesNoBubbleStyle {
             let availableBubbleWidth = max(1, rowWidth - noBubbleRowHorizontalPadding * 2)
-            return min(max(rowWidth * 0.92, 1), availableBubbleWidth)
+            return min(max(rowWidth * 0.96, 1), availableBubbleWidth)
         }
         let availableBubbleWidth = max(1, rowWidth - rowSpacerReserveWidth)
         let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.92

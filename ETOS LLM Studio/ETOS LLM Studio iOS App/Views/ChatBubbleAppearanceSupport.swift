@@ -438,7 +438,7 @@ extension ChatBubble {
         let availableBubbleWidth = max(1, baseWidth - rowChromeWidth)
         let widthRatio: CGFloat
         if usesNoBubbleStyle {
-            widthRatio = 0.92
+            widthRatio = 0.96
         } else if isOutgoing {
             widthRatio = 0.88
         } else {
