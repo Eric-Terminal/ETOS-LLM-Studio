@@ -133,23 +133,20 @@ struct RequestBodyGradientSlider: View {
                 .fill(Color.secondary.opacity(0.18))
                 .frame(height: trackHeight)
 
-            if showsFlowingRainbow {
-                FlowingRainbowGradient(axis: .horizontal)
-                    .frame(height: trackHeight)
-                    .mask(alignment: .leading) {
-                        Rectangle()
-                            .frame(width: fillWidth)
-                    }
-                    .clipShape(Capsule())
-            } else {
-                palette.gradient
-                    .frame(height: trackHeight)
-                    .mask(alignment: .leading) {
-                        Rectangle()
-                            .frame(width: fillWidth)
-                    }
-                    .clipShape(Capsule())
-            }
+            palette.gradient
+                .frame(height: trackHeight)
+                .mask(alignment: .leading) {
+                    Rectangle()
+                        .frame(width: fillWidth)
+                }
+                .clipShape(Capsule())
+
+            FlowingRainbowReveal(
+                isActive: showsFlowingRainbow,
+                axis: .horizontal
+            )
+            .frame(height: trackHeight)
+            .clipShape(Capsule())
 
             anchorMarks(size: size, travelWidth: travelWidth, normalizedValue: normalizedValue)
 

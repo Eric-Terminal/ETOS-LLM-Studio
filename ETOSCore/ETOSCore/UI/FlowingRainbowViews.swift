@@ -41,10 +41,19 @@ public struct FlowingRainbowGradient: View {
 
     private let axis: FlowingRainbowAxis
     private let duration: TimeInterval
+    private let phaseOrigin: Date?
+    private let startDelay: TimeInterval
 
-    public init(axis: FlowingRainbowAxis = .horizontal, duration: TimeInterval = 2.8) {
+    public init(
+        axis: FlowingRainbowAxis = .horizontal,
+        duration: TimeInterval = 2.8,
+        phaseOrigin: Date? = nil,
+        startDelay: TimeInterval = 0
+    ) {
         self.axis = axis
         self.duration = duration
+        self.phaseOrigin = phaseOrigin
+        self.startDelay = startDelay
     }
 
     public var body: some View {
@@ -74,7 +83,7 @@ public struct FlowingRainbowGradient: View {
             .offset(x: -size.width * phase)
         case .vertical:
             LinearGradient(
-                colors: Self.repeatingRainbowColors,
+                colors: Self.reversedRepeatingRainbowColors,
                 startPoint: .bottomLeading,
                 endPoint: .topTrailing
             )
@@ -85,7 +94,12 @@ public struct FlowingRainbowGradient: View {
 
     private func phase(at date: Date) -> Double {
         let safeDuration = max(duration, 0.1)
-        return date.timeIntervalSinceReferenceDate
+        let elapsed = if let phaseOrigin {
+            max(date.timeIntervalSince(phaseOrigin) - max(startDelay, 0), 0)
+        } else {
+            date.timeIntervalSinceReferenceDate
+        }
+        return elapsed
             .truncatingRemainder(dividingBy: safeDuration) / safeDuration
     }
 
@@ -103,11 +117,111 @@ public struct FlowingRainbowGradient: View {
         return cycle + cycle.dropFirst()
     }()
 
+    private static let reversedRepeatingRainbowColors = Array(repeatingRainbowColors.reversed())
+
 #if os(watchOS)
     private static let frameInterval: TimeInterval = 1.0 / 20.0
 #else
     private static let frameInterval: TimeInterval = 1.0 / 30.0
 #endif
+}
+
+// 先让完整色谱从端点方向接管原颜色，再启动循环流动，避免到顶瞬间跳色。
+public struct FlowingRainbowReveal: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let isActive: Bool
+    private let axis: FlowingRainbowAxis
+    private let flowDuration: TimeInterval
+    private let revealResponse: TimeInterval
+
+    @State private var revealProgress: CGFloat = 0
+    @State private var phaseOrigin = Date()
+    @State private var rendersRainbow = false
+    @State private var cleanupTask: Task<Void, Never>?
+
+    public init(
+        isActive: Bool,
+        axis: FlowingRainbowAxis = .horizontal,
+        flowDuration: TimeInterval = 2.8,
+        revealResponse: TimeInterval = 0.55
+    ) {
+        self.isActive = isActive
+        self.axis = axis
+        self.flowDuration = flowDuration
+        self.revealResponse = revealResponse
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            if rendersRainbow {
+                FlowingRainbowGradient(
+                    axis: axis,
+                    duration: flowDuration,
+                    phaseOrigin: phaseOrigin,
+                    startDelay: reduceMotion ? 0 : revealResponse * 0.75
+                )
+                .offset(revealOffset(in: proxy.size))
+                .opacity(reduceMotion ? revealProgress : 1)
+            }
+        }
+        .clipped()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            revealProgress = isActive ? 1 : 0
+            rendersRainbow = isActive
+            if isActive {
+                phaseOrigin = Date()
+            }
+        }
+        .onChange(of: isActive) { _, isActive in
+            updateReveal(isActive: isActive)
+        }
+        .onChange(of: reduceMotion) { _, _ in
+            updateReveal(isActive: isActive)
+        }
+        .onDisappear {
+            cleanupTask?.cancel()
+        }
+    }
+
+    private func revealOffset(in size: CGSize) -> CGSize {
+        guard !reduceMotion else { return .zero }
+        let remainingProgress = 1 - min(max(revealProgress, 0), 1)
+        switch axis {
+        case .horizontal:
+            return CGSize(width: size.width * remainingProgress, height: 0)
+        case .vertical:
+            return CGSize(width: 0, height: size.height * remainingProgress)
+        }
+    }
+
+    private func updateReveal(isActive: Bool) {
+        cleanupTask?.cancel()
+        if isActive {
+            phaseOrigin = Date()
+            rendersRainbow = true
+        }
+
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.2)) {
+                revealProgress = isActive ? 1 : 0
+            }
+        } else {
+            withAnimation(.spring(response: revealResponse, dampingFraction: 1)) {
+                revealProgress = isActive ? 1 : 0
+            }
+        }
+
+        guard !isActive else { return }
+        let cleanupDelay = reduceMotion ? 0.25 : revealResponse * 2
+        cleanupTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(cleanupDelay))
+            guard !Task.isCancelled else { return }
+            rendersRainbow = false
+        }
+    }
 }
 
 public struct FlowingRainbowForeground<Content: View>: View {

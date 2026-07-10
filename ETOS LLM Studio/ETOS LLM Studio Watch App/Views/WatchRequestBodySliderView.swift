@@ -101,22 +101,24 @@ struct WatchRequestBodySliderView: View {
             shape
                 .fill(.thinMaterial)
 
-            if showsFlowingRainbow {
-                FlowingRainbowGradient(axis: .vertical, duration: 3.2)
-                    .mask(alignment: .bottom) {
-                        Rectangle()
-                            .frame(height: fillHeight)
-                    }
-                    .mask(shape)
-            } else {
+            Rectangle()
+                .fill(palette.color(at: position))
+                .mask(alignment: .bottom) {
+                    Rectangle()
+                        .frame(height: fillHeight)
+                }
+                .mask(shape)
+
+            FlowingRainbowReveal(
+                isActive: showsFlowingRainbow,
+                axis: .vertical,
+                flowDuration: 3.2
+            )
+            .mask(alignment: .bottom) {
                 Rectangle()
-                    .fill(palette.color(at: position))
-                    .mask(alignment: .bottom) {
-                        Rectangle()
-                            .frame(height: fillHeight)
-                    }
-                    .mask(shape)
+                    .frame(height: fillHeight)
             }
+            .mask(shape)
 
             WatchLiquidScaleMarks(
                 count: descriptor.optionCount,
