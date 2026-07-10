@@ -454,6 +454,7 @@ struct RequestBodyControlTests {
         #expect(abs((temperatureDescriptor.automaticNumericGranularity ?? 0) - 0.01) < 0.000_000_001)
         #expect(evenlySpacedDescriptor.automaticNumericGranularity == 5)
         #expect(curvedDescriptor.automaticNumericGranularity == 20)
+        #expect(temperatureDescriptor.displayValue(at: 0) == "0.10")
         #expect(temperatureDescriptor.displayValue(at: 0.27) == "0.15")
         #expect(temperatureDescriptor.payload(for: 0.27)["temperature"] == .double(0.15))
     }
@@ -518,6 +519,7 @@ struct RequestBodyControlTests {
 
         #expect(descriptor.numericGranularity == 0.05)
         #expect(descriptor.displayValue(at: 0.33) == "0.65")
+        #expect(descriptor.displayValue(at: 0.5) == "1.00")
         #expect(descriptor.payload(for: 0.33)["temperature"] == .double(0.65))
     }
 

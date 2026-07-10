@@ -167,9 +167,6 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
     public func displayValue(at position: Double) -> String {
         if mode == .continuousNumeric {
             let value = numericValue(at: position)
-            if usesIntegerPayload, Self.isWholeNumber(value) {
-                return String(Int(value.rounded()))
-            }
             return Self.formattedDecimal(value, granularity: numericGranularity)
         }
 
@@ -375,7 +372,8 @@ private extension ModelRequestBodyControlSliderDescriptor {
             fractionDigits,
             value
         )
-        if formatted.contains(".") {
+        // 滑动期间保持粒度对应的固定宽度，避免整数锚点收缩后引发布局抖动。
+        if granularity == nil, formatted.contains(".") {
             while formatted.last == "0" {
                 formatted.removeLast()
             }
