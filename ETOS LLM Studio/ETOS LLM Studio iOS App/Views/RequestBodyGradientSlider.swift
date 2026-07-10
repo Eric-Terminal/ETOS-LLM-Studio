@@ -8,10 +8,42 @@
 
 import SwiftUI
 import UIKit
+import ETOSCore
 
 enum RequestBodySliderPalette {
     case structured
     case temperature
+    case custom(
+        start: RequestBodySliderColorComponents,
+        end: RequestBodySliderColorComponents
+    )
+
+    static func defaultPalette(for control: ModelRequestBodyControl) -> RequestBodySliderPalette {
+        control.options.contains { $0.payload.keys.contains("temperature") }
+            ? .temperature
+            : .structured
+    }
+
+    static func resolved(for control: ModelRequestBodyControl) -> RequestBodySliderPalette {
+        let fallback = defaultPalette(for: control)
+        guard control.sliderStartColorHex != nil || control.sliderEndColorHex != nil else {
+            return fallback
+        }
+
+        let fallbackStart = fallback.color(at: 0)
+        let fallbackEnd = fallback.color(at: 1)
+        let startColor = control.sliderStartColorHex.map {
+            ChatAppearanceColorCodec.color(from: $0, fallback: fallbackStart)
+        } ?? fallbackStart
+        let endColor = control.sliderEndColorHex.map {
+            ChatAppearanceColorCodec.color(from: $0, fallback: fallbackEnd)
+        } ?? fallbackEnd
+        guard let start = RequestBodySliderColorComponents(color: startColor),
+              let end = RequestBodySliderColorComponents(color: endColor) else {
+            return fallback
+        }
+        return .custom(start: start, end: end)
+    }
 
     var gradient: LinearGradient {
         LinearGradient(
@@ -42,6 +74,8 @@ enum RequestBodySliderPalette {
                 saturation: 0.78,
                 brightness: 0.96
             )
+        case .custom(let start, let end):
+            return start.interpolated(to: end, at: normalizedPosition).color
         }
     }
 }

@@ -4825,3 +4825,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "-已选%d条" = "-%d-seleccionados";
 "已选 %d / %d 条" = "%d de %d seleccionados";
 "反选" = "Invertir selección";
+"滑块颜色" = "Colores del control deslizante";
+"低值颜色" = "Color de valor bajo";
+"高值颜色" = "Color de valor alto";
+"分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Configura por separado los colores de los valores bajo y alto. Los colores intermedios se mezclan suavemente de forma automática.";

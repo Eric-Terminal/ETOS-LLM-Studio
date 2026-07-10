@@ -147,9 +147,7 @@ struct WatchRequestBodySliderView: View {
     }
 
     private var sliderPalette: WatchRequestBodySliderPalette {
-        control.options.contains { $0.payload.keys.contains("temperature") }
-            ? .temperature
-            : .structured
+        WatchRequestBodySliderPalette.resolved(for: control)
     }
 
     private var crownRotationStep: Double {
@@ -458,6 +456,37 @@ private struct WatchLiquidValueLabel: View {
 enum WatchRequestBodySliderPalette {
     case structured
     case temperature
+    case custom(
+        start: RequestBodySliderColorComponents,
+        end: RequestBodySliderColorComponents
+    )
+
+    static func defaultPalette(for control: ModelRequestBodyControl) -> WatchRequestBodySliderPalette {
+        control.options.contains { $0.payload.keys.contains("temperature") }
+            ? .temperature
+            : .structured
+    }
+
+    static func resolved(for control: ModelRequestBodyControl) -> WatchRequestBodySliderPalette {
+        let fallback = defaultPalette(for: control)
+        guard control.sliderStartColorHex != nil || control.sliderEndColorHex != nil else {
+            return fallback
+        }
+
+        let fallbackStart = fallback.color(at: 0)
+        let fallbackEnd = fallback.color(at: 1)
+        let startColor = control.sliderStartColorHex.map {
+            ChatAppearanceColorCodec.color(from: $0, fallback: fallbackStart)
+        } ?? fallbackStart
+        let endColor = control.sliderEndColorHex.map {
+            ChatAppearanceColorCodec.color(from: $0, fallback: fallbackEnd)
+        } ?? fallbackEnd
+        guard let start = RequestBodySliderColorComponents(color: startColor),
+              let end = RequestBodySliderColorComponents(color: endColor) else {
+            return fallback
+        }
+        return .custom(start: start, end: end)
+    }
 
     func color(at position: Double) -> Color {
         let normalizedPosition = min(max(position, 0), 1)
@@ -474,6 +503,8 @@ enum WatchRequestBodySliderPalette {
                 saturation: 0.78,
                 brightness: 0.98 - normalizedPosition * 0.1
             )
+        case .custom(let start, let end):
+            return start.interpolated(to: end, at: normalizedPosition).color
         }
     }
 }

@@ -4747,3 +4747,7 @@
 "-已选%d条" = "-selected-%d";
 "已选 %d / %d 条" = "Selected %d of %d";
 "反选" = "Invert Selection";
+"滑块颜色" = "Slider Colors";
+"低值颜色" = "Low-Value Color";
+"高值颜色" = "High-Value Color";
+"分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Set the low- and high-value colors separately. Colors between them transition smoothly.";

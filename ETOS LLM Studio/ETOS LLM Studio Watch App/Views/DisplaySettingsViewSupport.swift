@@ -487,6 +487,7 @@ struct WatchColorEditorView: View {
     @Binding var hexValue: String
     let fallback: Color
     let description: String
+    let supportsOpacity: Bool
 
     @State private var red: Double = 0
     @State private var green: Double = 0
@@ -499,6 +500,20 @@ struct WatchColorEditorView: View {
 
     private var previewHex: String {
         ChatAppearanceColorCodec.hexRGBA(from: previewColor) ?? hexValue
+    }
+
+    init(
+        title: String,
+        hexValue: Binding<String>,
+        fallback: Color,
+        description: String,
+        supportsOpacity: Bool = true
+    ) {
+        self.title = title
+        _hexValue = hexValue
+        self.fallback = fallback
+        self.description = description
+        self.supportsOpacity = supportsOpacity
     }
 
     var body: some View {
@@ -534,10 +549,12 @@ struct WatchColorEditorView: View {
                 Text(NSLocalizedString("RGB", comment: ""))
             }
 
-            Section {
-                opacitySlider(value: $alpha)
-            } header: {
-                Text(NSLocalizedString("透明度", comment: ""))
+            if supportsOpacity {
+                Section {
+                    opacitySlider(value: $alpha)
+                } header: {
+                    Text(NSLocalizedString("透明度", comment: ""))
+                }
             }
 
             Section {

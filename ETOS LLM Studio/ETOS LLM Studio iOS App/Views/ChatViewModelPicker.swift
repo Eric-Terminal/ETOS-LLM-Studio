@@ -280,9 +280,7 @@ private struct ChatRequestBodyControlRows: View {
     }
 
     private func sliderPalette(for control: ModelRequestBodyControl) -> RequestBodySliderPalette {
-        control.options.contains { $0.payload.keys.contains("temperature") }
-            ? .temperature
-            : .structured
+        RequestBodySliderPalette.resolved(for: control)
     }
 
     private func sliderBinding(

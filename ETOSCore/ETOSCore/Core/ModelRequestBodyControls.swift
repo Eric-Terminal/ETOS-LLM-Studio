@@ -41,6 +41,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
     public var defaultOptionID: String?
     public var isSliderEnabled: Bool
     public var sliderGranularity: Double?
+    public var sliderStartColorHex: String?
+    public var sliderEndColorHex: String?
     public var payload: [String: JSONValue]
     public var options: [ModelRequestBodyControlOption]
 
@@ -53,6 +55,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         defaultOptionID: String? = nil,
         isSliderEnabled: Bool = false,
         sliderGranularity: Double? = nil,
+        sliderStartColorHex: String? = nil,
+        sliderEndColorHex: String? = nil,
         payload: [String: JSONValue] = [:],
         options: [ModelRequestBodyControlOption] = []
     ) {
@@ -64,6 +68,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         self.defaultOptionID = defaultOptionID
         self.isSliderEnabled = isSliderEnabled
         self.sliderGranularity = sliderGranularity
+        self.sliderStartColorHex = sliderStartColorHex
+        self.sliderEndColorHex = sliderEndColorHex
         self.payload = payload
         self.options = options
     }
@@ -77,6 +83,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         case defaultOptionID
         case isSliderEnabled
         case sliderGranularity
+        case sliderStartColorHex
+        case sliderEndColorHex
         case payload
         case options
     }
@@ -91,6 +99,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         defaultOptionID = try container.decodeIfPresent(String.self, forKey: .defaultOptionID)
         isSliderEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSliderEnabled) ?? false
         sliderGranularity = try container.decodeIfPresent(Double.self, forKey: .sliderGranularity)
+        sliderStartColorHex = try container.decodeIfPresent(String.self, forKey: .sliderStartColorHex)
+        sliderEndColorHex = try container.decodeIfPresent(String.self, forKey: .sliderEndColorHex)
         payload = try container.decode([String: JSONValue].self, forKey: .payload)
         options = try container.decode([ModelRequestBodyControlOption].self, forKey: .options)
     }
@@ -105,6 +115,8 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         try container.encodeIfPresent(defaultOptionID, forKey: .defaultOptionID)
         try container.encode(isSliderEnabled, forKey: .isSliderEnabled)
         try container.encodeIfPresent(sliderGranularity, forKey: .sliderGranularity)
+        try container.encodeIfPresent(sliderStartColorHex, forKey: .sliderStartColorHex)
+        try container.encodeIfPresent(sliderEndColorHex, forKey: .sliderEndColorHex)
         try container.encode(payload, forKey: .payload)
         try container.encode(options, forKey: .options)
     }
@@ -142,6 +154,8 @@ public extension ModelRequestBodyControl {
             defaultOptionID: defaultOptionID.flatMap { optionIDMap[$0] },
             isSliderEnabled: isSliderEnabled,
             sliderGranularity: sliderGranularity,
+            sliderStartColorHex: sliderStartColorHex,
+            sliderEndColorHex: sliderEndColorHex,
             payload: payload,
             options: duplicatedOptions
         )

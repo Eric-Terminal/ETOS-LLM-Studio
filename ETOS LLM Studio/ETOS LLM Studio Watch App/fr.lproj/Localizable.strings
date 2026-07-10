@@ -4802,3 +4802,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "-已选%d条" = "-%d-selectionnes";
 "已选 %d / %d 条" = "%d sur %d sélectionnés";
 "反选" = "Inverser la sélection";
+"滑块颜色" = "Couleurs du curseur";
+"低值颜色" = "Couleur de valeur basse";
+"高值颜色" = "Couleur de valeur élevée";
+"分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Définissez séparément les couleurs des valeurs basse et élevée. Les couleurs intermédiaires sont automatiquement interpolées en douceur.";

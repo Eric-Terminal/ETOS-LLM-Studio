@@ -205,6 +205,14 @@ struct RequestBodyControlDetailView: View {
                     Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
                         .disabled(control.options.count < 2)
 
+                    if control.isSliderEnabled {
+                        NavigationLink {
+                            RequestBodySliderColorSettingsView(control: $control)
+                        } label: {
+                            Label(NSLocalizedString("滑块颜色", comment: ""), systemImage: "paintpalette")
+                        }
+                    }
+
                     if showsNumericSortAction {
                         Button(action: sortOptionsByNumericValue) {
                             Label(

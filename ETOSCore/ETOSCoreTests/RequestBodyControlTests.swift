@@ -164,6 +164,8 @@ struct RequestBodyControlTests {
             defaultOptionID: "high",
             isSliderEnabled: true,
             sliderGranularity: 0.05,
+            sliderStartColorHex: "3366CCFF",
+            sliderEndColorHex: "CC3366FF",
             options: [
                 ModelRequestBodyControlOption(
                     id: "low",
@@ -190,6 +192,8 @@ struct RequestBodyControlTests {
         #expect(importedControl.title == sourceControl.title)
         #expect(importedControl.isSliderEnabled)
         #expect(importedControl.sliderGranularity == 0.05)
+        #expect(importedControl.sliderStartColorHex == "3366CCFF")
+        #expect(importedControl.sliderEndColorHex == "CC3366FF")
         #expect(importedControl.options.map(\.payload) == sourceControl.options.map(\.payload))
         #expect(Set(importedControl.options.map(\.id)).isDisjoint(with: Set(sourceControl.options.map(\.id))))
         #expect(importedControl.defaultOptionID == importedControl.options.last?.id)
@@ -328,7 +332,37 @@ struct RequestBodyControlTests {
 
         #expect(!control.isSliderEnabled)
         #expect(control.sliderGranularity == nil)
+        #expect(control.sliderStartColorHex == nil)
+        #expect(control.sliderEndColorHex == nil)
         #expect(state.sliderPositionsByControlID.isEmpty)
+    }
+
+    @Test("滑块端点颜色可随控制配置编码与解码")
+    func testSliderEndpointColorsRoundTrip() throws {
+        let control = ModelRequestBodyControl(
+            title: "温度",
+            kind: .optionGroup,
+            sliderStartColorHex: "0055FFFF",
+            sliderEndColorHex: "FF3300FF"
+        )
+
+        let encoded = try JSONEncoder().encode(control)
+        let decoded = try JSONDecoder().decode(ModelRequestBodyControl.self, from: encoded)
+
+        #expect(decoded.sliderStartColorHex == control.sliderStartColorHex)
+        #expect(decoded.sliderEndColorHex == control.sliderEndColorHex)
+    }
+
+    @Test("滑块端点颜色按位置线性插值")
+    func testSliderEndpointColorInterpolation() {
+        let start = RequestBodySliderColorComponents(red: 0, green: 0.2, blue: 1, alpha: 1)
+        let end = RequestBodySliderColorComponents(red: 1, green: 0.4, blue: 0, alpha: 0.5)
+        let midpoint = start.interpolated(to: end, at: 0.5)
+
+        #expect(midpoint.red == 0.5)
+        #expect(abs(midpoint.green - 0.3) < 0.000_000_001)
+        #expect(midpoint.blue == 0.5)
+        #expect(midpoint.alpha == 0.75)
     }
 
     @Test("字符串滑块会吸附并编译最近档位")
