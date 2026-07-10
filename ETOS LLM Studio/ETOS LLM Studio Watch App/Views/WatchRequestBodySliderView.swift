@@ -77,12 +77,20 @@ struct WatchRequestBodySliderView: View {
                 .fill(.thinMaterial)
 
             Rectangle()
-                .fill(Color.accentColor.gradient)
-                .frame(height: fillHeight)
-                .frame(maxHeight: .infinity, alignment: .bottom)
+                .fill(WatchRequestBodySliderPalette.gradient)
+                .mask(alignment: .bottom) {
+                    Rectangle()
+                        .frame(height: fillHeight)
+                }
                 .mask(Capsule())
 
-            anchorMarks
+            anchorMarks(color: Color.secondary.opacity(0.55))
+
+            anchorMarks(color: Color.white.opacity(0.82))
+                .mask(alignment: .bottom) {
+                    Rectangle()
+                        .frame(height: fillHeight)
+                }
 
             Text(displayValue)
                 .etFont(.title3.monospaced().weight(.semibold))
@@ -107,7 +115,10 @@ struct WatchRequestBodySliderView: View {
         }
         .overlay {
             Capsule()
-                .stroke(.quaternary)
+                .stroke(
+                    WatchRequestBodySliderPalette.color(at: position).opacity(0.48),
+                    lineWidth: 1
+                )
         }
         .contentShape(Capsule())
         .opacity(isLoaded ? 1 : 0.65)
@@ -137,11 +148,11 @@ struct WatchRequestBodySliderView: View {
         }
     }
 
-    private var anchorMarks: some View {
+    private func anchorMarks(color: Color) -> some View {
         VStack(spacing: 0) {
             ForEach(Array((0..<descriptor.optionCount).reversed()), id: \.self) { index in
                 Circle()
-                    .fill(Color.white.opacity(0.55))
+                    .fill(color)
                     .frame(width: 4, height: 4)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 if index > 0 {
@@ -259,5 +270,27 @@ struct WatchRequestBodySliderView: View {
                 )
             }.value
         }
+    }
+}
+
+private enum WatchRequestBodySliderPalette {
+    static let gradient = LinearGradient(
+        colors: [
+            color(at: 0),
+            color(at: 0.34),
+            color(at: 0.68),
+            color(at: 1)
+        ],
+        startPoint: .bottom,
+        endPoint: .top
+    )
+
+    static func color(at position: Double) -> Color {
+        let normalizedPosition = min(max(position, 0), 1)
+        return Color(
+            hue: 0.58 + normalizedPosition * 0.29,
+            saturation: 0.72,
+            brightness: 0.94
+        )
     }
 }

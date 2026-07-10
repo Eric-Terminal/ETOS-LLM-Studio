@@ -253,24 +253,22 @@ private struct ChatRequestBodyControlRows: View {
                 Spacer()
                 Text(displayValue)
                     .etFont(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(RequestBodySliderPalette.color(at: position))
                     .lineLimit(1)
             }
 
-            ZStack {
-                SliderAnchorMarks(count: descriptor.optionCount)
-                Slider(
-                    value: sliderBinding(for: control, descriptor: descriptor),
-                    in: 0...1,
-                    onEditingChanged: { isEditing in
-                        if !isEditing {
-                            settleAndSaveSlider(for: control, descriptor: descriptor)
-                        }
+            RequestBodyGradientSlider(
+                value: sliderBinding(for: control, descriptor: descriptor),
+                anchorCount: descriptor.optionCount,
+                adjustmentStep: descriptor.crownStep,
+                accessibilityLabel: control.title,
+                accessibilityValue: displayValue,
+                onEditingChanged: { isEditing in
+                    if !isEditing {
+                        settleAndSaveSlider(for: control, descriptor: descriptor)
                     }
-                )
-                .accessibilityLabel(Text(control.title))
-                .accessibilityValue(Text(displayValue))
-            }
+                }
+            )
         }
         .disabled(state == nil)
     }
@@ -370,25 +368,5 @@ private struct ChatRequestBodyControlRows: View {
                 )
             }.value
         }
-    }
-}
-
-private struct SliderAnchorMarks: View {
-    let count: Int
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<count, id: \.self) { index in
-                Circle()
-                    .fill(Color.secondary.opacity(0.45))
-                    .frame(width: 4, height: 4)
-                if index < count - 1 {
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(.horizontal)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
