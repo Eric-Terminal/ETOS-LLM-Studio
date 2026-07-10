@@ -602,7 +602,7 @@ private struct WatchSnapshotDownloadProgressView: View {
                 Text(NSLocalizedString("下载进度", comment: ""))
                 Spacer()
                 if progress.totalBytes > 0 {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .monospacedDigit()
                 }
             }
@@ -1075,7 +1075,7 @@ private struct WatchSnapshotUploadProgressView: View {
             HStack {
                 Text(NSLocalizedString("上传进度", comment: ""))
                 Spacer()
-                Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                Text(String(format: "%d%%", progress.displayPercentage))
                     .monospacedDigit()
             }
             .etFont(.caption2)

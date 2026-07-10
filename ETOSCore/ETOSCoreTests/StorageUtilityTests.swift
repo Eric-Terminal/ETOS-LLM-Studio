@@ -18,3 +18,26 @@ struct StorageUtilityTests {
         #expect(result.range(of: #"17[.,]0"#, options: .regularExpression) == nil)
     }
 }
+
+@Suite("传输百分比测试")
+struct TransferProgressPercentageTests {
+    @Test("上传在服务端确认前最高显示百分之九十九")
+    func uploadWaitsForConfirmationBeforeShowingOneHundredPercent() {
+        let sending = SyncPackageUploadProgress(bytesSent: 100_000_000, totalBytes: 100_000_000)
+        let confirmed = SyncPackageUploadProgress(
+            bytesSent: 100_000_000,
+            totalBytes: 100_000_000,
+            isConfirmedComplete: true
+        )
+
+        #expect(sending.displayPercentage == 99)
+        #expect(confirmed.displayPercentage == 100)
+    }
+
+    @Test("下载接近完成时不会提前显示百分之百")
+    func downloadDoesNotRoundUpToOneHundredPercent() {
+        let progress = SyncPackageDownloadProgress(bytesReceived: 99_900_000, totalBytes: 100_000_000)
+
+        #expect(progress.displayPercentage == 99)
+    }
+}

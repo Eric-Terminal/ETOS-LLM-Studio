@@ -662,7 +662,7 @@ private struct SnapshotUploadProgressView: View {
             HStack {
                 Text(NSLocalizedString("上传进度", comment: ""))
                 Spacer()
-                Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                Text(String(format: "%d%%", progress.displayPercentage))
                     .monospacedDigit()
             }
             .etFont(.footnote)

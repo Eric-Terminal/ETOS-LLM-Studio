@@ -103,7 +103,7 @@ struct SyncPackageUploadServiceTests {
 
         let events = progressEvents.events
         #expect(events.first == SyncPackageUploadProgress(bytesSent: 0, totalBytes: 4096))
-        #expect(events.last == SyncPackageUploadProgress(bytesSent: 4096, totalBytes: 4096))
+        #expect(events.last == SyncPackageUploadProgress(bytesSent: 4096, totalBytes: 4096, isConfirmedComplete: true))
         #expect(events.last?.fractionCompleted == 1)
     }
 
@@ -355,7 +355,7 @@ struct SyncPackageUploadServiceTests {
         #expect(authorization.contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date"))
         #expect(try Data(contentsOf: downloadedURL) == Data("snapshot".utf8))
         #expect(downloadedURL.lastPathComponent.hasSuffix("ETOS-Snapshot-a.elsbackup"))
-        #expect(progressEvents.events.last == SyncPackageDownloadProgress(bytesReceived: 8, totalBytes: 8))
+        #expect(progressEvents.events.last == SyncPackageDownloadProgress(bytesReceived: 8, totalBytes: 8, isConfirmedComplete: true))
     }
 
     @Test("非 2xx 响应会抛出状态码错误")

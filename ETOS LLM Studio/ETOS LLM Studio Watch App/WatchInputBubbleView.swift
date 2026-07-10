@@ -504,7 +504,7 @@ struct WatchAttachmentImportProgressRowView: View {
                 Spacer(minLength: 4)
 
                 if progress.isDeterminate {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .etFont(.system(size: 10, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(.blue)

@@ -471,7 +471,7 @@ private struct SkillImportDownloadProgressView: View {
                 Text(NSLocalizedString("正在导入，请稍候…", comment: ""))
                 Spacer()
                 if let progress, progress.totalBytes > 0 {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .monospacedDigit()
                 } else {
                     ProgressView()

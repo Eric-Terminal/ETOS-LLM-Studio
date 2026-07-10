@@ -52,6 +52,10 @@ struct WatchAttachmentImportProgress: Equatable, Sendable {
         guard totalBytes > 0 else { return 0 }
         return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
     }
+
+    nonisolated var displayPercentage: Int {
+        min(Int((fractionCompleted * 100).rounded()), 99)
+    }
 }
 
 private enum WatchAttachmentImportError: LocalizedError {

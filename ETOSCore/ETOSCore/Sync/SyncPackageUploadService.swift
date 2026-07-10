@@ -70,38 +70,50 @@ public struct SyncPackageUploadResult: Sendable {
 public struct SyncPackageUploadProgress: Equatable, Sendable {
     public let bytesSent: Int64
     public let totalBytes: Int64
+    public let isConfirmedComplete: Bool
 
-    public init(bytesSent: Int64, totalBytes: Int64) {
+    public init(bytesSent: Int64, totalBytes: Int64, isConfirmedComplete: Bool = false) {
         let normalizedTotalBytes = max(0, totalBytes)
         let normalizedBytesSent = max(0, bytesSent)
         self.totalBytes = normalizedTotalBytes
         self.bytesSent = normalizedTotalBytes > 0
             ? min(normalizedBytesSent, normalizedTotalBytes)
             : normalizedBytesSent
+        self.isConfirmedComplete = isConfirmedComplete
     }
 
     public var fractionCompleted: Double {
         guard totalBytes > 0 else { return 0 }
         return min(max(Double(bytesSent) / Double(totalBytes), 0), 1)
     }
+
+    public var displayPercentage: Int {
+        isConfirmedComplete ? 100 : min(Int((fractionCompleted * 100).rounded()), 99)
+    }
 }
 
 public struct SyncPackageDownloadProgress: Equatable, Sendable {
     public let bytesReceived: Int64
     public let totalBytes: Int64
+    public let isConfirmedComplete: Bool
 
-    public init(bytesReceived: Int64, totalBytes: Int64) {
+    public init(bytesReceived: Int64, totalBytes: Int64, isConfirmedComplete: Bool = false) {
         let normalizedTotalBytes = max(0, totalBytes)
         let normalizedBytesReceived = max(0, bytesReceived)
         self.totalBytes = normalizedTotalBytes
         self.bytesReceived = normalizedTotalBytes > 0
             ? min(normalizedBytesReceived, normalizedTotalBytes)
             : normalizedBytesReceived
+        self.isConfirmedComplete = isConfirmedComplete
     }
 
     public var fractionCompleted: Double {
         guard totalBytes > 0 else { return 0 }
         return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
+    }
+
+    public var displayPercentage: Int {
+        isConfirmedComplete ? 100 : min(Int((fractionCompleted * 100).rounded()), 99)
     }
 }
 
@@ -199,8 +211,6 @@ public enum SyncPackageUploadService {
             try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, exportFileURL)
-        reportCompletedProgress(for: exportFileURL, progress: progress)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
         }
@@ -209,6 +219,7 @@ public enum SyncPackageUploadService {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
         }
+        reportCompletedProgress(for: exportFileURL, progress: progress)
 
         return SyncPackageUploadResult(
             statusCode: httpResponse.statusCode,
@@ -267,8 +278,6 @@ public enum SyncPackageUploadService {
             try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, fileURL)
-        reportCompletedProgress(for: fileURL, progress: progress)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
         }
@@ -277,6 +286,7 @@ public enum SyncPackageUploadService {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
         }
+        reportCompletedProgress(for: fileURL, progress: progress)
 
         return SyncPackageUploadResult(
             statusCode: httpResponse.statusCode,
@@ -308,8 +318,6 @@ public enum SyncPackageUploadService {
             try await uploadFile(request: request, fileURL: fileURL, progress: progress)
         }
         let (responseData, response) = try await sender(request, fileURL)
-        reportCompletedProgress(for: fileURL, progress: progress)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SyncPackageUploadError.invalidHTTPResponse
         }
@@ -318,6 +326,7 @@ public enum SyncPackageUploadService {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw SyncPackageUploadError.unexpectedStatusCode(httpResponse.statusCode, preview)
         }
+        reportCompletedProgress(for: fileURL, progress: progress)
 
         return SyncPackageUploadResult(
             statusCode: httpResponse.statusCode,
@@ -433,7 +442,7 @@ private extension SyncPackageUploadService {
     static func reportCompletedProgress(for fileURL: URL, progress: ProgressHandler?) {
         guard let progress else { return }
         let totalBytes = fileSizeInBytes(at: fileURL)
-        progress(SyncPackageUploadProgress(bytesSent: totalBytes, totalBytes: totalBytes))
+        progress(SyncPackageUploadProgress(bytesSent: totalBytes, totalBytes: totalBytes, isConfirmedComplete: true))
     }
 
     static func fileSizeInBytes(at fileURL: URL) -> Int64 {
@@ -451,7 +460,7 @@ private extension SyncPackageUploadService {
         let expectedBytes = response.expectedContentLength > 0
             ? response.expectedContentLength
             : receivedBytes
-        progress(SyncPackageDownloadProgress(bytesReceived: receivedBytes, totalBytes: expectedBytes))
+        progress(SyncPackageDownloadProgress(bytesReceived: receivedBytes, totalBytes: expectedBytes, isConfirmedComplete: true))
     }
 
     static func makeUploadRequest(

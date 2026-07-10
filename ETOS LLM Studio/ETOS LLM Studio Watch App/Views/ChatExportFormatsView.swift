@@ -262,7 +262,7 @@ private struct ChatExportUploadProgressView: View {
                 Text(NSLocalizedString("上传进度", comment: ""))
                 Spacer()
                 if let progress, progress.totalBytes > 0 {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .monospacedDigit()
                 } else {
                     ProgressView()

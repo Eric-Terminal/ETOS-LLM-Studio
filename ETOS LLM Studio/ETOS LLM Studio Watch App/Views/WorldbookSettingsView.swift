@@ -386,7 +386,7 @@ private struct WorldbookDownloadProgressView: View {
                 Text(NSLocalizedString("正在下载并导入...", comment: "Downloading and importing"))
                 Spacer()
                 if let progress, progress.totalBytes > 0 {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .monospacedDigit()
                 } else {
                     ProgressView()

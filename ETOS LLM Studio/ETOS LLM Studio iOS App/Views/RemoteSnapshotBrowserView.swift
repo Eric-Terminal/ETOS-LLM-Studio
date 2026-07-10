@@ -231,7 +231,7 @@ private struct SnapshotDownloadProgressView: View {
                 Text(NSLocalizedString("下载进度", comment: ""))
                 Spacer()
                 if progress.totalBytes > 0 {
-                    Text(String(format: "%.0f%%", progress.fractionCompleted * 100))
+                    Text(String(format: "%d%%", progress.displayPercentage))
                         .monospacedDigit()
                 }
             }
