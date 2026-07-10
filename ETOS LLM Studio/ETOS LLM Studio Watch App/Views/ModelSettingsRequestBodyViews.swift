@@ -81,7 +81,7 @@ struct RequestBodyControlDetailView: View {
                         Text(NSLocalizedString("暂无", comment: ""))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach($control.options, editActions: .move) { $option in
+                        ForEach(optionsBinding, id: \.id, editActions: .move) { $option in
                             let optionID = option.id
                             NavigationLink {
                                 RequestBodyOptionDetailView(
@@ -134,6 +134,13 @@ struct RequestBodyControlDetailView: View {
     private var displayTitle: String {
         let trimmedTitle = control.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedTitle.isEmpty ? NSLocalizedString("未命名提示词", comment: "") : trimmedTitle
+    }
+
+    private var optionsBinding: Binding<[ModelRequestBodyControlOption]> {
+        Binding(
+            get: { control.options },
+            set: { control.options = $0 }
+        )
     }
 
     private func addOption() {

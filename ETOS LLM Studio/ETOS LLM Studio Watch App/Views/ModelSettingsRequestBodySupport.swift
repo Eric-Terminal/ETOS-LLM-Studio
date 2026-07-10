@@ -302,7 +302,7 @@ extension ModelSettingsView {
                 Text(NSLocalizedString("暂无", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach($model.requestBodyControls, editActions: .move) { $control in
+                ForEach(requestBodyControlsBinding, id: \.id, editActions: .move) { $control in
                     let controlID = control.id
                     NavigationLink {
                         RequestBodyControlDetailView(
@@ -320,7 +320,6 @@ extension ModelSettingsView {
                         }
                     }
                 }
-                .onDelete(perform: deleteRequestBodyControls)
             }
 
             Button {
@@ -343,6 +342,13 @@ extension ModelSettingsView {
         )
     }
 
+    private var requestBodyControlsBinding: Binding<[ModelRequestBodyControl]> {
+        Binding(
+            get: { model.requestBodyControls },
+            set: { model.requestBodyControls = $0 }
+        )
+    }
+
     private func addOptionGroupControl() {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
@@ -350,10 +356,6 @@ extension ModelSettingsView {
                 apiFormat: provider.apiFormat
             )
         )
-    }
-
-    private func deleteRequestBodyControls(at offsets: IndexSet) {
-        model.requestBodyControls.remove(atOffsets: offsets)
     }
 
     private func deleteRequestBodyControl(withID controlID: String) {
