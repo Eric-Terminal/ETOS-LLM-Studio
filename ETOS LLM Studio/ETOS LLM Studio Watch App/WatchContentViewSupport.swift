@@ -73,7 +73,7 @@ extension ContentView {
         .navigationDestination(item: $selectedMessagesExportTarget) { target in
             ChatExportFormatsView(
                 session: viewModel.currentSession,
-                messages: ChatResponseAttemptSupport.visibleMessages(from: viewModel.allMessagesForSession),
+                messages: viewModel.allMessagesForSession,
                 upToMessageID: nil,
                 selectedMessageIDs: target.messageIDs
             )

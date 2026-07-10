@@ -55,6 +55,21 @@ public struct ChatTranscriptExportOutput: Sendable {
     }
 }
 
+/// 平台层渲染 PNG 前所需的稳定消息范围与文件名。
+public struct ChatTranscriptPreparedImageExport: Sendable {
+    public let messages: [ChatMessage]
+    public let suggestedFileName: String
+
+    public init(messages: [ChatMessage], suggestedFileName: String) {
+        self.messages = messages
+        self.suggestedFileName = suggestedFileName
+    }
+
+    public func output(data: Data) -> ChatTranscriptExportOutput {
+        ChatTranscriptExportOutput(data: data, format: .png, suggestedFileName: suggestedFileName)
+    }
+}
+
 public enum ChatTranscriptExportError: LocalizedError, Equatable {
     case emptyMessages
     case messageNotFound
@@ -80,6 +95,67 @@ public enum ChatTranscriptExportError: LocalizedError, Equatable {
 
 public struct ChatTranscriptExportService {
     public init() {}
+
+    /// PNG 只保留聊天列表真实显示的回复版本，并隐藏已内嵌到助手气泡的工具结果行。
+    public static func visibleImageMessages(from messages: [ChatMessage]) -> [ChatMessage] {
+        let visibleAttempts = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        let embeddedToolResultIDs = Set(
+            visibleAttempts
+                .filter { $0.role != .tool }
+                .flatMap { message in
+                    (message.toolCalls ?? []).compactMap { call -> String? in
+                        let result = (call.result ?? "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        return result.isEmpty ? nil : call.id
+                    }
+                }
+        )
+        guard !embeddedToolResultIDs.isEmpty else { return visibleAttempts }
+
+        return visibleAttempts.filter { message in
+            guard message.role == .tool,
+                  let toolCalls = message.toolCalls,
+                  !toolCalls.isEmpty else {
+                return true
+            }
+            return toolCalls.allSatisfy { !embeddedToolResultIDs.contains($0.id) }
+        }
+    }
+
+    /// 真实聊天 UI 位于各 App target；Core 只负责统一裁剪范围和命名。
+    public func prepareImageExport(
+        session: ChatSession?,
+        messages: [ChatMessage],
+        includeReasoning: Bool = true,
+        upToMessageID: UUID? = nil,
+        selectedMessageIDs: Set<UUID>? = nil,
+        exportedAt: Date = Date()
+    ) throws -> ChatTranscriptPreparedImageExport {
+        let visibleMessages = Self.visibleImageMessages(from: messages)
+        let scopedMessages = try resolveScopedMessages(
+            visibleMessages,
+            upToMessageID: upToMessageID,
+            selectedMessageIDs: selectedMessageIDs
+        ).filter { $0.role != .system }
+        guard !scopedMessages.isEmpty else {
+            throw ChatTranscriptExportError.emptyMessages
+        }
+        let context = ExportContext(
+            session: session,
+            messages: scopedMessages,
+            format: .png,
+            includeReasoning: includeReasoning,
+            includeSystemPrompt: false,
+            exportedAt: exportedAt,
+            upToMessageID: upToMessageID,
+            selectedMessageIDs: selectedMessageIDs,
+            sourceCount: visibleMessages.count
+        )
+        return ChatTranscriptPreparedImageExport(
+            messages: scopedMessages,
+            suggestedFileName: suggestedFileName(context)
+        )
+    }
 
     public func export(
         session: ChatSession?,

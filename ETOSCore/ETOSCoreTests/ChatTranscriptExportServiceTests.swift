@@ -187,6 +187,100 @@ struct ChatTranscriptExportServiceTests {
         #expect(output.data.starts(with: pngHeader))
     }
 
+    @Test("PNG 预处理会过滤系统消息并生成完整文件名")
+    func testPrepareImageExportFiltersSystemMessagesAndBuildsFileName() throws {
+        let system = ChatMessage(role: .system, content: "不可见的系统提示词")
+        var assistant = ChatMessage(role: .assistant, content: "可见回复")
+        assistant.reasoningContent = "可选思考"
+
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: ChatSession(id: UUID(), name: "测试/长图"),
+            messages: [system, assistant],
+            includeReasoning: false,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_260)
+        )
+
+        #expect(prepared.messages.map(\.id) == [assistant.id])
+        #expect(prepared.suggestedFileName.hasPrefix("测试-长图-完整-不含思考-不含系统提示-"))
+        #expect(prepared.suggestedFileName.hasSuffix(".png"))
+    }
+
+    @Test("PNG 预处理会按原始顺序保留选中的可见消息")
+    func testPrepareImageExportSelectedMessagesPreservesVisibleSourceOrder() throws {
+        let first = ChatMessage(id: UUID(), role: .user, content: "第一条")
+        let system = ChatMessage(id: UUID(), role: .system, content: "系统消息")
+        let second = ChatMessage(id: UUID(), role: .assistant, content: "第二条")
+        let third = ChatMessage(id: UUID(), role: .user, content: "第三条")
+
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: ChatSession(id: UUID(), name: "多选长图"),
+            messages: [first, system, second, third],
+            selectedMessageIDs: [third.id, system.id, first.id],
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_270)
+        )
+
+        #expect(prepared.messages.map(\.id) == [first.id, third.id])
+        #expect(prepared.suggestedFileName.contains("-已选2条-"))
+    }
+
+    @Test("PNG 预处理会隐藏已内嵌到助手气泡的工具结果行")
+    func testPrepareImageExportFiltersEmbeddedToolResultMessages() throws {
+        let call = InternalToolCall(
+            id: "call_embedded",
+            toolName: "search",
+            arguments: "{}",
+            result: "已在助手气泡中显示"
+        )
+        var assistant = ChatMessage(role: .assistant, content: "调用工具")
+        assistant.toolCalls = [call]
+        let tool = ChatMessage(
+            role: .tool,
+            content: "重复的工具结果",
+            toolCalls: [call]
+        )
+
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: nil,
+            messages: [assistant, tool],
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_275)
+        )
+
+        #expect(prepared.messages.map(\.id) == [assistant.id])
+    }
+
+    @Test("PNG 预处理截至指定消息且不包含后文")
+    func testPrepareImageExportUpToMessageTruncatesFollowingMessages() throws {
+        let first = ChatMessage(id: UUID(), role: .user, content: "第一条")
+        let second = ChatMessage(id: UUID(), role: .assistant, content: "第二条")
+        let third = ChatMessage(id: UUID(), role: .user, content: "第三条")
+
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: ChatSession(id: UUID(), name: "截止长图"),
+            messages: [first, second, third],
+            upToMessageID: second.id,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_280)
+        )
+
+        #expect(prepared.messages.map(\.id) == [first.id, second.id])
+        #expect(prepared.suggestedFileName.contains("-截至第2条-"))
+    }
+
+    @Test("PNG 预处理输出会保留数据、格式与文件名")
+    func testPreparedImageOutputWrapsPNGData() throws {
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: ChatSession(id: UUID(), name: "输出长图"),
+            messages: [ChatMessage(role: .user, content: "可见消息")],
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_290)
+        )
+        let pngData = Data([0x89, 0x50, 0x4E, 0x47])
+
+        let output = prepared.output(data: pngData)
+
+        #expect(output.data == pngData)
+        #expect(output.format == .png)
+        #expect(output.suggestedFileName == prepared.suggestedFileName)
+    }
+
     @Test("PNG 范围只有系统消息时不会生成图片")
     func testPNGExportRejectsSystemOnlyScope() {
         let system = ChatMessage(role: .system, content: "不可见的系统提示词")

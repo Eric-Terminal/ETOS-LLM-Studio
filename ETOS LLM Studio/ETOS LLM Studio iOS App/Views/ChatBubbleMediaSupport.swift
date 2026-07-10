@@ -10,6 +10,7 @@ import Foundation
 import SwiftUI
 import UIKit
 import ETOSCore
+import ImageIO
 
 struct ImagePreviewWrapper: Identifiable {
     let id = UUID()
@@ -193,7 +194,7 @@ private final class ZoomableUIImageScrollContainerView: UIView, UIScrollViewDele
     }
 }
 
-private enum ChatAttachmentImageCache {
+enum ChatAttachmentImageCache {
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 160
@@ -207,6 +208,56 @@ private enum ChatAttachmentImageCache {
     static func store(_ image: UIImage, for fileName: String) {
         let pixelCost = Int(image.size.width * image.size.height * image.scale * image.scale)
         cache.setObject(image, forKey: fileName as NSString, cost: max(1, pixelCost))
+    }
+
+    /// 离屏导出只保留展示尺寸缩略图，避免原图与长图位图叠加占用内存。
+    static func preload(fileNames: [String]) async throws -> ChatAttachmentImagePreloadResult {
+        let uniqueFileNames = Array(Set(fileNames))
+        guard !uniqueFileNames.isEmpty else {
+            return ChatAttachmentImagePreloadResult(images: [:])
+        }
+
+        return try await Task.detached(priority: .userInitiated) {
+            var images: [String: UIImage] = [:]
+            images.reserveCapacity(uniqueFileNames.count)
+            for fileName in uniqueFileNames {
+                try Task.checkCancellation()
+                let fileURL = Persistence.getImageDirectory().appendingPathComponent(fileName)
+                let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil)
+                    ?? Persistence.loadImage(fileName: fileName).flatMap {
+                        CGImageSourceCreateWithData($0 as CFData, nil)
+                    }
+                guard let source else { continue }
+                let options: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 1_024
+                ]
+                if let cgImage = CGImageSourceCreateThumbnailAtIndex(
+                    source,
+                    0,
+                    options as CFDictionary
+                ) {
+                    images[fileName] = UIImage(cgImage: cgImage)
+                }
+            }
+            return ChatAttachmentImagePreloadResult(images: images)
+        }.value
+    }
+}
+
+struct ChatAttachmentImagePreloadResult: @unchecked Sendable {
+    let images: [String: UIImage]
+}
+
+private struct ChatTranscriptPreloadedAttachmentImagesKey: EnvironmentKey {
+    static let defaultValue: [String: UIImage] = [:]
+}
+
+extension EnvironmentValues {
+    var chatTranscriptPreloadedAttachmentImages: [String: UIImage] {
+        get { self[ChatTranscriptPreloadedAttachmentImagesKey.self] }
+        set { self[ChatTranscriptPreloadedAttachmentImagesKey.self] = newValue }
     }
 }
 
@@ -248,12 +299,17 @@ struct AttachmentImageView: View {
     let cornerRadius: CGFloat
     let onPreview: (UIImage) -> Void
 
+    @Environment(\.chatTranscriptPreloadedAttachmentImages) private var preloadedImages
     @State private var image: UIImage?
     @State private var didAttemptLoad = false
 
+    private var displayedImage: UIImage? {
+        preloadedImages[fileName] ?? image ?? ChatAttachmentImageCache.image(for: fileName)
+    }
+
     var body: some View {
         Group {
-            if let image {
+            if let image = displayedImage {
                 Button {
                     onPreview(image)
                 } label: {
@@ -285,6 +341,7 @@ struct AttachmentImageView: View {
             }
         }
         .task(id: fileName) {
+            guard preloadedImages[fileName] == nil else { return }
             guard !didAttemptLoad else { return }
             didAttemptLoad = true
             await loadImage()

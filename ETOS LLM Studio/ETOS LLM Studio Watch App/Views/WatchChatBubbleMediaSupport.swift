@@ -9,17 +9,33 @@
 import SwiftUI
 import ETOSCore
 
+private struct WatchChatPreloadedAttachmentImagesKey: EnvironmentKey {
+    static let defaultValue: [String: UIImage] = [:]
+}
+
+extension EnvironmentValues {
+    var watchChatPreloadedAttachmentImages: [String: UIImage] {
+        get { self[WatchChatPreloadedAttachmentImagesKey.self] }
+        set { self[WatchChatPreloadedAttachmentImagesKey.self] = newValue }
+    }
+}
+
 struct AttachmentImageView: View {
     let fileName: String
     let height: CGFloat
     let onPreview: (UIImage) -> Void
 
+    @Environment(\.watchChatPreloadedAttachmentImages) private var preloadedImages
     @State private var image: UIImage?
     @State private var didAttemptLoad = false
 
+    private var resolvedImage: UIImage? {
+        preloadedImages[fileName] ?? image
+    }
+
     var body: some View {
         Group {
-            if let image {
+            if let image = resolvedImage {
                 Button {
                     onPreview(image)
                 } label: {
@@ -47,6 +63,7 @@ struct AttachmentImageView: View {
             }
         }
         .task(id: fileName) {
+            guard preloadedImages[fileName] == nil else { return }
             guard !didAttemptLoad else { return }
             didAttemptLoad = true
             await loadImage()

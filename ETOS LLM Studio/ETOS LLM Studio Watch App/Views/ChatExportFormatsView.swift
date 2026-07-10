@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Foundation
+import WatchKit
 import ETOSCore
 
 struct ChatExportFormatsView: View {
@@ -30,7 +31,6 @@ struct ChatExportFormatsView: View {
     @State private var prepareTask: Task<Void, Never>?
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
 
     var body: some View {
         List {
@@ -129,13 +129,15 @@ struct ChatExportFormatsView: View {
     }
 
     private var scopeDescription: String {
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
         let count: Int
         if let selectedMessageIDs {
             count = selectedMessageIDs.count
-        } else if let upToMessageID, let index = messages.firstIndex(where: { $0.id == upToMessageID }) {
+        } else if let upToMessageID,
+                  let index = visibleMessages.firstIndex(where: { $0.id == upToMessageID }) {
             count = index + 1
         } else {
-            count = messages.count
+            count = visibleMessages.count
         }
         if selectedMessageIDs != nil {
             return String(format: NSLocalizedString("将导出所选的 %d 条消息。", comment: "Selected messages export description"), count)
@@ -159,25 +161,28 @@ struct ChatExportFormatsView: View {
         let includeSystemPrompt = includeSystemPrompt
         let upToMessageID = upToMessageID
         let selectedMessageIDs = selectedMessageIDs
-        let imageStyle = transcriptImageStyle
+        let imageConfiguration = transcriptImageConfiguration
         let worker = Task.detached(priority: .userInitiated) {
             var nextURLs: [ChatTranscriptExportFormat: URL] = [:]
             var nextFileNames: [ChatTranscriptExportFormat: String] = [:]
             var nextErrors: [ChatTranscriptExportFormat: String] = [:]
+            var preparedImageExport: ChatTranscriptPreparedImageExport?
             let exportService = ChatTranscriptExportService()
+            let providers = ConfigLoader.loadProviders()
+            let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
 
             for format in ChatTranscriptExportFormat.allCases {
+                guard format != .png else { continue }
                 try Task.checkCancellation()
                 do {
                     let output = try exportService.export(
                         session: session,
-                        messages: messages,
+                        messages: visibleMessages,
                         format: format,
                         includeReasoning: includeReasoning,
                         includeSystemPrompt: includeSystemPrompt,
                         upToMessageID: upToMessageID,
-                        selectedMessageIDs: selectedMessageIDs,
-                        imageStyle: imageStyle
+                        selectedMessageIDs: selectedMessageIDs
                     )
                     let url = FileManager.default.temporaryDirectory
                         .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
@@ -190,21 +195,57 @@ struct ChatExportFormatsView: View {
                     nextErrors[format] = error.localizedDescription
                 }
             }
+
+            do {
+                preparedImageExport = try exportService.prepareImageExport(
+                    session: session,
+                    messages: messages,
+                    includeReasoning: includeReasoning,
+                    upToMessageID: upToMessageID,
+                    selectedMessageIDs: selectedMessageIDs
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                nextErrors[.png] = error.localizedDescription
+            }
             return PreparedChatExportFiles(
                 fileURLs: nextURLs,
                 suggestedFileNames: nextFileNames,
-                formatErrors: nextErrors
+                formatErrors: nextErrors,
+                preparedImageExport: preparedImageExport,
+                providers: providers
             )
         }
 
         prepareTask = Task { @MainActor in
             do {
-                let prepared = try await withTaskCancellationHandler {
+                var prepared = try await withTaskCancellationHandler {
                     try await worker.value
                 } onCancel: {
                     worker.cancel()
                 }
                 try Task.checkCancellation()
+
+                if let preparedImageExport = prepared.preparedImageExport {
+                    do {
+                        let output = try await WatchChatTranscriptImageRenderer.render(
+                            preparedExport: preparedImageExport,
+                            sourceMessages: messages,
+                            includeReasoning: includeReasoning,
+                            configuration: imageConfiguration,
+                            providers: prepared.providers
+                        )
+                        let url = try await writeTemporaryExport(output)
+                        prepared.fileURLs[.png] = url
+                        prepared.suggestedFileNames[.png] = output.suggestedFileName
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        prepared.formatErrors[.png] = error.localizedDescription
+                    }
+                }
+
                 fileURLs = prepared.fileURLs
                 suggestedFileNames = prepared.suggestedFileNames
                 formatErrors = prepared.formatErrors
@@ -222,6 +263,16 @@ struct ChatExportFormatsView: View {
                 prepareError = error.localizedDescription
             }
         }
+    }
+
+    private func writeTemporaryExport(_ output: ChatTranscriptExportOutput) async throws -> URL {
+        try await Task.detached(priority: .utility) {
+            try Task.checkCancellation()
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+            try output.data.write(to: url, options: .atomic)
+            return url
+        }.value
     }
 
     private func upload(format: ChatTranscriptExportFormat, fileURL: URL) {
@@ -322,32 +373,50 @@ struct ChatExportFormatsView: View {
         }
     }
 
-    private var transcriptImageStyle: ChatTranscriptImageStyle {
-        let profile = appearanceProfileManager.activeProfile
-        let isDark = colorScheme == .dark
-        let userText = isDark ? profile.userDarkText : profile.userLightText
-        let assistantText = isDark ? profile.assistantDarkText : profile.assistantLightText
+    private var transcriptImageConfiguration: WatchChatTranscriptImageConfiguration {
+        let bounds = WKInterfaceDevice.current().screenBounds
+        let currentBackground = appConfig.currentBackgroundImage
         let backgroundURL: URL?
-        if appConfig.enableBackground, !appConfig.currentBackgroundImage.isEmpty {
+        if appConfig.enableBackground,
+           !currentBackground.isEmpty,
+           !ConfigLoader.isVideoBackgroundFile(currentBackground) {
             backgroundURL = ConfigLoader.getBackgroundsDirectory()
-                .appendingPathComponent(appConfig.currentBackgroundImage)
+                .appendingPathComponent(currentBackground)
         } else {
             backgroundURL = nil
         }
-        return ChatTranscriptImageStyle(
-            prefersDarkAppearance: isDark,
-            backgroundMediaURL: backgroundURL,
-            backgroundOpacity: appConfig.backgroundOpacity,
-            backgroundBlurRadius: appConfig.backgroundBlur,
+
+        let enableLiquidGlass: Bool
+        if #available(watchOS 26.0, *) {
+            enableLiquidGlass = appConfig.enableLiquidGlass
+        } else {
+            enableLiquidGlass = false
+        }
+        let fontScale = FontLibrary.effectiveFontScale(
+            appConfig.fontCustomScale,
+            isCustomFontEnabled: appConfig.fontUseCustomFonts
+        )
+
+        return WatchChatTranscriptImageConfiguration(
+            title: session?.name ?? NSLocalizedString("新对话", comment: ""),
+            inputPlaceholder: NSLocalizedString("输入...", comment: "Default input placeholder on watch"),
+            prefersDarkAppearance: colorScheme == .dark,
+            appLanguage: appConfig.appLanguage,
+            backgroundImageURL: backgroundURL,
+            backgroundOpacity: WatchBackgroundOpacitySetting.normalized(appConfig.backgroundOpacity),
+            backgroundBlurRadius: max(0, appConfig.backgroundBlur),
             backgroundContentMode: appConfig.backgroundContentMode == "fit" ? .fit : .fill,
-            usesCustomBackground: appConfig.enableBackground,
-            userBubbleHex: profile.userBubble.isEnabled ? profile.userBubble.hex : nil,
-            assistantBubbleHex: profile.assistantBubble.isEnabled ? profile.assistantBubble.hex : nil,
-            userTextHex: userText.isEnabled ? userText.hex : nil,
-            assistantTextHex: assistantText.isEnabled ? assistantText.hex : nil,
-            usesNoBubbleStyle: appConfig.enableNoBubbleUI,
-            inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
-            untitledConversationName: NSLocalizedString("新的对话", comment: "聊天长图未命名会话标题")
+            enableBackground: appConfig.enableBackground,
+            enableMarkdown: appConfig.enableMarkdown,
+            enableLiquidGlass: enableLiquidGlass,
+            enableNoBubbleUI: appConfig.enableNoBubbleUI,
+            enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+            enableSpeechInput: appConfig.enableSpeechInput,
+            allowsMessageMerging: selectedMessageIDs == nil,
+            inputControlHeight: max(38, 38 * CGFloat(fontScale)),
+            canvasWidth: max(bounds.width, 1),
+            backgroundTileHeight: max(bounds.height, 1),
+            displayScale: max(WKInterfaceDevice.current().screenScale, 1)
         )
     }
 
@@ -357,10 +426,12 @@ struct ChatExportFormatsView: View {
     }
 }
 
-private struct PreparedChatExportFiles: Sendable {
-    let fileURLs: [ChatTranscriptExportFormat: URL]
-    let suggestedFileNames: [ChatTranscriptExportFormat: String]
-    let formatErrors: [ChatTranscriptExportFormat: String]
+private struct PreparedChatExportFiles: @unchecked Sendable {
+    var fileURLs: [ChatTranscriptExportFormat: URL]
+    var suggestedFileNames: [ChatTranscriptExportFormat: String]
+    var formatErrors: [ChatTranscriptExportFormat: String]
+    let preparedImageExport: ChatTranscriptPreparedImageExport?
+    let providers: [Provider]
 }
 
 private struct ChatExportUploadProgressView: View {

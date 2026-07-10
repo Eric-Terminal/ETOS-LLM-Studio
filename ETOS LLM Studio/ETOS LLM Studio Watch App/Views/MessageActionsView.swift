@@ -126,10 +126,6 @@ struct MessageActionsView: View {
         responseAttemptVersionInfo?.currentIndex ?? message.getCurrentVersionIndex()
     }
 
-    private var visibleAllMessages: [ChatMessage] {
-        ChatResponseAttemptSupport.visibleMessages(from: allMessages)
-    }
-
     private var resolvedCostEstimate: MessageCostEstimate? {
         let estimate = MessageCostResolver.resolvedCost(for: message, providers: providers)
         guard let estimate, estimate.totalCost > 0 else { return nil }
@@ -364,7 +360,7 @@ struct MessageActionsView: View {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
-                        messages: visibleAllMessages,
+                        messages: allMessages,
                         upToMessageID: nil
                     )
                 } label: {
@@ -374,7 +370,7 @@ struct MessageActionsView: View {
                 NavigationLink {
                     ChatExportFormatsView(
                         session: session,
-                        messages: visibleAllMessages,
+                        messages: allMessages,
                         upToMessageID: message.id
                     )
                 } label: {

@@ -76,28 +76,61 @@ extension ChatView {
         upToMessageID: UUID? = nil,
         selectedMessageIDs: Set<UUID>? = nil
     ) {
-        let imageStyle = transcriptImageStyle
         Task { @MainActor in
             do {
-                let fileURL = try await Task.detached(priority: .userInitiated) {
-                    let sourceMessages: [ChatMessage]
+                let imageConfiguration = format == .png
+                    ? transcriptSwiftUIImageConfiguration(session: session)
+                    : nil
+                let sourceMessages = await Task.detached(priority: .userInitiated) {
                     if let messages {
-                        sourceMessages = messages
+                        return messages
                     } else if let session {
-                        sourceMessages = Persistence.loadMessages(for: session.id)
+                        return Persistence.loadMessages(for: session.id)
                     } else {
-                        sourceMessages = []
+                        return []
                     }
-                    let output = try ChatTranscriptExportService().export(
-                        session: session,
-                        messages: ChatResponseAttemptSupport.visibleMessages(from: sourceMessages),
-                        format: format,
+                }.value
+
+                let output: ChatTranscriptExportOutput
+                switch format {
+                case .png:
+                    guard let imageConfiguration else {
+                        throw ChatTranscriptExportError.imageRenderFailed
+                    }
+                    let preparedExport = try await Task.detached(priority: .userInitiated) {
+                        try ChatTranscriptExportService().prepareImageExport(
+                            session: session,
+                            messages: sourceMessages,
+                            includeReasoning: includeReasoning,
+                            upToMessageID: upToMessageID,
+                            selectedMessageIDs: selectedMessageIDs
+                        )
+                    }.value
+                    let data = try await ChatTranscriptSwiftUIImageRenderer.render(
+                        preparedExport: preparedExport,
+                        sourceMessages: sourceMessages,
                         includeReasoning: includeReasoning,
-                        includeSystemPrompt: includeSystemPrompt,
-                        upToMessageID: upToMessageID,
-                        selectedMessageIDs: selectedMessageIDs,
-                        imageStyle: imageStyle
+                        configuration: imageConfiguration
                     )
+                    output = preparedExport.output(data: data)
+                case .pdf, .markdown, .text:
+                    output = try await Task.detached(priority: .userInitiated) {
+                        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(
+                            from: sourceMessages
+                        )
+                        return try ChatTranscriptExportService().export(
+                            session: session,
+                            messages: visibleMessages,
+                            format: format,
+                            includeReasoning: includeReasoning,
+                            includeSystemPrompt: includeSystemPrompt,
+                            upToMessageID: upToMessageID,
+                            selectedMessageIDs: selectedMessageIDs
+                        )
+                    }.value
+                }
+
+                let fileURL = try await Task.detached(priority: .userInitiated) {
                     let fileURL = FileManager.default.temporaryDirectory
                         .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
                     try output.data.write(to: fileURL, options: .atomic)
@@ -108,29 +141,6 @@ extension ChatView {
                 exportErrorMessage = error.localizedDescription
             }
         }
-    }
-
-    var transcriptImageStyle: ChatTranscriptImageStyle {
-        let profile = ChatAppearanceProfileManager.shared.activeProfile
-        let isDark = colorScheme == .dark
-        let userText = isDark ? profile.userDarkText : profile.userLightText
-        let assistantText = isDark ? profile.assistantDarkText : profile.assistantLightText
-        return ChatTranscriptImageStyle(
-            prefersDarkAppearance: isDark,
-            backgroundMediaURL: viewModel.enableBackground ? viewModel.currentBackgroundMediaURL : nil,
-            backgroundOpacity: viewModel.backgroundOpacity,
-            backgroundBlurRadius: viewModel.backgroundBlur,
-            backgroundContentMode: viewModel.backgroundContentMode == "fit" ? .fit : .fill,
-            usesCustomBackground: viewModel.enableBackground,
-            userBubbleHex: profile.userBubble.isEnabled ? profile.userBubble.hex : nil,
-            assistantBubbleHex: profile.assistantBubble.isEnabled ? profile.assistantBubble.hex : nil,
-            userTextHex: userText.isEnabled ? userText.hex : nil,
-            assistantTextHex: assistantText.isEnabled ? assistantText.hex : nil,
-            usesNoBubbleStyle: viewModel.enableNoBubbleUI,
-            subtitle: modelSubtitle,
-            inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
-            untitledConversationName: NSLocalizedString("新的对话", comment: "聊天长图未命名会话标题")
-        )
     }
 
     func downloadImagesToPhotoLibrary(fileNames: [String]) async {
