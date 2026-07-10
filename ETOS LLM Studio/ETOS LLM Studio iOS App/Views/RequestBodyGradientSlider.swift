@@ -147,6 +147,10 @@ struct RequestBodyGradientSlider: View {
                 startingColor: palette.color(at: 1)
             )
             .frame(height: trackHeight)
+            .mask(alignment: .leading) {
+                Rectangle()
+                    .frame(width: fillWidth)
+            }
             .clipShape(Capsule())
 
             anchorMarks(size: size, travelWidth: travelWidth, normalizedValue: normalizedValue)
