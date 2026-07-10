@@ -627,8 +627,8 @@ private struct WatchSnapshotDownloadProgressView: View {
     private var progressText: String {
         String(
             format: NSLocalizedString("已下载 %@ / %@", comment: ""),
-            StorageUtility.formatSize(progress.bytesReceived),
-            StorageUtility.formatSize(progress.totalBytes)
+            StorageUtility.formatTransferSize(progress.bytesReceived),
+            StorageUtility.formatTransferSize(progress.totalBytes)
         )
     }
 }
@@ -1091,8 +1091,8 @@ private struct WatchSnapshotUploadProgressView: View {
     private var progressText: String {
         String(
             format: NSLocalizedString("已上传 %@ / %@", comment: ""),
-            StorageUtility.formatSize(progress.bytesSent),
-            StorageUtility.formatSize(progress.totalBytes)
+            StorageUtility.formatTransferSize(progress.bytesSent),
+            StorageUtility.formatTransferSize(progress.totalBytes)
         )
     }
 }

@@ -40,6 +40,15 @@ public enum StorageUtility {
         formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         return formatter.string(fromByteCount: bytes)
     }
+
+    /// 格式化传输进度中的文件大小，固定保留小数位以避免数值变化时文字宽度跳动。
+    public static func formatTransferSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        formatter.zeroPadsFractionDigits = true
+        return formatter.string(fromByteCount: bytes)
+    }
     
     /// 计算单个文件或目录的大小
     public static func calculateSize(at url: URL) -> Int64 {

@@ -277,8 +277,8 @@ private struct ChatExportUploadProgressView: View {
                 Text(
                     String(
                         format: NSLocalizedString("已上传 %@ / %@", comment: ""),
-                        StorageUtility.formatSize(progress.bytesSent),
-                        StorageUtility.formatSize(progress.totalBytes)
+                        StorageUtility.formatTransferSize(progress.bytesSent),
+                        StorageUtility.formatTransferSize(progress.totalBytes)
                     )
                 )
                 .etFont(.caption2)

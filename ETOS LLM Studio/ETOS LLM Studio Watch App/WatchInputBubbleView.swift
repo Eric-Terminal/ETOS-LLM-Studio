@@ -519,8 +519,8 @@ struct WatchAttachmentImportProgressRowView: View {
                 Text(
                     String(
                         format: NSLocalizedString("已下载 %@ / %@", comment: "Watch attachment import downloaded bytes"),
-                        StorageUtility.formatSize(progress.bytesReceived),
-                        StorageUtility.formatSize(progress.totalBytes)
+                        StorageUtility.formatTransferSize(progress.bytesReceived),
+                        StorageUtility.formatTransferSize(progress.totalBytes)
                     )
                 )
                 .etFont(.system(size: 9))

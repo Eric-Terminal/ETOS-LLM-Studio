@@ -685,7 +685,7 @@ private struct SnapshotUploadProgressView: View {
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
-        StorageUtility.formatSize(bytes)
+        StorageUtility.formatTransferSize(bytes)
     }
 }
 

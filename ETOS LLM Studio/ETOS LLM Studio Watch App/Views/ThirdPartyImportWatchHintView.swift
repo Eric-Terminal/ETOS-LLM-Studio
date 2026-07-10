@@ -410,8 +410,8 @@ struct ThirdPartyImportWatchHintView: View {
                 Text(
                     String(
                         format: NSLocalizedString("已下载 %@ / %@", comment: ""),
-                        StorageUtility.formatSize(downloadProgress.bytesReceived),
-                        StorageUtility.formatSize(downloadProgress.totalBytes)
+                        StorageUtility.formatTransferSize(downloadProgress.bytesReceived),
+                        StorageUtility.formatTransferSize(downloadProgress.totalBytes)
                     )
                 )
                 .etFont(.caption2)
