@@ -304,7 +304,7 @@ extension ModelSettingsView {
                 Text(NSLocalizedString("暂无", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach($model.requestBodyControls) { $control in
+                ForEach($model.requestBodyControls, editActions: .move) { $control in
                     let controlID = control.id
                     NavigationLink {
                         RequestBodyControlDetailView(

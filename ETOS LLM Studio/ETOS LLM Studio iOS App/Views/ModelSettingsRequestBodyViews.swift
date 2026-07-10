@@ -83,7 +83,7 @@ struct RequestBodyControlDetailView: View {
                         Text(NSLocalizedString("暂无", comment: ""))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach($control.options) { $option in
+                        ForEach($control.options, editActions: .move) { $option in
                             let optionID = option.id
                             NavigationLink {
                                 RequestBodyOptionDetailView(
