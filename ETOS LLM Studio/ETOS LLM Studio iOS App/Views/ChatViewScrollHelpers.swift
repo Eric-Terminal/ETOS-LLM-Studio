@@ -11,6 +11,17 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
+    /// 相连气泡属于同一视觉组，不能被逐条滚动位移撕开连接处。
+    nonisolated static func chatScrollTransitionOffset(
+        phaseValue: CGFloat,
+        configuredOffset: Double,
+        isEnabled: Bool,
+        isConnectedToAdjacentBubble: Bool
+    ) -> CGFloat {
+        guard isEnabled, !isConnectedToAdjacentBubble else { return 0 }
+        return phaseValue * CGFloat(configuredOffset)
+    }
+
     func resolvePendingSearchJumpIfNeeded() {
         guard let target = viewModel.pendingSearchJumpTarget,
               viewModel.currentSession?.id == target.sessionID,

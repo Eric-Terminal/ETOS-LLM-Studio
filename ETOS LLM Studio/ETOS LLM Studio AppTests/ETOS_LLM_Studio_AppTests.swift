@@ -13,6 +13,33 @@ import ETOSCore
 
 struct ETOS_LLM_Studio_AppTests {
 
+    @Test("弹性滚动不会拉开同轮相连气泡")
+    func testChatScrollTransitionKeepsConnectedBubblesTogether() {
+        let standaloneOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: true,
+            isConnectedToAdjacentBubble: false
+        )
+        #expect(standaloneOffset == 16)
+
+        let connectedOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: true,
+            isConnectedToAdjacentBubble: true
+        )
+        #expect(connectedOffset == 0)
+
+        let disabledOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: false,
+            isConnectedToAdjacentBubble: false
+        )
+        #expect(disabledOffset == 0)
+    }
+
     @Test("自动朗读触发条件判断")
     func testShouldAutoPlayAssistantMessage() {
         let messageID = UUID()

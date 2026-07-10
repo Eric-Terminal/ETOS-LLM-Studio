@@ -792,7 +792,14 @@ extension ChatView {
                                 ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled,
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset] content, phase in
                                     content
-                                        .offset(y: scrollAnimEnabled ? phase.value * scrollAnimOffset : 0)
+                                        .offset(
+                                            y: Self.chatScrollTransitionOffset(
+                                                phaseValue: phase.value,
+                                                configuredOffset: scrollAnimOffset,
+                                                isEnabled: scrollAnimEnabled,
+                                                isConnectedToAdjacentBubble: mergeWithPrevious || mergeWithNext
+                                            )
+                                        )
                                 }
                                 .onAppear {
                                     loadMoreAutomaticHistoryIfNeeded(
