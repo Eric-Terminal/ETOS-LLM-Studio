@@ -3144,6 +3144,7 @@
 "启用滑块" = "Enable Slider";
 "启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。" = "When enabled, string options snap to stops, while numeric options adjust continuously between stops. Numeric granularity defaults to 10% of the smallest gap between adjacent stops and can be overridden. At least two options are required.";
 "粒度" = "Granularity";
+"按数值从小到大排序" = "Sort Smallest to Largest";
 "父路径“%@”不是目录，无法创建目录。" = "Parent path \"%@\" is not a directory, so the directory cannot be created.";
 "父路径“%@”不是目录，无法复制。" = "Parent path \"%@\" is not a directory, so the item cannot be copied.";
 "父路径“%@”不是目录，无法移动。" = "Parent path \"%@\" is not a directory, so the item cannot be moved.";

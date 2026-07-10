@@ -73,6 +73,29 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
         return min(anchorStep, anchorStep * numericGranularity / minimumNumericDifference)
     }
 
+    public var isNumericOrderAscending: Bool {
+        guard mode == .continuousNumeric else { return true }
+        return zip(numericValues, numericValues.dropFirst()).allSatisfy { pair in
+            pair.0 <= pair.1
+        }
+    }
+
+    public func optionsSortedByNumericValue() -> [ModelRequestBodyControlOption]? {
+        guard mode == .continuousNumeric,
+              options.count == numericValues.count else {
+            return nil
+        }
+
+        return options.indices.sorted { leftIndex, rightIndex in
+            let leftValue = numericValues[leftIndex]
+            let rightValue = numericValues[rightIndex]
+            if leftValue == rightValue {
+                return leftIndex < rightIndex
+            }
+            return leftValue < rightValue
+        }.map { options[$0] }
+    }
+
     public func normalized(_ position: Double) -> Double {
         guard position.isFinite else { return 0 }
         return min(max(position, 0), 1)

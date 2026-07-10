@@ -3108,6 +3108,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "启用滑块" = "Activer le curseur";
 "启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。" = "Une fois activé, les options textuelles s’alignent sur des crans et les valeurs numériques se règlent en continu entre eux. La granularité numérique vaut par défaut 10 % du plus petit écart entre deux crans adjacents et peut être modifiée manuellement. Deux options sont requises au minimum.";
 "粒度" = "Granularité";
+"按数值从小到大排序" = "Trier du plus petit au plus grand";
 "点击文件夹继续浏览，点击 JSON 文件打开分页阅读。" = "Tap folders to continue browsing. Tap JSON files to open paged reading.";
 "点击文件夹继续浏览，点击文件可尝试预览内容。" = "Touchez les dossiers pour continuer. Touchez les fichiers pour tenter d'en prévisualiser le contenu.";
 "点击进入二级菜单配置开关与审批策略" = "Tap to configure switches and approval policy in the secondary menu";

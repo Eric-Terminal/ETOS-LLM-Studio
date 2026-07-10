@@ -127,6 +127,7 @@ struct RequestBodyControlDetailView: View {
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     @State private var suggestedPayloadKeys: [String] = []
     @State private var automaticSliderGranularity: Double?
+    @State private var showsNumericSortAction = false
 
     var body: some View {
         Form {
@@ -198,6 +199,15 @@ struct RequestBodyControlDetailView: View {
                     Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
                         .disabled(control.options.count < 2)
 
+                    if showsNumericSortAction {
+                        Button(action: sortOptionsByNumericValue) {
+                            Label(
+                                NSLocalizedString("按数值从小到大排序", comment: ""),
+                                systemImage: "arrow.up"
+                            )
+                        }
+                    }
+
                     if let automaticSliderGranularity {
                         TextField(
                             NSLocalizedString("粒度", comment: "数值滑块每次调节的最小变化量"),
@@ -211,14 +221,14 @@ struct RequestBodyControlDetailView: View {
         .navigationTitle(displayTitle)
         .onAppear {
             refreshSuggestedPayloadKeys()
-            refreshSliderGranularity()
+            refreshSliderConfiguration()
         }
         .onChange(of: control.options) { _, options in
             if options.count < 2 {
                 control.isSliderEnabled = false
             }
             refreshSuggestedPayloadKeys()
-            refreshSliderGranularity()
+            refreshSliderConfiguration()
         }
     }
 
@@ -241,9 +251,22 @@ struct RequestBodyControlDetailView: View {
         }
     }
 
-    private func refreshSliderGranularity() {
-        automaticSliderGranularity = ModelRequestBodyControlSliderDescriptor(control: control)?
-            .automaticNumericGranularity
+    private func refreshSliderConfiguration() {
+        let descriptor = ModelRequestBodyControlSliderDescriptor(control: control)
+        automaticSliderGranularity = descriptor?.automaticNumericGranularity
+        showsNumericSortAction = descriptor?.mode == .continuousNumeric
+            && descriptor?.isNumericOrderAscending == false
+    }
+
+    private func sortOptionsByNumericValue() {
+        guard let sortedOptions = ModelRequestBodyControlSliderDescriptor(control: control)?
+            .optionsSortedByNumericValue() else {
+            return
+        }
+        withAnimation {
+            control.options = sortedOptions
+            showsNumericSortAction = false
+        }
     }
 
     private func sliderGranularityBinding(defaultValue: Double) -> Binding<Double> {

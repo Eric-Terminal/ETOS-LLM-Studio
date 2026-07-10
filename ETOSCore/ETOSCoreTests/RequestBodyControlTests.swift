@@ -436,6 +436,48 @@ struct RequestBodyControlTests {
         #expect(temperatureDescriptor.payload(for: 0.27)["temperature"] == .double(0.15))
     }
 
+    @Test("乱序数字档位可稳定整理为从小到大")
+    func testNumericSliderSortsOptionsByPayloadValue() throws {
+        let control = ModelRequestBodyControl(
+            title: "温度",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "高",
+                    payload: ["temperature": .double(0.3)]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "low-first",
+                    title: "低一",
+                    payload: ["temperature": .double(0.1)]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "low-second",
+                    title: "低二",
+                    payload: ["temperature": .double(0.1)]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "medium",
+                    title: "中",
+                    payload: ["temperature": .double(0.2)]
+                )
+            ]
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+        let sortedOptions = try #require(descriptor.optionsSortedByNumericValue())
+        var sortedControl = control
+        sortedControl.options = sortedOptions
+        let sortedDescriptor = try #require(
+            ModelRequestBodyControlSliderDescriptor(control: sortedControl)
+        )
+
+        #expect(!descriptor.isNumericOrderAscending)
+        #expect(sortedOptions.map(\.id) == ["low-first", "low-second", "medium", "high"])
+        #expect(sortedDescriptor.isNumericOrderAscending)
+    }
+
     @Test("手动粒度会覆盖自动值并量化滑块结果")
     func testNumericSliderUsesCustomGranularity() throws {
         let control = ModelRequestBodyControl(
