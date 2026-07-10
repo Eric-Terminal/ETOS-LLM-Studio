@@ -481,11 +481,15 @@ struct RequestBodyControlTests {
         #expect(control.payload["temperature"] == .double(1))
     }
 
-    @Test("OpenAI 请求构建使用结构化控制后的最终覆盖参数")
-    func testOpenAIRequestUsesCompiledStructuredControls() throws {
+    @Test("请求参数优先级为偏好设置、自定义Body、结构化控制")
+    func testOpenAIRequestParameterPriority() throws {
         let model = Model(
             modelName: "manual-model",
-            overrideParameters: ["temperature": .double(0.4)],
+            overrideParameters: [
+                "temperature": .double(0.4),
+                "top_p": .double(0.6),
+                "stream": .bool(false)
+            ],
             requestBodyControls: [
                 ModelRequestBodyControl(
                     id: "temperature-group",
@@ -493,7 +497,14 @@ struct RequestBodyControlTests {
                     kind: .optionGroup,
                     defaultOptionID: "high",
                     options: [
-                        ModelRequestBodyControlOption(id: "high", title: "high", payload: ["temperature": .double(0.9)])
+                        ModelRequestBodyControlOption(
+                            id: "high",
+                            title: "high",
+                            payload: [
+                                "temperature": .double(0.9),
+                                "stream": .bool(true)
+                            ]
+                        )
                     ]
                 )
             ]
@@ -512,6 +523,7 @@ struct RequestBodyControlTests {
             for: runnableModel,
             commonPayload: [
                 "temperature": 0.2,
+                "top_p": 0.3,
                 "stream": false
             ],
             messages: [
@@ -526,6 +538,24 @@ struct RequestBodyControlTests {
         let payload = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
 
         #expect(payload["temperature"] as? Double == 0.9)
+        #expect(payload["top_p"] as? Double == 0.6)
+        #expect(payload["stream"] as? Bool == true)
         #expect(payload["model"] as? String == "manual-model")
+    }
+
+    @Test("最终 stream 覆盖决定响应接收模式")
+    func testResolvedStreamControlsResponseMode() {
+        #expect(resolvedRequestStreamingEnabled(
+            preference: true,
+            overrides: ["stream": .bool(false)]
+        ) == false)
+        #expect(resolvedRequestStreamingEnabled(
+            preference: false,
+            overrides: ["stream": .bool(true)]
+        ) == true)
+        #expect(resolvedRequestStreamingEnabled(
+            preference: true,
+            overrides: [:]
+        ) == true)
     }
 }

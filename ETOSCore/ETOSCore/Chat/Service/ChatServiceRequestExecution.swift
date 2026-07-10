@@ -95,6 +95,11 @@ extension ChatService {
             return
         }
 
+        let effectiveStreaming = resolvedRequestStreamingEnabled(
+            preference: enableStreaming,
+            overrides: runnableModel.effectiveOverrideParameters
+        )
+
         let requestStartedAt = Date()
         let modelReference = MessageModelReference(
             providerID: runnableModel.provider.id,
@@ -110,7 +115,7 @@ extension ChatService {
             providerName: runnableModel.provider.name,
             modelID: runnableModel.model.modelName,
             requestSource: .chat,
-            isStreaming: enableStreaming,
+            isStreaming: effectiveStreaming,
             requestedAt: requestStartedAt,
             modelReference: modelReference,
             modelPricing: runnableModel.model.pricing
@@ -329,7 +334,7 @@ extension ChatService {
 
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
-        var commonPayload: [String: Any] = ["stream": enableStreaming]
+        var commonPayload: [String: Any] = ["stream": effectiveStreaming]
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
@@ -374,7 +379,7 @@ extension ChatService {
             )
         }()
 
-        if enableStreaming {
+        if effectiveStreaming {
             await handleStreamedResponse(
                 request: request,
                 provider: runnableModel.provider,

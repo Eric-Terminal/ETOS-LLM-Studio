@@ -52,6 +52,17 @@ public struct RunnableModel: Identifiable, Hashable {
     }
 }
 
+/// 根据最终请求覆盖参数决定响应模式，确保接收方式与实际发送的 `stream` 一致。
+func resolvedRequestStreamingEnabled(
+    preference: Bool,
+    overrides: [String: JSONValue]
+) -> Bool {
+    guard case .bool(let overriddenValue)? = overrides["stream"] else {
+        return preference
+    }
+    return overriddenValue
+}
+
 public enum SystemTimeInjectionPosition: String, CaseIterable, Identifiable, Sendable {
     case front
     case tail
