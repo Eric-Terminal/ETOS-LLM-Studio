@@ -80,7 +80,7 @@ struct WatchRequestBodySliderView: View {
         let displayValue = descriptor.displayValue(at: position)
         let palette = sliderPalette
         let shape = RoundedRectangle(
-            cornerRadius: min(size.width, size.height) * 0.12,
+            cornerRadius: min(size.width, size.height) * 0.2,
             style: .continuous
         )
 
@@ -95,6 +95,20 @@ struct WatchRequestBodySliderView: View {
                         .frame(height: fillHeight)
                 }
                 .mask(shape)
+
+            WatchLiquidAnchorMarks(
+                count: descriptor.optionCount,
+                color: Color.secondary.opacity(0.55)
+            )
+
+            WatchLiquidAnchorMarks(
+                count: descriptor.optionCount,
+                color: Color.white.opacity(0.82)
+            )
+            .mask(alignment: .bottom) {
+                Rectangle()
+                    .frame(height: fillHeight)
+            }
 
             Text(displayValue)
                 .etFont(.title3.monospaced().weight(.semibold))
@@ -161,9 +175,9 @@ struct WatchRequestBodySliderView: View {
     private var crownRotationStep: Double {
         switch descriptor.mode {
         case .discrete:
-            return min(descriptor.anchorStep / 5, 0.025)
+            return descriptor.anchorStep / 24
         case .continuousNumeric:
-            return min(descriptor.crownStep / 2, 0.005)
+            return descriptor.crownStep / 4
         }
     }
 
@@ -214,7 +228,7 @@ struct WatchRequestBodySliderView: View {
     private func scheduleSettle() {
         settleTask?.cancel()
         settleTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(320))
+            try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             settleAndSave()
         }
@@ -279,6 +293,8 @@ struct WatchTemperatureSliderView: View {
     @Binding var value: Double
 
     @State private var lastFeedbackAnchor: Int?
+    // 保留未四舍五入的表冠位置，避免细分步进被 0.01 精度吞掉。
+    @State private var interactivePosition: Double?
 
     private let range = 0.0...2.0
     private let step = 0.01
@@ -297,17 +313,18 @@ struct WatchTemperatureSliderView: View {
         .navigationTitle(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            lastFeedbackAnchor = feedbackAnchor(at: normalizedPosition)
+            interactivePosition = normalizedPosition
+            lastFeedbackAnchor = feedbackAnchor(at: currentPosition)
         }
     }
 
     private func liquidControl(size: CGSize) -> some View {
-        let position = normalizedPosition
+        let position = currentPosition
         let fillHeight = size.height * position
         let displayValue = value.formatted(.number.precision(.fractionLength(2)))
         let palette = WatchRequestBodySliderPalette.temperature
         let shape = RoundedRectangle(
-            cornerRadius: min(size.width, size.height) * 0.12,
+            cornerRadius: min(size.width, size.height) * 0.2,
             style: .continuous
         )
 
@@ -322,6 +339,20 @@ struct WatchTemperatureSliderView: View {
                         .frame(height: fillHeight)
                 }
                 .mask(shape)
+
+            WatchLiquidAnchorMarks(
+                count: 3,
+                color: Color.secondary.opacity(0.55)
+            )
+
+            WatchLiquidAnchorMarks(
+                count: 3,
+                color: Color.white.opacity(0.82)
+            )
+            .mask(alignment: .bottom) {
+                Rectangle()
+                    .frame(height: fillHeight)
+            }
 
             temperatureValue(displayValue, color: .primary)
 
@@ -343,7 +374,7 @@ struct WatchTemperatureSliderView: View {
             positionBinding,
             from: 0,
             through: 1,
-            by: step / (range.upperBound - range.lowerBound),
+            by: step / (range.upperBound - range.lowerBound) / 5,
             sensitivity: .low,
             isContinuous: false,
             isHapticFeedbackEnabled: false
@@ -379,9 +410,13 @@ struct WatchTemperatureSliderView: View {
         return min(max((value - range.lowerBound) / span, 0), 1)
     }
 
+    private var currentPosition: Double {
+        interactivePosition ?? normalizedPosition
+    }
+
     private var positionBinding: Binding<Double> {
         Binding(
-            get: { normalizedPosition },
+            get: { currentPosition },
             set: { updatePosition($0) }
         )
     }
@@ -400,6 +435,7 @@ struct WatchTemperatureSliderView: View {
 
     private func updatePosition(_ newPosition: Double) {
         let position = min(max(newPosition, 0), 1)
+        interactivePosition = position
         let anchor = feedbackAnchor(at: position)
         if let lastFeedbackAnchor, anchor != lastFeedbackAnchor {
             WKInterfaceDevice.current().play(.click)
@@ -413,6 +449,28 @@ struct WatchTemperatureSliderView: View {
 
     private func feedbackAnchor(at position: Double) -> Int {
         Int(min(max(position, 0), 1) * 2 + 0.000_001)
+    }
+}
+
+private struct WatchLiquidAnchorMarks: View {
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array((0..<count).reversed()), id: \.self) { index in
+                Circle()
+                    .fill(color)
+                    .frame(width: 4, height: 4)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                if index > 0 {
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
