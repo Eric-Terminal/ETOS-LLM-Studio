@@ -211,10 +211,21 @@ private enum ChatAttachmentImageCache {
 }
 
 struct ChatBubbleOpenMoreGestureModifier: ViewModifier {
+    let isSelectionMode: Bool
+    let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
 
     func body(content: Content) -> some View {
-        if let onOpenMore {
+        if isSelectionMode {
+            content
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    TapGesture()
+                        .onEnded { _ in
+                            onToggleSelection()
+                        }
+                )
+        } else if let onOpenMore {
             content
                 .contentShape(Rectangle())
                 .highPriorityGesture(

@@ -276,6 +276,7 @@ extension ChatBubble {
     }
 
     var customTextColorOverride: Color? {
+        guard !isSelected else { return nil }
         let slot: ChatAppearanceColorSlot
         let fallback: Color
         if isOutgoing {
@@ -362,6 +363,9 @@ extension ChatBubble {
     }
 
     var bubbleGradient: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(Color.red.opacity(enableBackground ? 0.82 : 1))
+        }
         if usesNoBubbleStyle {
             return AnyShapeStyle(Color.clear)
         }
@@ -409,6 +413,9 @@ extension ChatBubble {
     }
 
     var messageActionBarFillStyle: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(Color.red.opacity(enableBackground ? 0.82 : 1))
+        }
         if usesNoBubbleStyle {
             return AnyShapeStyle(Color.clear)
         }
@@ -509,7 +516,9 @@ extension ChatBubble {
 
     @ViewBuilder
     func bubbleBackground(for shape: BubbleCornerShape) -> some View {
-        if usesNoBubbleStyle {
+        if isSelected {
+            shape.fill(bubbleGradient)
+        } else if usesNoBubbleStyle {
             shape.fill(Color.clear)
         } else if enableLiquidGlass {
             if #available(iOS 26.0, *) {
@@ -589,6 +598,9 @@ extension ChatBubble {
     }
 
     var textForegroundColor: Color {
+        if isSelected {
+            return .white
+        }
         if isError && usesNoBubbleStyle {
             return .red
         }
@@ -599,10 +611,16 @@ extension ChatBubble {
     }
 
     func resolvedTextColor(default defaultColor: Color) -> Color {
-        customTextColorOverride ?? defaultColor
+        if isSelected {
+            return .white
+        }
+        return customTextColorOverride ?? defaultColor
     }
 
     func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double = 0.78) -> Color {
+        if isSelected {
+            return Color.white.opacity(customOpacity)
+        }
         if let customTextColorOverride {
             return customTextColorOverride.opacity(customOpacity)
         }

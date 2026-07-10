@@ -3,7 +3,7 @@
 // ============================================================================
 // ChatTranscriptExportService 会话文本导出模块
 // - 支持导出 PDF / Markdown / TXT
-// - 支持导出完整会话或“截至某条消息”的上文片段
+// - 支持导出完整会话、“截至某条消息”的上文片段或任意选中消息
 // ============================================================================
 
 import Foundation
@@ -76,9 +76,14 @@ public struct ChatTranscriptExportService {
         format: ChatTranscriptExportFormat,
         includeReasoning: Bool = true,
         upToMessageID: UUID? = nil,
+        selectedMessageIDs: Set<UUID>? = nil,
         exportedAt: Date = Date()
     ) throws -> ChatTranscriptExportOutput {
-        let scopedMessages = try resolveScopedMessages(messages, upToMessageID: upToMessageID)
+        let scopedMessages = try resolveScopedMessages(
+            messages,
+            upToMessageID: upToMessageID,
+            selectedMessageIDs: selectedMessageIDs
+        )
         let context = ExportContext(
             session: session,
             messages: scopedMessages,
@@ -86,6 +91,7 @@ public struct ChatTranscriptExportService {
             includeReasoning: includeReasoning,
             exportedAt: exportedAt,
             upToMessageID: upToMessageID,
+            selectedMessageIDs: selectedMessageIDs,
             sourceCount: messages.count
         )
 
@@ -109,9 +115,23 @@ public struct ChatTranscriptExportService {
         )
     }
 
-    private func resolveScopedMessages(_ messages: [ChatMessage], upToMessageID: UUID?) throws -> [ChatMessage] {
+    private func resolveScopedMessages(
+        _ messages: [ChatMessage],
+        upToMessageID: UUID?,
+        selectedMessageIDs: Set<UUID>?
+    ) throws -> [ChatMessage] {
         guard !messages.isEmpty else {
             throw ChatTranscriptExportError.emptyMessages
+        }
+        if let selectedMessageIDs {
+            guard !selectedMessageIDs.isEmpty else {
+                throw ChatTranscriptExportError.emptyMessages
+            }
+            let selectedMessages = messages.filter { selectedMessageIDs.contains($0.id) }
+            guard selectedMessages.count == selectedMessageIDs.count else {
+                throw ChatTranscriptExportError.messageNotFound
+            }
+            return selectedMessages
         }
         guard let upToMessageID else {
             return messages
@@ -137,7 +157,12 @@ public struct ChatTranscriptExportService {
         let stamp = formatter.string(from: context.exportedAt)
 
         let scopeSuffix: String
-        if context.upToMessageID != nil {
+        if context.selectedMessageIDs != nil {
+            scopeSuffix = String(
+                format: NSLocalizedString("-已选%d条", comment: "Chat transcript export file suffix for selected messages"),
+                context.messages.count
+            )
+        } else if context.upToMessageID != nil {
             scopeSuffix = String(
                 format: NSLocalizedString("-截至第%d条", comment: "Chat transcript export file suffix for partial scope"),
                 context.messages.count
@@ -407,6 +432,13 @@ public struct ChatTranscriptExportService {
     }
 
     private func scopeDescription(_ context: ExportContext) -> String {
+        if context.selectedMessageIDs != nil {
+            return String(
+                format: NSLocalizedString("已选 %d / %d 条", comment: "Chat transcript export selected messages scope description"),
+                context.messages.count,
+                context.sourceCount
+            )
+        }
         if context.upToMessageID != nil {
             return String(
                 format: NSLocalizedString("前 %d / %d 条（包含目标消息与其上文）", comment: "Chat transcript export partial scope description"),
@@ -567,6 +599,7 @@ public struct ChatTranscriptExportService {
         let includeReasoning: Bool
         let exportedAt: Date
         let upToMessageID: UUID?
+        let selectedMessageIDs: Set<UUID>?
         let sourceCount: Int
     }
 

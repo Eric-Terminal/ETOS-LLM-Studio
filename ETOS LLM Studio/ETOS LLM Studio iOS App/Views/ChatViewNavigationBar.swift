@@ -38,13 +38,60 @@ extension ChatView {
         .padding(.vertical, navBarVerticalPadding)
     }
 
+    @ViewBuilder
     var navBarSessionButton: some View {
-        Button {
-            presentSessionPicker()
-        } label: {
-            navBarSessionLabel
+        if isMessageSelectionMode {
+            Menu {
+                Button {
+                    exitMessageSelection()
+                } label: {
+                    Label(NSLocalizedString("退出多选", comment: "Exit message selection mode"), systemImage: "xmark.circle")
+                }
+
+                Button {
+                    isSelectedMessagesExportPresented = true
+                } label: {
+                    Label(NSLocalizedString("导出所选", comment: "Export selected messages"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(selectedMessageIDs.isEmpty)
+
+                Button(role: .destructive) {
+                    showSelectedMessagesDeleteConfirm = true
+                } label: {
+                    Label(NSLocalizedString("删除所选", comment: "Delete selected messages"), systemImage: "trash")
+                }
+                .disabled(selectedMessageIDs.isEmpty)
+            } label: {
+                navBarMessageSelectionLabel
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                presentSessionPicker()
+            } label: {
+                navBarSessionLabel
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    var navBarMessageSelectionLabel: some View {
+        Image(systemName: "ellipsis")
+            .etFont(.system(size: 17, weight: .semibold))
+            .foregroundColor(TelegramColors.navBarText)
+            .frame(width: navBarIconSize, height: navBarIconSize)
+            .background(navBarIconBackground)
+            .overlay(
+                Circle()
+                    .stroke(Color.red.opacity(0.7), lineWidth: 1)
+            )
+            .contentShape(Circle())
+            .accessibilityLabel(
+                String(
+                    format: NSLocalizedString("批量操作，已选择 %d 条消息", comment: "Selected messages batch menu accessibility label"),
+                    selectedMessageIDs.count
+                )
+            )
     }
 
     var navBarSessionLabel: some View {

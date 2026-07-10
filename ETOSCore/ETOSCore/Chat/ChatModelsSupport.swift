@@ -567,7 +567,7 @@ public struct RequestLogSummary: Codable, Hashable, Sendable {
     }
 }
 
-public struct ChatSession: Identifiable, Codable, Hashable {
+public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var name: String
     public var topicPrompt: String?

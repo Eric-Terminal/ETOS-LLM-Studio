@@ -77,6 +77,11 @@ extension ContentView {
                     connectsTimelineToNext: connectsTimelineToNext,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
                     canRetry: retryableMessageIDs.contains(message.id),
+                    isSelectionMode: isMessageSelectionMode,
+                    isSelected: selectedMessageIDs.contains(message.id),
+                    onToggleSelection: {
+                        toggleMessageSelection(message.id)
+                    },
                     onOpenMore: {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
                     }
@@ -245,12 +250,51 @@ extension ContentView {
         })
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    viewModel.activeSheet = nil
-                    isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
+                if isMessageSelectionMode {
+                    Menu {
+                        Button {
+                            exitMessageSelection()
+                        } label: {
+                            Label(NSLocalizedString("退出多选", comment: "Exit message selection mode"), systemImage: "xmark.circle")
+                        }
+
+                        Button {
+                            selectedMessagesExportTarget = WatchSelectedMessagesExportNavigationTarget(
+                                messageIDs: selectedMessageIDs
+                            )
+                        } label: {
+                            Label(NSLocalizedString("导出所选", comment: "Export selected messages"), systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(selectedMessageIDs.isEmpty)
+
+                        Button(role: .destructive) {
+                            showSelectedMessagesDeleteConfirm = true
+                        } label: {
+                            Label(NSLocalizedString("删除所选", comment: "Delete selected messages"), systemImage: "trash")
+                        }
+                        .disabled(selectedMessageIDs.isEmpty)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .accessibilityLabel(
+                                String(
+                                    format: NSLocalizedString("批量操作，已选择 %d 条消息", comment: "Selected messages batch menu accessibility label"),
+                                    selectedMessageIDs.count
+                                )
+                            )
+                    }
+                } else {
+                    Button {
+                        viewModel.activeSheet = nil
+                        isSettingsPresented = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                    }
                 }
+            }
+        }
+        .onChange(of: viewModel.currentSession?.id) { _, _ in
+            if isMessageSelectionMode {
+                exitMessageSelection()
             }
         }
         .onChange(of: viewModel.messages.count) {

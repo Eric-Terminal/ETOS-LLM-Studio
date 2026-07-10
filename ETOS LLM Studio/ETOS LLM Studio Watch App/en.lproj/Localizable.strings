@@ -4710,3 +4710,14 @@
 "可选。要直接抓取的网页 URL；提供后会优先作为查询目标。" = "Optional. Webpage URL to fetch directly; when provided, it is prioritized as the query target.";
 "整次搜索或网页抓取最多等待的秒数，范围 3 到 30，默认 12。" = "Maximum seconds to wait for the whole search or webpage fetch, from 3 to 30. Default is 12.";
 "搜索请求超时（%.1f 秒）。" = "Search request timed out (%.1f seconds).";
+"多选" = "Multiple Select";
+"退出多选" = "Exit Selection";
+"导出所选" = "Export Selected";
+"删除所选" = "Delete Selected";
+"批量操作，已选择 %d 条消息" = "Batch Actions, %d Messages Selected";
+"将导出所选的 %d 条消息。" = "The %d selected messages will be exported.";
+"导出格式" = "Export Format";
+"确认删除所选消息" = "Confirm Deletion of Selected Messages";
+"将删除选中的 %d 个气泡。此操作无法撤销。" = "The %d selected bubbles will be deleted. This cannot be undone.";
+"-已选%d条" = "-selected-%d";
+"已选 %d / %d 条" = "Selected %d of %d";

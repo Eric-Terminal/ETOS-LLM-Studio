@@ -115,11 +115,25 @@ extension ChatView {
                         UIPasteboard.general.string = message.content
                         messageActionSheetPayload = nil
                     },
+                    onSelectMultiple: { message in
+                        dismissMessageActionSheet {
+                            beginMessageSelection(with: message)
+                        }
+                    },
                     onJumpToMessage: { displayIndex in
                         jumpToMessage(displayIndex: displayIndex)
                     }
                 )
                 .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isSelectedMessagesExportPresented) {
+                SelectedMessagesExportSheet(selectionCount: selectedMessageIDs.count) { format, includeReasoning in
+                    DispatchQueue.main.async {
+                        exportSelectedMessages(format: format, includeReasoning: includeReasoning)
+                    }
+                }
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
             }
             .sheet(item: $fullErrorContent) { payload in
@@ -173,6 +187,19 @@ extension ChatView {
                 Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
                      ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
                      : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
+            }
+            .alert(NSLocalizedString("确认删除所选消息", comment: "Selected messages delete confirmation title"), isPresented: $showSelectedMessagesDeleteConfirm) {
+                Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
+                    deleteSelectedMessages()
+                }
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
+            } message: {
+                Text(
+                    String(
+                        format: NSLocalizedString("将删除选中的 %d 个气泡。此操作无法撤销。", comment: "Selected messages delete confirmation message"),
+                        selectedMessageIDs.count
+                    )
+                )
             }
             .alert(NSLocalizedString("确认删除", comment: ""), isPresented: messageVersionDeleteAlertPresented) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch App 会话导出格式选择视图
 // - 支持导出 PDF / Markdown / TXT
-// - 支持完整会话导出与“截至指定消息”导出
+// - 支持完整会话、“截至指定消息”与任意多选消息导出
 // ============================================================================
 
 import SwiftUI
@@ -14,6 +14,7 @@ struct ChatExportFormatsView: View {
     let session: ChatSession?
     let messages: [ChatMessage]
     let upToMessageID: UUID?
+    var selectedMessageIDs: Set<UUID>? = nil
 
     @State private var fileURLs: [ChatTranscriptExportFormat: URL] = [:]
     @State private var suggestedFileNames: [ChatTranscriptExportFormat: String] = [:]
@@ -24,8 +25,7 @@ struct ChatExportFormatsView: View {
     @State private var uploadProgress: SyncPackageUploadProgress?
     @State private var uploadMessage: String?
     @State private var uploadError: String?
-
-    private let exportService = ChatTranscriptExportService()
+    @State private var prepareTask: Task<Void, Never>?
 
     var body: some View {
         List {
@@ -105,14 +105,23 @@ struct ChatExportFormatsView: View {
         .onChange(of: includeReasoning) { _, _ in
             prepareFiles()
         }
+        .onDisappear {
+            prepareTask?.cancel()
+            prepareTask = nil
+        }
     }
 
     private var scopeDescription: String {
         let count: Int
-        if let upToMessageID, let index = messages.firstIndex(where: { $0.id == upToMessageID }) {
+        if let selectedMessageIDs {
+            count = selectedMessageIDs.count
+        } else if let upToMessageID, let index = messages.firstIndex(where: { $0.id == upToMessageID }) {
             count = index + 1
         } else {
             count = messages.count
+        }
+        if selectedMessageIDs != nil {
+            return String(format: NSLocalizedString("将导出所选的 %d 条消息。", comment: "Selected messages export description"), count)
         }
         if upToMessageID != nil {
             return String(format: NSLocalizedString("将导出前 %d 条消息（包含目标消息与其上文）。", comment: ""), count)
@@ -121,35 +130,59 @@ struct ChatExportFormatsView: View {
     }
 
     private func prepareFiles() {
-        var nextURLs: [ChatTranscriptExportFormat: URL] = [:]
-        var nextFileNames: [ChatTranscriptExportFormat: String] = [:]
+        prepareTask?.cancel()
+        fileURLs = [:]
+        suggestedFileNames = [:]
+        prepareError = nil
 
-        do {
+        let session = session
+        let messages = messages
+        let includeReasoning = includeReasoning
+        let upToMessageID = upToMessageID
+        let selectedMessageIDs = selectedMessageIDs
+        let worker = Task.detached(priority: .userInitiated) {
+            var nextURLs: [ChatTranscriptExportFormat: URL] = [:]
+            var nextFileNames: [ChatTranscriptExportFormat: String] = [:]
+            let exportService = ChatTranscriptExportService()
+
             for format in ChatTranscriptExportFormat.allCases {
+                try Task.checkCancellation()
                 let output = try exportService.export(
                     session: session,
                     messages: messages,
                     format: format,
                     includeReasoning: includeReasoning,
-                    upToMessageID: upToMessageID
+                    upToMessageID: upToMessageID,
+                    selectedMessageIDs: selectedMessageIDs
                 )
-
                 let url = FileManager.default.temporaryDirectory
                     .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
                 try output.data.write(to: url, options: .atomic)
                 nextURLs[format] = url
                 nextFileNames[format] = output.suggestedFileName
             }
+            return PreparedChatExportFiles(fileURLs: nextURLs, suggestedFileNames: nextFileNames)
+        }
 
-            fileURLs = nextURLs
-            suggestedFileNames = nextFileNames
-            prepareError = nil
-            uploadMessage = nil
-            uploadError = nil
-        } catch {
-            fileURLs = [:]
-            suggestedFileNames = [:]
-            prepareError = error.localizedDescription
+        prepareTask = Task { @MainActor in
+            do {
+                let prepared = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
+                try Task.checkCancellation()
+                fileURLs = prepared.fileURLs
+                suggestedFileNames = prepared.suggestedFileNames
+                uploadMessage = nil
+                uploadError = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                fileURLs = [:]
+                suggestedFileNames = [:]
+                prepareError = error.localizedDescription
+            }
         }
     }
 
@@ -251,6 +284,11 @@ struct ChatExportFormatsView: View {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey])
         return Int64(values?.fileSize ?? 0)
     }
+}
+
+private struct PreparedChatExportFiles: Sendable {
+    let fileURLs: [ChatTranscriptExportFormat: URL]
+    let suggestedFileNames: [ChatTranscriptExportFormat: String]
 }
 
 private struct ChatExportUploadProgressView: View {

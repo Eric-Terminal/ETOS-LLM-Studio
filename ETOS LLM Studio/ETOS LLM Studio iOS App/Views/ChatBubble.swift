@@ -47,6 +47,9 @@ struct ChatBubble: View {
     let onCopy: () -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
+    let isSelectionMode: Bool
+    let isSelected: Bool
+    let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
     let providers: [Provider]
     
@@ -91,6 +94,9 @@ struct ChatBubble: View {
         onCopy: @escaping () -> Void = {},
         onSwitchToPreviousVersion: @escaping () -> Void,
         onSwitchToNextVersion: @escaping () -> Void,
+        isSelectionMode: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
         providers: [Provider] = []
     ) {
@@ -124,6 +130,9 @@ struct ChatBubble: View {
         self.onCopy = onCopy
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
+        self.isSelectionMode = isSelectionMode
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
         self.providers = providers
     }
@@ -192,7 +201,20 @@ struct ChatBubble: View {
         .padding(.horizontal, rowHorizontalPadding)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
-        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: openMoreAction))
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.red, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(
+            ChatBubbleOpenMoreGestureModifier(
+                isSelectionMode: isSelectionMode,
+                onToggleSelection: onToggleSelection,
+                onOpenMore: openMoreAction
+            )
+        )
         .fullScreenCover(item: $imagePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in

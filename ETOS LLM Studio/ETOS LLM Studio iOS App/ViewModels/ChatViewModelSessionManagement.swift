@@ -16,6 +16,10 @@ extension ChatViewModel {
         chatService.deleteMessage(message)
     }
 
+    func deleteMessages(withIDs messageIDs: Set<UUID>) {
+        chatService.deleteMessages(withIDs: messageIDs)
+    }
+
     func deleteSession(at offsets: IndexSet) {
         let sessionsToDelete = offsets.map { chatSessions[$0] }
         chatService.deleteSessions(sessionsToDelete)

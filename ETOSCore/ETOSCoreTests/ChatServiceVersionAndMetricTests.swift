@@ -437,6 +437,45 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("批量删除只移除明确选中的消息")
+    func testDeleteSelectedMessagesDoesNotExpandDeletionScope() async {
+        await cleanup()
+
+        guard let sessionID = chatService.currentSessionSubject.value?.id else {
+            Issue.record("当前会话为空，无法验证批量消息删除行为。")
+            await cleanup()
+            return
+        }
+
+        let toolCall = InternalToolCall(
+            id: "call_batch_delete",
+            toolName: "search_memory",
+            arguments: "{}",
+            result: "工具结果"
+        )
+        let userMessage = ChatMessage(role: .user, content: "查一下记忆")
+        let assistantMessage = ChatMessage(role: .assistant, content: "", toolCalls: [toolCall])
+        let toolMessage = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            toolCalls: [toolCall]
+        )
+        let nextUserMessage = ChatMessage(role: .user, content: "下一条")
+        chatService.updateMessages(
+            [userMessage, assistantMessage, toolMessage, nextUserMessage],
+            for: sessionID
+        )
+
+        chatService.deleteMessages(withIDs: [assistantMessage.id, nextUserMessage.id])
+
+        #expect(chatService.messagesForSessionSubject.value.map(\.id) == [
+            userMessage.id,
+            toolMessage.id
+        ])
+
+        await cleanup()
+    }
+
     @Test("删除用户锚点后回复版本仍保持折叠展示")
     func testDeleteAnchorUserKeepsResponseAttemptsGrouped() async throws {
         await cleanup()

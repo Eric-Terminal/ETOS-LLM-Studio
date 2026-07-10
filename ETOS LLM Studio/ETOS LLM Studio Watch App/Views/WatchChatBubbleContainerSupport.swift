@@ -18,6 +18,9 @@ extension ChatBubble {
     }
 
     var userFallbackBackground: Color {
+        if isSelected {
+            return enableBackground ? Color.red.opacity(0.82) : .red
+        }
         if let resolvedUserBubbleColorOverride {
             return enableBackground ? resolvedUserBubbleColorOverride.opacity(0.7) : resolvedUserBubbleColorOverride
         }
@@ -25,7 +28,10 @@ extension ChatBubble {
     }
 
     var userLiquidGlassBackground: Color {
-        (resolvedUserBubbleColorOverride ?? .blue).opacity(0.5)
+        if isSelected {
+            return Color.red.opacity(0.62)
+        }
+        return (resolvedUserBubbleColorOverride ?? .blue).opacity(0.5)
     }
 
     var errorLiquidGlassBackground: Color {
@@ -55,6 +61,9 @@ extension ChatBubble {
     }
 
     var assistantFallbackBackground: Color {
+        if isSelected {
+            return enableBackground ? Color.red.opacity(0.82) : .red
+        }
         if let resolvedAssistantBubbleColorOverride {
             return enableBackground ? resolvedAssistantBubbleColorOverride.opacity(0.7) : resolvedAssistantBubbleColorOverride
         }
@@ -62,7 +71,10 @@ extension ChatBubble {
     }
 
     var assistantLiquidGlassBackground: Color {
-        resolvedAssistantBubbleColorOverride.map { enableBackground ? $0.opacity(0.5) : $0 } ?? Color.clear
+        if isSelected {
+            return Color.red.opacity(0.62)
+        }
+        return resolvedAssistantBubbleColorOverride.map { enableBackground ? $0.opacity(0.5) : $0 } ?? Color.clear
     }
 
     var standaloneAssistantBubbleShape: BubbleCornerShape {
@@ -106,7 +118,7 @@ extension ChatBubble {
                 alignment: .leading
             )
 
-        if usesNoBubbleStyle {
+        if usesNoBubbleStyle && !isSelected {
             sizedContent
         } else {
             Group {

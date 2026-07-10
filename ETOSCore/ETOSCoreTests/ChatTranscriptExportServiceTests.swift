@@ -3,7 +3,7 @@
 // ============================================================================
 // ChatTranscriptExportServiceTests 测试文件
 // - 覆盖会话导出的格式内容
-// - 覆盖“截至某条消息”范围裁剪行为
+// - 覆盖“截至某条消息”与任意多选消息的范围裁剪行为
 // ============================================================================
 
 import Testing
@@ -87,6 +87,31 @@ struct ChatTranscriptExportServiceTests {
         #expect(text.contains("第一条"))
         #expect(text.contains("第二条"))
         #expect(!text.contains("第三条"))
+    }
+
+    @Test("导出所选消息时会保留原始顺序并排除未选内容")
+    func testExportSelectedMessagesPreservesSourceOrder() throws {
+        let service = ChatTranscriptExportService()
+        let first = ChatMessage(id: UUID(), role: .user, content: "第一条")
+        let second = ChatMessage(id: UUID(), role: .assistant, content: "第二条")
+        let third = ChatMessage(id: UUID(), role: .user, content: "第三条")
+
+        let output = try service.export(
+            session: ChatSession(id: UUID(), name: "多选范围"),
+            messages: [first, second, third],
+            format: .text,
+            selectedMessageIDs: [third.id, first.id],
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_150)
+        )
+
+        let text = String(decoding: output.data, as: UTF8.self)
+        #expect(output.suggestedFileName.contains("已选2条"))
+        #expect(text.contains("第一条"))
+        #expect(!text.contains("第二条"))
+        #expect(text.contains("第三条"))
+        let firstRange = try #require(text.range(of: "第一条"))
+        let thirdRange = try #require(text.range(of: "第三条"))
+        #expect(firstRange.lowerBound < thirdRange.lowerBound)
     }
 
     @Test("PDF 导出会生成有效文件头")

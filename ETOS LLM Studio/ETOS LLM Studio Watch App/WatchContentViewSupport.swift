@@ -70,6 +70,14 @@ extension ContentView {
         .navigationDestination(item: $messageActionsTarget) { target in
             messageActionsView(for: target.id)
         }
+        .navigationDestination(item: $selectedMessagesExportTarget) { target in
+            ChatExportFormatsView(
+                session: viewModel.currentSession,
+                messages: ChatResponseAttemptSupport.visibleMessages(from: viewModel.allMessagesForSession),
+                upToMessageID: nil,
+                selectedMessageIDs: target.messageIDs
+            )
+        }
         .sheet(item: $messageRewriteTarget) { target in
             NavigationStack {
                 rewriteMessageView(for: target.id)
@@ -117,6 +125,19 @@ extension ContentView {
             }
         } message: {
             Text(viewModel.messageRewriteErrorMessage ?? "")
+        }
+        .alert(NSLocalizedString("确认删除所选消息", comment: "Selected messages delete confirmation title"), isPresented: $showSelectedMessagesDeleteConfirm) {
+            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
+                deleteSelectedMessages()
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
+        } message: {
+            Text(
+                String(
+                    format: NSLocalizedString("将删除选中的 %d 个气泡。此操作无法撤销。", comment: "Selected messages delete confirmation message"),
+                    selectedMessageIDs.count
+                )
+            )
         }
         .sheet(isPresented: $announcementManager.shouldShowAlert) {
             if let announcement = announcementManager.currentAnnouncement {
@@ -191,6 +212,8 @@ extension ContentView {
             || fullErrorContent != nil
             || messageActionsTarget != nil
             || messageRewriteTarget != nil
+            || selectedMessagesExportTarget != nil
+            || isMessageSelectionMode
             || announcementManager.shouldShowAlert
             || launchRecoveryNoticeMessage != nil
             || launchRecoveryRequest != nil
@@ -508,6 +531,9 @@ extension ContentView {
                 },
                 onStopSpeaking: {
                     viewModel.stopSpeakingMessage()
+                },
+                onSelectMultiple: {
+                    beginMessageSelection(with: message)
                 },
                 onDelete: {
                     viewModel.deleteAllVersions(of: message)

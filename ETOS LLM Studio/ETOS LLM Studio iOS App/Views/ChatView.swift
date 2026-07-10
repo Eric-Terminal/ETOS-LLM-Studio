@@ -57,6 +57,10 @@ struct ChatView: View {
     @State var imageDownloadAlertMessage: String?
     @State var exportSharePayload: ChatExportSharePayload?
     @State var exportErrorMessage: String?
+    @State var isMessageSelectionMode = false
+    @State var selectedMessageIDs: Set<UUID> = []
+    @State var isSelectedMessagesExportPresented = false
+    @State var showSelectedMessagesDeleteConfirm = false
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var activeChatPickerDetent: PresentationDetent = .medium
     @State var isChatLayoutLandscape = false
@@ -273,6 +277,11 @@ struct ChatView: View {
             .onChange(of: chatToolPermissionAutoPresentationBlocked) { _, _ in
                 refreshChatToolPermissionAutoPresentationBlocker()
             }
+            .onChange(of: viewModel.currentSession?.id) { _, _ in
+                if isMessageSelectionMode {
+                    exitMessageSelection()
+                }
+            }
     }
 
     var chatToolPermissionAutoPresentationBlocked: Bool {
@@ -290,6 +299,7 @@ struct ChatView: View {
             || sessionToDelete != nil
             || showGhostSessionAlert
             || exportErrorMessage != nil
+            || isMessageSelectionMode
             || viewModel.messageRewriteErrorMessage != nil
             || imageDownloadAlertMessage != nil
             || viewModel.showMemoryEmbeddingErrorAlert
@@ -743,6 +753,11 @@ extension ChatView {
                                     },
                                     onSwitchToNextVersion: {
                                         viewModel.switchToNextVersion(of: message)
+                                    },
+                                    isSelectionMode: isMessageSelectionMode,
+                                    isSelected: selectedMessageIDs.contains(message.id),
+                                    onToggleSelection: {
+                                        toggleMessageSelection(message.id)
                                     },
                                     onOpenMore: { latestMessage in
                                         messageActionSheetPayload = MessageActionSheetPayload(message: latestMessage)

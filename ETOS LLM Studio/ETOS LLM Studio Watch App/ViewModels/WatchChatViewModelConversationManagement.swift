@@ -21,6 +21,10 @@ extension ChatViewModel {
         chatService.deleteMessage(message)
     }
 
+    func deleteMessages(withIDs messageIDs: Set<UUID>) {
+        chatService.deleteMessages(withIDs: messageIDs)
+    }
+
     func responseAttemptVersionInfo(for message: ChatMessage) -> ChatResponseAttemptVersionInfo? {
         ChatResponseAttemptSupport.versionInfo(for: message, in: allMessagesForSession)
     }

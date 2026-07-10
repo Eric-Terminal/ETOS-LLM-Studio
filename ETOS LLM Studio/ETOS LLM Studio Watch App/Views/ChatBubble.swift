@@ -51,6 +51,9 @@ struct ChatBubble: View {
     let onCopy: () -> Void
     let onSwitchToPreviousVersion: () -> Void
     let onSwitchToNextVersion: () -> Void
+    let isSelectionMode: Bool
+    let isSelected: Bool
+    let onToggleSelection: () -> Void
     let onOpenMore: (() -> Void)?
     let providers: [Provider]
 
@@ -98,6 +101,9 @@ struct ChatBubble: View {
         onCopy: @escaping () -> Void = {},
         onSwitchToPreviousVersion: @escaping () -> Void = {},
         onSwitchToNextVersion: @escaping () -> Void = {},
+        isSelectionMode: Bool = false,
+        isSelected: Bool = false,
+        onToggleSelection: @escaping () -> Void = {},
         onOpenMore: (() -> Void)? = nil,
         providers: [Provider] = []
     ) {
@@ -131,6 +137,9 @@ struct ChatBubble: View {
         self.onCopy = onCopy
         self.onSwitchToPreviousVersion = onSwitchToPreviousVersion
         self.onSwitchToNextVersion = onSwitchToNextVersion
+        self.isSelectionMode = isSelectionMode
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
         self.providers = providers
     }
@@ -157,6 +166,7 @@ struct ChatBubble: View {
     }
 
     var customTextColorOverride: Color? {
+        guard !isSelected else { return nil }
         let slot: ChatAppearanceColorSlot
         let fallback: Color
         // watchOS 不区分白天与夜览文字配色，统一使用可跨端同步的白天槽位。
@@ -178,10 +188,16 @@ struct ChatBubble: View {
     }
 
     func resolvedTextColor(default defaultColor: Color) -> Color {
-        customTextColorOverride ?? defaultColor
+        if isSelected {
+            return .white
+        }
+        return customTextColorOverride ?? defaultColor
     }
 
     func resolvedSecondaryTextColor(default defaultColor: Color, customOpacity: Double) -> Color {
+        if isSelected {
+            return Color.white.opacity(customOpacity)
+        }
         if let customTextColorOverride {
             return customTextColorOverride.opacity(customOpacity)
         }
@@ -223,7 +239,20 @@ struct ChatBubble: View {
         .padding(.horizontal, usesNoBubbleStyle ? noBubbleRowHorizontalPadding : nil)
         .padding(.top, mergeWithPrevious ? 0 : rowVerticalPadding)
         .padding(.bottom, mergeWithNext ? 0 : rowVerticalPadding)
-        .modifier(ChatBubbleOpenMoreGestureModifier(onOpenMore: onOpenMore))
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.red, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(
+            ChatBubbleOpenMoreGestureModifier(
+                isSelectionMode: isSelectionMode,
+                onToggleSelection: onToggleSelection,
+                onOpenMore: onOpenMore
+            )
+        )
         .sheet(item: $imagePreview, onDismiss: {
             refreshChatBubbleLocalPresentationBlocker()
         }) { payload in

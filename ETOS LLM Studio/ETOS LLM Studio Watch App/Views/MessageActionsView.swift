@@ -24,6 +24,7 @@ struct MessageActionsView: View {
     let onRetry: (ChatMessage) -> Void
     let onSpeak: (ChatMessage) -> Void
     let onStopSpeaking: () -> Void
+    let onSelectMultiple: () -> Void
     let onDelete: () -> Void
     let onDeleteVersion: (Int) -> Void
     let onSwitchVersion: (Int) -> Void
@@ -51,6 +52,7 @@ struct MessageActionsView: View {
         onRetry: @escaping (ChatMessage) -> Void,
         onSpeak: @escaping (ChatMessage) -> Void,
         onStopSpeaking: @escaping () -> Void,
+        onSelectMultiple: @escaping () -> Void,
         onDelete: @escaping () -> Void,
         onDeleteVersion: @escaping (Int) -> Void,
         onSwitchVersion: @escaping (Int) -> Void,
@@ -76,6 +78,7 @@ struct MessageActionsView: View {
         self.onRetry = onRetry
         self.onSpeak = onSpeak
         self.onStopSpeaking = onStopSpeaking
+        self.onSelectMultiple = onSelectMultiple
         self.onDelete = onDelete
         self.onDeleteVersion = onDeleteVersion
         self.onSwitchVersion = onSwitchVersion
@@ -222,6 +225,13 @@ struct MessageActionsView: View {
                     dismiss()
                 } label: {
                     Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                }
+
+                Button {
+                    onSelectMultiple()
+                    dismiss()
+                } label: {
+                    Label(NSLocalizedString("多选", comment: "Enter message selection mode"), systemImage: "checkmark.circle")
                 }
             }
 

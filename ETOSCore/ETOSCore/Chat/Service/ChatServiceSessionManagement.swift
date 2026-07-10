@@ -345,6 +345,30 @@ extension ChatService {
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
     }
 
+    /// 仅删除明确选中的消息，不扩展到相邻工具结果或同组回复版本。
+    public func deleteMessages(withIDs messageIDs: Set<UUID>) {
+        guard !messageIDs.isEmpty,
+              let currentSession = currentSessionSubject.value else { return }
+        var messages = messagesForSessionSubject.value
+        let deletedMessages = messages.filter { messageIDs.contains($0.id) }
+        guard !deletedMessages.isEmpty else { return }
+
+        for deletedMessage in deletedMessages {
+            invalidateAttachmentCache(for: deletedMessage)
+        }
+        messages.removeAll { messageIDs.contains($0.id) }
+        repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
+
+        publishMessages(messages)
+        persistMessages(messages, for: currentSession.id)
+        scheduleStoredAttachmentCleanup(
+            for: deletedMessages,
+            excludingSessionIDs: [currentSession.id],
+            retainedMessages: messages
+        )
+        logger.info("已批量删除选中消息: \(deletedMessages.count) 条。")
+    }
+
     public func deleteAllVersions(of message: ChatMessage) {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value

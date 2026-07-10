@@ -33,6 +33,7 @@ struct MessageActionSheet: View {
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
     let onCopy: (ChatMessage) -> Void
+    let onSelectMultiple: (ChatMessage) -> Void
     let onJumpToMessage: (Int) -> Bool
 
     @Environment(\.dismiss) private var dismiss
@@ -138,6 +139,12 @@ struct MessageActionSheet: View {
                                 systemImage: isSpeakingThisMessage ? "stop.circle" : "speaker.wave.2"
                             )
                         }
+                    }
+
+                    Button {
+                        onSelectMultiple(message)
+                    } label: {
+                        Label(NSLocalizedString("多选", comment: "Enter message selection mode"), systemImage: "checkmark.circle")
                     }
                 }
 
