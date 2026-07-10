@@ -142,7 +142,10 @@ struct ContentView: View {
             refreshRootBodyFont()
             refreshAttachmentSourceHistory()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
             refreshRootBodyFont()
         }
         .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in

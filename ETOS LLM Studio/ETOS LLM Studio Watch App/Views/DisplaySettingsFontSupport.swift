@@ -176,7 +176,10 @@ struct WatchFontSettingsView: View {
             FontLibrary.registerAllFontsIfNeeded()
             reloadData()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
             reloadData()
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in

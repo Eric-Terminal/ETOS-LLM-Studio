@@ -82,7 +82,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
             pushNativeChatIfNeeded()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .syncFontsUpdated)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
             refreshRootBodyFont()
         }
         .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
