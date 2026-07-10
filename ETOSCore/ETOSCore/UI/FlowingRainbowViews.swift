@@ -126,14 +126,14 @@ public struct FlowingRainbowGradient: View {
 #endif
 }
 
-// 先让完整色谱从端点方向接管原颜色，再启动循环流动，避免到顶瞬间跳色。
+// 完整色谱以循环流动的速度接管原颜色，反向则快速弹簧收回。
 public struct FlowingRainbowReveal: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let isActive: Bool
     private let axis: FlowingRainbowAxis
     private let flowDuration: TimeInterval
-    private let revealResponse: TimeInterval
+    private let retractResponse: TimeInterval
 
     @State private var revealProgress: CGFloat = 0
     @State private var phaseOrigin = Date()
@@ -144,12 +144,12 @@ public struct FlowingRainbowReveal: View {
         isActive: Bool,
         axis: FlowingRainbowAxis = .horizontal,
         flowDuration: TimeInterval = 2.8,
-        revealResponse: TimeInterval = 0.55
+        retractResponse: TimeInterval = 0.55
     ) {
         self.isActive = isActive
         self.axis = axis
         self.flowDuration = flowDuration
-        self.revealResponse = revealResponse
+        self.retractResponse = retractResponse
     }
 
     public var body: some View {
@@ -159,7 +159,7 @@ public struct FlowingRainbowReveal: View {
                     axis: axis,
                     duration: flowDuration,
                     phaseOrigin: phaseOrigin,
-                    startDelay: reduceMotion ? 0 : revealResponse * 0.75
+                    startDelay: reduceMotion ? 0 : flowDuration
                 )
                 .offset(revealOffset(in: proxy.size))
                 .opacity(reduceMotion ? revealProgress : 1)
@@ -172,7 +172,8 @@ public struct FlowingRainbowReveal: View {
             revealProgress = isActive ? 1 : 0
             rendersRainbow = isActive
             if isActive {
-                phaseOrigin = Date()
+                // 初次进入页面时已经在最高档，无需重复播放接管过程。
+                phaseOrigin = Date().addingTimeInterval(-flowDuration)
             }
         }
         .onChange(of: isActive) { _, isActive in
@@ -208,14 +209,18 @@ public struct FlowingRainbowReveal: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 revealProgress = isActive ? 1 : 0
             }
+        } else if isActive {
+            withAnimation(.linear(duration: flowDuration)) {
+                revealProgress = 1
+            }
         } else {
-            withAnimation(.spring(response: revealResponse, dampingFraction: 1)) {
-                revealProgress = isActive ? 1 : 0
+            withAnimation(.spring(response: retractResponse, dampingFraction: 1)) {
+                revealProgress = 0
             }
         }
 
         guard !isActive else { return }
-        let cleanupDelay = reduceMotion ? 0.25 : revealResponse * 2
+        let cleanupDelay = reduceMotion ? 0.25 : retractResponse * 2
         cleanupTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(cleanupDelay))
             guard !Task.isCancelled else { return }
