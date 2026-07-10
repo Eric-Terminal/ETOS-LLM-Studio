@@ -4806,6 +4806,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "低值颜色" = "Color de valor bajo";
 "高值颜色" = "Color de valor alto";
 "分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Configura por separado los colores de los valores bajo y alto. Los colores intermedios se mezclan suavemente de forma automática.";
+"最高档彩虹效果" = "Arcoíris en el valor máximo";
+"开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。" = "Al activarlo, la etiqueta de valor y el control deslizante muestran un arcoíris animado en el nivel máximo actual.";
 "PNG" = "PNG";
 "导出失败：无法生成聊天长图。" = "Error de exportación: no se pudo generar la imagen larga del chat.";
 "聊天内容过长，请减少导出的消息数量后重试。" = "El chat es demasiado largo. Selecciona menos mensajes para exportar e inténtalo de nuevo.";

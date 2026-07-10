@@ -246,20 +246,33 @@ private struct ChatRequestBodyControlRows: View {
         let position = descriptor.position(in: state ?? ModelRequestBodyControlState())
         let displayValue = descriptor.displayValue(at: position)
         let palette = sliderPalette(for: control)
+        let showsFlowingRainbow = control.usesRainbowAtMaximum
+            && descriptor.isMaximumPosition(position)
 
         return VStack {
             HStack {
                 Text(control.title)
                     .lineLimit(1)
                 Spacer()
-                RequestBodySliderAnimatedValue(
-                    text: displayValue,
-                    position: position,
-                    isNumeric: descriptor.mode == .continuousNumeric
-                )
-                    .etFont(.footnote.monospaced())
-                    .foregroundStyle(palette.color(at: position))
-                    .lineLimit(1)
+                Group {
+                    if showsFlowingRainbow {
+                        FlowingRainbowForeground {
+                            sliderValueLabel(
+                                text: displayValue,
+                                position: position,
+                                isNumeric: descriptor.mode == .continuousNumeric
+                            )
+                        }
+                    } else {
+                        sliderValueLabel(
+                            text: displayValue,
+                            position: position,
+                            isNumeric: descriptor.mode == .continuousNumeric
+                        )
+                        .foregroundStyle(palette.color(at: position))
+                    }
+                }
+                .lineLimit(1)
             }
 
             RequestBodyGradientSlider(
@@ -269,6 +282,7 @@ private struct ChatRequestBodyControlRows: View {
                 adjustmentStep: descriptor.crownStep,
                 accessibilityLabel: control.title,
                 accessibilityValue: displayValue,
+                showsFlowingRainbow: showsFlowingRainbow,
                 onEditingChanged: { isEditing in
                     if !isEditing {
                         settleAndSaveSlider(for: control, descriptor: descriptor)
@@ -277,6 +291,19 @@ private struct ChatRequestBodyControlRows: View {
             )
         }
         .disabled(state == nil)
+    }
+
+    private func sliderValueLabel(
+        text: String,
+        position: Double,
+        isNumeric: Bool
+    ) -> some View {
+        RequestBodySliderAnimatedValue(
+            text: text,
+            position: position,
+            isNumeric: isNumeric
+        )
+        .etFont(.footnote.monospaced())
     }
 
     private func sliderPalette(for control: ModelRequestBodyControl) -> RequestBodySliderPalette {

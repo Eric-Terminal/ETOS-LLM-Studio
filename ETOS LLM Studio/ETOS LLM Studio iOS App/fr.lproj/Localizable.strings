@@ -4829,6 +4829,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "低值颜色" = "Couleur de valeur basse";
 "高值颜色" = "Couleur de valeur élevée";
 "分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Définissez séparément les couleurs des valeurs basse et élevée. Les couleurs intermédiaires sont automatiquement interpolées en douceur.";
+"最高档彩虹效果" = "Arc-en-ciel au maximum";
+"开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。" = "Lorsque cette option est activée, le libellé de valeur et le curseur affichent un arc-en-ciel animé au niveau maximal actuel.";
 "PNG" = "PNG";
 "导出失败：无法生成聊天长图。" = "Échec de l’exportation : impossible de générer l’image longue de la discussion.";
 "聊天内容过长，请减少导出的消息数量后重试。" = "La discussion est trop longue. Réduisez le nombre de messages à exporter, puis réessayez.";

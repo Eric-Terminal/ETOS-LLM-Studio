@@ -43,6 +43,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
     public var sliderGranularity: Double?
     public var sliderStartColorHex: String?
     public var sliderEndColorHex: String?
+    public var usesRainbowAtMaximum: Bool
     public var payload: [String: JSONValue]
     public var options: [ModelRequestBodyControlOption]
 
@@ -57,6 +58,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         sliderGranularity: Double? = nil,
         sliderStartColorHex: String? = nil,
         sliderEndColorHex: String? = nil,
+        usesRainbowAtMaximum: Bool = false,
         payload: [String: JSONValue] = [:],
         options: [ModelRequestBodyControlOption] = []
     ) {
@@ -70,6 +72,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         self.sliderGranularity = sliderGranularity
         self.sliderStartColorHex = sliderStartColorHex
         self.sliderEndColorHex = sliderEndColorHex
+        self.usesRainbowAtMaximum = usesRainbowAtMaximum
         self.payload = payload
         self.options = options
     }
@@ -85,6 +88,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         case sliderGranularity
         case sliderStartColorHex
         case sliderEndColorHex
+        case usesRainbowAtMaximum
         case payload
         case options
     }
@@ -101,6 +105,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         sliderGranularity = try container.decodeIfPresent(Double.self, forKey: .sliderGranularity)
         sliderStartColorHex = try container.decodeIfPresent(String.self, forKey: .sliderStartColorHex)
         sliderEndColorHex = try container.decodeIfPresent(String.self, forKey: .sliderEndColorHex)
+        usesRainbowAtMaximum = try container.decodeIfPresent(Bool.self, forKey: .usesRainbowAtMaximum) ?? false
         payload = try container.decode([String: JSONValue].self, forKey: .payload)
         options = try container.decode([ModelRequestBodyControlOption].self, forKey: .options)
     }
@@ -117,6 +122,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         try container.encodeIfPresent(sliderGranularity, forKey: .sliderGranularity)
         try container.encodeIfPresent(sliderStartColorHex, forKey: .sliderStartColorHex)
         try container.encodeIfPresent(sliderEndColorHex, forKey: .sliderEndColorHex)
+        try container.encode(usesRainbowAtMaximum, forKey: .usesRainbowAtMaximum)
         try container.encode(payload, forKey: .payload)
         try container.encode(options, forKey: .options)
     }
@@ -156,6 +162,7 @@ public extension ModelRequestBodyControl {
             sliderGranularity: sliderGranularity,
             sliderStartColorHex: sliderStartColorHex,
             sliderEndColorHex: sliderEndColorHex,
+            usesRainbowAtMaximum: usesRainbowAtMaximum,
             payload: payload,
             options: duplicatedOptions
         )

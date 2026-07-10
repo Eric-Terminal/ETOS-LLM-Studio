@@ -91,6 +91,7 @@ struct RequestBodyGradientSlider: View {
     let adjustmentStep: Double
     let accessibilityLabel: String
     let accessibilityValue: String
+    let showsFlowingRainbow: Bool
     let onEditingChanged: (Bool) -> Void
 
     @State private var isEditing = false
@@ -132,13 +133,23 @@ struct RequestBodyGradientSlider: View {
                 .fill(Color.secondary.opacity(0.18))
                 .frame(height: trackHeight)
 
-            palette.gradient
-                .frame(height: trackHeight)
-                .mask(alignment: .leading) {
-                    Rectangle()
-                        .frame(width: fillWidth)
-                }
-                .clipShape(Capsule())
+            if showsFlowingRainbow {
+                FlowingRainbowGradient(axis: .horizontal)
+                    .frame(height: trackHeight)
+                    .mask(alignment: .leading) {
+                        Rectangle()
+                            .frame(width: fillWidth)
+                    }
+                    .clipShape(Capsule())
+            } else {
+                palette.gradient
+                    .frame(height: trackHeight)
+                    .mask(alignment: .leading) {
+                        Rectangle()
+                            .frame(width: fillWidth)
+                    }
+                    .clipShape(Capsule())
+            }
 
             anchorMarks(size: size, travelWidth: travelWidth, normalizedValue: normalizedValue)
 

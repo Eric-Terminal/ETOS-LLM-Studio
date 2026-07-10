@@ -286,6 +286,7 @@ struct ModelAdvancedSettingsView: View {
                             adjustmentStep: samplingParameterStep / (temperatureRange.upperBound - temperatureRange.lowerBound),
                             accessibilityLabel: NSLocalizedString("温度", comment: "Temperature sampling parameter title"),
                             accessibilityValue: temperatureDisplayText,
+                            showsFlowingRainbow: false,
                             onEditingChanged: { _ in }
                         )
                         .sensoryFeedback(.selection, trigger: temperatureFeedbackAnchor)

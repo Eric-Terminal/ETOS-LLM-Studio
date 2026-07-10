@@ -60,7 +60,9 @@ struct WatchRequestBodySliderView: View {
                 WatchLiquidValueLabel(
                     text: descriptor.displayValue(at: position),
                     position: position,
-                    isNumeric: descriptor.mode == .continuousNumeric
+                    isNumeric: descriptor.mode == .continuousNumeric,
+                    showsFlowingRainbow: control.usesRainbowAtMaximum
+                        && descriptor.isMaximumPosition(position)
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,6 +90,8 @@ struct WatchRequestBodySliderView: View {
         let fillHeight = size.height * descriptor.normalized(position)
         let displayValue = descriptor.displayValue(at: position)
         let palette = sliderPalette
+        let showsFlowingRainbow = control.usesRainbowAtMaximum
+            && descriptor.isMaximumPosition(position)
         let shape = RoundedRectangle(
             cornerRadius: min(size.width, size.height) * 0.2,
             style: .continuous
@@ -97,13 +101,22 @@ struct WatchRequestBodySliderView: View {
             shape
                 .fill(.thinMaterial)
 
-            Rectangle()
-                .fill(palette.color(at: position))
-                .mask(alignment: .bottom) {
-                    Rectangle()
-                        .frame(height: fillHeight)
-                }
-                .mask(shape)
+            if showsFlowingRainbow {
+                FlowingRainbowGradient(axis: .vertical, duration: 3.2)
+                    .mask(alignment: .bottom) {
+                        Rectangle()
+                            .frame(height: fillHeight)
+                    }
+                    .mask(shape)
+            } else {
+                Rectangle()
+                    .fill(palette.color(at: position))
+                    .mask(alignment: .bottom) {
+                        Rectangle()
+                            .frame(height: fillHeight)
+                    }
+                    .mask(shape)
+            }
 
             WatchLiquidScaleMarks(
                 count: descriptor.optionCount,
@@ -291,7 +304,8 @@ struct WatchTemperatureSliderView: View {
                 WatchLiquidValueLabel(
                     text: value.formatted(.number.precision(.fractionLength(2))),
                     position: currentPosition,
-                    isNumeric: true
+                    isNumeric: true,
+                    showsFlowingRainbow: false
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -439,17 +453,29 @@ private struct WatchLiquidValueLabel: View {
     let text: String
     let position: Double
     let isNumeric: Bool
+    let showsFlowingRainbow: Bool
 
+    @ViewBuilder
     var body: some View {
+        if showsFlowingRainbow {
+            FlowingRainbowForeground(axis: .vertical, duration: 3.2) {
+                valueLabel
+            }
+        } else {
+            valueLabel
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private var valueLabel: some View {
         RequestBodySliderAnimatedValue(
             text: text,
             position: position,
             isNumeric: isNumeric
         )
-            .etFont(.title3.monospaced().weight(.semibold))
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
+        .etFont(.title3.monospaced().weight(.semibold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
     }
 }
 

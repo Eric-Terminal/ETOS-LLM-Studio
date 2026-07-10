@@ -7,61 +7,20 @@
 // ============================================================================
 
 import SwiftUI
+import ETOSCore
 
 struct ShimmeringText: View {
     let text: String
     let font: Font
     let baseColor: Color
     let highlightColor: Color
-    var duration: Double = 1.6
-    var angle: Double = 18
-    var bandWidthRatio: CGFloat = 0.6
-    var bandHeightRatio: CGFloat = 1.6
+    var duration: Double = 5
 
     var body: some View {
-        Text(text)
-            .etFont(font)
-            .foregroundStyle(baseColor)
-            .overlay(
-                GeometryReader { proxy in
-                    let width = proxy.size.width
-                    let height = proxy.size.height
-                    let bandWidth = max(1, width * bandWidthRatio)
-                    let bandHeight = max(1, height * bandHeightRatio)
-                    let startX = -bandWidth
-                    let endX = width + bandWidth
-                    let safeDuration = max(duration, 0.1)
-                    TimelineView(.animation) { timeline in
-                        let phase = timeline.date.timeIntervalSinceReferenceDate
-                            .truncatingRemainder(dividingBy: safeDuration) / safeDuration
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .clear, location: 0),
-                                        .init(color: highlightColor, location: 0.35),
-                                        .init(color: highlightColor, location: 0.65),
-                                        .init(color: .clear, location: 1)
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: bandWidth, height: bandHeight)
-                            .rotationEffect(.degrees(angle))
-                            .position(
-                                x: startX + (endX - startX) * CGFloat(phase),
-                                y: height / 2
-                            )
-                            .blendMode(.screen)
-                    }
-                }
-                .mask(
-                    Text(text)
-                        .etFont(font)
-                )
-                .allowsHitTesting(false)
-            )
+        RainbowSweepForeground(baseColor: baseColor, duration: duration) {
+            Text(text)
+                .etFont(font)
+        }
     }
 }
 

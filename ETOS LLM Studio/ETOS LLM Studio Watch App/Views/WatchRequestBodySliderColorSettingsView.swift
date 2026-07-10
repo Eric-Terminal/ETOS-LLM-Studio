@@ -116,7 +116,7 @@ struct WatchRequestBodySliderColorSettingsView: View {
         fallback: Color
     ) -> Binding<String> {
         let fallbackHex = ChatAppearanceColorCodec.hexRGBA(from: fallback) ?? "000000FF"
-        Binding(
+        return Binding(
             get: {
                 control[keyPath: keyPath] ?? fallbackHex
             },

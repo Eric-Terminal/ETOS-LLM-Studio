@@ -4751,6 +4751,8 @@
 "低值颜色" = "Low-Value Color";
 "高值颜色" = "High-Value Color";
 "分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Set the low- and high-value colors separately. Colors between them transition smoothly.";
+"最高档彩虹效果" = "Rainbow at Maximum";
+"开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。" = "When enabled, the value label and slider show a flowing rainbow at the current highest level.";
 "PNG" = "PNG";
 "导出失败：无法生成聊天长图。" = "Export failed: Unable to generate the chat image.";
 "聊天内容过长，请减少导出的消息数量后重试。" = "The chat is too long. Select fewer messages to export and try again.";

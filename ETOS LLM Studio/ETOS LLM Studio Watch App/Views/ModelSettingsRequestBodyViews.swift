@@ -166,7 +166,8 @@ struct RequestBodyControlDetailView: View {
                                     option: $option,
                                     defaultOptionID: $control.defaultOptionID,
                                     payloadDisplayMode: payloadDisplayMode,
-                                    suggestedPayloadKeys: suggestedPayloadKeys
+                                    suggestedPayloadKeys: suggestedPayloadKeys,
+                                    maximumRainbowEnabled: maximumRainbowBinding(for: optionID)
                                 )
                             } label: {
                                 RequestBodyOptionRow(
@@ -315,6 +316,14 @@ struct RequestBodyControlDetailView: View {
         return formatted
     }
 
+    private func maximumRainbowBinding(for optionID: String) -> Binding<Bool>? {
+        guard control.isSliderEnabled, control.options.last?.id == optionID else { return nil }
+        return Binding(
+            get: { control.usesRainbowAtMaximum },
+            set: { control.usesRainbowAtMaximum = $0 }
+        )
+    }
+
     private func addOption() {
         let optionID = UUID().uuidString
         control.options.append(
@@ -378,6 +387,7 @@ struct RequestBodyOptionDetailView: View {
     @Binding var defaultOptionID: String?
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     let suggestedPayloadKeys: [String]
+    let maximumRainbowEnabled: Binding<Bool>?
 
     var body: some View {
         Form {
@@ -397,6 +407,19 @@ struct RequestBodyOptionDetailView: View {
                     suggestedPayloadKeys: suggestedPayloadKeys
                 )
                 .id("\(option.id)-payload")
+            }
+
+            if let maximumRainbowEnabled {
+                Section {
+                    Toggle(
+                        NSLocalizedString("最高档彩虹效果", comment: ""),
+                        isOn: maximumRainbowEnabled
+                    )
+                } footer: {
+                    Text(NSLocalizedString("开启后，滑块到达当前最后一档时，档位文字与滑块会显示流动彩虹。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle(displayTitle)

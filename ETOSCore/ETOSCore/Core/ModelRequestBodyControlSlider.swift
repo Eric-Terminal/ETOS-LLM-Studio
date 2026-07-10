@@ -101,6 +101,10 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
         return min(max(position, 0), 1)
     }
 
+    public func isMaximumPosition(_ position: Double) -> Bool {
+        abs(normalized(position) - 1) <= 0.000_001
+    }
+
     public func position(in state: ModelRequestBodyControlState) -> Double {
         if let storedPosition = state.sliderPositionsByControlID[controlID] {
             return normalized(storedPosition)

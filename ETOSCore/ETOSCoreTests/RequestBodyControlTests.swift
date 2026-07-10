@@ -166,6 +166,7 @@ struct RequestBodyControlTests {
             sliderGranularity: 0.05,
             sliderStartColorHex: "3366CCFF",
             sliderEndColorHex: "CC3366FF",
+            usesRainbowAtMaximum: true,
             options: [
                 ModelRequestBodyControlOption(
                     id: "low",
@@ -194,6 +195,7 @@ struct RequestBodyControlTests {
         #expect(importedControl.sliderGranularity == 0.05)
         #expect(importedControl.sliderStartColorHex == "3366CCFF")
         #expect(importedControl.sliderEndColorHex == "CC3366FF")
+        #expect(importedControl.usesRainbowAtMaximum)
         #expect(importedControl.options.map(\.payload) == sourceControl.options.map(\.payload))
         #expect(Set(importedControl.options.map(\.id)).isDisjoint(with: Set(sourceControl.options.map(\.id))))
         #expect(importedControl.defaultOptionID == importedControl.options.last?.id)
@@ -334,16 +336,18 @@ struct RequestBodyControlTests {
         #expect(control.sliderGranularity == nil)
         #expect(control.sliderStartColorHex == nil)
         #expect(control.sliderEndColorHex == nil)
+        #expect(!control.usesRainbowAtMaximum)
         #expect(state.sliderPositionsByControlID.isEmpty)
     }
 
-    @Test("滑块端点颜色可随控制配置编码与解码")
-    func testSliderEndpointColorsRoundTrip() throws {
+    @Test("滑块视觉配置可随控制编码与解码")
+    func testSliderAppearanceRoundTrip() throws {
         let control = ModelRequestBodyControl(
             title: "温度",
             kind: .optionGroup,
             sliderStartColorHex: "0055FFFF",
-            sliderEndColorHex: "FF3300FF"
+            sliderEndColorHex: "FF3300FF",
+            usesRainbowAtMaximum: true
         )
 
         let encoded = try JSONEncoder().encode(control)
@@ -351,6 +355,29 @@ struct RequestBodyControlTests {
 
         #expect(decoded.sliderStartColorHex == control.sliderStartColorHex)
         #expect(decoded.sliderEndColorHex == control.sliderEndColorHex)
+        #expect(decoded.usesRainbowAtMaximum)
+    }
+
+    @Test("最高档彩虹状态属于控制并随最后档变化")
+    func testRainbowMaximumFollowsLastOption() {
+        var control = ModelRequestBodyControl(
+            title: "思考预算",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            usesRainbowAtMaximum: true,
+            options: [
+                ModelRequestBodyControlOption(id: "low", title: "low"),
+                ModelRequestBodyControlOption(id: "high", title: "high")
+            ]
+        )
+
+        control.options.append(ModelRequestBodyControlOption(id: "max", title: "max"))
+        #expect(control.usesRainbowAtMaximum)
+        #expect(control.options.last?.id == "max")
+
+        control.options.swapAt(1, 2)
+        #expect(control.usesRainbowAtMaximum)
+        #expect(control.options.last?.id == "high")
     }
 
     @Test("滑块端点颜色按位置线性插值")
@@ -437,6 +464,8 @@ struct RequestBodyControlTests {
         #expect(descriptor.displayValue(at: 0.5) == "300")
         #expect(descriptor.displayValue(at: 0.75) == "500")
         #expect(descriptor.payload(for: 0.75)["max_tokens"] == .int(500))
+        #expect(descriptor.isMaximumPosition(1))
+        #expect(!descriptor.isMaximumPosition(0.999))
     }
 
     @Test("数字滑块按最小档位差值的百分之十计算默认粒度")
