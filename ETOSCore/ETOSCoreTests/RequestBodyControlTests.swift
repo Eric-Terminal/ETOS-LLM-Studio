@@ -163,6 +163,7 @@ struct RequestBodyControlTests {
             kind: .optionGroup,
             defaultOptionID: "high",
             isSliderEnabled: true,
+            sliderGranularity: 0.05,
             options: [
                 ModelRequestBodyControlOption(
                     id: "low",
@@ -188,6 +189,7 @@ struct RequestBodyControlTests {
         #expect(importedControl.id != sourceControl.id)
         #expect(importedControl.title == sourceControl.title)
         #expect(importedControl.isSliderEnabled)
+        #expect(importedControl.sliderGranularity == 0.05)
         #expect(importedControl.options.map(\.payload) == sourceControl.options.map(\.payload))
         #expect(Set(importedControl.options.map(\.id)).isDisjoint(with: Set(sourceControl.options.map(\.id))))
         #expect(importedControl.defaultOptionID == importedControl.options.last?.id)
@@ -325,6 +327,7 @@ struct RequestBodyControlTests {
         let state = try JSONDecoder().decode(ModelRequestBodyControlState.self, from: Data(stateJSON.utf8))
 
         #expect(!control.isSliderEnabled)
+        #expect(control.sliderGranularity == nil)
         #expect(state.sliderPositionsByControlID.isEmpty)
     }
 
@@ -378,6 +381,80 @@ struct RequestBodyControlTests {
         #expect(descriptor.displayValue(at: 0.5) == "300")
         #expect(descriptor.displayValue(at: 0.75) == "500")
         #expect(descriptor.payload(for: 0.75)["max_tokens"] == .int(500))
+    }
+
+    @Test("数字滑块按最小档位差值的百分之十计算默认粒度")
+    func testNumericSliderCalculatesAutomaticGranularity() throws {
+        let temperatureControl = ModelRequestBodyControl(
+            title: "温度",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            options: [0.1, 0.2, 0.3].map { value in
+                ModelRequestBodyControlOption(
+                    title: String(value),
+                    payload: ["temperature": .double(value)]
+                )
+            }
+        )
+        let evenlySpacedControl = ModelRequestBodyControl(
+            title: "等距整数",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            options: [100, 150, 200].map { value in
+                ModelRequestBodyControlOption(
+                    title: String(value),
+                    payload: ["max_tokens": .int(value)]
+                )
+            }
+        )
+        let curvedControl = ModelRequestBodyControl(
+            title: "非等距整数",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            options: [100, 300, 1_000].map { value in
+                ModelRequestBodyControlOption(
+                    title: String(value),
+                    payload: ["max_tokens": .int(value)]
+                )
+            }
+        )
+
+        let temperatureDescriptor = try #require(
+            ModelRequestBodyControlSliderDescriptor(control: temperatureControl)
+        )
+        let evenlySpacedDescriptor = try #require(
+            ModelRequestBodyControlSliderDescriptor(control: evenlySpacedControl)
+        )
+        let curvedDescriptor = try #require(
+            ModelRequestBodyControlSliderDescriptor(control: curvedControl)
+        )
+
+        #expect(abs((temperatureDescriptor.automaticNumericGranularity ?? 0) - 0.01) < 0.000_000_001)
+        #expect(evenlySpacedDescriptor.automaticNumericGranularity == 5)
+        #expect(curvedDescriptor.automaticNumericGranularity == 20)
+        #expect(temperatureDescriptor.displayValue(at: 0.27) == "0.15")
+        #expect(temperatureDescriptor.payload(for: 0.27)["temperature"] == .double(0.15))
+    }
+
+    @Test("手动粒度会覆盖自动值并量化滑块结果")
+    func testNumericSliderUsesCustomGranularity() throws {
+        let control = ModelRequestBodyControl(
+            title: "温度",
+            kind: .optionGroup,
+            isSliderEnabled: true,
+            sliderGranularity: 0.05,
+            options: [0.0, 1.0, 2.0].map { value in
+                ModelRequestBodyControlOption(
+                    title: String(value),
+                    payload: ["temperature": .double(value)]
+                )
+            }
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+
+        #expect(descriptor.numericGranularity == 0.05)
+        #expect(descriptor.displayValue(at: 0.33) == "0.65")
+        #expect(descriptor.payload(for: 0.33)["temperature"] == .double(0.65))
     }
 
     @Test("浮点滑块会发送锚点之间的连续值")

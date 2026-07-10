@@ -17,11 +17,14 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
     public let controlID: String
     public let optionCount: Int
     public let mode: Mode
+    public let automaticNumericGranularity: Double?
+    public let numericGranularity: Double?
 
     private let options: [ModelRequestBodyControlOption]
     private let defaultOptionID: String?
     private let numericPath: [PayloadPathComponent]?
     private let numericValues: [Double]
+    private let minimumNumericDifference: Double?
     private let usesIntegerPayload: Bool
     private let discreteDisplayValues: [String]
 
@@ -39,11 +42,20 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
             mode = .continuousNumeric
             numericPath = numericConfiguration.path
             numericValues = numericConfiguration.values
+            minimumNumericDifference = Self.minimumPositiveDifference(
+                in: numericConfiguration.values
+            )
+            automaticNumericGranularity = minimumNumericDifference.map { $0 * 0.1 }
+            numericGranularity = Self.validGranularity(control.sliderGranularity)
+                ?? automaticNumericGranularity
             usesIntegerPayload = numericConfiguration.usesIntegerPayload
         } else {
             mode = .discrete
             numericPath = nil
             numericValues = []
+            minimumNumericDifference = nil
+            automaticNumericGranularity = nil
+            numericGranularity = nil
             usesIntegerPayload = false
         }
     }
@@ -53,7 +65,12 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
     }
 
     public var crownStep: Double {
-        mode == .discrete ? anchorStep : min(anchorStep / 20, 0.01)
+        guard mode == .continuousNumeric,
+              let numericGranularity,
+              let minimumNumericDifference else {
+            return anchorStep
+        }
+        return min(anchorStep, anchorStep * numericGranularity / minimumNumericDifference)
     }
 
     public func normalized(_ position: Double) -> Double {
@@ -111,9 +128,12 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
         }
 
         let interpolatedValue = numericValue(at: position)
-        let replacement: JSONValue = usesIntegerPayload
-            ? .int(Int(interpolatedValue.rounded()))
-            : .double(interpolatedValue)
+        let replacement: JSONValue
+        if usesIntegerPayload, Self.isWholeNumber(interpolatedValue) {
+            replacement = .int(Int(interpolatedValue.rounded()))
+        } else {
+            replacement = .double(interpolatedValue)
+        }
         return Self.replacingValue(
             in: options[nearestAnchorIndex(at: position)].payload,
             at: numericPath,
@@ -124,10 +144,10 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
     public func displayValue(at position: Double) -> String {
         if mode == .continuousNumeric {
             let value = numericValue(at: position)
-            if usesIntegerPayload {
+            if usesIntegerPayload, Self.isWholeNumber(value) {
                 return String(Int(value.rounded()))
             }
-            return Self.formattedDecimal(value)
+            return Self.formattedDecimal(value, granularity: numericGranularity)
         }
 
         return discreteDisplayValues[nearestAnchorIndex(at: position)]
@@ -136,11 +156,26 @@ public struct ModelRequestBodyControlSliderDescriptor: Hashable, Sendable {
     private func numericValue(at position: Double) -> Double {
         guard numericValues.count >= 2 else { return numericValues.first ?? 0 }
         let scaledPosition = normalized(position) * Double(numericValues.count - 1)
+        let nearestIndex = Int(scaledPosition.rounded())
+        if numericValues.indices.contains(nearestIndex),
+           abs(scaledPosition - Double(nearestIndex)) <= 0.000_000_001 {
+            return numericValues[nearestIndex]
+        }
+
         let lowerIndex = min(Int(floor(scaledPosition)), numericValues.count - 2)
         let fraction = scaledPosition - Double(lowerIndex)
         let lowerValue = numericValues[lowerIndex]
         let upperValue = numericValues[lowerIndex + 1]
-        return lowerValue + (upperValue - lowerValue) * fraction
+        let interpolatedValue = lowerValue + (upperValue - lowerValue) * fraction
+        guard let numericGranularity else { return interpolatedValue }
+
+        let origin = numericValues[0]
+        let quantizedValue = origin
+            + ((interpolatedValue - origin) / numericGranularity).rounded() * numericGranularity
+        let lowerBound = min(lowerValue, upperValue)
+        let upperBound = max(lowerValue, upperValue)
+        let boundedValue = min(max(quantizedValue, lowerBound), upperBound)
+        return Self.roundedForDisplay(boundedValue, granularity: numericGranularity)
     }
 }
 
@@ -190,6 +225,19 @@ private extension ModelRequestBodyControlSliderDescriptor {
             values: leaves.map(\.value),
             usesIntegerPayload: leaves.allSatisfy(\.isInteger)
         )
+    }
+
+    static func minimumPositiveDifference(in values: [Double]) -> Double? {
+        let sortedValues = Array(Set(values)).sorted()
+        return zip(sortedValues, sortedValues.dropFirst())
+            .map { pair in pair.1 - pair.0 }
+            .filter { $0.isFinite && $0 > 0 }
+            .min()
+    }
+
+    static func validGranularity(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
     }
 
     static func numericLeaves(
@@ -274,13 +322,43 @@ private extension ModelRequestBodyControlSliderDescriptor {
         }
     }
 
-    static func formattedDecimal(_ value: Double) -> String {
-        var formatted = String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), value)
-        while formatted.last == "0" {
-            formatted.removeLast()
+    static func isWholeNumber(_ value: Double) -> Bool {
+        abs(value - value.rounded()) <= 0.000_000_001
+    }
+
+    static func roundedForDisplay(_ value: Double, granularity: Double) -> Double {
+        let fractionDigits = fractionDigits(for: granularity)
+        let scale = pow(10, Double(fractionDigits))
+        return (value * scale).rounded() / scale
+    }
+
+    static func fractionDigits(for granularity: Double?) -> Int {
+        guard let granularity else { return 8 }
+        for fractionDigits in 0...8 {
+            let scaledValue = granularity * pow(10, Double(fractionDigits))
+            let tolerance = max(1, abs(scaledValue)) * 0.000_000_001
+            if abs(scaledValue - scaledValue.rounded()) <= tolerance {
+                return fractionDigits
+            }
         }
-        if formatted.last == "." {
-            formatted.removeLast()
+        return 8
+    }
+
+    static func formattedDecimal(_ value: Double, granularity: Double? = nil) -> String {
+        let fractionDigits = fractionDigits(for: granularity)
+        var formatted = String(
+            format: "%.*f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            fractionDigits,
+            value
+        )
+        if formatted.contains(".") {
+            while formatted.last == "0" {
+                formatted.removeLast()
+            }
+            if formatted.last == "." {
+                formatted.removeLast()
+            }
         }
         return formatted
     }

@@ -126,6 +126,7 @@ struct RequestBodyControlDetailView: View {
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     @State private var suggestedPayloadKeys: [String] = []
+    @State private var automaticSliderGranularity: Double?
 
     var body: some View {
         Form {
@@ -192,20 +193,32 @@ struct RequestBodyControlDetailView: View {
             if control.kind == .optionGroup {
                 Section(
                     header: Text(NSLocalizedString("滑块", comment: "")),
-                    footer: Text(NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。至少需要两个选项。", comment: ""))
+                    footer: Text(NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。", comment: ""))
                 ) {
                     Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
                         .disabled(control.options.count < 2)
+
+                    if let automaticSliderGranularity {
+                        TextField(
+                            NSLocalizedString("粒度", comment: "数值滑块每次调节的最小变化量"),
+                            value: sliderGranularityBinding(defaultValue: automaticSliderGranularity),
+                            format: .number.precision(.fractionLength(0...8))
+                        )
+                    }
                 }
             }
         }
         .navigationTitle(displayTitle)
-        .onAppear(perform: refreshSuggestedPayloadKeys)
+        .onAppear {
+            refreshSuggestedPayloadKeys()
+            refreshSliderGranularity()
+        }
         .onChange(of: control.options) { _, options in
             if options.count < 2 {
                 control.isSliderEnabled = false
             }
             refreshSuggestedPayloadKeys()
+            refreshSliderGranularity()
         }
     }
 
@@ -226,6 +239,29 @@ struct RequestBodyControlDetailView: View {
         if suggestedPayloadKeys != keys {
             suggestedPayloadKeys = keys
         }
+    }
+
+    private func refreshSliderGranularity() {
+        automaticSliderGranularity = ModelRequestBodyControlSliderDescriptor(control: control)?
+            .automaticNumericGranularity
+    }
+
+    private func sliderGranularityBinding(defaultValue: Double) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let granularity = control.sliderGranularity,
+                      granularity.isFinite,
+                      granularity > 0 else {
+                    return defaultValue
+                }
+                return granularity
+            },
+            set: { granularity in
+                control.sliderGranularity = granularity.isFinite && granularity > 0
+                    ? granularity
+                    : nil
+            }
+        )
     }
 
     private func addOption() {

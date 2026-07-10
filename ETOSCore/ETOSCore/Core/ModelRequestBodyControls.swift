@@ -40,6 +40,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
     public var defaultIsActive: Bool
     public var defaultOptionID: String?
     public var isSliderEnabled: Bool
+    public var sliderGranularity: Double?
     public var payload: [String: JSONValue]
     public var options: [ModelRequestBodyControlOption]
 
@@ -51,6 +52,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         defaultIsActive: Bool = false,
         defaultOptionID: String? = nil,
         isSliderEnabled: Bool = false,
+        sliderGranularity: Double? = nil,
         payload: [String: JSONValue] = [:],
         options: [ModelRequestBodyControlOption] = []
     ) {
@@ -61,6 +63,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         self.defaultIsActive = defaultIsActive
         self.defaultOptionID = defaultOptionID
         self.isSliderEnabled = isSliderEnabled
+        self.sliderGranularity = sliderGranularity
         self.payload = payload
         self.options = options
     }
@@ -73,6 +76,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         case defaultIsActive
         case defaultOptionID
         case isSliderEnabled
+        case sliderGranularity
         case payload
         case options
     }
@@ -86,6 +90,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         defaultIsActive = try container.decode(Bool.self, forKey: .defaultIsActive)
         defaultOptionID = try container.decodeIfPresent(String.self, forKey: .defaultOptionID)
         isSliderEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSliderEnabled) ?? false
+        sliderGranularity = try container.decodeIfPresent(Double.self, forKey: .sliderGranularity)
         payload = try container.decode([String: JSONValue].self, forKey: .payload)
         options = try container.decode([ModelRequestBodyControlOption].self, forKey: .options)
     }
@@ -99,6 +104,7 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
         try container.encode(defaultIsActive, forKey: .defaultIsActive)
         try container.encodeIfPresent(defaultOptionID, forKey: .defaultOptionID)
         try container.encode(isSliderEnabled, forKey: .isSliderEnabled)
+        try container.encodeIfPresent(sliderGranularity, forKey: .sliderGranularity)
         try container.encode(payload, forKey: .payload)
         try container.encode(options, forKey: .options)
     }
@@ -135,6 +141,7 @@ public extension ModelRequestBodyControl {
             defaultIsActive: defaultIsActive,
             defaultOptionID: defaultOptionID.flatMap { optionIDMap[$0] },
             isSliderEnabled: isSliderEnabled,
+            sliderGranularity: sliderGranularity,
             payload: payload,
             options: duplicatedOptions
         )
