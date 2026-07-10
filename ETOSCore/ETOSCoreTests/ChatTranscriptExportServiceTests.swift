@@ -20,6 +20,7 @@ struct ChatTranscriptExportServiceTests {
 
         var assistant = ChatMessage(role: .assistant, content: "这是回复")
         assistant.reasoningContent = "这是推理"
+        assistant.sentSystemPromptSnapshot = "<long_term_memory>记忆内容</long_term_memory>"
         assistant.toolCalls = [
             InternalToolCall(id: "call_1", toolName: "search", arguments: "{\"q\":\"swift\"}", result: "ok")
         ]
@@ -42,6 +43,7 @@ struct ChatTranscriptExportServiceTests {
         #expect(text.contains("## 2. 助手"))
         #expect(text.contains("### 工具调用"))
         #expect(text.contains("search"))
+        #expect(text.contains("<long_term_memory>记忆内容</long_term_memory>"))
     }
 
     @Test("不包含思考导出时会移除推理段落并标记文件名")
@@ -64,6 +66,42 @@ struct ChatTranscriptExportServiceTests {
         #expect(text.contains("思考/推理：不包含"))
         #expect(!text.contains("### 推理"))
         #expect(!text.contains("这段推理不应被导出"))
+    }
+
+    @Test("不包含系统提示词时会移除实际快照与系统消息")
+    func testExportWithoutSystemPromptRemovesSnapshotsAndSystemMessages() throws {
+        let service = ChatTranscriptExportService()
+        let systemMessage = ChatMessage(role: .system, content: "旧系统消息")
+        var assistant = ChatMessage(role: .assistant, content: "正文")
+        assistant.sentSystemPromptSnapshot = "包含动态记忆的实际系统提示词"
+
+        let output = try service.export(
+            session: ChatSession(id: UUID(), name: "系统提示词开关"),
+            messages: [systemMessage, assistant],
+            format: .markdown,
+            includeSystemPrompt: false,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_075)
+        )
+
+        let text = String(decoding: output.data, as: UTF8.self)
+        #expect(output.suggestedFileName.contains("不含系统提示"))
+        #expect(text.contains("系统提示词: 不包含") || text.contains("系统提示词：不包含"))
+        #expect(!text.contains("旧系统消息"))
+        #expect(!text.contains("包含动态记忆的实际系统提示词"))
+    }
+
+    @Test("旧消息没有系统提示词快照时会给出明确说明")
+    func testExportWithMissingSystemPromptSnapshotShowsNotice() throws {
+        let output = try ChatTranscriptExportService().export(
+            session: ChatSession(id: UUID(), name: "旧会话"),
+            messages: [ChatMessage(role: .assistant, content: "历史回复")],
+            format: .text,
+            includeSystemPrompt: true,
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_080)
+        )
+
+        let text = String(decoding: output.data, as: UTF8.self)
+        #expect(text.contains("未记录此回复的系统提示词快照。"))
     }
 
     @Test("截至指定消息导出时只包含上文")
@@ -133,7 +171,8 @@ struct ChatTranscriptExportServiceTests {
     func testPNGExportHasValidHeaderAndFiltersSystemMessages() throws {
         let service = ChatTranscriptExportService()
         let system = ChatMessage(role: .system, content: "不可见的系统提示词")
-        let user = ChatMessage(role: .user, content: "可见消息")
+        var user = ChatMessage(role: .user, content: "可见消息")
+        user.sentSystemPromptSnapshot = "不可写入图片的快照"
         let output = try service.export(
             session: ChatSession(id: UUID(), name: "长图会话"),
             messages: [system, user],
@@ -144,6 +183,7 @@ struct ChatTranscriptExportServiceTests {
 
         let pngHeader = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
         #expect(output.suggestedFileName.hasSuffix(".png"))
+        #expect(output.suggestedFileName.contains("不含系统提示"))
         #expect(output.data.starts(with: pngHeader))
     }
 

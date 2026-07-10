@@ -4733,3 +4733,13 @@
 "PNG" = "PNG";
 "导出失败：无法生成聊天长图。" = "Export failed: Unable to generate the chat image.";
 "聊天内容过长，请减少导出的消息数量后重试。" = "The chat is too long. Select fewer messages to export and try again.";
+"包含系统提示词" = "Include System Prompt";
+"不包含系统提示词" = "Exclude System Prompt";
+"系统提示词" = "System Prompt";
+"实际发送的系统提示词" = "System Prompts Actually Sent";
+"此导出范围内没有可用的系统提示词快照。" = "No system prompt snapshot is available in this export range.";
+"未发送系统提示词" = "No system prompt was sent";
+"PNG 仅导出聊天界面可见内容，不会包含系统提示词。" = "PNG exports only content visible in the chat interface and never includes system prompts.";
+"-含系统提示" = "-with-system-prompt";
+"-不含系统提示" = "-without-system-prompt";
+"未记录此回复的系统提示词快照。" = "No system prompt snapshot was recorded for this response.";

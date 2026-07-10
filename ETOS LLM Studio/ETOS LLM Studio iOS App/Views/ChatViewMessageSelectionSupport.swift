@@ -45,7 +45,8 @@ extension ChatView {
 
     func exportSelectedMessages(
         format: ChatTranscriptExportFormat,
-        includeReasoning: Bool
+        includeReasoning: Bool,
+        includeSystemPrompt: Bool
     ) {
         let selectedIDs = selectedMessageIDs
         beginTranscriptExport(
@@ -53,6 +54,7 @@ extension ChatView {
             messages: viewModel.allMessagesForSession,
             format: format,
             includeReasoning: includeReasoning,
+            includeSystemPrompt: includeSystemPrompt,
             selectedMessageIDs: selectedIDs
         )
     }
@@ -65,30 +67,35 @@ extension ChatView {
 
 struct SelectedMessagesExportSheet: View {
     let selectionCount: Int
-    let onExport: (ChatTranscriptExportFormat, Bool) -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool, Bool) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var includeReasoning = true
+    @State private var includeSystemPrompt = true
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
+                    Toggle(NSLocalizedString("包含系统提示词", comment: ""), isOn: $includeSystemPrompt)
                 } footer: {
-                    Text(
-                        String(
-                            format: NSLocalizedString("将导出所选的 %d 条消息。", comment: "Selected messages export footer"),
-                            selectionCount
+                    VStack(alignment: .leading) {
+                        Text(
+                            String(
+                                format: NSLocalizedString("将导出所选的 %d 条消息。", comment: "Selected messages export footer"),
+                                selectionCount
+                            )
                         )
-                    )
+                        Text(NSLocalizedString("PNG 仅导出聊天界面可见内容，不会包含系统提示词。", comment: "Chat image export system prompt privacy note"))
+                    }
                 }
 
                 Section(NSLocalizedString("导出格式", comment: "Selected messages export format section")) {
                     ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
                         Button {
                             dismiss()
-                            onExport(format, includeReasoning)
+                            onExport(format, includeReasoning, includeSystemPrompt)
                         } label: {
                             Label(format.displayName, systemImage: iconName(for: format))
                         }

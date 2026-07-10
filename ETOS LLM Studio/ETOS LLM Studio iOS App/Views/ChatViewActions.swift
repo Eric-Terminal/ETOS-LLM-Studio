@@ -36,6 +36,7 @@ extension ChatView {
     func exportConversation(
         format: ChatTranscriptExportFormat,
         includeReasoning: Bool,
+        includeSystemPrompt: Bool,
         upToMessage: ChatMessage?
     ) {
         beginTranscriptExport(
@@ -43,6 +44,7 @@ extension ChatView {
             messages: viewModel.allMessagesForSession,
             format: format,
             includeReasoning: includeReasoning,
+            includeSystemPrompt: includeSystemPrompt,
             upToMessageID: upToMessage?.id
         )
     }
@@ -50,7 +52,8 @@ extension ChatView {
     func exportSession(
         _ session: ChatSession,
         format: ChatTranscriptExportFormat,
-        includeReasoning: Bool
+        includeReasoning: Bool,
+        includeSystemPrompt: Bool
     ) {
         let loadedMessages = viewModel.currentSession?.id == session.id
             ? viewModel.allMessagesForSession
@@ -59,7 +62,8 @@ extension ChatView {
             session: session,
             messages: loadedMessages,
             format: format,
-            includeReasoning: includeReasoning
+            includeReasoning: includeReasoning,
+            includeSystemPrompt: includeSystemPrompt
         )
     }
 
@@ -68,6 +72,7 @@ extension ChatView {
         messages: [ChatMessage]?,
         format: ChatTranscriptExportFormat,
         includeReasoning: Bool,
+        includeSystemPrompt: Bool,
         upToMessageID: UUID? = nil,
         selectedMessageIDs: Set<UUID>? = nil
     ) {
@@ -88,6 +93,7 @@ extension ChatView {
                         messages: ChatResponseAttemptSupport.visibleMessages(from: sourceMessages),
                         format: format,
                         includeReasoning: includeReasoning,
+                        includeSystemPrompt: includeSystemPrompt,
                         upToMessageID: upToMessageID,
                         selectedMessageIDs: selectedMessageIDs,
                         imageStyle: imageStyle

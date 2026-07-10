@@ -26,7 +26,7 @@ struct MessageActionSheet: View {
     let onRetry: (ChatMessage) -> Void
     let onShowFullError: (String) -> Void
     let onBranch: (ChatMessage) -> Void
-    let onExport: (ChatTranscriptExportFormat, Bool, ChatMessage?) -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool, Bool, ChatMessage?) -> Void
     let onSpeak: (ChatMessage) -> Void
     let onSwitchVersion: (Int, ChatMessage) -> Void
     let onDeleteVersion: (ChatMessage, Int) -> Void
@@ -38,6 +38,7 @@ struct MessageActionSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var includeReasoning = true
+    @State private var includeSystemPrompt = true
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
 
@@ -199,14 +200,20 @@ struct MessageActionSheet: View {
 
     @ViewBuilder
     private var exportSection: some View {
-        Section(NSLocalizedString("导出", comment: "")) {
+        Section {
             Toggle(NSLocalizedString("包含思考", comment: ""), isOn: $includeReasoning)
+            Toggle(NSLocalizedString("包含系统提示词", comment: ""), isOn: $includeSystemPrompt)
 
             ForEach(MessageActionExportScope.allCases) { scope in
                 Menu {
                     ForEach(ChatTranscriptExportFormat.allCases, id: \.self) { format in
                         Button {
-                            onExport(format, includeReasoning, scope == .upToMessage ? message : nil)
+                            onExport(
+                                format,
+                                includeReasoning,
+                                includeSystemPrompt,
+                                scope == .upToMessage ? message : nil
+                            )
                         } label: {
                             Label(format.displayName, systemImage: iconName(for: format))
                         }
@@ -218,6 +225,10 @@ struct MessageActionSheet: View {
                     )
                 }
             }
+        } header: {
+            Text(NSLocalizedString("导出", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("PNG 仅导出聊天界面可见内容，不会包含系统提示词。", comment: "Chat image export system prompt privacy note"))
         }
     }
 
@@ -568,7 +579,7 @@ struct SessionPickerRow: View {
     let onDelete: () -> Void
     let onCancelRename: () -> Void
     let onInfo: () -> Void
-    let onExport: (ChatTranscriptExportFormat, Bool) -> Void
+    let onExport: (ChatTranscriptExportFormat, Bool, Bool) -> Void
 
     @FocusState private var focused: Bool
 
@@ -661,50 +672,8 @@ struct SessionPickerRow: View {
         }
 
         Menu {
-            Menu(NSLocalizedString("包含思考", comment: "")) {
-                Button {
-                    onExport(.pdf, true)
-                } label: {
-                    Label(NSLocalizedString("PDF", comment: "Export format"), systemImage: "doc.richtext")
-                }
-                Button {
-                    onExport(.markdown, true)
-                } label: {
-                    Label(NSLocalizedString("Markdown", comment: "Export format"), systemImage: "number.square")
-                }
-                Button {
-                    onExport(.text, true)
-                } label: {
-                    Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
-                }
-                Button {
-                    onExport(.png, true)
-                } label: {
-                    Label(NSLocalizedString("PNG", comment: "Export format"), systemImage: "photo")
-                }
-            }
-            Menu(NSLocalizedString("不包含思考", comment: "")) {
-                Button {
-                    onExport(.pdf, false)
-                } label: {
-                    Label(NSLocalizedString("PDF", comment: "Export format"), systemImage: "doc.richtext")
-                }
-                Button {
-                    onExport(.markdown, false)
-                } label: {
-                    Label(NSLocalizedString("Markdown", comment: "Export format"), systemImage: "number.square")
-                }
-                Button {
-                    onExport(.text, false)
-                } label: {
-                    Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
-                }
-                Button {
-                    onExport(.png, false)
-                } label: {
-                    Label(NSLocalizedString("PNG", comment: "Export format"), systemImage: "photo")
-                }
-            }
+            sessionExportReasoningMenu(includeReasoning: true)
+            sessionExportReasoningMenu(includeReasoning: false)
         } label: {
             Label(NSLocalizedString("导出会话", comment: ""), systemImage: "square.and.arrow.up")
         }
@@ -713,6 +682,49 @@ struct SessionPickerRow: View {
             onDelete()
         } label: {
             Label(NSLocalizedString("删除会话", comment: ""), systemImage: "trash")
+        }
+    }
+
+    @ViewBuilder
+    private func sessionExportReasoningMenu(includeReasoning: Bool) -> some View {
+        Menu(includeReasoning
+            ? NSLocalizedString("包含思考", comment: "")
+            : NSLocalizedString("不包含思考", comment: "")) {
+            Menu(NSLocalizedString("包含系统提示词", comment: "")) {
+                sessionTextExportButtons(includeReasoning: includeReasoning, includeSystemPrompt: true)
+            }
+            Menu(NSLocalizedString("不包含系统提示词", comment: "")) {
+                sessionTextExportButtons(includeReasoning: includeReasoning, includeSystemPrompt: false)
+            }
+            Button {
+                onExport(.png, includeReasoning, false)
+            } label: {
+                Label(NSLocalizedString("PNG", comment: "Export format"), systemImage: "photo")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionTextExportButtons(includeReasoning: Bool, includeSystemPrompt: Bool) -> some View {
+        ForEach([ChatTranscriptExportFormat.pdf, .markdown, .text], id: \.self) { format in
+            Button {
+                onExport(format, includeReasoning, includeSystemPrompt)
+            } label: {
+                Label(format.displayName, systemImage: sessionExportIconName(for: format))
+            }
+        }
+    }
+
+    private func sessionExportIconName(for format: ChatTranscriptExportFormat) -> String {
+        switch format {
+        case .pdf:
+            return "doc.richtext"
+        case .markdown:
+            return "number.square"
+        case .text:
+            return "doc.plaintext"
+        case .png:
+            return "photo"
         }
     }
 

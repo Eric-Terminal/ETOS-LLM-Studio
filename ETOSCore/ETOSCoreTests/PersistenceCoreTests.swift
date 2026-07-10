@@ -227,6 +227,7 @@ struct PersistenceCoreTests {
             ChatMessage(
                 role: .assistant,
                 content: "第一次回复",
+                sentSystemPromptSnapshot: "第一次请求的系统提示词",
                 responseGroupID: groupID,
                 responseAttemptID: firstAttemptID,
                 responseAttemptIndex: 0
@@ -234,6 +235,7 @@ struct PersistenceCoreTests {
             ChatMessage(
                 role: .assistant,
                 content: "第二次回复",
+                sentSystemPromptSnapshot: "<long_term_memory>第二次请求的记忆</long_term_memory>",
                 responseGroupID: groupID,
                 responseAttemptID: secondAttemptID,
                 responseAttemptIndex: 1
@@ -250,9 +252,11 @@ struct PersistenceCoreTests {
         #expect(loadedMessages[1].responseGroupID == groupID)
         #expect(loadedMessages[1].responseAttemptID == firstAttemptID)
         #expect(loadedMessages[1].responseAttemptIndex == 0)
+        #expect(loadedMessages[1].sentSystemPromptSnapshot == "第一次请求的系统提示词")
         #expect(loadedMessages[2].responseGroupID == groupID)
         #expect(loadedMessages[2].responseAttemptID == secondAttemptID)
         #expect(loadedMessages[2].responseAttemptIndex == 1)
+        #expect(loadedMessages[2].sentSystemPromptSnapshot == "<long_term_memory>第二次请求的记忆</long_term_memory>")
 
         cleanup(sessions: [session])
     }

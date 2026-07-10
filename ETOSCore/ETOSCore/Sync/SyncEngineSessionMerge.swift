@@ -273,6 +273,7 @@ extension SyncEngine {
         merged.responseAttemptID = local.responseAttemptID ?? incoming.responseAttemptID
         merged.responseAttemptIndex = local.responseAttemptIndex ?? incoming.responseAttemptIndex
         merged.selectedResponseAttemptID = local.selectedResponseAttemptID ?? incoming.selectedResponseAttemptID
+        merged.sentSystemPromptSnapshot = local.sentSystemPromptSnapshot ?? incoming.sentSystemPromptSnapshot
 
         if local.id != incoming.id, local.content == incoming.content {
             merged.id = local.id

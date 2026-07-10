@@ -389,8 +389,13 @@ extension ChatView {
                     isCurrent: isCurrent
                 )
             },
-            onExport: { format, includeReasoning in
-                exportSession(session, format: format, includeReasoning: includeReasoning)
+            onExport: { format, includeReasoning, includeSystemPrompt in
+                exportSession(
+                    session,
+                    format: format,
+                    includeReasoning: includeReasoning,
+                    includeSystemPrompt: includeSystemPrompt
+                )
             }
         )
     }

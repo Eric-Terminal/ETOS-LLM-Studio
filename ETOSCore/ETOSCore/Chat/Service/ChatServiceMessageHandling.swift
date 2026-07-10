@@ -132,6 +132,7 @@ extension ChatService {
                                 $0
                             )
                         },
+                        sentSystemPromptSnapshot: loadingMessage.sentSystemPromptSnapshot,
                         responseGroupID: loadingMessage.responseGroupID,
                         responseAttemptID: loadingMessage.responseAttemptID,
                         responseAttemptIndex: loadingMessage.responseAttemptIndex,
@@ -149,15 +150,16 @@ extension ChatService {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(
                     id: loadingMessage.id,
-                        role: .error,
-                        content: formattedContent,
-                        requestedAt: loadingMessage.requestedAt,
-                        modelReference: loadingMessage.modelReference,
-                        costEstimate: loadingMessage.costEstimate,
-                        fullErrorContent: fullContent,
-                        responseGroupID: loadingMessage.responseGroupID,
-                        responseAttemptID: loadingMessage.responseAttemptID,
-                        responseAttemptIndex: loadingMessage.responseAttemptIndex,
+                    role: .error,
+                    content: formattedContent,
+                    requestedAt: loadingMessage.requestedAt,
+                    modelReference: loadingMessage.modelReference,
+                    costEstimate: loadingMessage.costEstimate,
+                    fullErrorContent: fullContent,
+                    sentSystemPromptSnapshot: loadingMessage.sentSystemPromptSnapshot,
+                    responseGroupID: loadingMessage.responseGroupID,
+                    responseAttemptID: loadingMessage.responseAttemptID,
+                    responseAttemptIndex: loadingMessage.responseAttemptIndex,
                     selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
                 )
                 logger.error("错误消息已添加: \(content)")
@@ -438,6 +440,7 @@ extension ChatService {
                 imageFileNames: newMessage.imageFileNames ?? messages[index].imageFileNames,
                 fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
+                sentSystemPromptSnapshot: newMessage.sentSystemPromptSnapshot ?? messages[index].sentSystemPromptSnapshot,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics,
                 responseGroupID: newMessage.responseGroupID ?? messages[index].responseGroupID,
                 responseAttemptID: newMessage.responseAttemptID ?? messages[index].responseAttemptID,

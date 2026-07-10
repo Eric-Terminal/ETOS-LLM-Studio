@@ -86,6 +86,7 @@ public struct ChatTranscriptExportService {
         messages: [ChatMessage],
         format: ChatTranscriptExportFormat,
         includeReasoning: Bool = true,
+        includeSystemPrompt: Bool = true,
         upToMessageID: UUID? = nil,
         selectedMessageIDs: Set<UUID>? = nil,
         imageStyle: ChatTranscriptImageStyle = ChatTranscriptImageStyle(),
@@ -97,9 +98,10 @@ public struct ChatTranscriptExportService {
             selectedMessageIDs: selectedMessageIDs
         )
         // 聊天长图只呈现用户在聊天界面中可见的消息，不泄露系统提示词。
-        let scopedMessages = format == .png
-            ? resolvedMessages.filter { $0.role != .system }
-            : resolvedMessages
+        let effectiveIncludeSystemPrompt = format != .png && includeSystemPrompt
+        let scopedMessages = resolvedMessages.filter {
+            effectiveIncludeSystemPrompt || $0.role != .system
+        }
         guard !scopedMessages.isEmpty else {
             throw ChatTranscriptExportError.emptyMessages
         }
@@ -108,6 +110,7 @@ public struct ChatTranscriptExportService {
             messages: scopedMessages,
             format: format,
             includeReasoning: includeReasoning,
+            includeSystemPrompt: effectiveIncludeSystemPrompt,
             exportedAt: exportedAt,
             upToMessageID: upToMessageID,
             selectedMessageIDs: selectedMessageIDs,
@@ -200,7 +203,10 @@ public struct ChatTranscriptExportService {
         let reasoningSuffix = context.includeReasoning
             ? NSLocalizedString("-含思考", comment: "Chat transcript export file suffix with reasoning")
             : NSLocalizedString("-不含思考", comment: "Chat transcript export file suffix without reasoning")
-        return "\(baseName)\(scopeSuffix)\(reasoningSuffix)-\(stamp).\(context.format.fileExtension)"
+        let systemPromptSuffix = context.includeSystemPrompt
+            ? NSLocalizedString("-含系统提示", comment: "Chat transcript export file suffix with system prompt")
+            : NSLocalizedString("-不含系统提示", comment: "Chat transcript export file suffix without system prompt")
+        return "\(baseName)\(scopeSuffix)\(reasoningSuffix)\(systemPromptSuffix)-\(stamp).\(context.format.fileExtension)"
     }
 
     private func sanitizeFileName(_ raw: String) -> String {
@@ -222,9 +228,10 @@ public struct ChatTranscriptExportService {
         lines.append("- \(localizedExportText("导出时间")): \(formattedDateTime(context.exportedAt))")
         lines.append("- \(localizedExportText("导出范围")): \(scopeDescription(context))")
         lines.append("- \(localizedExportText("思考/推理")): \(context.includeReasoning ? localizedExportText("包含") : localizedExportText("不包含"))")
+        lines.append("- \(localizedExportText("系统提示词")): \(context.includeSystemPrompt ? localizedExportText("包含") : localizedExportText("不包含"))")
         lines.append("- \(localizedExportText("消息数量")): \(context.messages.count)")
 
-        appendPromptLinesIfNeeded(for: context.session, markdownLines: &lines)
+        appendSystemPromptSnapshotsIfNeeded(context, markdownLines: &lines)
 
         lines.append("")
         lines.append("---")
@@ -262,9 +269,10 @@ public struct ChatTranscriptExportService {
         lines.append("\(localizedExportText("导出时间")): \(formattedDateTime(context.exportedAt))")
         lines.append("\(localizedExportText("导出范围")): \(scopeDescription(context))")
         lines.append("\(localizedExportText("思考/推理")): \(context.includeReasoning ? localizedExportText("包含") : localizedExportText("不包含"))")
+        lines.append("\(localizedExportText("系统提示词")): \(context.includeSystemPrompt ? localizedExportText("包含") : localizedExportText("不包含"))")
         lines.append("\(localizedExportText("消息数量")): \(context.messages.count)")
 
-        appendPromptLinesIfNeeded(for: context.session, plainLines: &lines)
+        appendSystemPromptSnapshotsIfNeeded(context, plainLines: &lines)
         lines.append("")
 
         for (index, message) in context.messages.enumerated() {
@@ -286,66 +294,63 @@ public struct ChatTranscriptExportService {
         return lines.joined(separator: "\n")
     }
 
-    private func appendPromptLinesIfNeeded(for session: ChatSession?, markdownLines lines: inout [String]) {
-        guard let session else { return }
-
-        let globalPrompt = globalSystemPrompt()
-        let topicPrompt = trimmedOrNil(session.topicPrompt)
-        let enhancedPrompt = trimmedOrNil(session.enhancedPrompt)
-
-        guard trimmedOrNil(globalPrompt) != nil || topicPrompt != nil || enhancedPrompt != nil else { return }
-
+    private func appendSystemPromptSnapshotsIfNeeded(_ context: ExportContext, markdownLines lines: inout [String]) {
+        guard context.includeSystemPrompt else { return }
         lines.append("")
-        lines.append("## \(localizedExportText("提示词"))")
+        lines.append("## \(localizedExportText("实际发送的系统提示词"))")
         lines.append("")
 
-        if let globalPrompt = trimmedOrNil(globalPrompt) {
-            lines.append("### \(localizedExportText("全局系统提示词"))")
+        let snapshots = systemPromptSnapshots(in: context.messages)
+        guard !snapshots.isEmpty else {
+            lines.append(localizedExportText("此导出范围内没有可用的系统提示词快照。"))
             lines.append("")
-            lines.append(globalPrompt)
-            lines.append("")
+            return
         }
-        if let topicPrompt {
-            lines.append("### \(localizedExportText("话题提示词"))")
+
+        for snapshot in snapshots {
+            lines.append("### \(snapshot.messageIndex + 1). \(roleTitle(snapshot.role))")
             lines.append("")
-            lines.append(topicPrompt)
-            lines.append("")
-        }
-        if let enhancedPrompt {
-            lines.append("### \(localizedExportText("增强提示词"))")
-            lines.append("")
-            lines.append(enhancedPrompt)
+            if let content = snapshot.content {
+                lines.append(trimmedOrNil(content) ?? localizedExportText("未发送系统提示词"))
+            } else {
+                lines.append(localizedExportText("未记录此回复的系统提示词快照。"))
+            }
             lines.append("")
         }
     }
 
-    private func appendPromptLinesIfNeeded(for session: ChatSession?, plainLines lines: inout [String]) {
-        guard let session else { return }
-
-        let globalPrompt = globalSystemPrompt()
-        let topicPrompt = trimmedOrNil(session.topicPrompt)
-        let enhancedPrompt = trimmedOrNil(session.enhancedPrompt)
-
-        guard trimmedOrNil(globalPrompt) != nil || topicPrompt != nil || enhancedPrompt != nil else { return }
-
+    private func appendSystemPromptSnapshotsIfNeeded(_ context: ExportContext, plainLines lines: inout [String]) {
+        guard context.includeSystemPrompt else { return }
         lines.append("")
-        lines.append(localizedExportText("提示词"))
+        lines.append(localizedExportText("实际发送的系统提示词"))
         lines.append(String(repeating: "-", count: 42))
 
-        if let globalPrompt = trimmedOrNil(globalPrompt) {
-            lines.append("[\(localizedExportText("全局系统提示词"))]")
-            lines.append(globalPrompt)
+        let snapshots = systemPromptSnapshots(in: context.messages)
+        guard !snapshots.isEmpty else {
+            lines.append(localizedExportText("此导出范围内没有可用的系统提示词快照。"))
+            lines.append("")
+            return
+        }
+
+        for snapshot in snapshots {
+            lines.append("[\(snapshot.messageIndex + 1). \(roleTitle(snapshot.role))]")
+            if let content = snapshot.content {
+                lines.append(trimmedOrNil(content) ?? localizedExportText("未发送系统提示词"))
+            } else {
+                lines.append(localizedExportText("未记录此回复的系统提示词快照。"))
+            }
             lines.append("")
         }
-        if let topicPrompt {
-            lines.append("[\(localizedExportText("话题提示词"))]")
-            lines.append(topicPrompt)
-            lines.append("")
-        }
-        if let enhancedPrompt {
-            lines.append("[\(localizedExportText("增强提示词"))]")
-            lines.append(enhancedPrompt)
-            lines.append("")
+    }
+
+    private func systemPromptSnapshots(in messages: [ChatMessage]) -> [SystemPromptSnapshot] {
+        messages.enumerated().compactMap { index, message in
+            guard message.role == .assistant || message.role == .error else { return nil }
+            return SystemPromptSnapshot(
+                messageIndex: index,
+                role: message.role,
+                content: message.sentSystemPromptSnapshot
+            )
         }
     }
 
@@ -484,10 +489,6 @@ public struct ChatTranscriptExportService {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private func globalSystemPrompt() -> String? {
-        Persistence.readAppConfigText(key: AppConfigKey.systemPrompt.rawValue)
-    }
-
     private func messageBodyOrPlaceholder(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? localizedExportText("（空内容）") : trimmed
@@ -623,10 +624,17 @@ public struct ChatTranscriptExportService {
         let messages: [ChatMessage]
         let format: ChatTranscriptExportFormat
         let includeReasoning: Bool
+        let includeSystemPrompt: Bool
         let exportedAt: Date
         let upToMessageID: UUID?
         let selectedMessageIDs: Set<UUID>?
         let sourceCount: Int
+    }
+
+    private struct SystemPromptSnapshot {
+        let messageIndex: Int
+        let role: MessageRole
+        let content: String?
     }
 
     private func localizedExportText(_ key: String) -> String {

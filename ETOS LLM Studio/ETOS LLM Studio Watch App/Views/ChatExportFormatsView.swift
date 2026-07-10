@@ -21,6 +21,7 @@ struct ChatExportFormatsView: View {
     @State private var formatErrors: [ChatTranscriptExportFormat: String] = [:]
     @State private var prepareError: String?
     @State private var includeReasoning: Bool = true
+    @State private var includeSystemPrompt: Bool = true
     @State private var uploadURLText: String = ""
     @State private var uploadingFormat: ChatTranscriptExportFormat?
     @State private var uploadProgress: SyncPackageUploadProgress?
@@ -39,11 +40,16 @@ struct ChatExportFormatsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("导出范围", comment: "")) {
+            Section {
                 Picker(NSLocalizedString("思考内容", comment: ""), selection: $includeReasoning) {
                     Text(NSLocalizedString("包含思考", comment: "")).tag(true)
                     Text(NSLocalizedString("不包含思考", comment: "")).tag(false)
                 }
+                Toggle(NSLocalizedString("包含系统提示词", comment: ""), isOn: $includeSystemPrompt)
+            } header: {
+                Text(NSLocalizedString("导出范围", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("PNG 仅导出聊天界面可见内容，不会包含系统提示词。", comment: "Chat image export system prompt privacy note"))
             }
 
             Section(NSLocalizedString("上传到地址", comment: "")) {
@@ -113,6 +119,9 @@ struct ChatExportFormatsView: View {
         .onChange(of: includeReasoning) { _, _ in
             prepareFiles()
         }
+        .onChange(of: includeSystemPrompt) { _, _ in
+            prepareFiles()
+        }
         .onDisappear {
             prepareTask?.cancel()
             prepareTask = nil
@@ -147,6 +156,7 @@ struct ChatExportFormatsView: View {
         let session = session
         let messages = messages
         let includeReasoning = includeReasoning
+        let includeSystemPrompt = includeSystemPrompt
         let upToMessageID = upToMessageID
         let selectedMessageIDs = selectedMessageIDs
         let imageStyle = transcriptImageStyle
@@ -164,6 +174,7 @@ struct ChatExportFormatsView: View {
                         messages: messages,
                         format: format,
                         includeReasoning: includeReasoning,
+                        includeSystemPrompt: includeSystemPrompt,
                         upToMessageID: upToMessageID,
                         selectedMessageIDs: selectedMessageIDs,
                         imageStyle: imageStyle

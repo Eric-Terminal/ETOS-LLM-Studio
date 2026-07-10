@@ -196,6 +196,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
+    public var sentSystemPromptSnapshot: String? // 该回复请求实际发送的 system 角色消息快照；nil 表示旧消息未记录
     public var responseMetrics: MessageResponseMetrics? // 单次请求的响应测速信息
     public var responseGroupID: UUID? // 回复组 ID，通常指向锚点 user 消息
     public var responseAttemptID: UUID? // 当前消息所属的一次回复尝试
@@ -219,6 +220,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         imageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
         fullErrorContent: String? = nil,
+        sentSystemPromptSnapshot: String? = nil,
         responseMetrics: MessageResponseMetrics? = nil,
         responseGroupID: UUID? = nil,
         responseAttemptID: UUID? = nil,
@@ -242,6 +244,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.imageFileNames = imageFileNames
         self.fileFileNames = fileFileNames
         self.fullErrorContent = fullErrorContent
+        self.sentSystemPromptSnapshot = sentSystemPromptSnapshot
         self.responseMetrics = responseMetrics
         self.responseGroupID = responseGroupID
         self.responseAttemptID = responseAttemptID
@@ -292,7 +295,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, reasoningProviderSpecificFields, providerResponseMetadata, toolCalls, toolCallsPlacement, tokenUsage
         case modelReference, costEstimate
-        case audioFileName, imageFileNames, fileFileNames, fullErrorContent, responseMetrics
+        case audioFileName, imageFileNames, fileFileNames, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
     }
 
@@ -331,6 +334,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
+        self.sentSystemPromptSnapshot = try container.decodeIfPresent(String.self, forKey: .sentSystemPromptSnapshot)
         self.responseMetrics = try container.decodeIfPresent(MessageResponseMetrics.self, forKey: .responseMetrics)
         self.responseGroupID = try container.decodeIfPresent(UUID.self, forKey: .responseGroupID)
         self.responseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .responseAttemptID)
@@ -364,6 +368,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)
+        try container.encodeIfPresent(sentSystemPromptSnapshot, forKey: .sentSystemPromptSnapshot)
         try container.encodeIfPresent(responseMetrics, forKey: .responseMetrics)
         try container.encodeIfPresent(responseGroupID, forKey: .responseGroupID)
         try container.encodeIfPresent(responseAttemptID, forKey: .responseAttemptID)

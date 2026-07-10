@@ -344,7 +344,7 @@ extension PersistenceGRDBStore {
                    current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                    token_usage_json, model_reference_json, cost_estimate_json,
                    audio_file_name, image_file_names_json, file_file_names_json,
-                   full_error_content, response_metrics_json,
+                   full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                    response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                    position, created_at
             FROM messages
@@ -374,6 +374,7 @@ extension PersistenceGRDBStore {
                 imageFileNamesJSON: row["image_file_names_json"],
                 fileFileNamesJSON: row["file_file_names_json"],
                 fullErrorContent: row["full_error_content"],
+                sentSystemPromptSnapshot: row["sent_system_prompt_snapshot"],
                 responseMetricsJSON: row["response_metrics_json"],
                 responseGroupID: row["response_group_id"],
                 responseAttemptID: row["response_attempt_id"],
@@ -426,6 +427,7 @@ extension PersistenceGRDBStore {
             imageFileNamesJSON: encodeJSON(message.imageFileNames),
             fileFileNamesJSON: encodeJSON(message.fileFileNames),
             fullErrorContent: message.fullErrorContent,
+            sentSystemPromptSnapshot: message.sentSystemPromptSnapshot,
             responseMetricsJSON: encodeJSON(message.responseMetrics),
             responseGroupID: message.responseGroupID?.uuidString,
             responseAttemptID: message.responseAttemptID?.uuidString,
@@ -447,10 +449,10 @@ extension PersistenceGRDBStore {
                 current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                 token_usage_json, model_reference_json, cost_estimate_json,
                 audio_file_name, image_file_names_json, file_file_names_json,
-                full_error_content, response_metrics_json,
+                full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                 response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                 position, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 session_id = excluded.session_id,
                 role = excluded.role,
@@ -468,6 +470,7 @@ extension PersistenceGRDBStore {
                 image_file_names_json = excluded.image_file_names_json,
                 file_file_names_json = excluded.file_file_names_json,
                 full_error_content = excluded.full_error_content,
+                sent_system_prompt_snapshot = excluded.sent_system_prompt_snapshot,
                 response_metrics_json = excluded.response_metrics_json,
                 response_group_id = excluded.response_group_id,
                 response_attempt_id = excluded.response_attempt_id,
@@ -494,6 +497,7 @@ extension PersistenceGRDBStore {
                 record.imageFileNamesJSON,
                 record.fileFileNamesJSON,
                 record.fullErrorContent,
+                record.sentSystemPromptSnapshot,
                 record.responseMetricsJSON,
                 record.responseGroupID,
                 record.responseAttemptID,

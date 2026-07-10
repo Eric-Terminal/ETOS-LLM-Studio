@@ -102,6 +102,7 @@ extension ChatService {
         )
         loadingMessage.modelReference = refreshedMessage.modelReference
         loadingMessage.costEstimate = refreshedMessage.costEstimate
+        loadingMessage.sentSystemPromptSnapshot = BuiltInPromptStore.render(.messageRewriteSystem)
 
         let insertionIndex = rewriteInsertionIndex(
             in: updatedMessages,
@@ -341,6 +342,7 @@ extension ChatService {
             tokenUsage: rewrittenMessage.tokenUsage ?? messages[index].tokenUsage,
             modelReference: rewrittenMessage.modelReference ?? messages[index].modelReference,
             costEstimate: rewrittenMessage.costEstimate ?? messages[index].costEstimate,
+            sentSystemPromptSnapshot: messages[index].sentSystemPromptSnapshot,
             responseMetrics: rewrittenMessage.responseMetrics ?? messages[index].responseMetrics,
             responseGroupID: rewrittenMessage.responseGroupID,
             responseAttemptID: rewrittenMessage.responseAttemptID,

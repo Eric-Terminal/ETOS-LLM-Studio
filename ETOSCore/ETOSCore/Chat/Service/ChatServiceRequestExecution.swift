@@ -14,6 +14,25 @@ import UniformTypeIdentifiers
 #endif
 
 extension ChatService {
+    /// 在请求真正进入本地或远程执行器前，将当次发送的全部 system 消息保存到对应回复。
+    func persistSentSystemPromptSnapshot(
+        from messagesToSend: [ChatMessage],
+        loadingMessageID: UUID,
+        sessionID: UUID
+    ) {
+        let snapshot = messagesToSend
+            .filter { $0.role == .system }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        var persistedMessages = messagesSnapshot(for: sessionID)
+        guard let index = persistedMessages.firstIndex(where: { $0.id == loadingMessageID }) else {
+            logger.warning("无法记录系统提示词快照：未找到回复占位消息 \(loadingMessageID)。")
+            return
+        }
+        persistedMessages[index].sentSystemPromptSnapshot = snapshot
+        persistAndPublishMessages(persistedMessages, for: sessionID)
+    }
+
     func openAIReasoningContentEchoModeControlValue() async -> String {
         await MainActor.run {
             ReasoningContentEchoMode.normalized(AppConfigStore.shared.reasoningContentEchoMode).rawValue
@@ -272,6 +291,11 @@ extension ChatService {
         fileAttachments = filePreprocessing.fileAttachments
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
+            persistSentSystemPromptSnapshot(
+                from: messagesToSend,
+                loadingMessageID: loadingMessageID,
+                sessionID: currentSessionID
+            )
             await handleLocalLLMResponse(
                 runnableModel: runnableModel,
                 messagesToSend: messagesToSend,
@@ -363,6 +387,12 @@ extension ChatService {
             )
             return
         }
+
+        persistSentSystemPromptSnapshot(
+            from: messagesToSend,
+            loadingMessageID: loadingMessageID,
+            sessionID: currentSessionID
+        )
 
         let responsesFullInputFallbackRequest: URLRequest? = {
             guard openAIResponsesRequestUsesPreviousResponseID(request) else { return nil }

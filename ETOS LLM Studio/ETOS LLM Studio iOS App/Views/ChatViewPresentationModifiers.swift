@@ -81,9 +81,14 @@ extension ChatView {
                             showBranchOptions = true
                         }
                     },
-                    onExport: { format, includeReasoning, upToMessage in
+                    onExport: { format, includeReasoning, includeSystemPrompt, upToMessage in
                         dismissMessageActionSheet {
-                            exportConversation(format: format, includeReasoning: includeReasoning, upToMessage: upToMessage)
+                            exportConversation(
+                                format: format,
+                                includeReasoning: includeReasoning,
+                                includeSystemPrompt: includeSystemPrompt,
+                                upToMessage: upToMessage
+                            )
                         }
                     },
                     onSpeak: { message in
@@ -128,9 +133,13 @@ extension ChatView {
                 .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $isSelectedMessagesExportPresented) {
-                SelectedMessagesExportSheet(selectionCount: selectedMessageIDs.count) { format, includeReasoning in
+                SelectedMessagesExportSheet(selectionCount: selectedMessageIDs.count) { format, includeReasoning, includeSystemPrompt in
                     DispatchQueue.main.async {
-                        exportSelectedMessages(format: format, includeReasoning: includeReasoning)
+                        exportSelectedMessages(
+                            format: format,
+                            includeReasoning: includeReasoning,
+                            includeSystemPrompt: includeSystemPrompt
+                        )
                     }
                 }
                 .presentationDetents([.medium])

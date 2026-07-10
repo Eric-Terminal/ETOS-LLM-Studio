@@ -99,6 +99,7 @@ struct PersistedMessageRecord: Equatable {
     let imageFileNamesJSON: Data?
     let fileFileNamesJSON: Data?
     let fullErrorContent: String?
+    let sentSystemPromptSnapshot: String?
     let responseMetricsJSON: Data?
     let responseGroupID: String?
     let responseAttemptID: String?

@@ -346,7 +346,7 @@ extension PersistenceGRDBStore {
                            reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
                            model_reference_json, cost_estimate_json,
                            audio_file_name, image_file_names_json, file_file_names_json,
-                           full_error_content, response_metrics_json,
+                           full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                            response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id
                     FROM messages
                     WHERE session_id = ?
@@ -399,6 +399,7 @@ extension PersistenceGRDBStore {
                         imageFileNames: imageFileNames,
                         fileFileNames: fileFileNames,
                         fullErrorContent: row["full_error_content"],
+                        sentSystemPromptSnapshot: row["sent_system_prompt_snapshot"],
                         responseMetrics: responseMetrics,
                         responseGroupID: (row["response_group_id"] as String?).flatMap(UUID.init(uuidString:)),
                         responseAttemptID: (row["response_attempt_id"] as String?).flatMap(UUID.init(uuidString:)),

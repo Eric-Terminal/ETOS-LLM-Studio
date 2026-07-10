@@ -137,6 +137,7 @@ final class PersistenceGRDBStore {
                     image_file_names_json BLOB,
                     file_file_names_json BLOB,
                     full_error_content TEXT,
+                    sent_system_prompt_snapshot TEXT,
                     response_metrics_json BLOB,
                     response_group_id TEXT,
                     response_attempt_id TEXT,
@@ -245,6 +246,7 @@ final class PersistenceGRDBStore {
                     image_file_names_json BLOB,
                     file_file_names_json BLOB,
                     full_error_content TEXT,
+                    sent_system_prompt_snapshot TEXT,
                     response_metrics_json BLOB,
                     response_group_id TEXT,
                     response_attempt_id TEXT,
@@ -261,7 +263,7 @@ final class PersistenceGRDBStore {
                     content_versions_json, current_version_index,
                     reasoning_content, tool_calls_json, tool_calls_placement,
                     token_usage_json, audio_file_name, image_file_names_json, file_file_names_json,
-                    full_error_content, response_metrics_json,
+                    full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                     response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                     position, created_at
                 )
@@ -290,6 +292,7 @@ final class PersistenceGRDBStore {
                     image_file_names_json,
                     file_file_names_json,
                     full_error_content,
+                    NULL,
                     response_metrics_json,
                     NULL,
                     NULL,
@@ -438,6 +441,17 @@ final class PersistenceGRDBStore {
             try Self.createSessionTagTables(db)
         }
 
+        migrator.registerMigration("v6_add_sent_system_prompt_snapshot") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(messages)")
+            let hasSnapshotColumn = columns.contains { row in
+                let name: String = row["name"]
+                return name == "sent_system_prompt_snapshot"
+            }
+            if !hasSnapshotColumn {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN sent_system_prompt_snapshot TEXT")
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -476,6 +490,7 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "image_file_names_json", definition: "image_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "file_file_names_json", definition: "file_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "full_error_content", definition: "full_error_content TEXT")
+            try ensureColumn(db, table: "messages", column: "sent_system_prompt_snapshot", definition: "sent_system_prompt_snapshot TEXT")
             try ensureColumn(db, table: "messages", column: "response_metrics_json", definition: "response_metrics_json BLOB")
             try ensureColumn(db, table: "messages", column: "response_group_id", definition: "response_group_id TEXT")
             try ensureColumn(db, table: "messages", column: "response_attempt_id", definition: "response_attempt_id TEXT")
@@ -550,6 +565,7 @@ final class PersistenceGRDBStore {
                 image_file_names_json BLOB,
                 file_file_names_json BLOB,
                 full_error_content TEXT,
+                sent_system_prompt_snapshot TEXT,
                 response_metrics_json BLOB,
                 response_group_id TEXT,
                 response_attempt_id TEXT,
