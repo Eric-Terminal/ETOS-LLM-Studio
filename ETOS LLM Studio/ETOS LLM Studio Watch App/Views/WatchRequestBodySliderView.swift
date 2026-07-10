@@ -62,7 +62,8 @@ struct WatchRequestBodySliderView: View {
                     position: position,
                     isNumeric: descriptor.mode == .continuousNumeric,
                     showsFlowingRainbow: control.usesRainbowAtMaximum
-                        && descriptor.isMaximumPosition(position)
+                        && descriptor.isMaximumPosition(position),
+                    rainbowStartingColor: sliderPalette.color(at: 1)
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -112,7 +113,8 @@ struct WatchRequestBodySliderView: View {
             FlowingRainbowReveal(
                 isActive: showsFlowingRainbow,
                 axis: .vertical,
-                flowDuration: 3.2
+                flowDuration: 3.2,
+                startingColor: palette.color(at: 1)
             )
             .mask(alignment: .bottom) {
                 Rectangle()
@@ -307,7 +309,8 @@ struct WatchTemperatureSliderView: View {
                     text: value.formatted(.number.precision(.fractionLength(2))),
                     position: currentPosition,
                     isNumeric: true,
-                    showsFlowingRainbow: false
+                    showsFlowingRainbow: false,
+                    rainbowStartingColor: nil
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -456,11 +459,16 @@ private struct WatchLiquidValueLabel: View {
     let position: Double
     let isNumeric: Bool
     let showsFlowingRainbow: Bool
+    let rainbowStartingColor: Color?
 
     @ViewBuilder
     var body: some View {
         if showsFlowingRainbow {
-            FlowingRainbowForeground(axis: .vertical, duration: 3.2) {
+            FlowingRainbowForeground(
+                axis: .vertical,
+                duration: 3.2,
+                startingColor: rainbowStartingColor
+            ) {
                 valueLabel
             }
         } else {

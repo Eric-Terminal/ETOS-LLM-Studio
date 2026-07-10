@@ -143,7 +143,8 @@ struct RequestBodyGradientSlider: View {
 
             FlowingRainbowReveal(
                 isActive: showsFlowingRainbow,
-                axis: .horizontal
+                axis: .horizontal,
+                startingColor: palette.color(at: 1)
             )
             .frame(height: trackHeight)
             .clipShape(Capsule())

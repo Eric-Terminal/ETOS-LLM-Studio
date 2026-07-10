@@ -256,7 +256,9 @@ private struct ChatRequestBodyControlRows: View {
                 Spacer()
                 Group {
                     if showsFlowingRainbow {
-                        FlowingRainbowForeground {
+                        FlowingRainbowForeground(
+                            startingColor: palette.color(at: 1)
+                        ) {
                             sliderValueLabel(
                                 text: displayValue,
                                 position: position,

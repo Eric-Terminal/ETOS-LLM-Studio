@@ -392,6 +392,21 @@ struct RequestBodyControlTests {
         #expect(midpoint.alpha == 0.75)
     }
 
+    @Test("最高档彩虹会从端点颜色的下一色相继续")
+    func testRainbowCycleContinuesAfterMaximumColor() {
+        let redCycle = FlowingRainbowColorCycle.unwrappedHues(startingAt: 0)
+        let blueCycle = FlowingRainbowColorCycle.unwrappedHues(startingAt: 2.0 / 3.0)
+        let systemBlueCycle = FlowingRainbowColorCycle.unwrappedHues(startingAt: 0.6)
+
+        #expect(abs(redCycle[0] - 0) < 0.000_001)
+        #expect(abs(redCycle[1] - 1.0 / 12.0) < 0.000_001)
+        #expect(abs(blueCycle[0] - 2.0 / 3.0) < 0.000_001)
+        #expect(abs(blueCycle[1] - 3.0 / 4.0) < 0.000_001)
+        #expect(abs(blueCycle[2] - 1) < 0.000_001)
+        #expect(abs(systemBlueCycle[0] - 0.6) < 0.000_001)
+        #expect(abs(systemBlueCycle[1] - 3.0 / 4.0) < 0.000_001)
+    }
+
     @Test("字符串滑块会吸附并编译最近档位")
     func testDiscreteSliderSnapsAndCompilesNearestOption() throws {
         let control = ModelRequestBodyControl(

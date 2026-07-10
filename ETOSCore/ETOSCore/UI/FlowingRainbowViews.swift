@@ -36,6 +36,106 @@ private let rainbowSweepFrameInterval: TimeInterval = 1.0 / 20.0
 private let rainbowSweepFrameInterval: TimeInterval = 1.0 / 30.0
 #endif
 
+enum FlowingRainbowColorCycle {
+    private static let canonicalHues: [Double] = [
+        0,
+        1.0 / 12.0,
+        1.0 / 6.0,
+        1.0 / 3.0,
+        1.0 / 2.0,
+        2.0 / 3.0,
+        3.0 / 4.0
+    ]
+
+    static func unwrappedHues(startingAt rawHue: Double) -> [Double] {
+        let hue = normalizedHue(rawHue)
+        // 以最近的命名色判断“下一色”，起点仍保留用户设置的精确色相。
+        let nearestIndex = canonicalHues.indices.min { lhs, rhs in
+            circularDistance(from: hue, to: canonicalHues[lhs])
+                < circularDistance(from: hue, to: canonicalHues[rhs])
+        } ?? 0
+        let followingHues = (1..<canonicalHues.count).map { offset in
+            let unwrappedIndex = nearestIndex + offset
+            var followingHue = canonicalHues[unwrappedIndex % canonicalHues.count]
+                + Double(unwrappedIndex / canonicalHues.count)
+            while followingHue <= hue {
+                followingHue += 1
+            }
+            return followingHue
+        }
+        return [hue] + followingHues + [hue + 1]
+    }
+
+    static func repeatingColors(startingAt startingColor: Color?) -> [Color] {
+        guard let startingColor,
+              let components = RequestBodySliderColorComponents(color: startingColor) else {
+            return defaultRepeatingColors
+        }
+        let hsba = hsbaComponents(from: components)
+        var cycle = unwrappedHues(startingAt: hsba.hue).map { hue in
+            Color(
+                hue: normalizedHue(hue),
+                saturation: hsba.saturation,
+                brightness: hsba.brightness,
+                opacity: hsba.alpha
+            )
+        }
+        cycle[0] = startingColor
+        cycle[cycle.count - 1] = startingColor
+        return cycle + cycle.dropFirst()
+    }
+
+    private static func hsbaComponents(
+        from components: RequestBodySliderColorComponents
+    ) -> (hue: Double, saturation: Double, brightness: Double, alpha: Double) {
+        let maximum = max(components.red, components.green, components.blue)
+        let minimum = min(components.red, components.green, components.blue)
+        let delta = maximum - minimum
+        let saturation = maximum > 0 ? delta / maximum : 0
+        let hue: Double
+        if delta <= 0.000_001 {
+            hue = 0
+        } else if maximum == components.red {
+            hue = ((components.green - components.blue) / delta) / 6
+        } else if maximum == components.green {
+            hue = (2 + (components.blue - components.red) / delta) / 6
+        } else {
+            hue = (4 + (components.red - components.green) / delta) / 6
+        }
+        return (
+            hue: normalizedHue(hue),
+            saturation: saturation,
+            brightness: maximum,
+            alpha: components.alpha
+        )
+    }
+
+    private static func normalizedHue(_ hue: Double) -> Double {
+        guard hue.isFinite else { return 0 }
+        let remainder = hue.truncatingRemainder(dividingBy: 1)
+        return remainder >= 0 ? remainder : remainder + 1
+    }
+
+    private static func circularDistance(from lhs: Double, to rhs: Double) -> Double {
+        let directDistance = abs(lhs - rhs)
+        return min(directDistance, 1 - directDistance)
+    }
+
+    private static let defaultRepeatingColors: [Color] = {
+        let cycle: [Color] = [
+            Color(red: 0.92, green: 0.26, blue: 0.21),
+            Color(red: 0.98, green: 0.58, blue: 0.12),
+            Color(red: 0.99, green: 0.82, blue: 0.25),
+            Color(red: 0.20, green: 0.66, blue: 0.33),
+            Color(red: 0.14, green: 0.76, blue: 0.88),
+            Color(red: 0.26, green: 0.52, blue: 0.96),
+            Color(red: 0.63, green: 0.26, blue: 0.96),
+            Color(red: 0.92, green: 0.26, blue: 0.21)
+        ]
+        return cycle + cycle.dropFirst()
+    }()
+}
+
 public struct FlowingRainbowGradient: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -43,17 +143,23 @@ public struct FlowingRainbowGradient: View {
     private let duration: TimeInterval
     private let phaseOrigin: Date?
     private let startDelay: TimeInterval
+    private let rainbowColors: [Color]
+    private let reversedRainbowColors: [Color]
 
     public init(
         axis: FlowingRainbowAxis = .horizontal,
         duration: TimeInterval = 2.8,
         phaseOrigin: Date? = nil,
-        startDelay: TimeInterval = 0
+        startDelay: TimeInterval = 0,
+        startingColor: Color? = nil
     ) {
+        let rainbowColors = FlowingRainbowColorCycle.repeatingColors(startingAt: startingColor)
         self.axis = axis
         self.duration = duration
         self.phaseOrigin = phaseOrigin
         self.startDelay = startDelay
+        self.rainbowColors = rainbowColors
+        self.reversedRainbowColors = Array(rainbowColors.reversed())
     }
 
     public var body: some View {
@@ -75,7 +181,7 @@ public struct FlowingRainbowGradient: View {
         switch axis {
         case .horizontal:
             LinearGradient(
-                colors: Self.repeatingRainbowColors,
+                colors: rainbowColors,
                 startPoint: .leading,
                 endPoint: .trailing
             )
@@ -83,7 +189,7 @@ public struct FlowingRainbowGradient: View {
             .offset(x: -size.width * phase)
         case .vertical:
             LinearGradient(
-                colors: Self.reversedRepeatingRainbowColors,
+                colors: reversedRainbowColors,
                 startPoint: .bottomLeading,
                 endPoint: .topTrailing
             )
@@ -103,22 +209,6 @@ public struct FlowingRainbowGradient: View {
             .truncatingRemainder(dividingBy: safeDuration) / safeDuration
     }
 
-    private static let repeatingRainbowColors: [Color] = {
-        let cycle: [Color] = [
-            Color(red: 0.92, green: 0.26, blue: 0.21),
-            Color(red: 0.98, green: 0.58, blue: 0.12),
-            Color(red: 0.99, green: 0.82, blue: 0.25),
-            Color(red: 0.20, green: 0.66, blue: 0.33),
-            Color(red: 0.14, green: 0.76, blue: 0.88),
-            Color(red: 0.26, green: 0.52, blue: 0.96),
-            Color(red: 0.63, green: 0.26, blue: 0.96),
-            Color(red: 0.92, green: 0.26, blue: 0.21)
-        ]
-        return cycle + cycle.dropFirst()
-    }()
-
-    private static let reversedRepeatingRainbowColors = Array(repeatingRainbowColors.reversed())
-
 #if os(watchOS)
     private static let frameInterval: TimeInterval = 1.0 / 20.0
 #else
@@ -134,6 +224,7 @@ public struct FlowingRainbowReveal: View {
     private let axis: FlowingRainbowAxis
     private let flowDuration: TimeInterval
     private let retractResponse: TimeInterval
+    private let startingColor: Color?
 
     @State private var revealProgress: CGFloat = 0
     @State private var phaseOrigin = Date()
@@ -144,12 +235,14 @@ public struct FlowingRainbowReveal: View {
         isActive: Bool,
         axis: FlowingRainbowAxis = .horizontal,
         flowDuration: TimeInterval = 2.8,
-        retractResponse: TimeInterval = 0.55
+        retractResponse: TimeInterval = 0.55,
+        startingColor: Color? = nil
     ) {
         self.isActive = isActive
         self.axis = axis
         self.flowDuration = flowDuration
         self.retractResponse = retractResponse
+        self.startingColor = startingColor
     }
 
     public var body: some View {
@@ -159,7 +252,8 @@ public struct FlowingRainbowReveal: View {
                     axis: axis,
                     duration: flowDuration,
                     phaseOrigin: phaseOrigin,
-                    startDelay: reduceMotion ? 0 : flowDuration
+                    startDelay: reduceMotion ? 0 : flowDuration,
+                    startingColor: startingColor
                 )
                 .offset(revealOffset(in: proxy.size))
                 .opacity(reduceMotion ? revealProgress : 1)
@@ -232,15 +326,18 @@ public struct FlowingRainbowReveal: View {
 public struct FlowingRainbowForeground<Content: View>: View {
     private let axis: FlowingRainbowAxis
     private let duration: TimeInterval
+    private let startingColor: Color?
     private let content: Content
 
     public init(
         axis: FlowingRainbowAxis = .horizontal,
         duration: TimeInterval = 2.8,
+        startingColor: Color? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.axis = axis
         self.duration = duration
+        self.startingColor = startingColor
         self.content = content()
     }
 
@@ -248,7 +345,11 @@ public struct FlowingRainbowForeground<Content: View>: View {
         content
             .hidden()
             .overlay {
-                FlowingRainbowGradient(axis: axis, duration: duration)
+                FlowingRainbowGradient(
+                    axis: axis,
+                    duration: duration,
+                    startingColor: startingColor
+                )
                     .mask { content }
             }
             .accessibilityRepresentation {
