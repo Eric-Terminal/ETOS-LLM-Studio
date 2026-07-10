@@ -6,6 +6,7 @@
 
 import SwiftUI
 import Foundation
+import Combine
 import ETOSCore
 
 struct ContentView: View {
