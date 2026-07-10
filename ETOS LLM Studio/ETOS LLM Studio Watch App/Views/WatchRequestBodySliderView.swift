@@ -8,6 +8,7 @@
 
 import SwiftUI
 import WatchKit
+import Foundation
 import ETOSCore
 
 struct WatchRequestBodySliderView: View {
@@ -71,13 +72,14 @@ struct WatchRequestBodySliderView: View {
     private func liquidControl(size: CGSize) -> some View {
         let fillHeight = size.height * descriptor.normalized(position)
         let displayValue = descriptor.displayValue(at: position)
+        let palette = sliderPalette
 
         return ZStack(alignment: .bottom) {
             Capsule()
                 .fill(.thinMaterial)
 
             Rectangle()
-                .fill(WatchRequestBodySliderPalette.gradient)
+                .fill(palette.gradient)
                 .mask(alignment: .bottom) {
                     Rectangle()
                         .frame(height: fillHeight)
@@ -116,7 +118,7 @@ struct WatchRequestBodySliderView: View {
         .overlay {
             Capsule()
                 .stroke(
-                    WatchRequestBodySliderPalette.color(at: position).opacity(0.48),
+                    palette.color(at: position).opacity(0.48),
                     lineWidth: 1
                 )
         }
@@ -146,6 +148,12 @@ struct WatchRequestBodySliderView: View {
                 break
             }
         }
+    }
+
+    private var sliderPalette: WatchRequestBodySliderPalette {
+        control.options.contains { $0.payload.keys.contains("temperature") }
+            ? .temperature
+            : .structured
     }
 
     private func anchorMarks(color: Color) -> some View {
@@ -273,24 +281,194 @@ struct WatchRequestBodySliderView: View {
     }
 }
 
-private enum WatchRequestBodySliderPalette {
-    static let gradient = LinearGradient(
-        colors: [
-            color(at: 0),
-            color(at: 0.34),
-            color(at: 0.68),
-            color(at: 1)
-        ],
-        startPoint: .bottom,
-        endPoint: .top
-    )
+struct WatchTemperatureSliderView: View {
+    @Binding var value: Double
 
-    static func color(at position: Double) -> Color {
-        let normalizedPosition = min(max(position, 0), 1)
-        return Color(
-            hue: 0.58 + normalizedPosition * 0.29,
-            saturation: 0.72,
-            brightness: 0.94
+    @State private var lastFeedbackAnchor: Int?
+
+    private let range = 0.0...2.0
+    private let step = 0.01
+
+    var body: some View {
+        GeometryReader { geometry in
+            liquidControl(size: geometry.size)
+        }
+        .padding()
+        .navigationTitle(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            lastFeedbackAnchor = feedbackAnchor(at: normalizedPosition)
+        }
+    }
+
+    private func liquidControl(size: CGSize) -> some View {
+        let position = normalizedPosition
+        let fillHeight = size.height * position
+        let displayValue = value.formatted(.number.precision(.fractionLength(2)))
+        let palette = WatchRequestBodySliderPalette.temperature
+
+        return ZStack(alignment: .bottom) {
+            Capsule()
+                .fill(.thinMaterial)
+
+            Rectangle()
+                .fill(palette.gradient)
+                .mask(alignment: .bottom) {
+                    Rectangle()
+                        .frame(height: fillHeight)
+                }
+                .mask(Capsule())
+
+            temperatureAnchorMarks(color: Color.secondary.opacity(0.55))
+
+            temperatureAnchorMarks(color: Color.white.opacity(0.82))
+                .mask(alignment: .bottom) {
+                    Rectangle()
+                        .frame(height: fillHeight)
+                }
+
+            temperatureValue(displayValue, color: .primary)
+
+            temperatureValue(displayValue, color: .white)
+                .mask {
+                    Color.black
+                        .frame(height: fillHeight)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+        }
+        .overlay {
+            Capsule()
+                .stroke(palette.color(at: position).opacity(0.48), lineWidth: 1)
+        }
+        .contentShape(Capsule())
+        .gesture(dragGesture(height: size.height))
+        .focusable(true)
+        .digitalCrownRotation(
+            positionBinding,
+            from: 0,
+            through: 1,
+            by: step / (range.upperBound - range.lowerBound),
+            sensitivity: .medium,
+            isContinuous: false,
+            isHapticFeedbackEnabled: false
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(NSLocalizedString("温度", comment: "Temperature sampling parameter title")))
+        .accessibilityValue(Text(displayValue))
+        .accessibilityAdjustableAction { direction in
+            let positionStep = step / (range.upperBound - range.lowerBound)
+            switch direction {
+            case .increment:
+                updatePosition(position + positionStep)
+            case .decrement:
+                updatePosition(position - positionStep)
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func temperatureValue(_ displayValue: String, color: Color) -> some View {
+        Text(displayValue)
+            .etFont(.title3.monospaced().weight(.semibold))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func temperatureAnchorMarks(color: Color) -> some View {
+        VStack(spacing: 0) {
+            ForEach((0..<3).reversed(), id: \.self) { index in
+                Circle()
+                    .fill(color)
+                    .frame(width: 4, height: 4)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if index > 0 {
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private var normalizedPosition: Double {
+        let span = range.upperBound - range.lowerBound
+        return min(max((value - range.lowerBound) / span, 0), 1)
+    }
+
+    private var positionBinding: Binding<Double> {
+        Binding(
+            get: { normalizedPosition },
+            set: { updatePosition($0) }
+        )
+    }
+
+    private func dragGesture(height: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { drag in
+                guard height > 0 else { return }
+                updatePosition(1 - Double(drag.location.y / height))
+            }
+            .onEnded { drag in
+                guard height > 0 else { return }
+                updatePosition(1 - Double(drag.location.y / height))
+            }
+    }
+
+    private func updatePosition(_ newPosition: Double) {
+        let position = min(max(newPosition, 0), 1)
+        let anchor = feedbackAnchor(at: position)
+        if let lastFeedbackAnchor, anchor != lastFeedbackAnchor {
+            WKInterfaceDevice.current().play(.click)
+        }
+        lastFeedbackAnchor = anchor
+
+        let span = range.upperBound - range.lowerBound
+        let rawValue = range.lowerBound + position * span
+        value = min(max((rawValue / step).rounded() * step, range.lowerBound), range.upperBound)
+    }
+
+    private func feedbackAnchor(at position: Double) -> Int {
+        Int(min(max(position, 0), 1) * 2 + 0.000_001)
+    }
+}
+
+enum WatchRequestBodySliderPalette {
+    case structured
+    case temperature
+
+    var gradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                color(at: 0),
+                color(at: 0.34),
+                color(at: 0.68),
+                color(at: 1)
+            ],
+            startPoint: .bottom,
+            endPoint: .top
+        )
+    }
+
+    func color(at position: Double) -> Color {
+        let normalizedPosition = min(max(position, 0), 1)
+        switch self {
+        case .structured:
+            return Color(
+                hue: 0.58 + normalizedPosition * 0.29,
+                saturation: 0.72,
+                brightness: 0.94
+            )
+        case .temperature:
+            return Color(
+                hue: 0.62 + normalizedPosition * 0.38,
+                saturation: 0.78,
+                brightness: 0.96
+            )
+        }
     }
 }

@@ -247,10 +247,19 @@ struct ModelAdvancedSettingsView: View {
 
                 Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                 if aiTemperatureEnabled {
-                    samplingParameterField(
-                        title: NSLocalizedString("温度", comment: "Temperature sampling parameter title"),
-                        value: temperatureBinding
-                    )
+                    NavigationLink {
+                        WatchTemperatureSliderView(value: temperatureBinding)
+                    } label: {
+                        HStack {
+                            Text(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
+                            Spacer()
+                            Text(temperatureDisplayValue)
+                                .monospacedDigit()
+                                .foregroundStyle(
+                                    WatchRequestBodySliderPalette.temperature.color(at: temperatureSliderPosition)
+                                )
+                        }
+                    }
                 }
 
                 Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
@@ -294,6 +303,15 @@ struct ModelAdvancedSettingsView: View {
             get: { normalizedSamplingValue(aiTemperature, in: temperatureRange) },
             set: { handleTemperatureChange($0) }
         )
+    }
+
+    private var temperatureSliderPosition: Double {
+        let span = temperatureRange.upperBound - temperatureRange.lowerBound
+        return (temperatureBinding.wrappedValue - temperatureRange.lowerBound) / span
+    }
+
+    private var temperatureDisplayValue: String {
+        temperatureBinding.wrappedValue.formatted(.number.precision(.fractionLength(2)))
     }
 
     private var topPBinding: Binding<Double> {

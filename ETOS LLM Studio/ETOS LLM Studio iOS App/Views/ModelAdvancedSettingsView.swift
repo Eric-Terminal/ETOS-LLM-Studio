@@ -271,15 +271,19 @@ struct ModelAdvancedSettingsView: View {
                     Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                     if aiTemperatureEnabled {
                         Stepper(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep) {
-                            Text(
-                                String(
-                                    format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
-                                    temperatureBinding.wrappedValue
-                                )
-                            )
+                            Text(temperatureDisplayText)
                         }
 
-                        Slider(value: temperatureBinding, in: temperatureRange, step: samplingParameterStep)
+                        RequestBodyGradientSlider(
+                            value: temperatureSliderPositionBinding,
+                            palette: .temperature,
+                            anchorCount: 3,
+                            adjustmentStep: samplingParameterStep / (temperatureRange.upperBound - temperatureRange.lowerBound),
+                            accessibilityLabel: NSLocalizedString("温度", comment: "Temperature sampling parameter title"),
+                            accessibilityValue: temperatureDisplayText,
+                            onEditingChanged: { _ in }
+                        )
+                        .sensoryFeedback(.selection, trigger: temperatureFeedbackAnchor)
                     }
 
                     Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
@@ -375,6 +379,30 @@ struct ModelAdvancedSettingsView: View {
             get: { normalizedSamplingValue(aiTemperature, in: temperatureRange) },
             set: { handleTemperatureChange($0) }
         )
+    }
+
+    private var temperatureSliderPositionBinding: Binding<Double> {
+        let span = temperatureRange.upperBound - temperatureRange.lowerBound
+        return Binding(
+            get: {
+                (temperatureBinding.wrappedValue - temperatureRange.lowerBound) / span
+            },
+            set: { position in
+                temperatureBinding.wrappedValue = temperatureRange.lowerBound
+                    + min(max(position, 0), 1) * span
+            }
+        )
+    }
+
+    private var temperatureDisplayText: String {
+        String(
+            format: NSLocalizedString("模型温度 (Temperature): %.2f", comment: ""),
+            temperatureBinding.wrappedValue
+        )
+    }
+
+    private var temperatureFeedbackAnchor: Int {
+        Int(temperatureSliderPositionBinding.wrappedValue * 2 + 0.000_001)
     }
 
     private var topPBinding: Binding<Double> {

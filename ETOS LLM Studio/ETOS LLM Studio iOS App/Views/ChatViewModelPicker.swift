@@ -245,6 +245,7 @@ private struct ChatRequestBodyControlRows: View {
     ) -> some View {
         let position = descriptor.position(in: state ?? ModelRequestBodyControlState())
         let displayValue = descriptor.displayValue(at: position)
+        let palette = sliderPalette(for: control)
 
         return VStack {
             HStack {
@@ -253,12 +254,13 @@ private struct ChatRequestBodyControlRows: View {
                 Spacer()
                 Text(displayValue)
                     .etFont(.footnote.monospaced())
-                    .foregroundStyle(RequestBodySliderPalette.color(at: position))
+                    .foregroundStyle(palette.color(at: position))
                     .lineLimit(1)
             }
 
             RequestBodyGradientSlider(
                 value: sliderBinding(for: control, descriptor: descriptor),
+                palette: palette,
                 anchorCount: descriptor.optionCount,
                 adjustmentStep: descriptor.crownStep,
                 accessibilityLabel: control.title,
@@ -271,6 +273,12 @@ private struct ChatRequestBodyControlRows: View {
             )
         }
         .disabled(state == nil)
+    }
+
+    private func sliderPalette(for control: ModelRequestBodyControl) -> RequestBodySliderPalette {
+        control.options.contains { $0.payload.keys.contains("temperature") }
+            ? .temperature
+            : .structured
     }
 
     private func sliderBinding(

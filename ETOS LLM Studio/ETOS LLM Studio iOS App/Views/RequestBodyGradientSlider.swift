@@ -10,24 +10,39 @@ import SwiftUI
 import UIKit
 
 enum RequestBodySliderPalette {
-    static let gradient = LinearGradient(
-        colors: [
-            color(at: 0),
-            color(at: 0.34),
-            color(at: 0.68),
-            color(at: 1)
-        ],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
+    case structured
+    case temperature
 
-    static func color(at position: Double) -> Color {
-        let normalizedPosition = min(max(position, 0), 1)
-        return Color(
-            hue: 0.58 + normalizedPosition * 0.29,
-            saturation: 0.72,
-            brightness: 0.94
+    var gradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                color(at: 0),
+                color(at: 0.34),
+                color(at: 0.68),
+                color(at: 1)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
         )
+    }
+
+    func color(at position: Double) -> Color {
+        let normalizedPosition = min(max(position, 0), 1)
+        switch self {
+        case .structured:
+            return Color(
+                hue: 0.58 + normalizedPosition * 0.29,
+                saturation: 0.72,
+                brightness: 0.94
+            )
+        case .temperature:
+            // 沿蓝、紫、红方向过渡，避免冷热语义中间出现无关的绿色。
+            return Color(
+                hue: 0.62 + normalizedPosition * 0.38,
+                saturation: 0.78,
+                brightness: 0.96
+            )
+        }
     }
 }
 
@@ -37,6 +52,7 @@ struct RequestBodyGradientSlider: View {
     @ScaledMetric(relativeTo: .body) private var trackHeight: CGFloat = 8
 
     @Binding var value: Double
+    var palette: RequestBodySliderPalette = .structured
     let anchorCount: Int
     let adjustmentStep: Double
     let accessibilityLabel: String
@@ -82,7 +98,7 @@ struct RequestBodyGradientSlider: View {
                 .fill(Color.secondary.opacity(0.18))
                 .frame(height: trackHeight)
 
-            RequestBodySliderPalette.gradient
+            palette.gradient
                 .frame(height: trackHeight)
                 .mask(alignment: .leading) {
                     Rectangle()
@@ -92,7 +108,7 @@ struct RequestBodyGradientSlider: View {
 
             anchorMarks(size: size, travelWidth: travelWidth, normalizedValue: normalizedValue)
 
-            thumb(at: thumbCenterX, color: RequestBodySliderPalette.color(at: normalizedValue))
+            thumb(at: thumbCenterX, color: palette.color(at: normalizedValue))
         }
         .frame(maxHeight: .infinity)
     }
