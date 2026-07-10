@@ -48,13 +48,18 @@ struct WatchRequestBodySliderView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let controlHeight = geometry.size.height * 0.78
             let controlSize = CGSize(
-                width: min(geometry.size.width * 0.56, geometry.size.height * 0.52),
-                height: geometry.size.height
+                width: min(geometry.size.width * 0.56, controlHeight * 0.52),
+                height: controlHeight
             )
-            liquidControl(size: controlSize)
-                .frame(width: controlSize.width, height: controlSize.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack {
+                liquidControl(size: controlSize)
+                    .frame(width: controlSize.width, height: controlSize.height)
+
+                WatchLiquidValueLabel(text: descriptor.displayValue(at: position))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding()
         .navigationTitle(control.title)
@@ -101,26 +106,6 @@ struct WatchRequestBodySliderView: View {
                 color: Color.primary.opacity(0.26)
             )
 
-            Text(displayValue)
-                .etFont(.title3.monospaced().weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-
-            Text(displayValue)
-                .etFont(.title3.monospaced().weight(.semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .padding(.horizontal)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                .mask {
-                    Color.black
-                        .frame(height: fillHeight)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                }
         }
         .overlay {
             shape
@@ -166,9 +151,9 @@ struct WatchRequestBodySliderView: View {
     private var crownRotationStep: Double {
         switch descriptor.mode {
         case .discrete:
-            return descriptor.anchorStep / 192
+            return descriptor.anchorStep / 24
         case .continuousNumeric:
-            return descriptor.crownStep / 32
+            return descriptor.crownStep / 4
         }
     }
 
@@ -292,13 +277,20 @@ struct WatchTemperatureSliderView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let controlHeight = geometry.size.height * 0.78
             let controlSize = CGSize(
-                width: min(geometry.size.width * 0.56, geometry.size.height * 0.52),
-                height: geometry.size.height
+                width: min(geometry.size.width * 0.56, controlHeight * 0.52),
+                height: controlHeight
             )
-            liquidControl(size: controlSize)
-                .frame(width: controlSize.width, height: controlSize.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack {
+                liquidControl(size: controlSize)
+                    .frame(width: controlSize.width, height: controlSize.height)
+
+                WatchLiquidValueLabel(
+                    text: value.formatted(.number.precision(.fractionLength(2)))
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding()
         .navigationTitle(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
@@ -336,14 +328,6 @@ struct WatchTemperatureSliderView: View {
                 color: Color.primary.opacity(0.26)
             )
 
-            temperatureValue(displayValue, color: .primary)
-
-            temperatureValue(displayValue, color: .white)
-                .mask {
-                    Color.black
-                        .frame(height: fillHeight)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                }
         }
         .overlay {
             shape
@@ -356,7 +340,7 @@ struct WatchTemperatureSliderView: View {
             positionBinding,
             from: 0,
             through: 1,
-            by: step / (range.upperBound - range.lowerBound) / 40,
+            by: step / (range.upperBound - range.lowerBound) / 5,
             sensitivity: .low,
             isContinuous: false,
             isHapticFeedbackEnabled: false
@@ -375,16 +359,6 @@ struct WatchTemperatureSliderView: View {
                 break
             }
         }
-    }
-
-    private func temperatureValue(_ displayValue: String, color: Color) -> some View {
-        Text(displayValue)
-            .etFont(.title3.monospaced().weight(.semibold))
-            .foregroundStyle(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
-            .padding(.horizontal)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private var normalizedPosition: Double {
@@ -440,21 +414,32 @@ private struct WatchLiquidScaleMarks: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ForEach(0..<count, id: \.self) { index in
-                let position = count > 1
-                    ? Double(index) / Double(count - 1)
-                    : 0
-                let rawY = geometry.size.height * (1 - position)
-                let y = min(max(rawY, 1), geometry.size.height - 1)
+            if count > 2 {
+                ForEach(1..<(count - 1), id: \.self) { index in
+                    let position = Double(index) / Double(count - 1)
+                    let y = geometry.size.height * (1 - position)
 
-                Capsule()
-                    .fill(color)
-                    .frame(width: geometry.size.width * 0.22, height: 2)
-                    .position(x: geometry.size.width / 2, y: y)
+                    Capsule()
+                        .fill(color)
+                        .frame(width: geometry.size.width * 0.22, height: 2)
+                        .position(x: geometry.size.width / 2, y: y)
+                }
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+private struct WatchLiquidValueLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .etFont(.title3.monospaced().weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
 
