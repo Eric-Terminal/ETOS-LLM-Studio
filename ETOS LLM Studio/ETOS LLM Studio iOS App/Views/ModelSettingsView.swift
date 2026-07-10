@@ -11,6 +11,7 @@ import Foundation
 import ETOSCore
 
 struct ModelSettingsView: View {
+    @EnvironmentObject var viewModel: ChatViewModel
     @Binding var model: Model
     let provider: Provider
     let onSave: () -> Void
@@ -19,6 +20,8 @@ struct ModelSettingsView: View {
     @State var requestBodyMode: Model.RequestBodyOverrideMode = .keyValue
     @State var rawJSONInput: String = "{}"
     @State var rawJSONError: String?
+    @State var requestBodyControlImportSources: [RunnableModel] = []
+    @State var isRequestBodyControlImportPresented = false
 
     init(model: Binding<Model>, provider: Provider, onSave: @escaping () -> Void = {}) {
         _model = model

@@ -338,7 +338,37 @@ extension ModelSettingsView {
             } label: {
                 Label(NSLocalizedString("添加控制", comment: ""), systemImage: "plus")
             }
+
+            Button {
+                presentRequestBodyControlImport()
+            } label: {
+                Label(NSLocalizedString("从其他模型导入", comment: ""), systemImage: "square.and.arrow.down")
+            }
+            .navigationDestination(isPresented: $isRequestBodyControlImportPresented) {
+                RequestBodyControlImportView(sources: requestBodyControlImportSources) { source in
+                    importRequestBodyControls(from: source)
+                }
+            }
         }
+    }
+
+    private func presentRequestBodyControlImport() {
+        var sourceProviders = viewModel.providers.filter { $0.id != provider.id }
+        sourceProviders.insert(provider, at: 0)
+        requestBodyControlImportSources = sourceProviders.flatMap { sourceProvider in
+            sourceProvider.models.compactMap { sourceModel in
+                guard !(sourceProvider.id == provider.id && sourceModel.id == model.id),
+                      !sourceModel.requestBodyControls.isEmpty else {
+                    return nil
+                }
+                return RunnableModel(provider: sourceProvider, model: sourceModel)
+            }
+        }
+        isRequestBodyControlImportPresented = true
+    }
+
+    private func importRequestBodyControls(from source: RunnableModel) {
+        model.appendCopiesOfRequestBodyControls(source.model.requestBodyControls)
     }
 
     private func addToggleControl() {

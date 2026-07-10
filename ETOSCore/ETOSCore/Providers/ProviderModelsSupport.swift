@@ -69,6 +69,11 @@ public extension Model {
             state: state ?? defaultRequestBodyControlState
         )
     }
+
+    /// 将来源配置以独立副本追加到末尾，保留当前模型已有控制。
+    mutating func appendCopiesOfRequestBodyControls(_ controls: [ModelRequestBodyControl]) {
+        requestBodyControls.append(contentsOf: controls.map { $0.duplicatedWithNewIdentifiers() })
+    }
 }
 
 public extension Model {

@@ -49,6 +49,79 @@ struct RequestBodyControlRow: View {
     }
 }
 
+struct RequestBodyControlImportView: View {
+    @Environment(\.dismiss) private var dismiss
+    let sources: [RunnableModel]
+    let onImport: (RunnableModel) -> Void
+
+    var body: some View {
+        List {
+            Section {
+                if sources.isEmpty {
+                    Text(NSLocalizedString("没有其他已配置结构化控制的模型。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(sources) { source in
+                        Button {
+                            onImport(source)
+                            dismiss()
+                        } label: {
+                            RequestBodyControlImportRow(source: source)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } footer: {
+                Text(NSLocalizedString("选择后会追加来源模型的全部结构化控制，现有控制不会被替换。", comment: ""))
+            }
+        }
+        .navigationTitle(NSLocalizedString("选择来源模型", comment: ""))
+    }
+}
+
+private struct RequestBodyControlImportRow: View {
+    let source: RunnableModel
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(displayTitle)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text(source.model.modelName)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(providerAndCountText)
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var displayTitle: String {
+        let title = source.model.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? source.model.modelName : title
+    }
+
+    private var controlCountText: String {
+        String(
+            format: NSLocalizedString("%d 个控制", comment: ""),
+            source.model.requestBodyControls.count
+        )
+    }
+
+    private var providerAndCountText: String {
+        String(
+            format: NSLocalizedString("%@ · %@", comment: ""),
+            source.provider.name,
+            controlCountText
+        )
+    }
+}
+
 struct RequestBodyControlDetailView: View {
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode

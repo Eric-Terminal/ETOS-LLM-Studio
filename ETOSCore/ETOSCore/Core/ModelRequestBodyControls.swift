@@ -113,6 +113,32 @@ public extension ModelRequestBodyControl {
         }
         return []
     }
+
+    /// 复制配置内容并重建控制与选项 ID，避免导入后与现有运行状态串联。
+    func duplicatedWithNewIdentifiers() -> ModelRequestBodyControl {
+        var optionIDMap: [String: String] = [:]
+        let duplicatedOptions = options.map { option in
+            let newID = UUID().uuidString
+            optionIDMap[option.id] = newID
+            return ModelRequestBodyControlOption(
+                id: newID,
+                title: option.title,
+                payload: option.payload
+            )
+        }
+
+        return ModelRequestBodyControl(
+            id: UUID().uuidString,
+            title: title,
+            kind: kind,
+            isEnabled: isEnabled,
+            defaultIsActive: defaultIsActive,
+            defaultOptionID: defaultOptionID.flatMap { optionIDMap[$0] },
+            isSliderEnabled: isSliderEnabled,
+            payload: payload,
+            options: duplicatedOptions
+        )
+    }
 }
 
 public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {

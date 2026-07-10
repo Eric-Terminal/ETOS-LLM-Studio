@@ -149,6 +149,50 @@ struct RequestBodyControlTests {
         #expect(control.suggestedOptionPayloadKeys == ["temperature", "top_p"])
     }
 
+    @Test("导入结构化控制会追加独立副本并保留已有配置")
+    func testImportingRequestBodyControlsAppendsIndependentCopies() throws {
+        let existingControl = ModelRequestBodyControl(
+            id: "existing-control",
+            title: "现有控制",
+            kind: .toggle,
+            payload: ["search": .bool(true)]
+        )
+        let sourceControl = ModelRequestBodyControl(
+            id: "source-control",
+            title: "温度",
+            kind: .optionGroup,
+            defaultOptionID: "high",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "low",
+                    title: "low",
+                    payload: ["temperature": .double(0.2)]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "high",
+                    payload: ["temperature": .double(0.8)]
+                )
+            ]
+        )
+        var targetModel = Model(
+            modelName: "target",
+            requestBodyControls: [existingControl]
+        )
+
+        targetModel.appendCopiesOfRequestBodyControls([sourceControl])
+
+        #expect(targetModel.requestBodyControls.first == existingControl)
+        let importedControl = try #require(targetModel.requestBodyControls.last)
+        #expect(importedControl.id != sourceControl.id)
+        #expect(importedControl.title == sourceControl.title)
+        #expect(importedControl.isSliderEnabled)
+        #expect(importedControl.options.map(\.payload) == sourceControl.options.map(\.payload))
+        #expect(Set(importedControl.options.map(\.id)).isDisjoint(with: Set(sourceControl.options.map(\.id))))
+        #expect(importedControl.defaultOptionID == importedControl.options.last?.id)
+    }
+
     @Test("运行态缓存优先按模型恢复，再按同结构继承")
     func testRuntimeStoreRestoresByModelThenSignature() {
         let suiteName = "RequestBodyControlTests.\(UUID().uuidString)"
