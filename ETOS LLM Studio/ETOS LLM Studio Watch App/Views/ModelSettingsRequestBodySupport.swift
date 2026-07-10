@@ -6,6 +6,7 @@
 
 import SwiftUI
 import Foundation
+import Combine
 import ETOSCore
 
 extension ModelSettingsView {
@@ -339,16 +340,11 @@ extension ModelSettingsView {
             } label: {
                 Label(NSLocalizedString("从其他模型导入", comment: ""), systemImage: "square.and.arrow.down")
             }
-            .navigationDestination(isPresented: $isRequestBodyControlImportPresented) {
-                RequestBodyControlImportView(sources: requestBodyControlImportSources) { source in
-                    importRequestBodyControls(from: source)
-                }
-            }
         }
     }
 
     private func presentRequestBodyControlImport() {
-        var sourceProviders = viewModel.providers.filter { $0.id != provider.id }
+        var sourceProviders = ChatService.shared.providersSubject.value.filter { $0.id != provider.id }
         sourceProviders.insert(provider, at: 0)
         requestBodyControlImportSources = sourceProviders.flatMap { sourceProvider in
             sourceProvider.models.compactMap { sourceModel in
@@ -360,10 +356,6 @@ extension ModelSettingsView {
             }
         }
         isRequestBodyControlImportPresented = true
-    }
-
-    private func importRequestBodyControls(from source: RunnableModel) {
-        model.appendCopiesOfRequestBodyControls(source.model.requestBodyControls)
     }
 
     private func addToggleControl() {

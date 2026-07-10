@@ -12,7 +12,6 @@ import Foundation
 import ETOSCore
 
 struct ModelSettingsView: View {
-    @EnvironmentObject var viewModel: ChatViewModel
     @Binding var model: Model
     let provider: Provider
     let onSave: () -> Void
@@ -171,6 +170,11 @@ struct ModelSettingsView: View {
 
             Section(header: Text(NSLocalizedString("请求体预览", comment: ""))) {
                 RequestBodyPreviewInlineView(preview: preview)
+            }
+        }
+        .navigationDestination(isPresented: $isRequestBodyControlImportPresented) {
+            RequestBodyControlImportView(sources: requestBodyControlImportSources) { source in
+                model.appendCopiesOfRequestBodyControls(source.model.requestBodyControls)
             }
         }
         .navigationTitle(NSLocalizedString("编辑模型信息", comment: ""))
