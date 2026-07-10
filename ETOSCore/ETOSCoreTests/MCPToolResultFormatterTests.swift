@@ -75,13 +75,14 @@ struct MCPToolResultFormatterTests {
 
     @Test("Widget 载荷可从工具参数中提取")
     func testWidgetPayloadCanBeParsedFromArguments() {
-        let raw = #"{"title":"conversation_summary_system_plan","widget_code":"<style>.card{}</style><div>demo</div>","loading_messages":["规划中..."]}"#
+        let raw = #"{"title":"conversation_summary_system_plan","widget_code":"<style>.card{}</style><div>demo</div>","inline_aspect_ratio":"16:9","loading_messages":["规划中..."]}"#
 
         let payload = ToolWidgetPayloadParser.parse(from: raw)
 
         #expect(payload?.title == "conversation_summary_system_plan")
         #expect(payload?.widgetCode.contains("<div>demo</div>") == true)
         #expect(payload?.loadingMessages == ["规划中..."])
+        #expect(payload?.inlineAspectRatio.rawValue == "16:9")
     }
 
     @Test("Widget 载荷支持 input 包裹结构")
@@ -92,6 +93,27 @@ struct MCPToolResultFormatterTests {
 
         #expect(payload?.title == "wrapped_widget")
         #expect(payload?.widgetCode == "<div>wrapped</div>")
+        #expect(payload?.inlineAspectRatio == .standard)
+    }
+
+    @Test("Widget 画幅接受常用比例并拒绝极端比例")
+    func testWidgetAspectRatioValidation() {
+        let portrait = ToolWidgetAspectRatio(rawValue: " 9 : 16 ")
+
+        #expect(portrait?.rawValue == "9:16")
+        #expect(portrait?.value == 0.5625)
+        #expect(ToolWidgetAspectRatio(rawValue: "3:1") == nil)
+        #expect(ToolWidgetAspectRatio(rawValue: "0:1") == nil)
+        #expect(ToolWidgetAspectRatio(rawValue: "invalid") == nil)
+    }
+
+    @Test("Widget 载荷中的非法画幅会回退为标准比例")
+    func testWidgetPayloadInvalidAspectRatioUsesDefault() {
+        let raw = #"{"widget_code":"<div>fallback</div>","inline_aspect_ratio":"3:1"}"#
+
+        let payload = ToolWidgetPayloadParser.parse(from: raw)
+
+        #expect(payload?.inlineAspectRatio == .standard)
     }
 
     @Test("非法 Widget JSON 会安全降级为 nil")

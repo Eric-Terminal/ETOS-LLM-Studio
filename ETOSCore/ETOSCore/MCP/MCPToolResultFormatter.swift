@@ -31,16 +31,61 @@ public struct MCPToolResultDisplayModel: Equatable, Sendable {
     }
 }
 
+/// Widget 内联展示使用的宽高比。
+public struct ToolWidgetAspectRatio: Equatable, Sendable {
+    public static let standard = ToolWidgetAspectRatio(rawValue: "4:3", width: 4, height: 3)
+
+    public let rawValue: String
+    public let width: Double
+    public let height: Double
+
+    public var value: Double {
+        width / height
+    }
+
+    public init?(rawValue: String) {
+        let components = rawValue.split(separator: ":", omittingEmptySubsequences: false)
+        guard components.count == 2 else { return nil }
+
+        let widthText = String(components[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let heightText = String(components[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let width = Double(widthText),
+              let height = Double(heightText),
+              width.isFinite,
+              height.isFinite,
+              width > 0,
+              height > 0,
+              (0.5...2).contains(width / height) else {
+            return nil
+        }
+
+        self.init(rawValue: "\(widthText):\(heightText)", width: width, height: height)
+    }
+
+    private init(rawValue: String, width: Double, height: Double) {
+        self.rawValue = rawValue
+        self.width = width
+        self.height = height
+    }
+}
+
 /// Widget 工具的可渲染载荷。
 public struct ToolWidgetPayload: Equatable, Sendable {
     public let title: String?
     public let widgetCode: String
     public let loadingMessages: [String]
+    public let inlineAspectRatio: ToolWidgetAspectRatio
 
-    public init(title: String?, widgetCode: String, loadingMessages: [String] = []) {
+    public init(
+        title: String?,
+        widgetCode: String,
+        loadingMessages: [String] = [],
+        inlineAspectRatio: ToolWidgetAspectRatio = .standard
+    ) {
         self.title = title
         self.widgetCode = widgetCode
         self.loadingMessages = loadingMessages
+        self.inlineAspectRatio = inlineAspectRatio
     }
 }
 
@@ -83,11 +128,16 @@ public enum ToolWidgetPayloadParser {
 
         let title = firstNonEmptyString(for: ["title", "name"], in: dictionary)
         let loadingMessages = stringArray(for: ["loading_messages", "loadingMessages"], in: dictionary)
+        let inlineAspectRatio = firstNonEmptyString(
+            for: ["inline_aspect_ratio", "inlineAspectRatio", "aspect_ratio", "aspectRatio"],
+            in: dictionary
+        ).flatMap(ToolWidgetAspectRatio.init(rawValue:)) ?? .standard
 
         return ToolWidgetPayload(
             title: title,
             widgetCode: widgetCode,
-            loadingMessages: loadingMessages
+            loadingMessages: loadingMessages,
+            inlineAspectRatio: inlineAspectRatio
         )
     }
 

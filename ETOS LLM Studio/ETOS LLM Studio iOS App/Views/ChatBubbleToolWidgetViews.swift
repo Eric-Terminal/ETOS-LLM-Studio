@@ -15,7 +15,6 @@ struct ToolWidgetRendererCard: View {
     let payload: ToolWidgetPayload
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var renderedHeight: CGFloat = 180
     @State private var hasRendered = false
 
     private var loadingText: String {
@@ -33,16 +32,12 @@ struct ToolWidgetRendererCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            GeometryReader { proxy in
-                ToolWidgetWebView(
-                    widgetCode: payload.widgetCode,
-                    colorScheme: colorScheme,
-                    availableWidth: max(1, floor(proxy.size.width)),
-                    renderedHeight: $renderedHeight,
-                    hasRendered: $hasRendered
-                )
-            }
-            .frame(height: max(120, renderedHeight))
+            ToolWidgetWebView(
+                widgetCode: payload.widgetCode,
+                colorScheme: colorScheme,
+                hasRendered: $hasRendered
+            )
+            .aspectRatio(CGFloat(payload.inlineAspectRatio.value), contentMode: .fit)
             .overlay {
                 if !hasRendered {
                     ProgressView(loadingText)
@@ -65,12 +60,10 @@ struct ToolWidgetRendererCard: View {
 struct ToolWidgetWebView: UIViewRepresentable {
     let widgetCode: String
     let colorScheme: ColorScheme
-    let availableWidth: CGFloat
-    @Binding var renderedHeight: CGFloat
     @Binding var hasRendered: Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(renderedHeight: $renderedHeight, hasRendered: $hasRendered)
+        Coordinator(hasRendered: $hasRendered)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -78,9 +71,6 @@ struct ToolWidgetWebView: UIViewRepresentable {
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
-        let controller = WKUserContentController()
-        controller.add(context.coordinator, name: Coordinator.heightMessageName)
-        configuration.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -95,8 +85,7 @@ struct ToolWidgetWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let stableWidth = max(1, floor(availableWidth))
-        let html = wrappedHTML(widgetCode: widgetCode, stableWidth: stableWidth)
+        let html = wrappedHTML(widgetCode: widgetCode)
         let renderKey = "\(colorScheme == .dark ? "dark" : "light")|\(html)"
         guard context.coordinator.lastRenderKey != renderKey else { return }
         context.coordinator.lastRenderKey = renderKey
@@ -110,42 +99,20 @@ struct ToolWidgetWebView: UIViewRepresentable {
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         webView.navigationDelegate = nil
         webView.stopLoading()
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
-        static let heightMessageName = "etWidgetHeight"
-
-        @Binding var renderedHeight: CGFloat
+    final class Coordinator: NSObject, WKNavigationDelegate {
         @Binding var hasRendered: Bool
         var lastRenderKey: String?
 
-        init(renderedHeight: Binding<CGFloat>, hasRendered: Binding<Bool>) {
-            self._renderedHeight = renderedHeight
+        init(hasRendered: Binding<Bool>) {
             self._hasRendered = hasRendered
         }
 
-        func userContentController(
-            _ userContentController: WKUserContentController,
-            didReceive message: WKScriptMessage
-        ) {
-            guard message.name == Self.heightMessageName else { return }
-            guard let value = message.body as? Double else { return }
-            let nextHeight = max(120, ceil(value))
-            if abs(renderedHeight - nextHeight) > 0.5 {
-                DispatchQueue.main.async {
-                    self.renderedHeight = nextHeight
-                    self.hasRendered = true
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.hasRendered = true
-                }
-            }
-        }
-
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            webView.evaluateJavaScript("window.__etReportSize && window.__etReportSize();", completionHandler: nil)
+            DispatchQueue.main.async {
+                self.hasRendered = true
+            }
         }
 
         func webView(
@@ -169,7 +136,7 @@ struct ToolWidgetWebView: UIViewRepresentable {
         }
     }
 
-    private func wrappedHTML(widgetCode: String, stableWidth: CGFloat) -> String {
+    private func wrappedHTML(widgetCode: String) -> String {
         """
 <!doctype html>
 <html>
@@ -212,28 +179,29 @@ struct ToolWidgetWebView: UIViewRepresentable {
       margin: 0;
       padding: 0;
       width: 100%;
-      height: auto;
+      height: 100%;
       min-height: 0;
       background: transparent;
-      overflow: visible;
+      overflow: hidden;
     }
     body {
       position: relative;
     }
     #et-widget-host {
-      width: min(100%, \(Int(stableWidth))px);
+      width: 100%;
+      height: 100%;
       max-width: 100%;
-      min-height: 1px;
       box-sizing: border-box;
-      overflow: visible;
+      overflow: hidden;
     }
     #et-widget-root {
       width: 100%;
+      height: 100%;
       min-width: 0;
       max-width: 100%;
       margin: 0;
       box-sizing: border-box;
-      overflow: visible;
+      overflow: hidden;
     }
   </style>
 </head>
@@ -243,139 +211,6 @@ struct ToolWidgetWebView: UIViewRepresentable {
 \(widgetCode)
     </div>
   </div>
-  <script>
-    (function () {
-      var lastPostedHeight = 0;
-      var sampleCount = 0;
-
-      function isFiniteNumber(value) {
-        return typeof value === 'number' && isFinite(value);
-      }
-
-      function walkElements(rootNode, visitor) {
-        if (!rootNode || typeof rootNode.querySelectorAll !== 'function') return;
-        var elements = rootNode.querySelectorAll('*');
-        for (var index = 0; index < elements.length; index += 1) {
-          var element = elements[index];
-          visitor(element);
-          if (element && element.shadowRoot) {
-            walkElements(element.shadowRoot, visitor);
-          }
-        }
-      }
-
-      function syncSameOriginIframeHeight() {
-        var iframes = document.querySelectorAll('iframe');
-        for (var index = 0; index < iframes.length; index += 1) {
-          var frame = iframes[index];
-          if (!frame) continue;
-          try {
-            var frameDocument = frame.contentDocument;
-            if (!frameDocument) continue;
-            var frameBody = frameDocument.body;
-            var frameRoot = frameDocument.documentElement;
-            var frameHeight = Math.max(
-              frameBody ? frameBody.scrollHeight : 0,
-              frameBody ? frameBody.offsetHeight : 0,
-              frameRoot ? frameRoot.scrollHeight : 0,
-              frameRoot ? frameRoot.offsetHeight : 0
-            );
-            if (frameHeight > 0) {
-              frame.style.height = frameHeight + 'px';
-            }
-          } catch (_) {
-            // 跨域 iframe 无法读取高度，保持默认行为。
-          }
-        }
-      }
-
-      function visualBoundsHeight(container) {
-        if (!container || typeof container.getBoundingClientRect !== 'function') return 0;
-        var containerRect = container.getBoundingClientRect();
-        var minTop = isFiniteNumber(containerRect.top) ? containerRect.top : 0;
-        var maxBottom = isFiniteNumber(containerRect.bottom) ? containerRect.bottom : minTop;
-        walkElements(container, function (element) {
-          if (!element || typeof element.getBoundingClientRect !== 'function') return;
-          var rect = element.getBoundingClientRect();
-          if (!rect) return;
-          if (!isFiniteNumber(rect.top) || !isFiniteNumber(rect.bottom)) return;
-          if (rect.width <= 0 && rect.height <= 0) return;
-          if (rect.top < minTop) minTop = rect.top;
-          if (rect.bottom > maxBottom) maxBottom = rect.bottom;
-        });
-        return Math.max(0, Math.ceil(maxBottom - minTop));
-      }
-
-      function postHeight(height) {
-        if (!isFiniteNumber(height)) return;
-        if (Math.abs(height - lastPostedHeight) < 0.5) return;
-        lastPostedHeight = height;
-        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etWidgetHeight) {
-          window.webkit.messageHandlers.etWidgetHeight.postMessage(height);
-        }
-      }
-
-      function reportHeight() {
-        syncSameOriginIframeHeight();
-        var host = document.getElementById('et-widget-host');
-        var widgetRoot = document.getElementById('et-widget-root');
-        var flowHeight = Math.max(
-          host ? host.scrollHeight : 0,
-          host ? host.offsetHeight : 0,
-          widgetRoot ? widgetRoot.scrollHeight : 0,
-          widgetRoot ? widgetRoot.offsetHeight : 0
-        );
-        var visualHeight = visualBoundsHeight(widgetRoot || host);
-        var height = Math.max(1, flowHeight, visualHeight);
-        var viewportHeight = window.innerHeight || 0;
-        if (
-          lastPostedHeight > 0 &&
-          viewportHeight > 0 &&
-          Math.abs(viewportHeight - lastPostedHeight) < 1 &&
-          height > lastPostedHeight
-        ) {
-          var feedbackGrowth = height - viewportHeight;
-          if (feedbackGrowth > 0 && feedbackGrowth <= 96) {
-            height = lastPostedHeight;
-          }
-        }
-        postHeight(height);
-      }
-      window.__etReportSize = reportHeight;
-      if (window.ResizeObserver) {
-        var observer = new ResizeObserver(reportHeight);
-        var hostContainer = document.getElementById('et-widget-host');
-        var widgetContainer = document.getElementById('et-widget-root');
-        if (hostContainer) observer.observe(hostContainer);
-        if (widgetContainer) observer.observe(widgetContainer);
-      }
-      if (window.MutationObserver) {
-        var mutationObserver = new MutationObserver(reportHeight);
-        var mutationTarget = document.getElementById('et-widget-host') || document.documentElement;
-        if (mutationTarget) {
-          mutationObserver.observe(mutationTarget, {
-            attributes: true,
-            characterData: true,
-            childList: true,
-            subtree: true
-          });
-        }
-      }
-      window.addEventListener('load', reportHeight);
-      window.addEventListener('resize', reportHeight);
-      setTimeout(reportHeight, 0);
-      setTimeout(reportHeight, 120);
-      setTimeout(reportHeight, 360);
-      function sampleAnimatedLayout() {
-        reportHeight();
-        sampleCount += 1;
-        if (sampleCount < 20) {
-          setTimeout(sampleAnimatedLayout, 100);
-        }
-      }
-      sampleAnimatedLayout();
-    })();
-  </script>
 </body>
 </html>
 """

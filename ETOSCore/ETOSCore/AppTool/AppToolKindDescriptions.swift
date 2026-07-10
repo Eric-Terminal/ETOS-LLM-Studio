@@ -14,12 +14,12 @@ extension AppToolKind {
         case .showWidget:
             #if os(watchOS)
             return NSLocalizedString(
-                "在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。title 可选，widget_code 必填，loading_messages 可选。",
+                "在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。inline_aspect_ratio 必填，用于把结果同步到支持内联展示的客户端；watchOS 会保留但不使用它控制本地全屏尺寸。title 和 loading_messages 可选，widget_code 必填。",
                 comment: "Show widget tool description sent to model on watchOS"
             )
             #else
             return NSLocalizedString(
-                "在 iOS 聊天中把传入的 HTML Widget 渲染为内联网页卡片。App 会将 widget_code 作为 HTML 片段插入宿主管理的容器，并根据气泡可用宽度和片段内容确定卡片尺寸；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请使用响应式宽度和内容驱动高度，避免使用 vh、百分比高度或其他依赖视口高度的布局。title 可选，widget_code 必填，loading_messages 可选。",
+                "在 iOS 聊天中把传入的 HTML Widget 渲染为固定画幅的内联网页卡片。App 会将 widget_code 作为 HTML 片段插入宿主管理的容器，并根据气泡可用宽度与 inline_aspect_ratio 计算卡片高度；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让顶层内容使用 100% 宽高填满容器，并根据容器尺寸响应式布局。inline_aspect_ratio 和 widget_code 必填，title 和 loading_messages 可选。",
                 comment: "Show widget tool description sent to model on iOS"
             )
             #endif

@@ -1212,6 +1212,7 @@
 "主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。\n\n用法：\n1. mode=vector：语义相似检索，适合自然语言问题。\n2. mode=keyword：关键词命中检索，适合名称、术语、短语定位。\n3. count：希望返回的条数；未传时使用系统默认检索数量（Top K）。\n\n返回结果包含完整原文 content。若结果为空，表示当前记忆库无匹配项。" = "主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。\n\n用法：\n1. mode=vector：语义相似检索，适合自然语言问题。\n2. mode=keyword：关键词命中检索，适合名称、术语、短语定位。\n3. count：希望返回的条数；未传时使用系统默认检索数量（Top K）。\n\n返回结果包含完整原文 content。若结果为空，表示当前记忆库无匹配项。";
 "Widget 标题（可选）。" = "Widget 标题（可选）。";
 "watchOS 全屏 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应填满可用宽高，并适配手表的小尺寸圆角屏幕。" = "watchOS 全屏 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应填满可用宽高，并适配手表的小尺寸圆角屏幕。";
+"同步到支持内联展示的客户端时使用的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。watchOS 本地全屏渲染会保留但忽略此值。" = "同步到支持内联展示的客户端时使用的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。watchOS 本地全屏渲染会保留但忽略此值。";
 "渲染中提示文案列表（可选）。" = "渲染中提示文案列表（可选）。";
 "问答标题（可选）。" = "问答标题（可选）。";
 "问答说明（可选）。" = "问答说明（可选）。";
@@ -1268,7 +1269,7 @@
 "是否返回建表 SQL，默认 false。" = "是否返回建表 SQL，默认 false。";
 "只读 SQL，支持 SELECT / WITH / PRAGMA，且仅允许单条语句。" = "只读 SQL，支持 SELECT / WITH / PRAGMA，且仅允许单条语句。";
 "写入 SQL，仅支持 INSERT / UPDATE / DELETE / REPLACE，且仅允许单条语句。" = "写入 SQL，仅支持 INSERT / UPDATE / DELETE / REPLACE，且仅允许单条语句。";
-"在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。title 可选，widget_code 必填，loading_messages 可选。" = "在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。title 可选，widget_code 必填，loading_messages 可选。";
+"在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。inline_aspect_ratio 必填，用于把结果同步到支持内联展示的客户端；watchOS 会保留但不使用它控制本地全屏尺寸。title 和 loading_messages 可选，widget_code 必填。" = "在 watchOS 中把传入的 HTML Widget 打开为独立全屏网页。App 会将 widget_code 作为 HTML 片段插入宿主管理的页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。请让内容填满可用区域，并针对手表的小尺寸圆角屏幕使用响应式布局。inline_aspect_ratio 必填，用于把结果同步到支持内联展示的客户端；watchOS 会保留但不使用它控制本地全屏尺寸。title 和 loading_messages 可选，widget_code 必填。";
 "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。" = "向用户展示结构化问答面板。支持 single_select / multi_select、可选的“其他输入”、必填校验与自定义提交按钮文案。此工具用于在回答前收集关键信息，调用后应等待用户补充。";
 "把文本放入用户当前聊天输入框。text 为要填入的内容；mode=replace 会覆盖输入框，mode=append 会追加到末尾。适合为用户准备可编辑的草稿，而不是直接代替用户发送。" = "把文本放入用户当前聊天输入框。text 为要填入的内容；mode=replace 会覆盖输入框，mode=append 会追加到末尾。适合为用户准备可编辑的草稿，而不是直接代替用户发送。";
 "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息。" = "向反馈助手提交一条问题或建议工单。title 和 detail 必填；category 可选 bug 或 suggestion（默认 bug）；可附带复现步骤、预期行为、实际行为、补充信息。";

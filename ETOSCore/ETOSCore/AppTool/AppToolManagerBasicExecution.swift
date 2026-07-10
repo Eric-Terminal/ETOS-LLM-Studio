@@ -14,6 +14,7 @@ extension AppToolManager {
             let title: String?
             let widget_code: String
             let loading_messages: [String]?
+            let inline_aspect_ratio: String?
         }
 
         guard let argsData = argumentsJSON.data(using: .utf8),
@@ -31,6 +32,8 @@ extension AppToolManager {
         }
 
         let normalizedTitle = args.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAspectRatio = args.inline_aspect_ratio
+            .flatMap(ToolWidgetAspectRatio.init(rawValue:)) ?? .standard
         let normalizedLoadingMessages = (args.loading_messages ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -38,6 +41,7 @@ extension AppToolManager {
         let payload: [String: Any] = [
             "title": normalizedTitle as Any,
             "widget_code": widgetCode,
+            "inline_aspect_ratio": normalizedAspectRatio.rawValue,
             "loading_messages": normalizedLoadingMessages
         ]
         return prettyPrintedJSONString(from: payload)

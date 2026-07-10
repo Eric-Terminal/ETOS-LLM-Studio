@@ -17,10 +17,18 @@ extension AppToolKind {
                 "watchOS 全屏 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主页面；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应填满可用宽高，并适配手表的小尺寸圆角屏幕。",
                 comment: "Show widget tool html parameter description on watchOS"
             )
+            let inlineAspectRatioDescription = NSLocalizedString(
+                "同步到支持内联展示的客户端时使用的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。watchOS 本地全屏渲染会保留但忽略此值。",
+                comment: "Show widget inline aspect ratio parameter description on watchOS"
+            )
             #else
             let widgetCodeDescription = NSLocalizedString(
-                "iOS 聊天内联 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的宿主容器；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应使用响应式宽度与内容驱动高度，避免 vh、百分比高度或其他依赖视口高度的布局。",
+                "iOS 聊天内联 Widget 的 HTML 片段，可包含 style/script。片段会被插入 App 提供的固定画幅宿主容器；不要包含 html、head、body 或 viewport meta，也不要修改宿主页面。顶层内容应使用 100% 宽高填满容器，并根据容器尺寸响应式布局。",
                 comment: "Show widget tool html parameter description on iOS"
+            )
+            let inlineAspectRatioDescription = NSLocalizedString(
+                "iOS 内联卡片的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。宿主会填满气泡可用宽度，并根据此画幅计算固定高度。",
+                comment: "Show widget inline aspect ratio parameter description on iOS"
             )
             #endif
             return JSONValue.dictionary([
@@ -34,6 +42,10 @@ extension AppToolKind {
                         "type": .string("string"),
                         "description": .string(widgetCodeDescription)
                     ]),
+                    "inline_aspect_ratio": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(inlineAspectRatioDescription)
+                    ]),
                     "loading_messages": .dictionary([
                         "type": .string("array"),
                         "description": .string(NSLocalizedString("渲染中提示文案列表（可选）。", comment: "Show widget tool loading messages parameter description")),
@@ -42,7 +54,7 @@ extension AppToolKind {
                         ])
                     ])
                 ]),
-                "required": .array([.string("widget_code")])
+                "required": .array([.string("widget_code"), .string("inline_aspect_ratio")])
             ])
         case .askUserInput:
             return JSONValue.dictionary([
