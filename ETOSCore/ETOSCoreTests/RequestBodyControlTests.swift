@@ -177,6 +177,58 @@ struct RequestBodyControlTests {
         #expect(inherited.selectedOptionIDsByControlID["budget"] == "low")
     }
 
+    @Test("单独保存开关不会覆盖组选项状态")
+    func testSavingToggleValuePreservesOptionSelection() {
+        let suiteName = "RequestBodyControlTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let controls = [
+            ModelRequestBodyControl(
+                id: "thinking-toggle",
+                title: "开启思考",
+                kind: .toggle,
+                defaultIsActive: true
+            ),
+            ModelRequestBodyControl(
+                id: "budget",
+                title: "思考预算",
+                kind: .optionGroup,
+                defaultOptionID: "low",
+                options: [
+                    ModelRequestBodyControlOption(id: "low", title: "low"),
+                    ModelRequestBodyControlOption(id: "high", title: "high")
+                ]
+            )
+        ]
+        ModelRequestBodyControlRuntimeStore.save(
+            ModelRequestBodyControlState(
+                selectedOptionIDsByControlID: ["budget": "high"]
+            ),
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+
+        ModelRequestBodyControlRuntimeStore.saveToggleValue(
+            false,
+            forControlID: "thinking-toggle",
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+
+        let restored = ModelRequestBodyControlRuntimeStore.state(
+            forModelKey: "model-a",
+            controls: controls,
+            userDefaults: defaults
+        )
+        #expect(restored.toggleValuesByControlID["thinking-toggle"] == false)
+        #expect(restored.selectedOptionIDsByControlID["budget"] == "high")
+    }
+
     @Test("模型 effectiveOverrideParameters 使用运行态状态")
     func testModelEffectiveOverrideParametersUsesState() {
         let model = Model(

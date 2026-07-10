@@ -298,6 +298,28 @@ public enum ModelRequestBodyControlRuntimeStore {
         saveState(normalized, forKey: inheritedStateKey, userDefaults: userDefaults)
     }
 
+    /// 仅更新单个开关，保留同一模型中其他控制项的运行态。
+    public static func saveToggleValue(
+        _ isActive: Bool,
+        forControlID controlID: String,
+        forModelKey modelKey: String,
+        controls: [ModelRequestBodyControl],
+        userDefaults: UserDefaults = .standard
+    ) {
+        var currentState = state(
+            forModelKey: modelKey,
+            controls: controls,
+            userDefaults: userDefaults
+        )
+        currentState.toggleValuesByControlID[controlID] = isActive
+        save(
+            currentState,
+            forModelKey: modelKey,
+            controls: controls,
+            userDefaults: userDefaults
+        )
+    }
+
     private static func loadState(forKey key: String, userDefaults: UserDefaults) -> ModelRequestBodyControlState? {
         guard let data = dataValue(forKey: key, userDefaults: userDefaults) else { return nil }
         return try? JSONDecoder().decode(ModelRequestBodyControlState.self, from: data)

@@ -3024,7 +3024,7 @@
 "消息 %d" = "Messages %d";
 "清空历史" = "Clear History";
 "源路径与目标路径相同，无需移动。" = "Source and destination paths are the same. No move is needed.";
-"点击控制名称后选择具体参数。" = "Tap a control name, then choose specific parameters.";
+"开关可直接切换，点击选项组可选择具体参数。" = "スイッチは直接切り替えられます。オプショングループをタップして値を選択します。";
 "点击文件夹继续浏览，点击 JSON 文件打开分页阅读。" = "Tap folders to continue browsing. Tap JSON files to open paged reading.";
 "点击文件夹继续浏览，点击文件可尝试预览内容。" = "フォルダをタップして参照を続けます。ファイルをタップすると内容のプレビューを試せます。";
 "点击进入二级菜单配置开关与审批策略" = "Tap to configure switches and approval policy in the secondary menu";

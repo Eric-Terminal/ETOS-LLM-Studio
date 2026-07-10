@@ -159,6 +159,9 @@ struct WatchQuickRequestControlsView: View {
     let runnableModel: RunnableModel
     let onDone: () -> Void
 
+    @State private var state: ModelRequestBodyControlState?
+    @State private var pendingSaveTask: Task<Void, Never>?
+
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
         List {
@@ -167,20 +170,77 @@ struct WatchQuickRequestControlsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(controls) { control in
-                    NavigationLink {
-                        WatchRequestBodyControlDetailView(
-                            runnableModel: runnableModel,
-                            control: control,
-                            onDone: onDone
-                        )
-                    } label: {
-                        Text(control.title)
+                    switch control.kind {
+                    case .toggle:
+                        Toggle(isOn: toggleBinding(for: control)) {
+                            Text(control.title)
+                        }
+                        .disabled(state == nil)
+                    case .optionGroup:
+                        NavigationLink {
+                            WatchRequestBodyControlDetailView(
+                                runnableModel: runnableModel,
+                                control: control,
+                                onDone: onDone
+                            )
+                        } label: {
+                            Text(control.title)
+                        }
                     }
                 }
             }
         }
         .navigationTitle(NSLocalizedString("请求控制", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: runnableModel.id) {
+            await loadState()
+        }
+    }
+
+    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
+        Binding(
+            get: {
+                state?.toggleValuesByControlID[control.id] ?? control.defaultIsActive
+            },
+            set: { isActive in
+                guard var updatedState = state else { return }
+                updatedState.toggleValuesByControlID[control.id] = isActive
+                state = updatedState
+                enqueueToggleSave(isActive, controlID: control.id)
+            }
+        )
+    }
+
+    private func loadState() async {
+        state = nil
+        let modelKey = runnableModel.id
+        let modelControls = runnableModel.model.requestBodyControls
+        let loadedState = await Task.detached(priority: .userInitiated) {
+            ModelRequestBodyControlRuntimeStore.state(
+                forModelKey: modelKey,
+                controls: modelControls
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+        state = loadedState
+    }
+
+    private func enqueueToggleSave(_ isActive: Bool, controlID: String) {
+        let previousSaveTask = pendingSaveTask
+        let modelKey = runnableModel.id
+        let modelControls = runnableModel.model.requestBodyControls
+        pendingSaveTask = Task(priority: .utility) {
+            await previousSaveTask?.value
+            guard !Task.isCancelled else { return }
+            await Task.detached(priority: .utility) {
+                ModelRequestBodyControlRuntimeStore.saveToggleValue(
+                    isActive,
+                    forControlID: controlID,
+                    forModelKey: modelKey,
+                    controls: modelControls
+                )
+            }.value
+        }
     }
 }
 

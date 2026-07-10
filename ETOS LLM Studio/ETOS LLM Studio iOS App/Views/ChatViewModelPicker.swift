@@ -54,7 +54,7 @@ extension ChatView {
                     } header: {
                         Text(NSLocalizedString("请求控制", comment: ""))
                     } footer: {
-                        Text(NSLocalizedString("点击控制名称后选择具体参数。", comment: ""))
+                        Text(NSLocalizedString("开关可直接切换，点击选项组可选择具体参数。", comment: ""))
                     }
                 }
 
@@ -102,17 +102,11 @@ extension ChatView {
     @ViewBuilder
     var nativeModelPickerRequestControlRows: some View {
         if let selectedModel = viewModel.selectedModel {
-            ForEach(selectedModelRequestControls) { control in
-                NavigationLink {
-                    ChatRequestBodyControlDetailView(
-                        runnableModel: selectedModel,
-                        control: control,
-                        onDone: dismissModelPickerSheet
-                    )
-                } label: {
-                    Text(control.title)
-                }
-            }
+            ChatRequestBodyControlRows(
+                runnableModel: selectedModel,
+                controls: selectedModelRequestControls,
+                onDone: dismissModelPickerSheet
+            )
         }
     }
 
@@ -130,5 +124,85 @@ extension ChatView {
 
     var hasModelPickerRequestControls: Bool {
         !selectedModelRequestControls.isEmpty
+    }
+}
+
+private struct ChatRequestBodyControlRows: View {
+    let runnableModel: RunnableModel
+    let controls: [ModelRequestBodyControl]
+    let onDone: () -> Void
+
+    @State private var state: ModelRequestBodyControlState?
+    @State private var pendingSaveTask: Task<Void, Never>?
+
+    var body: some View {
+        ForEach(controls) { control in
+            switch control.kind {
+            case .toggle:
+                Toggle(isOn: toggleBinding(for: control)) {
+                    Text(control.title)
+                }
+                .disabled(state == nil)
+            case .optionGroup:
+                NavigationLink {
+                    ChatRequestBodyControlDetailView(
+                        runnableModel: runnableModel,
+                        control: control,
+                        onDone: onDone
+                    )
+                } label: {
+                    Text(control.title)
+                }
+            }
+        }
+        .task(id: runnableModel.id) {
+            await loadState()
+        }
+    }
+
+    private func toggleBinding(for control: ModelRequestBodyControl) -> Binding<Bool> {
+        Binding(
+            get: {
+                state?.toggleValuesByControlID[control.id] ?? control.defaultIsActive
+            },
+            set: { isActive in
+                guard var updatedState = state else { return }
+                updatedState.toggleValuesByControlID[control.id] = isActive
+                state = updatedState
+                enqueueToggleSave(isActive, controlID: control.id)
+            }
+        )
+    }
+
+    private func loadState() async {
+        state = nil
+        let modelKey = runnableModel.id
+        let modelControls = runnableModel.model.requestBodyControls
+        let loadedState = await Task.detached(priority: .userInitiated) {
+            ModelRequestBodyControlRuntimeStore.state(
+                forModelKey: modelKey,
+                controls: modelControls
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+        state = loadedState
+    }
+
+    private func enqueueToggleSave(_ isActive: Bool, controlID: String) {
+        let previousSaveTask = pendingSaveTask
+        let modelKey = runnableModel.id
+        let modelControls = runnableModel.model.requestBodyControls
+        pendingSaveTask = Task(priority: .utility) {
+            await previousSaveTask?.value
+            guard !Task.isCancelled else { return }
+            await Task.detached(priority: .utility) {
+                ModelRequestBodyControlRuntimeStore.saveToggleValue(
+                    isActive,
+                    forControlID: controlID,
+                    forModelKey: modelKey,
+                    controls: modelControls
+                )
+            }.value
+        }
     }
 }
