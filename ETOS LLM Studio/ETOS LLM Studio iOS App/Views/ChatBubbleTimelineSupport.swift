@@ -131,6 +131,7 @@ struct TimelineReasoningStepView: View {
     let suppressContentRender: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let customTextStyleColors: ChatAppearanceTextStyleColors
     let previewMaxHeight: CGFloat
     let usesNoBubbleStyle: Bool
     let enableMarkdown: Bool
@@ -179,6 +180,7 @@ struct TimelineReasoningStepView: View {
                         enableMathRendering: enableMathRendering,
                         isOutgoing: false,
                         textColor: secondaryColor,
+                        customTextStyleColors: customTextStyleColors,
                         font: .subheadline
                     )
                 }

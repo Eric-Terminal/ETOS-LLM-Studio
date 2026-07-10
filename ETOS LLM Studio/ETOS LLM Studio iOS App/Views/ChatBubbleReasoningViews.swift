@@ -90,6 +90,7 @@ struct ReasoningMarkdownContentView: View {
     let enableMathRendering: Bool
     let isOutgoing: Bool
     let textColor: Color
+    let customTextStyleColors: ChatAppearanceTextStyleColors
     let font: Font
 
     var body: some View {
@@ -103,7 +104,8 @@ struct ReasoningMarkdownContentView: View {
                 isOutgoing: isOutgoing,
                 enableAdvancedRenderer: enableAdvancedRenderer,
                 enableMathRendering: enableMathRendering,
-                customTextColor: textColor
+                customTextColor: textColor,
+                customTextStyleColors: customTextStyleColors
             )
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -129,6 +131,7 @@ struct ReasoningDisclosureView: View, Equatable {
     let usesNoBubbleStyle: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let customTextStyleColors: ChatAppearanceTextStyleColors
     let previewMaxHeight: CGFloat
     let enableMarkdown: Bool
     let enableAdvancedRenderer: Bool
@@ -148,6 +151,7 @@ struct ReasoningDisclosureView: View, Equatable {
             && lhs.usesNoBubbleStyle == rhs.usesNoBubbleStyle
             && lhs.isShimmering == rhs.isShimmering
             && Self.colorSignature(lhs.customTextColor) == Self.colorSignature(rhs.customTextColor)
+            && lhs.customTextStyleColors == rhs.customTextStyleColors
             && lhs.previewMaxHeight == rhs.previewMaxHeight
             && lhs.enableMarkdown == rhs.enableMarkdown
             && lhs.enableAdvancedRenderer == rhs.enableAdvancedRenderer
@@ -220,6 +224,7 @@ struct ReasoningDisclosureView: View, Equatable {
                         enableMathRendering: enableMathRendering,
                         isOutgoing: isOutgoing,
                         textColor: contentColor,
+                        customTextStyleColors: customTextStyleColors,
                         font: .subheadline
                     )
                     .padding(.top, 8)

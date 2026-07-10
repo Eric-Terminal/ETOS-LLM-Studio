@@ -44,6 +44,7 @@ extension ChatBubble {
             enableAdvancedRenderer: enableAdvancedRenderer,
             enableMathRendering: enableMathRendering,
             customTextColor: customTextColorOverride,
+            customTextStyleColors: customTextStyleColors,
             isStreaming: showsStreamingIndicators,
             onCodeBlockHeaderTap: onCodeBlockHeaderTap
         )
@@ -264,6 +265,7 @@ extension ChatBubble {
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         textColor: contentColor,
+                        customTextStyleColors: customTextStyleColors,
                         font: .footnote,
                         onCodeBlockHeaderTap: onCodeBlockHeaderTap
                     )

@@ -147,6 +147,12 @@ struct WatchChatAppearanceProfileSettingsView: View {
             profile.assistantBubble = .defaultAssistantBubble
             profile.userLightText = .defaultUserLightText
             profile.assistantLightText = .defaultAssistantLightText
+            profile.userLightTextStyles = ChatAppearanceTextStyleColors(
+                defaultHex: ChatAppearanceColorSlot.defaultUserLightText.hex
+            )
+            profile.assistantLightTextStyles = ChatAppearanceTextStyleColors(
+                defaultHex: ChatAppearanceColorSlot.defaultAssistantLightText.hex
+            )
             try manager.updateProfile(profile)
         } catch {
             show(error)
@@ -228,19 +234,17 @@ private struct WatchChatAppearanceProfileEditor: View {
             fallback: defaultAssistantBubbleColor,
             description: NSLocalizedString("影响助手消息与 Tool 消息的气泡背景颜色。", comment: "Assistant bubble color description")
         )
-        colorSlotEditor(
-            title: NSLocalizedString("用户文字颜色", comment: "User text color title"),
-            toggleTitle: NSLocalizedString("自定义用户文字颜色", comment: "Custom user text color toggle"),
-            slot: userLightTextBinding,
-            fallback: .white,
-            description: NSLocalizedString("覆盖用户气泡的聊天文本颜色。", comment: "User text color description")
+        textStyleColorsLink(
+            title: NSLocalizedString("用户文字样式", comment: "User text styles title"),
+            bodyColor: userLightTextBinding,
+            styleColors: userLightTextStylesBinding,
+            fallback: .white
         )
-        colorSlotEditor(
-            title: NSLocalizedString("助手文字颜色", comment: "Assistant text color title"),
-            toggleTitle: NSLocalizedString("自定义助手文字颜色", comment: "Custom assistant text color toggle"),
-            slot: assistantLightTextBinding,
-            fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1),
-            description: NSLocalizedString("覆盖助手和 Tool 气泡的聊天文本颜色。", comment: "Assistant text color description")
+        textStyleColorsLink(
+            title: NSLocalizedString("助手文字样式", comment: "Assistant text styles title"),
+            bodyColor: assistantLightTextBinding,
+            styleColors: assistantLightTextStylesBinding,
+            fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1)
         )
     }
 
@@ -278,6 +282,14 @@ private struct WatchChatAppearanceProfileEditor: View {
         slotBinding(\.assistantLightText)
     }
 
+    private var userLightTextStylesBinding: Binding<ChatAppearanceTextStyleColors> {
+        textStylesBinding(\.userLightTextStyles)
+    }
+
+    private var assistantLightTextStylesBinding: Binding<ChatAppearanceTextStyleColors> {
+        textStylesBinding(\.assistantLightTextStyles)
+    }
+
     private func slotBinding(_ keyPath: WritableKeyPath<ChatAppearanceProfile, ChatAppearanceColorSlot>) -> Binding<ChatAppearanceColorSlot> {
         Binding(
             get: { profile[keyPath: keyPath] },
@@ -287,6 +299,38 @@ private struct WatchChatAppearanceProfileEditor: View {
                 onChange(updated)
             }
         )
+    }
+
+    private func textStylesBinding(
+        _ keyPath: WritableKeyPath<ChatAppearanceProfile, ChatAppearanceTextStyleColors>
+    ) -> Binding<ChatAppearanceTextStyleColors> {
+        Binding(
+            get: { profile[keyPath: keyPath] },
+            set: { newValue in
+                var updated = profile
+                updated[keyPath: keyPath] = newValue
+                onChange(updated)
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func textStyleColorsLink(
+        title: String,
+        bodyColor: Binding<ChatAppearanceColorSlot>,
+        styleColors: Binding<ChatAppearanceTextStyleColors>,
+        fallback: Color
+    ) -> some View {
+        NavigationLink {
+            WatchTextStyleColorSettingsView(
+                title: title,
+                bodyColor: bodyColor,
+                styleColors: styleColors,
+                fallback: fallback
+            )
+        } label: {
+            Text(title)
+        }
     }
 
     @ViewBuilder
@@ -438,7 +482,7 @@ private struct WatchScheduleRuleRow: View {
     }
 }
 
-private struct WatchColorEditorView: View {
+struct WatchColorEditorView: View {
     let title: String
     @Binding var hexValue: String
     let fallback: Color

@@ -171,6 +171,12 @@ struct ChatBubble: View {
         return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
     }
 
+    var customTextStyleColors: ChatAppearanceTextStyleColors {
+        message.role == .user
+            ? activeAppearanceProfile.userLightTextStyles
+            : activeAppearanceProfile.assistantLightTextStyles
+    }
+
     func resolvedTextColor(default defaultColor: Color) -> Color {
         customTextColorOverride ?? defaultColor
     }

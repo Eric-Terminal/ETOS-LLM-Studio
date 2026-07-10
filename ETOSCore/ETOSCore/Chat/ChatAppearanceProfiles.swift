@@ -19,6 +19,28 @@ public struct ChatAppearanceColorSlot: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+public struct ChatAppearanceTextStyleColors: Codable, Equatable, Hashable, Sendable {
+    public var emphasis: ChatAppearanceColorSlot
+    public var strong: ChatAppearanceColorSlot
+    public var code: ChatAppearanceColorSlot
+
+    public init(
+        defaultHex: String,
+        emphasis: ChatAppearanceColorSlot? = nil,
+        strong: ChatAppearanceColorSlot? = nil,
+        code: ChatAppearanceColorSlot? = nil
+    ) {
+        let defaultSlot = ChatAppearanceColorSlot(isEnabled: false, hex: defaultHex)
+        self.emphasis = emphasis ?? defaultSlot
+        self.strong = strong ?? defaultSlot
+        self.code = code ?? defaultSlot
+    }
+
+    public var usesAutomaticCodeSyntaxHighlighting: Bool {
+        !code.isEnabled
+    }
+}
+
 public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable, Sendable {
     public static let defaultProfileID = "default"
 
@@ -30,6 +52,10 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
     public var userDarkText: ChatAppearanceColorSlot
     public var assistantLightText: ChatAppearanceColorSlot
     public var assistantDarkText: ChatAppearanceColorSlot
+    public var userLightTextStyles: ChatAppearanceTextStyleColors
+    public var userDarkTextStyles: ChatAppearanceTextStyleColors
+    public var assistantLightTextStyles: ChatAppearanceTextStyleColors
+    public var assistantDarkTextStyles: ChatAppearanceTextStyleColors
 
     public init(
         id: String = UUID().uuidString,
@@ -41,20 +67,36 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
         userLightText: ChatAppearanceColorSlot? = nil,
         userDarkText: ChatAppearanceColorSlot? = nil,
         assistantLightText: ChatAppearanceColorSlot? = nil,
-        assistantDarkText: ChatAppearanceColorSlot? = nil
+        assistantDarkText: ChatAppearanceColorSlot? = nil,
+        userLightTextStyles: ChatAppearanceTextStyleColors? = nil,
+        userDarkTextStyles: ChatAppearanceTextStyleColors? = nil,
+        assistantLightTextStyles: ChatAppearanceTextStyleColors? = nil,
+        assistantDarkTextStyles: ChatAppearanceTextStyleColors? = nil
     ) {
+        let resolvedUserLightText = userLightText
+            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultUserLightText)
+        let resolvedUserDarkText = userDarkText
+            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultUserDarkText)
+        let resolvedAssistantLightText = assistantLightText
+            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultAssistantLightText)
+        let resolvedAssistantDarkText = assistantDarkText
+            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultAssistantDarkText)
         self.id = id
         self.name = name
         self.userBubble = userBubble
         self.assistantBubble = assistantBubble
-        self.userLightText = userLightText
-            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultUserLightText)
-        self.userDarkText = userDarkText
-            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultUserDarkText)
-        self.assistantLightText = assistantLightText
-            ?? Self.legacyTextSlot(lightText, legacyDefault: .defaultLightText, roleDefault: .defaultAssistantLightText)
-        self.assistantDarkText = assistantDarkText
-            ?? Self.legacyTextSlot(darkText, legacyDefault: .defaultDarkText, roleDefault: .defaultAssistantDarkText)
+        self.userLightText = resolvedUserLightText
+        self.userDarkText = resolvedUserDarkText
+        self.assistantLightText = resolvedAssistantLightText
+        self.assistantDarkText = resolvedAssistantDarkText
+        self.userLightTextStyles = userLightTextStyles
+            ?? ChatAppearanceTextStyleColors(defaultHex: resolvedUserLightText.hex)
+        self.userDarkTextStyles = userDarkTextStyles
+            ?? ChatAppearanceTextStyleColors(defaultHex: resolvedUserDarkText.hex)
+        self.assistantLightTextStyles = assistantLightTextStyles
+            ?? ChatAppearanceTextStyleColors(defaultHex: resolvedAssistantLightText.hex)
+        self.assistantDarkTextStyles = assistantDarkTextStyles
+            ?? ChatAppearanceTextStyleColors(defaultHex: resolvedAssistantDarkText.hex)
     }
 
     public var lightText: ChatAppearanceColorSlot {
@@ -85,7 +127,11 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
             userLightText: userLightText,
             userDarkText: userDarkText,
             assistantLightText: assistantLightText,
-            assistantDarkText: assistantDarkText
+            assistantDarkText: assistantDarkText,
+            userLightTextStyles: userLightTextStyles,
+            userDarkTextStyles: userDarkTextStyles,
+            assistantLightTextStyles: assistantLightTextStyles,
+            assistantDarkTextStyles: assistantDarkTextStyles
         )
     }
 
@@ -117,6 +163,10 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
         case userDarkText
         case assistantLightText
         case assistantDarkText
+        case userLightTextStyles
+        case userDarkTextStyles
+        case assistantLightTextStyles
+        case assistantDarkTextStyles
     }
 
     public init(from decoder: Decoder) throws {
@@ -128,14 +178,26 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
 
         let legacyLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .lightText)
         let legacyDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .darkText)
-        userLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userLightText)
+        let decodedUserLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userLightText)
             ?? Self.legacyTextSlot(legacyLightText, legacyDefault: .defaultLightText, roleDefault: .defaultUserLightText)
-        userDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userDarkText)
+        let decodedUserDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .userDarkText)
             ?? Self.legacyTextSlot(legacyDarkText, legacyDefault: .defaultDarkText, roleDefault: .defaultUserDarkText)
-        assistantLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantLightText)
+        let decodedAssistantLightText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantLightText)
             ?? Self.legacyTextSlot(legacyLightText, legacyDefault: .defaultLightText, roleDefault: .defaultAssistantLightText)
-        assistantDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantDarkText)
+        let decodedAssistantDarkText = try container.decodeIfPresent(ChatAppearanceColorSlot.self, forKey: .assistantDarkText)
             ?? Self.legacyTextSlot(legacyDarkText, legacyDefault: .defaultDarkText, roleDefault: .defaultAssistantDarkText)
+        userLightText = decodedUserLightText
+        userDarkText = decodedUserDarkText
+        assistantLightText = decodedAssistantLightText
+        assistantDarkText = decodedAssistantDarkText
+        userLightTextStyles = try container.decodeIfPresent(ChatAppearanceTextStyleColors.self, forKey: .userLightTextStyles)
+            ?? ChatAppearanceTextStyleColors(defaultHex: decodedUserLightText.hex)
+        userDarkTextStyles = try container.decodeIfPresent(ChatAppearanceTextStyleColors.self, forKey: .userDarkTextStyles)
+            ?? ChatAppearanceTextStyleColors(defaultHex: decodedUserDarkText.hex)
+        assistantLightTextStyles = try container.decodeIfPresent(ChatAppearanceTextStyleColors.self, forKey: .assistantLightTextStyles)
+            ?? ChatAppearanceTextStyleColors(defaultHex: decodedAssistantLightText.hex)
+        assistantDarkTextStyles = try container.decodeIfPresent(ChatAppearanceTextStyleColors.self, forKey: .assistantDarkTextStyles)
+            ?? ChatAppearanceTextStyleColors(defaultHex: decodedAssistantDarkText.hex)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -150,6 +212,10 @@ public struct ChatAppearanceProfile: Codable, Identifiable, Equatable, Hashable,
         try container.encode(userDarkText, forKey: .userDarkText)
         try container.encode(assistantLightText, forKey: .assistantLightText)
         try container.encode(assistantDarkText, forKey: .assistantDarkText)
+        try container.encode(userLightTextStyles, forKey: .userLightTextStyles)
+        try container.encode(userDarkTextStyles, forKey: .userDarkTextStyles)
+        try container.encode(assistantLightTextStyles, forKey: .assistantLightTextStyles)
+        try container.encode(assistantDarkTextStyles, forKey: .assistantDarkTextStyles)
     }
 }
 
@@ -222,7 +288,7 @@ public struct ChatAppearanceProfileConfiguration: Codable, Equatable, Sendable {
     public var scheduleRules: [ChatAppearanceScheduleRule]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         profiles: [ChatAppearanceProfile] = [.defaultProfile],
         scheduleRules: [ChatAppearanceScheduleRule] = []
     ) {
@@ -335,7 +401,7 @@ public struct ChatAppearanceProfileConfiguration: Codable, Equatable, Sendable {
         }
 
         return ChatAppearanceProfileConfiguration(
-            schemaVersion: max(1, schemaVersion),
+            schemaVersion: max(2, schemaVersion),
             profiles: normalizedProfiles,
             scheduleRules: normalizedRules
         )
@@ -681,6 +747,10 @@ public final class ChatAppearanceProfileManager: ObservableObject {
         profile.userDarkText = .defaultUserDarkText
         profile.assistantLightText = .defaultAssistantLightText
         profile.assistantDarkText = .defaultAssistantDarkText
+        profile.userLightTextStyles = ChatAppearanceTextStyleColors(defaultHex: ChatAppearanceColorSlot.defaultUserLightText.hex)
+        profile.userDarkTextStyles = ChatAppearanceTextStyleColors(defaultHex: ChatAppearanceColorSlot.defaultUserDarkText.hex)
+        profile.assistantLightTextStyles = ChatAppearanceTextStyleColors(defaultHex: ChatAppearanceColorSlot.defaultAssistantLightText.hex)
+        profile.assistantDarkTextStyles = ChatAppearanceTextStyleColors(defaultHex: ChatAppearanceColorSlot.defaultAssistantDarkText.hex)
         try updateProfile(profile)
     }
 

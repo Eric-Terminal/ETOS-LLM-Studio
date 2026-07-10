@@ -11,6 +11,7 @@ import Foundation
 extension ETMathWebShellConfiguration {
     nonisolated static func javascriptRuntime(
         enableMarkdown: Bool,
+        syntaxHighlightingEnabled: Bool,
         codeCopyText: String,
         codeCopiedText: String,
         codeExpandText: String,
@@ -18,6 +19,7 @@ extension ETMathWebShellConfiguration {
     ) -> String {
         """
     const __enableMarkdown = \(enableMarkdown ? "true" : "false");
+    const __syntaxHighlightingEnabled = \(syntaxHighlightingEnabled ? "true" : "false");
     const __state = {
       raw: "",
       availableWidth: 1,
@@ -279,7 +281,7 @@ extension ETMathWebShellConfiguration {
           header.appendChild(languageTag);
         }
 
-        if (window.hljs) {
+        if (__syntaxHighlightingEnabled && window.hljs) {
           try {
             window.hljs.highlightElement(codeNode);
           } catch (_) {}
@@ -483,7 +485,7 @@ extension ETMathWebShellConfiguration {
     function __scheduleBootstrap(retryCount = 0) {
       const markdownReady = !__enableMarkdown || !!window.marked;
       const mathReady = !!window.renderMathInElement && !!window.katex;
-      const codeReady = !__enableMarkdown || !!window.hljs;
+      const codeReady = !__enableMarkdown || !__syntaxHighlightingEnabled || !!window.hljs;
       const mermaidReady = !__enableMarkdown || !__rawHasMermaidFence(__state.raw) || !!window.mermaid;
       const allReady = markdownReady && mathReady && codeReady && mermaidReady;
 

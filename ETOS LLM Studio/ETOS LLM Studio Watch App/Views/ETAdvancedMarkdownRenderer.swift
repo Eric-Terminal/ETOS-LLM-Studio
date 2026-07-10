@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
     let customTextColor: Color?
+    let customTextStyleColors: ChatAppearanceTextStyleColors?
     let isStreaming: Bool
     let onCodeBlockHeaderTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
@@ -33,6 +34,7 @@ struct ETAdvancedMarkdownRenderer: View {
         enableAdvancedRenderer: Bool,
         enableMathRendering: Bool,
         customTextColor: Color? = nil,
+        customTextStyleColors: ChatAppearanceTextStyleColors? = nil,
         isStreaming: Bool = false,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) {
@@ -43,6 +45,7 @@ struct ETAdvancedMarkdownRenderer: View {
         self.enableAdvancedRenderer = enableAdvancedRenderer
         self.enableMathRendering = enableMathRendering
         self.customTextColor = customTextColor
+        self.customTextStyleColors = customTextStyleColors
         self.isStreaming = isStreaming
         self.onCodeBlockHeaderTap = onCodeBlockHeaderTap
     }
@@ -115,6 +118,9 @@ struct ETAdvancedMarkdownRenderer: View {
         textColor: Color,
         fontScale: Double
     ) -> some View {
+        let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
+        let strongTextColor = resolvedStyleColor(customTextStyleColors?.strong, fallback: textColor)
+        let codeTextColor = resolvedStyleColor(customTextStyleColors?.code, fallback: textColor)
         Markdown(markdownContent)
             .markdownImageProvider(
                 ETWatchMarkdownImageProvider { item in
@@ -123,6 +129,10 @@ struct ETAdvancedMarkdownRenderer: View {
             )
             .etChatMarkdownBaseStyle(
                 textColor: textColor,
+                emphasisTextColor: emphasisTextColor,
+                strongTextColor: strongTextColor,
+                codeTextColor: codeTextColor,
+                usesCustomCodeTextColor: customTextStyleColors?.usesAutomaticCodeSyntaxHighlighting == false,
                 isOutgoing: isOutgoing,
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
@@ -166,6 +176,11 @@ struct ETAdvancedMarkdownRenderer: View {
         Text(text)
             .etFont(.body, sampleText: text)
             .foregroundStyle(textColor)
+    }
+
+    private func resolvedStyleColor(_ slot: ChatAppearanceColorSlot?, fallback: Color) -> Color {
+        guard let slot, slot.isEnabled else { return fallback }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
     }
 
     private func containsUnclosedFence(in text: String) -> Bool {
@@ -271,6 +286,10 @@ private extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(
         textColor: Color,
+        emphasisTextColor: Color,
+        strongTextColor: Color,
+        codeTextColor: Color,
+        usesCustomCodeTextColor: Bool,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
         sampleText: String,
@@ -301,9 +320,10 @@ private extension View {
             .markdownSoftBreakMode(.lineBreak)
             .markdownCodeSyntaxHighlighter(
                 ETCodeSyntaxHighlighter(
-                    baseColor: textColor,
+                    baseColor: codeTextColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: prefersDarkPalette,
+                    syntaxHighlightingEnabled: !usesCustomCodeTextColor,
                     maxHighlightedLength: codeHighlightLimit
                 )
             )
@@ -324,7 +344,7 @@ private extension View {
                     FontFamily(.custom(emphasisFontName))
                 }
                 FontStyle(.italic)
-                ForegroundColor(textColor)
+                ForegroundColor(emphasisTextColor)
             }
             .markdownTextStyle(\.strong) {
                 if !usesCharacterFallback,
@@ -332,7 +352,7 @@ private extension View {
                    !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
                 }
-                ForegroundColor(textColor)
+                ForegroundColor(strongTextColor)
             }
             .markdownTextStyle(\.code) {
                 if !usesCharacterFallback,
@@ -342,7 +362,7 @@ private extension View {
                 } else {
                     FontFamily(.system(.monospaced))
                 }
-                ForegroundColor(textColor)
+                ForegroundColor(codeTextColor)
             }
             .markdownBlockStyle(\.blockquote) { configuration in
                 configuration.label
@@ -395,7 +415,7 @@ private extension View {
                                     FontFamily(.system(.monospaced))
                                 }
                                 FontSize(.em(0.88))
-                                ForegroundColor(textColor)
+                                ForegroundColor(codeTextColor)
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)

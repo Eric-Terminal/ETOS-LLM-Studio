@@ -19,6 +19,7 @@ struct ETAdvancedMarkdownRenderer: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
     let customTextColor: Color?
+    var customTextStyleColors: ChatAppearanceTextStyleColors? = nil
     var isStreaming: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -48,6 +49,9 @@ struct ETAdvancedMarkdownRenderer: View {
                         enableMarkdown: enableMarkdown,
                         isOutgoing: isOutgoing,
                         customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
+                        customEmphasisTextHex: enabledHex(customTextStyleColors?.emphasis),
+                        customStrongTextHex: enabledHex(customTextStyleColors?.strong),
+                        customCodeTextHex: enabledHex(customTextStyleColors?.code),
                         prefersDarkPalette: colorScheme == .dark,
                         fontScale: fontScale
                     )
@@ -121,6 +125,9 @@ struct ETAdvancedMarkdownRenderer: View {
         fontScale: Double
     ) -> some View {
         let mathTextColor = ETIOSMathColorComponents(textColor)
+        let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
+        let strongTextColor = resolvedStyleColor(customTextStyleColors?.strong, fallback: textColor)
+        let codeTextColor = resolvedStyleColor(customTextStyleColors?.code, fallback: textColor)
         Markdown(markdownContent)
             .markdownImageProvider(
                 ETIOSMarkdownImageProvider(textColor: mathTextColor, fontScale: fontScale)
@@ -130,6 +137,10 @@ struct ETAdvancedMarkdownRenderer: View {
             )
             .etChatMarkdownBaseStyle(
                 textColor: textColor,
+                emphasisTextColor: emphasisTextColor,
+                strongTextColor: strongTextColor,
+                codeTextColor: codeTextColor,
+                usesCustomCodeTextColor: customTextStyleColors?.usesAutomaticCodeSyntaxHighlighting == false,
                 isOutgoing: isOutgoing,
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
@@ -169,6 +180,16 @@ struct ETAdvancedMarkdownRenderer: View {
         Text(text)
             .etFont(.body, sampleText: text)
             .foregroundStyle(textColor)
+    }
+
+    private func resolvedStyleColor(_ slot: ChatAppearanceColorSlot?, fallback: Color) -> Color {
+        guard let slot, slot.isEnabled else { return fallback }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
+    }
+
+    private func enabledHex(_ slot: ChatAppearanceColorSlot?) -> String? {
+        guard let slot, slot.isEnabled else { return nil }
+        return slot.hex
     }
 
     private func containsUnclosedFence(in text: String) -> Bool {

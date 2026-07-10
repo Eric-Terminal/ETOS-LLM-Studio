@@ -200,6 +200,7 @@ struct WatchReasoningMarkdownContentView: View {
     let enableAdvancedRenderer: Bool
     let enableMathRendering: Bool
     let textColor: Color
+    let customTextStyleColors: ChatAppearanceTextStyleColors
     let font: Font
     let onCodeBlockHeaderTap: ((String) -> Void)?
 
@@ -215,6 +216,7 @@ struct WatchReasoningMarkdownContentView: View {
                 enableAdvancedRenderer: enableAdvancedRenderer,
                 enableMathRendering: enableMathRendering,
                 customTextColor: textColor,
+                customTextStyleColors: customTextStyleColors,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,6 +239,7 @@ struct WatchTimelineReasoningStepView: View {
     let suppressContentRender: Bool
     let isShimmering: Bool
     let customTextColor: Color?
+    let customTextStyleColors: ChatAppearanceTextStyleColors
     let previewMaxHeight: CGFloat
     let enableMarkdown: Bool
     let enableAdvancedRenderer: Bool
@@ -283,6 +286,7 @@ struct WatchTimelineReasoningStepView: View {
                         enableAdvancedRenderer: enableAdvancedRenderer,
                         enableMathRendering: enableMathRendering,
                         textColor: secondaryColor,
+                        customTextStyleColors: customTextStyleColors,
                         font: .footnote,
                         onCodeBlockHeaderTap: nil
                     )

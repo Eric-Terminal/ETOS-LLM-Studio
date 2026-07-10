@@ -14,23 +14,29 @@ struct ETMathWebShellConfiguration: Equatable {
         let enableMarkdown: Bool
         let isOutgoing: Bool
         let customTextHex: String?
+        let customEmphasisTextHex: String?
+        let customStrongTextHex: String?
+        let customCodeTextHex: String?
         let prefersDarkPalette: Bool
         let fontScale: Double
 
         var htmlDocument: String {
             let defaultTextColor = isOutgoing ? "#FFFFFF" : (prefersDarkPalette ? "#FFFFFF" : "#1C1C1E")
             let textColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 1) ?? defaultTextColor
+            let emphasisTextColor = Self.cssRGBA(from: customEmphasisTextHex, alphaMultiplier: 1) ?? textColor
+            let strongTextColor = Self.cssRGBA(from: customStrongTextHex, alphaMultiplier: 1) ?? textColor
+            let codeTextColor = Self.cssRGBA(from: customCodeTextHex, alphaMultiplier: 1) ?? textColor
             let defaultSecondaryTextColor = isOutgoing
                 ? "rgba(255,255,255,0.85)"
                 : (prefersDarkPalette ? "rgba(255,255,255,0.82)" : "#3C3C43")
             let secondaryTextColor = Self.cssRGBA(from: customTextHex, alphaMultiplier: 0.85) ?? defaultSecondaryTextColor
             let linkColor = isOutgoing ? "rgba(255,255,255,0.95)" : "#0A84FF"
-            let codeKeywordColor = isOutgoing ? "rgba(255,255,255,0.96)" : "#8E44AD"
-            let codeStringColor = isOutgoing ? "#D4F5FF" : "#1A9445"
-            let codeNumberColor = isOutgoing ? "#FFE5C6" : "#D46B17"
-            let codeCommentColor = isOutgoing ? "rgba(255,255,255,0.7)" : "#8E8E93"
-            let codeTypeColor = isOutgoing ? "#E9F6FF" : "#0A84A8"
-            let codePunctuationColor = isOutgoing ? "rgba(255,255,255,0.88)" : "#4B5563"
+            let codeKeywordColor = customCodeTextHex == nil ? (isOutgoing ? "rgba(255,255,255,0.96)" : "#8E44AD") : codeTextColor
+            let codeStringColor = customCodeTextHex == nil ? (isOutgoing ? "#D4F5FF" : "#1A9445") : codeTextColor
+            let codeNumberColor = customCodeTextHex == nil ? (isOutgoing ? "#FFE5C6" : "#D46B17") : codeTextColor
+            let codeCommentColor = customCodeTextHex == nil ? (isOutgoing ? "rgba(255,255,255,0.7)" : "#8E8E93") : codeTextColor
+            let codeTypeColor = customCodeTextHex == nil ? (isOutgoing ? "#E9F6FF" : "#0A84A8") : codeTextColor
+            let codePunctuationColor = customCodeTextHex == nil ? (isOutgoing ? "rgba(255,255,255,0.88)" : "#4B5563") : codeTextColor
             let codeCopyButtonBackground = isOutgoing ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.05)"
             let codeCopyButtonActiveBackground = isOutgoing ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)"
             let codeBlockBackgroundColor = isOutgoing ? "rgba(255,255,255,0.16)" : "rgba(127,127,127,0.16)"
@@ -73,6 +79,9 @@ struct ETMathWebShellConfiguration: Equatable {
     :root {
       color-scheme: light dark;
       --text: \(textColor);
+      --text-emphasis: \(emphasisTextColor);
+      --text-strong: \(strongTextColor);
+      --text-code: \(codeTextColor);
       --secondary: \(secondaryTextColor);
       --link: \(linkColor);
       --max-width: 1px;
@@ -126,9 +135,10 @@ struct ETMathWebShellConfiguration: Equatable {
     blockquote > :first-child { margin-top: 0; }
     blockquote > :last-child { margin-bottom: 0; }
     a { color: var(--link); text-decoration: underline; }
-    strong { font-weight: 600; font-family: var(--font-strong); }
-    em { font-style: italic; font-family: var(--font-emphasis); }
+    strong { color: var(--text-strong); font-weight: 600; font-family: var(--font-strong); }
+    em { color: var(--text-emphasis); font-style: italic; font-family: var(--font-emphasis); }
     code {
+      color: var(--text-code);
       font-family: var(--font-code);
       background: rgba(127,127,127,0.16);
       border-radius: 6px;
@@ -346,6 +356,7 @@ struct ETMathWebShellConfiguration: Equatable {
   <script>
     \(Self.javascriptRuntime(
             enableMarkdown: enableMarkdown,
+            syntaxHighlightingEnabled: customCodeTextHex == nil,
             codeCopyText: codeCopyText,
             codeCopiedText: codeCopiedText,
             codeExpandText: codeExpandText,

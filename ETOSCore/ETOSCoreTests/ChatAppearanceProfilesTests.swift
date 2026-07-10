@@ -81,6 +81,8 @@ struct ChatAppearanceProfilesTests {
         #expect(added.userBubble == defaultLoaded.userBubble)
         #expect(added.userLightText == defaultLoaded.userLightText)
         #expect(added.assistantLightText == defaultLoaded.assistantLightText)
+        #expect(added.userLightTextStyles == defaultLoaded.userLightTextStyles)
+        #expect(added.assistantDarkTextStyles == defaultLoaded.assistantDarkTextStyles)
         #expect(added.name == "Profile 1")
     }
 
@@ -101,6 +103,45 @@ struct ChatAppearanceProfilesTests {
         #expect(decoded.userDarkText.hex == "222222FF")
         #expect(decoded.assistantLightText.hex == "333333FF")
         #expect(decoded.assistantDarkText.hex == "444444FF")
+    }
+
+    @Test("文字样式颜色会持久化并为旧配置继承正文色")
+    func textStyleColorsPersistAndMigrate() throws {
+        let profile = ChatAppearanceProfile(
+            id: ChatAppearanceProfile.defaultProfileID,
+            name: "default",
+            userLightText: .init(isEnabled: true, hex: "112233FF"),
+            assistantDarkText: .init(isEnabled: true, hex: "AABBCCFF"),
+            userLightTextStyles: ChatAppearanceTextStyleColors(
+                defaultHex: "112233FF",
+                strong: .init(isEnabled: true, hex: "FF0000FF"),
+                code: .init(isEnabled: true, hex: "00FF00FF")
+            )
+        )
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(ChatAppearanceProfile.self, from: data)
+
+        #expect(decoded.userLightTextStyles.strong.hex == "FF0000FF")
+        #expect(decoded.userLightTextStyles.code.isEnabled == true)
+        #expect(decoded.userLightTextStyles.usesAutomaticCodeSyntaxHighlighting == false)
+
+        let legacyJSON = """
+        {
+          "id": "default",
+          "name": "default",
+          "userLightText": { "isEnabled": true, "hex": "123456FF" },
+          "assistantDarkText": { "isEnabled": true, "hex": "ABCDEF88" }
+        }
+        """
+        let legacyDecoded = try JSONDecoder().decode(
+            ChatAppearanceProfile.self,
+            from: Data(legacyJSON.utf8)
+        )
+
+        #expect(legacyDecoded.userLightTextStyles.strong.isEnabled == false)
+        #expect(legacyDecoded.userLightTextStyles.strong.hex == "123456FF")
+        #expect(legacyDecoded.assistantDarkTextStyles.code.hex == "ABCDEF88")
+        #expect(legacyDecoded.assistantDarkTextStyles.usesAutomaticCodeSyntaxHighlighting == true)
     }
 
     @Test("默认配置名称可以修改并持久化")

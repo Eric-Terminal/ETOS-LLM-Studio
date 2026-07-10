@@ -297,6 +297,17 @@ extension ChatBubble {
         return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
     }
 
+    var customTextStyleColors: ChatAppearanceTextStyleColors {
+        if isOutgoing {
+            return colorScheme == .dark
+                ? activeAppearanceProfile.userDarkTextStyles
+                : activeAppearanceProfile.userLightTextStyles
+        }
+        return colorScheme == .dark
+            ? activeAppearanceProfile.assistantDarkTextStyles
+            : activeAppearanceProfile.assistantLightTextStyles
+    }
+
     var isOutgoing: Bool {
         message.role == .user
     }

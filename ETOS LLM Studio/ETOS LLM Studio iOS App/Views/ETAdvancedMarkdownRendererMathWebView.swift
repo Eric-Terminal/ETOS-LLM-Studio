@@ -16,6 +16,9 @@ struct ETMathWebMarkdownView: View {
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let customTextHex: String?
+    let customEmphasisTextHex: String?
+    let customStrongTextHex: String?
+    let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
 
@@ -28,6 +31,9 @@ struct ETMathWebMarkdownView: View {
                 enableMarkdown: enableMarkdown,
                 isOutgoing: isOutgoing,
                 customTextHex: customTextHex,
+                customEmphasisTextHex: customEmphasisTextHex,
+                customStrongTextHex: customStrongTextHex,
+                customCodeTextHex: customCodeTextHex,
                 prefersDarkPalette: prefersDarkPalette,
                 fontScale: fontScale,
                 availableWidth: max(1, geometry.size.width),
@@ -81,6 +87,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let enableMarkdown: Bool
     let isOutgoing: Bool
     let customTextHex: String?
+    let customEmphasisTextHex: String?
+    let customStrongTextHex: String?
+    let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
     let availableWidth: CGFloat
@@ -138,6 +147,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             enableMarkdown: enableMarkdown,
             isOutgoing: isOutgoing,
             customTextHex: customTextHex,
+            customEmphasisTextHex: customEmphasisTextHex,
+            customStrongTextHex: customStrongTextHex,
+            customCodeTextHex: customCodeTextHex,
             prefersDarkPalette: prefersDarkPalette,
             fontScale: fontScale
         )

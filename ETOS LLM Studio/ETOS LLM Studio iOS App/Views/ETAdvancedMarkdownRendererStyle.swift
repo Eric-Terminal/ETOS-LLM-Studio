@@ -14,6 +14,10 @@ extension View {
     @ViewBuilder
     func etChatMarkdownBaseStyle(
         textColor: Color,
+        emphasisTextColor: Color,
+        strongTextColor: Color,
+        codeTextColor: Color,
+        usesCustomCodeTextColor: Bool,
         isOutgoing: Bool,
         prefersDarkPalette: Bool,
         sampleText: String,
@@ -43,9 +47,10 @@ extension View {
             .markdownSoftBreakMode(.lineBreak)
             .markdownCodeSyntaxHighlighter(
                 ETCodeSyntaxHighlighter(
-                    baseColor: textColor,
+                    baseColor: codeTextColor,
                     isOutgoing: isOutgoing,
                     prefersDarkPalette: prefersDarkPalette,
+                    syntaxHighlightingEnabled: !usesCustomCodeTextColor,
                     maxHighlightedLength: codeHighlightLimit
                 )
             )
@@ -66,7 +71,7 @@ extension View {
                     FontFamily(.custom(emphasisFontName))
                 }
                 FontStyle(.italic)
-                ForegroundColor(textColor)
+                ForegroundColor(emphasisTextColor)
             }
             .markdownTextStyle(\.strong) {
                 if !usesCharacterFallback,
@@ -74,7 +79,7 @@ extension View {
                    !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
                 }
-                ForegroundColor(textColor)
+                ForegroundColor(strongTextColor)
             }
             .markdownTextStyle(\.code) {
                 if !usesCharacterFallback,
@@ -84,7 +89,7 @@ extension View {
                 } else {
                     FontFamily(.system(.monospaced))
                 }
-                ForegroundColor(textColor)
+                ForegroundColor(codeTextColor)
             }
             .markdownBlockStyle(\.blockquote) { configuration in
                 configuration.label
@@ -136,7 +141,7 @@ extension View {
                                     FontFamily(.system(.monospaced))
                                 }
                                 FontSize(.em(0.9))
-                                ForegroundColor(textColor)
+                                ForegroundColor(codeTextColor)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
