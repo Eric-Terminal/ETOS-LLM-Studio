@@ -39,6 +39,7 @@ extension ContentView {
         isMessageSelectionMode = false
         selectedMessageIDs.removeAll()
         selectedMessagesExportTarget = nil
+        showMessageSelectionActions = false
         showSelectedMessagesDeleteConfirm = false
     }
 

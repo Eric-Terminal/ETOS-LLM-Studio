@@ -127,6 +127,7 @@ struct RequestBodyControlDetailView: View {
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     @State private var suggestedPayloadKeys: [String] = []
     @State private var automaticSliderGranularity: Double?
+    @State private var sliderGranularityText = ""
     @State private var showsNumericSortAction = false
 
     var body: some View {
@@ -208,12 +209,14 @@ struct RequestBodyControlDetailView: View {
                         }
                     }
 
-                    if let automaticSliderGranularity {
+                    if automaticSliderGranularity != nil {
                         TextField(
                             NSLocalizedString("粒度", comment: "数值滑块每次调节的最小变化量"),
-                            value: sliderGranularityBinding(defaultValue: automaticSliderGranularity),
-                            format: .number.precision(.fractionLength(0...8))
+                            text: $sliderGranularityText.watchKeyboardNewlineBinding()
                         )
+                        .onChange(of: sliderGranularityText) { _, text in
+                            updateSliderGranularity(from: text)
+                        }
                     }
                 }
             }
@@ -256,6 +259,9 @@ struct RequestBodyControlDetailView: View {
         automaticSliderGranularity = descriptor?.automaticNumericGranularity
         showsNumericSortAction = descriptor?.mode == .continuousNumeric
             && descriptor?.isNumericOrderAscending == false
+        let displayedGranularity = control.sliderGranularity
+            ?? descriptor?.automaticNumericGranularity
+        sliderGranularityText = displayedGranularity.map(formattedGranularity) ?? ""
     }
 
     private func sortOptionsByNumericValue() {
@@ -269,22 +275,36 @@ struct RequestBodyControlDetailView: View {
         }
     }
 
-    private func sliderGranularityBinding(defaultValue: Double) -> Binding<Double> {
-        Binding(
-            get: {
-                guard let granularity = control.sliderGranularity,
-                      granularity.isFinite,
-                      granularity > 0 else {
-                    return defaultValue
-                }
-                return granularity
-            },
-            set: { granularity in
-                control.sliderGranularity = granularity.isFinite && granularity > 0
-                    ? granularity
-                    : nil
-            }
+    private func updateSliderGranularity(from text: String) {
+        let normalizedText = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard let granularity = Double(normalizedText),
+              granularity.isFinite,
+              granularity > 0 else {
+            return
+        }
+        if control.sliderGranularity == nil,
+           let automaticSliderGranularity,
+           abs(granularity - automaticSliderGranularity) <= 0.000_000_001 {
+            return
+        }
+        control.sliderGranularity = granularity
+    }
+
+    private func formattedGranularity(_ granularity: Double) -> String {
+        var formatted = String(
+            format: "%.8f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            granularity
         )
+        while formatted.last == "0" {
+            formatted.removeLast()
+        }
+        if formatted.last == "." {
+            formatted.removeLast()
+        }
+        return formatted
     }
 
     private func addOption() {

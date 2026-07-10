@@ -32,6 +32,7 @@ struct ContentView: View {
     @State var isMessageSelectionMode = false
     @State var selectedMessageIDs: Set<UUID> = []
     @State var selectedMessagesExportTarget: WatchSelectedMessagesExportNavigationTarget?
+    @State var showMessageSelectionActions = false
     @State var showSelectedMessagesDeleteConfirm = false
     @State var dailyPulsePreparationTask: Task<Void, Never>?
     @State var shouldForceScrollToBottom = false

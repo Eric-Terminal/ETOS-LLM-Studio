@@ -251,34 +251,8 @@ extension ContentView {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if isMessageSelectionMode {
-                    Menu {
-                        Button {
-                            exitMessageSelection()
-                        } label: {
-                            Label(NSLocalizedString("退出多选", comment: "Exit message selection mode"), systemImage: "xmark.circle")
-                        }
-
-                        Button {
-                            invertMessageSelection()
-                        } label: {
-                            Label(NSLocalizedString("反选", comment: "Invert message selection"), systemImage: "arrow.left.arrow.right.circle")
-                        }
-
-                        Button {
-                            selectedMessagesExportTarget = WatchSelectedMessagesExportNavigationTarget(
-                                messageIDs: selectedMessageIDs
-                            )
-                        } label: {
-                            Label(NSLocalizedString("导出所选", comment: "Export selected messages"), systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(selectedMessageIDs.isEmpty)
-
-                        Button(role: .destructive) {
-                            showSelectedMessagesDeleteConfirm = true
-                        } label: {
-                            Label(NSLocalizedString("删除所选", comment: "Delete selected messages"), systemImage: "trash")
-                        }
-                        .disabled(selectedMessageIDs.isEmpty)
+                    Button {
+                        showMessageSelectionActions = true
                     } label: {
                         Image(systemName: "ellipsis")
                             .accessibilityLabel(
@@ -297,6 +271,36 @@ extension ContentView {
                     }
                 }
             }
+        }
+        .confirmationDialog(
+            String(
+                format: NSLocalizedString("批量操作，已选择 %d 条消息", comment: "Selected messages batch menu accessibility label"),
+                selectedMessageIDs.count
+            ),
+            isPresented: $showMessageSelectionActions,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("退出多选", comment: "Exit message selection mode")) {
+                exitMessageSelection()
+            }
+
+            Button(NSLocalizedString("反选", comment: "Invert message selection")) {
+                invertMessageSelection()
+            }
+
+            if !selectedMessageIDs.isEmpty {
+                Button(NSLocalizedString("导出所选", comment: "Export selected messages")) {
+                    selectedMessagesExportTarget = WatchSelectedMessagesExportNavigationTarget(
+                        messageIDs: selectedMessageIDs
+                    )
+                }
+
+                Button(NSLocalizedString("删除所选", comment: "Delete selected messages"), role: .destructive) {
+                    showSelectedMessagesDeleteConfirm = true
+                }
+            }
+
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             if isMessageSelectionMode {
