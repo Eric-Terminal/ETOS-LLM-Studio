@@ -48,28 +48,13 @@ extension ChatView {
         includeReasoning: Bool
     ) {
         let selectedIDs = selectedMessageIDs
-        let session = viewModel.currentSession
-        let messages = ChatResponseAttemptSupport.visibleMessages(from: viewModel.allMessagesForSession)
-        Task { @MainActor in
-            do {
-                let fileURL = try await Task.detached(priority: .userInitiated) {
-                    let output = try ChatTranscriptExportService().export(
-                        session: session,
-                        messages: messages,
-                        format: format,
-                        includeReasoning: includeReasoning,
-                        selectedMessageIDs: selectedIDs
-                    )
-                    let fileURL = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
-                    try output.data.write(to: fileURL, options: .atomic)
-                    return fileURL
-                }.value
-                exportSharePayload = ChatExportSharePayload(fileURL: fileURL)
-            } catch {
-                exportErrorMessage = error.localizedDescription
-            }
-        }
+        beginTranscriptExport(
+            session: viewModel.currentSession,
+            messages: viewModel.allMessagesForSession,
+            format: format,
+            includeReasoning: includeReasoning,
+            selectedMessageIDs: selectedIDs
+        )
     }
 
     func deleteSelectedMessages() {
@@ -130,6 +115,8 @@ struct SelectedMessagesExportSheet: View {
             return "number.square"
         case .text:
             return "doc.plaintext"
+        case .png:
+            return "photo"
         }
     }
 }

@@ -38,18 +38,13 @@ extension ChatView {
         includeReasoning: Bool,
         upToMessage: ChatMessage?
     ) {
-        do {
-            let output = try transcriptExportService.export(
-                session: viewModel.currentSession,
-                messages: ChatResponseAttemptSupport.visibleMessages(from: viewModel.allMessagesForSession),
-                format: format,
-                includeReasoning: includeReasoning,
-                upToMessageID: upToMessage?.id
-            )
-            applyExportOutput(output)
-        } catch {
-            exportErrorMessage = error.localizedDescription
-        }
+        beginTranscriptExport(
+            session: viewModel.currentSession,
+            messages: viewModel.allMessagesForSession,
+            format: format,
+            includeReasoning: includeReasoning,
+            upToMessageID: upToMessage?.id
+        )
     }
 
     func exportSession(
@@ -57,39 +52,79 @@ extension ChatView {
         format: ChatTranscriptExportFormat,
         includeReasoning: Bool
     ) {
-        do {
-            let messages: [ChatMessage]
-            if viewModel.currentSession?.id == session.id {
-                messages = viewModel.allMessagesForSession
-            } else {
-                messages = Persistence.loadMessages(for: session.id)
-            }
+        let loadedMessages = viewModel.currentSession?.id == session.id
+            ? viewModel.allMessagesForSession
+            : nil
+        beginTranscriptExport(
+            session: session,
+            messages: loadedMessages,
+            format: format,
+            includeReasoning: includeReasoning
+        )
+    }
 
-            let output = try transcriptExportService.export(
-                session: session,
-                messages: ChatResponseAttemptSupport.visibleMessages(from: messages),
-                format: format,
-                includeReasoning: includeReasoning,
-                upToMessageID: nil
-            )
-            applyExportOutput(output)
-        } catch {
-            exportErrorMessage = error.localizedDescription
+    func beginTranscriptExport(
+        session: ChatSession?,
+        messages: [ChatMessage]?,
+        format: ChatTranscriptExportFormat,
+        includeReasoning: Bool,
+        upToMessageID: UUID? = nil,
+        selectedMessageIDs: Set<UUID>? = nil
+    ) {
+        let imageStyle = transcriptImageStyle
+        Task { @MainActor in
+            do {
+                let fileURL = try await Task.detached(priority: .userInitiated) {
+                    let sourceMessages: [ChatMessage]
+                    if let messages {
+                        sourceMessages = messages
+                    } else if let session {
+                        sourceMessages = Persistence.loadMessages(for: session.id)
+                    } else {
+                        sourceMessages = []
+                    }
+                    let output = try ChatTranscriptExportService().export(
+                        session: session,
+                        messages: ChatResponseAttemptSupport.visibleMessages(from: sourceMessages),
+                        format: format,
+                        includeReasoning: includeReasoning,
+                        upToMessageID: upToMessageID,
+                        selectedMessageIDs: selectedMessageIDs,
+                        imageStyle: imageStyle
+                    )
+                    let fileURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+                    try output.data.write(to: fileURL, options: .atomic)
+                    return fileURL
+                }.value
+                exportSharePayload = ChatExportSharePayload(fileURL: fileURL)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+            }
         }
     }
 
-    func applyExportOutput(_ output: ChatTranscriptExportOutput) {
-        let fileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
-        do {
-            try output.data.write(to: fileURL, options: .atomic)
-            exportSharePayload = ChatExportSharePayload(fileURL: fileURL)
-        } catch {
-            exportErrorMessage = String(
-                format: NSLocalizedString("导出失败：%@", comment: "Export failed alert message"),
-                error.localizedDescription
-            )
-        }
+    var transcriptImageStyle: ChatTranscriptImageStyle {
+        let profile = ChatAppearanceProfileManager.shared.activeProfile
+        let isDark = colorScheme == .dark
+        let userText = isDark ? profile.userDarkText : profile.userLightText
+        let assistantText = isDark ? profile.assistantDarkText : profile.assistantLightText
+        return ChatTranscriptImageStyle(
+            prefersDarkAppearance: isDark,
+            backgroundMediaURL: viewModel.enableBackground ? viewModel.currentBackgroundMediaURL : nil,
+            backgroundOpacity: viewModel.backgroundOpacity,
+            backgroundBlurRadius: viewModel.backgroundBlur,
+            backgroundContentMode: viewModel.backgroundContentMode == "fit" ? .fit : .fill,
+            usesCustomBackground: viewModel.enableBackground,
+            userBubbleHex: profile.userBubble.isEnabled ? profile.userBubble.hex : nil,
+            assistantBubbleHex: profile.assistantBubble.isEnabled ? profile.assistantBubble.hex : nil,
+            userTextHex: userText.isEnabled ? userText.hex : nil,
+            assistantTextHex: assistantText.isEnabled ? assistantText.hex : nil,
+            usesNoBubbleStyle: viewModel.enableNoBubbleUI,
+            subtitle: modelSubtitle,
+            inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
+            untitledConversationName: NSLocalizedString("新的对话", comment: "聊天长图未命名会话标题")
+        )
     }
 
     func downloadImagesToPhotoLibrary(fileNames: [String]) async {

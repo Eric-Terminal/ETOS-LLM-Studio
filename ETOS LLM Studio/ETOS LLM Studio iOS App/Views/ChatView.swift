@@ -116,7 +116,6 @@ struct ChatView: View {
     let reasoningPreviewMaxHeightLimit: CGFloat = 220
     let sessionPickerMaxSessionsPerPage = 100
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
-    let transcriptExportService = ChatTranscriptExportService()
     var scrollToBottomButtonBottomPadding: CGFloat {
         max(chatInputBarHeight + 16, 92)
     }

@@ -2,7 +2,7 @@
 // ChatExportFormatsView.swift
 // ============================================================================
 // ETOS LLM Studio Watch App 会话导出格式选择视图
-// - 支持导出 PDF / Markdown / TXT
+// - 支持导出 PDF / Markdown / TXT / PNG 聊天长图
 // - 支持完整会话、“截至指定消息”与任意多选消息导出
 // ============================================================================
 
@@ -18,6 +18,7 @@ struct ChatExportFormatsView: View {
 
     @State private var fileURLs: [ChatTranscriptExportFormat: URL] = [:]
     @State private var suggestedFileNames: [ChatTranscriptExportFormat: String] = [:]
+    @State private var formatErrors: [ChatTranscriptExportFormat: String] = [:]
     @State private var prepareError: String?
     @State private var includeReasoning: Bool = true
     @State private var uploadURLText: String = ""
@@ -26,6 +27,9 @@ struct ChatExportFormatsView: View {
     @State private var uploadMessage: String?
     @State private var uploadError: String?
     @State private var prepareTask: Task<Void, Never>?
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
 
     var body: some View {
         List {
@@ -73,6 +77,10 @@ struct ChatExportFormatsView: View {
                             }
                             .disabled(uploadingFormat != nil)
                         }
+                    } else if let formatError = formatErrors[format] {
+                        Text(formatError)
+                            .etFont(.caption)
+                            .foregroundStyle(.red)
                     } else {
                         HStack(spacing: 8) {
                             ProgressView()
@@ -133,6 +141,7 @@ struct ChatExportFormatsView: View {
         prepareTask?.cancel()
         fileURLs = [:]
         suggestedFileNames = [:]
+        formatErrors = [:]
         prepareError = nil
 
         let session = session
@@ -140,28 +149,41 @@ struct ChatExportFormatsView: View {
         let includeReasoning = includeReasoning
         let upToMessageID = upToMessageID
         let selectedMessageIDs = selectedMessageIDs
+        let imageStyle = transcriptImageStyle
         let worker = Task.detached(priority: .userInitiated) {
             var nextURLs: [ChatTranscriptExportFormat: URL] = [:]
             var nextFileNames: [ChatTranscriptExportFormat: String] = [:]
+            var nextErrors: [ChatTranscriptExportFormat: String] = [:]
             let exportService = ChatTranscriptExportService()
 
             for format in ChatTranscriptExportFormat.allCases {
                 try Task.checkCancellation()
-                let output = try exportService.export(
-                    session: session,
-                    messages: messages,
-                    format: format,
-                    includeReasoning: includeReasoning,
-                    upToMessageID: upToMessageID,
-                    selectedMessageIDs: selectedMessageIDs
-                )
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
-                try output.data.write(to: url, options: .atomic)
-                nextURLs[format] = url
-                nextFileNames[format] = output.suggestedFileName
+                do {
+                    let output = try exportService.export(
+                        session: session,
+                        messages: messages,
+                        format: format,
+                        includeReasoning: includeReasoning,
+                        upToMessageID: upToMessageID,
+                        selectedMessageIDs: selectedMessageIDs,
+                        imageStyle: imageStyle
+                    )
+                    let url = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("\(UUID().uuidString)-\(output.suggestedFileName)")
+                    try output.data.write(to: url, options: .atomic)
+                    nextURLs[format] = url
+                    nextFileNames[format] = output.suggestedFileName
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    nextErrors[format] = error.localizedDescription
+                }
             }
-            return PreparedChatExportFiles(fileURLs: nextURLs, suggestedFileNames: nextFileNames)
+            return PreparedChatExportFiles(
+                fileURLs: nextURLs,
+                suggestedFileNames: nextFileNames,
+                formatErrors: nextErrors
+            )
         }
 
         prepareTask = Task { @MainActor in
@@ -174,6 +196,10 @@ struct ChatExportFormatsView: View {
                 try Task.checkCancellation()
                 fileURLs = prepared.fileURLs
                 suggestedFileNames = prepared.suggestedFileNames
+                formatErrors = prepared.formatErrors
+                prepareError = ChatTranscriptExportFormat.allCases
+                    .compactMap { prepared.formatErrors[$0] }
+                    .first
                 uploadMessage = nil
                 uploadError = nil
             } catch is CancellationError {
@@ -181,6 +207,7 @@ struct ChatExportFormatsView: View {
             } catch {
                 fileURLs = [:]
                 suggestedFileNames = [:]
+                formatErrors = [:]
                 prepareError = error.localizedDescription
             }
         }
@@ -266,6 +293,8 @@ struct ChatExportFormatsView: View {
             return "text/markdown; charset=utf-8"
         case .text:
             return "text/plain; charset=utf-8"
+        case .png:
+            return "image/png"
         }
     }
 
@@ -277,7 +306,38 @@ struct ChatExportFormatsView: View {
             return "number.square"
         case .text:
             return "doc.plaintext"
+        case .png:
+            return "photo"
         }
+    }
+
+    private var transcriptImageStyle: ChatTranscriptImageStyle {
+        let profile = appearanceProfileManager.activeProfile
+        let isDark = colorScheme == .dark
+        let userText = isDark ? profile.userDarkText : profile.userLightText
+        let assistantText = isDark ? profile.assistantDarkText : profile.assistantLightText
+        let backgroundURL: URL?
+        if appConfig.enableBackground, !appConfig.currentBackgroundImage.isEmpty {
+            backgroundURL = ConfigLoader.getBackgroundsDirectory()
+                .appendingPathComponent(appConfig.currentBackgroundImage)
+        } else {
+            backgroundURL = nil
+        }
+        return ChatTranscriptImageStyle(
+            prefersDarkAppearance: isDark,
+            backgroundMediaURL: backgroundURL,
+            backgroundOpacity: appConfig.backgroundOpacity,
+            backgroundBlurRadius: appConfig.backgroundBlur,
+            backgroundContentMode: appConfig.backgroundContentMode == "fit" ? .fit : .fill,
+            usesCustomBackground: appConfig.enableBackground,
+            userBubbleHex: profile.userBubble.isEnabled ? profile.userBubble.hex : nil,
+            assistantBubbleHex: profile.assistantBubble.isEnabled ? profile.assistantBubble.hex : nil,
+            userTextHex: userText.isEnabled ? userText.hex : nil,
+            assistantTextHex: assistantText.isEnabled ? assistantText.hex : nil,
+            usesNoBubbleStyle: appConfig.enableNoBubbleUI,
+            inputPlaceholder: NSLocalizedString("Message", comment: "聊天长图输入框占位文本"),
+            untitledConversationName: NSLocalizedString("新的对话", comment: "聊天长图未命名会话标题")
+        )
     }
 
     private func fileSize(at url: URL) -> Int64 {
@@ -289,6 +349,7 @@ struct ChatExportFormatsView: View {
 private struct PreparedChatExportFiles: Sendable {
     let fileURLs: [ChatTranscriptExportFormat: URL]
     let suggestedFileNames: [ChatTranscriptExportFormat: String]
+    let formatErrors: [ChatTranscriptExportFormat: String]
 }
 
 private struct ChatExportUploadProgressView: View {

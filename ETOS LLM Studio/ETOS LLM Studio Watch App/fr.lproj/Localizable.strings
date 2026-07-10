@@ -4806,3 +4806,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "低值颜色" = "Couleur de valeur basse";
 "高值颜色" = "Couleur de valeur élevée";
 "分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Définissez séparément les couleurs des valeurs basse et élevée. Les couleurs intermédiaires sont automatiquement interpolées en douceur.";
+"PNG" = "PNG";
+"导出失败：无法生成聊天长图。" = "Échec de l’exportation : impossible de générer l’image longue de la discussion.";
+"聊天内容过长，请减少导出的消息数量后重试。" = "La discussion est trop longue. Réduisez le nombre de messages à exporter, puis réessayez.";

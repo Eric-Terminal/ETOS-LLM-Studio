@@ -4751,3 +4751,6 @@
 "低值颜色" = "Low-Value Color";
 "高值颜色" = "High-Value Color";
 "分别设置低值与高值颜色，中间颜色会自动平滑过渡。" = "Set the low- and high-value colors separately. Colors between them transition smoothly.";
+"PNG" = "PNG";
+"导出失败：无法生成聊天长图。" = "Export failed: Unable to generate the chat image.";
+"聊天内容过长，请减少导出的消息数量后重试。" = "The chat is too long. Select fewer messages to export and try again.";

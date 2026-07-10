@@ -2,7 +2,7 @@
 // ChatTranscriptExportService.swift
 // ============================================================================
 // ChatTranscriptExportService 会话文本导出模块
-// - 支持导出 PDF / Markdown / TXT
+// - 支持导出 PDF / Markdown / TXT / PNG 聊天长图
 // - 支持导出完整会话、“截至某条消息”的上文片段或任意选中消息
 // ============================================================================
 
@@ -14,6 +14,7 @@ public enum ChatTranscriptExportFormat: String, CaseIterable, Sendable {
     case pdf
     case markdown
     case text
+    case png
 
     public var fileExtension: String {
         switch self {
@@ -23,17 +24,21 @@ public enum ChatTranscriptExportFormat: String, CaseIterable, Sendable {
             return "md"
         case .text:
             return "txt"
+        case .png:
+            return "png"
         }
     }
 
     public var displayName: String {
         switch self {
         case .pdf:
-            return "PDF"
+            return NSLocalizedString("PDF", comment: "Chat transcript export format")
         case .markdown:
-            return "Markdown"
+            return NSLocalizedString("Markdown", comment: "Chat transcript export format")
         case .text:
-            return "TXT"
+            return NSLocalizedString("TXT", comment: "Chat transcript export format")
+        case .png:
+            return NSLocalizedString("PNG", comment: "Chat transcript export format")
         }
     }
 }
@@ -50,10 +55,12 @@ public struct ChatTranscriptExportOutput: Sendable {
     }
 }
 
-public enum ChatTranscriptExportError: LocalizedError {
+public enum ChatTranscriptExportError: LocalizedError, Equatable {
     case emptyMessages
     case messageNotFound
     case pdfRenderFailed
+    case imageRenderFailed
+    case imageTooLong
 
     public var errorDescription: String? {
         switch self {
@@ -63,6 +70,10 @@ public enum ChatTranscriptExportError: LocalizedError {
             return NSLocalizedString("导出失败：未找到指定的消息。", comment: "Chat transcript export missing target message error")
         case .pdfRenderFailed:
             return NSLocalizedString("导出失败：无法生成 PDF 文件。", comment: "Chat transcript export PDF render error")
+        case .imageRenderFailed:
+            return NSLocalizedString("导出失败：无法生成聊天长图。", comment: "Chat transcript image export render error")
+        case .imageTooLong:
+            return NSLocalizedString("聊天内容过长，请减少导出的消息数量后重试。", comment: "Chat transcript image export length error")
         }
     }
 }
@@ -77,13 +88,21 @@ public struct ChatTranscriptExportService {
         includeReasoning: Bool = true,
         upToMessageID: UUID? = nil,
         selectedMessageIDs: Set<UUID>? = nil,
+        imageStyle: ChatTranscriptImageStyle = ChatTranscriptImageStyle(),
         exportedAt: Date = Date()
     ) throws -> ChatTranscriptExportOutput {
-        let scopedMessages = try resolveScopedMessages(
+        let resolvedMessages = try resolveScopedMessages(
             messages,
             upToMessageID: upToMessageID,
             selectedMessageIDs: selectedMessageIDs
         )
+        // 聊天长图只呈现用户在聊天界面中可见的消息，不泄露系统提示词。
+        let scopedMessages = format == .png
+            ? resolvedMessages.filter { $0.role != .system }
+            : resolvedMessages
+        guard !scopedMessages.isEmpty else {
+            throw ChatTranscriptExportError.emptyMessages
+        }
         let context = ExportContext(
             session: session,
             messages: scopedMessages,
@@ -106,6 +125,13 @@ public struct ChatTranscriptExportService {
         case .text:
             let plain = buildPlainText(context)
             data = Data(plain.utf8)
+        case .png:
+            data = try ChatTranscriptImageRenderer().render(
+                session: session,
+                messages: scopedMessages,
+                includeReasoning: includeReasoning,
+                style: imageStyle
+            )
         }
 
         return ChatTranscriptExportOutput(

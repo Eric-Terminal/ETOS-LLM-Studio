@@ -471,6 +471,8 @@ struct MessageActionSheet: View {
             return "number.square"
         case .text:
             return "doc.plaintext"
+        case .png:
+            return "photo"
         }
     }
 }
@@ -675,6 +677,11 @@ struct SessionPickerRow: View {
                 } label: {
                     Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
                 }
+                Button {
+                    onExport(.png, true)
+                } label: {
+                    Label(NSLocalizedString("PNG", comment: "Export format"), systemImage: "photo")
+                }
             }
             Menu(NSLocalizedString("不包含思考", comment: "")) {
                 Button {
@@ -691,6 +698,11 @@ struct SessionPickerRow: View {
                     onExport(.text, false)
                 } label: {
                     Label(NSLocalizedString("TXT", comment: "Export format"), systemImage: "doc.plaintext")
+                }
+                Button {
+                    onExport(.png, false)
+                } label: {
+                    Label(NSLocalizedString("PNG", comment: "Export format"), systemImage: "photo")
                 }
             }
         } label: {

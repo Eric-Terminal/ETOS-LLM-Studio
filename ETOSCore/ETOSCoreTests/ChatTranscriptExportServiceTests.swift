@@ -2,7 +2,7 @@
 // ChatTranscriptExportServiceTests.swift
 // ============================================================================
 // ChatTranscriptExportServiceTests 测试文件
-// - 覆盖会话导出的格式内容
+// - 覆盖会话导出的格式内容与 PNG 长图文件
 // - 覆盖“截至某条消息”与任意多选消息的范围裁剪行为
 // ============================================================================
 
@@ -127,6 +127,38 @@ struct ChatTranscriptExportServiceTests {
         let header = Data([0x25, 0x50, 0x44, 0x46]) // %PDF
         #expect(output.suggestedFileName.hasSuffix(".pdf"))
         #expect(output.data.starts(with: header))
+    }
+
+    @Test("PNG 导出会生成聊天长图并过滤系统消息")
+    func testPNGExportHasValidHeaderAndFiltersSystemMessages() throws {
+        let service = ChatTranscriptExportService()
+        let system = ChatMessage(role: .system, content: "不可见的系统提示词")
+        let user = ChatMessage(role: .user, content: "可见消息")
+        let output = try service.export(
+            session: ChatSession(id: UUID(), name: "长图会话"),
+            messages: [system, user],
+            format: .png,
+            imageStyle: ChatTranscriptImageStyle(subtitle: "Test"),
+            exportedAt: Date(timeIntervalSince1970: 1_700_000_250)
+        )
+
+        let pngHeader = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        #expect(output.suggestedFileName.hasSuffix(".png"))
+        #expect(output.data.starts(with: pngHeader))
+    }
+
+    @Test("PNG 范围只有系统消息时不会生成图片")
+    func testPNGExportRejectsSystemOnlyScope() {
+        let system = ChatMessage(role: .system, content: "不可见的系统提示词")
+
+        #expect(throws: ChatTranscriptExportError.emptyMessages) {
+            try ChatTranscriptExportService().export(
+                session: nil,
+                messages: [system],
+                format: .png,
+                exportedAt: Date(timeIntervalSince1970: 1_700_000_275)
+            )
+        }
     }
 
     @Test("目标消息不存在时返回错误")
