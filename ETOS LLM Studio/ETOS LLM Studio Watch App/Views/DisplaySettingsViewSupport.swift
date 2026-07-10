@@ -142,7 +142,12 @@ struct WatchChatAppearanceProfileSettingsView: View {
 
     private func resetColors() {
         do {
-            try manager.resetColors(profileID: selectedProfileID)
+            var profile = selectedProfile
+            profile.userBubble = .defaultUserBubble
+            profile.assistantBubble = .defaultAssistantBubble
+            profile.userLightText = .defaultUserLightText
+            profile.assistantLightText = .defaultAssistantLightText
+            try manager.updateProfile(profile)
         } catch {
             show(error)
         }
@@ -224,32 +229,18 @@ private struct WatchChatAppearanceProfileEditor: View {
             description: NSLocalizedString("影响助手消息与 Tool 消息的气泡背景颜色。", comment: "Assistant bubble color description")
         )
         colorSlotEditor(
-            title: NSLocalizedString("用户白天文字颜色", comment: "User light appearance text color title"),
-            toggleTitle: NSLocalizedString("自定义用户白天文字颜色", comment: "Custom user light text color toggle"),
+            title: NSLocalizedString("用户文字颜色", comment: "User text color title"),
+            toggleTitle: NSLocalizedString("自定义用户文字颜色", comment: "Custom user text color toggle"),
             slot: userLightTextBinding,
             fallback: .white,
-            description: NSLocalizedString("覆盖浅色外观下用户气泡的聊天文本颜色。", comment: "User light text color description")
+            description: NSLocalizedString("覆盖用户气泡的聊天文本颜色。", comment: "User text color description")
         )
         colorSlotEditor(
-            title: NSLocalizedString("用户夜览文字颜色", comment: "User dark appearance text color title"),
-            toggleTitle: NSLocalizedString("自定义用户夜览文字颜色", comment: "Custom user dark text color toggle"),
-            slot: userDarkTextBinding,
-            fallback: .white,
-            description: NSLocalizedString("覆盖深色外观下用户气泡的聊天文本颜色。", comment: "User dark text color description")
-        )
-        colorSlotEditor(
-            title: NSLocalizedString("助手白天文字颜色", comment: "Assistant light appearance text color title"),
-            toggleTitle: NSLocalizedString("自定义助手白天文字颜色", comment: "Custom assistant light text color toggle"),
+            title: NSLocalizedString("助手文字颜色", comment: "Assistant text color title"),
+            toggleTitle: NSLocalizedString("自定义助手文字颜色", comment: "Custom assistant text color toggle"),
             slot: assistantLightTextBinding,
             fallback: .init(.sRGB, red: 0.11, green: 0.11, blue: 0.12, opacity: 1),
-            description: NSLocalizedString("覆盖浅色外观下助手和 Tool 气泡的聊天文本颜色。", comment: "Assistant light text color description")
-        )
-        colorSlotEditor(
-            title: NSLocalizedString("助手夜览文字颜色", comment: "Assistant dark appearance text color title"),
-            toggleTitle: NSLocalizedString("自定义助手夜览文字颜色", comment: "Custom assistant dark text color toggle"),
-            slot: assistantDarkTextBinding,
-            fallback: .white,
-            description: NSLocalizedString("覆盖深色外观下助手和 Tool 气泡的聊天文本颜色。", comment: "Assistant dark text color description")
+            description: NSLocalizedString("覆盖助手和 Tool 气泡的聊天文本颜色。", comment: "Assistant text color description")
         )
     }
 
@@ -283,16 +274,8 @@ private struct WatchChatAppearanceProfileEditor: View {
         slotBinding(\.userLightText)
     }
 
-    private var userDarkTextBinding: Binding<ChatAppearanceColorSlot> {
-        slotBinding(\.userDarkText)
-    }
-
     private var assistantLightTextBinding: Binding<ChatAppearanceColorSlot> {
         slotBinding(\.assistantLightText)
-    }
-
-    private var assistantDarkTextBinding: Binding<ChatAppearanceColorSlot> {
-        slotBinding(\.assistantDarkText)
     }
 
     private func slotBinding(_ keyPath: WritableKeyPath<ChatAppearanceProfile, ChatAppearanceColorSlot>) -> Binding<ChatAppearanceColorSlot> {

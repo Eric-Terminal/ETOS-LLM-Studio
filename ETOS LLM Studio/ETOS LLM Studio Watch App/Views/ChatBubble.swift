@@ -159,16 +159,9 @@ struct ChatBubble: View {
     var customTextColorOverride: Color? {
         let slot: ChatAppearanceColorSlot
         let fallback: Color
+        // watchOS 不区分白天与夜览文字配色，统一使用可跨端同步的白天槽位。
         if message.role == .user {
-            if colorScheme == .dark {
-                slot = activeAppearanceProfile.userDarkText
-                fallback = .white
-            } else {
-                slot = activeAppearanceProfile.userLightText
-                fallback = .white
-            }
-        } else if colorScheme == .dark {
-            slot = activeAppearanceProfile.assistantDarkText
+            slot = activeAppearanceProfile.userLightText
             fallback = .white
         } else {
             slot = activeAppearanceProfile.assistantLightText
