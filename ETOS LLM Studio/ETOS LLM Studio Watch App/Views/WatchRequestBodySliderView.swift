@@ -96,19 +96,10 @@ struct WatchRequestBodySliderView: View {
                 }
                 .mask(shape)
 
-            WatchLiquidAnchorMarks(
+            WatchLiquidScaleMarks(
                 count: descriptor.optionCount,
-                color: Color.secondary.opacity(0.55)
+                color: Color.primary.opacity(0.26)
             )
-
-            WatchLiquidAnchorMarks(
-                count: descriptor.optionCount,
-                color: Color.white.opacity(0.82)
-            )
-            .mask(alignment: .bottom) {
-                Rectangle()
-                    .frame(height: fillHeight)
-            }
 
             Text(displayValue)
                 .etFont(.title3.monospaced().weight(.semibold))
@@ -175,9 +166,9 @@ struct WatchRequestBodySliderView: View {
     private var crownRotationStep: Double {
         switch descriptor.mode {
         case .discrete:
-            return descriptor.anchorStep / 24
+            return descriptor.anchorStep / 192
         case .continuousNumeric:
-            return descriptor.crownStep / 4
+            return descriptor.crownStep / 32
         }
     }
 
@@ -340,19 +331,10 @@ struct WatchTemperatureSliderView: View {
                 }
                 .mask(shape)
 
-            WatchLiquidAnchorMarks(
+            WatchLiquidScaleMarks(
                 count: 3,
-                color: Color.secondary.opacity(0.55)
+                color: Color.primary.opacity(0.26)
             )
-
-            WatchLiquidAnchorMarks(
-                count: 3,
-                color: Color.white.opacity(0.82)
-            )
-            .mask(alignment: .bottom) {
-                Rectangle()
-                    .frame(height: fillHeight)
-            }
 
             temperatureValue(displayValue, color: .primary)
 
@@ -374,7 +356,7 @@ struct WatchTemperatureSliderView: View {
             positionBinding,
             from: 0,
             through: 1,
-            by: step / (range.upperBound - range.lowerBound) / 5,
+            by: step / (range.upperBound - range.lowerBound) / 40,
             sensitivity: .low,
             isContinuous: false,
             isHapticFeedbackEnabled: false
@@ -452,23 +434,25 @@ struct WatchTemperatureSliderView: View {
     }
 }
 
-private struct WatchLiquidAnchorMarks: View {
+private struct WatchLiquidScaleMarks: View {
     let count: Int
     let color: Color
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array((0..<count).reversed()), id: \.self) { index in
-                Circle()
+        GeometryReader { geometry in
+            ForEach(0..<count, id: \.self) { index in
+                let position = count > 1
+                    ? Double(index) / Double(count - 1)
+                    : 0
+                let rawY = geometry.size.height * (1 - position)
+                let y = min(max(rawY, 1), geometry.size.height - 1)
+
+                Capsule()
                     .fill(color)
-                    .frame(width: 4, height: 4)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                if index > 0 {
-                    Spacer(minLength: 0)
-                }
+                    .frame(width: geometry.size.width * 0.22, height: 2)
+                    .position(x: geometry.size.width / 2, y: y)
             }
         }
-        .padding()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
