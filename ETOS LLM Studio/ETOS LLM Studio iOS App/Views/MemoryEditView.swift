@@ -50,6 +50,33 @@ struct MemoryEditView: View {
             } header: {
                 Text(NSLocalizedString("状态", comment: ""))
             }
+
+            Section {
+                Picker(NSLocalizedString("类型", comment: "Memory kind field"), selection: $memory.kind) {
+                    ForEach(MemoryKind.allCases, id: \.self) { kind in
+                        Text(kind.localizedTitle).tag(kind)
+                    }
+                }
+                .onChange(of: memory.kind) { _, _ in hasChanges = true }
+
+                VStack(alignment: .leading) {
+                    Text(String(format: NSLocalizedString("重要度：%.1f", comment: "Memory importance value"), memory.importance))
+                    Slider(value: $memory.importance, in: 0...1, step: 0.1)
+                        .onChange(of: memory.importance) { _, _ in hasChanges = true }
+                }
+                VStack(alignment: .leading) {
+                    Text(String(format: NSLocalizedString("置信度：%.1f", comment: "Memory confidence value"), memory.confidence))
+                    Slider(value: $memory.confidence, in: 0...1, step: 0.1)
+                        .onChange(of: memory.confidence) { _, _ in hasChanges = true }
+                }
+                TextField(NSLocalizedString("相关实体（用逗号分隔）", comment: "Memory entities field"), text: entitiesBinding)
+            } header: {
+                Text(NSLocalizedString("记忆属性", comment: "Memory attributes section"))
+            } footer: {
+                Text(NSLocalizedString("类型帮助模型理解用途；重要度和置信度会参与混合检索排序。", comment: "Memory attributes footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             
             Section {
                 LabeledContent(NSLocalizedString("更新时间", comment: "")) {
@@ -138,6 +165,19 @@ struct MemoryEditView: View {
 
     private var canSaveChanges: Bool {
         hasChanges && !isReembeddingMemory && !memory.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var entitiesBinding: Binding<String> {
+        Binding(
+            get: { memory.entities.joined(separator: ", ") },
+            set: { value in
+                memory.entities = value
+                    .components(separatedBy: CharacterSet(charactersIn: ",，"))
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                hasChanges = true
+            }
+        )
     }
 
     private func requestDismiss() {

@@ -14,6 +14,10 @@ extension ChatViewModel {
         await MemoryManager.shared.addMemory(content: content)
     }
 
+    func addMemory(_ request: MemoryWriteRequest) async {
+        await MemoryManager.shared.addMemory(request)
+    }
+
     func updateMemory(item: MemoryItem) async {
         await MemoryManager.shared.updateMemory(item: item)
     }

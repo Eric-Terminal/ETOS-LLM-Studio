@@ -63,26 +63,52 @@ public struct AddMemorySheet: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.dismiss) var dismiss
     @State private var memoryContent: String = ""
+    @State private var memoryKind: MemoryKind = .semantic
+    @State private var importance = 0.5
+    @State private var entitiesText = ""
 
     public init() {}
 
     public var body: some View {
-        VStack {
-            Text(NSLocalizedString("添加新记忆", comment: ""))
-                .etFont(.headline)
-                .padding()
-
-            TextField(NSLocalizedString("输入记忆内容...", comment: ""), text: $memoryContent.watchKeyboardNewlineBinding())
-                .padding()
-
+        Form {
+            Section(NSLocalizedString("记忆内容", comment: "")) {
+                TextField(NSLocalizedString("输入记忆内容...", comment: ""), text: $memoryContent.watchKeyboardNewlineBinding(), axis: .vertical)
+            }
+            Section(NSLocalizedString("记忆属性", comment: "Memory attributes section")) {
+                Picker(NSLocalizedString("类型", comment: "Memory kind field"), selection: $memoryKind) {
+                    ForEach(MemoryKind.allCases, id: \.self) { kind in
+                        Text(kind.localizedTitle).tag(kind)
+                    }
+                }
+                Text(String(format: NSLocalizedString("重要度：%.1f", comment: "Memory importance value"), importance))
+                    .etFont(.footnote)
+                Slider(value: $importance, in: 0...1, step: 0.1)
+                TextField(NSLocalizedString("相关实体（用逗号分隔）", comment: "Memory entities field"), text: $entitiesText)
+            }
             Button(NSLocalizedString("保存", comment: "")) {
                 Task {
-                    await viewModel.addMemory(content: memoryContent)
+                    await viewModel.addMemory(
+                        MemoryWriteRequest(
+                            content: memoryContent,
+                            kind: memoryKind,
+                            source: .manual,
+                            importance: importance,
+                            entities: parsedEntities
+                        )
+                    )
                     dismiss()
                 }
             }
             .disabled(memoryContent.isEmpty)
         }
+        .navigationTitle(NSLocalizedString("添加新记忆", comment: ""))
+    }
+
+    private var parsedEntities: [String] {
+        entitiesText
+            .components(separatedBy: CharacterSet(charactersIn: ",，"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }
 
@@ -504,6 +530,16 @@ struct ConversationMemorySettingsView: View {
                     Text(String(format: NSLocalizedString("更新时间：%@", comment: ""), profile.updatedAt.formatted(.dateTime.month(.twoDigits).day(.twoDigits).hour().minute())))
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
+                    if !profile.facts.isEmpty {
+                        NavigationLink {
+                            ConversationProfileFactsView(facts: profile.facts)
+                        } label: {
+                            Label(
+                                String(format: NSLocalizedString("结构化事实：%d 条", comment: "Structured profile fact count"), profile.facts.count),
+                                systemImage: "person.text.rectangle"
+                            )
+                        }
+                    }
                     Button(NSLocalizedString("编辑用户画像", comment: "")) {
                         conversationProfileDraft = profile.content
                         isEditingConversationProfile = true
@@ -585,6 +621,36 @@ struct ConversationMemorySettingsView: View {
             return NSLocalizedString("未选择（跟随当前对话模型）", comment: "")
         }
         return "\(selected.model.displayName) | \(selected.provider.name)"
+    }
+}
+
+private struct ConversationProfileFactsView: View {
+    let facts: [ConversationProfileFact]
+
+    var body: some View {
+        List {
+            ForEach(ConversationProfileFactCategory.allCases, id: \.self) { category in
+                let categoryFacts = facts.filter { $0.category == category }
+                if !categoryFacts.isEmpty {
+                    Section(category.localizedTitle) {
+                        ForEach(categoryFacts) { fact in
+                            VStack(alignment: .leading) {
+                                Text(fact.statement)
+                                    .etFont(.footnote)
+                                Text(String(
+                                    format: NSLocalizedString("置信度 %.0f%% · %d 条证据", comment: "Profile fact confidence and evidence"),
+                                    fact.confidence * 100,
+                                    fact.evidenceCount
+                                ))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("画像事实", comment: "Structured profile facts title"))
     }
 }
 
