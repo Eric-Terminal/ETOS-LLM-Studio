@@ -60,7 +60,9 @@ struct RoleplayHTMLCardView: View {
                             userAvatarPath: persona?.avatarFileName ?? "",
                             characterAvatarPath: character?.avatarFileName ?? "",
                             chatMessages: chatMessages,
-                            variableSnapshot: snapshot
+                            variableSnapshot: snapshot,
+                            messageID: messageID,
+                            messageVersionIndex: versionIndex
                         )
                     )
                 }
@@ -134,7 +136,9 @@ struct RoleplaySessionScriptHost: View {
                                 userAvatarPath: persona?.avatarFileName ?? "",
                                 characterAvatarPath: character.avatarFileName ?? "",
                                 chatMessages: chatMessages,
-                                variableSnapshot: snapshot
+                                variableSnapshot: snapshot,
+                                messageID: messageID,
+                                messageVersionIndex: versionIndex
                             )
                         )
                     }

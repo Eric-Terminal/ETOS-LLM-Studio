@@ -54,7 +54,9 @@ struct WatchRoleplayHTMLCardView: View {
                             userAvatarPath: persona?.avatarFileName ?? "",
                             characterAvatarPath: character?.avatarFileName ?? "",
                             chatMessages: chatMessages,
-                            variableSnapshot: snapshot
+                            variableSnapshot: snapshot,
+                            messageID: messageID,
+                            messageVersionIndex: versionIndex
                         )
                     )
                 }
@@ -123,7 +125,9 @@ struct WatchRoleplaySessionScriptHost: View {
                                 userAvatarPath: persona?.avatarFileName ?? "",
                                 characterAvatarPath: character.avatarFileName ?? "",
                                 chatMessages: chatMessages,
-                                variableSnapshot: snapshot
+                                variableSnapshot: snapshot,
+                                messageID: messageID,
+                                messageVersionIndex: versionIndex
                             )
                         )
                     }

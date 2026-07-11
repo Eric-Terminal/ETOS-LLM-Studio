@@ -21,6 +21,14 @@ extension ChatService {
         roleplayStore.binding(sessionID: sessionID)
     }
 
+    public func roleplayVariableSnapshot(sessionID: UUID) -> RoleplayVariableSnapshot {
+        roleplayStore.variableSnapshot(sessionID: sessionID)
+    }
+
+    public func saveRoleplayVariableSnapshot(_ snapshot: RoleplayVariableSnapshot, sessionID: UUID) {
+        roleplayStore.saveVariableSnapshot(snapshot, sessionID: sessionID)
+    }
+
     @discardableResult
     public func importRoleplayCard(data: Data, fileName: String) throws -> RoleplayCardImportResult {
         var result = try RoleplayCardImportService().importCard(from: data, fileName: fileName)

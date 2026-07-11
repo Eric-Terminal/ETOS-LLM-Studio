@@ -129,6 +129,19 @@ struct RoleplayCompatibilityTests {
         #expect(first == second)
     }
 
+    @Test("宏支持三花括号、中文名称与递归自定义值")
+    func resolveTripleAndCustomMacros() {
+        let context = RoleplayMacroContext(
+            character: RoleplayCharacter(name: "星野"),
+            persona: PersonaProfile(name: "旅行者"),
+            customValues: ["地点": "海边", "问候": "{{user}}，去{{地点}}吧"]
+        )
+
+        let output = RoleplayMacroResolver.resolve("{{{问候}}} / {{{char}}}", context: context)
+
+        #expect(output == "旅行者，去海边吧 / 星野")
+    }
+
     @Test("消息变量按消息版本隔离")
     func isolateMessageVersions() {
         let messageID = UUID()
@@ -138,6 +151,17 @@ struct RoleplayCompatibilityTests {
 
         #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 0) == .int(1))
         #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 1) == .int(2))
+    }
+
+    @Test("分层变量替换会清空旧值并持久承载自定义宏")
+    func replaceScopedVariablesAndMacros() {
+        var snapshot = RoleplayVariableSnapshot(chat: ["旧值": .int(1), "保留": .bool(true)])
+        snapshot.replaceVariables(["新值": .int(2)], scope: .chat)
+        snapshot.replaceCustomMacros(["称呼": "旅行者", "空白键": "保留"])
+
+        #expect(snapshot.scopedVariables(.chat) == ["新值": .int(2)])
+        #expect(snapshot.customMacros["称呼"] == "旅行者")
+        #expect(snapshot.mergedVariables()["__etos_custom_macros"] != nil)
     }
 
     @Test("MVU lodash 命令更新 stat_data 并隐藏更新块")
@@ -265,6 +289,8 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("etosRoleplay"))
         #expect(document.contains("sendMessage"))
         #expect(document.contains("ResizeObserver"))
+        #expect(document.contains("scopeVariables"))
+        #expect(document.contains("deleteVariable"))
     }
 
     private func makePNGTextCard(keyword: String, json: String) -> Data {

@@ -77,7 +77,9 @@ public enum RoleplayHTMLDocumentFactory {
         userAvatarPath: String,
         characterAvatarPath: String,
         chatMessages: [ChatMessage] = [],
-        variableSnapshot: RoleplayVariableSnapshot? = nil
+        variableSnapshot: RoleplayVariableSnapshot? = nil,
+        messageID: UUID? = nil,
+        messageVersionIndex: Int = 0
     ) -> String {
         let body: String
         if source.range(of: #"<html\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
@@ -92,7 +94,9 @@ public enum RoleplayHTMLDocumentFactory {
             userAvatarPath: userAvatarPath,
             characterAvatarPath: characterAvatarPath,
             chatMessages: chatMessages,
-            variableSnapshot: variableSnapshot
+            variableSnapshot: variableSnapshot,
+            messageID: messageID,
+            messageVersionIndex: messageVersionIndex
         )
         let headInjection = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
@@ -123,9 +127,24 @@ public enum RoleplayHTMLDocumentFactory {
         userAvatarPath: String,
         characterAvatarPath: String,
         chatMessages: [ChatMessage],
-        variableSnapshot: RoleplayVariableSnapshot?
+        variableSnapshot: RoleplayVariableSnapshot?,
+        messageID: UUID?,
+        messageVersionIndex: Int
     ) -> String {
-        let variablesJSON = jsonLiteral(.dictionary(variables))
+        var scopedVariables = Dictionary(uniqueKeysWithValues: RoleplayVariableScope.allCases.map { scope in
+            (
+                scope.rawValue,
+                JSONValue.dictionary(variableSnapshot?.scopedVariables(
+                    scope,
+                    messageID: messageID,
+                    versionIndex: messageVersionIndex
+                ) ?? [:])
+            )
+        })
+        if variableSnapshot == nil {
+            scopedVariables[RoleplayVariableScope.chat.rawValue] = .dictionary(variables)
+        }
+        let scopedVariablesJSON = jsonLiteral(.dictionary(scopedVariables))
         let userJSON = jsonString(userName)
         let characterJSON = jsonString(characterName)
         let userAvatarJSON = jsonString(userAvatarPath)
@@ -174,7 +193,7 @@ public enum RoleplayHTMLDocumentFactory {
         return """
 (function () {
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-  let variables = \(variablesJSON);
+  let scopedVariables = \(scopedVariablesJSON);
   const chatMessages = \(chatMessagesJSON);
   const listeners = new Map();
   const post = payload => {
@@ -199,6 +218,48 @@ public enum RoleplayHTMLDocumentFactory {
     });
     target[parts.at(-1)] = clone(value);
   };
+  const deletePath = (root, path) => {
+    const parts = pathParts(path);
+    if (!parts.length) return false;
+    let target = root;
+    for (const part of parts.slice(0, -1)) {
+      if (target?.[part] == null || typeof target[part] !== 'object') return false;
+      target = target[part];
+    }
+    return delete target[parts.at(-1)];
+  };
+  const mergeValue = (target, source, overwrite) => {
+    for (const [key, value] of Object.entries(source || {})) {
+      if (Array.isArray(value)) {
+        if (overwrite || !(key in target)) target[key] = clone(value);
+      } else if (value && typeof value === 'object') {
+        if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) target[key] = {};
+        mergeValue(target[key], value, overwrite);
+      } else if (overwrite || !(key in target)) {
+        target[key] = clone(value);
+      }
+    }
+    return target;
+  };
+  const scopeName = option => {
+    const value = String(option?.type || 'chat').toLowerCase();
+    return value === 'extension' ? 'script' : value;
+  };
+  const scopeVariables = option => {
+    const scope = scopeName(option);
+    if (!scopedVariables[scope]) scopedVariables[scope] = {};
+    return scopedVariables[scope];
+  };
+  const rebuildVariables = () => Object.assign(
+    {},
+    scopedVariables.global || {},
+    scopedVariables.preset || {},
+    scopedVariables.character || {},
+    scopedVariables.persona || {},
+    scopedVariables.script || {},
+    scopedVariables.chat || {},
+    scopedVariables.message || {}
+  );
   const emitLocal = async (type, ...args) => {
     for (const listener of listeners.get(type) || []) await listener(...args);
     window.dispatchEvent(new CustomEvent('etos:' + type, { detail: args }));
@@ -221,23 +282,41 @@ public enum RoleplayHTMLDocumentFactory {
     return values;
   };
   const api = {
-    getVariables: (_option = { type: 'chat' }) => clone(variables),
-    getAllVariables: () => clone(variables),
+    getVariables: (option = { type: 'chat' }) => clone(scopeVariables(option)),
+    getAllVariables: () => clone(rebuildVariables()),
     replaceVariables: (value, option = { type: 'chat' }) => {
-      variables = clone(value || {});
-      post({ action: 'replace_variables', scope: option.type || 'chat', value: variables });
+      const scope = scopeName(option);
+      scopedVariables[scope] = clone(value || {});
+      post({ action: 'replace_variables', scope, value: scopedVariables[scope] });
+      return clone(scopedVariables[scope]);
     },
     insertOrAssignVariables: (value, option = { type: 'chat' }) => {
-      variables = Object.assign(variables, clone(value || {}));
-      post({ action: 'replace_variables', scope: option.type || 'chat', value: variables });
-      return clone(variables);
+      const scope = scopeName(option);
+      const updated = mergeValue(scopeVariables(option), clone(value || {}), true);
+      scopedVariables[scope] = updated;
+      post({ action: 'replace_variables', scope, value: updated });
+      return clone(updated);
     },
-    getVariable: (path, fallback = null) => clone(getPath(variables, path, fallback)),
+    insertVariables: (value, option = { type: 'chat' }) => {
+      const scope = scopeName(option);
+      const updated = mergeValue(scopeVariables(option), clone(value || {}), false);
+      scopedVariables[scope] = updated;
+      post({ action: 'replace_variables', scope, value: updated });
+      return clone(updated);
+    },
+    getVariable: (path, fallback = null, option = null) => clone(getPath(option ? scopeVariables(option) : rebuildVariables(), path, fallback)),
     setVariable: (path, value, option = { type: 'chat' }) => {
-      setPath(variables, path, value);
-      post({ action: 'set_variable', scope: option.type || 'chat', path, value });
+      const scope = scopeName(option);
+      setPath(scopeVariables(option), path, value);
+      post({ action: 'set_variable', scope, path, value });
       emitLocal('VARIABLE_UPDATED', path, clone(value));
       return clone(value);
+    },
+    deleteVariable: (path, option = { type: 'chat' }) => {
+      const scope = scopeName(option);
+      const delete_occurred = deletePath(scopeVariables(option), path);
+      if (delete_occurred) post({ action: 'delete_variable', scope, path });
+      return { variables: clone(scopedVariables[scope]), delete_occurred };
     },
     sendMessage: text => post({ action: 'send_message', text: String(text ?? '') }),
     chooseOption: text => post({ action: 'send_message', text: String(text ?? '') }),
@@ -275,8 +354,8 @@ public enum RoleplayHTMLDocumentFactory {
   window.TavernHelper = Object.assign(window.TavernHelper || {}, api);
   Object.assign(window, api);
   window.Mvu = window.Mvu || {
-    get: path => api.getVariable(path),
-    set: (path, value) => api.setVariable(path, value),
+    get: path => clone(getPath(rebuildVariables(), path, null)),
+    set: (path, value) => api.setVariable(path, value, { type: 'message' }),
     variables: () => api.getAllVariables()
   };
   window.SillyTavern = window.SillyTavern || { getContext: () => ({ name1: \(userJSON), name2: \(characterJSON) }) };

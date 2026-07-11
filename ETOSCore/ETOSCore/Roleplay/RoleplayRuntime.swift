@@ -54,7 +54,8 @@ enum RoleplayRuntime {
             characterAvatarPath: characters.first?.avatarFileName ?? "",
             currentSwipeID: messageContext.map { $0.getCurrentVersionIndex() + 1 },
             lastSwipeID: messageContext.map { $0.getAllVersions().count },
-            chatSeed: sessionID.uuidString
+            chatSeed: sessionID.uuidString,
+            customValues: variables.customMacros
         )
         return ResolvedRoleplaySession(
             binding: binding,

@@ -66,7 +66,7 @@ public struct RoleplayMacroContext: Sendable {
 public enum RoleplayMacroResolver {
     public static func resolve(_ input: String, context: RoleplayMacroContext) -> String {
         guard input.contains("{{") else { return input }
-        var output = input
+        var output = replaceCustomMacros(in: input, values: context.customValues)
         output = replaceVariableMacros(output, context: context, formatted: true)
         output = replaceVariableMacros(output, context: context, formatted: false)
         output = replaceListMacro(output, name: "random") { values, _ in
@@ -127,7 +127,7 @@ public enum RoleplayMacroResolver {
     }
 
     private static func replaceSimpleMacros(_ input: String, values: [String: String]) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}"#) else {
+        guard let regex = try? NSRegularExpression(pattern: #"\{\{\{?\s*([^{}:]+?)\s*\}\}\}?"#) else {
             return input
         }
         let source = input as NSString
@@ -141,13 +141,27 @@ public enum RoleplayMacroResolver {
         return result as String
     }
 
+    private static func replaceCustomMacros(in input: String, values: [String: String]) -> String {
+        guard !values.isEmpty else { return input }
+        let normalized = values.reduce(into: [String: String]()) { result, item in
+            result[item.key.lowercased()] = item.value
+        }
+        var output = input
+        for _ in 0..<10 {
+            let updated = replaceSimpleMacros(output, values: normalized)
+            guard updated != output else { break }
+            output = updated
+        }
+        return output
+    }
+
     private static func replaceVariableMacros(
         _ input: String,
         context: RoleplayMacroContext,
         formatted: Bool
     ) -> String {
         let prefix = formatted ? "format" : "get"
-        let pattern = #"\{\{\s*"# + prefix + #"_(message|chat|character|preset|global)_variable::(.*?)\}\}"#
+        let pattern = #"\{\{\{?\s*"# + prefix + #"_(message|chat|character|preset|global)_variable::(.*?)\}\}\}?"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return input }
         let source = input as NSString
         let result = NSMutableString(string: input)
@@ -174,7 +188,7 @@ public enum RoleplayMacroResolver {
 
     private static func replaceMergedVariableMacros(_ input: String, context: RoleplayMacroContext) -> String {
         guard let regex = try? NSRegularExpression(
-            pattern: #"\{\{\s*(?:getvar|get_variable)::(.*?)\}\}"#,
+            pattern: #"\{\{\{?\s*(?:getvar|get_variable)::(.*?)\}\}\}?"#,
             options: [.caseInsensitive]
         ) else { return input }
         let source = input as NSString

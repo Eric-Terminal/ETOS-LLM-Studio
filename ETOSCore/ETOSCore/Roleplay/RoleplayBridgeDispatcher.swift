@@ -44,13 +44,22 @@ public enum RoleplayBridgeDispatcher {
             let variables = dictionary.compactMapValues(JSONValue.init(anyJSONValue:))
             var snapshot = store.variableSnapshot(sessionID: sessionID)
             let scope = variableScope(payload["scope"] as? String)
-            if scope == .message {
-                snapshot.replaceMessageVariables(variables, messageID: messageID, versionIndex: versionIndex)
-            } else {
-                for (key, value) in variables {
-                    snapshot.setValue(value, scope: scope, path: key, messageID: messageID, versionIndex: versionIndex)
-                }
-            }
+            snapshot.replaceVariables(
+                variables,
+                scope: scope,
+                messageID: messageID,
+                versionIndex: versionIndex
+            )
+            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+        case "delete_variable":
+            guard let path = payload["path"] as? String else { return }
+            var snapshot = store.variableSnapshot(sessionID: sessionID)
+            snapshot.removeValue(
+                scope: variableScope(payload["scope"] as? String),
+                path: path,
+                messageID: messageID,
+                versionIndex: versionIndex
+            )
             store.saveVariableSnapshot(snapshot, sessionID: sessionID)
         case "send_message", "set_input", "generate", "event":
             NotificationCenter.default.post(

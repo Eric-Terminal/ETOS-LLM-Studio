@@ -19,6 +19,8 @@ public enum RoleplayVariableScope: String, Codable, CaseIterable, Hashable, Send
 }
 
 public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
+    private static let customMacrosKey = "__etos_custom_macros"
+
     public var global: [String: JSONValue]
     public var preset: [String: JSONValue]
     public var character: [String: JSONValue]
@@ -63,6 +65,44 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
 
     public func messageVariables(messageID: UUID, versionIndex: Int) -> [String: JSONValue] {
         messageVersions[Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)] ?? [:]
+    }
+
+    public func scopedVariables(
+        _ scope: RoleplayVariableScope,
+        messageID: UUID? = nil,
+        versionIndex: Int = 0
+    ) -> [String: JSONValue] {
+        variables(scope: scope, messageID: messageID, versionIndex: versionIndex)
+    }
+
+    public mutating func replaceVariables(
+        _ variables: [String: JSONValue],
+        scope: RoleplayVariableScope,
+        messageID: UUID? = nil,
+        versionIndex: Int = 0
+    ) {
+        assign(variables, scope: scope, messageID: messageID, versionIndex: versionIndex)
+    }
+
+    public var customMacros: [String: String] {
+        guard case .dictionary(let stored) = script[Self.customMacrosKey] else { return [:] }
+        return stored.reduce(into: [:]) { result, item in
+            guard case .string(let value) = item.value else { return }
+            result[item.key] = value
+        }
+    }
+
+    public mutating func replaceCustomMacros(_ macros: [String: String]) {
+        let normalized = macros.reduce(into: [String: JSONValue]()) { result, item in
+            let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { return }
+            result[key] = .string(item.value)
+        }
+        if normalized.isEmpty {
+            script.removeValue(forKey: Self.customMacrosKey)
+        } else {
+            script[Self.customMacrosKey] = .dictionary(normalized)
+        }
     }
 
     public mutating func replaceMessageVariables(
