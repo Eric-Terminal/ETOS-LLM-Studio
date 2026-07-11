@@ -16,6 +16,54 @@ import JavaScriptCore
 
 @Suite("角色扮演与酒馆兼容")
 struct RoleplayCompatibilityTests {
+
+    @Test("世界书 outlet 宏只在引用位置展开")
+    func resolvesWorldbookOutletMacrosAtReferenceSite() {
+        let resolved = RoleplayMacroResolver.resolveWorldbookOutlets(
+            "前文 {{outlet::角色状态}} 后文 {{outlet::不存在}}",
+            outlets: ["角色状态": "生命值：80"]
+        )
+
+        #expect(resolved == "前文 生命值：80 后文 ")
+    }
+
+    #if canImport(JavaScriptCore)
+    @Test("提示词模板执行 EJS 并预激活世界书条目")
+    func rendersPromptTemplateAndPreactivatesWorldbookEntry() async {
+        let preprocessor = WorldbookEntry(
+            comment: "[Preprocessing] 状态路由",
+            content: "@@preprocessing\n<% if (getvar('phase', { defaults: '' }) === 'on') { setLocalVar('initialized', true); activewi(null, '目标条目', true); } %>",
+            keys: [],
+            constant: true
+        )
+        let target = WorldbookEntry(
+            comment: "目标条目",
+            content: "动态内容",
+            keys: [],
+            isEnabled: false
+        )
+        let variables = RoleplayVariableSnapshot(chat: ["phase": .string("on")])
+        var context = RoleplayMacroContext(variables: variables)
+        let prepared = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
+            [Worldbook(name: "模板书", entries: [preprocessor, target])],
+            messages: [],
+            macroContext: &context
+        )
+
+        #expect(prepared[0].entries[1].isEnabled)
+        #expect(prepared[0].entries[1].constant)
+        #expect(context.variables.chat["initialized"] == .bool(true))
+
+        let rendered = await RoleplayPromptTemplateRenderer.renderMessages(
+            [ChatMessage(role: .system, content: "<% if (getvar('phase') === 'on') { %>已开启<% } %>")],
+            worldbooks: prepared,
+            chatHistory: [],
+            macroContext: &context
+        )
+        #expect(rendered[0].content == "已开启")
+    }
+    #endif
+
     @Test("导入 Character Card V3 的角色资料、世界书、正则和助手脚本")
     func importV3JSON() throws {
         let json = """

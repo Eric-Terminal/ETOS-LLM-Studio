@@ -312,7 +312,8 @@ public struct WorldbookEngine {
         let activeBooks = context.worldbooks
         guard !activeBooks.isEmpty else { return .empty }
 
-        let turn = runtimeStore.nextTurn(for: context.sessionID)
+        // 酒馆按当前聊天消息数计算 sticky/cooldown，而不是按评估调用次数计算。
+        let turn = context.messages.count
         let maxRecursionDepth = activeBooks.map { $0.settings.maxRecursionDepth }.max() ?? 0
         let minimumActivations = activeBooks.map(\.minimumActivations).max() ?? 0
         let configuredMinimumDepth = activeBooks.map(\.minimumActivationDepthMax).max() ?? 0
@@ -335,91 +336,63 @@ public struct WorldbookEngine {
                 let entryKey = WorldbookEntryRuntimeKey(worldbookID: item.book.id, entryID: entry.id)
                 if triggeredIDs.contains(entryKey) { continue }
                 if !entry.isEnabled { continue }
-                if entry.constant {
-                    var updatedState = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
-                    previousStates[entryKey] = updatedState
-                    updatedState.lastTriggeredTurn = turn
-                    updatedState.delayUntilTurn = nil
-                    runtimeStore.updateState(updatedState, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
+                let state = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
-                    let injection = WorldbookInjection(
-                        worldbookID: item.book.id,
-                        worldbookName: item.book.name,
-                        entryID: entry.id,
-                        entryComment: entry.comment,
-                        content: entry.content,
-                        position: entry.position,
-                        outletName: entry.outletName,
-                        order: entry.order,
-                        depth: entry.depth,
-                        role: entry.role,
-                        triggerScore: 1
-                    )
-                    triggered.append(injection)
-                    triggeredIDs.insert(entryKey)
-                    newlyTriggeredContents.append(entry.content)
+                // SillyTavern 的 delay 是最低聊天消息数，不是首次命中后的等待轮数。
+                if let delay = entry.delay, delay > 0, context.messages.count < delay {
                     continue
                 }
-                if recursionLevel > 0 && entry.excludeRecursion { continue }
-                if recursionLevel < entry.recursionDelayLevel { continue }
-
-                var state = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
                 let stickyActive = isStickyActive(entry: entry, state: state, currentTurn: turn)
                 let inCooldown = isCooldownActive(entry: entry, state: state, currentTurn: turn)
                 if inCooldown && !stickyActive {
                     continue
                 }
+                if recursionLevel == 0 && entry.recursionDelayLevel > 0 && !stickyActive { continue }
+                if recursionLevel > 0 && entry.recursionDelayLevel > recursionLevel && !stickyActive { continue }
+                if recursionLevel > 0 && entry.excludeRecursion && !stickyActive { continue }
 
-                let scanDepth = max(1, entry.scanDepth ?? item.book.settings.scanDepth)
-                let baseBuffer = buildScanBuffer(
-                    messages: context.messages,
-                    scanDepth: scanDepth,
-                    topicPrompt: context.topicPrompt,
-                    enhancedPrompt: context.enhancedPrompt,
-                    entry: entry,
-                    context: context
-                )
-                let effectiveBuffer: String
-                if recursionLevel == 0 || entry.excludeRecursion {
-                    effectiveBuffer = baseBuffer
+                let matchResult: (matched: Bool, score: Double)
+                if entry.constant || stickyActive {
+                    matchResult = (true, 0)
                 } else {
-                    effectiveBuffer = baseBuffer + "\n" + recursionBuffer.joined(separator: "\n")
-                }
-
-                var matchResult = entry.vectorized
-                    ? (matched: context.vectorActivatedEntryIDs.contains(entry.id), score: 1.0)
-                    : evaluateKeywordMatch(entry: entry, buffer: effectiveBuffer)
-                if !matchResult.matched,
-                   minimumActivations > triggered.count,
-                   minimumActivationDepthMax > scanDepth,
-                   !entry.vectorized {
-                    let expanded = buildScanBuffer(
+                    let scanDepth = max(1, entry.scanDepth ?? item.book.settings.scanDepth)
+                    let baseBuffer = buildScanBuffer(
                         messages: context.messages,
-                        scanDepth: minimumActivationDepthMax,
+                        scanDepth: scanDepth,
                         topicPrompt: context.topicPrompt,
                         enhancedPrompt: context.enhancedPrompt,
                         entry: entry,
                         context: context
                     )
-                    matchResult = evaluateKeywordMatch(entry: entry, buffer: expanded)
-                }
-                let keywordMatched = stickyActive || entry.constant || matchResult.matched
-                if !keywordMatched {
-                    continue
-                }
-
-                if let delay = entry.delay, delay > 0, !stickyActive {
-                    if let due = state.delayUntilTurn {
-                        if turn < due {
-                            runtimeStore.updateState(state, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
-                            continue
-                        }
+                    let effectiveBuffer: String
+                    if recursionLevel == 0 {
+                        effectiveBuffer = baseBuffer
                     } else {
-                        state.delayUntilTurn = turn + delay
-                        runtimeStore.updateState(state, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
-                        continue
+                        effectiveBuffer = baseBuffer + "\n" + recursionBuffer.joined(separator: "\n")
                     }
+
+                    var evaluatedMatch = entry.vectorized
+                        ? (matched: context.vectorActivatedEntryIDs.contains(entry.id), score: 1.0)
+                        : evaluateKeywordMatch(entry: entry, buffer: effectiveBuffer)
+                    if !evaluatedMatch.matched,
+                       minimumActivations > triggered.count,
+                       minimumActivationDepthMax > scanDepth,
+                       !entry.vectorized {
+                        let expanded = buildScanBuffer(
+                            messages: context.messages,
+                            scanDepth: minimumActivationDepthMax,
+                            topicPrompt: context.topicPrompt,
+                            enhancedPrompt: context.enhancedPrompt,
+                            entry: entry,
+                            context: context
+                        )
+                        evaluatedMatch = evaluateKeywordMatch(entry: entry, buffer: expanded)
+                    }
+                    matchResult = evaluatedMatch
+                }
+                if !matchResult.matched {
+                    continue
                 }
 
                 if entry.useProbability && !stickyActive {
@@ -431,13 +404,17 @@ public struct WorldbookEngine {
 
                 var updatedState = state
                 previousStates[entryKey] = state
-                updatedState.lastTriggeredTurn = turn
-                updatedState.delayUntilTurn = nil
-                if let sticky = entry.sticky, sticky > 0 {
-                    updatedState.stickyUntilTurn = turn + sticky
-                }
-                if let cooldown = entry.cooldown, cooldown > 0 {
-                    updatedState.cooldownUntilTurn = turn + cooldown
+                if !stickyActive {
+                    updatedState.lastTriggeredTurn = turn
+                    updatedState.delayUntilTurn = nil
+                    let stickyDuration = max(0, entry.sticky ?? 0)
+                    if stickyDuration > 0 {
+                        updatedState.stickyUntilTurn = turn + stickyDuration
+                    }
+                    if let cooldown = entry.cooldown, cooldown > 0 {
+                        // 酒馆会在 sticky 结束时重新开始 cooldown。
+                        updatedState.cooldownUntilTurn = turn + stickyDuration + cooldown
+                    }
                 }
                 runtimeStore.updateState(updatedState, for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
@@ -542,14 +519,16 @@ public struct WorldbookEngine {
 
     private func isStickyActive(entry: WorldbookEntry, state: WorldbookTimedEffectState, currentTurn: Int) -> Bool {
         guard entry.sticky != nil else { return false }
+        guard state.lastTriggeredTurn.map({ currentTurn > $0 }) ?? false else { return false }
         guard let stickyUntil = state.stickyUntilTurn else { return false }
-        return currentTurn <= stickyUntil
+        return currentTurn < stickyUntil
     }
 
     private func isCooldownActive(entry: WorldbookEntry, state: WorldbookTimedEffectState, currentTurn: Int) -> Bool {
         guard entry.cooldown != nil else { return false }
+        guard state.lastTriggeredTurn.map({ currentTurn > $0 }) ?? false else { return false }
         guard let cooldownUntil = state.cooldownUntilTurn else { return false }
-        return currentTurn <= cooldownUntil
+        return currentTurn < cooldownUntil
     }
 
     private func buildScanBuffer(

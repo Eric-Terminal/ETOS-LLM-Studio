@@ -173,6 +173,19 @@ extension ChatService {
                 macroContext: resolvedRoleplay.macroContext
             )
         }
+        var promptTemplateMacroContext = resolvedRoleplay?.macroContext ?? RoleplayMacroContext(
+            variables: roleplayStore.variableSnapshot(sessionID: currentSessionID),
+            lastMessage: requestMessages.last?.content ?? "",
+            lastUserMessage: requestMessages.last(where: { $0.role == .user })?.content ?? "",
+            lastCharacterMessage: requestMessages.last(where: { $0.role == .assistant })?.content ?? "",
+            messageCount: requestMessages.count,
+            chatSeed: currentSessionID.uuidString
+        )
+        boundWorldbooks = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
+            boundWorldbooks,
+            messages: requestMessages,
+            macroContext: &promptTemplateMacroContext
+        )
         let worldbookResult = await worldbookEngine.evaluateAsync(
             .init(
                 sessionID: currentSessionID,
@@ -201,7 +214,6 @@ extension ChatService {
             worldbookAfter: worldbookResult.after,
             worldbookANTop: worldbookResult.anTop,
             worldbookANBottom: worldbookResult.anBottom,
-            worldbookOutlet: worldbookResult.outlet,
             roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt)
         )
         if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {
@@ -254,6 +266,27 @@ extension ChatService {
 
         if includeSystemTime && systemTimeInjectionPosition == .tail {
             messagesToSend.append(makeSystemTimeSystemMessage())
+        }
+
+        messagesToSend = await RoleplayPromptTemplateRenderer.renderMessages(
+            messagesToSend,
+            worldbooks: boundWorldbooks,
+            chatHistory: requestMessages,
+            macroContext: &promptTemplateMacroContext
+        )
+        let storedPromptTemplateVariables = roleplayStore.variableSnapshot(sessionID: currentSessionID)
+        if promptTemplateMacroContext.variables != storedPromptTemplateVariables {
+            roleplayStore.saveVariableSnapshot(
+                promptTemplateMacroContext.variables,
+                sessionID: currentSessionID
+            )
+        }
+        let worldbookOutlets = makeWorldbookOutletValues(entries: worldbookResult.outlet)
+        for index in messagesToSend.indices {
+            messagesToSend[index].content = RoleplayMacroResolver.resolveWorldbookOutlets(
+                messagesToSend[index].content,
+                outlets: worldbookOutlets
+            )
         }
 
         var audioAttachments: [UUID: AudioAttachment] = [:]

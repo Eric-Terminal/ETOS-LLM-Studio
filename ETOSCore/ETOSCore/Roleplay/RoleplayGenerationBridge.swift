@@ -36,11 +36,13 @@ extension ChatService {
         }
         let transformedHistory = RoleplayRuntime.transformedRequestMessages(history, resolved: resolved)
         let overrides = dictionary["overrides"]?.roleplayDictionary ?? [:]
+        var templateMacroContext = resolved.macroContext
         let builtins = await roleplayGenerationBuiltins(
             resolved: resolved,
             history: transformedHistory,
             overrides: overrides,
-            sessionID: sessionID
+            sessionID: sessionID,
+            macroContext: &templateMacroContext
         )
         var requestMessages = RoleplayGenerationPromptAssembler.assemble(
             dictionary: dictionary,
@@ -63,6 +65,19 @@ extension ChatService {
                 )
             }
         }
+        let templateWorldbooks = RoleplayRuntime.resolvedWorldbooks(
+            loadWorldbooks().filter { resolved.worldbookIDs.contains($0.id) },
+            macroContext: templateMacroContext
+        )
+        requestMessages = await RoleplayPromptTemplateRenderer.renderMessages(
+            requestMessages,
+            worldbooks: templateWorldbooks,
+            chatHistory: transformedHistory,
+            macroContext: &templateMacroContext
+        )
+        if templateMacroContext.variables != store.variableSnapshot(sessionID: sessionID) {
+            store.saveVariableSnapshot(templateMacroContext.variables, sessionID: sessionID)
+        }
         return try await generateDetachedChatCompletion(
             messages: requestMessages,
             temperature: dictionary.roleplayTemperature,
@@ -75,14 +90,20 @@ extension ChatService {
         resolved: ResolvedRoleplaySession,
         history: [ChatMessage],
         overrides: [String: JSONValue],
-        sessionID: UUID
+        sessionID: UUID,
+        macroContext: inout RoleplayMacroContext
     ) async -> (system: [String: String], chatHistory: [ChatMessage]) {
         let character = resolved.characters.first
-        let macro = resolved.macroContext
-        let books = RoleplayRuntime.resolvedWorldbooks(
+        var books = RoleplayRuntime.resolvedWorldbooks(
             loadWorldbooks().filter { resolved.worldbookIDs.contains($0.id) },
-            macroContext: resolved.macroContext
+            macroContext: macroContext
         )
+        books = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
+            books,
+            messages: history,
+            macroContext: &macroContext
+        )
+        let macro = macroContext
         let evaluated = await WorldbookEngine().evaluateAsync(.init(
             sessionID: sessionID,
             worldbooks: books,
@@ -94,7 +115,19 @@ extension ChatService {
             scenario: resolved.characters.first?.scenario,
             creatorNotes: resolved.characters.first?.creatorNotes
         ))
-        func resolvedText(_ raw: String) -> String { RoleplayMacroResolver.resolve(raw, context: macro) }
+        let outletValues = Dictionary(grouping: evaluated.outlet) {
+            $0.outletName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }.reduce(into: [String: String]()) { result, item in
+            let (name, entries) = item
+            guard !name.isEmpty else { return }
+            result[name] = entries.map(\.content).joined(separator: "\n")
+        }
+        func resolvedText(_ raw: String) -> String {
+            RoleplayMacroResolver.resolveWorldbookOutlets(
+                RoleplayMacroResolver.resolve(raw, context: macro),
+                outlets: outletValues
+            )
+        }
         func overridden(_ key: String, fallback: String) -> String {
             overrides[key]?.roleplayString.map(resolvedText) ?? resolvedText(fallback)
         }
@@ -113,7 +146,11 @@ extension ChatService {
             "dialogue_examples": overridden("dialogue_examples", fallback: dialogueExamples)
         ]
         let chatOverride = overrides["chat_history"]?.roleplayDictionary ?? [:]
-        var generationHistory = history
+        var generationHistory = history.map { message in
+            var message = message
+            message.content = resolvedText(message.content)
+            return message
+        }
         if chatOverride["with_depth_entries"]?.roleplayBoolean != false {
             generationHistory = injectAtDepthMessages(evaluated.atDepth, into: generationHistory)
         }

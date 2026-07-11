@@ -51,26 +51,29 @@ struct WorldbookEngineTests {
         #expect(result.after.count == 80)
     }
 
-    @Test("常驻激活条目每轮注入且不受触发规则阻挡")
-    func testConstantEntriesInjectEveryTurnWithoutTriggerRules() {
+    @Test("常驻条目跳过关键词但仍遵守酒馆定时与概率规则")
+    func testConstantEntriesSkipKeywordsButRespectTimedAndProbabilityRules() {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-runtime-constant-every-turn-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tempURL) }
         let runtime = WorldbookRuntimeStateStore(storageURL: tempURL)
-        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 1 })
-        let entry = WorldbookEntry(
-            content: "常驻设定",
+        let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0.5 })
+        let delayed = WorldbookEntry(
+            content: "等待消息数的常驻设定",
+            keys: [],
+            constant: true,
+            position: .after,
+            delay: 2
+        )
+        let probabilistic = WorldbookEntry(
+            content: "未通过概率的常驻设定",
             keys: [],
             constant: true,
             position: .after,
             useProbability: true,
-            probability: 0,
-            cooldown: 99,
-            delay: 99,
-            preventRecursion: true,
-            delayUntilRecursion: true
+            probability: 0
         )
-        let book = Worldbook(name: "常驻书", entries: [entry])
+        let book = Worldbook(name: "常驻书", entries: [delayed, probabilistic])
         let sessionID = UUID()
 
         let first = engine.evaluate(
@@ -86,14 +89,19 @@ struct WorldbookEngineTests {
             .init(
                 sessionID: sessionID,
                 worldbooks: [book],
-                messages: [ChatMessage(role: .user, content: "依旧没有关键词")],
+                messages: [
+                    ChatMessage(role: .user, content: "依旧没有关键词"),
+                    ChatMessage(role: .assistant, content: "第二条消息")
+                ],
                 topicPrompt: nil,
                 enhancedPrompt: nil
             )
         )
 
-        #expect(first.after.contains(where: { $0.content == "常驻设定" }))
-        #expect(second.after.contains(where: { $0.content == "常驻设定" }))
+        #expect(!first.after.contains(where: { $0.content == "等待消息数的常驻设定" }))
+        #expect(second.after.contains(where: { $0.content == "等待消息数的常驻设定" }))
+        #expect(!first.after.contains(where: { $0.content == "未通过概率的常驻设定" }))
+        #expect(!second.after.contains(where: { $0.content == "未通过概率的常驻设定" }))
     }
 
     @Test("engine handles secondary logic, probability and sticky")
@@ -169,13 +177,32 @@ struct WorldbookEngineTests {
             .init(
                 sessionID: sessionID,
                 worldbooks: [book],
-                messages: [ChatMessage(role: .user, content: "no keyword")],
+                messages: [
+                    ChatMessage(role: .user, content: "apple banana hello"),
+                    ChatMessage(role: .assistant, content: "no keyword")
+                ],
                 topicPrompt: nil,
                 enhancedPrompt: nil
             )
         )
 
         #expect(second.after.contains(where: { $0.content.contains("粘性") }))
+
+        let third = engine.evaluate(
+            .init(
+                sessionID: sessionID,
+                worldbooks: [book],
+                messages: [
+                    ChatMessage(role: .user, content: "apple banana hello"),
+                    ChatMessage(role: .assistant, content: "no keyword"),
+                    ChatMessage(role: .user, content: "still no keyword")
+                ],
+                topicPrompt: nil,
+                enhancedPrompt: nil
+            )
+        )
+
+        #expect(!third.after.contains(where: { $0.content.contains("粘性") }))
     }
 
     @Test("engine treats negative injected character budget as unlimited")
@@ -709,7 +736,7 @@ struct WorldbookEngineTests {
             content: "delayed",
             keys: ["trigger"],
             position: .after,
-            delay: 1
+            delay: 2
         )
         let cooldown = WorldbookEntry(
             content: "cooldown",
@@ -724,7 +751,16 @@ struct WorldbookEngineTests {
         #expect(!first.after.contains(where: { $0.content == "delayed" }))
         #expect(first.after.contains(where: { $0.content == "cooldown" }))
 
-        let second = engine.evaluate(.init(sessionID: sessionID, worldbooks: [book], messages: [ChatMessage(role: .user, content: "trigger")], topicPrompt: nil, enhancedPrompt: nil))
+        let second = engine.evaluate(.init(
+            sessionID: sessionID,
+            worldbooks: [book],
+            messages: [
+                ChatMessage(role: .user, content: "trigger"),
+                ChatMessage(role: .assistant, content: "second message")
+            ],
+            topicPrompt: nil,
+            enhancedPrompt: nil
+        ))
         #expect(second.after.contains(where: { $0.content == "delayed" }))
         #expect(!second.after.contains(where: { $0.content == "cooldown" }))
     }

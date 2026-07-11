@@ -20,7 +20,6 @@ extension ChatService {
         worldbookAfter: [WorldbookInjection] = [],
         worldbookANTop: [WorldbookInjection] = [],
         worldbookANBottom: [WorldbookInjection] = [],
-        worldbookOutlet: [WorldbookInjection] = [],
         roleplayPrompt: String? = nil
     ) -> String {
         var parts: [String] = []
@@ -37,10 +36,6 @@ extension ChatService {
         if !worldbookANBottom.isEmpty {
             parts.append(makeWorldbookPromptBlock(tag: "worldbook_an_bottom", entries: worldbookANBottom))
         }
-        if !worldbookOutlet.isEmpty {
-            parts.append(contentsOf: makeWorldbookOutletBlocks(entries: worldbookOutlet))
-        }
-
         if let global, !global.isEmpty {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")
         }
@@ -161,18 +156,14 @@ extension ChatService {
         return "<\(tag)\(attrs)>\n\(lines)\n</\(tag)>"
     }
 
-    func makeWorldbookOutletBlocks(entries: [WorldbookInjection]) -> [String] {
+    func makeWorldbookOutletValues(entries: [WorldbookInjection]) -> [String: String] {
         let grouped = Dictionary(grouping: entries) { injection -> String in
-            let trimmed = injection.outletName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return trimmed.isEmpty ? "default" : trimmed
+            injection.outletName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
-        return grouped.keys.sorted().compactMap { outletName in
-            guard let outletEntries = grouped[outletName], !outletEntries.isEmpty else { return nil }
-            return makeWorldbookPromptBlock(
-                tag: "worldbook_outlet",
-                entries: outletEntries,
-                attributes: ["name": outletName]
-            )
+        return grouped.reduce(into: [:]) { result, item in
+            let (outletName, outletEntries) = item
+            guard !outletName.isEmpty, !outletEntries.isEmpty else { return }
+            result[outletName] = outletEntries.map(\.content).joined(separator: "\n")
         }
     }
 
