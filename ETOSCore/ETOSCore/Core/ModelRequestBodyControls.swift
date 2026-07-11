@@ -129,13 +129,30 @@ public struct ModelRequestBodyControl: Codable, Identifiable, Hashable, Sendable
 }
 
 public extension ModelRequestBodyControl {
-    /// 从首个已填写选项推断同组空白选项应预填的参数键，不复制具体值。
-    var suggestedOptionPayloadKeys: [String] {
-        guard kind == .optionGroup else { return [] }
-        for option in options where !option.payload.isEmpty {
-            return option.payload.keys.sorted()
+    /// 首次填写完成后，仅向其后仍为空白的选项传播一次参数结构。
+    var initialOptionPayloadSuggestions: [String: [String: JSONValue]] {
+        guard kind == .optionGroup else { return [:] }
+        var latestPayload: [String: JSONValue]?
+        var suggestions: [String: [String: JSONValue]] = [:]
+        for option in options {
+            if !option.payload.isEmpty {
+                latestPayload = option.payload
+            } else if let latestPayload {
+                suggestions[option.id] = latestPayload
+            }
         }
-        return []
+        return suggestions
+    }
+
+    /// 新增末尾选项时只参考紧邻的上一项，避免异构档位被整组模板覆盖。
+    func payloadSuggestionForAppendingOption(
+        existingSuggestions: [String: [String: JSONValue]]
+    ) -> [String: JSONValue]? {
+        guard kind == .optionGroup, let previousOption = options.last else { return nil }
+        if !previousOption.payload.isEmpty {
+            return previousOption.payload
+        }
+        return existingSuggestions[previousOption.id]
     }
 
     /// 复制配置内容并重建控制与选项 ID，避免导入后与现有运行状态串联。

@@ -131,7 +131,8 @@ private struct RequestBodyControlImportRow: View {
 struct RequestBodyControlDetailView: View {
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
-    @State private var suggestedPayloadKeys: [String] = []
+    @State private var payloadSuggestionsByOptionID: [String: [String: JSONValue]] = [:]
+    @State private var hasInitializedPayloadSuggestions = false
     @State private var automaticSliderGranularity: Double?
     @State private var showsNumericSortAction = false
 
@@ -154,7 +155,8 @@ struct RequestBodyControlDetailView: View {
                     RequestBodyPayloadEditor(
                         payloadDisplayMode: payloadDisplayMode,
                         payload: $control.payload,
-                        suggestedPayloadKeys: []
+                        suggestedPayload: nil,
+                        onSuggestionConsumed: {}
                     )
                     .id("\(control.id)-toggle-payload")
                 }
@@ -171,7 +173,11 @@ struct RequestBodyControlDetailView: View {
                                     option: $option,
                                     defaultOptionID: $control.defaultOptionID,
                                     payloadDisplayMode: payloadDisplayMode,
-                                    suggestedPayloadKeys: suggestedPayloadKeys,
+                                    suggestedPayload: payloadSuggestionsByOptionID[optionID],
+                                    onSuggestionConsumed: {
+                                        payloadSuggestionsByOptionID.removeValue(forKey: optionID)
+                                    },
+                                    onEditingFinished: initializePayloadSuggestionsIfNeeded,
                                     maximumRainbowEnabled: maximumRainbowBinding(for: optionID)
                                 )
                             } label: {
@@ -236,14 +242,13 @@ struct RequestBodyControlDetailView: View {
         }
         .navigationTitle(displayTitle)
         .onAppear {
-            refreshSuggestedPayloadKeys()
+            initializePayloadSuggestionsIfNeeded()
             refreshSliderConfiguration()
         }
         .onChange(of: control.options) { _, options in
             if options.count < 2 {
                 control.isSliderEnabled = false
             }
-            refreshSuggestedPayloadKeys()
             refreshSliderConfiguration()
         }
     }
@@ -260,11 +265,13 @@ struct RequestBodyControlDetailView: View {
         )
     }
 
-    private func refreshSuggestedPayloadKeys() {
-        let keys = control.suggestedOptionPayloadKeys
-        if suggestedPayloadKeys != keys {
-            suggestedPayloadKeys = keys
+    private func initializePayloadSuggestionsIfNeeded() {
+        guard !hasInitializedPayloadSuggestions,
+              control.options.contains(where: { !$0.payload.isEmpty }) else {
+            return
         }
+        payloadSuggestionsByOptionID = control.initialOptionPayloadSuggestions
+        hasInitializedPayloadSuggestions = true
     }
 
     private func refreshSliderConfiguration() {
@@ -313,6 +320,9 @@ struct RequestBodyControlDetailView: View {
 
     private func addOption() {
         let optionID = UUID().uuidString
+        let payloadSuggestion = control.payloadSuggestionForAppendingOption(
+            existingSuggestions: payloadSuggestionsByOptionID
+        )
         control.options.append(
             ModelRequestBodyControlOption(
                 id: optionID,
@@ -320,6 +330,9 @@ struct RequestBodyControlDetailView: View {
                 payload: [:]
             )
         )
+        if let payloadSuggestion {
+            payloadSuggestionsByOptionID[optionID] = payloadSuggestion
+        }
         if control.defaultOptionID == nil {
             control.defaultOptionID = optionID
         }
@@ -330,6 +343,9 @@ struct RequestBodyControlDetailView: View {
             control.options.indices.contains(index) ? control.options[index].id : nil
         }
         control.options.remove(atOffsets: offsets)
+        for deletedID in deletedIDs {
+            payloadSuggestionsByOptionID.removeValue(forKey: deletedID)
+        }
         if let defaultOptionID = control.defaultOptionID,
            deletedIDs.contains(defaultOptionID) {
             control.defaultOptionID = control.options.first?.id
@@ -373,7 +389,9 @@ struct RequestBodyOptionDetailView: View {
     @Binding var option: ModelRequestBodyControlOption
     @Binding var defaultOptionID: String?
     let payloadDisplayMode: Model.RequestBodyOverrideMode
-    let suggestedPayloadKeys: [String]
+    let suggestedPayload: [String: JSONValue]?
+    let onSuggestionConsumed: () -> Void
+    let onEditingFinished: () -> Void
     let maximumRainbowEnabled: Binding<Bool>?
 
     var body: some View {
@@ -391,7 +409,8 @@ struct RequestBodyOptionDetailView: View {
                 RequestBodyPayloadEditor(
                     payloadDisplayMode: payloadDisplayMode,
                     payload: $option.payload,
-                    suggestedPayloadKeys: suggestedPayloadKeys
+                    suggestedPayload: suggestedPayload,
+                    onSuggestionConsumed: onSuggestionConsumed
                 )
                 .id("\(option.id)-payload")
             }
@@ -410,6 +429,7 @@ struct RequestBodyOptionDetailView: View {
             }
         }
         .navigationTitle(displayTitle)
+        .onDisappear(perform: onEditingFinished)
     }
 
     private var displayTitle: String {
@@ -433,9 +453,11 @@ struct RequestBodyOptionDetailView: View {
 struct RequestBodyPayloadEditor: View {
     let payloadDisplayMode: Model.RequestBodyOverrideMode
     @Binding var payload: [String: JSONValue]
-    let suggestedPayloadKeys: [String]
+    let suggestedPayload: [String: JSONValue]?
+    let onSuggestionConsumed: () -> Void
     @State private var text: String = ""
     @State private var error: String?
+    @State private var hasEditedSuggestion = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -443,7 +465,8 @@ struct RequestBodyPayloadEditor: View {
             case .keyValue:
                 RequestBodyPayloadKeyValueEditor(
                     payload: $payload,
-                    suggestedPayloadKeys: suggestedPayloadKeys
+                    suggestedPayload: suggestedPayload,
+                    onSuggestionConsumed: onSuggestionConsumed
                 )
             case .rawJSON:
                 textPayloadEditor(
@@ -479,13 +502,19 @@ struct RequestBodyPayloadEditor: View {
                 .lineLimit(lineLimit)
                 .onAppear(perform: syncTextFromPayload)
                 .onChange(of: text) { _, newValue in
+                    if payload.isEmpty,
+                       let suggestedText = suggestedText(),
+                       newValue != suggestedText {
+                        hasEditedSuggestion = true
+                        onSuggestionConsumed()
+                    }
                     parse(newValue)
                 }
                 .onChange(of: payloadDisplayMode) { _, _ in
                     syncTextFromPayload()
                 }
-                .onChange(of: suggestedPayloadKeys) { _, _ in
-                    if payload.isEmpty {
+                .onChange(of: suggestedPayload) { _, _ in
+                    if payload.isEmpty, !hasEditedSuggestion {
                         syncTextFromPayload()
                     }
                 }
@@ -547,17 +576,16 @@ struct RequestBodyPayloadEditor: View {
     }
 
     private func suggestedText() -> String? {
-        guard !suggestedPayloadKeys.isEmpty else { return nil }
+        guard let suggestedPayload, !suggestedPayload.isEmpty else { return nil }
         switch payloadDisplayMode {
         case .rawJSON:
-            let placeholderPayload = Dictionary(
-                uniqueKeysWithValues: suggestedPayloadKeys.map { ($0, JSONValue.null) }
-            )
-            return ParameterExpressionParser.serializeRawJSONObject(parameters: placeholderPayload)
+            return ParameterExpressionParser.serializeRawJSONTemplate(parameters: suggestedPayload)
         case .keyValue, .expression:
-            return suggestedPayloadKeys.map { "\($0) = " }.joined(separator: "\n")
+            return ParameterExpressionParser.serializeTemplate(parameters: suggestedPayload)
+                .joined(separator: "\n")
         @unknown default:
-            return suggestedPayloadKeys.map { "\($0) = " }.joined(separator: "\n")
+            return ParameterExpressionParser.serializeTemplate(parameters: suggestedPayload)
+                .joined(separator: "\n")
         }
     }
 }
@@ -578,8 +606,10 @@ struct RequestBodyPayloadKeyValueEntry: Identifiable, Equatable {
 
 struct RequestBodyPayloadKeyValueEditor: View {
     @Binding var payload: [String: JSONValue]
-    let suggestedPayloadKeys: [String]
+    let suggestedPayload: [String: JSONValue]?
+    let onSuggestionConsumed: () -> Void
     @State private var entries: [RequestBodyPayloadKeyValueEntry] = []
+    @State private var hasEditedSuggestion = false
 
     var body: some View {
         Group {
@@ -588,21 +618,26 @@ struct RequestBodyPayloadKeyValueEditor: View {
                     entry: $entry,
                     canDelete: entries.count > 1,
                     onDelete: {
+                        consumeSuggestion()
                         deleteEntry(withID: entry.id)
                     },
-                    onChange: updatePayload
+                    onChange: {
+                        consumeSuggestion()
+                        updatePayload()
+                    }
                 )
             }
 
             Button {
+                consumeSuggestion()
                 entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
             } label: {
                 Label(NSLocalizedString("添加键值对", comment: ""), systemImage: "plus")
             }
         }
         .onAppear(perform: syncEntriesFromPayload)
-        .onChange(of: suggestedPayloadKeys) { _, _ in
-            if payload.isEmpty {
+        .onChange(of: suggestedPayload) { _, _ in
+            if payload.isEmpty, !hasEditedSuggestion {
                 syncEntriesFromPayload()
             }
         }
@@ -612,9 +647,14 @@ struct RequestBodyPayloadKeyValueEditor: View {
         let rows = payload
             .sorted(by: { $0.key < $1.key })
             .map { RequestBodyPayloadKeyValueEntry(key: $0.key, value: stringValue(for: $0.value)) }
-        let suggestedRows = suggestedPayloadKeys.map {
-            RequestBodyPayloadKeyValueEntry(key: $0, value: "")
-        }
+        let suggestedRows = (suggestedPayload ?? [:])
+            .sorted(by: { $0.key < $1.key })
+            .map {
+                RequestBodyPayloadKeyValueEntry(
+                    key: $0.key,
+                    value: ParameterExpressionParser.serializeTemplateValue($0.value)
+                )
+            }
         entries = rows.isEmpty
             ? (suggestedRows.isEmpty ? [RequestBodyPayloadKeyValueEntry(key: "", value: "")] : suggestedRows)
             : rows
@@ -652,7 +692,7 @@ struct RequestBodyPayloadKeyValueEditor: View {
             throw ParameterExpressionParser.ParserError.invalidKey
         }
         if value.isEmpty {
-            return ParameterExpressionParser.ParsedExpression(key: key, value: .string(""))
+            return nil
         }
         return try ParameterExpressionParser.parse("\(key) = \(entry.value)")
     }
@@ -663,6 +703,12 @@ struct RequestBodyPayloadKeyValueEditor: View {
             entries.append(RequestBodyPayloadKeyValueEntry(key: "", value: ""))
         }
         updatePayload()
+    }
+
+    private func consumeSuggestion() {
+        guard suggestedPayload != nil, !hasEditedSuggestion else { return }
+        hasEditedSuggestion = true
+        onSuggestionConsumed()
     }
 
     private func stringValue(for value: JSONValue) -> String {

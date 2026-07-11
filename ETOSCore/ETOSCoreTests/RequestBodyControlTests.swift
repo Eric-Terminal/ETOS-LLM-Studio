@@ -122,31 +122,64 @@ struct RequestBodyControlTests {
         #expect(compiled == ["budget": .string("high")])
     }
 
-    @Test("空白选项会沿用首个已填写选项的参数键")
-    func testOptionGroupSuggestsKeysFromFirstCompletedOption() {
+    @Test("首次补全只向已填写选项之后的空白档位传播参数结构")
+    func testOptionGroupSuggestsPayloadStructureForwardOnce() {
+        let sourcePayload: [String: JSONValue] = [
+            "thinking": .dictionary(["type": .string("disabled")]),
+            "reasoning_effort": .string("none")
+        ]
+        let laterPayload: [String: JSONValue] = ["max_tokens": .int(1024)]
         let control = ModelRequestBodyControl(
             id: "sampling",
             title: "采样参数",
             kind: .optionGroup,
             options: [
-                ModelRequestBodyControlOption(id: "empty", title: "空白"),
+                ModelRequestBodyControlOption(id: "before", title: "前置空白"),
                 ModelRequestBodyControlOption(
-                    id: "temperature",
-                    title: "温度",
-                    payload: [
-                        "top_p": .double(0.9),
-                        "temperature": .double(0.7)
-                    ]
+                    id: "source",
+                    title: "关闭思考",
+                    payload: sourcePayload
                 ),
+                ModelRequestBodyControlOption(id: "after-a", title: "后置空白一"),
                 ModelRequestBodyControlOption(
-                    id: "other",
-                    title: "其他",
-                    payload: ["max_tokens": .int(1024)]
-                )
+                    id: "filled",
+                    title: "已填写",
+                    payload: laterPayload
+                ),
+                ModelRequestBodyControlOption(id: "after-b", title: "后置空白二")
             ]
         )
 
-        #expect(control.suggestedOptionPayloadKeys == ["temperature", "top_p"])
+        let suggestions = control.initialOptionPayloadSuggestions
+        #expect(suggestions["before"] == nil)
+        #expect(suggestions["after-a"] == sourcePayload)
+        #expect(suggestions["filled"] == nil)
+        #expect(suggestions["after-b"] == laterPayload)
+    }
+
+    @Test("新增档位只继承紧邻上一档的参数结构")
+    func testAppendingOptionUsesPreviousPayloadSuggestion() {
+        let sourcePayload: [String: JSONValue] = [
+            "thinking": .dictionary(["type": .string("disabled")])
+        ]
+        var control = ModelRequestBodyControl(
+            title: "思考预算",
+            kind: .optionGroup,
+            options: [
+                ModelRequestBodyControlOption(id: "source", title: "关闭", payload: sourcePayload),
+                ModelRequestBodyControlOption(id: "previous", title: "待填写")
+            ]
+        )
+        let existingSuggestions = ["previous": sourcePayload]
+
+        #expect(control.payloadSuggestionForAppendingOption(
+            existingSuggestions: existingSuggestions
+        ) == sourcePayload)
+
+        control.options[1].payload = ["reasoning_effort": .string("high")]
+        #expect(control.payloadSuggestionForAppendingOption(
+            existingSuggestions: existingSuggestions
+        ) == ["reasoning_effort": .string("high")])
     }
 
     @Test("导入结构化控制会追加独立副本并保留已有配置")

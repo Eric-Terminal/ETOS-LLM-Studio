@@ -297,6 +297,25 @@ struct RequestBodyOverrideModeTests {
         #expect(rebuilt == parameters)
     }
 
+    @Test("参数模板保留多个键与嵌套结构但不复制值")
+    func testSerializeParameterTemplatePreservesStructureOnly() throws {
+        let parameters: [String: JSONValue] = [
+            "reasoning_effort": .string("high"),
+            "thinking": .dictionary([
+                "type": .string("disabled")
+            ])
+        ]
+
+        #expect(ParameterExpressionParser.serializeTemplate(parameters: parameters) == [
+            "reasoning_effort=",
+            "thinking={type=}"
+        ])
+        let rawTemplate = ParameterExpressionParser.serializeRawJSONTemplate(parameters: parameters)
+        let parsedTemplate = try ParameterExpressionParser.parseRawJSONObject(rawTemplate)
+        #expect(parsedTemplate["reasoning_effort"] == .null)
+        #expect(parsedTemplate["thinking"] == .dictionary(["type": .null]))
+    }
+
     @Test("结构化控制可写入本地对话模板参数")
     func testRequestBodyControlCanSetLocalChatTemplateKwargs() {
         let control = ModelRequestBodyControl(
