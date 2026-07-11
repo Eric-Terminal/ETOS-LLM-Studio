@@ -4975,3 +4975,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "记忆整理" = "Organisation des souvenirs";
 "长期记忆整理系统提示词" = "Vous organisez les souvenirs à long terme. Placez dans groups les doublons ayant exactement le même sens. Lorsqu'un fait clairement plus récent remplace un fait antérieur sur le même attribut, placez la paire dans supersessions. Ne considérez pas les informations complémentaires ou les contradictions incertaines comme des remplacements et ne traitez pas des souvenirs de types différents. Utilisez uniquement les ID fournis. Renvoyez un JSON strict : {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"un souvenir fusionné complet et exact\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Utilisez des tableaux vides lorsqu'aucune opération n'est sûre. N'ajoutez ni explication ni Markdown.";
 "长期记忆整理用户提示词" = "Examinez les souvenirs à long terme suivants et renvoyez les groupes de doublons pouvant être fusionnés sans risque :\n%@";
+"角色卡链接" = "URL de la carte de personnage";
+"从 URL 导入角色卡" = "Importer la carte de personnage depuis une URL";
+"头像链接" = "URL de l’avatar";
+"从 URL 载入头像" = "Charger l’avatar depuis une URL";

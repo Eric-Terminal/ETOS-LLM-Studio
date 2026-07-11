@@ -85,11 +85,13 @@ enum RoleplayHTMLCompatibilityRuntime {
   };
   const tavernEvents = Object.freeze(Object.fromEntries(names.map(name => [name, exceptional[name] || name.toLowerCase()])));
   const mvuEvents = Object.freeze({
-    VARIABLE_INITIALIZED: 'mag_variable_initiailized',
+    VARIABLE_INITIALIZED: 'mag_variable_initialized',
+    VARIABLE_INITIALIZED_LEGACY: 'mag_variable_initiailized',
     VARIABLE_UPDATE_STARTED: 'mag_variable_update_started',
     COMMAND_PARSED: 'mag_command_parsed',
     VARIABLE_UPDATE_ENDED: 'mag_variable_update_ended',
-    BEFORE_MESSAGE_UPDATE: 'mag_before_message_update'
+    BEFORE_MESSAGE_UPDATE: 'mag_before_message_update',
+    SINGLE_VARIABLE_UPDATED: 'mag_variable_updated'
   });
   const splitArguments = source => {
     const result = [];
@@ -130,7 +132,7 @@ enum RoleplayHTMLCompatibilityRuntime {
   const parseCommands = message => {
     const commands = [];
     const source = String(message || '');
-    const regex = /_\.(set|add|insert|delete|remove|move)\s*\(/gi;
+    const regex = /_\.(set|add|insert|assign|delete|remove|unset|move)\s*\(/gi;
     let match;
     while ((match = regex.exec(source))) {
       const argumentStart = regex.lastIndex;
@@ -151,15 +153,41 @@ enum RoleplayHTMLCompatibilityRuntime {
       const lineEnd = source.indexOf('\n', cursor);
       const suffix = source.slice(cursor, lineEnd < 0 ? source.length : lineEnd);
       const reason = suffix.match(/^\s*\/\/\s*(.*)$/)?.[1] || '';
+      const parsedType = match[1].toLowerCase();
       commands.push({
-        type: match[1].toLowerCase(),
+        offset: match.index,
+        type: parsedType === 'assign' ? 'insert' : parsedType === 'unset' ? 'delete' : parsedType,
         full_match: source.slice(match.index, cursor),
         args: splitArguments(source.slice(argumentStart, argumentEnd)).map(literal),
         reason
       });
       regex.lastIndex = cursor;
     }
-    return commands;
+    const patchRegex = /<(json_?patch)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+    while ((match = patchRegex.exec(source))) {
+      let operations;
+      try { operations = JSON.parse(match[2]); }
+      catch (_) {
+        try { operations = window.YAML?.parse?.(match[2]); }
+        catch (_) { operations = []; }
+      }
+      for (const [operationIndex, operation] of (Array.isArray(operations) ? operations : []).entries()) {
+        const offset = match.index + operationIndex;
+        const path = String(operation.path || operation.to || '').replace(/^\//, '').replaceAll('/', '.');
+        if (operation.op === 'replace') commands.push({ offset, type: 'set', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
+        else if (operation.op === 'delta') commands.push({ offset, type: 'add', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
+        else if (operation.op === 'insert' || operation.op === 'add') {
+          const parts = pathParts(path);
+          if (parts.at(-1) === '-') commands.push({ offset, type: 'insert', full_match: JSON.stringify(operation), args: [parts.slice(0, -1).join('.'), '-', operation.value], reason: 'json_patch' });
+          else commands.push({ offset, type: 'insert', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
+        } else if (operation.op === 'remove') commands.push({ offset, type: 'delete', full_match: JSON.stringify(operation), args: [path], reason: 'json_patch' });
+        else if (operation.op === 'move') {
+          const from = String(operation.from || '').replace(/^\//, '').replaceAll('/', '.');
+          commands.push({ offset, type: 'move', full_match: JSON.stringify(operation), args: [from, path], reason: 'json_patch' });
+        }
+      }
+    }
+    return commands.sort((lhs, rhs) => lhs.offset - rhs.offset).map(({ offset: _, ...command }) => command);
   };
   const applyCommand = (data, command) => {
     const [path, ...args] = command.args || [];
@@ -171,13 +199,19 @@ enum RoleplayHTMLCompatibilityRuntime {
         break;
       }
       case 'add':
-        setPath(data, targetPath, Number(getPath(data, targetPath, 0)) + Number(args[0] || 0));
+        {
+          const current = getPath(data, targetPath, undefined);
+          const actual = Array.isArray(current) && current.length === 2 && typeof current[1] === 'string' ? current[0] : current;
+          const updated = Number(actual) + Number(args[0] || 0);
+          if (Array.isArray(current) && current.length === 2 && typeof current[1] === 'string') setPath(data, targetPath, [updated, current[1]]);
+          else setPath(data, targetPath, updated);
+        }
         break;
       case 'insert': {
         const current = getPath(data, targetPath, null);
         const key = args.length >= 2 ? args[0] : null;
         const value = args.length >= 2 ? args[1] : args[0];
-        if (Array.isArray(current)) current.splice(key == null ? current.length : Math.max(0, Number(key)), 0, clone(value));
+        if (Array.isArray(current)) current.splice(key == null || key === '-' ? current.length : Math.max(0, Number(key)), 0, clone(value));
         else if (current && typeof current === 'object' && key != null) current[String(key)] = clone(value);
         else setPath(data, key == null ? targetPath : `${targetPath}.${key}`, value);
         break;
@@ -217,10 +251,7 @@ enum RoleplayHTMLCompatibilityRuntime {
       return data;
     },
     replaceMvuData: async (data, option = { type: 'chat' }) => {
-      const before = mvu.getMvuData(option);
-      await api.eventEmitAndWait(mvuEvents.BEFORE_MESSAGE_UPDATE, { variables: data, message_content: '' });
       api.replaceVariables(data, option);
-      await api.eventEmitAndWait(mvuEvents.VARIABLE_UPDATE_ENDED, data, before);
     },
     parseMessage: async (message, oldData) => {
       const before = clone(oldData || { stat_data: {}, initialized_lorebooks: {} });
@@ -230,13 +261,53 @@ enum RoleplayHTMLCompatibilityRuntime {
       await api.eventEmitAndWait(mvuEvents.COMMAND_PARSED, updated, commands, String(message || ''));
       commands.forEach(command => applyCommand(updated, command));
       await api.eventEmitAndWait(mvuEvents.VARIABLE_UPDATE_ENDED, updated, before);
-      return commands.length ? updated : undefined;
+      return updated;
     },
-    getMvuVariable: (data, path, { default_value = null } = {}) => {
-      const value = getPath(data, statPath(path), default_value);
+    getCurrentMvuData: () => mvu.getMvuData({ type: 'message', message_id: api.getCurrentMessageId() }),
+    replaceCurrentMvuData: data => mvu.replaceMvuData(data, { type: 'message', message_id: api.getCurrentMessageId() }),
+    reloadInitVar: async data => {
+      const names = window.getCharWorldbookNames?.('current') || {};
+      const lorebooks = [names.primary, ...(names.additional || [])].filter(Boolean);
+      data.initialized_lorebooks ||= {};
+      data.stat_data ||= {};
+      let changed = false;
+      for (const name of lorebooks) {
+        if (Object.prototype.hasOwnProperty.call(data.initialized_lorebooks, name)) continue;
+        const entries = await window.getLorebookEntries?.(name) || [];
+        const initialized = [];
+        for (const entry of entries) {
+          if (!String(entry.name || entry.comment || '').toLowerCase().includes('[initvar]')) continue;
+          try {
+            const parsed = window.YAML?.parse?.(window.substitudeMacros?.(entry.content) || entry.content) || {};
+            data.stat_data = { ...parsed, ...data.stat_data };
+            initialized.push(entry.uid ?? entry.id);
+            changed = true;
+          } catch (error) { console.error(error); }
+        }
+        data.initialized_lorebooks[name] = initialized;
+      }
+      return changed;
+    },
+    getMvuVariable: (data, path, { category = 'stat', default_value = undefined } = {}) => {
+      const record = data?.[`${category}_data`] || {};
+      const value = getPath(record, path, default_value);
       return Array.isArray(value) && value.length === 2 && typeof value[1] === 'string' ? value[0] : value;
     },
-    setMvuVariable: (data, path, value) => { setPath(data, statPath(path), value); return data; },
+    getRecordFromMvuData: (data, category) => data?.[`${category}_data`] || {},
+    setMvuVariable: async (data, path, value, { reason = '', is_recursive = false } = {}) => {
+      data.stat_data ||= {};
+      const current = getPath(data.stat_data, path, undefined);
+      if (current === undefined) return false;
+      const oldValue = clone(current);
+      const actual = Array.isArray(current) && current.length === 2 && typeof current[1] === 'string'
+        ? [value, current[1]] : value;
+      setPath(data.stat_data, path, actual);
+      const description = `${JSON.stringify(Array.isArray(oldValue) && oldValue.length === 2 ? oldValue[0] : oldValue)}->${JSON.stringify(value)}${reason ? ` (${reason})` : ''}`;
+      if (data.display_data) setPath(data.display_data, path, description);
+      if (data.delta_data) setPath(data.delta_data, path, description);
+      if (is_recursive) await api.eventEmitAndWait(mvuEvents.SINGLE_VARIABLE_UPDATED, data.stat_data, path, oldValue, actual);
+      return true;
+    },
     isDuringExtraAnalysis: () => false,
     get: path => clone(getPath(api.getAllVariables(), path, null)),
     set: (path, value) => api.setVariable(path, value, { type: 'message', message_id: 'latest' }),
@@ -256,6 +327,44 @@ enum RoleplayHTMLCompatibilityRuntime {
     })
   };
   window.Mvu = Object.assign(window.Mvu || {}, mvu);
+  const variableSchemas = {};
+  window.registerVariableSchema = (schema, { type = 'message' } = {}) => {
+    variableSchemas[type] = schema;
+    let exported = null;
+    try {
+      exported = window.z?.toJSONSchema?.(schema, { io: 'input', unrepresentable: 'any' });
+    } catch (error) {
+      console.warn('[ETOS MVU] Zod schema 无法完整转换为 JSON Schema', error);
+    }
+    if (exported) {
+      exported['x-etos-zod-schema'] = true;
+      const option = type === 'message'
+        ? { type, message_id: api.getCurrentMessageId() }
+        : { type };
+      const variables = api.getVariables(option);
+      variables.schema = exported;
+      api.replaceVariables(variables, option);
+    }
+    return schema;
+  };
+  window.getVariableSchema = (type = 'message') => variableSchemas[type];
+  api.eventOn(mvuEvents.VARIABLE_UPDATE_ENDED, async variables => {
+    const schema = variableSchemas.message;
+    if (!schema?.safeParseAsync) return;
+    const parsed = await schema.safeParseAsync(variables);
+    if (!parsed.success) return;
+    const option = { type: 'message', message_id: api.getCurrentMessageId() };
+    const current = api.getVariables(option);
+    api.replaceVariables({ ...current, ...parsed.data }, option);
+  });
+  window.getTavernHelperVersion = async () => '4.7.12';
+  window.toastr ||= Object.freeze({
+    info: (message, title = '') => console.info(title, message),
+    success: (message, title = '') => console.info(title, message),
+    warning: (message, title = '') => console.warn(title, message),
+    error: (message, title = '') => console.error(title, message)
+  });
+  window.TavernHelper.registerVariableSchema = window.registerVariableSchema;
   window.iframe_events = iframeEvents;
   window.tavern_events = tavernEvents;
   window.waitGlobalInitialized = name => new Promise(resolve => {
@@ -267,7 +376,11 @@ enum RoleplayHTMLCompatibilityRuntime {
       }
     }, 10);
   });
-  window.initializeGlobal = (name, value) => { window[name] = value; return value; };
+  window.initializeGlobal = (name, value) => {
+    window[name] = value;
+    api.eventEmit(`global_${name}_initialized`);
+    return value;
+  };
   window.errorCatched = callback => async (...args) => {
     try { return await callback(...args); } catch (error) { console.error(error); throw error; }
   };
@@ -327,6 +440,7 @@ enum RoleplayHTMLCompatibilityRuntime {
       const original = clone(data);
       const before = JSON.stringify(data);
       await api.eventEmitAndWait(mvuEvents.VARIABLE_INITIALIZED, data, 0);
+      await api.eventEmitAndWait(mvuEvents.VARIABLE_INITIALIZED_LEGACY, data, 0);
       await api.eventEmitAndWait(mvuEvents.VARIABLE_UPDATE_ENDED, data, original);
       if (JSON.stringify(data) !== before) api.replaceVariables(data, option);
     }, 0);

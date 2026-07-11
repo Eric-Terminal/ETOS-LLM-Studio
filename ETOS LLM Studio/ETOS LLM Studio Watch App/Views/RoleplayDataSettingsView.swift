@@ -59,9 +59,12 @@ struct RoleplayDataSettingsView: View {
                 }
                 .onChange(of: selectedScope) { _, _ in refreshVariablesJSON() }
 
-                TextEditor(text: $variablesJSON)
+                TextField(
+                    NSLocalizedString("分层变量", comment: "Scoped roleplay variables field"),
+                    text: $variablesJSON.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
                     .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 110)
 
                 Button(NSLocalizedString("保存此作用域", comment: "Save roleplay variable scope")) {
                     saveVariables()

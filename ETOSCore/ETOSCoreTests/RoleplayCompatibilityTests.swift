@@ -405,6 +405,137 @@ struct RoleplayCompatibilityTests {
         ) == .string("海边"))
     }
 
+    @Test("MVU 从世界书 YAML 初始化标准数据并解析宏")
+    func initializeMVUFromWorldbook() {
+        let primaryID = UUID()
+        let worldbook = Worldbook(
+            id: primaryID,
+            name: "白石世界书",
+            entries: [
+                WorldbookEntry(
+                    uid: 7,
+                    comment: "[initvar]变量初始化勿开",
+                    content: """
+                    世界:
+                      当前地点: {{user}}家客厅
+                      日期: 2026年1月8日
+                    白石:
+                      好感度: 85
+                      标签: [青梅竹马, 吸血鬼]
+                    """,
+                    keys: [],
+                    isEnabled: false,
+                    constant: true
+                )
+            ]
+        )
+        let result = RoleplayMVUInitializer.initialize(
+            greeting: "你好。",
+            worldbooks: [worldbook],
+            primaryWorldbookID: primaryID,
+            existingVariables: [:],
+            macroContext: RoleplayMacroContext(
+                character: RoleplayCharacter(name: "白石"),
+                persona: PersonaProfile(name: "旅行者")
+            )
+        )
+
+        #expect(result.failureReasons.isEmpty)
+        #expect(result.loadedSourceCount == 1)
+        guard case .dictionary(let world) = result.data.statData["世界"],
+              case .dictionary(let character) = result.data.statData["白石"] else {
+            Issue.record("initvar 没有生成预期对象。")
+            return
+        }
+        #expect(world["当前地点"] == .string("旅行者家客厅"))
+        #expect(character["好感度"] == .int(85))
+        #expect(result.data.initializedLorebooks["白石世界书"] == [.int(7)])
+        #expect(result.data.variables["display_data"] == result.data.variables["stat_data"])
+        #expect(result.data.variables["schema"] != nil)
+    }
+
+    @Test("MVU 将旧版根变量迁移到 stat_data")
+    func migrateLegacyRootMVUVariables() {
+        let data = RoleplayMVUData(migratingLegacyVariables: [
+            "日期": .string("2026年1月8日"),
+            "角色": .dictionary(["好感度": .int(12)]),
+            "__etos_displayed_html": .string("<b>状态</b>")
+        ])
+
+        #expect(data.statData["日期"] == .string("2026年1月8日"))
+        #expect(data.statData["角色"] == .dictionary(["好感度": .int(12)]))
+        #expect(data.extra["__etos_displayed_html"] == .string("<b>状态</b>"))
+    }
+
+    @Test("MVU 使用 Zod 导出的 JSON Schema 调和类型、范围和枚举")
+    func reconcileMVUJSONSchema() {
+        let schema: JSONValue = .dictionary([
+            "type": .string("object"),
+            "properties": .dictionary([
+                "stat_data": .dictionary([
+                    "type": .string("object"),
+                    "properties": .dictionary([
+                        "好感度": .dictionary([
+                            "type": .string("number"),
+                            "minimum": .int(0),
+                            "maximum": .int(100)
+                        ]),
+                        "状态": .dictionary([
+                            "type": .string("string"),
+                            "enum": .array([.string("正常"), .string("异常")]),
+                            "default": .string("正常")
+                        ])
+                    ])
+                ])
+            ])
+        ])
+        let reconciled = RoleplayMVUSchemaValidator.reconcile(
+            ["好感度": .int(130), "状态": .string("非法")],
+            schema: schema,
+            fallback: ["好感度": .int(10), "状态": .string("正常")]
+        )
+
+        #expect(reconciled["好感度"] == .int(100))
+        #expect(reconciled["状态"] == .string("正常"))
+    }
+
+    @Test("开场白 initvar 覆盖主世界书并保留附加世界书变量")
+    func initializeMVUFromGreetingOverride() {
+        let primaryID = UUID()
+        let additionalID = UUID()
+        let primary = Worldbook(
+            id: primaryID,
+            name: "主世界书",
+            entries: [WorldbookEntry(comment: "[initvar]主变量", content: "角色:\n  好感度: 1", keys: [])]
+        )
+        let additional = Worldbook(
+            id: additionalID,
+            name: "附加世界书",
+            entries: [WorldbookEntry(comment: "[initvar]附加变量", content: "天气: 晴\n角色:\n  标记: true", keys: [])]
+        )
+        let result = RoleplayMVUInitializer.initialize(
+            greeting: """
+            <UpdateVariable><initvar>
+            角色:
+              好感度: 30
+            </initvar></UpdateVariable>
+            """,
+            worldbooks: [primary, additional],
+            primaryWorldbookID: primaryID,
+            existingVariables: [:],
+            macroContext: .init()
+        )
+
+        guard case .dictionary(let character) = result.data.statData["角色"] else {
+            Issue.record("开场白 initvar 没有生成角色对象。")
+            return
+        }
+        #expect(character["好感度"] == .int(30))
+        #expect(character["标记"] == .bool(true))
+        #expect(result.data.statData["天气"] == .string("晴"))
+        #expect(result.data.initializedLorebooks["主世界书"] == [])
+    }
+
     @Test("MVU JSON Patch 支持 replace、delta、insert 和 remove")
     func applyJSONPatchMVU() {
         let messageID = UUID()
@@ -436,6 +567,47 @@ struct RoleplayCompatibilityTests {
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.数值", messageID: messageID) == .double(7))
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.列表[1]", messageID: messageID) == .string("b"))
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.名称", messageID: messageID) == .string("新状态"))
+    }
+
+    @Test("MVU JSON Patch 支持数组尾部、移动、VWD 与派生数据")
+    func applyNativeMVUSemantics() {
+        let messageID = UUID()
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.replaceMessageVariables(
+            RoleplayMVUData(
+                statData: [
+                    "记忆": .array([.string("初始")]),
+                    "好感度": .array([.int(10), .string("当前好感")]),
+                    "旧位置": .string("车站")
+                ]
+            ).variables,
+            messageID: messageID,
+            versionIndex: 0
+        )
+        let result = RoleplayMVUEngine.applyUpdates(
+            in: """
+            正文
+            <UpdateVariable><JSONPatch>
+            [
+              {"op":"insert","path":"/记忆/-","value":"新记忆"},
+              {"op":"delta","path":"/好感度","value":5},
+              {"op":"move","from":"/旧位置","path":"/当前位置"}
+            ]
+            </JSONPatch></UpdateVariable>
+            """,
+            snapshot: snapshot,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        #expect(result.visibleContent == "正文")
+        #expect(result.appliedCommandCount == 3)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.记忆[1]", messageID: messageID) == .string("新记忆"))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.好感度[0]", messageID: messageID) == .int(15))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.好感度[1]", messageID: messageID) == .string("当前好感"))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.旧位置", messageID: messageID) == nil)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.当前位置", messageID: messageID) == .string("车站"))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "delta_data.好感度", messageID: messageID) != nil)
     }
 
     @Test("MVU lodash 支持条件 set、move 与 delete")
@@ -472,6 +644,28 @@ struct RoleplayCompatibilityTests {
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.原路径", messageID: messageID) == nil)
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.目标路径", messageID: messageID) == .string("待移动"))
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.临时", messageID: messageID) == nil)
+    }
+
+    @Test("MVU 可解析 UpdateVariable 标签外的直接命令")
+    func applyUntaggedMVUCommand() {
+        let messageID = UUID()
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.replaceMessageVariables(
+            RoleplayMVUData(statData: ["数值": .int(1)]).variables,
+            messageID: messageID,
+            versionIndex: 0
+        )
+        let content = "正文\n_.set('数值', 2); // 直接更新"
+        let result = RoleplayMVUEngine.applyUpdates(
+            in: content,
+            snapshot: snapshot,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        #expect(result.visibleContent == content)
+        #expect(result.appliedCommandCount == 1)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.数值", messageID: messageID) == .int(2))
     }
 
     @Test("角色正则支持 JavaScript 字面量、命名捕获、trim 和宏")
@@ -536,6 +730,19 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("getButtonEvent"))
     }
 
+    @Test("酒馆助手脚本使用 ES Module 并由原生 MVU 接管 MagVarUpdate")
+    func makeHelperScriptModuleDocument() {
+        let source = RoleplayHelperScriptDocument.source("""
+        import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate@beta/artifact/bundle.js';
+        export const Schema = z.object({ value: z.number() });
+        """)
+
+        #expect(source.contains("source = source.replace"))
+        #expect(source.contains("await import(moduleURL)"))
+        #expect(source.contains("MagicalAstrogy\\/MagVarUpdate"))
+        #expect(source.contains("window.z = await import"))
+    }
+
 #if canImport(JavaScriptCore)
     @Test("HTML 兼容桥可执行变量、事件、MVU、lorebook 与宏语义")
     func executeHTMLCompatibilityRuntime() throws {
@@ -592,6 +799,19 @@ struct RoleplayCompatibilityTests {
         #expect(context.evaluateScript("typeof Mvu.getMvuData")?.toString() == "function")
         #expect(context.evaluateScript("typeof Mvu.replaceMvuData")?.toString() == "function")
         #expect(context.evaluateScript("typeof Mvu.parseMessage")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.getCurrentMvuData")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.replaceCurrentMvuData")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.reloadInitVar")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.getRecordFromMvuData")?.toString() == "function")
+        #expect(context.evaluateScript("Mvu.events.VARIABLE_INITIALIZED")?.toString() == "mag_variable_initialized")
+        #expect(context.evaluateScript("Mvu.events.SINGLE_VARIABLE_UPDATED")?.toString() == "mag_variable_updated")
+        context.evaluateScript("""
+        window.z = { toJSONSchema: () => ({ type: 'object', properties: { stat_data: { type: 'object' } } }) };
+        registerVariableSchema({}, { type: 'message' });
+        """)
+        #expect(context.evaluateScript(
+            "posted.some(item => item.action === 'replace_message_variables' && item.value.schema.properties.stat_data.type === 'object')"
+        )?.toBool() == true)
         #expect(context.evaluateScript("typeof getLorebookEntries")?.toString() == "function")
         #expect(context.evaluateScript("typeof formatAsDisplayedMessage")?.toString() == "function")
         #expect(context.evaluateScript("getScriptId()")?.toString() == "11111111-1111-1111-1111-111111111111")
@@ -626,6 +846,16 @@ struct RoleplayCompatibilityTests {
         """)
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         #expect(context.evaluateScript("parsedMVUValue")?.toInt32() == 9)
+
+        context.evaluateScript("""
+        var parsedMVUArrayLength = -1;
+        Mvu.parseMessage(
+          '<JSONPatch>[{"op":"insert","path":"/items/-","value":"b"}]</JSONPatch>',
+          { stat_data: { items: ['a'] }, initialized_lorebooks: {} }
+        ).then(value => { parsedMVUArrayLength = value.stat_data.items.length; });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("parsedMVUArrayLength")?.toInt32() == 2)
 
         context.evaluateScript("""
         var generationResult = '';

@@ -4975,3 +4975,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "记忆整理" = "Organización de recuerdos";
 "长期记忆整理系统提示词" = "Organizas recuerdos a largo plazo. Coloca en groups los duplicados con exactamente el mismo significado. Cuando un hecho claramente más reciente sustituya a otro anterior sobre el mismo atributo, coloca el par en supersessions. No trates información complementaria ni contradicciones inciertas como sustituciones, ni proceses recuerdos de tipos diferentes. Usa solo los ID de la entrada. Devuelve JSON estricto: {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"un único recuerdo completo y preciso tras la fusión\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Usa matrices vacías cuando no haya operaciones seguras. No incluyas explicaciones ni Markdown.";
 "长期记忆整理用户提示词" = "Revisa los siguientes recuerdos a largo plazo y devuelve grupos de duplicados seguros:\n%@";
+"角色卡链接" = "URL de la tarjeta de personaje";
+"从 URL 导入角色卡" = "Importar tarjeta de personaje desde URL";
+"头像链接" = "URL del avatar";
+"从 URL 载入头像" = "Cargar avatar desde URL";

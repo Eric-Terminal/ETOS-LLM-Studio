@@ -51,7 +51,7 @@ struct RoleplayDataSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("分层变量", comment: "Scoped roleplay variables section")) {
+            Section {
                 Picker(NSLocalizedString("变量作用域", comment: "Roleplay variable scope"), selection: $selectedScope) {
                     ForEach(RoleplayVariableScope.allCases, id: \.self) { scope in
                         Text(scope.localizedName).tag(scope)
@@ -67,6 +67,8 @@ struct RoleplayDataSettingsView: View {
                     saveVariables()
                 }
                 .disabled(selectedScope == .message && latestMessageID == nil)
+            } header: {
+                Text(NSLocalizedString("分层变量", comment: "Scoped roleplay variables section"))
             } footer: {
                 Text(variableFooter)
             }

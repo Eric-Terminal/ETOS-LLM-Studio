@@ -105,7 +105,7 @@ extension ChatService {
         guard case .array = value,
               let data = try? JSONEncoder().encode(value),
               let entries = try? JSONDecoder().decode([WorldbookEntry].self, from: data) else { return }
-        var worldbook = loadWorldbooks().first(where: { $0.name == name }) ?? Worldbook(name: name)
+        var worldbook = loadWorldbooks().first(where: { $0.name == name }) ?? Worldbook(name: name, entries: [])
         worldbook.entries = entries.enumerated().map { index, entry in
             var entry = entry
             if entry.uid == nil { entry.uid = index }
@@ -118,7 +118,7 @@ extension ChatService {
     func createRoleplayWorldbook(named name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !loadWorldbooks().contains(where: { $0.name == trimmed }) else { return }
-        saveWorldbook(Worldbook(name: trimmed))
+        saveWorldbook(Worldbook(name: trimmed, entries: []))
     }
 
     func deleteRoleplayWorldbook(named name: String) {

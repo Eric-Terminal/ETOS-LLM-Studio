@@ -197,21 +197,52 @@ enum RoleplayRuntime {
     ) -> RoleplayMVUResult? {
         guard store.binding(sessionID: sessionID) != nil else { return nil }
         var snapshot = store.variableSnapshot(sessionID: sessionID)
+        let storedSnapshot = snapshot
         let existing = snapshot.messageVariables(messageID: messageID, versionIndex: versionIndex)
-        if existing.isEmpty,
-           let previous = previousMessages.reversed().first(where: {
-               !snapshot.messageVariables(
-                   messageID: $0.id,
-                   versionIndex: $0.getCurrentVersionIndex()
-               ).isEmpty
-           }) {
+        if existing[RoleplayMVUData.statDataKey] == nil {
+            var inherited = previousMessages.reversed().compactMap { message -> [String: JSONValue]? in
+                let variables = snapshot.messageVariables(
+                    messageID: message.id,
+                    versionIndex: message.getCurrentVersionIndex()
+                )
+                return variables[RoleplayMVUData.statDataKey] == nil ? nil : variables
+            }.first
+            if inherited == nil {
+                let chatVariables = snapshot.scopedVariables(.chat)
+                if chatVariables[RoleplayMVUData.statDataKey] != nil {
+                    inherited = chatVariables
+                }
+            }
+            let normalized: RoleplayMVUData
+            if var inherited {
+                inherited.merge(existing) { _, current in current }
+                normalized = RoleplayMVUData(variables: inherited)
+            } else {
+                var legacy = previousMessages.reversed().compactMap { message -> [String: JSONValue]? in
+                    let variables = snapshot.messageVariables(
+                        messageID: message.id,
+                        versionIndex: message.getCurrentVersionIndex()
+                    )
+                    return variables.isEmpty ? nil : variables
+                }.first ?? [:]
+                legacy.merge(existing) { _, current in current }
+                normalized = RoleplayMVUData(migratingLegacyVariables: legacy)
+            }
             snapshot.replaceMessageVariables(
-                snapshot.messageVariables(
-                    messageID: previous.id,
-                    versionIndex: previous.getCurrentVersionIndex()
-                ),
+                normalized.variables,
                 messageID: messageID,
                 versionIndex: versionIndex
+            )
+        }
+        let variablesBeforeUpdate = RoleplayMVUData(
+            variables: snapshot.messageVariables(messageID: messageID, versionIndex: versionIndex)
+        )
+        let containsUpdateBlock = RoleplayMVUEngine.containsUpdateBlock(in: content)
+        if containsUpdateBlock {
+            RoleplayMVUEventBridge.emit(
+                RoleplayMVUEventName.variableUpdateStarted,
+                arguments: [RoleplayMVUEventBridge.variables(variablesBeforeUpdate)],
+                sessionID: sessionID
             )
         }
         let result = RoleplayMVUEngine.applyUpdates(
@@ -220,7 +251,56 @@ enum RoleplayRuntime {
             messageID: messageID,
             versionIndex: versionIndex
         )
-        if result.appliedCommandCount > 0 {
+        if !result.failureReasons.isEmpty {
+            AppLog.developer(
+                level: .warning,
+                category: "roleplay_mvu",
+                action: "apply_updates",
+                message: result.failureReasons.joined(separator: "\n"),
+                payload: [
+                    "sessionID": sessionID.uuidString,
+                    "messageID": messageID.uuidString,
+                    "versionIndex": String(versionIndex)
+                ]
+            )
+        }
+        if result.didMutateVariables {
+            let variablesAfterUpdate = RoleplayMVUData(
+                variables: result.updatedSnapshot.messageVariables(
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                )
+            )
+            for change in result.changes {
+                RoleplayMVUEventBridge.emit(
+                    RoleplayMVUEventName.singleVariableUpdated,
+                    arguments: [
+                        variablesAfterUpdate.statData.mapValues { $0.toAny() },
+                        change.path,
+                        change.oldValue?.toAny() ?? NSNull(),
+                        change.newValue?.toAny() ?? NSNull()
+                    ],
+                    sessionID: sessionID
+                )
+            }
+            RoleplayMVUEventBridge.emit(
+                RoleplayMVUEventName.variableUpdateEnded,
+                arguments: [
+                    RoleplayMVUEventBridge.variables(variablesAfterUpdate),
+                    RoleplayMVUEventBridge.variables(variablesBeforeUpdate)
+                ],
+                sessionID: sessionID
+            )
+            RoleplayMVUEventBridge.emit(
+                RoleplayMVUEventName.beforeMessageUpdate,
+                arguments: [[
+                    "variables": RoleplayMVUEventBridge.variables(variablesAfterUpdate),
+                    "message_content": content
+                ]],
+                sessionID: sessionID
+            )
+        }
+        if result.updatedSnapshot != storedSnapshot {
             store.saveVariableSnapshot(result.updatedSnapshot, sessionID: sessionID)
         }
         return result

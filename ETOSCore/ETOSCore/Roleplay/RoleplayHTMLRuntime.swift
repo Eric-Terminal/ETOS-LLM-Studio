@@ -178,7 +178,7 @@ public enum RoleplayHTMLDocumentFactory {
                 stored.merge(scriptInitialVariables) { existing, _ in existing }
                 return (scope.rawValue, JSONValue.dictionary(stored))
             }
-            (
+            return (
                 scope.rawValue,
                 JSONValue.dictionary(variableSnapshot?.scopedVariables(
                     scope,

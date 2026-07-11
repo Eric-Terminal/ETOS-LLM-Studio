@@ -7,8 +7,8 @@
 // ============================================================================
 
 import ETOSCore
+import Foundation
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct RoleplaySettingsView: View {
     @ObservedObject var viewModel: ChatViewModel
@@ -19,6 +19,7 @@ struct RoleplaySettingsView: View {
     @State private var selectedPersonaID: UUID?
     @State private var htmlRenderingEnabled = true
     @State private var helperScriptsEnabled = true
+    @State private var importURLText = ""
     @State private var isImporting = false
     @State private var importError: String?
     @State private var isAddingPersona = false
@@ -58,10 +59,23 @@ struct RoleplaySettingsView: View {
             }
 
             Section(NSLocalizedString("角色卡", comment: "Roleplay character cards section")) {
+                TextField(
+                    NSLocalizedString("角色卡链接", comment: "Roleplay card URL field"),
+                    text: $importURLText.watchKeyboardNewlineBinding()
+                )
+
                 Button {
-                    isImporting = true
+                    importCardFromURL()
                 } label: {
-                    Label(NSLocalizedString("导入角色卡", comment: "Import roleplay card"), systemImage: "square.and.arrow.down")
+                    Label(
+                        NSLocalizedString("从 URL 导入角色卡", comment: "Import roleplay card from URL"),
+                        systemImage: "link.badge.plus"
+                    )
+                }
+                .disabled(isImporting)
+
+                if isImporting {
+                    ProgressView()
                 }
 
                 if characters.isEmpty {
@@ -135,12 +149,6 @@ struct RoleplaySettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("酒馆兼容", comment: "Watch roleplay compatibility title"))
-        .fileImporter(
-            isPresented: $isImporting,
-            allowedContentTypes: [.json, .png, UTType(filenameExtension: "charx", conformingTo: .zip) ?? .zip],
-            allowsMultipleSelection: false,
-            onCompletion: importCard
-        )
         .sheet(isPresented: $isAddingPersona) {
             WatchPersonaEditorView { persona, avatarData in
                 Task {
@@ -203,25 +211,64 @@ struct RoleplaySettingsView: View {
         )
     }
 
-    private func importCard(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else {
-            if case .failure(let error) = result { importError = error.localizedDescription }
+    private func importCardFromURL() {
+        let trimmed = importURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            importError = NSLocalizedString("链接不能为空。", comment: "URL cannot be empty")
             return
         }
-        let hasAccess = url.startAccessingSecurityScopedResource()
+        guard let url = URL(string: trimmed) else {
+            importError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "Invalid URL format")
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            importError = NSLocalizedString("仅支持 http/https 链接。", comment: "Only http or https is supported")
+            return
+        }
+
+        importError = nil
+        isImporting = true
         Task {
-            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
             do {
-                let data = try await Task.detached(priority: .userInitiated) { try Data(contentsOf: url) }.value
-                _ = try await Task.detached(priority: .userInitiated) {
-                    try ChatService.shared.importRoleplayCard(data: data, fileName: url.lastPathComponent)
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(request: request)
+                defer { try? FileManager.default.removeItem(at: downloadedURL) }
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    throw URLError(.badServerResponse)
+                }
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Data(contentsOf: downloadedURL)
                 }.value
+                let fileName = suggestedCardFileName(from: url, response: response)
+                _ = try await Task.detached(priority: .userInitiated) {
+                    try ChatService.shared.importRoleplayCard(data: data, fileName: fileName)
+                }.value
+                importURLText = ""
                 importError = nil
+                isImporting = false
                 reload()
             } catch {
                 importError = error.localizedDescription
+                isImporting = false
             }
         }
+    }
+
+    private func suggestedCardFileName(from url: URL, response: URLResponse) -> String {
+        let suggested = response.suggestedFilename?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let pathName = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fileName = suggested.isEmpty ? pathName : suggested
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".json") || lowercased.hasSuffix(".png") || lowercased.hasSuffix(".charx") {
+            return fileName
+        }
+        if let httpResponse = response as? HTTPURLResponse,
+           let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type")?.lowercased() {
+            if contentType.contains("png") { return "\(fileName.isEmpty ? "character-card" : fileName).png" }
+            if contentType.contains("zip") { return "\(fileName.isEmpty ? "character-card" : fileName).charx" }
+        }
+        return "\(fileName.isEmpty ? "character-card" : fileName).json"
     }
 }
 
@@ -258,6 +305,7 @@ private struct WatchPersonaEditorView: View {
     @State private var name = ""
     @State private var description = ""
     @State private var avatarData: Data?
+    @State private var avatarURLText = ""
     @State private var isImportingAvatar = false
     @State private var avatarError: String?
     let onSave: (PersonaProfile, Data?) -> Void
@@ -267,10 +315,21 @@ private struct WatchPersonaEditorView: View {
             Form {
                 TextField(NSLocalizedString("名称", comment: "Name"), text: $name)
                 TextField(NSLocalizedString("角色扮演资料", comment: "Persona roleplay profile"), text: $description)
+                TextField(
+                    NSLocalizedString("头像链接", comment: "Persona avatar URL field"),
+                    text: $avatarURLText.watchKeyboardNewlineBinding()
+                )
                 Button {
-                    isImportingAvatar = true
+                    loadAvatarFromURL()
                 } label: {
-                    Label(NSLocalizedString("选择头像", comment: "Choose persona avatar"), systemImage: "person.crop.circle.badge.plus")
+                    Label(
+                        NSLocalizedString("从 URL 载入头像", comment: "Load persona avatar from URL"),
+                        systemImage: "person.crop.circle.badge.plus"
+                    )
+                }
+                .disabled(isImportingAvatar)
+                if isImportingAvatar {
+                    ProgressView()
                 }
                 if avatarData != nil {
                     Label(NSLocalizedString("已选择新头像", comment: "New persona avatar selected"), systemImage: "checkmark.circle")
@@ -288,25 +347,40 @@ private struct WatchPersonaEditorView: View {
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .navigationTitle(NSLocalizedString("新增用户身份", comment: "Add persona"))
-            .fileImporter(
-                isPresented: $isImportingAvatar,
-                allowedContentTypes: [.image],
-                allowsMultipleSelection: false
-            ) { result in
-                guard case .success(let urls) = result, let url = urls.first else {
-                    if case .failure(let error) = result { avatarError = error.localizedDescription }
-                    return
+        }
+    }
+
+    private func loadAvatarFromURL() {
+        let trimmed = avatarURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            avatarError = NSLocalizedString("链接不能为空。", comment: "URL cannot be empty")
+            return
+        }
+        guard let url = URL(string: trimmed) else {
+            avatarError = NSLocalizedString("链接格式无效，请输入完整 URL。", comment: "Invalid URL format")
+            return
+        }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            avatarError = NSLocalizedString("仅支持 http/https 链接。", comment: "Only http or https is supported")
+            return
+        }
+
+        avatarError = nil
+        isImportingAvatar = true
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 45
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    throw URLError(.badServerResponse)
                 }
-                let hasAccess = url.startAccessingSecurityScopedResource()
-                Task {
-                    defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
-                    do {
-                        avatarData = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
-                        avatarError = nil
-                    } catch {
-                        avatarError = error.localizedDescription
-                    }
-                }
+                avatarData = data
+                avatarURLText = ""
+                isImportingAvatar = false
+            } catch {
+                avatarError = error.localizedDescription
+                isImportingAvatar = false
             }
         }
     }

@@ -110,7 +110,6 @@ extension ChatService {
             variableSnapshot.persona.merge(persona.metadata) { _, new in new }
         }
         roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
-        guard seedGreetingIfEmpty else { return }
 
         let messages = messagesSnapshot(for: sessionID)
         guard messages.isEmpty,
@@ -119,20 +118,57 @@ extension ChatService {
         let greetings = [character.firstMessage] + character.alternateGreetings
         let index = min(max(0, selectedGreetingIndex), max(0, greetings.count - 1))
         guard greetings.indices.contains(index) else { return }
-        let greeting = RoleplayMacroResolver.resolve(greetings[index], context: resolved.macroContext)
+        let rawGreeting = greetings[index]
+        let enabledWorldbookIDs = Set(resolved.worldbookIDs)
+        let initialization = RoleplayMVUInitializer.initialize(
+            greeting: rawGreeting,
+            worldbooks: loadWorldbooks().filter { enabledWorldbookIDs.contains($0.id) },
+            primaryWorldbookID: character.embeddedWorldbookID,
+            existingVariables: variableSnapshot.character,
+            macroContext: resolved.macroContext
+        )
+        if !initialization.failureReasons.isEmpty {
+            AppLog.developer(
+                level: .warning,
+                category: "roleplay_mvu",
+                action: "initialize",
+                message: initialization.failureReasons.joined(separator: "\n"),
+                payload: ["sessionID": sessionID.uuidString]
+            )
+        }
+        variableSnapshot.replaceVariables(initialization.data.variables, scope: .chat)
+        roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
+        let initializedArguments: [Any] = [RoleplayMVUEventBridge.variables(initialization.data), 0]
+        RoleplayMVUEventBridge.emit(
+            RoleplayMVUEventName.variableInitialized,
+            arguments: initializedArguments,
+            sessionID: sessionID
+        )
+        RoleplayMVUEventBridge.emit(
+            RoleplayMVUEventName.legacyVariableInitialized,
+            arguments: initializedArguments,
+            sessionID: sessionID
+        )
+        guard seedGreetingIfEmpty,
+              let initializedSession = RoleplayRuntime.resolve(sessionID: sessionID, messages: [], store: roleplayStore) else {
+            return
+        }
+        let greeting = RoleplayMacroResolver.resolve(rawGreeting, context: initializedSession.macroContext)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !greeting.isEmpty else { return }
         let greetingMessage = ChatMessage(role: .assistant, content: greeting)
-        if let statData = variableSnapshot.character["stat_data"] {
-            variableSnapshot.setValue(
-                statData,
-                scope: .message,
-                path: "stat_data",
-                messageID: greetingMessage.id,
-                versionIndex: 0
-            )
-            roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
-        }
+        variableSnapshot.replaceMessageVariables(
+            initialization.data.variables,
+            messageID: greetingMessage.id,
+            versionIndex: 0
+        )
+        variableSnapshot = RoleplayMVUEngine.applyUpdates(
+            in: greeting,
+            snapshot: variableSnapshot,
+            messageID: greetingMessage.id,
+            versionIndex: 0
+        ).updatedSnapshot
+        roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
         updateMessages([greetingMessage], for: sessionID)
     }
 

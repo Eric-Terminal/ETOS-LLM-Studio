@@ -4897,3 +4897,7 @@
 "记忆整理" = "Memory Organization";
 "长期记忆整理系统提示词" = "You organize long-term memories. Put exact semantic duplicates in groups. When a clearly newer fact replaces an older fact about the same attribute, put that pair in supersessions; do not treat complementary information or uncertain contradictions as replacement. Never combine different memory kinds. Use only input IDs. Return strict JSON: {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"one complete and accurate merged memory\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Use empty arrays when there are no safe operations. Do not output explanations or Markdown.";
 "长期记忆整理用户提示词" = "Review the following long-term memory candidates and return safe duplicate groups:\n%@";
+"角色卡链接" = "Character Card URL";
+"从 URL 导入角色卡" = "Import Character Card from URL";
+"头像链接" = "Avatar URL";
+"从 URL 载入头像" = "Load Avatar from URL";

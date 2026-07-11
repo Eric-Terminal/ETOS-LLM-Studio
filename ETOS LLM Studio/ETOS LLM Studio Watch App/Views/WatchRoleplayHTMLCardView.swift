@@ -140,7 +140,7 @@ struct WatchRoleplaySessionScriptHost: View {
                             sessionID: sessionID,
                             messageID: messageID,
                             html: RoleplayHTMLDocumentFactory.makeDocument(
-                                source: Self.scriptSource(script.content),
+                                source: RoleplayHelperScriptDocument.source(script.content),
                                 variables: variables,
                                 userName: persona?.name ?? "User",
                                 characterName: character.name,
@@ -179,19 +179,6 @@ struct WatchRoleplaySessionScriptHost: View {
         "\(sessionID?.uuidString ?? "none")|\(messageID?.uuidString ?? "none")|\(versionIndex)|\(revision)"
     }
 
-    private static func scriptSource(_ content: String) -> String {
-        let encoded = Data(content.utf8).base64EncodedString()
-        return """
-<script>
-(async function () {
-  const binary = atob('\(encoded)');
-  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
-  const source = new TextDecoder().decode(bytes);
-  (0, eval)(source);
-})();
-</script>
-"""
-    }
 }
 
 struct WatchRoleplayScriptButtonBar: View {

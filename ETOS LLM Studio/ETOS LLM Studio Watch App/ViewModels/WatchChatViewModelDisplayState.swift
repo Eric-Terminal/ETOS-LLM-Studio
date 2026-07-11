@@ -253,7 +253,7 @@ extension ChatViewModel {
     private func scheduleVisualMessagePreparationIfNeeded(for state: ChatMessageRenderState, source message: ChatMessage) {
         let rules = MessageRegexRuleStore.shared.rules
         let sessionID = currentSession?.id
-        let sourceMessages = messages
+        let sourceMessages = allMessagesForSession
         let needsRoleplayPreparation = message.role == .assistant && sessionID != nil
         guard Self.hasVisualRegexRule(in: rules, for: message) || needsRoleplayPreparation else {
             visualMessagePrepareTasks[message.id]?.cancel()

@@ -472,11 +472,13 @@ private struct RoleplaySessionBindingView: View {
                     }
                 }
 
-                Section(NSLocalizedString("酒馆兼容", comment: "Tavern compatibility section")) {
+                Section {
                     Toggle(NSLocalizedString("自动渲染 HTML", comment: "Auto-render roleplay HTML"), isOn: $htmlRenderingEnabled)
                         .onChange(of: htmlRenderingEnabled) { _, _ in persist() }
                     Toggle(NSLocalizedString("启用助手脚本", comment: "Enable roleplay helper scripts"), isOn: $helperScriptsEnabled)
                         .onChange(of: helperScriptsEnabled) { _, _ in persist() }
+                } header: {
+                    Text(NSLocalizedString("酒馆兼容", comment: "Tavern compatibility section"))
                 } footer: {
                     Text(NSLocalizedString("角色正则、宏和 MVU 始终按角色卡运行；这里控制 HTML 与助手脚本承载。", comment: "Roleplay compatibility controls footer"))
                 }

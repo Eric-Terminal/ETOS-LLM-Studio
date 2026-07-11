@@ -403,7 +403,7 @@ extension ChatViewModel {
             userInput = text
             sendMessage()
         case "generate":
-            if let latestAssistant = messages.last(where: { $0.role == .assistant }) {
+            if let latestAssistant = allMessagesForSession.last(where: { $0.role == .assistant }) {
                 retryMessage(latestAssistant)
             }
         default:
