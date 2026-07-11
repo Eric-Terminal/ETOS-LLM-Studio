@@ -210,8 +210,8 @@ struct WorldbookEngineTests {
         #expect(result.after.contains(where: { $0.content == longContent }))
     }
 
-    @Test("engine ignores injected entry budget when entries match")
-    func testInjectedEntryBudgetDoesNotSuppressMatchedEntries() {
+    @Test("engine enforces explicit per-book entry and character budgets")
+    func testInjectedEntryBudgetSuppressesLowerPriorityEntries() {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-runtime-per-book-budget-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -219,7 +219,7 @@ struct WorldbookEngineTests {
         let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
 
         let book = Worldbook(
-            name: "显式预算不裁剪",
+            name: "显式预算裁剪",
             entries: [
                 WorldbookEntry(content: "budget-first-hit", keys: ["hero"], position: .after, order: 100),
                 WorldbookEntry(content: "budget-second-hit", keys: ["hero"], position: .after, order: 90)
@@ -238,7 +238,7 @@ struct WorldbookEngineTests {
         )
 
         #expect(result.after.contains(where: { $0.content == "budget-first-hit" }))
-        #expect(result.after.contains(where: { $0.content == "budget-second-hit" }))
+        #expect(!result.after.contains(where: { $0.content == "budget-second-hit" }))
     }
 
     @Test("engine keeps matching entries when different worldbooks reuse entry IDs")
@@ -273,8 +273,8 @@ struct WorldbookEngineTests {
         #expect(result.after.contains(where: { $0.content == "same-entry-id-second" }))
     }
 
-    @Test("engine keeps all matching entries in the same group")
-    func testGroupDoesNotSuppressMatchingEntries() {
+    @Test("engine selects one weighted winner from the same inclusion group")
+    func testGroupSelectsSingleWinner() {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-runtime-group-scope-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -282,7 +282,7 @@ struct WorldbookEngineTests {
         let engine = WorldbookEngine(runtimeStore: runtime, randomSource: { 0 })
 
         let book = Worldbook(
-            name: "同组条目全部发送",
+            name: "同组条目选出一个",
             entries: [
                 WorldbookEntry(content: "group-high-hit", keys: ["hero"], order: 100, group: "shared"),
                 WorldbookEntry(content: "group-low-hit", keys: ["hero"], order: 10, group: "shared")
@@ -300,7 +300,91 @@ struct WorldbookEngineTests {
         )
 
         #expect(result.after.contains(where: { $0.content == "group-high-hit" }))
-        #expect(result.after.contains(where: { $0.content == "group-low-hit" }))
+        #expect(!result.after.contains(where: { $0.content == "group-low-hit" }))
+    }
+
+    @Test("engine gives group override priority over weighted selection")
+    func testGroupOverrideWins() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-group-override-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let engine = WorldbookEngine(
+            runtimeStore: WorldbookRuntimeStateStore(storageURL: tempURL),
+            randomSource: { 0 }
+        )
+        let book = Worldbook(
+            name: "组优先级",
+            entries: [
+                WorldbookEntry(content: "普通高权重", keys: ["hero"], order: 100, group: "route", groupWeight: 100),
+                WorldbookEntry(content: "强制优先", keys: ["hero"], order: 10, group: "route", groupOverride: true, groupWeight: 1)
+            ]
+        )
+
+        let result = engine.evaluate(.init(
+            sessionID: UUID(),
+            worldbooks: [book],
+            messages: [ChatMessage(role: .user, content: "hero")],
+            topicPrompt: nil,
+            enhancedPrompt: nil
+        ))
+
+        #expect(result.after.map(\.content) == ["强制优先"])
+    }
+
+    @Test("engine parses SillyTavern slash-delimited regex keyword flags")
+    func testSlashDelimitedRegexKeyword() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-regex-literal-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let engine = WorldbookEngine(runtimeStore: WorldbookRuntimeStateStore(storageURL: tempURL), randomSource: { 0 })
+        let entry = WorldbookEntry(
+            content: "regex-hit",
+            keys: [#"/^hero\s+arrives$/im"#],
+            useRegex: true
+        )
+        let book = Worldbook(name: "正则关键词", entries: [entry])
+
+        let result = engine.evaluate(.init(
+            sessionID: UUID(),
+            worldbooks: [book],
+            messages: [ChatMessage(role: .user, content: "前文\nHero arrives\n后文")],
+            topicPrompt: nil,
+            enhancedPrompt: nil
+        ))
+
+        #expect(result.after.contains(where: { $0.content == "regex-hit" }))
+    }
+
+    @Test("ignoreBudget metadata bypasses explicit budgets")
+    func testIgnoreBudgetMetadata() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-ignore-budget-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let engine = WorldbookEngine(runtimeStore: WorldbookRuntimeStateStore(storageURL: tempURL), randomSource: { 0 })
+        let book = Worldbook(
+            name: "预算豁免",
+            entries: [
+                WorldbookEntry(content: "normal", keys: ["hero"], order: 100),
+                WorldbookEntry(
+                    content: "ignore-budget",
+                    keys: ["hero"],
+                    order: 90,
+                    metadata: ["ignoreBudget": .bool(true)]
+                )
+            ],
+            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: 6)
+        )
+
+        let result = engine.evaluate(.init(
+            sessionID: UUID(),
+            worldbooks: [book],
+            messages: [ChatMessage(role: .user, content: "hero")],
+            topicPrompt: nil,
+            enhancedPrompt: nil
+        ))
+
+        #expect(result.after.contains(where: { $0.content == "normal" }))
+        #expect(result.after.contains(where: { $0.content == "ignore-budget" }))
     }
 
     @Test("engine supports atDepth / emTop / emBottom positions")

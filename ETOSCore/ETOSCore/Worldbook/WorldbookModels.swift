@@ -217,6 +217,16 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
         return !secondaryKeys.isEmpty
     }
 
+    public var ignoresBudget: Bool {
+        switch metadata["ignoreBudget"] {
+        case .bool(let value): return value
+        case .int(let value): return value != 0
+        case .double(let value): return value != 0
+        case .string(let value): return ["true", "1", "yes"].contains(value.lowercased())
+        default: return false
+        }
+    }
+
     public init(
         id: UUID = UUID(),
         uid: Int? = nil,

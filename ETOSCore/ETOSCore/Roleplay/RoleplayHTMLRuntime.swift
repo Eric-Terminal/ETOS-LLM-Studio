@@ -36,7 +36,7 @@ public enum RoleplayHTMLExtractor {
             return .init(remainingText: content, documents: [])
         }
         guard let fenceRegex = try? NSRegularExpression(
-            pattern: #"```(?:html|htm|xml)?\s*\n([\s\S]*?)```"#,
+            pattern: #"```(html|htm|xml)?\s*\n([\s\S]*?)```"#,
             options: [.caseInsensitive]
         ) else { return .init(remainingText: content, documents: []) }
         let source = content as NSString
@@ -44,9 +44,10 @@ public enum RoleplayHTMLExtractor {
         var documents: [RoleplayHTMLDocument] = []
         let remaining = NSMutableString(string: content)
         for match in matches.reversed() {
-            guard match.numberOfRanges > 1 else { continue }
-            let candidate = source.substring(with: match.range(at: 1))
-            guard isFrontend(candidate) else { continue }
+            guard match.numberOfRanges > 2 else { continue }
+            let languageIsHTML = match.range(at: 1).location != NSNotFound
+            let candidate = source.substring(with: match.range(at: 2))
+            guard languageIsHTML || isFrontend(candidate) else { continue }
             documents.insert(.init(id: match.range.location, source: candidate), at: 0)
             remaining.replaceCharacters(in: match.range, with: "")
         }
@@ -61,7 +62,7 @@ public enum RoleplayHTMLExtractor {
 
     public static func isFrontend(_ content: String) -> Bool {
         content.range(
-            of: #"(?:<html\b|<head\b|<body\b|class\s*=\s*['\"][^'\"]*\bTH-render\b|<script\b|<style\b|<div\b)"#,
+            of: #"(?:<!doctype\s+html\b|<html\b|<head\b|<body\b|class\s*=\s*['\"][^'\"]*\bTH-render\b)"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }
