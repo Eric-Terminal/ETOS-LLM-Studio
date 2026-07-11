@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 private extension MemoryConsolidationState {
     static func load() -> MemoryConsolidationState {
@@ -32,13 +33,16 @@ extension ChatService {
         for sessionID: UUID?,
         enableMemory: Bool
     ) {
-        guard enableMemory,
-              AppConfigStore.shared.enableMemoryWrite,
-              AppConfigStore.shared.enableMemoryAutoConsolidation else {
-            return
-        }
+        guard enableMemory else { return }
 
         Task { [weak self] in
+            let writeEnabled = Persistence.readAppConfigInteger(
+                key: AppConfigKey.enableMemoryWrite.rawValue
+            ) ?? 1
+            let consolidationEnabled = Persistence.readAppConfigInteger(
+                key: AppConfigKey.enableMemoryAutoConsolidation.rawValue
+            ) ?? 1
+            guard writeEnabled != 0, consolidationEnabled != 0 else { return }
             await self?.performLongTermMemoryConsolidationIfNeeded(sessionID: sessionID)
         }
     }
