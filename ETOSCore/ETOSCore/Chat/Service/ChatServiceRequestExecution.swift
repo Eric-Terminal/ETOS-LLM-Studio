@@ -77,9 +77,21 @@ extension ChatService {
             messages: preparedRequestMessages,
             store: roleplayStore
         )
-        let requestMessages = resolvedRoleplay.map {
+        var requestMessages = resolvedRoleplay.map {
             RoleplayRuntime.transformedRequestMessages(preparedRequestMessages, resolved: $0)
         } ?? preparedRequestMessages
+        let helperScriptIDs = resolvedRoleplay?.characters.flatMap { character in
+            character.helperScripts.filter(\.enabled).map(\.id)
+        } ?? []
+        if !helperScriptIDs.isEmpty {
+            for index in requestMessages.indices where requestMessages[index].content.contains("{{") {
+                requestMessages[index].content = await RoleplayMacroExpansionBridge.shared.expand(
+                    requestMessages[index].content,
+                    sessionID: currentSessionID,
+                    scriptIDs: helperScriptIDs
+                )
+            }
+        }
 
         var memories: [MemoryItem] = []
         if enableMemory {
@@ -161,18 +173,24 @@ extension ChatService {
                 macroContext: resolvedRoleplay.macroContext
             )
         }
-        let worldbookResult = worldbookEngine.evaluate(
+        let worldbookResult = await worldbookEngine.evaluateAsync(
             .init(
                 sessionID: currentSessionID,
                 worldbooks: boundWorldbooks,
                 messages: requestMessages,
                 topicPrompt: sessionForRequest?.topicPrompt,
-                enhancedPrompt: enhancedPrompt
+                enhancedPrompt: enhancedPrompt,
+                personaDescription: resolvedRoleplay?.persona?.description,
+                characterDescription: resolvedRoleplay?.characters.first?.description,
+                characterPersonality: resolvedRoleplay?.characters.first?.personality,
+                characterDepthPrompt: resolvedRoleplay?.characters.first?.postHistoryInstructions,
+                scenario: resolvedRoleplay?.characters.first?.scenario,
+                creatorNotes: resolvedRoleplay?.characters.first?.creatorNotes
             )
         )
 
         var messagesToSend: [ChatMessage] = []
-        let finalSystemPrompt = buildFinalSystemPrompt(
+        var finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             topic: sessionForRequest?.topicPrompt,
             memories: memories,
@@ -186,6 +204,13 @@ extension ChatService {
             worldbookOutlet: worldbookResult.outlet,
             roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt)
         )
+        if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {
+            finalSystemPrompt = await RoleplayMacroExpansionBridge.shared.expand(
+                finalSystemPrompt,
+                sessionID: currentSessionID,
+                scriptIDs: helperScriptIDs
+            )
+        }
 
         if !finalSystemPrompt.isEmpty {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))

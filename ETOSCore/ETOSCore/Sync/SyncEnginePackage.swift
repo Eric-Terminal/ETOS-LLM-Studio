@@ -44,6 +44,10 @@ extension SyncEngine {
         var legacyGlobalSystemPrompt: String?
         var referencedAudioFileNames = Set<String>()
         var referencedImageFileNames = Set<String>()
+        let roleplayCharacters = RoleplayStore.shared.loadCharacters()
+        referencedImageFileNames.formUnion(roleplayCharacters.compactMap(\.avatarFileName))
+        referencedImageFileNames.formUnion(roleplayCharacters.flatMap { $0.assets ?? [] }.compactMap(\.localFileName))
+        referencedImageFileNames.formUnion(RoleplayStore.shared.loadPersonas().compactMap(\.avatarFileName))
 
         if options.contains(.providers) {
             providers = ConfigLoader.loadProviders()

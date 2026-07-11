@@ -62,7 +62,8 @@ public final class RoleplayStore: @unchecked Sendable {
     }
 
     public func deleteCharacter(id: UUID) {
-        let avatarFileName = character(id: id)?.avatarFileName
+        let character = character(id: id)
+        let avatarFileName = character?.avatarFileName
         queue.sync {
             var library = loadLibraryUnlocked()
             library.characters.removeAll { $0.id == id }
@@ -77,6 +78,7 @@ public final class RoleplayStore: @unchecked Sendable {
         if let avatarFileName {
             Persistence.deleteImage(fileName: avatarFileName)
         }
+        RoleplayAssetStore.deleteFiles(for: character?.assets ?? [])
         notifyChange(kind: Self.libraryChangeKind)
     }
 

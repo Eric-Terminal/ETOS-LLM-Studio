@@ -244,6 +244,15 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: RoleplayDisplayedMessageBridge.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      notification.userInfo?[RoleplayBridgeNotification.sessionIDKey] as? UUID == self.currentSession?.id else { return }
+                self.refreshVisualMessagesAfterRegexRulesChange()
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: RoleplayBridgeNotification.requestedAction)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in

@@ -51,6 +51,12 @@ struct RoleplayHTMLCardView: View {
                 let binding = store.binding(sessionID: sessionID)
                 let character = binding?.characterIDs.first.flatMap(store.character(id:))
                 let persona = binding?.personaID.flatMap(store.persona(id:))
+                let primaryWorldbookName = character?.embeddedWorldbookID.flatMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                }
+                let additionalWorldbookNames = binding?.additionalWorldbookIDs.compactMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                } ?? []
                 return extraction.documents.map { document in
                     PreparedRoleplayHTMLDocument(
                         id: document.id,
@@ -61,11 +67,16 @@ struct RoleplayHTMLCardView: View {
                             characterName: character?.name ?? "Assistant",
                             userAvatarPath: persona?.avatarFileName ?? "",
                             characterAvatarPath: character?.avatarFileName ?? "",
+                            characterAssets: character?.assets ?? [],
+                            regexRules: character?.regexRules ?? [],
                             chatMessages: chatMessages,
                             variableSnapshot: snapshot,
                             messageID: messageID,
                             messageVersionIndex: versionIndex,
-                            worldbooks: worldbooks
+                            documentID: document.id,
+                            worldbooks: worldbooks,
+                            primaryWorldbookName: primaryWorldbookName,
+                            additionalWorldbookNames: additionalWorldbookNames
                         )
                     )
                 }
@@ -122,12 +133,19 @@ struct RoleplaySessionScriptHost: View {
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
+                let additionalWorldbookNames = binding.additionalWorldbookIDs.compactMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                }
                 let baseVariables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 return characters.flatMap { character in
                     character.helperScripts.filter(\.enabled).map { script in
                         var variables = baseVariables
+                        let scriptInitialVariables: [String: JSONValue]
                         if case .dictionary(let data) = script.metadata["data"] {
+                            scriptInitialVariables = data
                             variables.merge(data) { _, new in new }
+                        } else {
+                            scriptInitialVariables = [:]
                         }
                         return PreparedRoleplayScriptDocument(
                             id: script.id,
@@ -140,15 +158,22 @@ struct RoleplaySessionScriptHost: View {
                                 characterName: character.name,
                                 userAvatarPath: persona?.avatarFileName ?? "",
                                 characterAvatarPath: character.avatarFileName ?? "",
+                                characterAssets: character.assets ?? [],
+                                regexRules: character.regexRules,
                                 chatMessages: chatMessages,
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
                                 messageVersionIndex: versionIndex,
                                 worldbooks: worldbooks,
+                                primaryWorldbookName: character.embeddedWorldbookID.flatMap { id in
+                                    worldbooks.first(where: { $0.id == id })?.name
+                                },
+                                additionalWorldbookNames: additionalWorldbookNames,
                                 scriptID: script.id,
                                 scriptName: script.name,
                                 scriptInfo: script.info,
-                                scriptButtons: script.buttons
+                                scriptButtons: script.buttons,
+                                scriptInitialVariables: scriptInitialVariables
                             )
                         )
                     }
@@ -292,7 +317,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "etosRoleplay")
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = .default()
         configuration.userContentController = controller
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
@@ -334,6 +359,9 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         var loadedHTML: String?
         weak var webView: WKWebView?
         private var buttonObserver: NSObjectProtocol? = nil
+        private var requestObserver: NSObjectProtocol? = nil
+        private var macroObserver: NSObjectProtocol? = nil
+        private var eventObserver: NSObjectProtocol? = nil
 
         init(
             sessionID: UUID,
@@ -355,10 +383,34 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
             ) { [weak self] notification in
                 self?.handleScriptButton(notification)
             }
+            requestObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayBridgeNotification.completedRequest,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleCompletedRequest(notification)
+            }
+            macroObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayMacroExpansionNotification.requested,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleMacroExpansion(notification)
+            }
+            eventObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayEventBridge.didEmitNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleRoleplayEvent(notification)
+            }
         }
 
         deinit {
             if let buttonObserver { NotificationCenter.default.removeObserver(buttonObserver) }
+            if let requestObserver { NotificationCenter.default.removeObserver(requestObserver) }
+            if let macroObserver { NotificationCenter.default.removeObserver(macroObserver) }
+            if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -384,6 +436,39 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
                   let data = try? JSONEncoder().encode(name),
                   let literal = String(data: data, encoding: .utf8) else { return }
             webView?.evaluateJavaScript("window.__etosEmitScriptButton?.(\(literal));")
+        }
+
+        private func handleCompletedRequest(_ notification: Notification) {
+            guard notification.userInfo?[RoleplayBridgeNotification.sessionIDKey] as? UUID == sessionID,
+                  let requestID = notification.userInfo?[RoleplayBridgeNotification.requestIDKey] as? String,
+                  let data = try? JSONSerialization.data(withJSONObject: [
+                    requestID,
+                    notification.userInfo?[RoleplayBridgeNotification.resultKey] ?? NSNull(),
+                    notification.userInfo?[RoleplayBridgeNotification.errorKey] ?? NSNull()
+                  ]),
+                  let arguments = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__etosResolveRequest?.(...\(arguments));")
+        }
+
+        private func handleMacroExpansion(_ notification: Notification) {
+            guard let scriptID,
+                  notification.userInfo?[RoleplayMacroExpansionNotification.sessionIDKey] as? UUID == sessionID,
+                  notification.userInfo?[RoleplayMacroExpansionNotification.scriptIDKey] as? UUID == scriptID,
+                  let requestID = notification.userInfo?[RoleplayMacroExpansionNotification.requestIDKey] as? String,
+                  let text = notification.userInfo?[RoleplayMacroExpansionNotification.textKey] as? String,
+                  let data = try? JSONSerialization.data(withJSONObject: [requestID, text]),
+                  let arguments = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__etosExpandMacros?.(...\(arguments));")
+        }
+
+        private func handleRoleplayEvent(_ notification: Notification) {
+            guard notification.userInfo?[RoleplayBridgeNotification.sessionIDKey] as? UUID == sessionID,
+                  let name = notification.userInfo?[RoleplayBridgeNotification.eventNameKey] as? String,
+                  let arguments = notification.userInfo?[RoleplayEventBridge.argumentsKey] as? [Any],
+                  let source = notification.userInfo?[RoleplayEventBridge.sourceKey] as? String,
+                  let data = try? JSONSerialization.data(withJSONObject: [name, arguments, source]),
+                  let payload = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__etosReceiveEvent?.(...\(payload));")
         }
 
         func webView(

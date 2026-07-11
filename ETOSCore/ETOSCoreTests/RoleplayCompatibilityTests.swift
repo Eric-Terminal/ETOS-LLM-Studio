@@ -9,6 +9,10 @@
 import Foundation
 import Testing
 @testable import ETOSCore
+import ZIPFoundation
+#if canImport(JavaScriptCore)
+import JavaScriptCore
+#endif
 
 @Suite("角色扮演与酒馆兼容")
 struct RoleplayCompatibilityTests {
@@ -97,6 +101,68 @@ struct RoleplayCompatibilityTests {
         #expect(result.character.name == "PNG 角色")
         #expect(result.character.sourceSpecVersion == "2.0")
         #expect(result.avatarPNGData == png)
+    }
+
+    @Test("从 Character Card V3 PNG 导入扩展资源块")
+    func importV3PNGAssets() throws {
+        let json = """
+        {
+          "spec": "chara_card_v3",
+          "spec_version": "3.0",
+          "data": {
+            "name": "PNG 资源角色",
+            "assets": [
+              { "type": "background", "uri": "__asset:assets/background.txt", "name": "main", "ext": "txt" }
+            ]
+          }
+        }
+        """
+        let payload = Data("resource-data".utf8)
+        let png = makePNGTextCard(
+            keyword: "ccv3",
+            json: json,
+            assets: ["assets/background.txt": payload]
+        )
+
+        let result = try RoleplayCardImportService().importCard(from: png, fileName: "asset.png")
+
+        #expect(result.character.assets?.first?.uri == "__asset:assets/background.txt")
+        #expect(result.assets.first?.data == payload)
+    }
+
+    @Test("导入 Character Card V3 CHARX 及 embeded 资源")
+    func importV3CHARXAssets() throws {
+        let card = """
+        {
+          "spec": "chara_card_v3",
+          "spec_version": "3.0",
+          "data": {
+            "name": "资源角色",
+            "description": "测试",
+            "assets": [
+              { "type": "icon", "uri": "embeded://assets/icon/images/main.png", "name": "main", "ext": "png" },
+              { "type": "background", "uri": "data:text/plain;base64,YmFja2dyb3VuZA==", "name": "main", "ext": "txt" }
+            ]
+          }
+        }
+        """
+        let archive = try Archive(data: Data(), accessMode: .create)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cardURL = directory.appendingPathComponent("card.json")
+        let iconURL = directory.appendingPathComponent("main.png")
+        try Data(card.utf8).write(to: cardURL)
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: iconURL)
+        try archive.addEntry(with: "card.json", fileURL: cardURL, compressionMethod: .none)
+        try archive.addEntry(with: "assets/icon/images/main.png", fileURL: iconURL, compressionMethod: .none)
+        let data = try #require(archive.data)
+
+        let result = try RoleplayCardImportService().importCard(from: data, fileName: "asset.charx")
+
+        #expect(result.character.assets?.count == 2)
+        #expect(result.assets.first?.data == Data([0x89, 0x50, 0x4E, 0x47]))
+        #expect(result.assets.last?.data == Data("background".utf8))
     }
 
     @Test("宏解析角色、Persona、消息变量与稳定 pick")
@@ -206,12 +272,80 @@ struct RoleplayCompatibilityTests {
         var snapshot = RoleplayVariableSnapshot()
         snapshot.setValue(.int(1), scope: .message, path: "value", messageID: messageID, versionIndex: 0)
         snapshot.setValue(.int(2), scope: .message, path: "value", messageID: messageID, versionIndex: 1)
+        snapshot.setValue(
+            .string("<b>内部显示</b>"),
+            scope: .message,
+            path: RoleplayDisplayedMessageBridge.variableKey,
+            messageID: messageID,
+            versionIndex: 1
+        )
+        snapshot.replaceMessageVariables(["value": .int(3)], messageID: messageID, versionIndex: 1)
 
         #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 0) == .int(1))
-        #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 1) == .int(2))
+        #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 1) == .int(3))
+        #expect(snapshot.messageVariables(messageID: messageID, versionIndex: 1)[RoleplayDisplayedMessageBridge.variableKey] == nil)
+        #expect(snapshot.value(
+            scope: .message,
+            path: RoleplayDisplayedMessageBridge.variableKey,
+            messageID: messageID,
+            versionIndex: 1
+        ) == .string("<b>内部显示</b>"))
         snapshot.removeMessageVariables(messageID: messageID)
         #expect(snapshot.messageVariables(messageID: messageID, versionIndex: 0).isEmpty)
         #expect(snapshot.messageVariables(messageID: messageID, versionIndex: 1).isEmpty)
+    }
+
+    @Test("脚本变量按脚本 ID 隔离且不进入合并提示词")
+    func isolateScriptVariables() {
+        let firstID = UUID()
+        let secondID = UUID()
+        var snapshot = RoleplayVariableSnapshot(script: ["shared": .int(1)])
+        snapshot.replaceScriptVariables(["value": .string("first")], scriptID: firstID)
+        snapshot.replaceScriptVariables(["value": .string("second")], scriptID: secondID)
+
+        #expect(snapshot.scriptVariables(scriptID: firstID)["value"] == .string("first"))
+        #expect(snapshot.scriptVariables(scriptID: secondID)["value"] == .string("second"))
+        #expect(snapshot.mergedVariables()["shared"] == .int(1))
+        #expect(snapshot.mergedVariables()["__etos_script_scopes"] == nil)
+    }
+
+    @Test("generateRaw 按自定义顺序、历史覆盖和深度注入组装提示词")
+    func assembleCustomGenerationPrompts() {
+        let config: [String: JSONValue] = [
+            "user_input": .string("用户输入"),
+            "ordered_prompts": .array([
+                .string("char_description"),
+                .dictionary(["role": .string("assistant"), "content": .string("自定义助手提示")]),
+                .string("chat_history"),
+                .string("user_input")
+            ]),
+            "overrides": .dictionary([
+                "chat_history": .dictionary([
+                    "prompts": .array([
+                        .dictionary(["role": .string("user"), "content": .string("覆盖历史")])
+                    ])
+                ])
+            ]),
+            "injects": .array([
+                .dictionary([
+                    "role": .string("system"),
+                    "content": .string("深度注入"),
+                    "position": .string("in_chat"),
+                    "depth": .int(1)
+                ])
+            ])
+        ]
+
+        let messages = RoleplayGenerationPromptAssembler.assemble(
+            dictionary: config,
+            raw: true,
+            systemPrompts: ["char_description": "角色描述"],
+            chatHistory: [ChatMessage(role: .user, content: "原历史")],
+            fallbackSystemPrompt: "不应注入"
+        )
+
+        #expect(messages.map(\.role) == [.system, .assistant, .user, .system, .user])
+        #expect(messages.map(\.content) == ["角色描述", "自定义助手提示", "覆盖历史", "深度注入", "用户输入"])
     }
 
     @Test("分层变量替换会清空旧值并持久承载自定义宏")
@@ -304,6 +438,42 @@ struct RoleplayCompatibilityTests {
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.名称", messageID: messageID) == .string("新状态"))
     }
 
+    @Test("MVU lodash 支持条件 set、move 与 delete")
+    func applyExtendedLodashMVU() {
+        let messageID = UUID()
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.setValue(
+            .dictionary([
+                "地点": .string("车站"),
+                "原路径": .string("待移动"),
+                "目标路径": .string("旧值"),
+                "临时": .bool(true)
+            ]),
+            scope: .message,
+            path: "stat_data",
+            messageID: messageID
+        )
+        let result = RoleplayMVUEngine.applyUpdates(
+            in: """
+            <UpdateVariable>
+            _.set('地点', '错误旧值', '不会生效');
+            _.set('地点', '车站', '海边');
+            _.move('原路径', '目标路径');
+            _.delete('临时');
+            </UpdateVariable>
+            """,
+            snapshot: snapshot,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        #expect(result.appliedCommandCount == 3)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.地点", messageID: messageID) == .string("海边"))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.原路径", messageID: messageID) == nil)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.目标路径", messageID: messageID) == .string("待移动"))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.临时", messageID: messageID) == nil)
+    }
+
     @Test("角色正则支持 JavaScript 字面量、命名捕获、trim 和宏")
     func transformRoleplayRegex() {
         let context = RoleplayMacroContext(
@@ -366,13 +536,236 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("getButtonEvent"))
     }
 
-    private func makePNGTextCard(keyword: String, json: String) -> Data {
+#if canImport(JavaScriptCore)
+    @Test("HTML 兼容桥可执行变量、事件、MVU、lorebook 与宏语义")
+    func executeHTMLCompatibilityRuntime() throws {
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: "<html><head></head><body></body></html>",
+            variables: ["score": .int(1)],
+            userName: "旅行者",
+            characterName: "星野",
+            userAvatarPath: "",
+            characterAvatarPath: "",
+            chatMessages: [ChatMessage(role: .assistant, content: "状态")],
+            worldbooks: [Worldbook(name: "测试世界书", entries: [WorldbookEntry(content: "内容", keys: ["键"])])],
+            primaryWorldbookName: "测试世界书",
+            scriptID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")
+        )
+        let startMarker = "<script>(function () {"
+        let start = try #require(document.range(of: startMarker)?.lowerBound)
+        let scriptStart = document.index(start, offsetBy: "<script>".count)
+        let scriptEnd = try #require(document.range(of: "</script>", range: scriptStart..<document.endIndex)?.lowerBound)
+        let script = String(document[scriptStart..<scriptEnd])
+
+        let context = try #require(JSContext())
+        context.exceptionHandler = { _, exception in
+            Issue.record("JavaScript 异常：\(exception?.toString() ?? "未知错误")")
+        }
+        context.evaluateScript("""
+        var window = this;
+        var posted = [];
+        window.webkit = { messageHandlers: { etosRoleplay: { postMessage: value => posted.push(value) } } };
+        window.addEventListener = function() {};
+        window.dispatchEvent = function() {};
+        var File = function() {};
+        var mutationCallbacks = [];
+        var document = {
+          querySelector: () => null,
+          createElement: () => ({ className: '', innerHTML: '', setAttribute: () => {}, appendChild: () => {} }),
+          body: {},
+          documentElement: {}
+        };
+        var CustomEvent = function() {};
+        var MutationObserver = function(callback) { mutationCallbacks.push(callback); this.observe = function() {}; };
+        var ResizeObserver = function() { this.observe = function() {}; };
+        var Audio = function() {};
+        """)
+        context.evaluateScript(script)
+
+        let variableResult = context.evaluateScript("""
+        JSON.stringify(updateVariablesWith(value => { value.score += 4; return value; }, { type: 'chat' }))
+        """)?.toString()
+        #expect(variableResult == #"{"score":5}"#)
+        #expect(context.evaluateScript("iframe_events.GENERATION_ENDED")?.toString() == "js_generation_ended")
+        #expect(context.evaluateScript("tavern_events.MESSAGE_UPDATED")?.toString() == "message_updated")
+        #expect(context.evaluateScript("typeof waitGlobalInitialized")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.getMvuData")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.replaceMvuData")?.toString() == "function")
+        #expect(context.evaluateScript("typeof Mvu.parseMessage")?.toString() == "function")
+        #expect(context.evaluateScript("typeof getLorebookEntries")?.toString() == "function")
+        #expect(context.evaluateScript("typeof formatAsDisplayedMessage")?.toString() == "function")
+        #expect(context.evaluateScript("getScriptId()")?.toString() == "11111111-1111-1111-1111-111111111111")
+        #expect(context.evaluateScript("getCharWorldbookNames('current').primary")?.toString() == "测试世界书")
+
+        context.evaluateScript("""
+        var asyncVariableResult = '';
+        updateVariablesWith(async value => { await Promise.resolve(); value.score += 2; return value; }, { type: 'chat' })
+          .then(value => { asyncVariableResult = JSON.stringify(value); });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("asyncVariableResult")?.toString() == #"{"score":7}"#)
+
+        context.evaluateScript("""
+        var eventOrder = [];
+        var eventResult = '';
+        var normalListener = () => eventOrder.push('normal');
+        eventOn('ordered', normalListener);
+        eventOn('ordered', normalListener);
+        eventMakeFirst('ordered', () => eventOrder.push('first'));
+        eventMakeLast('ordered', () => eventOrder.push('last'));
+        eventEmitAndWait('ordered').then(() => { eventResult = eventOrder.join(','); });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("eventResult")?.toString() == "first,normal,last")
+
+        context.evaluateScript("""
+        var parsedMVUValue = -1;
+        eventOn(Mvu.events.COMMAND_PARSED, (_variables, commands) => { commands[0].args[1] = 9; });
+        Mvu.parseMessage("_.set('value', 3); // 测试; 注释", { stat_data: { value: 1 }, initialized_lorebooks: {} })
+          .then(value => { parsedMVUValue = value.stat_data.value; });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("parsedMVUValue")?.toInt32() == 9)
+
+        context.evaluateScript("""
+        var generationResult = '';
+        generateRaw({ user_input: '输入', ordered_prompts: ['user_input'] })
+          .then(value => { generationResult = value; });
+        """)
+        let generationRequestID = context.evaluateScript(
+            "posted.filter(item => item.action === 'generate_text').at(-1).request_id"
+        )?.toString()
+        context.evaluateScript("__etosResolveRequest('\(generationRequestID ?? "")', '生成文本', null)")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("generationResult")?.toString() == "生成文本")
+
+        context.evaluateScript("""
+        var displayed = retrieveDisplayedMessage(0);
+        displayed.innerHTML = '<b>跨消息更新</b>';
+        mutationCallbacks.at(-1)();
+        """)
+        #expect(context.evaluateScript(
+            "posted.some(item => item.action === 'set_displayed_message' && item.html === '<b>跨消息更新</b>')"
+        )?.toBool() == true)
+
+        let macro = context.evaluateScript("""
+        registerMacroLike(/{{value}}/g, () => '42'); substitudeMacros('{{user}}={{value}}')
+        """)?.toString()
+        #expect(macro == "旅行者=42")
+        #expect(context.evaluateScript("substitudeMacros('{{{user}}}/{{{char}}}')")?.toString() == "旅行者/星野")
+        #expect(context.evaluateScript("posted.some(item => item.action === 'replace_variables')")?.toBool() == true)
+    }
+
+    @Test("执行导入角色卡的助手脚本并验证异步返回与变量副作用")
+    func executeImportedHelperScript() throws {
+        let helperSource = """
+        window.cardResult = '';
+        window.cardPromise = (async () => {
+          await waitGlobalInitialized('Mvu');
+          await updateVariablesWith(async value => {
+            await Promise.resolve();
+            value.stat_data.count += 2;
+            return value;
+          }, { type: 'chat' });
+          let data = Mvu.getMvuData({ type: 'chat' });
+          data = await Mvu.parseMessage("_.add('count', 3); // 角色脚本更新", data);
+          await Mvu.replaceMvuData(data, { type: 'chat' });
+          registerMacroLike(/{{card_value}}/g, () => String(Mvu.getMvuData({ type: 'chat' }).stat_data.count));
+          const generated = await generateRaw({
+            user_input: substitudeMacros('{{card_value}}'),
+            ordered_prompts: ['user_input']
+          });
+          window.cardResult = `${generated}:${Mvu.getMvuData({ type: 'chat' }).stat_data.count}`;
+        })();
+        """
+        let payload: [String: Any] = [
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": [
+                "name": "可执行脚本角色",
+                "extensions": [
+                    "tavern_helper": [
+                        "scripts": [[
+                            "type": "script",
+                            "id": "22222222-2222-2222-2222-222222222222",
+                            "name": "语义测试",
+                            "enabled": true,
+                            "content": helperSource
+                        ]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let imported = try RoleplayCardImportService().importCard(from: data, fileName: "executable.json")
+        let script = try #require(imported.character.helperScripts.first)
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: "<html><head></head><body></body></html>",
+            variables: ["stat_data": .dictionary(["count": .int(1)])],
+            userName: "用户",
+            characterName: imported.character.name,
+            userAvatarPath: "",
+            characterAvatarPath: "",
+            chatMessages: [ChatMessage(role: .assistant, content: "开场")],
+            scriptID: script.id,
+            scriptName: script.name
+        )
+        let start = try #require(document.range(of: "<script>(function () {")?.lowerBound)
+        let scriptStart = document.index(start, offsetBy: "<script>".count)
+        let scriptEnd = try #require(document.range(of: "</script>", range: scriptStart..<document.endIndex)?.lowerBound)
+        let context = try #require(JSContext())
+        context.exceptionHandler = { _, exception in
+            Issue.record("角色脚本 JavaScript 异常：\(exception?.toString() ?? "未知错误")")
+        }
+        context.evaluateScript("""
+        var window = this;
+        var posted = [];
+        var File = function() {};
+        window.webkit = { messageHandlers: { etosRoleplay: { postMessage: value => posted.push(value) } } };
+        window.addEventListener = function() {};
+        window.dispatchEvent = function() {};
+        var document = { querySelector: () => null, createElement: () => ({ innerHTML: '' }), body: {}, documentElement: {} };
+        var CustomEvent = function() {};
+        var MutationObserver = function() { this.observe = function() {}; };
+        var ResizeObserver = function() { this.observe = function() {}; };
+        var Audio = function() {};
+        """)
+        context.evaluateScript(String(document[scriptStart..<scriptEnd]))
+        let encodedSource = try JSONEncoder().encode(script.content)
+        let sourceLiteral = try #require(String(data: encodedSource, encoding: .utf8))
+        context.evaluateScript("eval(\(sourceLiteral))")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+
+        let requestID = context.evaluateScript(
+            "posted.filter(item => item.action === 'generate_text').at(-1).request_id"
+        )?.toString()
+        context.evaluateScript("__etosResolveRequest('\(requestID ?? "")', '角色脚本生成', null)")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+
+        #expect(context.evaluateScript("cardResult")?.toString() == "角色脚本生成:6")
+        #expect(context.evaluateScript(
+            "posted.filter(item => item.action === 'replace_variables').at(-1).value.stat_data.count"
+        )?.toInt32() == 6)
+    }
+#endif
+
+    private func makePNGTextCard(
+        keyword: String,
+        json: String,
+        assets: [String: Data] = [:]
+    ) -> Data {
         var png = Data([137, 80, 78, 71, 13, 10, 26, 10])
         let encoded = Data(json.utf8).base64EncodedString()
         var text = Data(keyword.utf8)
         text.append(0)
         text.append(Data(encoded.utf8))
         appendChunk(type: "tEXt", payload: text, to: &png)
+        for (path, data) in assets.sorted(by: { $0.key < $1.key }) {
+            var asset = Data("chara-ext-asset_:\(path)".utf8)
+            asset.append(0)
+            asset.append(Data(data.base64EncodedString().utf8))
+            appendChunk(type: "tEXt", payload: asset, to: &png)
+        }
         appendChunk(type: "IEND", payload: Data(), to: &png)
         return png
     }

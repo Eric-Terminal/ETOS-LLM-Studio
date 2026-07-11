@@ -20,6 +20,8 @@ public enum RoleplayVariableScope: String, Codable, CaseIterable, Hashable, Send
 
 public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
     private static let customMacrosKey = "__etos_custom_macros"
+    private static let scriptScopesKey = "__etos_script_scopes"
+    private static let displayedHTMLKey = "__etos_displayed_html"
 
     public var global: [String: JSONValue]
     public var preset: [String: JSONValue]
@@ -55,18 +57,23 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         var merged = global
         var visibleScriptVariables = script
         visibleScriptVariables.removeValue(forKey: Self.customMacrosKey)
+        visibleScriptVariables.removeValue(forKey: Self.scriptScopesKey)
         for layer in [preset, character, persona, visibleScriptVariables, chat] {
             merged.merge(layer) { _, new in new }
         }
         if let messageID {
             let key = Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)
-            merged.merge(messageVersions[key] ?? [:]) { _, new in new }
+            var visibleMessageVariables = messageVersions[key] ?? [:]
+            visibleMessageVariables.removeValue(forKey: Self.displayedHTMLKey)
+            merged.merge(visibleMessageVariables) { _, new in new }
         }
         return merged
     }
 
     public func messageVariables(messageID: UUID, versionIndex: Int) -> [String: JSONValue] {
-        messageVersions[Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)] ?? [:]
+        var result = messageVersions[Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)] ?? [:]
+        result.removeValue(forKey: Self.displayedHTMLKey)
+        return result
     }
 
     public func scopedVariables(
@@ -77,8 +84,28 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         var result = variables(scope: scope, messageID: messageID, versionIndex: versionIndex)
         if scope == .script {
             result.removeValue(forKey: Self.customMacrosKey)
+            result.removeValue(forKey: Self.scriptScopesKey)
+        } else if scope == .message {
+            result.removeValue(forKey: Self.displayedHTMLKey)
         }
         return result
+    }
+
+    public func scriptVariables(scriptID: UUID) -> [String: JSONValue] {
+        guard case .dictionary(let scopes) = script[Self.scriptScopesKey],
+              case .dictionary(let values) = scopes[scriptID.uuidString] else { return [:] }
+        return values
+    }
+
+    public mutating func replaceScriptVariables(_ variables: [String: JSONValue], scriptID: UUID) {
+        var scopes: [String: JSONValue]
+        if case .dictionary(let stored) = script[Self.scriptScopesKey] {
+            scopes = stored
+        } else {
+            scopes = [:]
+        }
+        scopes[scriptID.uuidString] = .dictionary(variables)
+        script[Self.scriptScopesKey] = .dictionary(scopes)
     }
 
     public mutating func replaceVariables(
@@ -90,6 +117,13 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         var replacement = variables
         if scope == .script, let customMacros = script[Self.customMacrosKey] {
             replacement[Self.customMacrosKey] = customMacros
+        } else if scope == .message,
+                  let messageID,
+                  let displayedHTML = messageVersions[Self.messageVersionKey(
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                  )]?[Self.displayedHTMLKey] {
+            replacement[Self.displayedHTMLKey] = displayedHTML
         }
         assign(replacement, scope: scope, messageID: messageID, versionIndex: versionIndex)
     }
@@ -120,7 +154,12 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         messageID: UUID,
         versionIndex: Int
     ) {
-        messageVersions[Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)] = variables
+        let key = Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)
+        var replacement = variables
+        if let displayedHTML = messageVersions[key]?[Self.displayedHTMLKey] {
+            replacement[Self.displayedHTMLKey] = displayedHTML
+        }
+        messageVersions[key] = replacement
     }
 
     public mutating func removeMessageVariables(messageID: UUID) {

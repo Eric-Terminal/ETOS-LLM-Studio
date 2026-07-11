@@ -755,4 +755,88 @@ struct WorldbookEngineTests {
         #expect(result.after.first?.content == "high")
         #expect(result.after.last?.content == "low")
     }
+
+    @Test("最小激活数会把扫描深度扩展到配置上限")
+    func testMinimumActivationsExpandScanDepth() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-minimum-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let engine = WorldbookEngine(
+            runtimeStore: WorldbookRuntimeStateStore(storageURL: tempURL),
+            randomSource: { 0 }
+        )
+        let entry = WorldbookEntry(content: "深层激活", keys: ["旧线索"])
+        let book = Worldbook(
+            name: "最小激活",
+            entries: [entry],
+            settings: .init(scanDepth: 1),
+            metadata: ["min_activations": .int(1), "min_activations_depth_max": .int(3)]
+        )
+
+        let result = engine.evaluate(.init(
+            sessionID: UUID(),
+            worldbooks: [book],
+            messages: [
+                ChatMessage(role: .user, content: "旧线索"),
+                ChatMessage(role: .assistant, content: "中间回复"),
+                ChatMessage(role: .user, content: "最新消息")
+            ]
+        ))
+
+        #expect(result.after.map(\.content) == ["深层激活"])
+    }
+
+    @Test("条目可扫描 Persona 与角色资料并接受外部向量激活")
+    func testContextAndVectorActivation() {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worldbook-runtime-context-vector-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        let engine = WorldbookEngine(
+            runtimeStore: WorldbookRuntimeStateStore(storageURL: tempURL),
+            randomSource: { 0 }
+        )
+        let persona = WorldbookEntry(
+            content: "Persona 命中",
+            keys: ["北方旅人"],
+            metadata: ["extensions": .dictionary(["match_persona_description": .bool(true)])]
+        )
+        let vector = WorldbookEntry(
+            content: "向量命中",
+            keys: ["不会出现的关键词"],
+            metadata: ["extensions": .dictionary(["vectorized": .bool(true)])]
+        )
+        let scenario = WorldbookEntry(
+            content: "场景命中",
+            keys: ["海边车站"],
+            metadata: ["extensions": .dictionary(["match_scenario": .bool(true)])]
+        )
+        let book = Worldbook(name: "上下文与向量", entries: [persona, vector, scenario])
+
+        let result = engine.evaluate(.init(
+            sessionID: UUID(),
+            worldbooks: [book],
+            messages: [ChatMessage(role: .user, content: "普通消息")],
+            personaDescription: "来自北方旅人家族",
+            scenario: "故事发生在海边车站",
+            vectorActivatedEntryIDs: [vector.id]
+        ))
+
+        #expect(Set(result.after.map(\.content)) == ["Persona 命中", "向量命中", "场景命中"])
+    }
+
+    @Test("向量匹配在系统嵌入不可用时仍可通过本地向量回退激活")
+    func testVectorMatcherFallback() async {
+        let matching = WorldbookEntry(content: "海边车站与北方旅人", keys: [])
+        let unrelated = WorldbookEntry(content: "量子处理器性能参数", keys: [])
+        let matcher = WorldbookVectorMatcher()
+
+        let activated = await matcher.activatedEntryIDs(
+            entries: [matching, unrelated],
+            query: "海边车站与北方旅人",
+            maximumEntries: 1,
+            scoreThreshold: 0.2
+        )
+
+        #expect(activated == [matching.id])
+    }
 }

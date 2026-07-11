@@ -348,10 +348,6 @@ extension ChatService {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
 
-        guard let targetModel = runnableModel ?? detachedChatCompletionFallbackModel() else {
-            throw DetachedCompletionError.noAvailableModel
-        }
-
         var requestMessages: [ChatMessage] = []
         if let systemPrompt {
             let trimmedSystemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -363,6 +359,29 @@ extension ChatService {
             }
         }
         requestMessages.append(ChatMessage(role: .user, content: trimmedUserPrompt))
+
+        return try await generateDetachedChatCompletion(
+            messages: requestMessages,
+            temperature: temperature,
+            runnableModel: runnableModel,
+            requestSource: requestSource,
+            sessionID: sessionID
+        )
+    }
+
+    /// 执行保留消息角色与顺序的独立推理请求，不写入主聊天历史。
+    public func generateDetachedChatCompletion(
+        messages: [ChatMessage],
+        temperature: Double = 0.4,
+        runnableModel: RunnableModel? = nil,
+        requestSource: UsageRequestSource,
+        sessionID: UUID? = nil
+    ) async throws -> String {
+        let requestMessages = messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !requestMessages.isEmpty else { return "" }
+        guard let targetModel = runnableModel ?? detachedChatCompletionFallbackModel() else {
+            throw DetachedCompletionError.noAvailableModel
+        }
 
         let requestContext = RequestLogContext(
             requestID: UUID(),

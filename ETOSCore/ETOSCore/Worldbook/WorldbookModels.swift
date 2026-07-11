@@ -218,13 +218,52 @@ public struct WorldbookEntry: Codable, Identifiable, Hashable, Sendable {
     }
 
     public var ignoresBudget: Bool {
-        switch metadata["ignoreBudget"] {
+        switch compatibilityMetadataValue(camel: "ignoreBudget", snake: "ignore_budget") {
         case .bool(let value): return value
         case .int(let value): return value != 0
         case .double(let value): return value != 0
         case .string(let value): return ["true", "1", "yes"].contains(value.lowercased())
         default: return false
         }
+    }
+
+    public var vectorized: Bool {
+        compatibilityMetadataValue(camel: "vectorized", snake: "vectorized")?.boolValue ?? false
+    }
+
+    public var matchPersonaDescription: Bool {
+        compatibilityMetadataValue(camel: "matchPersonaDescription", snake: "match_persona_description")?.boolValue ?? false
+    }
+
+    public var matchCharacterDescription: Bool {
+        compatibilityMetadataValue(camel: "matchCharacterDescription", snake: "match_character_description")?.boolValue ?? false
+    }
+
+    public var matchCharacterPersonality: Bool {
+        compatibilityMetadataValue(camel: "matchCharacterPersonality", snake: "match_character_personality")?.boolValue ?? false
+    }
+
+    public var matchCharacterDepthPrompt: Bool {
+        compatibilityMetadataValue(camel: "matchCharacterDepthPrompt", snake: "match_character_depth_prompt")?.boolValue ?? false
+    }
+
+    public var matchScenario: Bool {
+        compatibilityMetadataValue(camel: "matchScenario", snake: "match_scenario")?.boolValue ?? false
+    }
+
+    public var matchCreatorNotes: Bool {
+        compatibilityMetadataValue(camel: "matchCreatorNotes", snake: "match_creator_notes")?.boolValue ?? false
+    }
+
+    public var recursionDelayLevel: Int {
+        compatibilityMetadataValue(camel: "delayUntilRecursion", snake: "delay_until_recursion")?.integerValue
+            ?? (delayUntilRecursion ? 1 : 0)
+    }
+
+    private func compatibilityMetadataValue(camel: String, snake: String) -> JSONValue? {
+        if let value = metadata[camel] ?? metadata[snake] { return value }
+        guard case .dictionary(let extensions) = metadata["extensions"] else { return nil }
+        return extensions[camel] ?? extensions[snake]
     }
 
     public init(
@@ -513,6 +552,57 @@ public struct Worldbook: Codable, Identifiable, Hashable, Sendable {
         try container.encodeIfPresent(sourceFileName, forKey: .sourceFileName)
         if !metadata.isEmpty {
             try container.encode(metadata, forKey: .metadata)
+        }
+    }
+}
+
+public extension Worldbook {
+    var minimumActivations: Int {
+        metadataCompatibilityInteger("minActivations", "min_activations", "world_info_min_activations") ?? 0
+    }
+
+    var minimumActivationDepthMax: Int {
+        metadataCompatibilityInteger(
+            "minActivationsDepthMax",
+            "min_activations_depth_max",
+            "world_info_min_activations_depth_max"
+        ) ?? settings.scanDepth
+    }
+
+    private func metadataCompatibilityInteger(_ keys: String...) -> Int? {
+        for key in keys {
+            if let value = metadata[key]?.integerValue { return value }
+        }
+        if case .dictionary(let nested) = metadata["settings"] {
+            for key in keys {
+                if let value = nested[key]?.integerValue { return value }
+            }
+        }
+        return nil
+    }
+}
+
+private extension JSONValue {
+    var boolValue: Bool? {
+        switch self {
+        case .bool(let value): return value
+        case .int(let value): return value != 0
+        case .double(let value): return value != 0
+        case .string(let value):
+            if ["true", "1", "yes"].contains(value.lowercased()) { return true }
+            if ["false", "0", "no"].contains(value.lowercased()) { return false }
+            return nil
+        default: return nil
+        }
+    }
+
+    var integerValue: Int? {
+        switch self {
+        case .int(let value): return value
+        case .double(let value): return Int(value)
+        case .string(let value): return Int(value)
+        case .bool(let value): return value ? 1 : 0
+        default: return nil
         }
     }
 }

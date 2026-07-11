@@ -281,9 +281,27 @@ extension ChatViewModel {
                 let htmlRenderingEnabled = sessionID.flatMap {
                     RoleplayStore.shared.binding(sessionID: $0)?.htmlRenderingEnabled
                 } == true
-                let html = sourceMessage.role == .assistant && htmlRenderingEnabled
-                    ? RoleplayHTMLExtractor.extract(from: visualMessage.content)
-                    : nil
+                let displayedHTML: String? = sessionID.flatMap { sessionID in
+                    let value = RoleplayStore.shared.variableSnapshot(sessionID: sessionID).value(
+                        scope: .message,
+                        path: RoleplayDisplayedMessageBridge.variableKey,
+                        messageID: sourceMessage.id,
+                        versionIndex: sourceMessage.getCurrentVersionIndex()
+                    )
+                    guard case .string(let html) = value else { return nil }
+                    return html
+                }
+                let html: RoleplayHTMLExtraction?
+                if sourceMessage.role == .assistant, htmlRenderingEnabled, let displayedHTML {
+                    html = RoleplayHTMLExtraction(
+                        remainingText: "",
+                        documents: [RoleplayHTMLDocument(id: 0, source: displayedHTML)]
+                    )
+                } else {
+                    html = sourceMessage.role == .assistant && htmlRenderingEnabled
+                        ? RoleplayHTMLExtractor.extract(from: visualMessage.content)
+                        : nil
+                }
                 return (visualMessage, html)
             }.value
 

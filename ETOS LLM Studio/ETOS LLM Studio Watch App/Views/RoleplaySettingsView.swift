@@ -137,7 +137,7 @@ struct RoleplaySettingsView: View {
         .navigationTitle(NSLocalizedString("酒馆兼容", comment: "Watch roleplay compatibility title"))
         .fileImporter(
             isPresented: $isImporting,
-            allowedContentTypes: [.json, .png],
+            allowedContentTypes: [.json, .png, UTType(filenameExtension: "charx", conformingTo: .zip) ?? .zip],
             allowsMultipleSelection: false,
             onCompletion: importCard
         )

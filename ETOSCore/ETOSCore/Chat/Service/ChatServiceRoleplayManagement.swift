@@ -36,9 +36,19 @@ extension ChatService {
             worldbookStore.upsertWorldbook(worldbook)
             result.character.embeddedWorldbookID = worldbook.id
         }
+        result.character.assets = try RoleplayAssetStore.install(result.assets, characterID: result.character.id)
         if let avatar = result.avatarPNGData {
             let avatarFileName = "roleplay-character-\(result.character.id.uuidString).png"
             if Persistence.saveImage(avatar, fileName: avatarFileName) != nil {
+                result.character.avatarFileName = avatarFileName
+            }
+        }
+        if let mainIcon = result.assets.first(where: { $0.asset.type == "icon" && $0.asset.name == "main" })
+            ?? result.assets.first(where: { $0.asset.type == "icon" }),
+           let data = mainIcon.data {
+            let ext = mainIcon.asset.fileExtension.isEmpty ? "png" : mainIcon.asset.fileExtension
+            let avatarFileName = "roleplay-character-\(result.character.id.uuidString).\(ext)"
+            if Persistence.saveImage(data, fileName: avatarFileName) != nil {
                 result.character.avatarFileName = avatarFileName
             }
         }

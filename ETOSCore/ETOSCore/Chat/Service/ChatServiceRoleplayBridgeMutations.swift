@@ -21,6 +21,13 @@ extension ChatService {
                   let index = normalizedRoleplayIndex(rawIndex, count: messages.count) else { continue }
             if let content = fields["message"]?.stringValue {
                 messages[index].content = content
+                variables.removeValue(
+                    scope: .message,
+                    path: RoleplayDisplayedMessageBridge.variableKey,
+                    messageID: messages[index].id,
+                    versionIndex: messages[index].getCurrentVersionIndex()
+                )
+                didChangeVariables = true
             }
             if let role = fields["role"]?.stringValue.flatMap(roleplayMessageRole) {
                 messages[index].role = role
@@ -97,8 +104,8 @@ extension ChatService {
     func replaceRoleplayWorldbook(named name: String, entries value: JSONValue) {
         guard case .array = value,
               let data = try? JSONEncoder().encode(value),
-              let entries = try? JSONDecoder().decode([WorldbookEntry].self, from: data),
-              var worldbook = loadWorldbooks().first(where: { $0.name == name }) else { return }
+              let entries = try? JSONDecoder().decode([WorldbookEntry].self, from: data) else { return }
+        var worldbook = loadWorldbooks().first(where: { $0.name == name }) ?? Worldbook(name: name)
         worldbook.entries = entries.enumerated().map { index, entry in
             var entry = entry
             if entry.uid == nil { entry.uid = index }
@@ -106,6 +113,73 @@ extension ChatService {
         }
         worldbook.updatedAt = Date()
         saveWorldbook(worldbook)
+    }
+
+    func createRoleplayWorldbook(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !loadWorldbooks().contains(where: { $0.name == trimmed }) else { return }
+        saveWorldbook(Worldbook(name: trimmed))
+    }
+
+    func deleteRoleplayWorldbook(named name: String) {
+        guard let worldbook = loadWorldbooks().first(where: { $0.name == name }) else { return }
+        deleteWorldbook(id: worldbook.id)
+    }
+
+    func rebindRoleplayCharacterWorldbooks(_ value: JSONValue, sessionID: UUID) {
+        guard case .dictionary(let fields) = value,
+              var binding = roleplayStore.binding(sessionID: sessionID),
+              let characterID = binding.characterIDs.first,
+              var character = roleplayStore.character(id: characterID) else { return }
+        let books = loadWorldbooks()
+        let primaryName = fields["primary"]?.stringValue
+        let primaryID = primaryName.flatMap { name in books.first(where: { $0.name == name })?.id }
+        let additionalNames = fields["additional"]?.stringArrayValue ?? []
+        let additionalIDs = additionalNames.compactMap { name in books.first(where: { $0.name == name })?.id }
+
+        character.embeddedWorldbookID = primaryID
+        binding.additionalWorldbookIDs = additionalIDs.filter { $0 != primaryID }
+        roleplayStore.upsertCharacter(character)
+        roleplayStore.upsertBinding(binding)
+    }
+
+    func replaceRoleplayRegexRules(_ value: JSONValue, sessionID: UUID) {
+        guard case .array(let values) = value,
+              let binding = roleplayStore.binding(sessionID: sessionID),
+              let characterID = binding.characterIDs.first,
+              var character = roleplayStore.character(id: characterID) else { return }
+        character.regexRules = values.compactMap(roleplayRegexRule)
+        roleplayStore.upsertCharacter(character)
+    }
+
+    private func roleplayRegexRule(_ value: JSONValue) -> RoleplayRegexRule? {
+        guard case .dictionary(let fields) = value,
+              let findRegex = fields["find_regex"]?.stringValue ?? fields["findRegex"]?.stringValue else { return nil }
+        let source = fields["source"]?.dictionaryValue ?? [:]
+        let placements: [RoleplayRegexPlacement] = [
+            source["user_input"]?.booleanValue == true ? .userInput : nil,
+            source["ai_output"]?.booleanValue == true ? .aiOutput : nil,
+            source["slash_command"]?.booleanValue == true ? .slashCommand : nil,
+            source["world_info"]?.booleanValue == true ? .worldInfo : nil,
+            source["reasoning"]?.booleanValue == true ? .reasoning : nil
+        ].compactMap { $0 }
+        let destination = fields["destination"]?.dictionaryValue ?? [:]
+        return RoleplayRegexRule(
+            id: fields["id"]?.stringValue.flatMap(UUID.init(uuidString:)) ?? UUID(),
+            scriptName: fields["script_name"]?.stringValue ?? fields["scriptName"]?.stringValue ?? "",
+            findRegex: findRegex,
+            replaceString: fields["replace_string"]?.stringValue ?? fields["replaceString"]?.stringValue ?? "",
+            trimStrings: fields["trim_strings"]?.stringArrayValue ?? fields["trimStrings"]?.stringArrayValue ?? [],
+            placements: placements.isEmpty ? [.aiOutput] : placements,
+            scope: RoleplayRegexScope(rawValue: fields["scope"]?.stringValue ?? "character") ?? .character,
+            disabled: !(fields["enabled"]?.booleanValue ?? true),
+            markdownOnly: destination["display"]?.booleanValue ?? false,
+            promptOnly: destination["prompt"]?.booleanValue ?? false,
+            runOnEdit: fields["run_on_edit"]?.booleanValue ?? fields["runOnEdit"]?.booleanValue ?? false,
+            minDepth: fields["min_depth"]?.integerValue ?? fields["minDepth"]?.integerValue,
+            maxDepth: fields["max_depth"]?.integerValue ?? fields["maxDepth"]?.integerValue,
+            metadata: fields
+        )
     }
 
     func replaceRoleplayScriptButtons(scriptID: UUID, buttons value: JSONValue) {
@@ -186,6 +260,19 @@ private extension JSONValue {
             if ["true", "1"].contains(value.lowercased()) { return true }
             if ["false", "0"].contains(value.lowercased()) { return false }
             return nil
+        default: return nil
+        }
+    }
+
+    var dictionaryValue: [String: JSONValue]? {
+        guard case .dictionary(let value) = self else { return nil }
+        return value
+    }
+
+    var stringArrayValue: [String]? {
+        switch self {
+        case .array(let values): return values.compactMap(\.stringValue)
+        case .string(let value): return [value]
         default: return nil
         }
     }

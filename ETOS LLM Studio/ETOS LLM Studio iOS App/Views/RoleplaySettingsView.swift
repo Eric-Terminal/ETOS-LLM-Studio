@@ -113,7 +113,7 @@ private struct RoleplayCharacterLibraryView: View {
         .navigationTitle(NSLocalizedString("角色卡", comment: "Roleplay character cards title"))
         .fileImporter(
             isPresented: $isImporting,
-            allowedContentTypes: [.json, .png],
+            allowedContentTypes: [.json, .png, UTType(filenameExtension: "charx", conformingTo: .zip) ?? .zip],
             allowsMultipleSelection: false,
             onCompletion: importCard
         )

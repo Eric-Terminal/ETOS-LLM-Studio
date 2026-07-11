@@ -123,6 +123,31 @@ public struct RoleplayHelperScript: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+public struct RoleplayCardAsset: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID
+    public var type: String
+    public var uri: String
+    public var name: String
+    public var fileExtension: String
+    public var localFileName: String?
+
+    public init(
+        id: UUID = UUID(),
+        type: String,
+        uri: String,
+        name: String,
+        fileExtension: String,
+        localFileName: String? = nil
+    ) {
+        self.id = id
+        self.type = type
+        self.uri = uri
+        self.name = name
+        self.fileExtension = fileExtension
+        self.localFileName = localFileName
+    }
+}
+
 public enum RoleplayCompatibilityStatus: String, Codable, Hashable, Sendable {
     case supported
     case translated
@@ -155,9 +180,6 @@ public struct RoleplayCompatibilityItem: Codable, Identifiable, Hashable, Sendab
     }
 
     public var localizedDetail: String {
-        if id == "dom" {
-            return NSLocalizedString("ETOS 不包含 SillyTavern 网页结构。", comment: "Roleplay compatibility missing Tavern DOM detail")
-        }
         return detail
     }
 }
@@ -203,6 +225,7 @@ public struct RoleplayCharacter: Codable, Identifiable, Hashable, Sendable {
     public var embeddedWorldbookID: UUID?
     public var regexRules: [RoleplayRegexRule]
     public var helperScripts: [RoleplayHelperScript]
+    public var assets: [RoleplayCardAsset]?
     public var initialVariables: [String: JSONValue]
     public var extensions: [String: JSONValue]
     public var rawCardData: [String: JSONValue]
@@ -232,6 +255,7 @@ public struct RoleplayCharacter: Codable, Identifiable, Hashable, Sendable {
         embeddedWorldbookID: UUID? = nil,
         regexRules: [RoleplayRegexRule] = [],
         helperScripts: [RoleplayHelperScript] = [],
+        assets: [RoleplayCardAsset] = [],
         initialVariables: [String: JSONValue] = [:],
         extensions: [String: JSONValue] = [:],
         rawCardData: [String: JSONValue] = [:],
@@ -260,6 +284,7 @@ public struct RoleplayCharacter: Codable, Identifiable, Hashable, Sendable {
         self.embeddedWorldbookID = embeddedWorldbookID
         self.regexRules = regexRules
         self.helperScripts = helperScripts
+        self.assets = assets
         self.initialVariables = initialVariables
         self.extensions = extensions
         self.rawCardData = rawCardData

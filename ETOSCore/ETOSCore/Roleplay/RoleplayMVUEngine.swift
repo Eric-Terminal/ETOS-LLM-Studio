@@ -155,7 +155,7 @@ public enum RoleplayMVUEngine {
         failures: inout [String]
     ) -> Int {
         guard let regex = try? NSRegularExpression(
-            pattern: #"_\.(set|add|assign|insert|remove)\s*\(\s*(['\"])(.*?)\2\s*(?:,\s*(.*?))?\)\s*;?"#,
+            pattern: #"_\.(set|add|assign|insert|delete|remove|move)\s*\(\s*(['\"])(.*?)\2\s*(?:,\s*(.*?))?\)\s*;?"#,
             options: [.caseInsensitive]
         ) else { return 0 }
         let source = block as NSString
@@ -179,6 +179,11 @@ public enum RoleplayMVUEngine {
                     failures.append("无法解析 _.set：\(path)")
                     continue
                 }
+                if arguments.count >= 2,
+                   let expected = parseLiteral(arguments[arguments.count - 2]),
+                   snapshot.value(scope: .message, path: path, messageID: messageID, versionIndex: versionIndex) != expected {
+                    continue
+                }
                 snapshot.setValue(value, scope: .message, path: path, messageID: messageID, versionIndex: versionIndex)
                 count += 1
             case "add":
@@ -198,12 +203,30 @@ public enum RoleplayMVUEngine {
                 guard let raw = arguments.last, let value = parseLiteral(raw) else { continue }
                 assign(value, path: path, snapshot: &snapshot, messageID: messageID, versionIndex: versionIndex)
                 count += 1
-            case "remove":
+            case "delete", "remove":
                 if let raw = arguments.last, let target = parseLiteral(raw) {
                     remove(target, path: path, snapshot: &snapshot, messageID: messageID, versionIndex: versionIndex)
                 } else {
                     snapshot.removeValue(scope: .message, path: path, messageID: messageID, versionIndex: versionIndex)
                 }
+                count += 1
+            case "move":
+                guard let rawDestination = arguments.last,
+                      case .string(let destination) = parseLiteral(rawDestination),
+                      let value = snapshot.value(
+                        scope: .message,
+                        path: path,
+                        messageID: messageID,
+                        versionIndex: versionIndex
+                      ) else { continue }
+                let destinationPath = resolvedMessagePath(
+                    destination,
+                    snapshot: snapshot,
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                )
+                snapshot.setValue(value, scope: .message, path: destinationPath, messageID: messageID, versionIndex: versionIndex)
+                snapshot.removeValue(scope: .message, path: path, messageID: messageID, versionIndex: versionIndex)
                 count += 1
             default:
                 continue

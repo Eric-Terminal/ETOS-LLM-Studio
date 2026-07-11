@@ -242,19 +242,40 @@ public struct WorldbookEngine {
         public var messages: [ChatMessage]
         public var topicPrompt: String?
         public var enhancedPrompt: String?
+        public var personaDescription: String?
+        public var characterDescription: String?
+        public var characterPersonality: String?
+        public var characterDepthPrompt: String?
+        public var scenario: String?
+        public var creatorNotes: String?
+        public var vectorActivatedEntryIDs: Set<UUID>
 
         public init(
             sessionID: UUID,
             worldbooks: [Worldbook],
             messages: [ChatMessage],
-            topicPrompt: String?,
-            enhancedPrompt: String?
+            topicPrompt: String? = nil,
+            enhancedPrompt: String? = nil,
+            personaDescription: String? = nil,
+            characterDescription: String? = nil,
+            characterPersonality: String? = nil,
+            characterDepthPrompt: String? = nil,
+            scenario: String? = nil,
+            creatorNotes: String? = nil,
+            vectorActivatedEntryIDs: Set<UUID> = []
         ) {
             self.sessionID = sessionID
             self.worldbooks = worldbooks
             self.messages = messages
             self.topicPrompt = topicPrompt
             self.enhancedPrompt = enhancedPrompt
+            self.personaDescription = personaDescription
+            self.characterDescription = characterDescription
+            self.characterPersonality = characterPersonality
+            self.characterDepthPrompt = characterDepthPrompt
+            self.scenario = scenario
+            self.creatorNotes = creatorNotes
+            self.vectorActivatedEntryIDs = vectorActivatedEntryIDs
         }
     }
 
@@ -270,12 +291,32 @@ public struct WorldbookEngine {
         self.randomSource = randomSource
     }
 
+    public func evaluateAsync(_ context: Context) async -> WorldbookEvaluationResult {
+        let vectorEntries = context.worldbooks.flatMap(\.entries).filter { $0.isEnabled && $0.vectorized }
+        guard !vectorEntries.isEmpty else { return evaluate(context) }
+        let query = buildScanBuffer(
+            messages: context.messages,
+            scanDepth: context.worldbooks.map(\.settings.scanDepth).max() ?? 4,
+            topicPrompt: context.topicPrompt,
+            enhancedPrompt: context.enhancedPrompt
+        )
+        var resolved = context
+        resolved.vectorActivatedEntryIDs = await WorldbookVectorMatcher.shared.activatedEntryIDs(
+            entries: vectorEntries,
+            query: query
+        )
+        return evaluate(resolved)
+    }
+
     public func evaluate(_ context: Context) -> WorldbookEvaluationResult {
         let activeBooks = context.worldbooks
         guard !activeBooks.isEmpty else { return .empty }
 
         let turn = runtimeStore.nextTurn(for: context.sessionID)
         let maxRecursionDepth = activeBooks.map { $0.settings.maxRecursionDepth }.max() ?? 0
+        let minimumActivations = activeBooks.map(\.minimumActivations).max() ?? 0
+        let configuredMinimumDepth = activeBooks.map(\.minimumActivationDepthMax).max() ?? 0
+        let minimumActivationDepthMax = configuredMinimumDepth > 0 ? configuredMinimumDepth : context.messages.count
 
         var triggered: [WorldbookInjection] = []
         var triggeredIDs = Set<WorldbookEntryRuntimeKey>()
@@ -319,8 +360,8 @@ public struct WorldbookEngine {
                     newlyTriggeredContents.append(entry.content)
                     continue
                 }
-                if recursionLevel > 0 && entry.preventRecursion { continue }
-                if recursionLevel == 0 && entry.delayUntilRecursion { continue }
+                if recursionLevel > 0 && entry.excludeRecursion { continue }
+                if recursionLevel < entry.recursionDelayLevel { continue }
 
                 var state = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
 
@@ -331,7 +372,14 @@ public struct WorldbookEngine {
                 }
 
                 let scanDepth = max(1, entry.scanDepth ?? item.book.settings.scanDepth)
-                let baseBuffer = buildScanBuffer(messages: context.messages, scanDepth: scanDepth, topicPrompt: context.topicPrompt, enhancedPrompt: context.enhancedPrompt)
+                let baseBuffer = buildScanBuffer(
+                    messages: context.messages,
+                    scanDepth: scanDepth,
+                    topicPrompt: context.topicPrompt,
+                    enhancedPrompt: context.enhancedPrompt,
+                    entry: entry,
+                    context: context
+                )
                 let effectiveBuffer: String
                 if recursionLevel == 0 || entry.excludeRecursion {
                     effectiveBuffer = baseBuffer
@@ -339,7 +387,23 @@ public struct WorldbookEngine {
                     effectiveBuffer = baseBuffer + "\n" + recursionBuffer.joined(separator: "\n")
                 }
 
-                let matchResult = evaluateKeywordMatch(entry: entry, buffer: effectiveBuffer)
+                var matchResult = entry.vectorized
+                    ? (matched: context.vectorActivatedEntryIDs.contains(entry.id), score: 1.0)
+                    : evaluateKeywordMatch(entry: entry, buffer: effectiveBuffer)
+                if !matchResult.matched,
+                   minimumActivations > triggered.count,
+                   minimumActivationDepthMax > scanDepth,
+                   !entry.vectorized {
+                    let expanded = buildScanBuffer(
+                        messages: context.messages,
+                        scanDepth: minimumActivationDepthMax,
+                        topicPrompt: context.topicPrompt,
+                        enhancedPrompt: context.enhancedPrompt,
+                        entry: entry,
+                        context: context
+                    )
+                    matchResult = evaluateKeywordMatch(entry: entry, buffer: expanded)
+                }
                 let keywordMatched = stickyActive || entry.constant || matchResult.matched
                 if !keywordMatched {
                     continue
@@ -422,7 +486,13 @@ public struct WorldbookEngine {
                     entryID: key.entryID
                 )
             }
-            newlyTriggeredContents = levelAccepted.map(\.content)
+            let entryByKey = Dictionary(uniqueKeysWithValues: activeBooks.flatMap { book in
+                book.entries.map { (WorldbookEntryRuntimeKey(worldbookID: book.id, entryID: $0.id), $0) }
+            })
+            newlyTriggeredContents = levelAccepted.compactMap { injection in
+                let key = WorldbookEntryRuntimeKey(worldbookID: injection.worldbookID, entryID: injection.entryID)
+                return entryByKey[key]?.preventRecursion == true ? nil : injection.content
+            }
             activatedGroupNames.formUnion(groupNames(for: levelAccepted, books: activeBooks))
 
             if newlyTriggeredContents.isEmpty {
@@ -486,7 +556,9 @@ public struct WorldbookEngine {
         messages: [ChatMessage],
         scanDepth: Int,
         topicPrompt: String?,
-        enhancedPrompt: String?
+        enhancedPrompt: String?,
+        entry: WorldbookEntry? = nil,
+        context: Context? = nil
     ) -> String {
         let filtered = messages.filter { $0.role == .user || $0.role == .assistant || $0.role == .tool }
         let limited = Array(filtered.suffix(max(1, scanDepth)))
@@ -497,6 +569,36 @@ public struct WorldbookEngine {
         }
         if let enhancedPrompt, !enhancedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append("[Enhanced]\n\(enhancedPrompt)")
+        }
+        if entry?.matchPersonaDescription == true,
+           let value = context?.personaDescription,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Persona]\n\(value)")
+        }
+        if entry?.matchCharacterDescription == true,
+           let value = context?.characterDescription,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Character Description]\n\(value)")
+        }
+        if entry?.matchCharacterPersonality == true,
+           let value = context?.characterPersonality,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Character Personality]\n\(value)")
+        }
+        if entry?.matchCharacterDepthPrompt == true,
+           let value = context?.characterDepthPrompt,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Character Depth Prompt]\n\(value)")
+        }
+        if entry?.matchScenario == true,
+           let value = context?.scenario,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Scenario]\n\(value)")
+        }
+        if entry?.matchCreatorNotes == true,
+           let value = context?.creatorNotes,
+           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("[Creator Notes]\n\(value)")
         }
 
         for message in limited {

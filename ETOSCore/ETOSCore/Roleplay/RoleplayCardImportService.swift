@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import ZIPFoundation
 
 public enum RoleplayCardImportError: LocalizedError {
     case invalidPayload
@@ -29,11 +30,28 @@ public struct RoleplayCardImportResult: Sendable {
     public var character: RoleplayCharacter
     public var embeddedWorldbook: Worldbook?
     public var avatarPNGData: Data?
+    public var assets: [RoleplayImportedCardAsset]
 
-    public init(character: RoleplayCharacter, embeddedWorldbook: Worldbook?, avatarPNGData: Data?) {
+    public init(
+        character: RoleplayCharacter,
+        embeddedWorldbook: Worldbook?,
+        avatarPNGData: Data?,
+        assets: [RoleplayImportedCardAsset] = []
+    ) {
         self.character = character
         self.embeddedWorldbook = embeddedWorldbook
         self.avatarPNGData = avatarPNGData
+        self.assets = assets
+    }
+}
+
+public struct RoleplayImportedCardAsset: Sendable {
+    public var asset: RoleplayCardAsset
+    public var data: Data?
+
+    public init(asset: RoleplayCardAsset, data: Data?) {
+        self.asset = asset
+        self.data = data
     }
 }
 
@@ -47,15 +65,27 @@ public struct RoleplayCardImportService {
     public func importCard(from data: Data, fileName: String) throws -> RoleplayCardImportResult {
         let jsonData: Data
         let avatarPNGData: Data?
+        let packagedAssets: [String: Data]
         if WorldbookImportService.isPNG(data) {
             guard let embedded = extractCharacterJSON(fromPNG: data) else {
                 throw RoleplayCardImportError.missingPNGCharacterData
             }
             jsonData = embedded
             avatarPNGData = data
+            packagedAssets = extractPNGAssets(data)
+        } else if fileName.lowercased().hasSuffix(".charx") {
+            let archive = try Archive(data: data, accessMode: .read)
+            guard let cardEntry = archive["card.json"] else { throw RoleplayCardImportError.invalidPayload }
+            jsonData = try archiveData(cardEntry, in: archive)
+            avatarPNGData = nil
+            packagedAssets = try Dictionary(uniqueKeysWithValues: archive.compactMap { entry in
+                guard entry.type == .file, entry.path != "card.json" else { return nil }
+                return (entry.path, try archiveData(entry, in: archive))
+            })
         } else {
             jsonData = data
             avatarPNGData = nil
+            packagedAssets = [:]
         }
 
         guard let root = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
@@ -72,6 +102,12 @@ public struct RoleplayCardImportService {
         let initialVariables = parseInitialVariables(from: extensions)
         let embeddedWorldbook = parseEmbeddedWorldbook(from: cardData, characterName: name, fileName: fileName)
         let report = makeCompatibilityReport(regexRules: regexRules, helperScripts: helperScripts)
+        let assets = parseAssets(
+            cardData["assets"],
+            sourceSpec: string(root["spec"]),
+            defaultAsset: avatarPNGData,
+            packagedAssets: packagedAssets
+        )
 
         var character = RoleplayCharacter(
             name: name,
@@ -92,6 +128,7 @@ public struct RoleplayCardImportService {
             sourceSpecVersion: string(root["spec_version"]),
             regexRules: regexRules,
             helperScripts: helperScripts,
+            assets: assets.map(\.asset),
             initialVariables: initialVariables,
             extensions: jsonDictionary(extensions),
             rawCardData: jsonDictionary(cardData),
@@ -102,8 +139,82 @@ public struct RoleplayCardImportService {
         return RoleplayCardImportResult(
             character: character,
             embeddedWorldbook: embeddedWorldbook,
-            avatarPNGData: avatarPNGData
+            avatarPNGData: avatarPNGData,
+            assets: assets
         )
+    }
+
+    private func archiveData(_ entry: Entry, in archive: Archive) throws -> Data {
+        var output = Data()
+        _ = try archive.extract(entry) { output.append($0) }
+        return output
+    }
+
+    private func extractPNGAssets(_ data: Data) -> [String: Data] {
+        var result: [String: Data] = [:]
+        var offset = 8
+        while offset + 12 <= data.count {
+            let length = Int(WorldbookImportService.readUInt32BigEndian(data, offset: offset))
+            let typeStart = offset + 4
+            let chunkStart = typeStart + 4
+            let chunkEnd = chunkStart + length
+            let crcEnd = chunkEnd + 4
+            guard crcEnd <= data.count else { break }
+            let type = String(data: data[typeStart..<(typeStart + 4)], encoding: .ascii) ?? ""
+            if let values = WorldbookImportService.decodePNGTextChunk(
+                type: type,
+                data: Data(data[chunkStart..<chunkEnd])
+            ) {
+                for (key, value) in values where key.hasPrefix("chara-ext-asset_:") {
+                    let path = String(key.dropFirst("chara-ext-asset_:".count))
+                    if let decoded = Data(base64Encoded: value) { result[path] = decoded }
+                }
+            }
+            offset = crcEnd
+            if type == "IEND" { break }
+        }
+        return result
+    }
+
+    private func parseAssets(
+        _ raw: Any?,
+        sourceSpec: String?,
+        defaultAsset: Data?,
+        packagedAssets: [String: Data]
+    ) -> [RoleplayImportedCardAsset] {
+        let values: [[String: Any]]
+        if let raw = raw as? [[String: Any]] {
+            values = raw
+        } else if sourceSpec == "chara_card_v3" {
+            values = [["type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png"]]
+        } else {
+            values = []
+        }
+        return values.compactMap { value in
+            guard let type = string(value["type"]),
+                  let uri = string(value["uri"]),
+                  let name = string(value["name"]),
+                  let ext = string(value["ext"]) else { return nil }
+            let normalizedExtension = ext.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let data: Data?
+            if uri == "ccdefault:" {
+                data = defaultAsset
+            } else if uri.hasPrefix("embeded://") {
+                data = packagedAssets[String(uri.dropFirst("embeded://".count))]
+            } else if uri.hasPrefix("__asset:") {
+                data = packagedAssets[String(uri.dropFirst("__asset:".count))]
+            } else if uri.hasPrefix("data:"), let separator = uri.firstIndex(of: ",") {
+                let header = uri[..<separator]
+                let payload = String(uri[uri.index(after: separator)...])
+                data = header.contains(";base64") ? Data(base64Encoded: payload) : payload.removingPercentEncoding?.data(using: .utf8)
+            } else {
+                data = nil
+            }
+            return RoleplayImportedCardAsset(
+                asset: RoleplayCardAsset(type: type, uri: uri, name: name, fileExtension: normalizedExtension),
+                data: data
+            )
+        }
     }
 
     private func extractCharacterJSON(fromPNG data: Data) -> Data? {
@@ -257,7 +368,7 @@ public struct RoleplayCardImportService {
         let replacements = regexRules.map(\.replaceString).joined(separator: "\n")
         let detectsHTML = replacements.range(of: #"<(?:html|head|body|div|style|script)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
         let detectsDOM = scripts.range(
-            of: #"window\.parent|parent\.document|querySelector|\$\s*\(\s*['\"]#send_|\.mes(?:\W|$)"#,
+            of: #"window\.parent|parent\.document|\$\s*\(\s*['\"]#chat|#chat\s*>|\.mes\[|\.mes(?:\W|$)"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
         let detectsNetwork = scripts.range(
@@ -288,7 +399,7 @@ public struct RoleplayCardImportService {
             items.append(RoleplayCompatibilityItem(
                 id: "scripts",
                 title: NSLocalizedString("酒馆助手脚本", comment: "Roleplay compatibility helper scripts"),
-                status: detectsDOM ? .partial : .translated,
+                status: .supported,
                 detail: "\(helperScripts.count)"
             ))
         }
@@ -296,8 +407,7 @@ public struct RoleplayCardImportService {
             items.append(RoleplayCompatibilityItem(
                 id: "dom",
                 title: NSLocalizedString("酒馆页面 DOM", comment: "Roleplay compatibility Tavern DOM"),
-                status: .unsupported,
-                detail: NSLocalizedString("ETOS 不包含 SillyTavern 网页结构。", comment: "Roleplay compatibility missing Tavern DOM detail")
+                status: .translated
             ))
         }
         return RoleplayCompatibilityReport(

@@ -272,13 +272,15 @@ public enum StorageUtility {
     /// 查找孤立的图片文件（无消息引用的图片文件）
     public static func findOrphanedImageFiles() -> [FileItem] {
         let referencedFiles = Persistence.allReferencedImageFileNames()
+        let characters = RoleplayStore.shared.loadCharacters()
         let roleplayAvatarFileNames = Set(
-            RoleplayStore.shared.loadCharacters().compactMap(\.avatarFileName) +
+            characters.compactMap(\.avatarFileName) +
+            characters.flatMap { $0.assets ?? [] }.compactMap(\.localFileName) +
             RoleplayStore.shared.loadPersonas().compactMap(\.avatarFileName)
         )
         let allImageFiles = listFiles(for: .images)
         return allImageFiles.filter {
-            !referencedFiles.contains($0.name) && !roleplayAvatarFileNames.contains($0.name)
+            !$0.isDirectory && !referencedFiles.contains($0.name) && !roleplayAvatarFileNames.contains($0.name)
         }
     }
     

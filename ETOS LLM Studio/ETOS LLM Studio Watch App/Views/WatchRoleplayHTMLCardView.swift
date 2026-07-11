@@ -44,6 +44,12 @@ struct WatchRoleplayHTMLCardView: View {
                 let binding = store.binding(sessionID: sessionID)
                 let character = binding?.characterIDs.first.flatMap(store.character(id:))
                 let persona = binding?.personaID.flatMap(store.persona(id:))
+                let primaryWorldbookName = character?.embeddedWorldbookID.flatMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                }
+                let additionalWorldbookNames = binding?.additionalWorldbookIDs.compactMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                } ?? []
                 return extraction.documents.map { document in
                     WatchPreparedRoleplayHTMLDocument(
                         id: document.id,
@@ -54,11 +60,16 @@ struct WatchRoleplayHTMLCardView: View {
                             characterName: character?.name ?? "Assistant",
                             userAvatarPath: persona?.avatarFileName ?? "",
                             characterAvatarPath: character?.avatarFileName ?? "",
+                            characterAssets: character?.assets ?? [],
+                            regexRules: character?.regexRules ?? [],
                             chatMessages: chatMessages,
                             variableSnapshot: snapshot,
                             messageID: messageID,
                             messageVersionIndex: versionIndex,
-                            worldbooks: worldbooks
+                            documentID: document.id,
+                            worldbooks: worldbooks,
+                            primaryWorldbookName: primaryWorldbookName,
+                            additionalWorldbookNames: additionalWorldbookNames
                         )
                     )
                 }
@@ -110,12 +121,19 @@ struct WatchRoleplaySessionScriptHost: View {
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
                 let worldbooks = ChatService.shared.loadWorldbooks()
+                let additionalWorldbookNames = binding.additionalWorldbookIDs.compactMap { id in
+                    worldbooks.first(where: { $0.id == id })?.name
+                }
                 let baseVariables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 return characters.flatMap { character in
                     character.helperScripts.filter(\.enabled).map { script in
                         var variables = baseVariables
+                        let scriptInitialVariables: [String: JSONValue]
                         if case .dictionary(let data) = script.metadata["data"] {
+                            scriptInitialVariables = data
                             variables.merge(data) { _, new in new }
+                        } else {
+                            scriptInitialVariables = [:]
                         }
                         return WatchPreparedRoleplayScriptDocument(
                             id: script.id,
@@ -128,15 +146,22 @@ struct WatchRoleplaySessionScriptHost: View {
                                 characterName: character.name,
                                 userAvatarPath: persona?.avatarFileName ?? "",
                                 characterAvatarPath: character.avatarFileName ?? "",
+                                characterAssets: character.assets ?? [],
+                                regexRules: character.regexRules,
                                 chatMessages: chatMessages,
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
                                 messageVersionIndex: versionIndex,
                                 worldbooks: worldbooks,
+                                primaryWorldbookName: character.embeddedWorldbookID.flatMap { id in
+                                    worldbooks.first(where: { $0.id == id })?.name
+                                },
+                                additionalWorldbookNames: additionalWorldbookNames,
                                 scriptID: script.id,
                                 scriptName: script.name,
                                 scriptInfo: script.info,
-                                scriptButtons: script.buttons
+                                scriptButtons: script.buttons,
+                                scriptInitialVariables: scriptInitialVariables
                             )
                         )
                     }
