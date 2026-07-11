@@ -89,7 +89,8 @@ struct WatchRoleplaySessionScriptHost: View {
                     html: document.html,
                     sessionID: document.sessionID,
                     messageID: document.messageID,
-                    versionIndex: versionIndex
+                    versionIndex: versionIndex,
+                    scriptID: document.id
                 )
                 .frame(width: 1, height: 1)
                 .opacity(0.001)
@@ -131,7 +132,11 @@ struct WatchRoleplaySessionScriptHost: View {
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
                                 messageVersionIndex: versionIndex,
-                                worldbooks: worldbooks
+                                worldbooks: worldbooks,
+                                scriptID: script.id,
+                                scriptName: script.name,
+                                scriptInfo: script.info,
+                                scriptButtons: script.buttons
                             )
                         )
                     }
@@ -162,6 +167,83 @@ struct WatchRoleplaySessionScriptHost: View {
 </script>
 """
     }
+}
+
+struct WatchRoleplayScriptButtonBar: View {
+    let sessionID: UUID?
+
+    @State private var actions: [WatchRoleplayScriptButtonAction] = []
+    @State private var revision = 0
+
+    var body: some View {
+        Group {
+            if actions.isEmpty {
+                Color.clear.frame(width: 0, height: 0)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(actions) { action in
+                            Button(action.name) {
+                                NotificationCenter.default.post(
+                                    name: RoleplayScriptButtonNotification.requested,
+                                    object: nil,
+                                    userInfo: [
+                                        RoleplayScriptButtonNotification.sessionIDKey: action.sessionID,
+                                        RoleplayScriptButtonNotification.scriptIDKey: action.scriptID,
+                                        RoleplayScriptButtonNotification.buttonNameKey: action.name
+                                    ]
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+                .background(.ultraThinMaterial)
+            }
+        }
+        .task(id: preparationKey) { await loadActions() }
+        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { notification in
+            if notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String == RoleplayStore.libraryChangeKind {
+                revision &+= 1
+            }
+        }
+    }
+
+    private var preparationKey: String {
+        "\(sessionID?.uuidString ?? "none")|\(revision)"
+    }
+
+    @MainActor
+    private func loadActions() async {
+        guard let sessionID else {
+            actions = []
+            return
+        }
+        actions = await Task.detached(priority: .utility) {
+            let store = RoleplayStore.shared
+            guard let binding = store.binding(sessionID: sessionID), binding.helperScriptsEnabled else { return [] }
+            return binding.characterIDs.compactMap(store.character(id:)).flatMap { character in
+                character.helperScripts.filter(\.enabled).flatMap { script in
+                    script.buttons.filter(\.visible).map {
+                        WatchRoleplayScriptButtonAction(
+                            sessionID: sessionID,
+                            scriptID: script.id,
+                            buttonID: $0.id,
+                            name: $0.name
+                        )
+                    }
+                }
+            }
+        }.value
+    }
+}
+
+private struct WatchRoleplayScriptButtonAction: Identifiable, Sendable {
+    var id: String { "\(scriptID.uuidString):\(buttonID.uuidString)" }
+    let sessionID: UUID
+    let scriptID: UUID
+    let buttonID: UUID
+    let name: String
 }
 
 private struct WatchPreparedRoleplayHTMLDocument: Identifiable, Sendable {

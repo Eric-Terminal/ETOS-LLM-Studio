@@ -97,6 +97,12 @@ public enum RoleplayBridgeDispatcher {
             Task.detached(priority: .utility) {
                 ChatService.shared.replaceRoleplayWorldbook(named: name, entries: entries)
             }
+        case "replace_script_buttons":
+            guard let scriptID = (payload["script_id"] as? String).flatMap(UUID.init(uuidString:)),
+                  let buttons = payload["buttons"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
+            Task.detached(priority: .utility) {
+                ChatService.shared.replaceRoleplayScriptButtons(scriptID: scriptID, buttons: buttons)
+            }
         case "send_message", "set_input", "generate", "event":
             NotificationCenter.default.post(
                 name: RoleplayBridgeNotification.requestedAction,

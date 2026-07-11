@@ -8,6 +8,13 @@
 
 import Foundation
 
+public enum RoleplayScriptButtonNotification {
+    public static let requested = Notification.Name("com.ETOS.roleplayScriptButton.requested")
+    public static let sessionIDKey = "sessionID"
+    public static let scriptIDKey = "scriptID"
+    public static let buttonNameKey = "buttonName"
+}
+
 public struct RoleplayHTMLDocument: Codable, Identifiable, Hashable, Sendable {
     public var id: Int
     public var source: String
@@ -80,7 +87,11 @@ public enum RoleplayHTMLDocumentFactory {
         variableSnapshot: RoleplayVariableSnapshot? = nil,
         messageID: UUID? = nil,
         messageVersionIndex: Int = 0,
-        worldbooks: [Worldbook] = []
+        worldbooks: [Worldbook] = [],
+        scriptID: UUID? = nil,
+        scriptName: String = "",
+        scriptInfo: String = "",
+        scriptButtons: [RoleplayScriptButton] = []
     ) -> String {
         let body: String
         if source.range(of: #"<html\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
@@ -98,7 +109,11 @@ public enum RoleplayHTMLDocumentFactory {
             variableSnapshot: variableSnapshot,
             messageID: messageID,
             messageVersionIndex: messageVersionIndex,
-            worldbooks: worldbooks
+            worldbooks: worldbooks,
+            scriptID: scriptID,
+            scriptName: scriptName,
+            scriptInfo: scriptInfo,
+            scriptButtons: scriptButtons
         )
         let headInjection = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
@@ -132,7 +147,11 @@ public enum RoleplayHTMLDocumentFactory {
         variableSnapshot: RoleplayVariableSnapshot?,
         messageID: UUID?,
         messageVersionIndex: Int,
-        worldbooks: [Worldbook]
+        worldbooks: [Worldbook],
+        scriptID: UUID?,
+        scriptName: String,
+        scriptInfo: String,
+        scriptButtons: [RoleplayScriptButton]
     ) -> String {
         var scopedVariables = Dictionary(uniqueKeysWithValues: RoleplayVariableScope.allCases.map { scope in
             (
@@ -153,6 +172,10 @@ public enum RoleplayHTMLDocumentFactory {
         let userAvatarJSON = jsonString(userAvatarPath)
         let characterAvatarJSON = jsonString(characterAvatarPath)
         let worldbooksJSON = encodableJSONLiteral(worldbooks, fallback: "[]")
+        let scriptIDJSON = jsonString(scriptID?.uuidString ?? "")
+        let scriptNameJSON = jsonString(scriptName)
+        let scriptInfoJSON = jsonString(scriptInfo)
+        let scriptButtonsJSON = encodableJSONLiteral(scriptButtons, fallback: "[]")
         let chatMessagesJSON = jsonLiteral(.array(chatMessages.enumerated().map { index, message in
             let role: String
             let name: String
@@ -200,6 +223,10 @@ public enum RoleplayHTMLDocumentFactory {
   let scopedVariables = \(scopedVariablesJSON);
   let chatMessages = \(chatMessagesJSON);
   const worldbookList = \(worldbooksJSON);
+  const currentScriptID = \(scriptIDJSON);
+  const currentScriptName = \(scriptNameJSON);
+  let currentScriptInfo = \(scriptInfoJSON);
+  let currentScriptButtons = \(scriptButtonsJSON);
   const worldbooks = Object.fromEntries(worldbookList.map(book => [book.name, (book.entries || []).map((entry, index) => ({
     ...entry,
     uid: entry.uid ?? index,
@@ -491,6 +518,27 @@ public enum RoleplayHTMLDocumentFactory {
         if (!store.enabled) store.player.pause();
       }
     },
+    getButtonEvent: name => `etos_script_button:${currentScriptID}:${String(name)}`,
+    getScriptButtons: () => clone(currentScriptButtons),
+    replaceScriptButtons: buttons => {
+      currentScriptButtons = clone(buttons || []);
+      post({ action: 'replace_script_buttons', script_id: currentScriptID, buttons: currentScriptButtons });
+    },
+    updateScriptButtonsWith: async updater => {
+      const updated = await updater(clone(currentScriptButtons));
+      api.replaceScriptButtons(updated || []);
+      return clone(currentScriptButtons);
+    },
+    appendInexistentScriptButtons: buttons => {
+      for (const button of buttons || []) {
+        if (!currentScriptButtons.some(existing => existing.name === button.name)) currentScriptButtons.push(clone(button));
+      }
+      api.replaceScriptButtons(currentScriptButtons);
+      return clone(currentScriptButtons);
+    },
+    getScriptName: () => currentScriptName,
+    getScriptInfo: () => currentScriptInfo,
+    replaceScriptInfo: info => { currentScriptInfo = String(info ?? ''); },
     getCharacterName: () => \(characterJSON),
     getUserName: () => \(userJSON),
     userAvatarPath: \(userAvatarJSON),
@@ -505,6 +553,7 @@ public enum RoleplayHTMLDocumentFactory {
     variables: () => api.getAllVariables()
   };
   window.SillyTavern = window.SillyTavern || { getContext: () => ({ name1: \(userJSON), name2: \(characterJSON) }) };
+  window.__etosEmitScriptButton = name => emitLocal(api.getButtonEvent(name));
   const reportHeight = () => post({ action: 'height', value: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 1) });
   window.addEventListener('DOMContentLoaded', () => {
     reportHeight();

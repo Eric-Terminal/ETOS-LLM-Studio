@@ -229,7 +229,8 @@ public struct RoleplayCardImportService {
             return children.flatMap(parseScriptTree)
         }
         let rawButton = dictionary["button"] as? [String: Any]
-        let buttons = (rawButton?["buttons"] as? [Any] ?? dictionary["buttons"] as? [Any] ?? []).compactMap { raw -> RoleplayScriptButton? in
+        let buttonsEnabled = bool(rawButton?["enabled"]) ?? true
+        let buttons = (buttonsEnabled ? (rawButton?["buttons"] as? [Any] ?? dictionary["buttons"] as? [Any] ?? []) : []).compactMap { raw -> RoleplayScriptButton? in
             guard let button = raw as? [String: Any], let name = string(button["name"]) else { return nil }
             return RoleplayScriptButton(
                 name: name,

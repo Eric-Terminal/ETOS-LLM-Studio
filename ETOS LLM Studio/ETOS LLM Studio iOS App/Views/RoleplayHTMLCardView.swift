@@ -28,6 +28,7 @@ struct RoleplayHTMLCardView: View {
                     sessionID: sessionID,
                     messageID: messageID,
                     versionIndex: versionIndex,
+                    scriptID: nil,
                     height: Binding(
                         get: { heights[document.id] ?? 180 },
                         set: { heights[document.id] = max(1, $0) }
@@ -97,6 +98,7 @@ struct RoleplaySessionScriptHost: View {
                     sessionID: document.sessionID,
                     messageID: document.messageID,
                     versionIndex: versionIndex,
+                    scriptID: document.id,
                     height: Binding(
                         get: { heights[document.id] ?? 1 },
                         set: { heights[document.id] = $0 }
@@ -142,7 +144,11 @@ struct RoleplaySessionScriptHost: View {
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
                                 messageVersionIndex: versionIndex,
-                                worldbooks: worldbooks
+                                worldbooks: worldbooks,
+                                scriptID: script.id,
+                                scriptName: script.name,
+                                scriptInfo: script.info,
+                                scriptButtons: script.buttons
                             )
                         )
                     }
@@ -175,6 +181,83 @@ struct RoleplaySessionScriptHost: View {
     }
 }
 
+struct RoleplayScriptButtonBar: View {
+    let sessionID: UUID?
+
+    @State private var actions: [RoleplayScriptButtonAction] = []
+    @State private var revision = 0
+
+    var body: some View {
+        if !actions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(actions) { action in
+                        Button(action.name) {
+                            NotificationCenter.default.post(
+                                name: RoleplayScriptButtonNotification.requested,
+                                object: nil,
+                                userInfo: [
+                                    RoleplayScriptButtonNotification.sessionIDKey: action.sessionID,
+                                    RoleplayScriptButtonNotification.scriptIDKey: action.scriptID,
+                                    RoleplayScriptButtonNotification.buttonNameKey: action.name
+                                ]
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial)
+        }
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task(id: preparationKey) { await loadActions() }
+            .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { notification in
+                if notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String == RoleplayStore.libraryChangeKind {
+                    revision &+= 1
+                }
+            }
+    }
+
+    private var preparationKey: String {
+        "\(sessionID?.uuidString ?? "none")|\(revision)"
+    }
+
+    @MainActor
+    private func loadActions() async {
+        guard let sessionID else {
+            actions = []
+            return
+        }
+        actions = await Task.detached(priority: .utility) {
+            let store = RoleplayStore.shared
+            guard let binding = store.binding(sessionID: sessionID), binding.helperScriptsEnabled else { return [] }
+            return binding.characterIDs.compactMap(store.character(id:)).flatMap { character in
+                character.helperScripts.filter(\.enabled).flatMap { script in
+                    script.buttons.filter(\.visible).map {
+                        RoleplayScriptButtonAction(
+                            sessionID: sessionID,
+                            scriptID: script.id,
+                            buttonID: $0.id,
+                            name: $0.name
+                        )
+                    }
+                }
+            }
+        }.value
+    }
+}
+
+private struct RoleplayScriptButtonAction: Identifiable, Sendable {
+    var id: String { "\(scriptID.uuidString):\(buttonID.uuidString)" }
+    let sessionID: UUID
+    let scriptID: UUID
+    let buttonID: UUID
+    let name: String
+}
+
 private struct PreparedRoleplayHTMLDocument: Identifiable, Sendable {
     let id: Int
     let html: String
@@ -192,6 +275,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
     let sessionID: UUID
     let messageID: UUID
     let versionIndex: Int
+    let scriptID: UUID?
     @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator {
@@ -199,6 +283,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
             sessionID: sessionID,
             messageID: messageID,
             versionIndex: versionIndex,
+            scriptID: scriptID,
             height: $height
         )
     }
@@ -222,6 +307,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
+        context.coordinator.webView = webView
         return webView
     }
 
@@ -236,25 +322,43 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.stopLoading()
+        coordinator.webView = nil
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         let sessionID: UUID
         let messageID: UUID
         let versionIndex: Int
+        let scriptID: UUID?
         @Binding var height: CGFloat
         var loadedHTML: String?
+        weak var webView: WKWebView?
+        private var buttonObserver: NSObjectProtocol? = nil
 
         init(
             sessionID: UUID,
             messageID: UUID,
             versionIndex: Int,
+            scriptID: UUID?,
             height: Binding<CGFloat>
         ) {
             self.sessionID = sessionID
             self.messageID = messageID
             self.versionIndex = versionIndex
+            self.scriptID = scriptID
             self._height = height
+            super.init()
+            buttonObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayScriptButtonNotification.requested,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleScriptButton(notification)
+            }
+        }
+
+        deinit {
+            if let buttonObserver { NotificationCenter.default.removeObserver(buttonObserver) }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -270,6 +374,16 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
                 messageID: messageID,
                 versionIndex: versionIndex
             )
+        }
+
+        private func handleScriptButton(_ notification: Notification) {
+            guard let scriptID,
+                  notification.userInfo?[RoleplayScriptButtonNotification.sessionIDKey] as? UUID == sessionID,
+                  notification.userInfo?[RoleplayScriptButtonNotification.scriptIDKey] as? UUID == scriptID,
+                  let name = notification.userInfo?[RoleplayScriptButtonNotification.buttonNameKey] as? String,
+                  let data = try? JSONEncoder().encode(name),
+                  let literal = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__etosEmitScriptButton?.(\(literal));")
         }
 
         func webView(

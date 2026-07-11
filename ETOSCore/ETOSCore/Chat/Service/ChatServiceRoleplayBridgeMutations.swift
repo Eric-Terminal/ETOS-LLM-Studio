@@ -108,6 +108,39 @@ extension ChatService {
         saveWorldbook(worldbook)
     }
 
+    func replaceRoleplayScriptButtons(scriptID: UUID, buttons value: JSONValue) {
+        guard case .array(let values) = value else { return }
+        let parsed = values.compactMap { value -> (UUID?, String, Bool, [String: JSONValue])? in
+            guard case .dictionary(let fields) = value,
+                  let name = fields["name"]?.stringValue else { return nil }
+            return (
+                fields["id"]?.stringValue.flatMap(UUID.init(uuidString:)),
+                name,
+                fields["visible"]?.booleanValue ?? true,
+                fields
+            )
+        }
+        for var character in loadRoleplayCharacters() {
+            guard let index = character.helperScripts.firstIndex(where: { $0.id == scriptID }) else { continue }
+            let existing = character.helperScripts[index].buttons
+            let buttons = parsed.map { id, name, visible, metadata in
+                RoleplayScriptButton(
+                    id: id ?? existing.first(where: { $0.name == name })?.id ?? UUID(),
+                    name: name,
+                    visible: visible,
+                    metadata: metadata
+                )
+            }
+            let unchanged = existing.count == buttons.count && zip(existing, buttons).allSatisfy { pair in
+                pair.0.name == pair.1.name && pair.0.visible == pair.1.visible
+            }
+            guard !unchanged else { return }
+            character.helperScripts[index].buttons = buttons
+            roleplayStore.upsertCharacter(character)
+            return
+        }
+    }
+
     private func normalizedRoleplayIndex(_ value: Int, count: Int) -> Int? {
         let index = value < 0 ? count + value : value
         return (0..<count).contains(index) ? index : nil
@@ -142,5 +175,18 @@ private extension JSONValue {
     var stringValue: String? {
         guard case .string(let value) = self else { return nil }
         return value
+    }
+
+    var booleanValue: Bool? {
+        switch self {
+        case .bool(let value): return value
+        case .int(let value): return value != 0
+        case .double(let value): return value != 0
+        case .string(let value):
+            if ["true", "1"].contains(value.lowercased()) { return true }
+            if ["false", "0"].contains(value.lowercased()) { return false }
+            return nil
+        default: return nil
+        }
     }
 }

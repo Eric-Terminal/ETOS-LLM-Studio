@@ -321,6 +321,7 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("createWorldbookEntries"))
         #expect(document.contains("测试世界书"))
         #expect(document.contains("playAudio"))
+        #expect(document.contains("getButtonEvent"))
     }
 
     private func makePNGTextCard(keyword: String, json: String) -> Data {

@@ -51,25 +51,29 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
     let sessionID: UUID?
     let messageID: UUID?
     let versionIndex: Int
+    let scriptID: UUID?
 
     init(
         html: String,
         sessionID: UUID? = nil,
         messageID: UUID? = nil,
-        versionIndex: Int = 0
+        versionIndex: Int = 0,
+        scriptID: UUID? = nil
     ) {
         self.html = html
         self.sessionID = sessionID
         self.messageID = messageID
         self.versionIndex = versionIndex
+        self.scriptID = scriptID
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(sessionID: sessionID, messageID: messageID, versionIndex: versionIndex)
+        Coordinator(sessionID: sessionID, messageID: messageID, versionIndex: versionIndex, scriptID: scriptID)
     }
 
     func makeUIView(context: Context) -> NSObject {
         let view = WatchWebKitRuntime.makeWebView(messageHandler: context.coordinator.messageHandler)
+        context.coordinator.webView = view
         context.coordinator.loadedHTML = html
         WatchWebKitRuntime.load(html, into: view)
         return view
@@ -83,18 +87,41 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: NSObject, coordinator: Coordinator) {
         WatchWebKitRuntime.removeMessageHandler(from: uiView)
+        coordinator.webView = nil
     }
 
     final class Coordinator {
         var loadedHTML: String?
         let messageHandler: WatchRoleplayScriptMessageHandler
+        weak var webView: NSObject?
+        private var buttonObserver: NSObjectProtocol? = nil
 
-        init(sessionID: UUID?, messageID: UUID?, versionIndex: Int) {
+        init(sessionID: UUID?, messageID: UUID?, versionIndex: Int, scriptID: UUID?) {
             self.messageHandler = WatchRoleplayScriptMessageHandler(
                 sessionID: sessionID,
                 messageID: messageID,
                 versionIndex: versionIndex
             )
+            buttonObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayScriptButtonNotification.requested,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self,
+                      let sessionID,
+                      let scriptID,
+                      notification.userInfo?[RoleplayScriptButtonNotification.sessionIDKey] as? UUID == sessionID,
+                      notification.userInfo?[RoleplayScriptButtonNotification.scriptIDKey] as? UUID == scriptID,
+                      let name = notification.userInfo?[RoleplayScriptButtonNotification.buttonNameKey] as? String,
+                      let data = try? JSONEncoder().encode(name),
+                      let literal = String(data: data, encoding: .utf8),
+                      let webView = self.webView else { return }
+                WatchWebKitRuntime.evaluate("window.__etosEmitScriptButton?.(\(literal));", in: webView)
+            }
+        }
+
+        deinit {
+            if let buttonObserver { NotificationCenter.default.removeObserver(buttonObserver) }
         }
     }
 }
@@ -409,6 +436,13 @@ private enum WatchWebKitRuntime {
         let selector = NSSelectorFromString("removeScriptMessageHandlerForName:")
         if controller.responds(to: selector) {
             controller.perform(selector, with: "etosRoleplay" as NSString)
+        }
+    }
+
+    static func evaluate(_ javaScript: String, in webView: NSObject) {
+        let selector = NSSelectorFromString("evaluateJavaScript:completionHandler:")
+        if webView.responds(to: selector) {
+            webView.perform(selector, with: javaScript as NSString, with: nil)
         }
     }
 
