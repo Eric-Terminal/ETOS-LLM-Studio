@@ -142,6 +142,24 @@ public struct RoleplayCompatibilityItem: Codable, Identifiable, Hashable, Sendab
         self.status = status
         self.detail = detail
     }
+
+    public var localizedTitle: String {
+        switch id {
+        case "character": return NSLocalizedString("角色资料", comment: "Roleplay compatibility character data")
+        case "regex": return NSLocalizedString("角色正则", comment: "Roleplay compatibility regex")
+        case "html": return NSLocalizedString("HTML 渲染", comment: "Roleplay compatibility HTML rendering")
+        case "scripts": return NSLocalizedString("酒馆助手脚本", comment: "Roleplay compatibility helper scripts")
+        case "dom": return NSLocalizedString("酒馆页面 DOM", comment: "Roleplay compatibility Tavern DOM")
+        default: return title
+        }
+    }
+
+    public var localizedDetail: String {
+        if id == "dom" {
+            return NSLocalizedString("ETOS 不包含 SillyTavern 网页结构。", comment: "Roleplay compatibility missing Tavern DOM detail")
+        }
+        return detail
+    }
 }
 
 public struct RoleplayCompatibilityReport: Codable, Hashable, Sendable {

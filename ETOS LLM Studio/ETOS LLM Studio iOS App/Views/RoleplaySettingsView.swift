@@ -203,9 +203,9 @@ private struct RoleplayCharacterDetailView: View {
                 ForEach(character.compatibilityReport.items) { item in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(item.title)
-                            if !item.detail.isEmpty {
-                                Text(item.detail)
+                        Text(item.localizedTitle)
+                    if !item.localizedDetail.isEmpty {
+                        Text(item.localizedDetail)
                                     .etFont(.caption)
                                     .foregroundStyle(.secondary)
                             }

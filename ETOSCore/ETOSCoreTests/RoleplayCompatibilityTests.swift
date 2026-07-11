@@ -158,6 +158,48 @@ struct RoleplayCompatibilityTests {
         #expect(output == "旅行者/星野 3 继续者行旅 1970-01-01 ")
     }
 
+    @Test("角色与 Persona 提示词和请求正则按会话上下文组装")
+    func assembleRoleplayPromptAndRequestMessages() {
+        let character = RoleplayCharacter(
+            name: "星野",
+            description: "为 {{user}} 引路",
+            personality: "冷静",
+            scenario: "海边",
+            systemPrompt: "保持 {{char}} 身份",
+            postHistoryInstructions: "继续称呼 {{user}}",
+            regexRules: [
+                RoleplayRegexRule(
+                    findRegex: "秘密",
+                    replaceString: "公开",
+                    placements: [.userInput],
+                    promptOnly: true
+                )
+            ]
+        )
+        let persona = PersonaProfile(name: "旅行者", description: "来自北方")
+        let macroContext = RoleplayMacroContext(character: character, persona: persona)
+        let resolved = ResolvedRoleplaySession(
+            binding: SessionRoleplayBinding(sessionID: UUID(), characterIDs: [character.id], personaID: persona.id),
+            characters: [character],
+            persona: persona,
+            variables: .init(),
+            macroContext: macroContext
+        )
+
+        let prompt = RoleplayRuntime.roleplaySystemPrompt(resolved)
+        let postHistory = RoleplayRuntime.postHistoryPrompt(resolved)
+        let messages = RoleplayRuntime.transformedRequestMessages(
+            [ChatMessage(role: .user, content: "{{user}} 的秘密")],
+            resolved: resolved
+        )
+
+        #expect(prompt.contains("为 旅行者 引路"))
+        #expect(prompt.contains("保持 星野 身份"))
+        #expect(prompt.contains("来自北方"))
+        #expect(postHistory == "继续称呼 旅行者")
+        #expect(messages.first?.content == "旅行者 的公开")
+    }
+
     @Test("消息变量按消息版本隔离")
     func isolateMessageVersions() {
         let messageID = UUID()

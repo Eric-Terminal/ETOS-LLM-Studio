@@ -242,7 +242,7 @@ private struct WatchRoleplayCharacterDetailView: View {
             Section(NSLocalizedString("兼容性报告", comment: "Roleplay compatibility report")) {
                 ForEach(character.compatibilityReport.items) { item in
                     HStack {
-                        Text(item.title)
+                        Text(item.localizedTitle)
                         Spacer()
                         Image(systemName: item.status == .unsupported ? "xmark.circle" : "checkmark.circle")
                     }
