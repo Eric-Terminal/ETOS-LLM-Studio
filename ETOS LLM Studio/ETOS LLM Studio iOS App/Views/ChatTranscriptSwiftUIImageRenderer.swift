@@ -830,7 +830,7 @@ private struct ChatTranscriptExportComposer: View {
 private final class ChatTranscriptImageBox: @unchecked Sendable {
     let image: UIImage?
 
-    init(_ image: UIImage?) {
+    nonisolated init(_ image: UIImage?) {
         self.image = image
     }
 }
