@@ -20,7 +20,8 @@ extension ChatService {
         worldbookAfter: [WorldbookInjection] = [],
         worldbookANTop: [WorldbookInjection] = [],
         worldbookANBottom: [WorldbookInjection] = [],
-        worldbookOutlet: [WorldbookInjection] = []
+        worldbookOutlet: [WorldbookInjection] = [],
+        roleplayPrompt: String? = nil
     ) -> String {
         var parts: [String] = []
 
@@ -42,6 +43,11 @@ extension ChatService {
 
         if let global, !global.isEmpty {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")
+        }
+
+        if let roleplayPrompt,
+           !roleplayPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append(roleplayPrompt)
         }
 
         if let topic, !topic.isEmpty {

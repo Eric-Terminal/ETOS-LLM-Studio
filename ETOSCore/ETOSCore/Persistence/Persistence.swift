@@ -40,7 +40,9 @@ public enum Persistence {
         "feedback_tickets",
         "feedback_tickets_v1",
         "mcp_servers_records",
-        "mcp_servers_records_v1"
+        "mcp_servers_records_v1",
+        "roleplay_library_v1",
+        "roleplay_variables_v1"
     ]
     static let auxiliaryMemoryBlobKeys: Set<String> = [
         "memory_raw_memories",

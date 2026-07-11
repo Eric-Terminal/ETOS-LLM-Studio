@@ -16,11 +16,13 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     // 否则流式更新 message 时不会稳定触发 SwiftUI 刷新。
     @Published public private(set) var message: ChatMessage
     @Published public private(set) var visualMessage: ChatMessage
+    @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
     
     public init(message: ChatMessage) {
         self.id = message.id
         self.message = message
         self.visualMessage = message
+        self.roleplayHTML = nil
     }
     
     public func update(with message: ChatMessage) {
@@ -31,5 +33,10 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public func updateVisualMessage(_ message: ChatMessage) {
         guard visualMessage != message else { return }
         visualMessage = message
+    }
+
+    public func updateRoleplayHTML(_ extraction: RoleplayHTMLExtraction?) {
+        guard roleplayHTML != extraction else { return }
+        roleplayHTML = extraction
     }
 }

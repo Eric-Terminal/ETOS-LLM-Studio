@@ -348,6 +348,15 @@ extension ChatService {
 
     /// 将最终确定的消息更新到消息列表中
     func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
+        let priorMessages = messagesSnapshot(for: sessionID)
+        _ = RoleplayRuntime.processMVU(
+            content: newMessage.content,
+            messageID: loadingMessageID,
+            versionIndex: priorMessages.first(where: { $0.id == loadingMessageID })?.getCurrentVersionIndex() ?? 0,
+            sessionID: sessionID,
+            previousMessages: priorMessages.filter { $0.id != loadingMessageID },
+            store: roleplayStore
+        )
         let messageRegexRules = MessageRegexRuleStore.currentRules()
         let newMessage = messageRegexRules.isEmpty
             ? newMessage

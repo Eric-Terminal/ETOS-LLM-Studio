@@ -180,6 +180,7 @@ public class ChatService {
     let worldbookImportService: WorldbookImportService
     let worldbookExportService: WorldbookExportService
     let worldbookEngine: WorldbookEngine
+    let roleplayStore: RoleplayStore
     let urlSession: URLSession
     let fileAttachmentTextExtractor: FileAttachmentTextExtractor
     let startupStateLoadLock = NSLock()
@@ -499,6 +500,7 @@ public class ChatService {
         worldbookImportService: WorldbookImportService = WorldbookImportService(),
         worldbookExportService: WorldbookExportService = WorldbookExportService(),
         worldbookEngine: WorldbookEngine = WorldbookEngine(),
+        roleplayStore: RoleplayStore = .shared,
         fileAttachmentTextExtractor: FileAttachmentTextExtractor = FileAttachmentTextExtractor(),
         localModelStore: LocalModelStore = .shared,
         urlSession: URLSession = NetworkSessionConfiguration.shared
@@ -510,6 +512,7 @@ public class ChatService {
         self.worldbookImportService = worldbookImportService
         self.worldbookExportService = worldbookExportService
         self.worldbookEngine = worldbookEngine
+        self.roleplayStore = roleplayStore
         self.fileAttachmentTextExtractor = fileAttachmentTextExtractor
         self.localModelStore = localModelStore
         self.urlSession = urlSession

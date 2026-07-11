@@ -67,11 +67,19 @@ extension ChatService {
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
             ? currentSessionSnapshot
             : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
-        let requestMessages = preparedMessagesForRequest(
+        let preparedRequestMessages = preparedMessagesForRequest(
             from: messages,
             loadingMessageID: loadingMessageID,
             session: sessionForRequest
         )
+        let resolvedRoleplay = RoleplayRuntime.resolve(
+            sessionID: currentSessionID,
+            messages: preparedRequestMessages,
+            store: roleplayStore
+        )
+        let requestMessages = resolvedRoleplay.map {
+            RoleplayRuntime.transformedRequestMessages(preparedRequestMessages, resolved: $0)
+        } ?? preparedRequestMessages
 
         var memories: [MemoryItem] = []
         if enableMemory {
@@ -140,7 +148,19 @@ extension ChatService {
             modelPricing: runnableModel.model.pricing
         )
 
-        let boundWorldbooks = worldbookStore.resolveWorldbooks(ids: sessionForRequest?.lorebookIDs ?? [])
+        var boundWorldbookIDs = sessionForRequest?.lorebookIDs ?? []
+        if let resolvedRoleplay {
+            boundWorldbookIDs.append(contentsOf: resolvedRoleplay.worldbookIDs)
+        }
+        var seenWorldbookIDs = Set<UUID>()
+        boundWorldbookIDs = boundWorldbookIDs.filter { seenWorldbookIDs.insert($0).inserted }
+        var boundWorldbooks = worldbookStore.resolveWorldbooks(ids: boundWorldbookIDs)
+        if let resolvedRoleplay {
+            boundWorldbooks = RoleplayRuntime.resolvedWorldbooks(
+                boundWorldbooks,
+                macroContext: resolvedRoleplay.macroContext
+            )
+        }
         let worldbookResult = worldbookEngine.evaluate(
             .init(
                 sessionID: currentSessionID,
@@ -163,7 +183,8 @@ extension ChatService {
             worldbookAfter: worldbookResult.after,
             worldbookANTop: worldbookResult.anTop,
             worldbookANBottom: worldbookResult.anBottom,
-            worldbookOutlet: worldbookResult.outlet
+            worldbookOutlet: worldbookResult.outlet,
+            roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt)
         )
 
         if !finalSystemPrompt.isEmpty {
@@ -196,6 +217,11 @@ extension ChatService {
         messagesToSend.append(contentsOf: emTopMessages)
         messagesToSend.append(contentsOf: chatHistory)
         messagesToSend.append(contentsOf: emBottomMessages)
+
+        if let resolvedRoleplay,
+           let postHistoryPrompt = RoleplayRuntime.postHistoryPrompt(resolvedRoleplay) {
+            messagesToSend.append(ChatMessage(role: .system, content: postHistoryPrompt))
+        }
 
         if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
             messagesToSend.append(enhancedPromptMessage)

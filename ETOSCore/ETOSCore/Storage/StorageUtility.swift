@@ -272,8 +272,13 @@ public enum StorageUtility {
     /// 查找孤立的图片文件（无消息引用的图片文件）
     public static func findOrphanedImageFiles() -> [FileItem] {
         let referencedFiles = Persistence.allReferencedImageFileNames()
+        let roleplayAvatarFileNames = Set(
+            RoleplayStore.shared.loadCharacters().compactMap(\.avatarFileName)
+        )
         let allImageFiles = listFiles(for: .images)
-        return allImageFiles.filter { !referencedFiles.contains($0.name) }
+        return allImageFiles.filter {
+            !referencedFiles.contains($0.name) && !roleplayAvatarFileNames.contains($0.name)
+        }
     }
     
     // MARK: - 幽灵会话检测（彩蛋功能）
