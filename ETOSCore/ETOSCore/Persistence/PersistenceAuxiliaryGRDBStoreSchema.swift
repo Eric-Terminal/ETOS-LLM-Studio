@@ -900,6 +900,39 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN needs_llm_dedup INTEGER NOT NULL DEFAULT 0")
                 }
             }
+
+            migrator.registerMigration("v4_add_structured_memory_metadata") { db in
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(memory_items)")
+                let names = Set(columns.map { row -> String in row["name"] })
+                let additions: [(name: String, definition: String)] = [
+                    ("kind", "TEXT NOT NULL DEFAULT 'semantic'"),
+                    ("source", "TEXT NOT NULL DEFAULT 'manual'"),
+                    ("importance", "REAL NOT NULL DEFAULT 0.5"),
+                    ("confidence", "REAL NOT NULL DEFAULT 1.0"),
+                    ("entities_json", "TEXT NOT NULL DEFAULT '[]'"),
+                    ("valid_from", "REAL"),
+                    ("valid_until", "REAL"),
+                    ("source_session_id", "TEXT"),
+                    ("access_count", "INTEGER NOT NULL DEFAULT 0"),
+                    ("last_accessed_at", "REAL")
+                ]
+                for addition in additions where !names.contains(addition.name) {
+                    try db.execute(sql: "ALTER TABLE memory_items ADD COLUMN \(addition.name) \(addition.definition)")
+                }
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_items_kind ON memory_items(kind, is_archived)")
+                try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_memory_items_validity ON memory_items(valid_from, valid_until)")
+            }
+
+            migrator.registerMigration("v5_add_structured_conversation_profile") { db in
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(conversation_user_profile)")
+                let names = Set(columns.map { row -> String in row["name"] })
+                if !names.contains("facts_json") {
+                    try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN facts_json TEXT NOT NULL DEFAULT '[]'")
+                }
+                if !names.contains("schema_version") {
+                    try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1")
+                }
+            }
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")

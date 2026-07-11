@@ -121,7 +121,17 @@ struct MemoryRawStore {
                     embedding: RelationalFloatArrayCodec.decode(row.embeddingData),
                     createdAt: Date(timeIntervalSince1970: row.createdAt),
                     updatedAt: row.updatedAt.map(Date.init(timeIntervalSince1970:)),
-                    isArchived: row.isArchived != 0
+                    isArchived: row.isArchived != 0,
+                    kind: MemoryKind(rawValue: row.kind) ?? .semantic,
+                    source: MemorySource(rawValue: row.source) ?? .manual,
+                    importance: row.importance,
+                    confidence: row.confidence,
+                    entities: decodeEntities(row.entitiesJSON),
+                    validFrom: row.validFrom.map(Date.init(timeIntervalSince1970:)),
+                    validUntil: row.validUntil.map(Date.init(timeIntervalSince1970:)),
+                    sourceSessionID: row.sourceSessionID.flatMap(UUID.init(uuidString:)),
+                    accessCount: row.accessCount,
+                    lastAccessedAt: row.lastAccessedAt.map(Date.init(timeIntervalSince1970:))
                 )
             }
     }
@@ -163,7 +173,17 @@ struct MemoryRawStore {
                     embeddingData: RelationalFloatArrayCodec.encode(memory.embedding),
                     createdAt: memory.createdAt.timeIntervalSince1970,
                     updatedAt: memory.updatedAt?.timeIntervalSince1970,
-                    isArchived: memory.isArchived ? 1 : 0
+                    isArchived: memory.isArchived ? 1 : 0,
+                    kind: memory.kind.rawValue,
+                    source: memory.source.rawValue,
+                    importance: memory.importance,
+                    confidence: memory.confidence,
+                    entitiesJSON: Self.encodeEntities(memory.entities),
+                    validFrom: memory.validFrom?.timeIntervalSince1970,
+                    validUntil: memory.validUntil?.timeIntervalSince1970,
+                    sourceSessionID: memory.sourceSessionID?.uuidString,
+                    accessCount: memory.accessCount,
+                    lastAccessedAt: memory.lastAccessedAt?.timeIntervalSince1970
                 )
                 if let existing = existingByID[record.id], existing == record {
                     continue
@@ -172,14 +192,26 @@ struct MemoryRawStore {
                 try db.execute(
                     sql: """
                     INSERT INTO memory_items (
-                        id, content, embedding_data, created_at, updated_at, is_archived
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        id, content, embedding_data, created_at, updated_at, is_archived,
+                        kind, source, importance, confidence, entities_json,
+                        valid_from, valid_until, source_session_id, access_count, last_accessed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         content = excluded.content,
                         embedding_data = excluded.embedding_data,
                         created_at = excluded.created_at,
                         updated_at = excluded.updated_at,
-                        is_archived = excluded.is_archived
+                        is_archived = excluded.is_archived,
+                        kind = excluded.kind,
+                        source = excluded.source,
+                        importance = excluded.importance,
+                        confidence = excluded.confidence,
+                        entities_json = excluded.entities_json,
+                        valid_from = excluded.valid_from,
+                        valid_until = excluded.valid_until,
+                        source_session_id = excluded.source_session_id,
+                        access_count = excluded.access_count,
+                        last_accessed_at = excluded.last_accessed_at
                     """,
                     arguments: [
                         record.id,
@@ -187,7 +219,17 @@ struct MemoryRawStore {
                         record.embeddingData,
                         record.createdAt,
                         record.updatedAt,
-                        record.isArchived
+                        record.isArchived,
+                        record.kind,
+                        record.source,
+                        record.importance,
+                        record.confidence,
+                        record.entitiesJSON,
+                        record.validFrom,
+                        record.validUntil,
+                        record.sourceSessionID,
+                        record.accessCount,
+                        record.lastAccessedAt
                     ]
                 )
             }
@@ -253,6 +295,22 @@ struct MemoryRawStore {
         }
     }
 
+    private static func encodeEntities(_ entities: [String]) -> String {
+        guard let data = try? JSONEncoder().encode(entities),
+              let json = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return json
+    }
+
+    private static func decodeEntities(_ json: String) -> [String] {
+        guard let data = json.data(using: .utf8),
+              let entities = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return entities
+    }
+
     private struct RelationalMemoryItemRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord, Equatable {
         static let databaseTableName = "memory_items"
 
@@ -263,6 +321,16 @@ struct MemoryRawStore {
             case createdAt = "created_at"
             case updatedAt = "updated_at"
             case isArchived = "is_archived"
+            case kind
+            case source
+            case importance
+            case confidence
+            case entitiesJSON = "entities_json"
+            case validFrom = "valid_from"
+            case validUntil = "valid_until"
+            case sourceSessionID = "source_session_id"
+            case accessCount = "access_count"
+            case lastAccessedAt = "last_accessed_at"
         }
 
         var id: String
@@ -271,5 +339,15 @@ struct MemoryRawStore {
         var createdAt: Double
         var updatedAt: Double?
         var isArchived: Int
+        var kind: String
+        var source: String
+        var importance: Double
+        var confidence: Double
+        var entitiesJSON: String
+        var validFrom: Double?
+        var validUntil: Double?
+        var sourceSessionID: String?
+        var accessCount: Int
+        var lastAccessedAt: Double?
     }
 }

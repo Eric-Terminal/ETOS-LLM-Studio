@@ -14,6 +14,12 @@ extension AppToolManager {
             let memory_id: String
             let content: String?
             let is_archived: Bool?
+            let kind: String?
+            let importance: Double?
+            let confidence: Double?
+            let entities: [String]?
+            let valid_from: String?
+            let valid_until: String?
         }
 
         guard let argsData = argumentsJSON.data(using: .utf8),
@@ -42,9 +48,11 @@ extension AppToolManager {
         let trimmedContent = args.content?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasContentUpdate = trimmedContent != nil
         let hasArchiveUpdate = args.is_archived != nil
-        guard hasContentUpdate || hasArchiveUpdate else {
+        let hasMetadataUpdate = args.kind != nil || args.importance != nil || args.confidence != nil
+            || args.entities != nil || args.valid_from != nil || args.valid_until != nil
+        guard hasContentUpdate || hasArchiveUpdate || hasMetadataUpdate else {
             throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：edit_memory 至少要提供 content 或 is_archived 中的一个。", comment: "Memory edit tool missing update fields")
+                NSLocalizedString("错误：edit_memory 没有提供任何可更新字段。", comment: "Memory edit tool missing update fields")
             )
         }
 
@@ -56,20 +64,39 @@ extension AppToolManager {
 
         let embeddingConfigured = MemoryManager.shared.isEmbeddingModelConfigured()
         let resultPayload: [String: Any]
+        let formatter = ISO8601DateFormatter()
 
-        if hasContentUpdate {
+        if let kind = args.kind, MemoryKind(rawValue: kind) == nil {
+            throw AppToolExecutionError.invalidArguments(
+                NSLocalizedString("错误：edit_memory 的 kind 不受支持。", comment: "Memory edit unsupported kind")
+            )
+        }
+        let validFrom = try parseMemoryDate(args.valid_from, field: "valid_from", formatter: formatter)
+        let validUntil = try parseMemoryDate(args.valid_until, field: "valid_until", formatter: formatter)
+
+        if hasContentUpdate || hasMetadataUpdate {
             var updated = existing
             updated.content = trimmedContent ?? existing.content
             if let isArchived = args.is_archived {
                 updated.isArchived = isArchived
             }
+            if let kind = args.kind.flatMap(MemoryKind.init(rawValue:)) { updated.kind = kind }
+            if let importance = args.importance { updated.importance = min(max(importance, 0), 1) }
+            if let confidence = args.confidence { updated.confidence = min(max(confidence, 0), 1) }
+            if let entities = args.entities { updated.entities = entities }
+            if args.valid_from != nil { updated.validFrom = validFrom }
+            if args.valid_until != nil { updated.validUntil = validUntil }
             await MemoryManager.shared.updateMemory(item: updated)
             resultPayload = [
                 "memory_id": existing.id.uuidString,
                 "content": updated.content,
                 "isArchived": updated.isArchived,
+                "kind": updated.kind.rawValue,
+                "importance": updated.importance,
+                "confidence": updated.confidence,
+                "entities": updated.entities,
                 "embeddingConfigured": embeddingConfigured,
-                "reembedded": embeddingConfigured
+                "reembedded": embeddingConfigured && hasContentUpdate
             ]
         } else if let isArchived = args.is_archived {
             if isArchived {
@@ -86,11 +113,28 @@ extension AppToolManager {
             ]
         } else {
             throw AppToolExecutionError.invalidArguments(
-                NSLocalizedString("错误：edit_memory 至少要提供 content 或 is_archived 中的一个。", comment: "Memory edit tool missing update fields")
+                NSLocalizedString("错误：edit_memory 没有提供任何可更新字段。", comment: "Memory edit tool missing update fields")
             )
         }
 
         return prettyPrintedJSONString(from: resultPayload)
+    }
+
+    private func parseMemoryDate(
+        _ value: String?,
+        field: String,
+        formatter: ISO8601DateFormatter
+    ) throws -> Date? {
+        guard let value else { return nil }
+        guard let date = formatter.date(from: value) else {
+            throw AppToolExecutionError.invalidArguments(
+                String(
+                    format: NSLocalizedString("错误：edit_memory 的 %@ 必须是 ISO 8601 时间。", comment: "Memory edit invalid date"),
+                    field
+                )
+            )
+        }
+        return date
     }
 
     func executeSubmitFeedbackTicket(argumentsJSON: String) async throws -> String {
@@ -201,13 +245,22 @@ extension AppToolManager {
             "offset": offset,
             "limit": limit,
             "items": paged.map { item in
-                [
+                var payload: [String: Any] = [
                     "memory_id": item.id.uuidString,
                     "content": item.content,
                     "isArchived": item.isArchived,
+                    "kind": item.kind.rawValue,
+                    "source": item.source.rawValue,
+                    "importance": item.importance,
+                    "confidence": item.confidence,
+                    "entities": item.entities,
+                    "accessCount": item.accessCount,
                     "createdAt": formatter.string(from: item.createdAt),
                     "updatedAt": item.updatedAt.map(formatter.string(from:)) as Any
                 ]
+                if let validFrom = item.validFrom { payload["validFrom"] = formatter.string(from: validFrom) }
+                if let validUntil = item.validUntil { payload["validUntil"] = formatter.string(from: validUntil) }
+                return payload
             }
         ]
         return prettyPrintedJSONString(from: payload)

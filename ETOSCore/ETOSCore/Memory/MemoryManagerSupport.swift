@@ -423,7 +423,7 @@ extension MemoryManager {
                let parentId = UUID(uuidString: parentIdString) {
                 guard !seenParentIDs.contains(parentId) else { continue }
                 if let memory = cachedMemories.first(where: { $0.id == parentId }) {
-                    guard !memory.isArchived else { continue }
+                    guard memory.isValid(at: Date()) else { continue }
                     uniqueMemories.append(memory)
                     seenParentIDs.insert(parentId)
                 } else {
@@ -444,6 +444,40 @@ extension MemoryManager {
         }
 
         return uniqueMemories
+    }
+
+    func parentSemanticScores(from results: [SearchResult]) -> [UUID: Double] {
+        var scores: [UUID: Double] = [:]
+        for result in results {
+            guard let parentIDText = result.metadata["parentMemoryId"],
+                  let parentID = UUID(uuidString: parentIDText) else {
+                continue
+            }
+            let rawScore = Double(result.score)
+            guard rawScore.isFinite else { continue }
+            let score = min(max((rawScore + 1) / 2, 0), 1)
+            scores[parentID] = max(scores[parentID] ?? 0, score)
+        }
+        return scores
+    }
+
+    func recordMemoryAccess(_ memories: [MemoryItem], at date: Date = Date()) {
+        guard !memories.isEmpty else { return }
+        let ids = Set(memories.map(\.id))
+        var shouldPersist = false
+        for index in cachedMemories.indices where ids.contains(cachedMemories[index].id) {
+            let previousCount = cachedMemories[index].accessCount
+            let previousAccess = cachedMemories[index].lastAccessedAt
+            cachedMemories[index].accessCount += 1
+            cachedMemories[index].lastAccessedAt = date
+            let count = cachedMemories[index].accessCount
+            let reachedPersistenceMilestone = count == 1 || (count & (count - 1)) == 0
+            let crossedDailyBoundary = previousAccess.map { date.timeIntervalSince($0) >= 86_400 } ?? true
+            shouldPersist = shouldPersist || reachedPersistenceMilestone || crossedDailyBoundary || previousCount == 0
+        }
+        if shouldPersist {
+            persistRawMemories()
+        }
     }
 
     func embeddingsWithRetry(for chunkTexts: [String]) async throws -> [[Float]] {
@@ -610,30 +644,32 @@ extension MemoryManager {
 
 extension MemoryItem {
     init(from indexItem: IndexItem) {
-        self.id = UUID(uuidString: indexItem.id) ?? UUID()
-        self.content = indexItem.text
-        self.embedding = indexItem.embedding
-
+        let createdAt: Date
         if let dateString = indexItem.metadata["createdAt"], let date = ISO8601DateFormatter().date(from: dateString) {
-            self.createdAt = date
+            createdAt = date
         } else {
-            self.createdAt = Date()
+            createdAt = Date()
         }
-
-        self.isArchived = false
+        self.init(
+            id: UUID(uuidString: indexItem.id) ?? UUID(),
+            content: indexItem.text,
+            embedding: indexItem.embedding,
+            createdAt: createdAt
+        )
     }
 
     init(from searchResult: SearchResult) {
-        self.id = UUID(uuidString: searchResult.id) ?? UUID()
-        self.content = searchResult.text
-        self.embedding = []
-
+        let createdAt: Date
         if let dateString = searchResult.metadata["createdAt"], let date = ISO8601DateFormatter().date(from: dateString) {
-            self.createdAt = date
+            createdAt = date
         } else {
-            self.createdAt = Date()
+            createdAt = Date()
         }
-
-        self.isArchived = false
+        self.init(
+            id: UUID(uuidString: searchResult.id) ?? UUID(),
+            content: searchResult.text,
+            embedding: [],
+            createdAt: createdAt
+        )
     }
 }

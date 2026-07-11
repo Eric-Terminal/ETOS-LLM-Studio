@@ -146,11 +146,7 @@ extension SyncEngine {
                 memory.id = UUID()
             }
 
-            let success = await memoryManager.restoreMemory(
-                id: memory.id,
-                content: memory.content,
-                createdAt: memory.createdAt
-            )
+            let success = await memoryManager.restoreMemory(memory)
 
             if success {
                 imported += 1
@@ -169,7 +165,7 @@ extension SyncEngine {
     ) -> (imported: Int, skipped: Int) {
         guard let incoming else { return (0, 0) }
         let incomingContent = incoming.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !incomingContent.isEmpty else { return (0, 1) }
+        guard !incomingContent.isEmpty || !incoming.facts.isEmpty else { return (0, 1) }
 
         guard let local = ConversationMemoryManager.loadUserProfile() else {
             do {
@@ -182,7 +178,8 @@ extension SyncEngine {
 
         let localContent = local.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalizeContent(localContent) == normalizeContent(incomingContent),
-           local.needsLLMDedup == incoming.needsLLMDedup {
+           local.needsLLMDedup == incoming.needsLLMDedup,
+           local.facts == incoming.facts {
             return (0, 1)
         }
 
@@ -205,13 +202,15 @@ extension SyncEngine {
         let sourceSessionID = incoming.updatedAt >= local.updatedAt
             ? incoming.sourceSessionID ?? local.sourceSessionID
             : local.sourceSessionID ?? incoming.sourceSessionID
+        let mergedFacts = mergedConversationProfileFacts(local.facts, incoming.facts)
 
         if localContent.isEmpty {
             return ConversationUserProfile(
                 content: incomingContent,
                 updatedAt: latestUpdatedAt,
                 sourceSessionID: sourceSessionID,
-                needsLLMDedup: incoming.needsLLMDedup
+                needsLLMDedup: incoming.needsLLMDedup,
+                facts: mergedFacts
             )
         }
         if incomingContent.isEmpty || normalizeContent(localContent) == normalizeContent(incomingContent) {
@@ -219,7 +218,8 @@ extension SyncEngine {
                 content: localContent,
                 updatedAt: latestUpdatedAt,
                 sourceSessionID: sourceSessionID,
-                needsLLMDedup: local.needsLLMDedup || incoming.needsLLMDedup
+                needsLLMDedup: local.needsLLMDedup || incoming.needsLLMDedup,
+                facts: mergedFacts
             )
         }
 
@@ -229,8 +229,40 @@ extension SyncEngine {
             content: stitched,
             updatedAt: latestUpdatedAt,
             sourceSessionID: sourceSessionID,
-            needsLLMDedup: stitchedSegments.count > 1 || local.needsLLMDedup || incoming.needsLLMDedup
+            needsLLMDedup: stitchedSegments.count > 1 || local.needsLLMDedup || incoming.needsLLMDedup,
+            facts: mergedFacts
         )
+    }
+
+    static func mergedConversationProfileFacts(
+        _ local: [ConversationProfileFact],
+        _ incoming: [ConversationProfileFact]
+    ) -> [ConversationProfileFact] {
+        var merged: [String: ConversationProfileFact] = [:]
+        for fact in local + incoming {
+            let key = "\(fact.category.rawValue)|\(normalizeContent(fact.statement))"
+            guard !key.hasSuffix("|") else { continue }
+            if let existing = merged[key] {
+                merged[key] = ConversationProfileFact(
+                    id: existing.id,
+                    category: fact.category,
+                    statement: fact.lastObservedAt >= existing.lastObservedAt ? fact.statement : existing.statement,
+                    confidence: max(existing.confidence, fact.confidence),
+                    evidenceCount: max(existing.evidenceCount, fact.evidenceCount),
+                    firstObservedAt: min(existing.firstObservedAt, fact.firstObservedAt),
+                    lastObservedAt: max(existing.lastObservedAt, fact.lastObservedAt),
+                    sourceSessionIDs: existing.sourceSessionIDs + fact.sourceSessionIDs
+                )
+            } else {
+                merged[key] = fact
+            }
+        }
+        return merged.values.sorted {
+            if $0.category == $1.category {
+                return $0.statement.localizedStandardCompare($1.statement) == .orderedAscending
+            }
+            return $0.category.rawValue < $1.category.rawValue
+        }
     }
 
     static func mergedConversationProfileSegments(_ local: String, _ incoming: String) -> [String] {

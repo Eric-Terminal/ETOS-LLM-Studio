@@ -236,14 +236,32 @@ public class MemoryManager {
 
     /// 添加一条新的记忆。
     public func addMemory(content: String) async {
+        await addMemory(MemoryWriteRequest(content: content))
+    }
+
+    /// 添加一条带结构化元数据的新记忆。
+    public func addMemory(_ request: MemoryWriteRequest) async {
         await initializationTask.value
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = request.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return }
         
-        let memory = MemoryItem(id: UUID(), content: trimmed, embedding: [], createdAt: Date())
+        let memory = MemoryItem(
+            id: UUID(),
+            content: trimmed,
+            embedding: [],
+            createdAt: Date(),
+            kind: request.kind,
+            source: request.source,
+            importance: request.importance,
+            confidence: request.confidence,
+            entities: request.entities,
+            validFrom: request.validFrom,
+            validUntil: request.validUntil,
+            sourceSessionID: request.sourceSessionID
+        )
         cacheMemory(memory)
         
         // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
@@ -268,13 +286,29 @@ public class MemoryManager {
     /// 从外部导入一条记忆（用于设备同步等场景）。
     @discardableResult
     public func restoreMemory(id: UUID, content: String, createdAt: Date) async -> Bool {
+        await restoreMemory(
+            MemoryItem(
+                id: id,
+                content: content,
+                embedding: [],
+                createdAt: createdAt,
+                source: .imported
+            )
+        )
+    }
+
+    /// 从同步或备份中恢复完整记忆元数据。
+    @discardableResult
+    public func restoreMemory(_ restoredMemory: MemoryItem) async -> Bool {
         await initializationTask.value
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = restoredMemory.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return false }
         
-        let memory = MemoryItem(id: id, content: trimmed, embedding: [], createdAt: createdAt)
+        var memory = restoredMemory
+        memory.content = trimmed
+        memory.embedding = []
         cacheMemory(memory)
         
         // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
@@ -308,10 +342,35 @@ public class MemoryManager {
         }
         let chunkTexts = chunker.chunk(text: trimmed)
         guard !chunkTexts.isEmpty else { return }
+        let existingMemory = cachedMemories.first(where: { $0.id == item.id })
+        let contentChanged = existingMemory?.content != trimmed
         
         // 更新时设置 updatedAt 为当前时间
-        let updatedMemory = MemoryItem(id: item.id, content: trimmed, embedding: [], createdAt: item.createdAt, updatedAt: Date(), isArchived: item.isArchived)
+        let updatedMemory = MemoryItem(
+            id: item.id,
+            content: trimmed,
+            embedding: existingMemory?.embedding ?? item.embedding,
+            createdAt: item.createdAt,
+            updatedAt: Date(),
+            isArchived: item.isArchived,
+            kind: item.kind,
+            source: item.source,
+            importance: item.importance,
+            confidence: item.confidence,
+            entities: item.entities,
+            validFrom: item.validFrom,
+            validUntil: item.validUntil,
+            sourceSessionID: item.sourceSessionID,
+            accessCount: item.accessCount,
+            lastAccessedAt: item.lastAccessedAt
+        )
         cacheMemory(updatedMemory)
+
+        // 仅修改分类、重要度或有效期时，已有文本向量仍然有效。
+        guard contentChanged else {
+            logger.info("已更新记忆元数据。")
+            return
+        }
         
         // 如果没有选择嵌入模型，只更新原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
@@ -378,7 +437,8 @@ public class MemoryManager {
     /// 获取激活的记忆（不包括归档的），用于发送给模型。
     public func getActiveMemories() async -> [MemoryItem] {
         await initializationTask.value
-        return cachedMemories.filter { !$0.isArchived }
+        let now = Date()
+        return cachedMemories.filter { $0.isValid(at: now) }
     }
 
     /// 重新构建所有记忆的嵌入，并清空旧的向量存储。
@@ -629,6 +689,45 @@ public class MemoryManager {
 
     // MARK: - 公开方法 (搜索)
 
+    /// 使用向量、词法、实体与时间信息进行混合检索；向量不可用时自动退化为本地检索。
+    public func searchMemoriesHybrid(query: String, topK: Int) async -> [MemoryItem] {
+        await initializationTask.value
+        guard topK > 0 else { return [] }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        var semanticScores: [UUID: Double] = [:]
+        if hasConfiguredEmbeddingModel(), !similarityIndex.indexItems.isEmpty {
+            do {
+                let embeddings = try await embeddingGenerator.generateEmbeddings(
+                    for: [trimmed],
+                    preferredModelID: preferredEmbeddingModelIdentifier()
+                )
+                if let queryEmbedding = embeddings.first,
+                   similarityIndex.dimension == 0 || similarityIndex.dimension == queryEmbedding.count {
+                    let candidateCount = min(max(topK * 8, 32), similarityIndex.indexItems.count)
+                    let results = similarityIndex.search(usingQueryEmbedding: queryEmbedding, top: candidateCount)
+                    semanticScores = parentSemanticScores(from: results)
+                } else if let queryEmbedding = embeddings.first {
+                    internalDimensionMismatchPublisher.send((query: queryEmbedding.count, index: similarityIndex.dimension))
+                }
+            } catch {
+                logger.warning("混合检索的向量通道不可用，继续使用本地词法通道：\(error.localizedDescription)")
+            }
+        }
+
+        let matches = MemoryHybridRetriever.rank(
+            query: trimmed,
+            tokens: keywordTokens(from: trimmed),
+            memories: cachedMemories,
+            semanticScores: semanticScores,
+            limit: topK
+        )
+        let memories = matches.map(\.memory)
+        recordMemoryAccess(memories)
+        return memories
+    }
+
     /// 根据查询文本搜索最相关的记忆。
     public func searchMemories(query: String, topK: Int) async -> [MemoryItem] {
         await initializationTask.value
@@ -670,6 +769,7 @@ public class MemoryManager {
                 requestedCount = min(requestedCount + topK, totalChunks)
             }
             
+            recordMemoryAccess(resolvedMemories)
             return resolvedMemories
         } catch {
             logger.error("记忆检索失败：\(error.localizedDescription)")
@@ -688,36 +788,15 @@ public class MemoryManager {
         let tokens = keywordTokens(from: trimmed)
         guard !tokens.isEmpty else { return [] }
 
-        let normalizedQuery = normalizedKeywordSearchText(trimmed)
-        let activeMemories = cachedMemories.filter { !$0.isArchived }
-        guard !activeMemories.isEmpty else { return [] }
-
-        let scoredMemories: [(memory: MemoryItem, score: Int)] = activeMemories.compactMap { memory in
-            let normalizedContent = normalizedKeywordSearchText(memory.content)
-            guard !normalizedContent.isEmpty else { return nil }
-
-            var score = 0
-            if !normalizedQuery.isEmpty, normalizedContent.contains(normalizedQuery) {
-                score += max(5, normalizedQuery.count) * 3
-            }
-
-            for token in tokens {
-                let hits = occurrenceCount(of: token, in: normalizedContent)
-                guard hits > 0 else { continue }
-                score += hits * max(1, token.count)
-            }
-
-            guard score > 0 else { return nil }
-            return (memory: memory, score: score)
-        }
-
-        let sorted = scoredMemories.sorted { lhs, rhs in
-            if lhs.score == rhs.score {
-                return lhs.memory.createdAt > rhs.memory.createdAt
-            }
-            return lhs.score > rhs.score
-        }
-
-        return Array(sorted.prefix(topK).map(\.memory))
+        let matches = MemoryHybridRetriever.rank(
+            query: trimmed,
+            tokens: tokens,
+            memories: cachedMemories,
+            semanticScores: [:],
+            limit: topK
+        )
+        let memories = matches.map(\.memory)
+        recordMemoryAccess(memories)
+        return memories
     }
 }

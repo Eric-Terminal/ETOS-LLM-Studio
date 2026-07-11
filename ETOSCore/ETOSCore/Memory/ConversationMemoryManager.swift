@@ -27,29 +27,94 @@ public struct ConversationSessionSummary: Identifiable, Codable, Hashable, Senda
     }
 }
 
+public enum ConversationProfileFactCategory: String, CaseIterable, Codable, Hashable, Sendable {
+    case identity
+    case communication
+    case expertise
+    case interest
+    case workStyle
+    case goal
+    case constraint
+    case relationship
+    case other
+
+    public var localizedTitle: String {
+        switch self {
+        case .identity: return NSLocalizedString("身份背景", comment: "Profile fact category")
+        case .communication: return NSLocalizedString("沟通偏好", comment: "Profile fact category")
+        case .expertise: return NSLocalizedString("技能与专长", comment: "Profile fact category")
+        case .interest: return NSLocalizedString("兴趣关注", comment: "Profile fact category")
+        case .workStyle: return NSLocalizedString("工作方式", comment: "Profile fact category")
+        case .goal: return NSLocalizedString("长期目标", comment: "Profile fact category")
+        case .constraint: return NSLocalizedString("约束与边界", comment: "Profile fact category")
+        case .relationship: return NSLocalizedString("长期关系", comment: "Profile fact category")
+        case .other: return NSLocalizedString("其他", comment: "Profile fact category")
+        }
+    }
+}
+
+public struct ConversationProfileFact: Identifiable, Codable, Hashable, Sendable {
+    public let id: UUID
+    public let category: ConversationProfileFactCategory
+    public let statement: String
+    public let confidence: Double
+    public let evidenceCount: Int
+    public let firstObservedAt: Date
+    public let lastObservedAt: Date
+    public let sourceSessionIDs: [UUID]
+
+    public init(
+        id: UUID = UUID(),
+        category: ConversationProfileFactCategory,
+        statement: String,
+        confidence: Double = 1,
+        evidenceCount: Int = 1,
+        firstObservedAt: Date = Date(),
+        lastObservedAt: Date = Date(),
+        sourceSessionIDs: [UUID] = []
+    ) {
+        self.id = id
+        self.category = category
+        self.statement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.confidence = min(max(confidence, 0), 1)
+        self.evidenceCount = max(1, evidenceCount)
+        self.firstObservedAt = firstObservedAt
+        self.lastObservedAt = lastObservedAt
+        self.sourceSessionIDs = Array(Set(sourceSessionIDs)).sorted { $0.uuidString < $1.uuidString }
+    }
+}
+
 public struct ConversationUserProfile: Codable, Hashable, Sendable {
     public let content: String
     public let updatedAt: Date
     public let sourceSessionID: UUID?
     public let needsLLMDedup: Bool
+    public let facts: [ConversationProfileFact]
+    public let schemaVersion: Int
 
     enum CodingKeys: String, CodingKey {
         case content
         case updatedAt
         case sourceSessionID
         case needsLLMDedup
+        case facts
+        case schemaVersion
     }
 
     public init(
         content: String,
         updatedAt: Date,
         sourceSessionID: UUID? = nil,
-        needsLLMDedup: Bool = false
+        needsLLMDedup: Bool = false,
+        facts: [ConversationProfileFact] = [],
+        schemaVersion: Int = 2
     ) {
         self.content = content
         self.updatedAt = updatedAt
         self.sourceSessionID = sourceSessionID
         self.needsLLMDedup = needsLLMDedup
+        self.facts = facts.filter { !$0.statement.isEmpty }
+        self.schemaVersion = max(1, schemaVersion)
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +123,24 @@ public struct ConversationUserProfile: Codable, Hashable, Sendable {
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         sourceSessionID = try container.decodeIfPresent(UUID.self, forKey: .sourceSessionID)
         needsLLMDedup = try container.decodeIfPresent(Bool.self, forKey: .needsLLMDedup) ?? false
+        facts = try container.decodeIfPresent([ConversationProfileFact].self, forKey: .facts) ?? []
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+    }
+
+    public var promptRepresentation: String {
+        guard !facts.isEmpty else { return content }
+        let grouped = Dictionary(grouping: facts, by: \.category)
+        let factBlocks = ConversationProfileFactCategory.allCases.compactMap { category -> String? in
+            guard let values = grouped[category], !values.isEmpty else { return nil }
+            let lines = values
+                .sorted { $0.confidence > $1.confidence }
+                .map { fact in
+                    "- \(fact.statement) [confidence=\(String(format: "%.2f", fact.confidence)), evidence=\(fact.evidenceCount)]"
+                }
+                .joined(separator: "\n")
+            return "<\(category.rawValue)>\n\(lines)\n</\(category.rawValue)>"
+        }
+        return ([content] + factBlocks).filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }
 
@@ -120,19 +203,25 @@ public enum ConversationMemoryManager {
         sourceSessionID: UUID? = nil,
         needsLLMDedup: Bool = false
     ) throws {
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            try clearUserProfile()
+            return
+        }
+        let existingFacts = loadUserProfile()?.facts ?? []
         try saveUserProfile(
             ConversationUserProfile(
                 content: content,
                 updatedAt: updatedAt,
                 sourceSessionID: sourceSessionID,
-                needsLLMDedup: needsLLMDedup
+                needsLLMDedup: needsLLMDedup,
+                facts: existingFacts
             )
         )
     }
 
     public static func saveUserProfile(_ profile: ConversationUserProfile) throws {
         let trimmed = profile.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        guard !trimmed.isEmpty || !profile.facts.isEmpty else {
             try clearUserProfile()
             return
         }
@@ -140,7 +229,9 @@ public enum ConversationMemoryManager {
             content: trimmed,
             updatedAt: profile.updatedAt,
             sourceSessionID: profile.sourceSessionID,
-            needsLLMDedup: profile.needsLLMDedup
+            needsLLMDedup: profile.needsLLMDedup,
+            facts: profile.facts,
+            schemaVersion: profile.schemaVersion
         )
         try profileStore.saveProfile(normalized)
         NotificationCenter.default.post(name: .conversationMemoryDidChange, object: nil)
@@ -164,6 +255,73 @@ public enum ConversationMemoryManager {
 
     public static func shouldUpdateUserProfile(on now: Date = Date(), calendar: Calendar = .current) -> Bool {
         shouldUpdateUserProfile(existingProfile: loadUserProfile(), on: now, calendar: calendar)
+    }
+
+    public static func decodeGeneratedProfile(
+        _ text: String,
+        updatedAt: Date = Date(),
+        sourceSessionID: UUID?
+    ) -> ConversationUserProfile? {
+        let normalized = normalizedGeneratedJSON(text)
+        guard let data = normalized.data(using: .utf8),
+              let document = try? JSONDecoder().decode(GeneratedProfileDocument.self, from: data) else {
+            let fallback = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !fallback.isEmpty else { return nil }
+            return ConversationUserProfile(
+                content: fallback,
+                updatedAt: updatedAt,
+                sourceSessionID: sourceSessionID
+            )
+        }
+        let facts = document.facts.compactMap { item -> ConversationProfileFact? in
+            let statement = item.statement.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !statement.isEmpty else { return nil }
+            return ConversationProfileFact(
+                category: ConversationProfileFactCategory(rawValue: item.category) ?? .other,
+                statement: statement,
+                confidence: item.confidence ?? 0.8,
+                evidenceCount: item.evidenceCount ?? 1,
+                firstObservedAt: updatedAt,
+                lastObservedAt: updatedAt,
+                sourceSessionIDs: sourceSessionID.map { [$0] } ?? []
+            )
+        }
+        let overview = (document.overview ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !overview.isEmpty || !facts.isEmpty else { return nil }
+        return ConversationUserProfile(
+            content: overview,
+            updatedAt: updatedAt,
+            sourceSessionID: sourceSessionID,
+            facts: facts
+        )
+    }
+
+    private static func normalizedGeneratedJSON(_ text: String) -> String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("```") {
+            let lines = value.split(separator: "\n", omittingEmptySubsequences: false)
+            if lines.count >= 3 {
+                value = lines.dropFirst().dropLast().joined(separator: "\n")
+            }
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private struct GeneratedProfileDocument: Decodable {
+        struct Fact: Decodable {
+            let category: String
+            let statement: String
+            let confidence: Double?
+            let evidenceCount: Int?
+
+            enum CodingKeys: String, CodingKey {
+                case category, statement, confidence
+                case evidenceCount = "evidence_count"
+            }
+        }
+
+        let overview: String?
+        let facts: [Fact]
     }
 }
 
@@ -253,7 +411,9 @@ private struct ConversationUserProfileStore {
                 content: record.content,
                 updatedAt: Date(timeIntervalSince1970: record.updatedAt),
                 sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
-                needsLLMDedup: record.needsLLMDedup != 0
+                needsLLMDedup: record.needsLLMDedup != 0,
+                facts: decodeFacts(record.factsJSON),
+                schemaVersion: record.schemaVersion
             )
         }) else {
             return (false, nil)
@@ -278,7 +438,9 @@ private struct ConversationUserProfileStore {
                 content: profile.content,
                 updatedAt: profile.updatedAt.timeIntervalSince1970,
                 sourceSessionID: profile.sourceSessionID?.uuidString,
-                needsLLMDedup: profile.needsLLMDedup ? 1 : 0
+                needsLLMDedup: profile.needsLLMDedup ? 1 : 0,
+                factsJSON: encodeFacts(profile.facts),
+                schemaVersion: profile.schemaVersion
             )
             try record.save(db)
             return true
@@ -334,8 +496,34 @@ private struct ConversationUserProfileStore {
             content: record.content,
             updatedAt: Date(timeIntervalSince1970: record.updatedAt),
             sourceSessionID: record.sourceSessionID.flatMap(UUID.init(uuidString:)),
-            needsLLMDedup: record.needsLLMDedup != 0
+            needsLLMDedup: record.needsLLMDedup != 0,
+            facts: decodeFacts(record.factsJSON),
+            schemaVersion: record.schemaVersion
         )
+    }
+
+    private static func encodeFacts(_ facts: [ConversationProfileFact]) -> String {
+        guard let data = try? JSONEncoder().encode(facts),
+              let json = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return json
+    }
+
+    private static func decodeFacts(_ json: String) -> [ConversationProfileFact] {
+        guard let data = json.data(using: .utf8),
+              let facts = try? JSONDecoder().decode([ConversationProfileFact].self, from: data) else {
+            return []
+        }
+        return facts
+    }
+
+    private func encodeFacts(_ facts: [ConversationProfileFact]) -> String {
+        Self.encodeFacts(facts)
+    }
+
+    private func decodeFacts(_ json: String) -> [ConversationProfileFact] {
+        Self.decodeFacts(json)
     }
 
     private struct RelationalConversationUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, TableRecord {
@@ -347,6 +535,8 @@ private struct ConversationUserProfileStore {
             case updatedAt = "updated_at"
             case sourceSessionID = "source_session_id"
             case needsLLMDedup = "needs_llm_dedup"
+            case factsJSON = "facts_json"
+            case schemaVersion = "schema_version"
         }
 
         var singletonKey: Int
@@ -354,5 +544,7 @@ private struct ConversationUserProfileStore {
         var updatedAt: Double
         var sourceSessionID: String?
         var needsLLMDedup: Int
+        var factsJSON: String
+        var schemaVersion: Int
     }
 }

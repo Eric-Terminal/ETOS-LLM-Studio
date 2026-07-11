@@ -8,6 +8,47 @@
 
 import Foundation
 
+/// 写入长期记忆时携带的结构化信息。
+public struct MemoryWriteRequest: Sendable {
+    public let content: String
+    public let kind: MemoryKind
+    public let source: MemorySource
+    public let importance: Double
+    public let confidence: Double
+    public let entities: [String]
+    public let validFrom: Date?
+    public let validUntil: Date?
+    public let sourceSessionID: UUID?
+
+    public init(
+        content: String,
+        kind: MemoryKind = .semantic,
+        source: MemorySource = .manual,
+        importance: Double = 0.5,
+        confidence: Double = 1,
+        entities: [String] = [],
+        validFrom: Date? = nil,
+        validUntil: Date? = nil,
+        sourceSessionID: UUID? = nil
+    ) {
+        self.content = content
+        self.kind = kind
+        self.source = source
+        self.importance = min(max(importance, 0), 1)
+        self.confidence = min(max(confidence, 0), 1)
+        self.entities = entities
+        self.validFrom = validFrom
+        self.validUntil = validUntil
+        self.sourceSessionID = sourceSessionID
+    }
+}
+
+public enum MemorySearchMode: String, Codable, Sendable {
+    case hybrid
+    case vector
+    case keyword
+}
+
 public struct MemoryEmbeddingRetryPolicy {
     public static let `default` = MemoryEmbeddingRetryPolicy()
 

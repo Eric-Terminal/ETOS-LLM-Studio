@@ -170,7 +170,8 @@ extension ChatService {
         guard isConversationProfileDailyUpdateEnabled() else { return }
         guard ConversationMemoryManager.shouldUpdateUserProfile(on: Date()) else { return }
 
-        let existingProfileText = ConversationMemoryManager.loadUserProfile()?.content ?? ""
+        let existingProfile = ConversationMemoryManager.loadUserProfile()
+        let existingProfileText = existingProfile?.promptRepresentation ?? ""
         let profileSystemPrompt = BuiltInPromptStore.render(.conversationProfileUpdateSystem)
         let profileUserPrompt = BuiltInPromptStore.render(
             .conversationProfileUpdateUser,
@@ -189,13 +190,20 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile)
-            guard !profileContent.isEmpty else { return }
-            try ConversationMemoryManager.saveUserProfile(
-                content: profileContent,
+            guard var generatedProfile = ConversationMemoryManager.decodeGeneratedProfile(
+                rawProfile,
                 updatedAt: Date(),
                 sourceSessionID: sessionID
-            )
+            ) else { return }
+            if generatedProfile.facts.isEmpty, let existingProfile, !existingProfile.facts.isEmpty {
+                generatedProfile = ConversationUserProfile(
+                    content: generatedProfile.content,
+                    updatedAt: generatedProfile.updatedAt,
+                    sourceSessionID: sessionID,
+                    facts: existingProfile.facts
+                )
+            }
+            try ConversationMemoryManager.saveUserProfile(generatedProfile)
         } catch {
             logger.warning("异步用户画像更新失败: \(error.localizedDescription)")
         }
@@ -211,7 +219,7 @@ extension ChatService {
         let systemPrompt = BuiltInPromptStore.render(.conversationProfileDedupSystem)
         let userPrompt = BuiltInPromptStore.render(
             .conversationProfileDedupUser,
-            variables: ["profile": profile.content]
+            variables: ["profile": profile.promptRepresentation]
         )
 
         do {
@@ -223,14 +231,20 @@ extension ChatService {
                 requestSource: .conversationProfile,
                 sessionID: sessionID
             )
-            let profileContent = sanitizeConversationMemoryText(rawProfile)
-            guard !profileContent.isEmpty else { return }
-            try ConversationMemoryManager.saveUserProfile(
-                content: profileContent,
+            guard var generatedProfile = ConversationMemoryManager.decodeGeneratedProfile(
+                rawProfile,
                 updatedAt: Date(),
-                sourceSessionID: profile.sourceSessionID,
-                needsLLMDedup: false
-            )
+                sourceSessionID: profile.sourceSessionID
+            ) else { return }
+            if generatedProfile.facts.isEmpty, !profile.facts.isEmpty {
+                generatedProfile = ConversationUserProfile(
+                    content: generatedProfile.content,
+                    updatedAt: generatedProfile.updatedAt,
+                    sourceSessionID: profile.sourceSessionID,
+                    facts: profile.facts
+                )
+            }
+            try ConversationMemoryManager.saveUserProfile(generatedProfile)
         } catch {
             logger.warning("用户画像同步去重失败: \(error.localizedDescription)")
         }

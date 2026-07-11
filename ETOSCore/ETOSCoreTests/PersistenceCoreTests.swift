@@ -340,7 +340,16 @@ struct PersistenceCoreTests {
             id: memoryAID,
             content: "记忆-A",
             embedding: [0.1, 0.2],
-            createdAt: createdAt
+            createdAt: createdAt,
+            kind: .preference,
+            source: .userStatement,
+            importance: 0.8,
+            confidence: 0.9,
+            entities: ["SwiftUI"],
+            validFrom: createdAt,
+            sourceSessionID: UUID(),
+            accessCount: 3,
+            lastAccessedAt: createdAt
         )
         let memoryB = MemoryItem(
             id: memoryBID,
@@ -360,7 +369,16 @@ struct PersistenceCoreTests {
             content: "记忆-A-已更新",
             embedding: [0.9, 0.8],
             createdAt: createdAt,
-            updatedAt: createdAt.addingTimeInterval(10)
+            updatedAt: createdAt.addingTimeInterval(10),
+            kind: memoryA.kind,
+            source: memoryA.source,
+            importance: memoryA.importance,
+            confidence: memoryA.confidence,
+            entities: memoryA.entities,
+            validFrom: memoryA.validFrom,
+            sourceSessionID: memoryA.sourceSessionID,
+            accessCount: memoryA.accessCount,
+            lastAccessedAt: memoryA.lastAccessedAt
         )
         try store.saveMemories([updatedMemoryA, memoryB])
 
@@ -376,6 +394,12 @@ struct PersistenceCoreTests {
         let loaded = store.loadMemories()
         #expect(loaded.contains(where: { $0.id == memoryAID && $0.content == "记忆-A-已更新" }))
         #expect(loaded.contains(where: { $0.id == memoryBID && $0.content == "记忆-B" }))
+        let loadedMemoryA = try #require(loaded.first(where: { $0.id == memoryAID }))
+        #expect(loadedMemoryA.kind == .preference)
+        #expect(loadedMemoryA.source == .userStatement)
+        #expect(loadedMemoryA.importance == 0.8)
+        #expect(loadedMemoryA.entities == ["SwiftUI"])
+        #expect(loadedMemoryA.accessCount == 3)
     }
 
     @Test("GRDB 在仅收到临时会话快照时不会误删已有会话")

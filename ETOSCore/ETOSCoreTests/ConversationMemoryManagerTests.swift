@@ -57,12 +57,7 @@ struct ConversationMemoryManagerTests {
         let previousProfile = ConversationMemoryManager.loadUserProfile()
         defer {
             if let previousProfile {
-                try? ConversationMemoryManager.saveUserProfile(
-                    content: previousProfile.content,
-                    updatedAt: previousProfile.updatedAt,
-                    sourceSessionID: previousProfile.sourceSessionID,
-                    needsLLMDedup: previousProfile.needsLLMDedup
-                )
+                try? ConversationMemoryManager.saveUserProfile(previousProfile)
             } else {
                 try? ConversationMemoryManager.clearUserProfile()
             }
@@ -70,11 +65,23 @@ struct ConversationMemoryManagerTests {
 
         let sourceSessionID = UUID()
         let updatedAt = Date(timeIntervalSince1970: 1_736_121_600)
+        let fact = ConversationProfileFact(
+            category: .workStyle,
+            statement: "关注跨平台客户端体验。",
+            confidence: 0.9,
+            evidenceCount: 2,
+            firstObservedAt: updatedAt,
+            lastObservedAt: updatedAt,
+            sourceSessionIDs: [sourceSessionID]
+        )
         try ConversationMemoryManager.saveUserProfile(
-            content: "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。",
-            updatedAt: updatedAt,
-            sourceSessionID: sourceSessionID,
-            needsLLMDedup: true
+            ConversationUserProfile(
+                content: "用户长期偏好：偏好技术实现细节，关注跨平台客户端体验。",
+                updatedAt: updatedAt,
+                sourceSessionID: sourceSessionID,
+                needsLLMDedup: true,
+                facts: [fact]
+            )
         )
 
         let loaded = ConversationMemoryManager.loadUserProfile()
@@ -82,9 +89,52 @@ struct ConversationMemoryManagerTests {
         #expect(loaded?.updatedAt == updatedAt)
         #expect(loaded?.sourceSessionID == sourceSessionID)
         #expect(loaded?.needsLLMDedup == true)
+        #expect(loaded?.facts == [fact])
+        #expect(loaded?.schemaVersion == 2)
 
         try ConversationMemoryManager.clearUserProfile()
         #expect(ConversationMemoryManager.loadUserProfile() == nil)
+    }
+
+    @Test("解析结构化用户画像并生成分区提示词")
+    func decodeStructuredUserProfile() throws {
+        let sessionID = UUID()
+        let raw = """
+        ```json
+        {
+          "overview": "用户重视 Apple 平台的原生体验。",
+          "facts": [
+            {
+              "category": "communication",
+              "statement": "默认使用简体中文并希望回答直接。",
+              "confidence": 0.95,
+              "evidence_count": 3
+            },
+            {
+              "category": "expertise",
+              "statement": "长期开发 SwiftUI 与 watchOS 项目。",
+              "confidence": 0.9,
+              "evidence_count": 2
+            }
+          ]
+        }
+        ```
+        """
+
+        let profile = try #require(
+            ConversationMemoryManager.decodeGeneratedProfile(
+                raw,
+                sourceSessionID: sessionID
+            )
+        )
+        #expect(profile.facts.count == 2)
+        #expect(profile.facts.allSatisfy { $0.sourceSessionIDs == [sessionID] })
+        #expect(profile.promptRepresentation.contains("<communication>"))
+        #expect(profile.promptRepresentation.contains("evidence=3"))
+
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(ConversationUserProfile.self, from: data)
+        #expect(decoded == profile)
     }
 
     @Test("persist session summary in session json")

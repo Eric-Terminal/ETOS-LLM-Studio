@@ -304,8 +304,9 @@ extension DailyPulseManager {
     }
 
     private func buildMemoryExcerpts() -> [String] {
-        memoryManager.currentMemoriesSnapshot()
-            .filter { !$0.isArchived }
+        let now = Date()
+        return memoryManager.currentMemoriesSnapshot()
+            .filter { $0.isValid(at: now) }
             .prefix(maxMemoriesInPrompt)
             .map { Self.truncated($0.content.trimmingCharacters(in: .whitespacesAndNewlines), limit: 120) }
             .filter { !$0.isEmpty }

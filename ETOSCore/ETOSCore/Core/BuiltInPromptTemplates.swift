@@ -566,7 +566,7 @@ private extension BuiltInPromptID {
                 comment: "System tool content description for save_memory."
             )
         case .searchMemoryToolDescription:
-            return NSLocalizedString(
+            let base = NSLocalizedString(
                 """
                 主动检索长期记忆，用于在回答前补充用户历史偏好、长期背景和已记录事实。
 
@@ -579,6 +579,7 @@ private extension BuiltInPromptID {
                 """,
                 comment: "System tool description for search_memory."
             )
+            return "\(base)\n\n\(NSLocalizedString("混合记忆检索模式说明", comment: "Hybrid memory search mode instruction"))"
         case .reasoningSummarySystem:
             return NSLocalizedString(
                 """
@@ -638,7 +639,7 @@ private extension BuiltInPromptID {
                 "{conversation}"
             )
         case .conversationProfileUpdateSystem:
-            return NSLocalizedString(
+            let base = NSLocalizedString(
                 """
                 你是用户画像整理助手。请根据“已有画像”和“最新会话摘要”输出更新后的用户画像。
                 约束：
@@ -649,6 +650,7 @@ private extension BuiltInPromptID {
                 """,
                 comment: "Conversation profile update system prompt"
             )
+            return "\(base)\n\n\(NSLocalizedString("用户画像结构化 JSON 输出约束", comment: "Conversation profile structured JSON output contract"))"
         case .conversationProfileUpdateUser:
             return String(
                 format: NSLocalizedString(
@@ -665,7 +667,7 @@ private extension BuiltInPromptID {
                 "{summary}"
             )
         case .conversationProfileDedupSystem:
-            return NSLocalizedString(
+            let base = NSLocalizedString(
                 """
                 你是用户画像去重助手。请把拼接后的多端用户画像压缩成一份一致画像。
                 约束：
@@ -676,6 +678,7 @@ private extension BuiltInPromptID {
                 """,
                 comment: "Conversation profile dedup system prompt"
             )
+            return "\(base)\n\n\(NSLocalizedString("用户画像结构化 JSON 输出约束", comment: "Conversation profile structured JSON output contract"))"
         case .conversationProfileDedupUser:
             return String(
                 format: NSLocalizedString(

@@ -514,4 +514,73 @@ struct MemoryManagerTests {
 
         await cleanup(memoryManager: memoryManager)
     }
+
+    @Test("混合检索融合重要度、实体与时间有效性")
+    func hybridRetrievalUsesMultipleSignalsAndValidity() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let expired = MemoryItem(
+            content: "用户以前喜欢深烘咖啡。",
+            embedding: [],
+            createdAt: now.addingTimeInterval(-100_000),
+            importance: 0.9,
+            entities: ["咖啡"],
+            validUntil: now.addingTimeInterval(-10)
+        )
+        let current = MemoryItem(
+            content: "用户现在喜欢浅烘咖啡。",
+            embedding: [],
+            createdAt: now,
+            kind: .preference,
+            importance: 0.8,
+            entities: ["咖啡"]
+        )
+        let lowImportance = MemoryItem(
+            content: "用户现在喜欢浅烘咖啡。",
+            embedding: [],
+            createdAt: now,
+            kind: .preference,
+            importance: 0.1,
+            entities: ["咖啡"]
+        )
+
+        let currentMatches = MemoryHybridRetriever.rank(
+            query: "用户现在喜欢什么咖啡",
+            tokens: ["用户", "现在", "喜欢", "咖啡"],
+            memories: [expired, lowImportance, current],
+            semanticScores: [current.id: 0.8, lowImportance.id: 0.8, expired.id: 0.9],
+            limit: 3,
+            now: now
+        )
+        #expect(!currentMatches.contains { $0.memory.id == expired.id })
+        #expect(currentMatches.first?.memory.id == current.id)
+
+        let historicalMatches = MemoryHybridRetriever.rank(
+            query: "用户以前喜欢什么咖啡",
+            tokens: ["用户", "以前", "喜欢", "咖啡"],
+            memories: [expired, current],
+            semanticScores: [expired.id: 0.9, current.id: 0.7],
+            limit: 2,
+            now: now
+        )
+        #expect(historicalMatches.contains { $0.memory.id == expired.id })
+    }
+
+    @Test("结构化记忆元数据可编码并兼容往返")
+    func structuredMemoryMetadataRoundTrip() throws {
+        let original = MemoryItem(
+            content: "用户偏好原生 SwiftUI 界面。",
+            embedding: [0.1, 0.2],
+            kind: .preference,
+            source: .userStatement,
+            importance: 0.85,
+            confidence: 0.95,
+            entities: ["SwiftUI", "Apple"],
+            sourceSessionID: UUID(),
+            accessCount: 4,
+            lastAccessedAt: Date()
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MemoryItem.self, from: data)
+        #expect(decoded == original)
+    }
 }

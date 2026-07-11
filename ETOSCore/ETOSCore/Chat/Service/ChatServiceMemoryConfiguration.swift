@@ -22,9 +22,44 @@ extension ChatService {
                 "content": .dictionary([
                     "type": .string("string"),
                     "description": .string(contentDescription)
+                ]),
+                "kind": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("记忆类型：semantic（事实）、preference（偏好）、episodic（经历）或 procedural（长期规则）。", comment: "Save memory kind description")),
+                    "enum": .array([.string("semantic"), .string("preference"), .string("episodic"), .string("procedural")])
+                ]),
+                "source": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("事实来源：user_statement 表示用户明确陈述，assistant_action 表示助手已确认完成的行为。", comment: "Save memory source description")),
+                    "enum": .array([.string("user_statement"), .string("assistant_action")])
+                ]),
+                "importance": .dictionary([
+                    "type": .string("number"),
+                    "minimum": .int(0),
+                    "maximum": .int(1),
+                    "description": .string(NSLocalizedString("长期重要度，范围 0 到 1；普通事实建议 0.5。", comment: "Save memory importance description"))
+                ]),
+                "confidence": .dictionary([
+                    "type": .string("number"),
+                    "minimum": .int(0),
+                    "maximum": .int(1),
+                    "description": .string(NSLocalizedString("事实置信度，用户明确陈述通常为 1。", comment: "Save memory confidence description"))
+                ]),
+                "entities": .dictionary([
+                    "type": .string("array"),
+                    "items": .dictionary(["type": .string("string")]),
+                    "description": .string(NSLocalizedString("内容涉及的人、项目、组织、产品或关键概念名称。", comment: "Save memory entities description"))
+                ]),
+                "valid_from": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("事实开始生效的 ISO 8601 时间，可省略。", comment: "Save memory valid from description"))
+                ]),
+                "valid_until": .dictionary([
+                    "type": .string("string"),
+                    "description": .string(NSLocalizedString("事实停止生效的 ISO 8601 时间，可省略；旧事实应保留而不是覆盖。", comment: "Save memory valid until description"))
                 ])
             ]),
-            "required": .array([.string("content")])
+            "required": .array([.string("content"), .string("kind"), .string("source")])
         ])
         return InternalToolDefinition(name: "save_memory", description: toolDescription, parameters: parameters, isBlocking: false)
     }
@@ -38,8 +73,8 @@ extension ChatService {
             "properties": .dictionary([
                 "mode": .dictionary([
                     "type": .string("string"),
-                    "description": .string(NSLocalizedString("检索模式：vector 或 keyword。", comment: "Search memory mode description")),
-                    "enum": .array([.string("vector"), .string("keyword")])
+                    "description": .string(NSLocalizedString("检索模式：hybrid（推荐）、vector 或 keyword。", comment: "Search memory mode description")),
+                    "enum": .array([.string("hybrid"), .string("vector"), .string("keyword")])
                 ]),
                 "query": .dictionary([
                     "type": .string("string"),

@@ -37,10 +37,31 @@ extension ChatService {
         case "save_memory":
             struct SaveMemoryArgs: Decodable {
                 let content: String
+                let kind: String?
+                let source: String?
+                let importance: Double?
+                let confidence: Double?
+                let entities: [String]?
+                let valid_from: String?
+                let valid_until: String?
             }
             if let argsData = toolCall.arguments.data(using: .utf8),
                let args = try? JSONDecoder().decode(SaveMemoryArgs.self, from: argsData) {
-                await self.memoryManager.addMemory(content: args.content)
+                let formatter = ISO8601DateFormatter()
+                let source: MemorySource = args.source == "assistant_action" ? .assistantAction : .userStatement
+                await self.memoryManager.addMemory(
+                    MemoryWriteRequest(
+                        content: args.content,
+                        kind: MemoryKind(rawValue: args.kind ?? "") ?? .semantic,
+                        source: source,
+                        importance: args.importance ?? 0.5,
+                        confidence: args.confidence ?? 1,
+                        entities: args.entities ?? [],
+                        validFrom: args.valid_from.flatMap(formatter.date(from:)),
+                        validUntil: args.valid_until.flatMap(formatter.date(from:)),
+                        sourceSessionID: sessionID
+                    )
+                )
                 content = String(format: NSLocalizedString("成功将内容 \"%@\" 存入记忆。", comment: "Save memory tool result"), args.content)
                 displayResult = content
                 logger.info("  - 记忆保存成功。")
@@ -77,12 +98,14 @@ extension ChatService {
             let requestedCount = max(1, args.count ?? resolvedMemoryTopK())
             var resolvedMemories: [MemoryItem] = []
             switch mode {
+            case "hybrid":
+                resolvedMemories = await memoryManager.searchMemoriesHybrid(query: query, topK: requestedCount)
             case "vector":
                 resolvedMemories = await memoryManager.searchMemories(query: query, topK: requestedCount)
             case "keyword":
                 resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
             default:
-                content = NSLocalizedString("错误：search_memory 的 mode 仅支持 vector 或 keyword。", comment: "Search memory unsupported mode error")
+                content = NSLocalizedString("错误：search_memory 的 mode 仅支持 hybrid、vector 或 keyword。", comment: "Search memory unsupported mode error")
                 displayResult = content
                 logger.error("  - search_memory mode 不支持: \(mode)")
                 break
@@ -337,8 +360,20 @@ extension ChatService {
         let items: [[String: Any]] = memories.map { memory in
             var item: [String: Any] = [
                 "id": memory.id.uuidString,
-                "content": memory.content
+                "content": memory.content,
+                "kind": memory.kind.rawValue,
+                "source": memory.source.rawValue,
+                "importance": memory.importance,
+                "confidence": memory.confidence,
+                "entities": memory.entities,
+                "accessCount": memory.accessCount
             ]
+            if let validFrom = memory.validFrom {
+                item["validFrom"] = formatter.string(from: validFrom)
+            }
+            if let validUntil = memory.validUntil {
+                item["validUntil"] = formatter.string(from: validUntil)
+            }
             if shouldSendMemoryUpdateTime() {
                 item["updatedAt"] = formatter.string(from: memory.updatedAt ?? memory.createdAt)
             }

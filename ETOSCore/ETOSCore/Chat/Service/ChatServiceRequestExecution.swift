@@ -81,7 +81,7 @@ extension ChatService {
             } else {
                 let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
                 if let queryText {
-                    memories = await self.memoryManager.searchMemories(query: queryText, topK: topK)
+                    memories = await self.memoryManager.searchMemoriesHybrid(query: queryText, topK: topK)
                 }
             }
             if !memories.isEmpty {

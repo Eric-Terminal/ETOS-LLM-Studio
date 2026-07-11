@@ -240,6 +240,36 @@ extension AppToolKind {
                     "is_archived": .dictionary([
                         "type": .string("boolean"),
                         "description": .string(NSLocalizedString("是否归档这条记忆。true 表示归档，false 表示恢复激活。", comment: "Memory edit tool archive parameter description"))
+                    ]),
+                    "kind": .dictionary([
+                        "type": .string("string"),
+                        "enum": .array(MemoryKind.allCases.map { .string($0.rawValue) }),
+                        "description": .string(NSLocalizedString("更新记忆类型。", comment: "Memory edit kind parameter description"))
+                    ]),
+                    "importance": .dictionary([
+                        "type": .string("number"),
+                        "minimum": .int(0),
+                        "maximum": .int(1),
+                        "description": .string(NSLocalizedString("更新长期重要度，范围 0 到 1。", comment: "Memory edit importance parameter description"))
+                    ]),
+                    "confidence": .dictionary([
+                        "type": .string("number"),
+                        "minimum": .int(0),
+                        "maximum": .int(1),
+                        "description": .string(NSLocalizedString("更新事实置信度，范围 0 到 1。", comment: "Memory edit confidence parameter description"))
+                    ]),
+                    "entities": .dictionary([
+                        "type": .string("array"),
+                        "items": .dictionary(["type": .string("string")]),
+                        "description": .string(NSLocalizedString("替换记忆关联的实体名称。", comment: "Memory edit entities parameter description"))
+                    ]),
+                    "valid_from": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("更新事实开始生效的 ISO 8601 时间。", comment: "Memory edit valid from parameter description"))
+                    ]),
+                    "valid_until": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("设置事实停止生效的 ISO 8601 时间，用于保留已被新事实取代的历史记录。", comment: "Memory edit valid until parameter description"))
                     ])
                 ]),
                 "required": .array([.string("memory_id")])

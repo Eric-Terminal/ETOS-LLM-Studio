@@ -55,11 +55,23 @@ extension ChatService {
         if !memories.isEmpty {
             let sendUpdateTime = shouldSendMemoryUpdateTime()
             let memoryStrings = memories.map { memory in
-                guard sendUpdateTime else {
-                    return "- \(memory.content)"
+                var metadata = ["type=\(memory.kind.promptLabel)"]
+                metadata.append("importance=\(String(format: "%.2f", memory.importance))")
+                metadata.append("confidence=\(String(format: "%.2f", memory.confidence))")
+                if !memory.entities.isEmpty {
+                    metadata.append("entities=\(memory.entities.joined(separator: ", "))")
                 }
-                let displayDate = (memory.updatedAt ?? memory.createdAt).formatted(date: .abbreviated, time: .shortened)
-                return "- (\(displayDate)): \(memory.content)"
+                if let validFrom = memory.validFrom {
+                    metadata.append("valid_from=\(validFrom.formatted(date: .abbreviated, time: .shortened))")
+                }
+                if let validUntil = memory.validUntil {
+                    metadata.append("valid_until=\(validUntil.formatted(date: .abbreviated, time: .shortened))")
+                }
+                if sendUpdateTime {
+                    let displayDate = (memory.updatedAt ?? memory.createdAt).formatted(date: .abbreviated, time: .shortened)
+                    metadata.append("updated_at=\(displayDate)")
+                }
+                return "- [\(metadata.joined(separator: "; "))] \(memory.content)"
             }
             let memoriesContent = memoryStrings.joined(separator: "\n")
             parts.append(BuiltInPromptStore.render(
@@ -85,7 +97,7 @@ extension ChatService {
             parts.append(BuiltInPromptStore.render(
                 .userProfileMemory,
                 variables: [
-                    "memory": conversationProfile.content,
+                    "memory": conversationProfile.promptRepresentation,
                     "updated_at": profileUpdatedAt
                 ]
             ))
