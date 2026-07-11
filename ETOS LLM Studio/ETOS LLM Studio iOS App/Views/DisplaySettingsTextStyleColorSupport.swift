@@ -20,9 +20,45 @@ struct ChatTextStyleColorSettingsView: View {
             ForEach(FontSemanticRole.allCases) { role in
                 textStyleSection(role)
             }
+
+            customRulesSection
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var customRulesSection: some View {
+        Section {
+            ForEach(styleColors.customRules) { rule in
+                NavigationLink {
+                    ChatTextColorRuleEditorView(
+                        rule: customRuleBinding(id: rule.id),
+                        fallback: fallback
+                    )
+                } label: {
+                    ChatTextColorRuleRow(rule: rule, fallback: fallback)
+                }
+            }
+            .onDelete(perform: deleteCustomRules)
+            .onMove(perform: moveCustomRules)
+
+            Button {
+                styleColors.customRules.append(
+                    ChatAppearanceTextColorRule(colorHex: bodyColor.hex)
+                )
+            } label: {
+                Label(
+                    NSLocalizedString("添加着色规则", comment: ""),
+                    systemImage: "plus"
+                )
+            }
+        } header: {
+            Text(NSLocalizedString("指定内容", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则按从上到下的顺序匹配；靠前规则优先。代码与公式会保留各自的专用颜色。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder
@@ -92,5 +128,28 @@ struct ChatTextStyleColorSettingsView: View {
                 slot.wrappedValue = updated
             }
         )
+    }
+
+    private func customRuleBinding(id: String) -> Binding<ChatAppearanceTextColorRule> {
+        Binding(
+            get: {
+                styleColors.customRules.first { $0.id == id }
+                    ?? ChatAppearanceTextColorRule(id: id, colorHex: bodyColor.hex)
+            },
+            set: { updatedRule in
+                guard let index = styleColors.customRules.firstIndex(where: { $0.id == id }) else {
+                    return
+                }
+                styleColors.customRules[index] = updatedRule
+            }
+        )
+    }
+
+    private func deleteCustomRules(at offsets: IndexSet) {
+        styleColors.customRules.remove(atOffsets: offsets)
+    }
+
+    private func moveCustomRules(from source: IndexSet, to destination: Int) {
+        styleColors.customRules.move(fromOffsets: source, toOffset: destination)
     }
 }

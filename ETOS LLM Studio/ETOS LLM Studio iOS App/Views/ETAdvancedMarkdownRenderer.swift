@@ -23,6 +23,8 @@ struct ETAdvancedMarkdownRenderer: View {
     var isStreaming: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var preparedRuleRequest: ChatAppearanceTextRuleRenderRequest?
+    @State private var ruleAttributedText: AttributedString?
 
     private var effectivePreparedContent: ETPreparedMarkdownRenderPayload? {
         guard let preparedContent, preparedContent.sourceText == content else {
@@ -34,47 +36,78 @@ struct ETAdvancedMarkdownRenderer: View {
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         let fontScale = FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts)
-        if enableMarkdown {
-            if let streamingLineParts {
-                streamingLineMarkdownView(
-                    prefix: streamingLineParts.prefix,
-                    activeLine: streamingLineParts.activeLine,
-                    textColor: textColor,
-                    fontScale: fontScale
-                )
-            } else if let prepared = effectivePreparedContent {
-                if shouldUseWebRenderer(prepared) {
-                    ETMathWebMarkdownView(
-                        content: prepared.normalizedText,
-                        enableMarkdown: enableMarkdown,
-                        isOutgoing: isOutgoing,
-                        customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
-                        customEmphasisTextHex: enabledHex(customTextStyleColors?.emphasis),
-                        customStrongTextHex: enabledHex(customTextStyleColors?.strong),
-                        customCodeTextHex: enabledHex(customTextStyleColors?.code),
-                        prefersDarkPalette: colorScheme == .dark,
+        Group {
+            if preparedRuleRequest == ruleRenderRequest,
+               let ruleAttributedText {
+                Text(ruleAttributedText)
+                    .etFont(.body, sampleText: content)
+                    .foregroundStyle(textColor)
+            } else if enableMarkdown {
+                if let streamingLineParts {
+                    streamingLineMarkdownView(
+                        prefix: streamingLineParts.prefix,
+                        activeLine: streamingLineParts.activeLine,
+                        textColor: textColor,
                         fontScale: fontScale
                     )
+                } else if let prepared = effectivePreparedContent {
+                    if shouldUseWebRenderer(prepared) {
+                        ETMathWebMarkdownView(
+                            content: prepared.normalizedText,
+                            enableMarkdown: enableMarkdown,
+                            isOutgoing: isOutgoing,
+                            customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },
+                            customEmphasisTextHex: enabledHex(customTextStyleColors?.emphasis),
+                            customStrongTextHex: enabledHex(customTextStyleColors?.strong),
+                            customCodeTextHex: enabledHex(customTextStyleColors?.code),
+                            prefersDarkPalette: colorScheme == .dark,
+                            fontScale: fontScale
+                        )
+                    } else {
+                        let markdownContent = resolvedMarkdownContent(for: prepared)
+                        markdownTextView(
+                            markdownContent: markdownContent,
+                            sampleText: prepared.sourceText,
+                            textColor: textColor,
+                            fontScale: fontScale
+                        )
+                    }
                 } else {
-                    let markdownContent = resolvedMarkdownContent(for: prepared)
                     markdownTextView(
-                        markdownContent: markdownContent,
-                        sampleText: prepared.sourceText,
+                        markdownContent: MarkdownContent(content),
+                        sampleText: content,
                         textColor: textColor,
                         fontScale: fontScale
                     )
                 }
             } else {
-                markdownTextView(
-                    markdownContent: MarkdownContent(content),
-                    sampleText: content,
-                    textColor: textColor,
-                    fontScale: fontScale
-                )
+                plainTextView(content, textColor: textColor)
             }
-        } else {
-            plainTextView(content, textColor: textColor)
         }
+        .task(id: ruleRenderRequest) {
+            guard let request = ruleRenderRequest else {
+                preparedRuleRequest = nil
+                ruleAttributedText = nil
+                return
+            }
+            let prepared = await ChatAppearanceTextRuleRenderer.shared.prepare(request: request)
+            guard !Task.isCancelled else { return }
+            preparedRuleRequest = request
+            ruleAttributedText = prepared
+        }
+    }
+
+    private var ruleRenderRequest: ChatAppearanceTextRuleRenderRequest? {
+        guard !isStreaming,
+              let customTextStyleColors,
+              !customTextStyleColors.customRules.isEmpty else {
+            return nil
+        }
+        return ChatAppearanceTextRuleRenderRequest(
+            source: content,
+            usesMarkdown: enableMarkdown,
+            styleColors: customTextStyleColors
+        )
     }
 
     // 流式期间只把短的最后一行作为活动文本，避免整泡切纯文本或扫过气泡背景。
