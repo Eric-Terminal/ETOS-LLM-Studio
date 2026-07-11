@@ -199,6 +199,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var memoryTopK: Int { didSet { write(.memoryTopK, memoryTopK) } }
     @Published public var memorySendUpdateTime: Bool { didSet { write(.memorySendUpdateTime, memorySendUpdateTime) } }
     @Published public var memoryReembeddingConcurrencyLimit: Int { didSet { write(.memoryReembeddingConcurrencyLimit, memoryReembeddingConcurrencyLimit) } }
+    @Published public var enableMemoryAutoConsolidation: Bool { didSet { write(.enableMemoryAutoConsolidation, enableMemoryAutoConsolidation) } }
     @Published public var enableConversationMemoryAsync: Bool { didSet { write(.enableConversationMemoryAsync, enableConversationMemoryAsync) } }
     @Published public var conversationMemoryRecentLimit: Int { didSet { write(.conversationMemoryRecentLimit, conversationMemoryRecentLimit) } }
     @Published public var conversationMemoryRoundThreshold: Int { didSet { write(.conversationMemoryRoundThreshold, conversationMemoryRoundThreshold) } }
@@ -359,6 +360,7 @@ public final class AppConfigStore: ObservableObject {
         memoryTopK = Self.integerValue(.memoryTopK, userDefaults: userDefaults)
         memorySendUpdateTime = Self.boolValue(.memorySendUpdateTime, userDefaults: userDefaults)
         memoryReembeddingConcurrencyLimit = Self.integerValue(.memoryReembeddingConcurrencyLimit, userDefaults: userDefaults)
+        enableMemoryAutoConsolidation = Self.boolValue(.enableMemoryAutoConsolidation, userDefaults: userDefaults)
         enableConversationMemoryAsync = Self.boolValue(.enableConversationMemoryAsync, userDefaults: userDefaults)
         conversationMemoryRecentLimit = Self.integerValue(.conversationMemoryRecentLimit, userDefaults: userDefaults)
         conversationMemoryRoundThreshold = Self.integerValue(.conversationMemoryRoundThreshold, userDefaults: userDefaults)
@@ -779,7 +781,8 @@ public final class AppConfigStore: ObservableObject {
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
-             .localDebugLastServerAddress:
+             .localDebugLastServerAddress,
+             .memoryAutoConsolidationState:
             return Self.cachedValue(for: key) ?? key.defaultValue
         case .appLockEnabled: return .bool(appLockEnabled)
         case .appLockTimeoutSeconds: return .integer(appLockTimeoutSeconds)
@@ -812,6 +815,7 @@ public final class AppConfigStore: ObservableObject {
         case .memoryTopK: return .integer(memoryTopK)
         case .memorySendUpdateTime: return .bool(memorySendUpdateTime)
         case .memoryReembeddingConcurrencyLimit: return .integer(memoryReembeddingConcurrencyLimit)
+        case .enableMemoryAutoConsolidation: return .bool(enableMemoryAutoConsolidation)
         case .enableConversationMemoryAsync: return .bool(enableConversationMemoryAsync)
         case .conversationMemoryRecentLimit: return .integer(conversationMemoryRecentLimit)
         case .conversationMemoryRoundThreshold: return .integer(conversationMemoryRoundThreshold)
@@ -951,6 +955,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableMemoryWrite: enableMemoryWrite = value
         case .enableMemoryActiveRetrieval: enableMemoryActiveRetrieval = value
         case .memorySendUpdateTime: memorySendUpdateTime = value
+        case .enableMemoryAutoConsolidation: enableMemoryAutoConsolidation = value
         case .enableConversationMemoryAsync: enableConversationMemoryAsync = value
         case .enableConversationProfileDailyUpdate: enableConversationProfileDailyUpdate = value
         case .enableMarkdown: enableMarkdown = value

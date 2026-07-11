@@ -101,6 +101,19 @@ struct MemorySettingsView: View {
             }
 
             Section {
+                Toggle(
+                    NSLocalizedString("低频自动整理", comment: "Memory auto consolidation toggle title"),
+                    isOn: $appConfig.enableMemoryAutoConsolidation
+                )
+            } header: {
+                Text(NSLocalizedString("自动整理", comment: "Memory auto consolidation section title"))
+            } footer: {
+                Text(NSLocalizedString("长期记忆自动整理说明", comment: "Memory auto consolidation footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 NavigationLink {
                     MemoryDataMaintenanceView()
                         .environmentObject(viewModel)

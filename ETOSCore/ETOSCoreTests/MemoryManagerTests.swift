@@ -583,4 +583,128 @@ struct MemoryManagerTests {
         let decoded = try JSONDecoder().decode(MemoryItem.self, from: data)
         #expect(decoded == original)
     }
+
+    @Test("长期记忆整理达到数量与时间门槛后才触发")
+    func memoryConsolidationRespectsLowFrequencyPolicy() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let memories = (0..<8).map { index in
+            MemoryItem(
+                content: "长期记忆 \(index)",
+                embedding: [],
+                createdAt: now.addingTimeInterval(Double(index - 20))
+            )
+        }
+
+        #expect(LongTermMemoryConsolidationPlanner.shouldRun(
+            memories: memories,
+            state: MemoryConsolidationState(),
+            now: now
+        ))
+
+        #expect(!LongTermMemoryConsolidationPlanner.shouldRun(
+            memories: memories,
+            state: MemoryConsolidationState(lastAttemptAt: now.addingTimeInterval(-60), lastSuccessAt: nil),
+            now: now
+        ))
+
+        #expect(!LongTermMemoryConsolidationPlanner.shouldRun(
+            memories: memories,
+            state: MemoryConsolidationState(lastAttemptAt: nil, lastSuccessAt: now.addingTimeInterval(-10)),
+            now: now
+        ))
+    }
+
+    @Test("长期记忆整理只接受通过本地相似度校验的重复项")
+    func memoryConsolidationRejectsUnrelatedModelSuggestions() {
+        let keeper = MemoryItem(
+            content: "用户偏好原生 SwiftUI 界面。",
+            embedding: [1, 0, 0],
+            kind: .preference,
+            entities: ["SwiftUI"]
+        )
+        let duplicate = MemoryItem(
+            content: "用户偏好原生 SwiftUI 界面",
+            embedding: [0.99, 0.01, 0],
+            kind: .preference,
+            entities: ["SwiftUI"]
+        )
+        let unrelated = MemoryItem(
+            content: "用户每周末跑步。",
+            embedding: [0, 1, 0],
+            kind: .preference,
+            entities: ["跑步"]
+        )
+        let response = """
+        {
+          "groups": [
+            {
+              "keeper_id": "\(keeper.id.uuidString)",
+              "duplicate_ids": ["\(duplicate.id.uuidString)", "\(unrelated.id.uuidString)"],
+              "canonical_content": "用户偏好原生 SwiftUI 界面。"
+            }
+          ]
+        }
+        """
+
+        let plan = LongTermMemoryConsolidationPlanner.plan(
+            from: response,
+            candidates: [keeper, duplicate, unrelated]
+        )
+        #expect(plan?.merges.count == 1)
+        #expect(plan?.merges.first?.keeperID == keeper.id)
+        #expect(plan?.merges.first?.duplicateIDs == [duplicate.id])
+    }
+
+    @Test("长期记忆整理拒绝跨类型合并")
+    func memoryConsolidationRejectsCrossKindMerge() {
+        let fact = MemoryItem(
+            content: "用户使用 Swift。",
+            embedding: [1, 0],
+            kind: .semantic
+        )
+        let rule = MemoryItem(
+            content: "用户使用 Swift。",
+            embedding: [1, 0],
+            kind: .procedural
+        )
+        let response = """
+        {"groups":[{"keeper_id":"\(fact.id.uuidString)","duplicate_ids":["\(rule.id.uuidString)"],"canonical_content":"用户使用 Swift。"}]}
+        """
+
+        let plan = LongTermMemoryConsolidationPlanner.plan(
+            from: response,
+            candidates: [fact, rule]
+        )
+        #expect(plan?.merges.isEmpty == true)
+    }
+
+    @Test("长期记忆整理用新事实结束旧事实的有效期")
+    func memoryConsolidationBuildsValidatedSupersession() {
+        let oldDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let newDate = oldDate.addingTimeInterval(86_400)
+        let oldMemory = MemoryItem(
+            content: "用户当前使用模型 Alpha。",
+            embedding: [0.9, 0.1],
+            createdAt: oldDate,
+            kind: .semantic,
+            entities: ["模型"]
+        )
+        let newMemory = MemoryItem(
+            content: "用户当前使用模型 Beta。",
+            embedding: [0.88, 0.12],
+            createdAt: newDate,
+            kind: .semantic,
+            entities: ["模型"]
+        )
+        let response = """
+        {"groups":[],"supersessions":[{"older_id":"\(oldMemory.id.uuidString)","newer_id":"\(newMemory.id.uuidString)"}]}
+        """
+
+        let plan = LongTermMemoryConsolidationPlanner.plan(
+            from: response,
+            candidates: [oldMemory, newMemory]
+        )
+        #expect(plan?.supersessions.count == 1)
+        #expect(plan?.supersessions.first?.validUntil == newDate)
+    }
 }

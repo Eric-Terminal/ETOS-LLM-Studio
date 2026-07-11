@@ -4914,3 +4914,9 @@
 "选择头像" = "Choose Avatar";
 "已选择新头像" = "New Avatar Selected";
 "已设置头像" = "Avatar Configured";
+"自动整理" = "Automatic Organization";
+"低频自动整理" = "Low-Frequency Auto Organization";
+"长期记忆自动整理说明" = "After at least 8 new memories accumulate and 24 hours have passed since the last attempt, the summary model checks duplicates and clear fact changes. Duplicates are archived, while old facts receive an end time; nothing is deleted.";
+"记忆整理" = "Memory Organization";
+"长期记忆整理系统提示词" = "You organize long-term memories. Put exact semantic duplicates in groups. When a clearly newer fact replaces an older fact about the same attribute, put that pair in supersessions; do not treat complementary information or uncertain contradictions as replacement. Never combine different memory kinds. Use only input IDs. Return strict JSON: {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"one complete and accurate merged memory\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Use empty arrays when there are no safe operations. Do not output explanations or Markdown.";
+"长期记忆整理用户提示词" = "Review the following long-term memory candidates and return safe duplicate groups:\n%@";

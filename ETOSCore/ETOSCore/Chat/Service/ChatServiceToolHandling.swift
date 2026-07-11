@@ -65,6 +65,10 @@ extension ChatService {
                 content = String(format: NSLocalizedString("成功将内容 \"%@\" 存入记忆。", comment: "Save memory tool result"), args.content)
                 displayResult = content
                 logger.info("  - 记忆保存成功。")
+                scheduleLongTermMemoryConsolidationIfNeeded(
+                    for: sessionID,
+                    enableMemory: true
+                )
             } else {
                 content = NSLocalizedString("错误：无法解析 save_memory 的参数。", comment: "Save memory args parse error")
                 displayResult = content

@@ -144,6 +144,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case memoryTopK = "memoryTopK"
     case memorySendUpdateTime = "memory.sendUpdateTime"
     case memoryReembeddingConcurrencyLimit = "memoryReembedding.concurrencyLimit"
+    case enableMemoryAutoConsolidation = "memory.autoConsolidation.enabled"
+    case memoryAutoConsolidationState = "memory.autoConsolidation.state"
     case enableConversationMemoryAsync = "enableConversationMemoryAsync"
     case conversationMemoryRecentLimit = "conversationMemoryRecentLimit"
     case conversationMemoryRoundThreshold = "conversationMemoryRoundThreshold"
@@ -344,6 +346,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .enableMemory,
              .enableMemoryWrite,
              .memorySendUpdateTime,
+             .enableMemoryAutoConsolidation,
              .enableConversationMemoryAsync,
              .enableConversationProfileDailyUpdate:
             return .bool(true)
@@ -353,6 +356,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .integer(3)
         case .memoryReembeddingConcurrencyLimit:
             return .integer(1)
+        case .memoryAutoConsolidationState:
+            return .text("")
         case .conversationMemoryRecentLimit:
             return .integer(5)
         case .conversationMemoryRoundThreshold:
@@ -507,6 +512,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .requestLogPlainMessageEnabled,
              .watchUseThirdPartyKeyboard,
              .localDebugLastServerAddress,
+             .memoryAutoConsolidationState,
              .appLockEnabled,
              .appLockTimeoutSeconds,
              .appLockBiometricEnabled,

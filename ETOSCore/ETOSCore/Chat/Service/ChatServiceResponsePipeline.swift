@@ -675,6 +675,7 @@ extension ChatService {
             updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
+            scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
@@ -820,6 +821,7 @@ extension ChatService {
             )
         } else {
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
+            scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
         }
     }

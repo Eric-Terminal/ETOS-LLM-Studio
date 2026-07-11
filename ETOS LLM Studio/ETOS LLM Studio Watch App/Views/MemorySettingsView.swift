@@ -123,6 +123,18 @@ public struct MemorySettingsView: View {
             }
 
             Section(
+                header: Text(NSLocalizedString("自动整理", comment: "Memory auto consolidation section title")),
+                footer: Text(NSLocalizedString("长期记忆自动整理说明", comment: "Memory auto consolidation footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("低频自动整理", comment: "Memory auto consolidation toggle title"),
+                    isOn: $appConfig.enableMemoryAutoConsolidation
+                )
+            }
+
+            Section(
                 header: Text(NSLocalizedString("数据维护", comment: "")),
                 footer: Text(NSLocalizedString("进入后可重新生成全部嵌入，并查看每条记忆的处理状态。", comment: ""))
                     .etFont(.footnote)
