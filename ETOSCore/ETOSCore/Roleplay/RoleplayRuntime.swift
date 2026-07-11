@@ -52,8 +52,9 @@ enum RoleplayRuntime {
             lastCharacterMessage: lastCharacterMessage,
             userAvatarPath: persona?.avatarFileName ?? "",
             characterAvatarPath: characters.first?.avatarFileName ?? "",
-            currentSwipeID: messageContext.map { $0.getCurrentVersionIndex() + 1 },
-            lastSwipeID: messageContext.map { $0.getAllVersions().count },
+            currentSwipeID: messageContext.map { $0.getCurrentVersionIndex() },
+            lastSwipeID: messageContext.map { max(0, $0.getAllVersions().count - 1) },
+            messageCount: messages.count,
             chatSeed: sessionID.uuidString,
             customValues: variables.customMacros
         )

@@ -142,6 +142,22 @@ struct RoleplayCompatibilityTests {
         #expect(output == "旅行者，去海边吧 / 星野")
     }
 
+    @Test("宏兼容旧名称、楼层、裁剪、注释与日期格式")
+    func resolveLegacyAndUtilityMacros() {
+        let context = RoleplayMacroContext(
+            character: RoleplayCharacter(name: "星野"),
+            persona: PersonaProfile(name: "旅行者"),
+            lastUserMessage: "继续",
+            messageCount: 4,
+            now: Date(timeIntervalSince1970: 0),
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        let input = "<USER>/<BOT> {{lastMessageId}} {{input}}\n{{trim}}\n{{reverse:{{user}}}} {{isodate}} {{//隐藏}}"
+        let output = RoleplayMacroResolver.resolve(input, context: context)
+
+        #expect(output == "旅行者/星野 3 继续者行旅 1970-01-01 ")
+    }
+
     @Test("消息变量按消息版本隔离")
     func isolateMessageVersions() {
         let messageID = UUID()

@@ -307,3 +307,12 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         }
     }
 }
+
+struct RoleplaySharedVariableSnapshot: Codable, Sendable {
+    var global: [String: JSONValue] = [:]
+    var preset: [String: JSONValue] = [:]
+    var characters: [UUID: [String: JSONValue]] = [:]
+    var personas: [UUID: [String: JSONValue]] = [:]
+    var globalInitialized: Bool?
+    var presetInitialized: Bool?
+}

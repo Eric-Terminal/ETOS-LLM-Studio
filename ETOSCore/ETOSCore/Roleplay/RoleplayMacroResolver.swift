@@ -21,6 +21,7 @@ public struct RoleplayMacroContext: Sendable {
     public var characterAvatarPath: String
     public var currentSwipeID: Int?
     public var lastSwipeID: Int?
+    public var messageCount: Int
     public var now: Date
     public var locale: Locale
     public var chatSeed: String
@@ -39,6 +40,7 @@ public struct RoleplayMacroContext: Sendable {
         characterAvatarPath: String = "",
         currentSwipeID: Int? = nil,
         lastSwipeID: Int? = nil,
+        messageCount: Int = 0,
         now: Date = Date(),
         locale: Locale = .current,
         chatSeed: String = "",
@@ -56,6 +58,7 @@ public struct RoleplayMacroContext: Sendable {
         self.characterAvatarPath = characterAvatarPath
         self.currentSwipeID = currentSwipeID
         self.lastSwipeID = lastSwipeID
+        self.messageCount = max(0, messageCount)
         self.now = now
         self.locale = locale
         self.chatSeed = chatSeed
@@ -65,8 +68,13 @@ public struct RoleplayMacroContext: Sendable {
 
 public enum RoleplayMacroResolver {
     public static func resolve(_ input: String, context: RoleplayMacroContext) -> String {
-        guard input.contains("{{") else { return input }
-        var output = replaceCustomMacros(in: input, values: context.customValues)
+        guard input.contains("{{") || input.range(of: #"<(?:USER|BOT|CHAR|GROUP|CHARIFNOTGROUP)>"#, options: [.regularExpression, .caseInsensitive]) != nil else {
+            return input
+        }
+        var output = replaceLegacyNames(in: input, context: context)
+        output = replaceMacroComments(in: output)
+        output = replaceTrimMacros(in: output)
+        output = replaceCustomMacros(in: output, values: context.customValues)
         output = replaceVariableMacros(output, context: context, formatted: true)
         output = replaceVariableMacros(output, context: context, formatted: false)
         output = replaceListMacro(output, name: "random") { values, _ in
@@ -79,6 +87,9 @@ public enum RoleplayMacroResolver {
         }
         output = replaceRollMacros(output)
         output = replaceSimpleMacros(output, values: simpleValues(context))
+        output = replaceReverseMacros(in: output)
+        output = replaceUTCtimeMacros(in: output, context: context)
+        output = replaceDateFormatMacros(in: output, context: context)
         return output
     }
 
@@ -97,6 +108,14 @@ public enum RoleplayMacroResolver {
         weekdayFormatter.locale = context.locale
         weekdayFormatter.dateFormat = "EEEE"
 
+        let isoDateFormatter = DateFormatter()
+        isoDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        isoDateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let isoTimeFormatter = DateFormatter()
+        isoTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        isoTimeFormatter.dateFormat = "HH:mm"
+
         var values: [String: String] = [
             "user": context.persona?.name ?? "User",
             "persona": context.persona?.description ?? "",
@@ -114,16 +133,109 @@ public enum RoleplayMacroResolver {
             "charavatarpath": context.characterAvatarPath,
             "currentswipeid": context.currentSwipeID.map(String.init) ?? "",
             "lastswipeid": context.lastSwipeID.map(String.init) ?? "",
+            "lastmessageid": context.messageCount > 0 ? String(context.messageCount - 1) : "",
+            "firstincludedmessageid": context.messageCount > 0 ? "0" : "",
+            "firstdisplayedmessageid": context.messageCount > 0 ? "0" : "",
             "date": dateFormatter.string(from: context.now),
             "time": timeFormatter.string(from: context.now),
             "weekday": weekdayFormatter.string(from: context.now),
+            "isodate": isoDateFormatter.string(from: context.now),
+            "isotime": isoTimeFormatter.string(from: context.now),
             "newline": "\n",
+            "noop": "",
+            "input": context.lastUserMessage,
+            "group": context.character?.name ?? "Assistant",
+            "charifnotgroup": context.character?.name ?? "Assistant",
             "ismobile": "true"
         ]
         for (key, value) in context.customValues {
             values[key.lowercased()] = value
         }
         return values
+    }
+
+    private static func replaceLegacyNames(in input: String, context: RoleplayMacroContext) -> String {
+        let values = [
+            "<USER>": context.persona?.name ?? "User",
+            "<BOT>": context.character?.name ?? "Assistant",
+            "<CHAR>": context.character?.name ?? "Assistant",
+            "<GROUP>": context.character?.name ?? "Assistant",
+            "<CHARIFNOTGROUP>": context.character?.name ?? "Assistant"
+        ]
+        return values.reduce(input) { output, item in
+            output.replacingOccurrences(of: item.key, with: item.value, options: .caseInsensitive)
+        }
+    }
+
+    private static func replaceMacroComments(in input: String) -> String {
+        input.replacingOccurrences(
+            of: #"\{\{\/\/[\s\S]*?\}\}"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private static func replaceTrimMacros(in input: String) -> String {
+        input.replacingOccurrences(
+            of: #"(?:\r?\n)*\{\{\s*trim\s*\}\}(?:\r?\n)*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+    }
+
+    private static func replaceReverseMacros(in input: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\{\{\s*reverse:(.+?)\}\}"#, options: [.caseInsensitive]) else {
+            return input
+        }
+        let source = input as NSString
+        let result = NSMutableString(string: input)
+        for match in regex.matches(in: input, range: NSRange(location: 0, length: source.length)).reversed() {
+            guard match.numberOfRanges > 1 else { continue }
+            let value = source.substring(with: match.range(at: 1))
+            result.replaceCharacters(in: match.range, with: String(value.reversed()))
+        }
+        return result as String
+    }
+
+    private static func replaceUTCtimeMacros(in input: String, context: RoleplayMacroContext) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\{\{\s*time_UTC([-+]\d+)\s*\}\}"#, options: [.caseInsensitive]) else {
+            return input
+        }
+        let source = input as NSString
+        let result = NSMutableString(string: input)
+        for match in regex.matches(in: input, range: NSRange(location: 0, length: source.length)).reversed() {
+            guard match.numberOfRanges > 1,
+                  let offset = Int(source.substring(with: match.range(at: 1))),
+                  (-24...24).contains(offset) else { continue }
+            let formatter = DateFormatter()
+            formatter.locale = context.locale
+            formatter.timeZone = TimeZone(secondsFromGMT: offset * 3600)
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+            result.replaceCharacters(in: match.range, with: formatter.string(from: context.now))
+        }
+        return result as String
+    }
+
+    private static func replaceDateFormatMacros(in input: String, context: RoleplayMacroContext) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\{\{\s*datetimeformat\s+([^}]+)\}\}"#, options: [.caseInsensitive]) else {
+            return input
+        }
+        let source = input as NSString
+        let result = NSMutableString(string: input)
+        for match in regex.matches(in: input, range: NSRange(location: 0, length: source.length)).reversed() {
+            guard match.numberOfRanges > 1 else { continue }
+            let momentFormat = source.substring(with: match.range(at: 1))
+            let format = momentFormat
+                .replacingOccurrences(of: "YYYY", with: "yyyy")
+                .replacingOccurrences(of: "dddd", with: "EEEE")
+                .replacingOccurrences(of: "DD", with: "dd")
+            let formatter = DateFormatter()
+            formatter.locale = context.locale
+            formatter.dateFormat = format
+            result.replaceCharacters(in: match.range, with: formatter.string(from: context.now))
+        }
+        return result as String
     }
 
     private static func replaceSimpleMacros(_ input: String, values: [String: String]) -> String {
