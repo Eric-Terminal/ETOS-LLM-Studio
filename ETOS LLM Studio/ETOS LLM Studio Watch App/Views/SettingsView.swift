@@ -485,6 +485,7 @@ extension SettingsListIcon {
     static let shortcuts = SettingsListIcon(systemName: "bolt", backgroundColor: .orange, legacySystemName: "bolt.horizontal.circle")
     static let imageGeneration = SettingsListIcon(systemName: "photo", backgroundColor: .pink, legacySystemName: "photo.on.rectangle.angled")
     static let worldbook = SettingsListIcon(systemName: "book", backgroundColor: .brown, legacySystemName: "book.pages")
+    static let roleplay = SettingsListIcon(systemName: "theatermasks", backgroundColor: .purple, legacySystemName: "person.2")
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo, legacySystemName: "puzzlepiece.extension")
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)

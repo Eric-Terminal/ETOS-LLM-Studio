@@ -244,6 +244,13 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: RoleplayBridgeNotification.requestedAction)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                self?.handleRoleplayBridgeAction(notification)
+            }
+            .store(in: &cancellables)
+
         chatService.chatSessionsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] sessions in
@@ -454,6 +461,27 @@ extension ChatViewModel {
         syncReasoningSummaryModelSelection()
         syncOCRModelSelection()
         reloadConversationMemoryState()
+    }
+
+    private func handleRoleplayBridgeAction(_ notification: Notification) {
+        guard let sessionID = notification.userInfo?[RoleplayBridgeNotification.sessionIDKey] as? UUID,
+              sessionID == currentSession?.id,
+              let action = notification.userInfo?[RoleplayBridgeNotification.actionKey] as? String else { return }
+        let text = notification.userInfo?[RoleplayBridgeNotification.textKey] as? String ?? ""
+        switch action {
+        case "set_input":
+            userInput = text
+        case "send_message":
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            userInput = text
+            sendMessage()
+        case "generate":
+            if let latestAssistant = messages.last(where: { $0.role == .assistant }) {
+                retryMessage(latestAssistant)
+            }
+        default:
+            return
+        }
     }
 
     func applyChatSessions(_ sessions: [ChatSession]) {

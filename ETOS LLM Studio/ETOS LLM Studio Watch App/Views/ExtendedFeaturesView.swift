@@ -160,6 +160,20 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    RoleplaySettingsView(viewModel: viewModel)
+                } label: {
+                    settingsNavigationLabel("角色扮演与酒馆兼容", icon: .roleplay)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("导入角色卡、设置用户身份，并运行酒馆宏、变量与 HTML。", comment: "Watch roleplay entry detail"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     WorldbookSettingsView(viewModel: viewModel)
                 } label: {
                     settingsNavigationLabel("世界书", icon: .worldbook)

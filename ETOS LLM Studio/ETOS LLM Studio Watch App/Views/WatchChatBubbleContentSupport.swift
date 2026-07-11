@@ -36,18 +36,46 @@ extension ChatBubble {
             || message.role == .error
             || (message.role == .assistant
                 && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
-        ETAdvancedMarkdownRenderer(
-            content: content,
-            preparedContent: preparedMarkdownPayload,
-            enableMarkdown: enableMarkdown,
-            isOutgoing: shouldRenderAsOutgoing,
-            enableAdvancedRenderer: enableAdvancedRenderer,
-            enableMathRendering: enableMathRendering,
-            customTextColor: customTextColorOverride,
-            customTextStyleColors: customTextStyleColors,
-            isStreaming: showsStreamingIndicators,
-            onCodeBlockHeaderTap: onCodeBlockHeaderTap
-        )
+        if let extraction = messageState.roleplayHTML,
+           let roleplaySessionID,
+           message.role == .assistant,
+           extraction.containsHTML {
+            VStack(alignment: .leading) {
+                if !extraction.remainingText.isEmpty {
+                    ETAdvancedMarkdownRenderer(
+                        content: extraction.remainingText,
+                        preparedContent: nil,
+                        enableMarkdown: enableMarkdown,
+                        isOutgoing: shouldRenderAsOutgoing,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        customTextColor: customTextColorOverride,
+                        customTextStyleColors: customTextStyleColors,
+                        isStreaming: showsStreamingIndicators,
+                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
+                    )
+                }
+                WatchRoleplayHTMLCardView(
+                    extraction: extraction,
+                    sessionID: roleplaySessionID,
+                    messageID: message.id,
+                    versionIndex: message.getCurrentVersionIndex()
+                )
+            }
+        } else {
+            ETAdvancedMarkdownRenderer(
+                content: content,
+                preparedContent: preparedMarkdownPayload,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: shouldRenderAsOutgoing,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: customTextColorOverride,
+                customTextStyleColors: customTextStyleColors,
+                isStreaming: showsStreamingIndicators,
+                onCodeBlockHeaderTap: onCodeBlockHeaderTap
+            )
+        }
     }
 
     @ViewBuilder

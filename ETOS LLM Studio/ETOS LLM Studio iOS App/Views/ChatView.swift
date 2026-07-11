@@ -707,6 +707,7 @@ extension ChatView {
                                 let hiddenForFlight = isHiddenForFlight(message)
                                 ChatBubble(
                                     messageState: state,
+                                    roleplaySessionID: viewModel.currentSession?.id,
                                     layoutWidth: messageLayoutWidth,
                                     reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
                                     preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
@@ -967,6 +968,12 @@ extension ChatView {
 
                 // 发送飞行气泡覆盖层：从输入框变形飞入落点气泡（置于最顶层）
                 flightOverlayLayer
+
+                RoleplaySessionScriptHost(
+                    sessionID: viewModel.currentSession?.id,
+                    messageID: displayedMessages.last?.message.id,
+                    versionIndex: displayedMessages.last?.message.getCurrentVersionIndex() ?? 0
+                )
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))
             .onPreferenceChange(InputBarRectKey.self) { rect in

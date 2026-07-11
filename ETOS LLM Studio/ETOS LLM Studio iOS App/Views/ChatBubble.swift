@@ -18,6 +18,7 @@ import WebKit
 
 struct ChatBubble: View {
     @ObservedObject var messageState: ChatMessageRenderState
+    let roleplaySessionID: UUID?
     let layoutWidth: CGFloat?
     let reasoningPreviewMaxHeight: CGFloat
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
@@ -65,6 +66,7 @@ struct ChatBubble: View {
 
     init(
         messageState: ChatMessageRenderState,
+        roleplaySessionID: UUID? = nil,
         layoutWidth: CGFloat? = nil,
         reasoningPreviewMaxHeight: CGFloat = 177,
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
@@ -101,6 +103,7 @@ struct ChatBubble: View {
         providers: [Provider] = []
     ) {
         self.messageState = messageState
+        self.roleplaySessionID = roleplaySessionID
         self.layoutWidth = layoutWidth
         self.reasoningPreviewMaxHeight = reasoningPreviewMaxHeight
         self.preparedMarkdownPayload = preparedMarkdownPayload

@@ -77,6 +77,7 @@ struct WatchMessageRowView: View {
     var body: some View {
         let bubble = ChatBubble(
             messageState: state,
+            roleplaySessionID: viewModel.currentSession?.id,
             preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
             preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
             reasoningThinkingTitle: viewModel.reasoningThinkingTitleByMessageID[message.id],

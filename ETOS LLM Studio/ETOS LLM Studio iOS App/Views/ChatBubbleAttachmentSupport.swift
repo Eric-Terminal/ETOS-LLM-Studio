@@ -129,17 +129,44 @@ extension ChatBubble {
     @ViewBuilder
     func renderContent(_ content: String) -> some View {
         let shouldRenderAsOutgoing = isOutgoing || isError
-        ETAdvancedMarkdownRenderer(
-            content: content,
-            preparedContent: preparedMarkdownPayload,
-            enableMarkdown: enableMarkdown,
-            isOutgoing: shouldRenderAsOutgoing,
-            enableAdvancedRenderer: enableAdvancedRenderer,
-            enableMathRendering: enableMathRendering,
-            customTextColor: customTextColorOverride,
-            customTextStyleColors: customTextStyleColors,
-            isStreaming: showsStreamingIndicators
-        )
+        if let extraction = messageState.roleplayHTML,
+           let roleplaySessionID,
+           message.role == .assistant,
+           extraction.containsHTML {
+            VStack(alignment: .leading) {
+                if !extraction.remainingText.isEmpty {
+                    ETAdvancedMarkdownRenderer(
+                        content: extraction.remainingText,
+                        preparedContent: nil,
+                        enableMarkdown: enableMarkdown,
+                        isOutgoing: shouldRenderAsOutgoing,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableMathRendering,
+                        customTextColor: customTextColorOverride,
+                        customTextStyleColors: customTextStyleColors,
+                        isStreaming: showsStreamingIndicators
+                    )
+                }
+                RoleplayHTMLCardView(
+                    extraction: extraction,
+                    sessionID: roleplaySessionID,
+                    messageID: message.id,
+                    versionIndex: message.getCurrentVersionIndex()
+                )
+            }
+        } else {
+            ETAdvancedMarkdownRenderer(
+                content: content,
+                preparedContent: preparedMarkdownPayload,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: shouldRenderAsOutgoing,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableMathRendering,
+                customTextColor: customTextColorOverride,
+                customTextStyleColors: customTextStyleColors,
+                isStreaming: showsStreamingIndicators
+            )
+        }
     }
 
     @ViewBuilder

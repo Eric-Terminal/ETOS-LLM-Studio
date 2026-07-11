@@ -48,13 +48,28 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
     typealias UIViewType = NSObject
 
     let html: String
+    let sessionID: UUID?
+    let messageID: UUID?
+    let versionIndex: Int
+
+    init(
+        html: String,
+        sessionID: UUID? = nil,
+        messageID: UUID? = nil,
+        versionIndex: Int = 0
+    ) {
+        self.html = html
+        self.sessionID = sessionID
+        self.messageID = messageID
+        self.versionIndex = versionIndex
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(sessionID: sessionID, messageID: messageID, versionIndex: versionIndex)
     }
 
     func makeUIView(context: Context) -> NSObject {
-        let view = WatchWebKitRuntime.makeWebView()
+        let view = WatchWebKitRuntime.makeWebView(messageHandler: context.coordinator.messageHandler)
         context.coordinator.loadedHTML = html
         WatchWebKitRuntime.load(html, into: view)
         return view
@@ -66,8 +81,46 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
         WatchWebKitRuntime.load(html, into: uiView)
     }
 
+    static func dismantleUIView(_ uiView: NSObject, coordinator: Coordinator) {
+        WatchWebKitRuntime.removeMessageHandler(from: uiView)
+    }
+
     final class Coordinator {
         var loadedHTML: String?
+        let messageHandler: WatchRoleplayScriptMessageHandler
+
+        init(sessionID: UUID?, messageID: UUID?, versionIndex: Int) {
+            self.messageHandler = WatchRoleplayScriptMessageHandler(
+                sessionID: sessionID,
+                messageID: messageID,
+                versionIndex: versionIndex
+            )
+        }
+    }
+}
+
+final class WatchRoleplayScriptMessageHandler: NSObject {
+    let sessionID: UUID?
+    let messageID: UUID?
+    let versionIndex: Int
+
+    init(sessionID: UUID?, messageID: UUID?, versionIndex: Int) {
+        self.sessionID = sessionID
+        self.messageID = messageID
+        self.versionIndex = versionIndex
+    }
+
+    @objc(userContentController:didReceiveScriptMessage:)
+    func userContentController(_ userContentController: NSObject, didReceiveScriptMessage message: NSObject) {
+        guard let sessionID, let messageID,
+              let payload = message.value(forKey: "body") as? [String: Any],
+              payload["action"] as? String != "height" else { return }
+        RoleplayBridgeDispatcher.handle(
+            payload,
+            sessionID: sessionID,
+            messageID: messageID,
+            versionIndex: versionIndex
+        )
     }
 }
 
@@ -314,12 +367,15 @@ enum WatchWebHTMLDocumentFactory {
 }
 
 private enum WatchWebKitRuntime {
-    static func makeWebView() -> NSObject {
+    static func makeWebView(messageHandler: NSObject? = nil) -> NSObject {
         loadWebKitIfNeeded()
         guard let webViewClass = NSClassFromString("WKWebView") as? NSObject.Type else {
             return fallbackView()
         }
         let webView = webViewClass.init()
+        if let messageHandler {
+            addMessageHandler(messageHandler, to: webView)
+        }
         configure(webView)
         return webView
     }
@@ -346,6 +402,27 @@ private enum WatchWebKitRuntime {
         if webView.responds(to: backForwardSelector) {
             webView.setValue(true, forKey: "allowsBackForwardNavigationGestures")
         }
+    }
+
+    static func removeMessageHandler(from webView: NSObject) {
+        guard let controller = userContentController(from: webView) else { return }
+        let selector = NSSelectorFromString("removeScriptMessageHandlerForName:")
+        if controller.responds(to: selector) {
+            controller.perform(selector, with: "etosRoleplay" as NSString)
+        }
+    }
+
+    private static func addMessageHandler(_ handler: NSObject, to webView: NSObject) {
+        guard let controller = userContentController(from: webView) else { return }
+        let selector = NSSelectorFromString("addScriptMessageHandler:name:")
+        if controller.responds(to: selector) {
+            controller.perform(selector, with: handler, with: "etosRoleplay" as NSString)
+        }
+    }
+
+    private static func userContentController(from webView: NSObject) -> NSObject? {
+        guard let configuration = webView.value(forKey: "configuration") as? NSObject else { return nil }
+        return configuration.value(forKey: "userContentController") as? NSObject
     }
 
     private static func fallbackView() -> NSObject {

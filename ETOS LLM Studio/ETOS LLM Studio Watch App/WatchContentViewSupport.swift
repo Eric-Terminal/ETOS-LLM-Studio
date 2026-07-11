@@ -18,6 +18,12 @@ extension ContentView {
             ZStack(alignment: .bottom) {
                 chatList(proxy: proxy)
 
+                WatchRoleplaySessionScriptHost(
+                    sessionID: viewModel.currentSession?.id,
+                    messageID: viewModel.displayMessages.last?.message.id,
+                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0
+                )
+
                 if showScrollToBottomButton {
                     scrollToBottomButton(proxy: proxy)
                 }

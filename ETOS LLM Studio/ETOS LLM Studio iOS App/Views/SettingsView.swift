@@ -195,6 +195,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    RoleplaySettingsView().environmentObject(viewModel)
+                } label: {
+                    SettingsListIconLabel("角色扮演与酒馆兼容", icon: .roleplay)
+                }
+
+                NavigationLink {
                     WorldbookSettingsView().environmentObject(viewModel)
                 } label: {
                     SettingsListIconLabel("世界书", icon: .worldbook)
@@ -435,6 +441,7 @@ extension SettingsListIcon {
     static let shortcuts = SettingsListIcon(systemName: "bolt", backgroundColor: .orange)
     static let imageGeneration = SettingsListIcon(systemName: "photo", backgroundColor: .pink)
     static let worldbook = SettingsListIcon(systemName: "book", backgroundColor: .brown)
+    static let roleplay = SettingsListIcon(systemName: "theatermasks", backgroundColor: .purple)
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
