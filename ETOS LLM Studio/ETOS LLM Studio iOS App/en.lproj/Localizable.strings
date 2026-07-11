@@ -4786,3 +4786,7 @@
 "从起始标记匹配到下一处结束标记；没有结束标记时不会着色。" = "Matches from a start delimiter to the next end delimiter. Unclosed text is not colored.";
 "规则颜色" = "Rule Color";
 "设置匹配文字在聊天内容中的颜色。" = "Set the color of matching text in chat content.";
+"未设置正则表达式" = "No Regular Expression Set";
+"要匹配的正则表达式" = "Regular Expression to Match";
+"正则表达式无效，请检查语法。" = "The regular expression is invalid. Check its syntax.";
+"正则表达式的完整匹配范围会使用所选颜色。" = "The full regular expression match is colored with the selected color.";

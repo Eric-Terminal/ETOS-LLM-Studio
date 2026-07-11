@@ -9,6 +9,7 @@ import Foundation
 public enum ChatAppearanceTextColorRuleKind: String, Codable, CaseIterable, Sendable {
     case exactText
     case delimitedText
+    case regularExpression
 }
 
 public struct ChatAppearanceTextColorRule: Codable, Identifiable, Equatable, Hashable, Sendable {
@@ -43,7 +44,7 @@ public struct ChatAppearanceTextColorRule: Codable, Identifiable, Equatable, Has
 
     public var isConfigured: Bool {
         switch kind {
-        case .exactText:
+        case .exactText, .regularExpression:
             return !exactText.isEmpty
         case .delimitedText:
             return !startDelimiter.isEmpty && !endDelimiter.isEmpty
@@ -85,7 +86,7 @@ public enum ChatAppearanceTextColorMatcher {
         var result: [ChatAppearanceTextColorSpan] = []
 
         for rule in rules where rule.isEnabled && rule.isConfigured {
-            let candidates = candidateRanges(for: rule, in: textUnits)
+            let candidates = candidateRanges(for: rule, in: text, textUnits: textUnits)
             for candidate in candidates {
                 let availableRanges = subtract(occupiedRanges, from: candidate)
                 for range in availableRanges where !range.isEmpty {
@@ -109,18 +110,44 @@ public enum ChatAppearanceTextColorMatcher {
 
     private static func candidateRanges(
         for rule: ChatAppearanceTextColorRule,
-        in text: [UTF16.CodeUnit]
+        in text: String,
+        textUnits: [UTF16.CodeUnit]
     ) -> [Range<Int>] {
         switch rule.kind {
         case .exactText:
-            return exactRanges(of: Array(rule.exactText.utf16), in: text)
+            return exactRanges(of: Array(rule.exactText.utf16), in: textUnits)
         case .delimitedText:
             return delimitedRanges(
                 start: Array(rule.startDelimiter.utf16),
                 end: Array(rule.endDelimiter.utf16),
                 includesDelimiters: rule.includesDelimiters,
-                in: text
+                in: textUnits
             )
+        case .regularExpression:
+            return regularExpressionRanges(pattern: rule.exactText, in: text)
+        }
+    }
+
+    public static func isValidRegularExpression(_ pattern: String) async -> Bool {
+        guard !pattern.isEmpty else { return true }
+        return await Task.detached(priority: .userInitiated) {
+            (try? NSRegularExpression(pattern: pattern)) != nil
+        }.value
+    }
+
+    private static func regularExpressionRanges(
+        pattern: String,
+        in text: String
+    ) -> [Range<Int>] {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else {
+            return []
+        }
+        let searchRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        return expression.matches(in: text, range: searchRange).compactMap { match in
+            guard match.range.location != NSNotFound, match.range.length > 0 else {
+                return nil
+            }
+            return match.range.location..<(match.range.location + match.range.length)
         }
     }
 

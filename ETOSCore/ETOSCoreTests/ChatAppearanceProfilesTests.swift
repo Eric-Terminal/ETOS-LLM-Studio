@@ -250,6 +250,88 @@ struct ChatAppearanceProfilesTests {
         #expect(spans.map(\.range) == [0..<3, 6..<9])
     }
 
+    @Test("正则规则会着色完整匹配范围")
+    func regularExpressionRuleMatchesFullRanges() {
+        let rule = ChatAppearanceTextColorRule(
+            id: "regex",
+            kind: .regularExpression,
+            exactText: "\\bG[A-Z]{2}\\b",
+            colorHex: "FF0000FF"
+        )
+
+        let spans = ChatAppearanceTextColorMatcher.spans(
+            in: "GPG GPS Gpg",
+            rules: [rule]
+        )
+
+        #expect(spans.map(\.range) == [0..<3, 4..<7])
+        #expect(spans.allSatisfy { $0.ruleID == "regex" })
+    }
+
+    @Test("正则规则可以分别配置颜色")
+    func regularExpressionRulesKeepIndependentColors() {
+        let uppercaseRule = ChatAppearanceTextColorRule(
+            id: "uppercase",
+            kind: .regularExpression,
+            exactText: "[A-Z]+",
+            colorHex: "FF0000FF"
+        )
+        let numberRule = ChatAppearanceTextColorRule(
+            id: "number",
+            kind: .regularExpression,
+            exactText: "[0-9]+",
+            colorHex: "0000FFFF"
+        )
+
+        let spans = ChatAppearanceTextColorMatcher.spans(
+            in: "ABC 123",
+            rules: [uppercaseRule, numberRule]
+        )
+
+        #expect(spans.map(\.colorHex) == ["FF0000FF", "0000FFFF"])
+    }
+
+    @Test("正则规则类型会随 Profile 持久化")
+    func regularExpressionRulePersistsWithProfile() throws {
+        let rule = ChatAppearanceTextColorRule(
+            id: "regex",
+            kind: .regularExpression,
+            exactText: "G(P|S)G",
+            colorHex: "FF00FFFF"
+        )
+        let profile = ChatAppearanceProfile(
+            id: ChatAppearanceProfile.defaultProfileID,
+            name: "default",
+            assistantDarkTextStyles: ChatAppearanceTextStyleColors(
+                defaultHex: "FFFFFFFF",
+                customRules: [rule]
+            )
+        )
+
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(ChatAppearanceProfile.self, from: data)
+
+        #expect(decoded.assistantDarkTextStyles.customRules == [rule])
+        #expect(decoded.assistantDarkTextStyles.customRules.first?.kind == .regularExpression)
+    }
+
+    @Test("无效正则和零长度匹配不会产生颜色范围")
+    func invalidAndEmptyRegularExpressionMatchesAreIgnored() async {
+        let invalidRule = ChatAppearanceTextColorRule(
+            kind: .regularExpression,
+            exactText: "[",
+            colorHex: "FF0000FF"
+        )
+        let zeroLengthRule = ChatAppearanceTextColorRule(
+            kind: .regularExpression,
+            exactText: "^",
+            colorHex: "00FF00FF"
+        )
+
+        #expect(await ChatAppearanceTextColorMatcher.isValidRegularExpression("[") == false)
+        #expect(ChatAppearanceTextColorMatcher.spans(in: "GPG", rules: [invalidRule, zeroLengthRule]).isEmpty)
+    }
+
     @Test("成对标记规则支持方向标记和是否包含标记")
     func delimitedRuleSupportsDirectionalMarkers() {
         let includedRule = ChatAppearanceTextColorRule(

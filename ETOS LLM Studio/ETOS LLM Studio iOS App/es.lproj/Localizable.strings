@@ -4864,3 +4864,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "从起始标记匹配到下一处结束标记；没有结束标记时不会着色。" = "Coincide desde un delimitador inicial hasta el siguiente final. El texto sin cerrar no se colorea.";
 "规则颜色" = "Color de la regla";
 "设置匹配文字在聊天内容中的颜色。" = "Define el color del texto coincidente en el chat.";
+"未设置正则表达式" = "Expresión regular sin definir";
+"要匹配的正则表达式" = "Expresión regular que coincidir";
+"正则表达式无效，请检查语法。" = "La expresión regular no es válida. Comprueba la sintaxis.";
+"正则表达式的完整匹配范围会使用所选颜色。" = "La coincidencia completa de la expresión regular usa el color seleccionado.";

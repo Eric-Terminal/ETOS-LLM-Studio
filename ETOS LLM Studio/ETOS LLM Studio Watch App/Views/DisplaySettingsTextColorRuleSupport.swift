@@ -44,13 +44,23 @@ struct WatchTextColorRuleRow: View {
                 return NSLocalizedString("未设置起止标记", comment: "")
             }
             return "\(rule.startDelimiter)…\(rule.endDelimiter)"
+        case .regularExpression:
+            return rule.exactText.isEmpty
+                ? NSLocalizedString("未设置正则表达式", comment: "")
+                : rule.exactText
         }
     }
 
     private var ruleKindTitle: String {
-        let title = rule.kind == .exactText
-            ? NSLocalizedString("指定文字", comment: "")
-            : NSLocalizedString("起止标记之间", comment: "")
+        let title: String
+        switch rule.kind {
+        case .exactText:
+            title = NSLocalizedString("指定文字", comment: "")
+        case .delimitedText:
+            title = NSLocalizedString("起止标记之间", comment: "")
+        case .regularExpression:
+            title = NSLocalizedString("正则表达式", comment: "")
+        }
         return rule.isEnabled
             ? title
             : String(format: NSLocalizedString("%@（已停用）", comment: ""), title)
@@ -60,6 +70,7 @@ struct WatchTextColorRuleRow: View {
 struct WatchTextColorRuleEditorView: View {
     @Binding var rule: ChatAppearanceTextColorRule
     let fallback: Color
+    @State private var isRegularExpressionValid = true
 
     var body: some View {
         Form {
@@ -73,21 +84,32 @@ struct WatchTextColorRuleEditorView: View {
                         .tag(ChatAppearanceTextColorRuleKind.exactText)
                     Text(NSLocalizedString("起止标记之间", comment: ""))
                         .tag(ChatAppearanceTextColorRuleKind.delimitedText)
+                    Text(NSLocalizedString("正则表达式", comment: ""))
+                        .tag(ChatAppearanceTextColorRuleKind.regularExpression)
                 }
 
-                if rule.kind == .exactText {
+                switch rule.kind {
+                case .exactText:
                     TextField(NSLocalizedString("要匹配的文字", comment: ""), text: $rule.exactText)
-                } else {
+                case .delimitedText:
                     TextField(NSLocalizedString("起始标记", comment: ""), text: $rule.startDelimiter)
                     TextField(NSLocalizedString("结束标记", comment: ""), text: $rule.endDelimiter)
                     Toggle(NSLocalizedString("包含起止标记", comment: ""), isOn: $rule.includesDelimiters)
+                case .regularExpression:
+                    TextField(NSLocalizedString("要匹配的正则表达式", comment: ""), text: $rule.exactText)
                 }
             } header: {
                 Text(NSLocalizedString("匹配内容", comment: ""))
             } footer: {
-                Text(matchDescription)
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading) {
+                    Text(matchDescription)
+                    if rule.kind == .regularExpression, !isRegularExpressionValid {
+                        Text(NSLocalizedString("正则表达式无效，请检查语法。", comment: ""))
+                            .foregroundStyle(.red)
+                    }
+                }
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -114,6 +136,15 @@ struct WatchTextColorRuleEditorView: View {
             }
         }
         .navigationTitle(NSLocalizedString("着色规则", comment: ""))
+        .task(id: regularExpressionValidationPattern) {
+            guard let pattern = regularExpressionValidationPattern else {
+                isRegularExpressionValid = true
+                return
+            }
+            let isValid = await ChatAppearanceTextColorMatcher.isValidRegularExpression(pattern)
+            guard regularExpressionValidationPattern == pattern else { return }
+            isRegularExpressionValid = isValid
+        }
     }
 
     private var matchDescription: String {
@@ -122,6 +153,12 @@ struct WatchTextColorRuleEditorView: View {
             return NSLocalizedString("只修改完全相同文字片段的颜色，不使用正则表达式。", comment: "")
         case .delimitedText:
             return NSLocalizedString("从起始标记匹配到下一处结束标记；没有结束标记时不会着色。", comment: "")
+        case .regularExpression:
+            return NSLocalizedString("正则表达式的完整匹配范围会使用所选颜色。", comment: "")
         }
+    }
+
+    private var regularExpressionValidationPattern: String? {
+        rule.kind == .regularExpression ? rule.exactText : nil
     }
 }

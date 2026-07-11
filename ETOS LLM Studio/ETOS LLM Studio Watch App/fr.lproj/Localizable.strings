@@ -4841,3 +4841,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "从起始标记匹配到下一处结束标记；没有结束标记时不会着色。" = "Correspond du délimiteur de début au prochain délimiteur de fin. Un texte non fermé n’est pas coloré.";
 "规则颜色" = "Couleur de la règle";
 "设置匹配文字在聊天内容中的颜色。" = "Définissez la couleur du texte correspondant dans le chat.";
+"未设置正则表达式" = "Aucune expression régulière définie";
+"要匹配的正则表达式" = "Expression régulière à rechercher";
+"正则表达式无效，请检查语法。" = "L’expression régulière est invalide. Vérifiez sa syntaxe.";
+"正则表达式的完整匹配范围会使用所选颜色。" = "La correspondance complète de l’expression régulière utilise la couleur choisie.";
