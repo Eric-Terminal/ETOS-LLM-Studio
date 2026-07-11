@@ -45,6 +45,7 @@ struct RoleplayHTMLCardView: View {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
+                let worldbooks = ChatService.shared.loadWorldbooks()
                 let variables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 let binding = store.binding(sessionID: sessionID)
                 let character = binding?.characterIDs.first.flatMap(store.character(id:))
@@ -62,7 +63,8 @@ struct RoleplayHTMLCardView: View {
                             chatMessages: chatMessages,
                             variableSnapshot: snapshot,
                             messageID: messageID,
-                            messageVersionIndex: versionIndex
+                            messageVersionIndex: versionIndex,
+                            worldbooks: worldbooks
                         )
                     )
                 }
@@ -117,6 +119,7 @@ struct RoleplaySessionScriptHost: View {
                 let persona = binding.personaID.flatMap(store.persona(id:))
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
+                let worldbooks = ChatService.shared.loadWorldbooks()
                 let baseVariables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 return characters.flatMap { character in
                     character.helperScripts.filter(\.enabled).map { script in
@@ -138,7 +141,8 @@ struct RoleplaySessionScriptHost: View {
                                 chatMessages: chatMessages,
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
-                                messageVersionIndex: versionIndex
+                                messageVersionIndex: versionIndex,
+                                worldbooks: worldbooks
                             )
                         )
                     }
@@ -207,6 +211,8 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         configuration.userContentController = controller
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator

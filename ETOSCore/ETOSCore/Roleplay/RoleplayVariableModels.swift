@@ -123,6 +123,11 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         messageVersions[Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)] = variables
     }
 
+    public mutating func removeMessageVariables(messageID: UUID) {
+        let prefix = "\(messageID.uuidString):"
+        messageVersions = messageVersions.filter { !$0.key.hasPrefix(prefix) }
+    }
+
     public func value(
         scope: RoleplayVariableScope,
         path: String,

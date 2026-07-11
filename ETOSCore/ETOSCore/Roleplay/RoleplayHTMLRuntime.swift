@@ -79,7 +79,8 @@ public enum RoleplayHTMLDocumentFactory {
         chatMessages: [ChatMessage] = [],
         variableSnapshot: RoleplayVariableSnapshot? = nil,
         messageID: UUID? = nil,
-        messageVersionIndex: Int = 0
+        messageVersionIndex: Int = 0,
+        worldbooks: [Worldbook] = []
     ) -> String {
         let body: String
         if source.range(of: #"<html\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
@@ -96,7 +97,8 @@ public enum RoleplayHTMLDocumentFactory {
             chatMessages: chatMessages,
             variableSnapshot: variableSnapshot,
             messageID: messageID,
-            messageVersionIndex: messageVersionIndex
+            messageVersionIndex: messageVersionIndex,
+            worldbooks: worldbooks
         )
         let headInjection = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
@@ -129,7 +131,8 @@ public enum RoleplayHTMLDocumentFactory {
         chatMessages: [ChatMessage],
         variableSnapshot: RoleplayVariableSnapshot?,
         messageID: UUID?,
-        messageVersionIndex: Int
+        messageVersionIndex: Int,
+        worldbooks: [Worldbook]
     ) -> String {
         var scopedVariables = Dictionary(uniqueKeysWithValues: RoleplayVariableScope.allCases.map { scope in
             (
@@ -149,6 +152,7 @@ public enum RoleplayHTMLDocumentFactory {
         let characterJSON = jsonString(characterName)
         let userAvatarJSON = jsonString(userAvatarPath)
         let characterAvatarJSON = jsonString(characterAvatarPath)
+        let worldbooksJSON = encodableJSONLiteral(worldbooks, fallback: "[]")
         let chatMessagesJSON = jsonLiteral(.array(chatMessages.enumerated().map { index, message in
             let role: String
             let name: String
@@ -194,8 +198,21 @@ public enum RoleplayHTMLDocumentFactory {
 (function () {
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
   let scopedVariables = \(scopedVariablesJSON);
-  const chatMessages = \(chatMessagesJSON);
+  let chatMessages = \(chatMessagesJSON);
+  const worldbookList = \(worldbooksJSON);
+  const worldbooks = Object.fromEntries(worldbookList.map(book => [book.name, (book.entries || []).map((entry, index) => ({
+    ...entry,
+    uid: entry.uid ?? index,
+    key: entry.keys || entry.key || [],
+    keysecondary: entry.secondaryKeys || entry.keysecondary || [],
+    enabled: entry.isEnabled ?? entry.enabled ?? !entry.disable,
+    disable: !(entry.isEnabled ?? entry.enabled ?? !entry.disable)
+  }))]));
   const listeners = new Map();
+  const audioState = {
+    bgm: { playlist: [], player: null, enabled: true, muted: false, volume: 100 },
+    ambient: { playlist: [], player: null, enabled: true, muted: false, volume: 100 }
+  };
   const post = payload => {
     try { window.webkit?.messageHandlers?.etosRoleplay?.postMessage(payload); } catch (_) {}
   };
@@ -281,6 +298,23 @@ public enum RoleplayHTMLDocumentFactory {
     const values = match.slice(1).map(Number).map(value => value < 0 ? chatMessages.length + value : value).sort((a, b) => a - b);
     return values;
   };
+  const normalizeMessageId = value => {
+    const raw = Number(value);
+    return raw < 0 ? chatMessages.length + raw : raw;
+  };
+  const reindexMessages = () => chatMessages.forEach((message, index) => { message.message_id = index; });
+  const nativeWorldbookEntries = entries => entries.map((entry, index) => ({
+    ...entry,
+    uid: entry.uid ?? index,
+    keys: entry.keys || entry.key || [],
+    secondaryKeys: entry.secondaryKeys || entry.keysecondary || [],
+    isEnabled: entry.enabled ?? !entry.disable
+  }));
+  const commitWorldbook = (name, entries) => {
+    worldbooks[name] = clone(entries || []);
+    post({ action: 'replace_worldbook', name, entries: nativeWorldbookEntries(worldbooks[name]) });
+  };
+  const audioStore = type => audioState[type === 'ambient' ? 'ambient' : 'bgm'];
   const api = {
     getVariables: (option = { type: 'chat' }) => clone(scopeVariables(option)),
     getAllVariables: () => clone(rebuildVariables()),
@@ -322,6 +356,7 @@ public enum RoleplayHTMLDocumentFactory {
     chooseOption: text => post({ action: 'send_message', text: String(text ?? '') }),
     setInput: text => post({ action: 'set_input', text: String(text ?? '') }),
     triggerGeneration: () => post({ action: 'generate' }),
+    generate: () => post({ action: 'generate' }),
     eventOn: (type, listener) => {
       const values = listeners.get(type) || [];
       values.push(listener);
@@ -345,6 +380,117 @@ public enum RoleplayHTMLDocumentFactory {
       }));
     },
     getDisplayedMessages: (range = 'all', options = {}) => api.getChatMessages(range, options),
+    setChatMessages: async (updates, _options = {}) => {
+      const normalized = (updates || []).map(update => ({ ...clone(update), message_id: normalizeMessageId(update.message_id) }));
+      for (const update of normalized) {
+        const current = chatMessages[update.message_id];
+        if (!current) continue;
+        Object.assign(current, update);
+        if (update.message !== undefined) current.message = String(update.message);
+        if (update.data !== undefined) current.data = clone(update.data);
+      }
+      post({ action: 'set_chat_messages', value: normalized });
+    },
+    createChatMessages: async (created, options = {}) => {
+      const rawIndex = options.insert_at ?? options.insert_before ?? chatMessages.length;
+      const insertBefore = rawIndex === 'end' ? chatMessages.length : Math.max(0, Math.min(chatMessages.length, normalizeMessageId(rawIndex)));
+      const messages = (created || []).map(item => ({
+        name: item.name || (item.role === 'user' ? \(userJSON) : item.role === 'system' ? 'System' : \(characterJSON)),
+        role: item.role || 'assistant',
+        is_hidden: item.is_hidden || false,
+        message: String(item.message ?? ''),
+        data: clone(item.data || {}),
+        extra: clone(item.extra || {}),
+        swipe_id: 0,
+        swipes: [String(item.message ?? '')],
+        swipes_data: [clone(item.data || {})]
+      }));
+      chatMessages.splice(insertBefore, 0, ...messages);
+      reindexMessages();
+      post({ action: 'create_chat_messages', value: messages, insert_before: insertBefore });
+      for (let index = insertBefore; index < insertBefore + messages.length; index++) {
+        const event = messages[index - insertBefore].role === 'user' ? 'message_sent' : 'message_received';
+        await emitLocal(event, index, 'extension');
+      }
+    },
+    deleteChatMessages: async (ids, _options = {}) => {
+      const normalized = [...new Set((ids || []).map(normalizeMessageId).filter(index => index >= 0 && index < chatMessages.length))].sort((a, b) => b - a);
+      for (const index of normalized) chatMessages.splice(index, 1);
+      reindexMessages();
+      post({ action: 'delete_chat_messages', value: normalized });
+    },
+    rotateChatMessages: async (begin, middle, end, _options = {}) => {
+      const lower = Math.max(0, Math.min(chatMessages.length, normalizeMessageId(begin)));
+      const upper = Math.max(lower, Math.min(chatMessages.length, normalizeMessageId(end)));
+      const pivot = Math.max(lower, Math.min(upper, normalizeMessageId(middle)));
+      if (lower < pivot && pivot < upper) {
+        const range = chatMessages.splice(lower, upper - lower);
+        const offset = pivot - lower;
+        chatMessages.splice(lower, 0, ...range.slice(offset), ...range.slice(0, offset));
+        reindexMessages();
+        post({ action: 'rotate_chat_messages', begin: lower, middle: pivot, end: upper });
+      }
+    },
+    setChatMessage: async (value, message_id = -1) => api.setChatMessages([{ message_id, ...(typeof value === 'string' ? { message: value } : value) }]),
+    getWorldbookNames: () => Object.keys(worldbooks),
+    getWorldbook: async name => {
+      if (!(name in worldbooks)) throw new Error(`Worldbook '${name}' was not found`);
+      return clone(worldbooks[name]);
+    },
+    replaceWorldbook: async (name, entries, _options = {}) => {
+      if (!(name in worldbooks)) throw new Error(`Worldbook '${name}' was not found`);
+      commitWorldbook(name, entries);
+    },
+    updateWorldbookWith: async (name, updater, options = {}) => {
+      const updated = await updater(await api.getWorldbook(name));
+      await api.replaceWorldbook(name, updated, options);
+      return api.getWorldbook(name);
+    },
+    createWorldbookEntries: async (name, entries, options = {}) => {
+      const existing = await api.getWorldbook(name);
+      const created = clone(entries || []);
+      await api.replaceWorldbook(name, [...existing, ...created], options);
+      const worldbook = await api.getWorldbook(name);
+      return { worldbook, new_entries: worldbook.slice(existing.length) };
+    },
+    deleteWorldbookEntries: async (name, predicate, options = {}) => {
+      const existing = await api.getWorldbook(name);
+      const deleted_entries = existing.filter(predicate);
+      const retained = existing.filter(entry => !deleted_entries.includes(entry));
+      await api.replaceWorldbook(name, retained, options);
+      return { worldbook: await api.getWorldbook(name), deleted_entries };
+    },
+    playAudio: (type, audio) => {
+      const store = audioStore(type);
+      const item = typeof audio === 'string' ? { url: audio } : clone(audio || {});
+      if (!item.url) return;
+      item.title = item.title || String(item.url).split('/').at(-1)?.split('.')[0] || item.url;
+      const index = store.playlist.findIndex(value => value.title === item.title || value.url === item.url);
+      if (index >= 0) store.playlist[index] = item; else store.playlist.push(item);
+      store.player?.pause();
+      store.player = new Audio(item.url);
+      store.player.loop = type === 'bgm' || type === 'ambient';
+      store.player.muted = store.muted;
+      store.player.volume = Math.max(0, Math.min(1, store.volume / 100));
+      if (store.enabled) store.player.play().catch(() => {});
+    },
+    pauseAudio: type => audioStore(type).player?.pause(),
+    getAudioList: type => clone(audioStore(type).playlist),
+    replaceAudioList: (type, list) => { audioStore(type).playlist = clone(list || []); },
+    appendAudioList: (type, list) => { audioStore(type).playlist.push(...clone(list || [])); },
+    getAudioSettings: type => {
+      const { enabled, muted, volume } = audioStore(type);
+      return { enabled, muted, volume };
+    },
+    setAudioSettings: (type, settings) => {
+      const store = audioStore(type);
+      Object.assign(store, clone(settings || {}));
+      if (store.player) {
+        store.player.muted = store.muted;
+        store.player.volume = Math.max(0, Math.min(1, store.volume / 100));
+        if (!store.enabled) store.player.pause();
+      }
+    },
     getCharacterName: () => \(characterJSON),
     getUserName: () => \(userJSON),
     userAvatarPath: \(userAvatarJSON),
@@ -388,6 +534,13 @@ public enum RoleplayHTMLDocumentFactory {
     private static func jsonLiteral(_ value: JSONValue) -> String {
         guard let data = try? JSONEncoder().encode(value), let output = String(data: data, encoding: .utf8) else {
             return "{}"
+        }
+        return output
+    }
+
+    private static func encodableJSONLiteral<T: Encodable>(_ value: T, fallback: String) -> String {
+        guard let data = try? JSONEncoder().encode(value), let output = String(data: data, encoding: .utf8) else {
+            return fallback
         }
         return output
     }

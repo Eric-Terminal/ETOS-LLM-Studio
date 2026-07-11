@@ -29,38 +29,74 @@ public enum RoleplayBridgeDispatcher {
         case "set_variable":
             guard let path = payload["path"] as? String,
                   let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
-            var snapshot = store.variableSnapshot(sessionID: sessionID)
             let scope = variableScope(payload["scope"] as? String)
-            snapshot.setValue(
-                value,
-                scope: scope,
-                path: path,
-                messageID: messageID,
-                versionIndex: versionIndex
-            )
-            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            Task.detached(priority: .utility) {
+                var snapshot = store.variableSnapshot(sessionID: sessionID)
+                snapshot.setValue(
+                    value,
+                    scope: scope,
+                    path: path,
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                )
+                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            }
         case "replace_variables":
             guard let dictionary = payload["value"] as? [String: Any] else { return }
             let variables = dictionary.compactMapValues(JSONValue.init(anyJSONValue:))
-            var snapshot = store.variableSnapshot(sessionID: sessionID)
             let scope = variableScope(payload["scope"] as? String)
-            snapshot.replaceVariables(
-                variables,
-                scope: scope,
-                messageID: messageID,
-                versionIndex: versionIndex
-            )
-            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            Task.detached(priority: .utility) {
+                var snapshot = store.variableSnapshot(sessionID: sessionID)
+                snapshot.replaceVariables(
+                    variables,
+                    scope: scope,
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                )
+                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            }
         case "delete_variable":
             guard let path = payload["path"] as? String else { return }
-            var snapshot = store.variableSnapshot(sessionID: sessionID)
-            snapshot.removeValue(
-                scope: variableScope(payload["scope"] as? String),
-                path: path,
-                messageID: messageID,
-                versionIndex: versionIndex
-            )
-            store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            let scope = variableScope(payload["scope"] as? String)
+            Task.detached(priority: .utility) {
+                var snapshot = store.variableSnapshot(sessionID: sessionID)
+                snapshot.removeValue(
+                    scope: scope,
+                    path: path,
+                    messageID: messageID,
+                    versionIndex: versionIndex
+                )
+                store.saveVariableSnapshot(snapshot, sessionID: sessionID)
+            }
+        case "set_chat_messages":
+            guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
+            Task.detached(priority: .utility) {
+                ChatService.shared.applyRoleplayMessageUpdates(value, sessionID: sessionID)
+            }
+        case "create_chat_messages":
+            guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
+            let insertBefore = (payload["insert_before"] as? NSNumber)?.intValue
+            Task.detached(priority: .utility) {
+                ChatService.shared.createRoleplayMessages(value, insertBefore: insertBefore, sessionID: sessionID)
+            }
+        case "delete_chat_messages":
+            guard let value = payload["value"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
+            Task.detached(priority: .utility) {
+                ChatService.shared.deleteRoleplayMessages(value, sessionID: sessionID)
+            }
+        case "rotate_chat_messages":
+            guard let begin = (payload["begin"] as? NSNumber)?.intValue,
+                  let middle = (payload["middle"] as? NSNumber)?.intValue,
+                  let end = (payload["end"] as? NSNumber)?.intValue else { return }
+            Task.detached(priority: .utility) {
+                ChatService.shared.rotateRoleplayMessages(begin: begin, middle: middle, end: end, sessionID: sessionID)
+            }
+        case "replace_worldbook":
+            guard let name = payload["name"] as? String,
+                  let entries = payload["entries"].flatMap(JSONValue.init(anyJSONValue:)) else { return }
+            Task.detached(priority: .utility) {
+                ChatService.shared.replaceRoleplayWorldbook(named: name, entries: entries)
+            }
         case "send_message", "set_input", "generate", "event":
             NotificationCenter.default.post(
                 name: RoleplayBridgeNotification.requestedAction,

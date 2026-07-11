@@ -39,6 +39,7 @@ struct WatchRoleplayHTMLCardView: View {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
+                let worldbooks = ChatService.shared.loadWorldbooks()
                 let variables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 let binding = store.binding(sessionID: sessionID)
                 let character = binding?.characterIDs.first.flatMap(store.character(id:))
@@ -56,7 +57,8 @@ struct WatchRoleplayHTMLCardView: View {
                             chatMessages: chatMessages,
                             variableSnapshot: snapshot,
                             messageID: messageID,
-                            messageVersionIndex: versionIndex
+                            messageVersionIndex: versionIndex,
+                            worldbooks: worldbooks
                         )
                     )
                 }
@@ -106,6 +108,7 @@ struct WatchRoleplaySessionScriptHost: View {
                 let persona = binding.personaID.flatMap(store.persona(id:))
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
+                let worldbooks = ChatService.shared.loadWorldbooks()
                 let baseVariables = snapshot.mergedVariables(messageID: messageID, versionIndex: versionIndex)
                 return characters.flatMap { character in
                     character.helperScripts.filter(\.enabled).map { script in
@@ -127,7 +130,8 @@ struct WatchRoleplaySessionScriptHost: View {
                                 chatMessages: chatMessages,
                                 variableSnapshot: snapshot,
                                 messageID: messageID,
-                                messageVersionIndex: versionIndex
+                                messageVersionIndex: versionIndex,
+                                worldbooks: worldbooks
                             )
                         )
                     }

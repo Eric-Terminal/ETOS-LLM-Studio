@@ -151,6 +151,9 @@ struct RoleplayCompatibilityTests {
 
         #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 0) == .int(1))
         #expect(snapshot.value(scope: .message, path: "value", messageID: messageID, versionIndex: 1) == .int(2))
+        snapshot.removeMessageVariables(messageID: messageID)
+        #expect(snapshot.messageVariables(messageID: messageID, versionIndex: 0).isEmpty)
+        #expect(snapshot.messageVariables(messageID: messageID, versionIndex: 1).isEmpty)
     }
 
     @Test("分层变量替换会清空旧值并持久承载自定义宏")
@@ -281,7 +284,13 @@ struct RoleplayCompatibilityTests {
             userName: "旅行者",
             characterName: "星野",
             userAvatarPath: "user.png",
-            characterAvatarPath: "char.png"
+            characterAvatarPath: "char.png",
+            worldbooks: [
+                Worldbook(
+                    name: "测试世界书",
+                    entries: [WorldbookEntry(content: "海边车站", keys: ["车站"])]
+                )
+            ]
         )
 
         #expect(extraction.remainingText == "叙事正文")
@@ -292,6 +301,10 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("ResizeObserver"))
         #expect(document.contains("scopeVariables"))
         #expect(document.contains("deleteVariable"))
+        #expect(document.contains("setChatMessages"))
+        #expect(document.contains("createWorldbookEntries"))
+        #expect(document.contains("测试世界书"))
+        #expect(document.contains("playAudio"))
     }
 
     private func makePNGTextCard(keyword: String, json: String) -> Data {
