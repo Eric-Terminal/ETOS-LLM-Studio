@@ -30,6 +30,23 @@ enum SessionMergedEntry: Identifiable {
     }
 }
 
+/// 统一文件夹和会话的原生选择标识，避免不同类型的相同 UUID 发生冲突。
+enum SessionBatchSelectionID: Hashable {
+    case folder(UUID)
+    case session(UUID)
+}
+
+extension SessionMergedEntry {
+    var batchSelectionID: SessionBatchSelectionID {
+        switch self {
+        case .folder(let folder):
+            return .folder(folder.id)
+        case .session(let session):
+            return .session(session.id)
+        }
+    }
+}
+
 struct SessionMoveFolderOption: Identifiable {
     let id: UUID
     let title: String
@@ -107,76 +124,49 @@ struct SessionGroupHeader: View {
 
 // MARK: - 批量选择行
 
+// 选择控件与连续选择手势由 List(selection:) 提供，行内不拦截滚动触摸。
+
 struct BatchSelectableFolderRow: View {
     let folder: SessionFolder
     let sessionCount: Int
     let tags: [SessionTag]
-    let isSelected: Bool
-    let onToggle: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            SessionRowCard(isCurrent: false) {
-                HStack(alignment: .center, spacing: 12) {
-                    selectionIndicator
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "folder.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                            Text(folder.name)
-                                .etFont(.system(size: 15.5, weight: .semibold))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                        }
-                        Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
-                            .etFont(.system(size: 12.5))
-                            .foregroundStyle(.secondary)
-                        SessionTagInlineList(tags: tags)
-                    }
-                    Spacer(minLength: 8)
+        SessionRowCard(isCurrent: false) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                    Text(folder.name)
+                        .etFont(.system(size: 15.5, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
                 }
+                Text(String(format: NSLocalizedString("%d 个会话", comment: ""), sessionCount))
+                    .etFont(.system(size: 12.5))
+                    .foregroundStyle(.secondary)
+                SessionTagInlineList(tags: tags)
             }
         }
-        .buttonStyle(.plain)
-    }
-
-    private var selectionIndicator: some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(.system(size: 20, weight: .regular))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }
 
 struct BatchSelectableSessionRow: View {
     let session: ChatSession
     let tags: [SessionTag]
-    let isSelected: Bool
-    let onToggle: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
-            SessionRowCard(isCurrent: false) {
-                HStack(alignment: .center, spacing: 12) {
-                    selectionIndicator
-                    SessionListRowContentBody(
-                        title: session.name,
-                        subtitle: session.topicPrompt,
-                        footnote: nil,
-                        tags: tags,
-                        isCurrent: false,
-                        isRunning: false
-                    )
-                }
-            }
+        SessionRowCard(isCurrent: false) {
+            SessionListRowContentBody(
+                title: session.name,
+                subtitle: session.topicPrompt,
+                footnote: nil,
+                tags: tags,
+                isCurrent: false,
+                isRunning: false
+            )
         }
-        .buttonStyle(.plain)
-    }
-
-    private var selectionIndicator: some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(.system(size: 20, weight: .regular))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
     }
 }
 

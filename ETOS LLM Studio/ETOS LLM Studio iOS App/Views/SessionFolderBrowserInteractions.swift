@@ -51,9 +51,7 @@ extension SessionFolderBrowserView {
             .onChange(of: searchText) { _, newValue in
                 guard isRoot else { return }
                 if !SessionHistorySearchSupport.normalizedQuery(newValue).isEmpty, isBatchSelecting {
-                    isBatchSelecting = false
-                    selectedSessionIDs.removeAll()
-                    selectedFolderIDs.removeAll()
+                    setBatchSelecting(false)
                 }
                 isLoadingMoreSearchResults = false
                 loadedSearchResultItems = []
@@ -385,11 +383,7 @@ extension SessionFolderBrowserView {
             BatchSelectableFolderRow(
                 folder: folder,
                 sessionCount: recursiveSessionCount(in: folder.id),
-                tags: folderTags(in: folder.id),
-                isSelected: selectedFolderIDs.contains(folder.id),
-                onToggle: {
-                    toggleFolderSelection(folder.id)
-                }
+                tags: folderTags(in: folder.id)
             )
         } else {
             NavigationLink {
@@ -497,11 +491,7 @@ extension SessionFolderBrowserView {
         if isBatchSelecting && !forceRegularMode {
             BatchSelectableSessionRow(
                 session: session,
-                tags: sessionTags(for: session),
-                isSelected: selectedSessionIDs.contains(session.id),
-                onToggle: {
-                    toggleSessionSelection(session.id)
-                }
+                tags: sessionTags(for: session)
             )
         } else {
             SessionRow(
@@ -604,26 +594,14 @@ extension SessionFolderBrowserView {
     }
 
     func toggleBatchMode() {
-        isBatchSelecting.toggle()
-        if !isBatchSelecting {
+        setBatchSelecting(!isBatchSelecting)
+    }
+
+    func setBatchSelecting(_ enabled: Bool) {
+        isBatchSelecting = enabled
+        if !enabled {
             selectedSessionIDs.removeAll()
             selectedFolderIDs.removeAll()
-        }
-    }
-
-    func toggleSessionSelection(_ sessionID: UUID) {
-        if selectedSessionIDs.contains(sessionID) {
-            selectedSessionIDs.remove(sessionID)
-        } else {
-            selectedSessionIDs.insert(sessionID)
-        }
-    }
-
-    func toggleFolderSelection(_ folderID: UUID) {
-        if selectedFolderIDs.contains(folderID) {
-            selectedFolderIDs.remove(folderID)
-        } else {
-            selectedFolderIDs.insert(folderID)
         }
     }
 
