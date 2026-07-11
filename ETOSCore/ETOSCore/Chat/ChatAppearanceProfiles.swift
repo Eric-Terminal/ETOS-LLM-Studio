@@ -23,21 +23,47 @@ public struct ChatAppearanceTextStyleColors: Codable, Equatable, Hashable, Senda
     public var emphasis: ChatAppearanceColorSlot
     public var strong: ChatAppearanceColorSlot
     public var code: ChatAppearanceColorSlot
+    public var customRules: [ChatAppearanceTextColorRule]
 
     public init(
         defaultHex: String,
         emphasis: ChatAppearanceColorSlot? = nil,
         strong: ChatAppearanceColorSlot? = nil,
-        code: ChatAppearanceColorSlot? = nil
+        code: ChatAppearanceColorSlot? = nil,
+        customRules: [ChatAppearanceTextColorRule] = []
     ) {
         let defaultSlot = ChatAppearanceColorSlot(isEnabled: false, hex: defaultHex)
         self.emphasis = emphasis ?? defaultSlot
         self.strong = strong ?? defaultSlot
         self.code = code ?? defaultSlot
+        self.customRules = customRules
     }
 
     public var usesAutomaticCodeSyntaxHighlighting: Bool {
         !code.isEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case emphasis
+        case strong
+        case code
+        case customRules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        emphasis = try container.decode(ChatAppearanceColorSlot.self, forKey: .emphasis)
+        strong = try container.decode(ChatAppearanceColorSlot.self, forKey: .strong)
+        code = try container.decode(ChatAppearanceColorSlot.self, forKey: .code)
+        customRules = try container.decodeIfPresent([ChatAppearanceTextColorRule].self, forKey: .customRules) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(emphasis, forKey: .emphasis)
+        try container.encode(strong, forKey: .strong)
+        try container.encode(code, forKey: .code)
+        try container.encode(customRules, forKey: .customRules)
     }
 }
 
@@ -288,7 +314,7 @@ public struct ChatAppearanceProfileConfiguration: Codable, Equatable, Sendable {
     public var scheduleRules: [ChatAppearanceScheduleRule]
 
     public init(
-        schemaVersion: Int = 2,
+        schemaVersion: Int = 3,
         profiles: [ChatAppearanceProfile] = [.defaultProfile],
         scheduleRules: [ChatAppearanceScheduleRule] = []
     ) {
@@ -401,7 +427,7 @@ public struct ChatAppearanceProfileConfiguration: Codable, Equatable, Sendable {
         }
 
         return ChatAppearanceProfileConfiguration(
-            schemaVersion: max(2, schemaVersion),
+            schemaVersion: max(3, schemaVersion),
             profiles: normalizedProfiles,
             scheduleRules: normalizedRules
         )

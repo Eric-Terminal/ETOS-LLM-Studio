@@ -64,7 +64,17 @@ struct ChatAppearanceProfilesTests {
             userBubble: .init(isEnabled: true, hex: "11223344"),
             assistantBubble: .init(isEnabled: false, hex: "55667788"),
             lightText: .init(isEnabled: true, hex: "99AABBCC"),
-            darkText: .init(isEnabled: false, hex: "DDEEFF00")
+            darkText: .init(isEnabled: false, hex: "DDEEFF00"),
+            assistantLightTextStyles: ChatAppearanceTextStyleColors(
+                defaultHex: "99AABBCC",
+                customRules: [
+                    ChatAppearanceTextColorRule(
+                        kind: .exactText,
+                        exactText: "GPG",
+                        colorHex: "FF0000FF"
+                    )
+                ]
+            )
         )
         let configuration = ChatAppearanceProfileConfiguration(profiles: [defaultProfile], scheduleRules: [])
         _ = try ChatAppearanceProfileStore.saveConfiguration(configuration, userDefaults: defaults)
@@ -82,8 +92,47 @@ struct ChatAppearanceProfilesTests {
         #expect(added.userLightText == defaultLoaded.userLightText)
         #expect(added.assistantLightText == defaultLoaded.assistantLightText)
         #expect(added.userLightTextStyles == defaultLoaded.userLightTextStyles)
+        #expect(added.assistantLightTextStyles.customRules.count == 1)
         #expect(added.assistantDarkTextStyles == defaultLoaded.assistantDarkTextStyles)
         #expect(added.name == "Profile 1")
+    }
+
+    @Test("恢复颜色会同时清空自定义文字规则")
+    @MainActor
+    func resetColorsClearsCustomTextRules() throws {
+        let suite = "com.ETOS.tests.chatAppearance.resetRules.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            Issue.record("无法创建测试专用 UserDefaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let rule = ChatAppearanceTextColorRule(
+            kind: .exactText,
+            exactText: "GPG",
+            colorHex: "FF0000FF"
+        )
+        let profile = ChatAppearanceProfile(
+            id: ChatAppearanceProfile.defaultProfileID,
+            name: "default",
+            assistantLightTextStyles: ChatAppearanceTextStyleColors(
+                defaultHex: "1C1C1EFF",
+                customRules: [rule]
+            )
+        )
+        _ = try ChatAppearanceProfileStore.saveConfiguration(
+            ChatAppearanceProfileConfiguration(profiles: [profile]),
+            userDefaults: defaults
+        )
+        let manager = ChatAppearanceProfileManager(
+            userDefaults: defaults,
+            automaticallySchedulesRefresh: false
+        )
+
+        try manager.resetColors(profileID: ChatAppearanceProfile.defaultProfileID)
+
+        #expect(manager.configuration.defaultProfile.assistantLightTextStyles.customRules.isEmpty)
     }
 
     @Test("用户和助手文字颜色会分别持久化")
@@ -142,6 +191,173 @@ struct ChatAppearanceProfilesTests {
         #expect(legacyDecoded.userLightTextStyles.strong.hex == "123456FF")
         #expect(legacyDecoded.assistantDarkTextStyles.code.hex == "ABCDEF88")
         #expect(legacyDecoded.assistantDarkTextStyles.usesAutomaticCodeSyntaxHighlighting == true)
+    }
+
+    @Test("自定义文字颜色规则会随 Profile 持久化")
+    func customTextColorRulesPersistWithProfile() throws {
+        let rule = ChatAppearanceTextColorRule(
+            id: "gpg-rule",
+            kind: .exactText,
+            exactText: "GPG",
+            colorHex: "FF0000FF"
+        )
+        let profile = ChatAppearanceProfile(
+            id: ChatAppearanceProfile.defaultProfileID,
+            name: "default",
+            assistantLightTextStyles: ChatAppearanceTextStyleColors(
+                defaultHex: "1C1C1EFF",
+                customRules: [rule]
+            )
+        )
+
+        let data = try JSONEncoder().encode(profile)
+        let decoded = try JSONDecoder().decode(ChatAppearanceProfile.self, from: data)
+
+        #expect(decoded.assistantLightTextStyles.customRules == [rule])
+        #expect(decoded.userLightTextStyles.customRules.isEmpty)
+    }
+
+    @Test("旧文字样式配置缺少规则字段时回退为空数组")
+    func legacyTextStylesDecodeWithoutCustomRules() throws {
+        let legacyJSON = """
+        {
+          "emphasis": { "isEnabled": false, "hex": "111111FF" },
+          "strong": { "isEnabled": true, "hex": "222222FF" },
+          "code": { "isEnabled": false, "hex": "333333FF" }
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            ChatAppearanceTextStyleColors.self,
+            from: Data(legacyJSON.utf8)
+        )
+
+        #expect(decoded.customRules.isEmpty)
+        #expect(decoded.strong.hex == "222222FF")
+    }
+
+    @Test("精确文字规则会匹配全部非重叠文本")
+    func exactTextRuleMatchesAllOccurrences() {
+        let rule = ChatAppearanceTextColorRule(
+            id: "exact",
+            kind: .exactText,
+            exactText: "GPG",
+            colorHex: "FF0000FF"
+        )
+
+        let spans = ChatAppearanceTextColorMatcher.spans(in: "GPG 与 GPG", rules: [rule])
+
+        #expect(spans.map(\.range) == [0..<3, 6..<9])
+    }
+
+    @Test("成对标记规则支持方向标记和是否包含标记")
+    func delimitedRuleSupportsDirectionalMarkers() {
+        let includedRule = ChatAppearanceTextColorRule(
+            id: "included",
+            kind: .delimitedText,
+            startDelimiter: "“",
+            endDelimiter: "”",
+            includesDelimiters: true,
+            colorHex: "FF0000FF"
+        )
+        var contentOnlyRule = includedRule
+        contentOnlyRule.id = "content-only"
+        contentOnlyRule.includesDelimiters = false
+
+        let included = ChatAppearanceTextColorMatcher.spans(in: "说“你好”吧", rules: [includedRule])
+        let contentOnly = ChatAppearanceTextColorMatcher.spans(in: "说“你好”吧", rules: [contentOnlyRule])
+
+        #expect(included.map(\.range) == [1..<5])
+        #expect(contentOnly.map(\.range) == [2..<4])
+    }
+
+    @Test("相同起止标记会逐对匹配")
+    func matchingDelimiterPairsAreSupported() {
+        let rule = ChatAppearanceTextColorRule(
+            kind: .delimitedText,
+            startDelimiter: "\"",
+            endDelimiter: "\"",
+            includesDelimiters: false,
+            colorHex: "FF0000FF"
+        )
+
+        let spans = ChatAppearanceTextColorMatcher.spans(
+            in: "\"第一段\" 和 \"第二段\"",
+            rules: [rule]
+        )
+
+        #expect(spans.map(\.range) == [1..<4, 9..<12])
+    }
+
+    @Test("未闭合标记不会产生颜色范围")
+    func unclosedDelimiterDoesNotMatch() {
+        let rule = ChatAppearanceTextColorRule(
+            kind: .delimitedText,
+            startDelimiter: "[",
+            endDelimiter: "]",
+            colorHex: "FF0000FF"
+        )
+
+        #expect(ChatAppearanceTextColorMatcher.spans(in: "前缀[未闭合", rules: [rule]).isEmpty)
+    }
+
+    @Test("靠前规则优先且受保护范围不会着色")
+    func earlierRulesWinAndExcludedRangesStayUncolored() {
+        let first = ChatAppearanceTextColorRule(
+            id: "first",
+            kind: .exactText,
+            exactText: "GPG",
+            colorHex: "FF0000FF"
+        )
+        let second = ChatAppearanceTextColorRule(
+            id: "second",
+            kind: .delimitedText,
+            startDelimiter: "[",
+            endDelimiter: "]",
+            includesDelimiters: true,
+            colorHex: "00FF00FF"
+        )
+
+        let spans = ChatAppearanceTextColorMatcher.spans(
+            in: "[GPG] GPG",
+            rules: [first, second],
+            excludedRanges: [6..<9]
+        )
+
+        #expect(spans.map(\.ruleID) == ["second", "first", "second"])
+        #expect(spans.map(\.range) == [0..<1, 1..<4, 4..<5])
+    }
+
+    @Test("后台渲染会覆盖粗体颜色并避开行内代码")
+    func attributedRendererOverridesStrongButPreservesCode() async throws {
+        let rule = ChatAppearanceTextColorRule(
+            kind: .exactText,
+            exactText: "GPG",
+            colorHex: "FF0000FF"
+        )
+        let request = ChatAppearanceTextRuleRenderRequest(
+            source: "**GPG** `GPG`",
+            usesMarkdown: true,
+            styleColors: ChatAppearanceTextStyleColors(
+                defaultHex: "000000FF",
+                strong: .init(isEnabled: true, hex: "00FF00FF"),
+                customRules: [rule]
+            )
+        )
+
+        let rendered = try #require(
+            await ChatAppearanceTextRuleRenderer.shared.prepare(request: request)
+        )
+        let coloredRuns = rendered.runs.compactMap { run -> (String, String)? in
+            guard let color = run.foregroundColor,
+                  let hex = ChatAppearanceColorCodec.hexRGBA(from: color) else {
+                return nil
+            }
+            return (String(rendered[run.range].characters), hex)
+        }
+
+        #expect(coloredRuns.contains { $0.0 == "GPG" && $0.1 == "FF0000FF" })
+        #expect(coloredRuns.filter { $0.0 == "GPG" }.count == 1)
     }
 
     @Test("默认配置名称可以修改并持久化")
