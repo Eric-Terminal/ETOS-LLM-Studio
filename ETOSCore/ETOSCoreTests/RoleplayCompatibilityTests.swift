@@ -161,7 +161,8 @@ struct RoleplayCompatibilityTests {
 
         #expect(snapshot.scopedVariables(.chat) == ["新值": .int(2)])
         #expect(snapshot.customMacros["称呼"] == "旅行者")
-        #expect(snapshot.mergedVariables()["__etos_custom_macros"] != nil)
+        #expect(snapshot.mergedVariables()["__etos_custom_macros"] == nil)
+        #expect(snapshot.scopedVariables(.script)["__etos_custom_macros"] == nil)
     }
 
     @Test("MVU lodash 命令更新 stat_data 并隐藏更新块")

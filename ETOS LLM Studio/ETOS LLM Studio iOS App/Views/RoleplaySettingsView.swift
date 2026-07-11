@@ -436,6 +436,14 @@ private struct RoleplaySessionBindingView: View {
                 }
 
                 Section {
+                    if let sessionID = currentSession?.id {
+                        NavigationLink {
+                            RoleplayDataSettingsView(sessionID: sessionID)
+                        } label: {
+                            Label(NSLocalizedString("宏与变量", comment: "Roleplay macros and variables"), systemImage: "curlybraces.square")
+                        }
+                    }
+
                     NavigationLink {
                         WorldbookSettingsView()
                     } label: {

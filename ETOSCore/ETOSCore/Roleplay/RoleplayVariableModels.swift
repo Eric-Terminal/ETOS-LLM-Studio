@@ -53,7 +53,9 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
 
     public func mergedVariables(messageID: UUID? = nil, versionIndex: Int = 0) -> [String: JSONValue] {
         var merged = global
-        for layer in [preset, character, persona, script, chat] {
+        var visibleScriptVariables = script
+        visibleScriptVariables.removeValue(forKey: Self.customMacrosKey)
+        for layer in [preset, character, persona, visibleScriptVariables, chat] {
             merged.merge(layer) { _, new in new }
         }
         if let messageID {
@@ -72,7 +74,11 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         messageID: UUID? = nil,
         versionIndex: Int = 0
     ) -> [String: JSONValue] {
-        variables(scope: scope, messageID: messageID, versionIndex: versionIndex)
+        var result = variables(scope: scope, messageID: messageID, versionIndex: versionIndex)
+        if scope == .script {
+            result.removeValue(forKey: Self.customMacrosKey)
+        }
+        return result
     }
 
     public mutating func replaceVariables(
@@ -81,7 +87,11 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         messageID: UUID? = nil,
         versionIndex: Int = 0
     ) {
-        assign(variables, scope: scope, messageID: messageID, versionIndex: versionIndex)
+        var replacement = variables
+        if scope == .script, let customMacros = script[Self.customMacrosKey] {
+            replacement[Self.customMacrosKey] = customMacros
+        }
+        assign(replacement, scope: scope, messageID: messageID, versionIndex: versionIndex)
     }
 
     public var customMacros: [String: String] {
