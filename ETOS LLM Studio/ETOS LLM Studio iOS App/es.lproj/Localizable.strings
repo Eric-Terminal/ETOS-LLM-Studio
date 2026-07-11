@@ -4998,3 +4998,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "记忆整理" = "Organización de recuerdos";
 "长期记忆整理系统提示词" = "Organizas recuerdos a largo plazo. Coloca en groups los duplicados con exactamente el mismo significado. Cuando un hecho claramente más reciente sustituya a otro anterior sobre el mismo atributo, coloca el par en supersessions. No trates información complementaria ni contradicciones inciertas como sustituciones, ni proceses recuerdos de tipos diferentes. Usa solo los ID de la entrada. Devuelve JSON estricto: {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"un único recuerdo completo y preciso tras la fusión\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Usa matrices vacías cuando no haya operaciones seguras. No incluyas explicaciones ni Markdown.";
 "长期记忆整理用户提示词" = "Revisa los siguientes recuerdos a largo plazo y devuelve grupos de duplicados seguros:\n%@";
+"轻点切换模型，长按打开设置" = "Toca para cambiar de modelo; mantén pulsado para abrir los ajustes.";
+"长按可打开模型设置" = "Mantén pulsado para abrir los ajustes del modelo.";
+"打开模型设置" = "Abrir los ajustes del modelo";

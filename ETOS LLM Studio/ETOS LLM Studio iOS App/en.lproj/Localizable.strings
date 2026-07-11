@@ -4920,3 +4920,6 @@
 "记忆整理" = "Memory Organization";
 "长期记忆整理系统提示词" = "You organize long-term memories. Put exact semantic duplicates in groups. When a clearly newer fact replaces an older fact about the same attribute, put that pair in supersessions; do not treat complementary information or uncertain contradictions as replacement. Never combine different memory kinds. Use only input IDs. Return strict JSON: {\"groups\":[{\"keeper_id\":\"UUID\",\"duplicate_ids\":[\"UUID\"],\"canonical_content\":\"one complete and accurate merged memory\"}],\"supersessions\":[{\"older_id\":\"UUID\",\"newer_id\":\"UUID\"}]}. Use empty arrays when there are no safe operations. Do not output explanations or Markdown.";
 "长期记忆整理用户提示词" = "Review the following long-term memory candidates and return safe duplicate groups:\n%@";
+"轻点切换模型，长按打开设置" = "Tap to switch models; touch and hold to open settings.";
+"长按可打开模型设置" = "Touch and hold to open model settings.";
+"打开模型设置" = "Open Model Settings";

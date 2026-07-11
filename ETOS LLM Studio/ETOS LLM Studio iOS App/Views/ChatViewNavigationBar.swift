@@ -297,6 +297,7 @@ extension ChatView {
 
     func handleChatPickerSheetDismissed() {
         activeChatPickerDetent = .medium
+        quickModelSettingsTarget = nil
         resetSessionPickerSearchState()
     }
 

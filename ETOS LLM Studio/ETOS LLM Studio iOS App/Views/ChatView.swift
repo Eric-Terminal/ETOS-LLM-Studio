@@ -63,6 +63,7 @@ struct ChatView: View {
     @State var showSelectedMessagesDeleteConfirm = false
     @State var activeChatPickerSheet: ChatPickerSheet?
     @State var activeChatPickerDetent: PresentationDetent = .medium
+    @State var quickModelSettingsTarget: RunnableModel?
     @State var isChatLayoutLandscape = false
     @State var isLandscapeSessionSidebarPresented = true
     @State var bottomSafeAreaInset: CGFloat = 0

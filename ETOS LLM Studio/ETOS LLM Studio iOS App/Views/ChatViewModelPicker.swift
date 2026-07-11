@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import Foundation
 import ETOSCore
 import UIKit
 
@@ -16,6 +17,9 @@ extension ChatView {
             nativeModelPickerContent
             .navigationTitle(NSLocalizedString("选择模型", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(item: $quickModelSettingsTarget) { runnable in
+                ChatQuickModelSettingsView(runnableModel: runnable)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
@@ -46,7 +50,7 @@ extension ChatView {
                 } header: {
                     Text(NSLocalizedString("置顶模型", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("切换当前对话的模型", comment: ""))
+                    Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
                 }
 
                 if hasModelPickerRequestControls {
@@ -80,6 +84,8 @@ extension ChatView {
                 }
             } header: {
                 Text(NSLocalizedString("模型", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
             }
         }
         .navigationTitle(NSLocalizedString("更多模型", comment: ""))
@@ -98,6 +104,22 @@ extension ChatView {
                 subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
             )
         }
+        .highPriorityGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in
+                    presentQuickModelSettings(for: runnable)
+                }
+        )
+        .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
+        .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
+            presentQuickModelSettings(for: runnable)
+        }
+    }
+
+    func presentQuickModelSettings(for runnable: RunnableModel) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        activeChatPickerDetent = .large
+        quickModelSettingsTarget = runnable
     }
 
     @ViewBuilder
@@ -125,6 +147,30 @@ extension ChatView {
 
     var hasModelPickerRequestControls: Bool {
         !selectedModelRequestControls.isEmpty
+    }
+}
+
+private struct ChatQuickModelSettingsView: View {
+    @State private var provider: Provider
+    private let modelID: UUID
+
+    init(runnableModel: RunnableModel) {
+        _provider = State(initialValue: runnableModel.provider)
+        modelID = runnableModel.model.id
+    }
+
+    var body: some View {
+        if let modelIndex = provider.models.firstIndex(where: { $0.id == modelID }) {
+            ModelSettingsView(
+                model: $provider.models[modelIndex],
+                provider: provider,
+                onSave: saveProvider
+            )
+        }
+    }
+
+    private func saveProvider() {
+        ChatService.shared.saveProviderFromManagement(provider)
     }
 }
 
