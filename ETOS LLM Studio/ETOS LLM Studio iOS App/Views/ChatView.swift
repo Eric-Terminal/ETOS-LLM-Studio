@@ -68,6 +68,7 @@ struct ChatView: View {
     @State var bottomSafeAreaInset: CGFloat = 0
     @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
+    @State var chatScrollViewportHeight: CGFloat = 0
     @State var scrollDistanceToBottom: CGFloat = 0
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
@@ -815,9 +816,16 @@ extension ChatView {
                         .scrollTargetLayout()
                     }
                     .padding(.horizontal, 8)
+                    // 短列表必须占满滚动视口，避免流式增长时底部锚点搬动整段内容。
+                    .frame(minHeight: chatScrollViewportHeight, alignment: .top)
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { newHeight in
+                    chatScrollViewportHeight = newHeight
+                }
                 .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
