@@ -63,10 +63,13 @@ public enum RoleplayBridgeDispatcher {
             let variables = dictionary.compactMapValues(JSONValue.init(anyJSONValue:))
             let scope = variableScope(payload["scope"] as? String)
             let scriptID = (payload["script_id"] as? String).flatMap(UUID.init(uuidString:))
+            let extensionID = payload["extension_id"] as? String
             Task.detached(priority: .utility) {
                 var snapshot = store.variableSnapshot(sessionID: sessionID)
                 if scope == .script, let scriptID {
                     snapshot.replaceScriptVariables(variables, scriptID: scriptID)
+                } else if let extensionID, !extensionID.isEmpty {
+                    snapshot.replaceExtensionVariables(variables, extensionID: extensionID)
                 } else {
                     snapshot.replaceVariables(
                         variables,

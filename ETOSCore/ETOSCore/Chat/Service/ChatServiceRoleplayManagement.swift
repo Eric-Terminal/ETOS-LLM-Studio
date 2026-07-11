@@ -102,8 +102,8 @@ extension ChatService {
         )
         roleplayStore.upsertBinding(binding)
         var variableSnapshot = roleplayStore.variableSnapshot(sessionID: sessionID)
-        for characterID in characterIDs {
-            guard let character = roleplayStore.character(id: characterID) else { continue }
+        if let characterID = characterIDs.first,
+           let character = roleplayStore.character(id: characterID) {
             variableSnapshot.character.merge(character.initialVariables) { _, new in new }
         }
         if let personaID, let persona = roleplayStore.persona(id: personaID) {

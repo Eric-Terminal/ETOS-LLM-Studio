@@ -14,7 +14,36 @@ enum RoleplayHTMLCompatibilityRuntime {
   const api = window.etos;
   if (!api) return;
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-  const pathParts = path => String(path || '').replaceAll('[', '.').replaceAll(']', '').split('.').filter(Boolean);
+  const pathParts = path => {
+    if (Array.isArray(path)) return path.map(String);
+    const source = String(path || '');
+    const result = [];
+    let index = 0;
+    while (index < source.length) {
+      if (source[index] === '.') { index += 1; continue; }
+      if (source[index] === '[') {
+        index += 1;
+        while (/\s/.test(source[index] || '')) index += 1;
+        let value = '';
+        const quote = source[index] === '"' || source[index] === "'" ? source[index++] : null;
+        while (index < source.length) {
+          const character = source[index++];
+          if (quote && character === '\\' && index < source.length) { value += source[index++]; continue; }
+          if ((quote && character === quote) || (!quote && character === ']')) break;
+          value += character;
+        }
+        while (index < source.length && source[index] !== ']') index += 1;
+        if (source[index] === ']') index += 1;
+        if (value.trim()) result.push(value.trim());
+        continue;
+      }
+      let value = '';
+      while (index < source.length && source[index] !== '.' && source[index] !== '[') value += source[index++];
+      value = value.trim().replace(/^(["'])(.*)\1$/, '$2');
+      if (value) result.push(value);
+    }
+    return result;
+  };
   const getPath = (root, path, fallback = null) => {
     let value = root;
     for (const part of pathParts(path)) {
@@ -25,7 +54,10 @@ enum RoleplayHTMLCompatibilityRuntime {
   };
   const setPath = (root, path, value) => {
     const parts = pathParts(path);
-    if (!parts.length) return;
+    if (!parts.length) {
+      if (value && typeof value === 'object') Object.assign(root, clone(value));
+      return;
+    }
     let target = root;
     for (const part of parts.slice(0, -1)) {
       if (target[part] == null || typeof target[part] !== 'object') target[part] = {};
@@ -35,13 +67,25 @@ enum RoleplayHTMLCompatibilityRuntime {
   };
   const deletePath = (root, path) => {
     const parts = pathParts(path);
+    if (!parts.length) return false;
     let target = root;
     for (const part of parts.slice(0, -1)) {
       if (target?.[part] == null || typeof target[part] !== 'object') return false;
       target = target[part];
     }
-    return parts.length ? delete target[parts.at(-1)] : false;
+    const key = parts.at(-1);
+    if (Array.isArray(target) && /^\d+$/.test(key)) {
+      const index = Number(key);
+      if (index < 0 || index >= target.length) return false;
+      target.splice(index, 1);
+      return true;
+    }
+    return delete target[key];
   };
+  const variablePath = parts => parts.map(part => /^[^.[\]\/]+$/.test(part)
+    ? part
+    : `[${JSON.stringify(part)}]`
+  ).join('.').replaceAll('.[', '[');
   const iframeEvents = Object.freeze({
     MESSAGE_IFRAME_RENDER_STARTED: 'message_iframe_render_started',
     MESSAGE_IFRAME_RENDER_ENDED: 'message_iframe_render_ended',
@@ -102,7 +146,7 @@ enum RoleplayHTMLCompatibilityRuntime {
         if (escaped) escaped = false;
         else if (character === '\\') escaped = true;
         else if (character === quote) quote = null;
-      } else if (character === '"' || character === "'") {
+      } else if (character === '"' || character === "'" || character === '`') {
         quote = character;
         current += character;
       } else if ('[{('.includes(character)) {
@@ -129,6 +173,41 @@ enum RoleplayHTMLCompatibilityRuntime {
     const normalized = String(path || '').replace(/^stat_data\.?/, '');
     return normalized ? `stat_data.${normalized}` : 'stat_data';
   };
+  const schemaAt = (schema, path) => {
+    let current = schema?.properties?.stat_data || schema;
+    for (const part of pathParts(String(path || '').replace(/^stat_data\.?/, ''))) {
+      if (!current || typeof current !== 'object') return null;
+      if (current.type === 'array') {
+        const index = Number(part);
+        current = Array.isArray(current.prefixItems) && Number.isInteger(index)
+          ? current.prefixItems[index] || current.items
+          : current.items;
+      } else current = current.properties?.[part];
+    }
+    return current || null;
+  };
+  const schemaAllowsInsertion = (data, path, key) => {
+    if (data.schema?.['x-etos-generated']) return true;
+    const schema = schemaAt(data.schema, path);
+    if (!schema) return true;
+    if (schema.type === 'array') {
+      return schema.extensible !== false && (!schema.prefixItems || schema.extensible === true);
+    }
+    if (schema.type !== 'object') return false;
+    if (key != null && schema.properties?.[String(key)]) return true;
+    return schema.extensible !== false && schema.additionalProperties !== false;
+  };
+  const schemaAllowsDeletion = (data, path, key) => {
+    if (data.schema?.['x-etos-generated']) return true;
+    const schema = schemaAt(data.schema, path);
+    if (!schema) return true;
+    if (schema.type === 'array') {
+      return schema.extensible !== false && (!schema.prefixItems || schema.extensible === true);
+    }
+    if (schema.type !== 'object' || key == null) return false;
+    const property = schema.properties?.[String(key)];
+    return property?.required !== true && !(schema.required || []).includes(String(key));
+  };
   const parseCommands = message => {
     const commands = [];
     const source = String(message || '');
@@ -143,13 +222,15 @@ enum RoleplayHTMLCompatibilityRuntime {
           if (escaped) escaped = false;
           else if (character === '\\') escaped = true;
           else if (character === quote) quote = null;
-        } else if (character === '"' || character === "'") quote = character;
+        } else if (character === '"' || character === "'" || character === '`') quote = character;
         else if (character === '(') depth += 1;
         else if (character === ')') depth -= 1;
       }
       if (depth !== 0) break;
       const argumentEnd = cursor - 1;
-      if (source[cursor] === ';') cursor += 1;
+      while (source[cursor] === ' ' || source[cursor] === '\t') cursor += 1;
+      if (source[cursor] !== ';') { regex.lastIndex = argumentEnd + 1; continue; }
+      cursor += 1;
       const lineEnd = source.indexOf('\n', cursor);
       const suffix = source.slice(cursor, lineEnd < 0 ? source.length : lineEnd);
       const reason = suffix.match(/^\s*\/\/\s*(.*)$/)?.[1] || '';
@@ -166,23 +247,29 @@ enum RoleplayHTMLCompatibilityRuntime {
     const patchRegex = /<(json_?patch)\b[^>]*>([\s\S]*?)<\/\1>/gi;
     while ((match = patchRegex.exec(source))) {
       let operations;
-      try { operations = JSON.parse(match[2]); }
+      const patchBody = match[2].trim().replace(/^```[^\n]*\n([\s\S]*?)\n```$/, '$1').trim();
+      try { operations = JSON.parse(patchBody); }
       catch (_) {
-        try { operations = window.YAML?.parse?.(match[2]); }
+        try { operations = window.YAML?.parse?.(patchBody); }
         catch (_) { operations = []; }
       }
       for (const [operationIndex, operation] of (Array.isArray(operations) ? operations : []).entries()) {
         const offset = match.index + operationIndex;
-        const path = String(operation.path || operation.to || '').replace(/^\//, '').replaceAll('/', '.');
+        const path = variablePath(String(operation.path || operation.to || '').replace(/^\//, '').split('/').map(value => value.replaceAll('~1', '/').replaceAll('~0', '~')));
         if (operation.op === 'replace') commands.push({ offset, type: 'set', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
         else if (operation.op === 'delta') commands.push({ offset, type: 'add', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
         else if (operation.op === 'insert' || operation.op === 'add') {
           const parts = pathParts(path);
-          if (parts.at(-1) === '-') commands.push({ offset, type: 'insert', full_match: JSON.stringify(operation), args: [parts.slice(0, -1).join('.'), '-', operation.value], reason: 'json_patch' });
-          else commands.push({ offset, type: 'insert', full_match: JSON.stringify(operation), args: [path, operation.value], reason: 'json_patch' });
+          commands.push({
+            offset,
+            type: 'insert',
+            full_match: JSON.stringify(operation),
+            args: [variablePath(parts.slice(0, -1)), parts.at(-1), operation.value],
+            reason: 'json_patch'
+          });
         } else if (operation.op === 'remove') commands.push({ offset, type: 'delete', full_match: JSON.stringify(operation), args: [path], reason: 'json_patch' });
         else if (operation.op === 'move') {
-          const from = String(operation.from || '').replace(/^\//, '').replaceAll('/', '.');
+          const from = variablePath(String(operation.from || '').replace(/^\//, '').split('/').map(value => value.replaceAll('~1', '/').replaceAll('~0', '~')));
           commands.push({ offset, type: 'move', full_match: JSON.stringify(operation), args: [from, path], reason: 'json_patch' });
         }
       }
@@ -194,15 +281,26 @@ enum RoleplayHTMLCompatibilityRuntime {
     const targetPath = statPath(path);
     switch (command.type) {
       case 'set': {
-        const value = args.length >= 2 ? args[1] : args[0];
-        if (args.length < 2 || JSON.stringify(getPath(data, targetPath)) === JSON.stringify(args[0])) setPath(data, targetPath, value);
+        const current = getPath(data, targetPath, undefined);
+        if (current === undefined) break;
+        let value = args.length >= 2 ? args[1] : args[0];
+        if (args.length >= 2 && JSON.stringify(Array.isArray(current) && current.length === 2 && typeof current[1] === 'string' ? current[0] : current) !== JSON.stringify(args[0])) break;
+        const comparable = Array.isArray(current) && current.length === 2 && typeof current[1] === 'string' ? current[0] : current;
+        if (typeof comparable === 'number' && value !== null && !Number.isNaN(Number(value))) value = Number(value);
+        if (Array.isArray(current) && current.length === 2 && typeof current[1] === 'string') setPath(data, targetPath, [value, current[1]]);
+        else setPath(data, targetPath, value);
         break;
       }
       case 'add':
         {
           const current = getPath(data, targetPath, undefined);
+          if (current === undefined) break;
           const actual = Array.isArray(current) && current.length === 2 && typeof current[1] === 'string' ? current[0] : current;
-          const updated = Number(actual) + Number(args[0] || 0);
+          let updated;
+          const date = typeof actual === 'string' && Number.isNaN(Number(actual)) ? new Date(actual) : null;
+          if (date && !Number.isNaN(date.getTime())) updated = new Date(date.getTime() + Number(args[0] || 0)).toISOString();
+          else if (typeof actual === 'number' && !Number.isNaN(Number(args[0]))) updated = Number((actual + Number(args[0])).toPrecision(12));
+          else break;
           if (Array.isArray(current) && current.length === 2 && typeof current[1] === 'string') setPath(data, targetPath, [updated, current[1]]);
           else setPath(data, targetPath, updated);
         }
@@ -211,16 +309,23 @@ enum RoleplayHTMLCompatibilityRuntime {
         const current = getPath(data, targetPath, null);
         const key = args.length >= 2 ? args[0] : null;
         const value = args.length >= 2 ? args[1] : args[0];
+        if (!schemaAllowsInsertion(data, path, key)) break;
         if (Array.isArray(current)) current.splice(key == null || key === '-' ? current.length : Math.max(0, Number(key)), 0, clone(value));
         else if (current && typeof current === 'object' && key != null) current[String(key)] = clone(value);
-        else setPath(data, key == null ? targetPath : `${targetPath}.${key}`, value);
+        else if (current && typeof current === 'object' && value && typeof value === 'object' && !Array.isArray(value)) Object.assign(current, clone(value));
+        else if (current == null && key != null) setPath(data, `${targetPath}.${key}`, value);
         break;
       }
       case 'delete':
       case 'remove': {
-        if (!args.length) deletePath(data, targetPath);
+        if (!args.length) {
+          const parts = pathParts(path);
+          const containerPath = variablePath(parts.slice(0, -1));
+          if (schemaAllowsDeletion(data, containerPath, parts.at(-1))) deletePath(data, targetPath);
+        }
         else {
           const current = getPath(data, targetPath, null);
+          if (!schemaAllowsDeletion(data, path, args[0])) break;
           if (Array.isArray(current)) {
             const index = Number(args[0]);
             if (Number.isInteger(index) && index >= 0 && index < current.length) current.splice(index, 1);
@@ -259,7 +364,31 @@ enum RoleplayHTMLCompatibilityRuntime {
       await api.eventEmitAndWait(mvuEvents.VARIABLE_UPDATE_STARTED, updated);
       const commands = parseCommands(message);
       await api.eventEmitAndWait(mvuEvents.COMMAND_PARSED, updated, commands, String(message || ''));
-      commands.forEach(command => applyCommand(updated, command));
+      updated.display_data = clone(before.stat_data || {});
+      updated.delta_data = {};
+      for (const command of commands) {
+        const rawPath = command.args?.[0] ?? '';
+        const targetPath = statPath(rawPath);
+        const oldValue = clone(getPath(updated, targetPath, undefined));
+        applyCommand(updated, command);
+        const newValue = clone(getPath(updated, targetPath, undefined));
+        if (JSON.stringify(oldValue) === JSON.stringify(newValue)) continue;
+        const visibleOld = Array.isArray(oldValue) && oldValue.length === 2 && typeof oldValue[1] === 'string' ? oldValue[0] : oldValue;
+        const visibleNew = Array.isArray(newValue) && newValue.length === 2 && typeof newValue[1] === 'string' ? newValue[0] : newValue;
+        const displayPath = String(rawPath).replace(/^stat_data\.?/, '');
+        const description = `${JSON.stringify(visibleOld)}->${JSON.stringify(visibleNew)}${command.reason ? ` (${command.reason})` : ''}`;
+        if (displayPath) {
+          setPath(updated.display_data, displayPath, description);
+          setPath(updated.delta_data, displayPath, description);
+        }
+        await api.eventEmitAndWait(
+          mvuEvents.SINGLE_VARIABLE_UPDATED,
+          updated.stat_data,
+          displayPath,
+          oldValue,
+          newValue
+        );
+      }
       await api.eventEmitAndWait(mvuEvents.VARIABLE_UPDATE_ENDED, updated, before);
       return updated;
     },

@@ -32,7 +32,7 @@ public struct RoleplayMVUData: Codable, Hashable, Sendable {
     ) {
         self.initializedLorebooks = initializedLorebooks
         self.statData = statData
-        self.schema = schema ?? Self.makeSchema(for: .dictionary(statData))
+        self.schema = schema ?? Self.generatedSchema(for: statData)
         self.displayData = displayData ?? statData
         self.deltaData = deltaData
         self.extra = extra
@@ -102,7 +102,15 @@ public struct RoleplayMVUData: Codable, Hashable, Sendable {
     }
 
     public mutating func regenerateSchema() {
-        schema = Self.makeSchema(for: .dictionary(statData))
+        schema = Self.generatedSchema(for: statData)
+    }
+
+    private static func generatedSchema(for statData: [String: JSONValue]) -> JSONValue {
+        guard case .dictionary(var fields) = makeSchema(for: .dictionary(statData)) else {
+            return makeSchema(for: .dictionary(statData))
+        }
+        fields["x-etos-generated"] = .bool(true)
+        return .dictionary(fields)
     }
 
     public static func makeSchema(for value: JSONValue, required: Bool = true) -> JSONValue {
@@ -125,6 +133,7 @@ public struct RoleplayMVUData: Codable, Hashable, Sendable {
                 fields["maxItems"] = .int(2)
             } else {
                 fields["items"] = array.first.map { makeSchema(for: $0) } ?? .dictionary(["type": .string("any")])
+                fields["extensible"] = .bool(true)
             }
         case .string:
             fields["type"] = .string("string")

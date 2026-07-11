@@ -191,6 +191,12 @@ public enum RoleplayHTMLDocumentFactory {
             scopedVariables[RoleplayVariableScope.chat.rawValue] = .dictionary(variables)
         }
         let scopedVariablesJSON = jsonLiteral(.dictionary(scopedVariables))
+        let scriptScopesJSON = jsonLiteral(.dictionary(
+            (variableSnapshot?.allScriptVariables ?? [:]).mapValues(JSONValue.dictionary)
+        ))
+        let extensionScopesJSON = jsonLiteral(.dictionary(
+            (variableSnapshot?.extensionScopes ?? [:]).mapValues(JSONValue.dictionary)
+        ))
         let userJSON = jsonString(userName)
         let characterJSON = jsonString(characterName)
         let userAvatarJSON = jsonString(userAvatarPath)
@@ -267,6 +273,8 @@ public enum RoleplayHTMLDocumentFactory {
 (function () {
   const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
   let scopedVariables = \(scopedVariablesJSON);
+  let scriptVariableScopes = \(scriptScopesJSON);
+  let extensionVariableScopes = \(extensionScopesJSON);
   let chatMessages = \(chatMessagesJSON);
   const worldbookList = \(worldbooksJSON);
   let currentCharacterWorldbooks = {
@@ -274,6 +282,9 @@ public enum RoleplayHTMLDocumentFactory {
     additional: \(additionalWorldbooksJSON)
   };
   const currentScriptID = \(scriptIDJSON);
+  if (currentScriptID && !scriptVariableScopes[currentScriptID]) {
+    scriptVariableScopes[currentScriptID] = clone(scopedVariables.script || {});
+  }
   const currentMessageIndex = \(currentMessageIndex);
   const currentScriptName = \(scriptNameJSON);
   const currentIframeName = currentScriptID
@@ -354,7 +365,36 @@ public enum RoleplayHTMLDocumentFactory {
   const post = payload => {
     try { window.webkit?.messageHandlers?.etosRoleplay?.postMessage(payload); } catch (_) {}
   };
-  const pathParts = path => String(path || '').replaceAll('[', '.').replaceAll(']', '').split('.').filter(Boolean);
+  const pathParts = path => {
+    if (Array.isArray(path)) return path.map(String);
+    const source = String(path || '');
+    const result = [];
+    let index = 0;
+    while (index < source.length) {
+      if (source[index] === '.') { index += 1; continue; }
+      if (source[index] === '[') {
+        index += 1;
+        while (/\\s/.test(source[index] || '')) index += 1;
+        let value = '';
+        const quote = source[index] === '"' || source[index] === "'" ? source[index++] : null;
+        while (index < source.length) {
+          const character = source[index++];
+          if (quote && character === '\\' && index < source.length) { value += source[index++]; continue; }
+          if ((quote && character === quote) || (!quote && character === ']')) break;
+          value += character;
+        }
+        while (index < source.length && source[index] !== ']') index += 1;
+        if (source[index] === ']') index += 1;
+        if (value.trim()) result.push(value.trim());
+        continue;
+      }
+      let value = '';
+      while (index < source.length && source[index] !== '.' && source[index] !== '[') value += source[index++];
+      value = value.trim().replace(/^(["'])(.*)\\1$/, '$2');
+      if (value) result.push(value);
+    }
+    return result;
+  };
   const getPath = (root, path, fallback = null) => {
     let value = root;
     for (const part of pathParts(path)) {
@@ -365,7 +405,10 @@ public enum RoleplayHTMLDocumentFactory {
   };
   const setPath = (root, path, value) => {
     const parts = pathParts(path);
-    if (!parts.length) return;
+    if (!parts.length) {
+      if (value && typeof value === 'object') Object.assign(root, clone(value));
+      return;
+    }
     let target = root;
     parts.slice(0, -1).forEach(part => {
       if (target[part] == null || typeof target[part] !== 'object') target[part] = {};
@@ -381,7 +424,14 @@ public enum RoleplayHTMLDocumentFactory {
       if (target?.[part] == null || typeof target[part] !== 'object') return false;
       target = target[part];
     }
-    return delete target[parts.at(-1)];
+    const key = parts.at(-1);
+    if (Array.isArray(target) && /^\\d+$/.test(key)) {
+      const index = Number(key);
+      if (index < 0 || index >= target.length) return false;
+      target.splice(index, 1);
+      return true;
+    }
+    return delete target[key];
   };
   const mergeValue = (target, source, overwrite) => {
     for (const [key, value] of Object.entries(source || {})) {
@@ -398,7 +448,7 @@ public enum RoleplayHTMLDocumentFactory {
   };
   const scopeName = option => {
     const value = String(option?.type || 'chat').toLowerCase();
-    return value === 'extension' ? 'script' : value;
+    return value;
   };
   const messageIndex = option => {
     if (option?.message_id === undefined || option?.message_id === 'latest') {
@@ -407,7 +457,11 @@ public enum RoleplayHTMLDocumentFactory {
       }
       return chatMessages.length - 1;
     }
-    return normalizeMessageId(option.message_id);
+    const raw = Number(option.message_id);
+    if (!Number.isInteger(raw) || raw < -chatMessages.length || raw >= chatMessages.length) {
+      throw new Error(`Message '${option.message_id}' is outside [-${chatMessages.length}, ${chatMessages.length})`);
+    }
+    return normalizeMessageId(raw);
   };
   const scopeVariables = option => {
     const scope = scopeName(option);
@@ -421,19 +475,35 @@ public enum RoleplayHTMLDocumentFactory {
       message.data = message.swipes_data[swipe];
       return message.data;
     }
+    if (scope === 'script') {
+      const scriptID = String(option?.script_id || currentScriptID || '');
+      if (!scriptID) throw new Error('Script variables require script_id');
+      scriptVariableScopes[scriptID] ||= {};
+      if (scriptID === currentScriptID) scopedVariables.script = scriptVariableScopes[scriptID];
+      return scriptVariableScopes[scriptID];
+    }
+    if (scope === 'extension') {
+      const extensionID = String(option?.extension_id || '');
+      if (!extensionID) throw new Error('Extension variables require extension_id');
+      extensionVariableScopes[extensionID] ||= {};
+      return extensionVariableScopes[extensionID];
+    }
     if (!scopedVariables[scope]) scopedVariables[scope] = {};
     return scopedVariables[scope];
   };
-  const rebuildVariables = () => Object.assign(
-    {},
-    scopedVariables.global || {},
-    scopedVariables.preset || {},
-    scopedVariables.character || {},
-    scopedVariables.persona || {},
-    scopedVariables.script || {},
-    scopedVariables.chat || {},
-    scopedVariables.message || {}
-  );
+  const rebuildVariables = () => {
+    const layers = [scopedVariables.global || {}, scopedVariables.character || {}];
+    if (currentScriptID) layers.push(scopeVariables({ type: 'script' }));
+    layers.push(scopedVariables.chat || {});
+    if (!currentScriptID) {
+      const end = Math.min(Math.max(currentMessageIndex, 0), chatMessages.length - 1);
+      for (let index = 0; index <= end; index += 1) {
+        const message = chatMessages[index];
+        layers.push(message?.swipes_data?.[message.swipe_id || 0] || message?.data || {});
+      }
+    }
+    return Object.assign({}, ...layers);
+  };
   const emitLocal = async (type, ...args) => {
     for (const listener of [...(listeners.get(type) || [])]) await listener(...args);
     window.dispatchEvent(new CustomEvent('etos:' + type, { detail: args }));
@@ -558,9 +628,25 @@ public enum RoleplayHTMLDocumentFactory {
       post({ action: 'replace_message_variables', message_id: index, swipe_id: swipe, value: message.data });
       return clone(message.data);
     }
-    scopedVariables[scope] = clone(value || {});
-    post({ action: 'replace_variables', scope, script_id: scope === 'script' ? currentScriptID : '', value: scopedVariables[scope] });
-    return clone(scopedVariables[scope]);
+    const replacement = clone(value || {});
+    if (scope === 'script') {
+      const scriptID = String(option?.script_id || currentScriptID || '');
+      if (!scriptID) throw new Error('Script variables require script_id');
+      scriptVariableScopes[scriptID] = replacement;
+      if (scriptID === currentScriptID) scopedVariables.script = replacement;
+      post({ action: 'replace_variables', scope, script_id: scriptID, value: replacement });
+      return clone(replacement);
+    }
+    if (scope === 'extension') {
+      const extensionID = String(option?.extension_id || '');
+      if (!extensionID) throw new Error('Extension variables require extension_id');
+      extensionVariableScopes[extensionID] = replacement;
+      post({ action: 'replace_variables', scope, extension_id: extensionID, value: replacement });
+      return clone(replacement);
+    }
+    scopedVariables[scope] = replacement;
+    post({ action: 'replace_variables', scope, value: replacement });
+    return clone(replacement);
   };
   const applyMacroLikes = (text, context = {}) => {
     let output = String(text ?? '');
@@ -1102,9 +1188,25 @@ public enum RoleplayHTMLDocumentFactory {
   window.translate = text => String(text ?? '');
   window.getContext = window.SillyTavern.getContext;
   window.__etosEmitScriptButton = name => emitLocal(api.getButtonEvent(name));
-  window.__etosReceiveEvent = (name, args, source) => source === currentIframeName
-    ? undefined
-    : emitLocal(name, ...(Array.isArray(args) ? args : []));
+  window.__etosReceiveEvent = (name, args, source) => {
+    if (source === currentIframeName) return undefined;
+    const values = Array.isArray(args) ? args : [];
+    if ([
+      'mag_variable_initiailized', 'mag_variable_initialized',
+      'mag_variable_update_started', 'mag_command_parsed', 'mag_variable_update_ended'
+    ].includes(name) && values[0] && typeof values[0] === 'object') {
+      const index = messageIndex({ type: 'message', message_id: 'latest' });
+      const message = chatMessages[index];
+      if (message) {
+        const swipe = message.swipe_id || 0;
+        message.data = clone(values[0]);
+        message.swipes_data ||= [];
+        message.swipes_data[swipe] = message.data;
+        if (index === chatMessages.length - 1) scopedVariables.message = message.data;
+      }
+    }
+    return emitLocal(name, ...values);
+  };
   window.__etosExpandMacros = (requestID, text) => post({
     action: 'macro_expansion_response',
     request_id: requestID,

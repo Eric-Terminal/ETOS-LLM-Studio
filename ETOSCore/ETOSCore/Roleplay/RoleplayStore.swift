@@ -187,10 +187,9 @@ public final class RoleplayStore: @unchecked Sendable {
 
             snapshot.global = shared.global
             snapshot.preset = shared.preset
-            snapshot.character = binding?.characterIDs.reduce(into: [String: JSONValue]()) { values, id in
-                values.merge(shared.characters[id] ?? [:]) { _, new in new }
-            } ?? [:]
+            snapshot.character = binding?.characterIDs.first.flatMap { shared.characters[$0] } ?? [:]
             snapshot.persona = binding?.personaID.flatMap { shared.personas[$0] } ?? [:]
+            snapshot.extensionScopes = shared.extensions ?? [:]
             return snapshot
         }
     }
@@ -210,11 +209,13 @@ public final class RoleplayStore: @unchecked Sendable {
             if let personaID = binding?.personaID {
                 shared.personas[personaID] = snapshot.persona
             }
+            shared.extensions = snapshot.extensionScopes ?? [:]
             var sessionSnapshot = snapshot
             sessionSnapshot.global = [:]
             sessionSnapshot.preset = [:]
             sessionSnapshot.character = [:]
             sessionSnapshot.persona = [:]
+            sessionSnapshot.extensionScopes = nil
             variables[sessionID] = sessionSnapshot
             saveVariablesUnlocked(variables)
             saveSharedVariablesUnlocked(shared)

@@ -22,10 +22,34 @@ public struct RoleplayMVUChange: Codable, Hashable, Sendable {
     }
 }
 
+public struct RoleplayMVUCommandInfo: Codable, Hashable, Sendable {
+    public var type: String
+    public var fullMatch: String
+    public var arguments: [JSONValue]
+    public var reason: String
+
+    public init(type: String, fullMatch: String, arguments: [JSONValue], reason: String) {
+        self.type = type
+        self.fullMatch = fullMatch
+        self.arguments = arguments
+        self.reason = reason
+    }
+
+    var bridgeValue: [String: Any] {
+        [
+            "type": type,
+            "full_match": fullMatch,
+            "args": arguments.map { $0.toAny() },
+            "reason": reason
+        ]
+    }
+}
+
 public struct RoleplayMVUResult: Hashable, Sendable {
     public var visibleContent: String
     public var updatedSnapshot: RoleplayVariableSnapshot
     public var appliedCommandCount: Int
+    public var parsedCommands: [RoleplayMVUCommandInfo]
     public var changes: [RoleplayMVUChange]
     public var failureReasons: [String]
 
@@ -33,12 +57,14 @@ public struct RoleplayMVUResult: Hashable, Sendable {
         visibleContent: String,
         updatedSnapshot: RoleplayVariableSnapshot,
         appliedCommandCount: Int,
+        parsedCommands: [RoleplayMVUCommandInfo] = [],
         changes: [RoleplayMVUChange] = [],
         failureReasons: [String] = []
     ) {
         self.visibleContent = visibleContent
         self.updatedSnapshot = updatedSnapshot
         self.appliedCommandCount = appliedCommandCount
+        self.parsedCommands = parsedCommands
         self.changes = changes
         self.failureReasons = failureReasons
     }
@@ -69,17 +95,51 @@ public enum RoleplayMVUEngine {
         var path: String
         var kind: CommandKind
         var reason: String
+
+        var info: RoleplayMVUCommandInfo {
+            let type: String
+            let values: [JSONValue]
+            switch kind {
+            case .set(let expected, let value):
+                type = "set"
+                values = expected.map { [.string(path), $0, value] } ?? [.string(path), value]
+            case .add(let value):
+                type = "add"
+                values = [.string(path), value]
+            case .insert(let key, let value):
+                type = "insert"
+                values = key.map { [.string(path), .string($0), value] } ?? [.string(path), value]
+            case .patchInsert(let value):
+                type = "insert"
+                values = [.string(path), value]
+            case .delete(let value):
+                type = "delete"
+                values = value.map { [.string(path), $0] } ?? [.string(path)]
+            case .move(let destination):
+                type = "move"
+                values = [.string(path), .string(destination)]
+            }
+            let rendered = values.map { $0.prettyPrintedCompact() }.joined(separator: ", ")
+            return RoleplayMVUCommandInfo(
+                type: type,
+                fullMatch: "_.\(type)(\(rendered));",
+                arguments: values,
+                reason: reason
+            )
+        }
     }
 
     public static func applyUpdates(
         in content: String,
+        commandSource: String? = nil,
         snapshot: RoleplayVariableSnapshot,
         messageID: UUID,
         versionIndex: Int
     ) -> RoleplayMVUResult {
-        let taggedBlocks = taggedRanges(named: "UpdateVariable", in: content)
-        let blocks = taggedBlocks.isEmpty && containsCommandSyntax(in: content)
-            ? [TaggedRange(location: 0, content: content)]
+        let source = commandSource ?? content
+        let taggedBlocks = taggedRanges(named: "UpdateVariable", in: source)
+        let blocks = taggedBlocks.isEmpty && containsCommandSyntax(in: source)
+            ? [TaggedRange(location: 0, content: source)]
             : taggedBlocks
         guard !blocks.isEmpty else {
             return RoleplayMVUResult(
@@ -104,7 +164,12 @@ public enum RoleplayMVUEngine {
         let statDataBeforeUpdate = variables.statData
         var commandChanges: [RoleplayMVUChange] = []
         for command in commands {
-            if let change = apply(command, to: &variables.statData, failures: &failures) {
+            if let change = apply(
+                command,
+                to: &variables.statData,
+                schema: variables.schema,
+                failures: &failures
+            ) {
                 commandChanges.append(change)
             }
         }
@@ -141,6 +206,7 @@ public enum RoleplayMVUEngine {
             appliedCommandCount: commandChanges.filter { change in
                 value(at: change.path, in: variables.statData) != change.oldValue
             }.count,
+            parsedCommands: commands.map(\.info),
             changes: changes,
             failureReasons: failures
         )
@@ -174,7 +240,8 @@ public enum RoleplayMVUEngine {
                 continue
             }
             for (index, operation) in operations.enumerated() {
-                let path = operation.path ?? operation.to ?? ""
+                let pointer = operation.path ?? operation.to ?? ""
+                let path = patchCommandPath(pointer)
                 let offset = baseOffset + match.location + index
                 switch operation.op.lowercased() {
                 case "replace":
@@ -185,7 +252,7 @@ public enum RoleplayMVUEngine {
                     commands.append(.init(offset: offset, path: path, kind: .add(value), reason: "json_patch"))
                 case "insert", "add":
                     guard let value = operation.value else { continue }
-                    commands.append(.init(offset: offset, path: path, kind: .patchInsert(value), reason: "json_patch"))
+                    commands.append(.init(offset: offset, path: pointer, kind: .patchInsert(value), reason: "json_patch"))
                 case "remove":
                     commands.append(.init(offset: offset, path: path, kind: .delete(nil), reason: "json_patch"))
                 case "move":
@@ -193,7 +260,12 @@ public enum RoleplayMVUEngine {
                         failures.append("JSONPatch move 缺少 from。")
                         continue
                     }
-                    commands.append(.init(offset: offset, path: from, kind: .move(path), reason: "json_patch"))
+                    commands.append(.init(
+                        offset: offset,
+                        path: patchCommandPath(from),
+                        kind: .move(path),
+                        reason: "json_patch"
+                    ))
                 default:
                     failures.append("不支持的 MVU 操作：\(operation.op)")
                 }
@@ -203,7 +275,19 @@ public enum RoleplayMVUEngine {
     }
 
     private static func decodeJSONPatch(_ source: String) -> [JSONPatchOperation]? {
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let regex = try? NSRegularExpression(
+            pattern: #"^```[^\n]*\n([\s\S]*?)\n```$"#,
+            options: [.caseInsensitive]
+        ) {
+            let value = trimmed as NSString
+            if let match = regex.firstMatch(
+                in: trimmed,
+                range: NSRange(location: 0, length: value.length)
+            ), match.numberOfRanges > 1 {
+                trimmed = value.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
         if let data = trimmed.data(using: .utf8),
            let operations = try? JSONDecoder().decode([JSONPatchOperation].self, from: data) {
             return operations
@@ -245,17 +329,25 @@ public enum RoleplayMVUEngine {
                 failures.append("MVU 命令缺少右括号。")
                 break
             }
+            var commandEnd = closing + 1
+            while commandEnd < units.count, (units[commandEnd] == 32 || units[commandEnd] == 9) {
+                commandEnd += 1
+            }
+            guard commandEnd < units.count, units[commandEnd] == 59 else {
+                searchLocation = closing + 1
+                continue
+            }
             let name = value.substring(with: match.range(at: 1)).lowercased()
             let rawArguments = value.substring(with: NSRange(location: argumentStart, length: closing - argumentStart))
             let arguments = splitArguments(rawArguments)
             let lineEnd = min(
-                value.range(of: "\n", options: [], range: NSRange(location: closing + 1, length: value.length - closing - 1)).location,
+                value.range(of: "\n", options: [], range: NSRange(location: commandEnd + 1, length: value.length - commandEnd - 1)).location,
                 value.length
             )
-            let suffixLength = max(0, lineEnd - closing - 1)
-            let suffix = value.substring(with: NSRange(location: closing + 1, length: suffixLength))
+            let suffixLength = max(0, lineEnd - commandEnd - 1)
+            let suffix = value.substring(with: NSRange(location: commandEnd + 1, length: suffixLength))
             let reason = suffix.firstMatch(#"^\s*;?\s*//\s*(.*)$"#, group: 1) ?? ""
-            searchLocation = closing + 1
+            searchLocation = commandEnd + 1
 
             guard let rawPath = arguments.first,
                   case .string(let path) = parseLiteral(rawPath) else {
@@ -304,6 +396,7 @@ public enum RoleplayMVUEngine {
     private static func apply(
         _ command: Command,
         to statData: inout [String: JSONValue],
+        schema: JSONValue,
         failures: inout [String]
     ) -> RoleplayMVUChange? {
         let path: String
@@ -315,8 +408,27 @@ public enum RoleplayMVUEngine {
         let oldValue = value(at: path, in: statData)
         switch command.kind {
         case .set(let expected, let value):
+            if path.isEmpty {
+                guard case .dictionary(let replacement) = value else {
+                    failures.append("MVU set 根路径只接受对象。")
+                    return nil
+                }
+                let previous = JSONValue.dictionary(statData)
+                if let expected, comparableValue(previous) != comparableValue(expected) { return nil }
+                statData = replacement
+                return RoleplayMVUChange(
+                    path: "",
+                    oldValue: previous,
+                    newValue: .dictionary(replacement),
+                    reason: command.reason
+                )
+            }
+            guard oldValue != nil else {
+                failures.append("MVU set 路径不存在：\(path)")
+                return nil
+            }
             if let expected, comparableValue(oldValue) != comparableValue(expected) { return nil }
-            setValue(preservingDescription(value, current: oldValue), at: path, in: &statData)
+            setValue(preservingDescription(coerced(value, for: oldValue), current: oldValue), at: path, in: &statData)
         case .add(let delta):
             guard let current = comparableValue(oldValue) else {
                 failures.append("MVU add 路径不存在：\(path)")
@@ -328,16 +440,39 @@ public enum RoleplayMVUEngine {
             }
             setValue(preservingDescription(next, current: oldValue), at: path, in: &statData)
         case .insert(let key, let value):
+            guard permitsInsertion(at: path, key: key, schema: schema) else {
+                failures.append("MVU insert 违反 schema 扩展约束：\(path)")
+                return nil
+            }
             guard insert(value, at: path, key: key, in: &statData) else {
                 failures.append("MVU insert 目标不是集合：\(path)")
                 return nil
             }
         case .patchInsert(let value):
+            let pointerParts = patchPathComponents(command.path)
+            let exactPath = variablePath(pointerParts)
+            let schemaPath: String
+            let insertionKey: String?
+            if case .array = self.value(at: exactPath, in: statData) {
+                schemaPath = exactPath
+                insertionKey = nil
+            } else {
+                schemaPath = variablePath(Array(pointerParts.dropLast()))
+                insertionKey = pointerParts.last
+            }
+            guard permitsInsertion(at: schemaPath, key: insertionKey, schema: schema) else {
+                failures.append("MVU JSONPatch insert 违反 schema 扩展约束：\(command.path)")
+                return nil
+            }
             guard insertPatchValue(value, pointer: command.path, in: &statData) else {
                 failures.append("MVU JSONPatch insert 路径无效：\(command.path)")
                 return nil
             }
         case .delete(let target):
+            guard permitsDeletion(at: path, target: target, schema: schema) else {
+                failures.append("MVU delete 违反 schema 必填或扩展约束：\(path)")
+                return nil
+            }
             if let target {
                 guard remove(target, from: path, in: &statData) else {
                     failures.append("MVU delete 未找到目标：\(path)")
@@ -364,9 +499,9 @@ public enum RoleplayMVUEngine {
 
     private static func patchMutationPath(_ pointer: String, in root: [String: JSONValue]) -> String {
         let tokens = patchPathComponents(pointer)
-        let exactPath = tokens.joined(separator: ".")
+        let exactPath = variablePath(tokens)
         if case .array = value(at: exactPath, in: root) { return exactPath }
-        let containerPath = tokens.dropLast().joined(separator: ".")
+        let containerPath = variablePath(Array(tokens.dropLast()))
         return containerPath.isEmpty ? (tokens.last ?? "") : containerPath
     }
 
@@ -386,6 +521,14 @@ public enum RoleplayMVUEngine {
         guard case .array(let pair) = current, pair.count == 2,
               case .string = pair[1] else { return value }
         return .array([value, pair[1]])
+    }
+
+    private static func coerced(_ value: JSONValue, for current: JSONValue?) -> JSONValue {
+        let comparable = comparableValue(current)
+        guard comparable?.numericValue != nil,
+              case .string(let raw) = value,
+              let number = Double(raw) else { return value }
+        return number.rounded(.towardZero) == number ? .int(Int(number)) : .double(number)
     }
 
     private static func comparableValue(_ value: JSONValue?) -> JSONValue? {
@@ -442,12 +585,12 @@ public enum RoleplayMVUEngine {
     ) -> Bool {
         let tokens = patchPathComponents(pointer)
         guard !tokens.isEmpty else { return false }
-        let exactPath = tokens.joined(separator: ".")
+        let exactPath = variablePath(tokens)
         if case .array = self.value(at: exactPath, in: root) {
             return insert(value, at: exactPath, key: nil, in: &root)
         }
         let key = tokens.last!
-        let containerPath = tokens.dropLast().joined(separator: ".")
+        let containerPath = variablePath(Array(tokens.dropLast()))
         if containerPath.isEmpty {
             root[key] = value
             return true
@@ -490,10 +633,10 @@ public enum RoleplayMVUEngine {
     }
 
     private static func normalizedStatPath(_ path: String) -> String {
-        let normalized = path
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/."))
-            .replacingOccurrences(of: "/", with: ".")
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.hasPrefix("/")
+            ? trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/.")).replacingOccurrences(of: "/", with: ".")
+            : trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "."))
         return normalized.hasPrefix("stat_data.")
             ? String(normalized.dropFirst("stat_data.".count))
             : normalized == "stat_data" ? "" : normalized
@@ -508,13 +651,116 @@ public enum RoleplayMVUEngine {
         return pathComponents(normalizedStatPath(path))
     }
 
+    private static func patchCommandPath(_ pointer: String) -> String {
+        variablePath(patchPathComponents(pointer))
+    }
+
+    private static func variablePath(_ components: [String]) -> String {
+        components.map { component in
+            if !component.isEmpty, !component.contains(where: { ".[]/".contains($0) }) {
+                return component
+            }
+            let escaped = component
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "[\"\(escaped)\"]"
+        }.joined(separator: ".").replacingOccurrences(of: ".[", with: "[")
+    }
+
+    private static func permitsInsertion(
+        at path: String,
+        key: String?,
+        schema: JSONValue
+    ) -> Bool {
+        if case .dictionary(let root) = schema, root["x-etos-generated"] == .bool(true) { return true }
+        guard case .dictionary(let fields) = schemaValue(at: path, schema: schema) else { return true }
+        switch fields["type"]?.stringValue {
+        case "array":
+            if case .bool(false) = fields["extensible"] { return false }
+            if fields["prefixItems"] != nil, fields["extensible"] != .bool(true) { return false }
+            return true
+        case "object":
+            if let key,
+               case .dictionary(let properties) = fields["properties"],
+               properties[key] != nil {
+                return true
+            }
+            if case .bool(false) = fields["extensible"] { return false }
+            if case .bool(false) = fields["additionalProperties"] { return false }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func permitsDeletion(
+        at path: String,
+        target: JSONValue?,
+        schema: JSONValue
+    ) -> Bool {
+        if case .dictionary(let root) = schema, root["x-etos-generated"] == .bool(true) { return true }
+        let components = pathComponents(path)
+        let containerPath: String
+        let key: String?
+        if let target {
+            containerPath = path
+            key = target.pathComponent
+        } else {
+            containerPath = variablePath(Array(components.dropLast()))
+            key = components.last
+        }
+        guard case .dictionary(let fields) = schemaValue(at: containerPath, schema: schema) else { return true }
+        switch fields["type"]?.stringValue {
+        case "array":
+            if case .bool(false) = fields["extensible"] { return false }
+            return fields["prefixItems"] == nil || fields["extensible"] == .bool(true)
+        case "object":
+            guard let key else { return false }
+            if case .dictionary(let properties) = fields["properties"],
+               case .dictionary(let property) = properties[key],
+               property["required"] == .bool(true) {
+                return false
+            }
+            if case .array(let required) = fields["required"], required.contains(.string(key)) {
+                return false
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func schemaValue(at path: String, schema: JSONValue) -> JSONValue? {
+        var current = schema
+        if case .dictionary(let root) = current,
+           case .dictionary(let properties) = root["properties"],
+           let statData = properties[RoleplayMVUData.statDataKey] {
+            current = statData
+        }
+        for component in pathComponents(path) {
+            guard case .dictionary(let fields) = current else { return nil }
+            if fields["type"]?.stringValue == "array" {
+                if case .array(let prefix) = fields["prefixItems"],
+                   let index = Int(component),
+                   prefix.indices.contains(index) {
+                    current = prefix[index]
+                } else if let items = fields["items"] {
+                    current = items
+                } else {
+                    return nil
+                }
+            } else if case .dictionary(let properties) = fields["properties"],
+                      let property = properties[component] {
+                current = property
+            } else {
+                return nil
+            }
+        }
+        return current
+    }
+
     private static func pathComponents(_ path: String) -> [String] {
-        path
-            .replacingOccurrences(of: "[", with: ".")
-            .replacingOccurrences(of: "]", with: "")
-            .split(separator: ".")
-            .map(String.init)
-            .filter { !$0.isEmpty }
+        RoleplayVariablePath.components(path)
     }
 
     private static func value(at path: String, in root: [String: JSONValue]) -> JSONValue? {
@@ -723,7 +969,14 @@ public enum RoleplayMVUEngine {
         if trimmed == "undefined" { return nil }
         guard let parsed = try? RoleplayYAMLParser.parse("value: \(trimmed)"),
               case .dictionary(let dictionary) = parsed else { return nil }
-        return dictionary["value"]
+        guard let value = dictionary["value"] else { return nil }
+        if case .string(let literal) = value,
+           !trimmed.hasPrefix("\""),
+           !trimmed.hasPrefix("'"),
+           let number = MVUNumericExpression.evaluate(literal) {
+            return number.rounded(.towardZero) == number ? .int(Int(number)) : .double(number)
+        }
+        return value
     }
 
     private static func changeDescription(_ change: RoleplayMVUChange) -> String {
@@ -745,7 +998,7 @@ public enum RoleplayMVUEngine {
                 differences(
                     from: oldDictionary[key],
                     to: newDictionary[key],
-                    path: path.isEmpty ? key : "\(path).\(key)",
+                    path: appendingPath(key, to: path),
                     reasonByPath: reasonByPath
                 )
             }
@@ -755,6 +1008,12 @@ public enum RoleplayMVUEngine {
             ?? reasonByPath.first(where: { path.hasPrefix($0.key + ".") || $0.key.hasPrefix(path + ".") })?.value
             ?? ""
         return [RoleplayMVUChange(path: path, oldValue: oldValue, newValue: newValue, reason: reason)]
+    }
+
+    private static func appendingPath(_ component: String, to path: String) -> String {
+        let encoded = variablePath([component])
+        guard !path.isEmpty else { return encoded }
+        return encoded.hasPrefix("[") ? path + encoded : path + "." + encoded
     }
 }
 

@@ -73,6 +73,7 @@ extension ChatService {
             requestMessages,
             worldbooks: templateWorldbooks,
             chatHistory: transformedHistory,
+            regexRules: resolved.regexRules,
             macroContext: &templateMacroContext
         )
         if templateMacroContext.variables != store.variableSnapshot(sessionID: sessionID) {
@@ -101,6 +102,7 @@ extension ChatService {
         books = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
             books,
             messages: history,
+            regexRules: resolved.regexRules,
             macroContext: &macroContext
         )
         let macro = macroContext

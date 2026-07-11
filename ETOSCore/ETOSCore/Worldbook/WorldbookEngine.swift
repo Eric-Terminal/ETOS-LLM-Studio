@@ -337,23 +337,32 @@ public struct WorldbookEngine {
                 if triggeredIDs.contains(entryKey) { continue }
                 if !entry.isEnabled { continue }
                 let state = runtimeStore.state(for: context.sessionID, worldbookID: item.book.id, entryID: entry.id)
+                let promptTemplateActivated: Bool
+                if case .bool(true) = entry.metadata["__etos_prompt_template_activated"] {
+                    promptTemplateActivated = true
+                } else {
+                    promptTemplateActivated = false
+                }
 
                 // SillyTavern 的 delay 是最低聊天消息数，不是首次命中后的等待轮数。
-                if let delay = entry.delay, delay > 0, context.messages.count < delay {
+                if let delay = entry.delay,
+                   delay > 0,
+                   context.messages.count < delay,
+                   !promptTemplateActivated {
                     continue
                 }
 
                 let stickyActive = isStickyActive(entry: entry, state: state, currentTurn: turn)
                 let inCooldown = isCooldownActive(entry: entry, state: state, currentTurn: turn)
-                if inCooldown && !stickyActive {
+                if inCooldown && !stickyActive && !promptTemplateActivated {
                     continue
                 }
-                if recursionLevel == 0 && entry.recursionDelayLevel > 0 && !stickyActive { continue }
-                if recursionLevel > 0 && entry.recursionDelayLevel > recursionLevel && !stickyActive { continue }
-                if recursionLevel > 0 && entry.excludeRecursion && !stickyActive { continue }
+                if recursionLevel == 0 && entry.recursionDelayLevel > 0 && !stickyActive && !promptTemplateActivated { continue }
+                if recursionLevel > 0 && entry.recursionDelayLevel > recursionLevel && !stickyActive && !promptTemplateActivated { continue }
+                if recursionLevel > 0 && entry.excludeRecursion && !stickyActive && !promptTemplateActivated { continue }
 
                 let matchResult: (matched: Bool, score: Double)
-                if entry.constant || stickyActive {
+                if entry.constant || stickyActive || promptTemplateActivated {
                     matchResult = (true, 0)
                 } else {
                     let scanDepth = max(1, entry.scanDepth ?? item.book.settings.scanDepth)
@@ -395,7 +404,7 @@ public struct WorldbookEngine {
                     continue
                 }
 
-                if entry.useProbability && !stickyActive {
+                if entry.useProbability && !stickyActive && !promptTemplateActivated {
                     let roll = randomSource() * 100
                     if roll > max(0, min(100, entry.probability)) {
                         continue

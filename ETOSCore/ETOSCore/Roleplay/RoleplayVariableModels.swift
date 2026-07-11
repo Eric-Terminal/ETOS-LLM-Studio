@@ -21,6 +21,7 @@ public enum RoleplayVariableScope: String, Codable, CaseIterable, Hashable, Send
 public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
     private static let customMacrosKey = "__etos_custom_macros"
     private static let scriptScopesKey = "__etos_script_scopes"
+    private static let promptTemplateInitialKey = "__etos_prompt_template_initial"
     private static let displayedHTMLKey = "__etos_displayed_html"
 
     public var global: [String: JSONValue]
@@ -30,6 +31,7 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
     public var chat: [String: JSONValue]
     public var messageVersions: [String: [String: JSONValue]]
     public var script: [String: JSONValue]
+    public var extensionScopes: [String: [String: JSONValue]]?
 
     public init(
         global: [String: JSONValue] = [:],
@@ -38,7 +40,8 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         persona: [String: JSONValue] = [:],
         chat: [String: JSONValue] = [:],
         messageVersions: [String: [String: JSONValue]] = [:],
-        script: [String: JSONValue] = [:]
+        script: [String: JSONValue] = [:],
+        extensionScopes: [String: [String: JSONValue]]? = nil
     ) {
         self.global = global
         self.preset = preset
@@ -47,6 +50,7 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         self.chat = chat
         self.messageVersions = messageVersions
         self.script = script
+        self.extensionScopes = extensionScopes
     }
 
     public static func messageVersionKey(messageID: UUID, versionIndex: Int) -> String {
@@ -58,6 +62,7 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         var visibleScriptVariables = script
         visibleScriptVariables.removeValue(forKey: Self.customMacrosKey)
         visibleScriptVariables.removeValue(forKey: Self.scriptScopesKey)
+        visibleScriptVariables.removeValue(forKey: Self.promptTemplateInitialKey)
         for layer in [preset, character, persona, visibleScriptVariables, chat] {
             merged.merge(layer) { _, new in new }
         }
@@ -85,6 +90,7 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         if scope == .script {
             result.removeValue(forKey: Self.customMacrosKey)
             result.removeValue(forKey: Self.scriptScopesKey)
+            result.removeValue(forKey: Self.promptTemplateInitialKey)
         } else if scope == .message {
             result.removeValue(forKey: Self.displayedHTMLKey)
         }
@@ -95,6 +101,14 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         guard case .dictionary(let scopes) = script[Self.scriptScopesKey],
               case .dictionary(let values) = scopes[scriptID.uuidString] else { return [:] }
         return values
+    }
+
+    public var allScriptVariables: [String: [String: JSONValue]] {
+        guard case .dictionary(let scopes) = script[Self.scriptScopesKey] else { return [:] }
+        return scopes.reduce(into: [:]) { result, item in
+            guard case .dictionary(let values) = item.value else { return }
+            result[item.key] = values
+        }
     }
 
     public mutating func replaceScriptVariables(_ variables: [String: JSONValue], scriptID: UUID) {
@@ -108,6 +122,32 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         script[Self.scriptScopesKey] = .dictionary(scopes)
     }
 
+    public func extensionVariables(extensionID: String) -> [String: JSONValue] {
+        extensionScopes?[extensionID] ?? [:]
+    }
+
+    public mutating func replaceExtensionVariables(
+        _ variables: [String: JSONValue],
+        extensionID: String
+    ) {
+        var scopes = extensionScopes ?? [:]
+        scopes[extensionID] = variables
+        extensionScopes = scopes
+    }
+
+    public var promptTemplateInitialVariables: [String: JSONValue] {
+        guard case .dictionary(let values) = script[Self.promptTemplateInitialKey] else { return [:] }
+        return values
+    }
+
+    public mutating func replacePromptTemplateInitialVariables(_ variables: [String: JSONValue]) {
+        if variables.isEmpty {
+            script.removeValue(forKey: Self.promptTemplateInitialKey)
+        } else {
+            script[Self.promptTemplateInitialKey] = .dictionary(variables)
+        }
+    }
+
     public mutating func replaceVariables(
         _ variables: [String: JSONValue],
         scope: RoleplayVariableScope,
@@ -115,8 +155,12 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         versionIndex: Int = 0
     ) {
         var replacement = variables
-        if scope == .script, let customMacros = script[Self.customMacrosKey] {
-            replacement[Self.customMacrosKey] = customMacros
+        if scope == .script {
+            for key in [Self.customMacrosKey, Self.scriptScopesKey, Self.promptTemplateInitialKey] {
+                if let internalValue = script[key] {
+                    replacement[key] = internalValue
+                }
+            }
         } else if scope == .message,
                   let messageID,
                   let displayedHTML = messageVersions[Self.messageVersionKey(
@@ -154,7 +198,16 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
         messageID: UUID,
         versionIndex: Int
     ) {
-        let key = Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)
+        replaceMessageVariables(
+            variables,
+            versionKey: Self.messageVersionKey(messageID: messageID, versionIndex: versionIndex)
+        )
+    }
+
+    mutating func replaceMessageVariables(
+        _ variables: [String: JSONValue],
+        versionKey key: String
+    ) {
         var replacement = variables
         if let displayedHTML = messageVersions[key]?[Self.displayedHTMLKey] {
             replacement[Self.displayedHTMLKey] = displayedHTML
@@ -239,12 +292,7 @@ public struct RoleplayVariableSnapshot: Codable, Hashable, Sendable {
     }
 
     private static func pathComponents(_ path: String) -> [String] {
-        path
-            .replacingOccurrences(of: "[", with: ".")
-            .replacingOccurrences(of: "]", with: "")
-            .split(separator: ".")
-            .map(String.init)
-            .filter { !$0.isEmpty }
+        RoleplayVariablePath.components(path)
     }
 
     private static func value(at path: String, in root: [String: JSONValue]) -> JSONValue? {
@@ -352,6 +400,7 @@ struct RoleplaySharedVariableSnapshot: Codable, Sendable {
     var preset: [String: JSONValue] = [:]
     var characters: [UUID: [String: JSONValue]] = [:]
     var personas: [UUID: [String: JSONValue]] = [:]
+    var extensions: [String: [String: JSONValue]]?
     var globalInitialized: Bool?
     var presetInitialized: Bool?
 }

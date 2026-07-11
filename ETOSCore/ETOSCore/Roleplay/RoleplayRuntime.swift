@@ -245,12 +245,30 @@ enum RoleplayRuntime {
                 sessionID: sessionID
             )
         }
+        let commandSource: String
+        if let resolved = resolve(sessionID: sessionID, messages: previousMessages, store: store) {
+            commandSource = RoleplayMacroResolver.resolve(content, context: resolved.macroContext)
+        } else {
+            commandSource = content
+        }
         let result = RoleplayMVUEngine.applyUpdates(
             in: content,
+            commandSource: commandSource,
             snapshot: snapshot,
             messageID: messageID,
             versionIndex: versionIndex
         )
+        if containsUpdateBlock {
+            RoleplayMVUEventBridge.emit(
+                RoleplayMVUEventName.commandParsed,
+                arguments: [
+                    RoleplayMVUEventBridge.variables(variablesBeforeUpdate),
+                    result.parsedCommands.map(\.bridgeValue),
+                    content
+                ],
+                sessionID: sessionID
+            )
+        }
         if !result.failureReasons.isEmpty {
             AppLog.developer(
                 level: .warning,

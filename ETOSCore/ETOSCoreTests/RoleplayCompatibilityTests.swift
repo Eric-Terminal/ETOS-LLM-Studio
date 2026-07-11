@@ -62,6 +62,70 @@ struct RoleplayCompatibilityTests {
         )
         #expect(rendered[0].content == "已开启")
     }
+
+    @Test("提示词预处理支持异步世界书、消息筛选、键模板与分层变量回存")
+    func preprocessesCompletePromptTemplateContext() async {
+        let firstMessage = ChatMessage(role: .assistant, content: "第一层")
+        let secondMessage = ChatMessage(role: .user, content: "第二层")
+        let thirdMessage = ChatMessage(role: .assistant, content: "第三层")
+        var variables = RoleplayVariableSnapshot(global: ["全局": .int(1)], chat: ["会话": .int(2)])
+        variables.replaceMessageVariables(
+            ["原值": .string("保留")],
+            messageID: firstMessage.id,
+            versionIndex: 0
+        )
+        let preprocessor = WorldbookEntry(
+            comment: "[Preprocessing] 完整预处理",
+            content: """
+            @@preprocessing
+            <% const recent = getChatMessages(-2); setGlobalVar('最近', recent.join('|')); setLocalVar('本地', recent.length); setMessageVar('指定楼层', recent[1], { withMsg: { id: 0 } }); await activewi(null, /目标条目/, true); %>
+            <%= await getwi('子模板', { suffix: '完成' }) %>
+            """,
+            keys: ["<%= getChatMessages(-1)[0] %>"],
+            secondaryKeys: ["<%= getGlobalVar('最近') %>"],
+            constant: true
+        )
+        let child = WorldbookEntry(
+            uid: 8,
+            comment: "子模板",
+            content: "子模板<%= suffix %>",
+            keys: []
+        )
+        let target = WorldbookEntry(
+            uid: 9,
+            comment: "目标条目",
+            content: "目标内容",
+            keys: [],
+            isEnabled: false
+        )
+        let disabled = WorldbookEntry(
+            comment: "[Preprocessing] 已禁用",
+            content: "@@preprocessing\n<% setLocalVar('不应写入', true); %>",
+            keys: [],
+            isEnabled: false
+        )
+        var context = RoleplayMacroContext(
+            variables: variables,
+            messageID: thirdMessage.id,
+            messageVersionIndex: 0
+        )
+
+        let prepared = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
+            [Worldbook(name: "模板书", entries: [preprocessor, child, target, disabled])],
+            messages: [firstMessage, secondMessage, thirdMessage],
+            macroContext: &context
+        )
+
+        #expect(prepared[0].entries[0].content.trimmingCharacters(in: .whitespacesAndNewlines) == "子模板完成")
+        #expect(prepared[0].entries[0].keys == ["第三层"])
+        #expect(prepared[0].entries[0].secondaryKeys == ["第二层|第三层"])
+        #expect(prepared[0].entries[2].isEnabled)
+        #expect(prepared[0].entries[2].constant)
+        #expect(context.variables.global["最近"] == .string("第二层|第三层"))
+        #expect(context.variables.chat["本地"] == .int(2))
+        #expect(context.variables.messageVariables(messageID: firstMessage.id, versionIndex: 0)["指定楼层"] == .string("第三层"))
+        #expect(context.variables.chat["不应写入"] == nil)
+    }
     #endif
 
     @Test("导入 Character Card V3 的角色资料、世界书、正则和助手脚本")
@@ -357,6 +421,23 @@ struct RoleplayCompatibilityTests {
         #expect(snapshot.mergedVariables()["__etos_script_scopes"] == nil)
     }
 
+    @Test("扩展变量与提示词初始变量分别隔离并兼容旧快照")
+    func isolatesExtensionAndPromptTemplateVariables() throws {
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.replaceExtensionVariables(["启用": .bool(true)], extensionID: "example-extension")
+        snapshot.replacePromptTemplateInitialVariables(["初始值": .int(7)])
+
+        #expect(snapshot.extensionVariables(extensionID: "example-extension")["启用"] == .bool(true))
+        #expect(snapshot.promptTemplateInitialVariables["初始值"] == .int(7))
+        #expect(snapshot.mergedVariables()["__etos_prompt_template_initial"] == nil)
+
+        let legacy = """
+        {"global":{},"preset":{},"character":{},"persona":{},"chat":{},"messageVersions":{},"script":{}}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(RoleplayVariableSnapshot.self, from: legacy)
+        #expect(decoded.extensionScopes == nil)
+    }
+
     @Test("generateRaw 按自定义顺序、历史覆盖和深度注入组装提示词")
     func assembleCustomGenerationPrompts() {
         let config: [String: JSONValue] = [
@@ -599,8 +680,8 @@ struct RoleplayCompatibilityTests {
         <UpdateVariable><JSONPatch>
         [
           {"op":"delta","path":"/数值","value":3},
-          {"op":"insert","path":"/列表","value":"b"},
-          {"op":"replace","path":"/名称","value":"新状态"}
+          {"op":"insert","path":"/列表/-","value":"b"},
+          {"op":"insert","path":"/名称","value":"新状态"}
         ]
         </JSONPatch></UpdateVariable>
         """
@@ -612,7 +693,7 @@ struct RoleplayCompatibilityTests {
         )
 
         #expect(result.appliedCommandCount == 3)
-        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.数值", messageID: messageID) == .double(7))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.数值", messageID: messageID) == .int(7))
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.列表[1]", messageID: messageID) == .string("b"))
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.名称", messageID: messageID) == .string("新状态"))
     }
@@ -714,6 +795,104 @@ struct RoleplayCompatibilityTests {
         #expect(result.visibleContent == content)
         #expect(result.appliedCommandCount == 1)
         #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.数值", messageID: messageID) == .int(2))
+    }
+
+    @Test("MVU 命令支持带点键路径、算术增量并拒绝不存在路径与缺失分号")
+    func applyStrictMVUCommandSemantics() {
+        let messageID = UUID()
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.replaceMessageVariables(
+            RoleplayMVUData(statData: [
+                "角色": .dictionary([
+                    "名字.带点": .dictionary(["数值": .int(1)])
+                ]),
+                "计时": .int(10)
+            ]).variables,
+            messageID: messageID,
+            versionIndex: 0
+        )
+        let result = RoleplayMVUEngine.applyUpdates(
+            in: """
+            _.set('角色["名字.带点"].数值', 2); // 带点键
+            _.add('计时', 2 * 3); // 算术表达式
+            _.set('不存在', 1); // 不允许隐式创建
+            _.set('计时', 99)
+            """,
+            snapshot: snapshot,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        #expect(result.appliedCommandCount == 2)
+        #expect(result.parsedCommands.count == 3)
+        #expect(result.updatedSnapshot.value(
+            scope: .message,
+            path: "stat_data.角色[\"名字.带点\"].数值",
+            messageID: messageID,
+            versionIndex: 0
+        ) == .int(2))
+        #expect(result.updatedSnapshot.value(
+            scope: .message,
+            path: "stat_data.计时",
+            messageID: messageID,
+            versionIndex: 0
+        ) == .int(16))
+        #expect(result.failureReasons.contains { $0.contains("不存在") })
+    }
+
+    @Test("MVU 插入和删除遵守自定义 Schema 的扩展与必填约束")
+    func enforceMVUSchemaMutationConstraints() {
+        let messageID = UUID()
+        let schema: JSONValue = .dictionary([
+            "type": .string("object"),
+            "properties": .dictionary([
+                "stat_data": .dictionary([
+                    "type": .string("object"),
+                    "extensible": .bool(false),
+                    "properties": .dictionary([
+                        "固定": .dictionary([
+                            "type": .string("number"),
+                            "required": .bool(true)
+                        ]),
+                        "列表": .dictionary([
+                            "type": .string("array"),
+                            "extensible": .bool(false),
+                            "items": .dictionary(["type": .string("string")])
+                        ])
+                    ])
+                ])
+            ])
+        ])
+        var snapshot = RoleplayVariableSnapshot()
+        snapshot.replaceMessageVariables(
+            RoleplayMVUData(
+                statData: ["固定": .int(1), "列表": .array([.string("a")])],
+                schema: schema
+            ).variables,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        let result = RoleplayMVUEngine.applyUpdates(
+            in: """
+            <UpdateVariable><JSONPatch>
+            [
+              {"op":"insert","path":"/新增","value":2},
+              {"op":"insert","path":"/列表/-","value":"b"},
+              {"op":"remove","path":"/固定"}
+            ]
+            </JSONPatch></UpdateVariable>
+            """,
+            snapshot: snapshot,
+            messageID: messageID,
+            versionIndex: 0
+        )
+
+        #expect(result.appliedCommandCount == 0)
+        #expect(result.failureReasons.count == 3)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.新增", messageID: messageID) == nil)
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.列表", messageID: messageID) == .array([.string("a")]))
+        #expect(result.updatedSnapshot.value(scope: .message, path: "stat_data.固定", messageID: messageID) == .int(1))
     }
 
     @Test("角色正则支持 JavaScript 字面量、命名捕获、trim 和宏")
@@ -841,6 +1020,19 @@ struct RoleplayCompatibilityTests {
         JSON.stringify(updateVariablesWith(value => { value.score += 4; return value; }, { type: 'chat' }))
         """)?.toString()
         #expect(variableResult == #"{"score":5}"#)
+        let extensionResult = context.evaluateScript("""
+        replaceVariables({ enabled: true }, { type: 'extension', extension_id: 'example-extension' });
+        JSON.stringify(getVariables({ type: 'extension', extension_id: 'example-extension' }));
+        """)?.toString()
+        #expect(extensionResult == #"{"enabled":true}"#)
+        #expect(context.evaluateScript(
+            "posted.some(item => item.action === 'replace_variables' && item.extension_id === 'example-extension')"
+        )?.toBool() == true)
+        let isolatedScript = context.evaluateScript("""
+        replaceVariables({ isolated: 1 }, { type: 'script', script_id: '33333333-3333-3333-3333-333333333333' });
+        JSON.stringify(getVariables({ type: 'script', script_id: '33333333-3333-3333-3333-333333333333' }));
+        """)?.toString()
+        #expect(isolatedScript == #"{"isolated":1}"#)
         #expect(context.evaluateScript("iframe_events.GENERATION_ENDED")?.toString() == "js_generation_ended")
         #expect(context.evaluateScript("tavern_events.MESSAGE_UPDATED")?.toString() == "message_updated")
         #expect(context.evaluateScript("typeof waitGlobalInitialized")?.toString() == "function")
@@ -864,6 +1056,16 @@ struct RoleplayCompatibilityTests {
         #expect(context.evaluateScript("typeof formatAsDisplayedMessage")?.toString() == "function")
         #expect(context.evaluateScript("getScriptId()")?.toString() == "11111111-1111-1111-1111-111111111111")
         #expect(context.evaluateScript("getCharWorldbookNames('current').primary")?.toString() == "测试世界书")
+        context.evaluateScript("""
+        __etosReceiveEvent(
+          Mvu.events.VARIABLE_UPDATE_ENDED,
+          [{ stat_data: { synced: 4 }, initialized_lorebooks: {} }, { stat_data: {} }],
+          'ETOS-native-mvu'
+        );
+        """)
+        #expect(context.evaluateScript(
+            "Mvu.getMvuData({ type: 'message', message_id: 'latest' }).stat_data.synced"
+        )?.toInt32() == 4)
 
         context.evaluateScript("""
         var asyncVariableResult = '';
@@ -904,6 +1106,39 @@ struct RoleplayCompatibilityTests {
         """)
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         #expect(context.evaluateScript("parsedMVUArrayLength")?.toInt32() == 2)
+
+        context.evaluateScript("""
+        var parsedMVUQuotedPath = -1;
+        Mvu.parseMessage(
+          `_.add('角色["名字.带点"].数值', 2 * 3); // 算术表达式`,
+          { stat_data: { 角色: { '名字.带点': { 数值: 1 } } }, initialized_lorebooks: {} }
+        ).then(value => { parsedMVUQuotedPath = value.stat_data.角色['名字.带点'].数值; });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("parsedMVUQuotedPath")?.toInt32() == 7)
+
+        context.evaluateScript("""
+        var parsedMVUSchemaValue = '';
+        Mvu.parseMessage(
+          `<JSONPatch>[{"op":"insert","path":"/新增","value":2},{"op":"remove","path":"/固定"}]</JSONPatch>`,
+          {
+            stat_data: { 固定: 1 },
+            initialized_lorebooks: {},
+            schema: {
+              type: 'object',
+              properties: {
+                stat_data: {
+                  type: 'object',
+                  extensible: false,
+                  properties: { 固定: { type: 'number', required: true } }
+                }
+              }
+            }
+          }
+        ).then(value => { parsedMVUSchemaValue = JSON.stringify(value.stat_data); });
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("parsedMVUSchemaValue")?.toString() == #"{"固定":1}"#)
 
         context.evaluateScript("""
         var generationResult = '';

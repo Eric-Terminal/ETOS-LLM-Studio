@@ -184,6 +184,7 @@ extension ChatService {
         boundWorldbooks = await RoleplayPromptTemplateRenderer.preprocessWorldbooks(
             boundWorldbooks,
             messages: requestMessages,
+            regexRules: resolvedRoleplay?.regexRules ?? [],
             macroContext: &promptTemplateMacroContext
         )
         let worldbookResult = await worldbookEngine.evaluateAsync(
@@ -272,6 +273,7 @@ extension ChatService {
             messagesToSend,
             worldbooks: boundWorldbooks,
             chatHistory: requestMessages,
+            regexRules: resolvedRoleplay?.regexRules ?? [],
             macroContext: &promptTemplateMacroContext
         )
         let storedPromptTemplateVariables = roleplayStore.variableSnapshot(sessionID: currentSessionID)
