@@ -96,6 +96,7 @@ public final class RoleplayStore: @unchecked Sendable {
     }
 
     public func deletePersona(id: UUID) {
+        let avatarFileName = persona(id: id)?.avatarFileName
         queue.sync {
             var library = loadLibraryUnlocked()
             library.personas.removeAll { $0.id == id }
@@ -106,6 +107,9 @@ public final class RoleplayStore: @unchecked Sendable {
             var shared = loadSharedVariablesUnlocked()
             shared.personas.removeValue(forKey: id)
             saveSharedVariablesUnlocked(shared)
+        }
+        if let avatarFileName {
+            Persistence.deleteImage(fileName: avatarFileName)
         }
         notifyChange(kind: Self.libraryChangeKind)
     }

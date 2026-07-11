@@ -46,8 +46,17 @@ extension ChatService {
         return result
     }
 
-    public func savePersonaProfile(_ persona: PersonaProfile) {
-        roleplayStore.upsertPersona(persona)
+    @discardableResult
+    public func savePersonaProfile(_ persona: PersonaProfile, avatarData: Data? = nil) -> PersonaProfile {
+        var updated = persona
+        if let avatarData {
+            let fileName = "roleplay-persona-\(persona.id.uuidString).png"
+            if Persistence.saveImage(avatarData, fileName: fileName) != nil {
+                updated.avatarFileName = fileName
+            }
+        }
+        roleplayStore.upsertPersona(updated)
+        return updated
     }
 
     public func deletePersonaProfile(id: UUID) {

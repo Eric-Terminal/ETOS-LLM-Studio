@@ -306,10 +306,14 @@ private struct PersonaLibraryView: View {
             }
         }
         .sheet(item: $editingPersona) { persona in
-            PersonaEditorView(persona: persona) {
-                ChatService.shared.savePersonaProfile($0)
-                editingPersona = nil
-                reload()
+            PersonaEditorView(persona: persona) { persona, avatarData in
+                Task {
+                    _ = await Task.detached(priority: .utility) {
+                        ChatService.shared.savePersonaProfile(persona, avatarData: avatarData)
+                    }.value
+                    editingPersona = nil
+                    reload()
+                }
             }
         }
         .confirmationDialog(
@@ -342,9 +346,12 @@ private struct PersonaLibraryView: View {
 private struct PersonaEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var persona: PersonaProfile
-    let onSave: (PersonaProfile) -> Void
+    @State private var avatarData: Data?
+    @State private var isImportingAvatar = false
+    @State private var avatarError: String?
+    let onSave: (PersonaProfile, Data?) -> Void
 
-    init(persona: PersonaProfile, onSave: @escaping (PersonaProfile) -> Void) {
+    init(persona: PersonaProfile, onSave: @escaping (PersonaProfile, Data?) -> Void) {
         self._persona = State(initialValue: persona)
         self.onSave = onSave
     }
@@ -355,6 +362,25 @@ private struct PersonaEditorView: View {
                 Section(NSLocalizedString("身份", comment: "Persona identity section")) {
                     TextField(NSLocalizedString("名称", comment: "Name"), text: $persona.name)
                     TextField(NSLocalizedString("称谓或代词", comment: "Pronouns"), text: $persona.pronouns)
+                }
+                Section(NSLocalizedString("头像", comment: "Persona avatar section")) {
+                    Button {
+                        isImportingAvatar = true
+                    } label: {
+                        Label(NSLocalizedString("选择头像", comment: "Choose persona avatar"), systemImage: "person.crop.circle.badge.plus")
+                    }
+                    if avatarData != nil {
+                        Label(NSLocalizedString("已选择新头像", comment: "New persona avatar selected"), systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                    } else if persona.avatarFileName != nil {
+                        Label(NSLocalizedString("已设置头像", comment: "Persona avatar configured"), systemImage: "person.crop.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let avatarError {
+                        Text(avatarError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                 }
                 Section(NSLocalizedString("角色扮演资料", comment: "Persona roleplay profile section")) {
                     TextEditor(text: $persona.description)
@@ -368,10 +394,30 @@ private struct PersonaEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("保存", comment: "Save")) {
-                        onSave(persona)
+                        onSave(persona, avatarData)
                         dismiss()
                     }
                     .disabled(persona.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .fileImporter(
+                isPresented: $isImportingAvatar,
+                allowedContentTypes: [.image],
+                allowsMultipleSelection: false
+            ) { result in
+                guard case .success(let urls) = result, let url = urls.first else {
+                    if case .failure(let error) = result { avatarError = error.localizedDescription }
+                    return
+                }
+                let hasAccess = url.startAccessingSecurityScopedResource()
+                Task {
+                    defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        avatarData = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+                        avatarError = nil
+                    } catch {
+                        avatarError = error.localizedDescription
+                    }
                 }
             }
         }

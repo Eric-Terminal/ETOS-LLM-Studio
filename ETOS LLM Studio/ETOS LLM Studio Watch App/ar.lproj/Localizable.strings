@@ -4965,3 +4965,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "自定义宏已保存。" = "Custom macros saved.";
 "角色变量" = "Character Variables";
 "预设变量" = "Preset Variables";
+"头像" = "Avatar";
+"选择头像" = "Choose Avatar";
+"已选择新头像" = "New Avatar Selected";
+"已设置头像" = "Avatar Configured";

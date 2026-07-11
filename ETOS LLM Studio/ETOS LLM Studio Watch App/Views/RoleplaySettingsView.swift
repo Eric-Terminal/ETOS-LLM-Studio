@@ -142,10 +142,14 @@ struct RoleplaySettingsView: View {
             onCompletion: importCard
         )
         .sheet(isPresented: $isAddingPersona) {
-            WatchPersonaEditorView {
-                ChatService.shared.savePersonaProfile($0)
-                isAddingPersona = false
-                reload()
+            WatchPersonaEditorView { persona, avatarData in
+                Task {
+                    _ = await Task.detached(priority: .utility) {
+                        ChatService.shared.savePersonaProfile(persona, avatarData: avatarData)
+                    }.value
+                    isAddingPersona = false
+                    reload()
+                }
             }
         }
         .task { reload() }
@@ -253,20 +257,57 @@ private struct WatchPersonaEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var description = ""
-    let onSave: (PersonaProfile) -> Void
+    @State private var avatarData: Data?
+    @State private var isImportingAvatar = false
+    @State private var avatarError: String?
+    let onSave: (PersonaProfile, Data?) -> Void
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField(NSLocalizedString("名称", comment: "Name"), text: $name)
                 TextField(NSLocalizedString("角色扮演资料", comment: "Persona roleplay profile"), text: $description)
+                Button {
+                    isImportingAvatar = true
+                } label: {
+                    Label(NSLocalizedString("选择头像", comment: "Choose persona avatar"), systemImage: "person.crop.circle.badge.plus")
+                }
+                if avatarData != nil {
+                    Label(NSLocalizedString("已选择新头像", comment: "New persona avatar selected"), systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+                if let avatarError {
+                    Text(avatarError)
+                        .etFont(.footnote)
+                        .foregroundStyle(.red)
+                }
                 Button(NSLocalizedString("保存", comment: "Save")) {
-                    onSave(PersonaProfile(name: name, description: description))
+                    onSave(PersonaProfile(name: name, description: description), avatarData)
                     dismiss()
                 }
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .navigationTitle(NSLocalizedString("新增用户身份", comment: "Add persona"))
+            .fileImporter(
+                isPresented: $isImportingAvatar,
+                allowedContentTypes: [.image],
+                allowsMultipleSelection: false
+            ) { result in
+                guard case .success(let urls) = result, let url = urls.first else {
+                    if case .failure(let error) = result { avatarError = error.localizedDescription }
+                    return
+                }
+                let hasAccess = url.startAccessingSecurityScopedResource()
+                Task {
+                    defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        avatarData = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+                        avatarError = nil
+                    } catch {
+                        avatarError = error.localizedDescription
+                    }
+                }
+            }
         }
     }
 }

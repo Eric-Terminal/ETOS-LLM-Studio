@@ -273,7 +273,8 @@ public enum StorageUtility {
     public static func findOrphanedImageFiles() -> [FileItem] {
         let referencedFiles = Persistence.allReferencedImageFileNames()
         let roleplayAvatarFileNames = Set(
-            RoleplayStore.shared.loadCharacters().compactMap(\.avatarFileName)
+            RoleplayStore.shared.loadCharacters().compactMap(\.avatarFileName) +
+            RoleplayStore.shared.loadPersonas().compactMap(\.avatarFileName)
         )
         let allImageFiles = listFiles(for: .images)
         return allImageFiles.filter {
