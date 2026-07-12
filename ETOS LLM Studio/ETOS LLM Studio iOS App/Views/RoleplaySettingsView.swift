@@ -15,26 +15,20 @@ struct RoleplaySettingsView: View {
 
     var body: some View {
         TabView {
-            NavigationStack {
-                RoleplaySessionBindingView(currentSession: $viewModel.currentSession)
-            }
-            .tabItem {
-                Label(NSLocalizedString("当前会话", comment: "Roleplay current session tab"), systemImage: "link")
-            }
+            RoleplaySessionBindingView(currentSession: $viewModel.currentSession)
+                .tabItem {
+                    Label(NSLocalizedString("当前会话", comment: "Roleplay current session tab"), systemImage: "link")
+                }
 
-            NavigationStack {
-                RoleplayCharacterLibraryView()
-            }
-            .tabItem {
-                Label(NSLocalizedString("角色卡", comment: "Roleplay character cards tab"), systemImage: "person.crop.rectangle.stack")
-            }
+            RoleplayCharacterLibraryView()
+                .tabItem {
+                    Label(NSLocalizedString("角色卡", comment: "Roleplay character cards tab"), systemImage: "person.crop.rectangle.stack")
+                }
 
-            NavigationStack {
-                PersonaLibraryView()
-            }
-            .tabItem {
-                Label(NSLocalizedString("用户身份", comment: "Roleplay personas tab"), systemImage: "person.text.rectangle")
-            }
+            PersonaLibraryView()
+                .tabItem {
+                    Label(NSLocalizedString("用户身份", comment: "Roleplay personas tab"), systemImage: "person.text.rectangle")
+                }
         }
         .navigationTitle(NSLocalizedString("角色扮演与酒馆兼容", comment: "Roleplay compatibility title"))
         .navigationBarTitleDisplayMode(.inline)
