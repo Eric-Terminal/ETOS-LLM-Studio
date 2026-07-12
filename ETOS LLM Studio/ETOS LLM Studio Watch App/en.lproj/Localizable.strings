@@ -4904,3 +4904,9 @@
 "轻点切换模型，长按打开设置" = "Tap to switch models; touch and hold to open settings.";
 "长按可打开模型设置" = "Touch and hold to open model settings.";
 "打开模型设置" = "Open Model Settings";
+"选定文字" = "Select Text";
+"拖动手指选择文字；滚动数码表冠可浏览全文。" = "Drag across text to select it; turn the Digital Crown to browse the full message.";
+"填充格式" = "Fill Format";
+"填充 Markdown" = "Fill Markdown";
+"填充纯文本" = "Fill Plain Text";
+"选择填充到输入框的格式。" = "Choose the format to insert into the input field.";

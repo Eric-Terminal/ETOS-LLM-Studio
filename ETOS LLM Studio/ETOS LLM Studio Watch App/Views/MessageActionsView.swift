@@ -18,7 +18,7 @@ struct MessageActionsView: View {
     let message: ChatMessage
     let canRetry: Bool
     let canRewrite: Bool
-    let onCopy: () -> Void
+    let onInsertText: (String) -> Void
     let onEdit: () -> Void
     let onRewrite: () -> Void
     let onRetry: (ChatMessage) -> Void
@@ -46,7 +46,7 @@ struct MessageActionsView: View {
         message: ChatMessage,
         canRetry: Bool,
         canRewrite: Bool,
-        onCopy: @escaping () -> Void,
+        onInsertText: @escaping (String) -> Void,
         onEdit: @escaping () -> Void,
         onRewrite: @escaping () -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
@@ -72,7 +72,7 @@ struct MessageActionsView: View {
         self.message = message
         self.canRetry = canRetry
         self.canRewrite = canRewrite
-        self.onCopy = onCopy
+        self.onInsertText = onInsertText
         self.onEdit = onEdit
         self.onRewrite = onRewrite
         self.onRetry = onRetry
@@ -216,11 +216,16 @@ struct MessageActionsView: View {
                     }
                 }
 
-                Button {
-                    onCopy()
-                    dismiss()
+                NavigationLink {
+                    WatchMessageTextSelectionView(message: message) { text in
+                        onInsertText(text)
+                        dismiss()
+                    }
                 } label: {
-                    Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                    Label(
+                        NSLocalizedString("选定文字", comment: "Open message text selection"),
+                        systemImage: "character.cursor.ibeam"
+                    )
                 }
 
                 Button {

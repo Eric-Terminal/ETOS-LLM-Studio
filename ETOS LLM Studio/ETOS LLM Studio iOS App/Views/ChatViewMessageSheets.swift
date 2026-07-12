@@ -9,7 +9,6 @@
 import SwiftUI
 import Foundation
 import ETOSCore
-import UIKit
 
 struct MessageActionSheet: View {
     let payload: MessageActionSheetPayload
@@ -32,7 +31,6 @@ struct MessageActionSheet: View {
     let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
-    let onCopy: (ChatMessage) -> Void
     let onSelectMultiple: (ChatMessage) -> Void
     let onJumpToMessage: (Int) -> Bool
 
@@ -79,10 +77,13 @@ struct MessageActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    Button {
-                        onCopy(message)
+                    NavigationLink {
+                        MessageTextSelectionView(message: message)
                     } label: {
-                        Label(NSLocalizedString("复制内容", comment: ""), systemImage: "doc.on.doc")
+                        Label(
+                            NSLocalizedString("选定文字", comment: "Open message text selection"),
+                            systemImage: "character.cursor.ibeam"
+                        )
                     }
 
                     if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {

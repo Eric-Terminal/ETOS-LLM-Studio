@@ -7,7 +7,6 @@
 // ============================================================================
 
 import SwiftUI
-import UIKit
 import ETOSCore
 
 extension ChatView {
@@ -115,10 +114,6 @@ extension ChatView {
                                 await downloadImagesToPhotoLibrary(fileNames: fileNames)
                             }
                         }
-                    },
-                    onCopy: { message in
-                        UIPasteboard.general.string = message.content
-                        messageActionSheetPayload = nil
                     },
                     onSelectMultiple: { message in
                         dismissMessageActionSheet {

@@ -519,9 +519,9 @@ extension ContentView {
                 message: message,
                 canRetry: viewModel.canRetry(message: message),
                 canRewrite: viewModel.canRewrite(message: message),
-                onCopy: {
+                onInsertText: { text in
                     viewModel.applyToolInputDraftRequest(
-                        AppToolInputDraftRequest(text: message.content, mode: .append)
+                        AppToolInputDraftRequest(text: text, mode: .append)
                     )
                 },
                 onEdit: {

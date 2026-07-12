@@ -5001,3 +5001,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "轻点切换模型，长按打开设置" = "Touchez pour changer de modèle ; maintenez pour ouvrir les réglages.";
 "长按可打开模型设置" = "Maintenez pour ouvrir les réglages du modèle.";
 "打开模型设置" = "Ouvrir les réglages du modèle";
+"选定文字" = "Sélectionner le texte";
+"复制为 Markdown" = "Copier au format Markdown";
+"复制为纯文本" = "Copier en texte brut";
+"复制格式" = "Format de copie";
+"选择需要复制的格式。" = "Choisissez le format à copier.";

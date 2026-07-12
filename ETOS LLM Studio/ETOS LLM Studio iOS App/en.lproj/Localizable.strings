@@ -4923,3 +4923,8 @@
 "轻点切换模型，长按打开设置" = "Tap to switch models; touch and hold to open settings.";
 "长按可打开模型设置" = "Touch and hold to open model settings.";
 "打开模型设置" = "Open Model Settings";
+"选定文字" = "Select Text";
+"复制为 Markdown" = "Copy as Markdown";
+"复制为纯文本" = "Copy as Plain Text";
+"复制格式" = "Copy Format";
+"选择需要复制的格式。" = "Choose the format to copy.";
