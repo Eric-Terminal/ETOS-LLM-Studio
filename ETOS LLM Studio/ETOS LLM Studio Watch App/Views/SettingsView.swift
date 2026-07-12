@@ -11,6 +11,7 @@
 import SwiftUI
 import Foundation
 import ETOSCore
+import WatchKit
 
 enum WatchSettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse
@@ -546,27 +547,50 @@ private struct ModelSelectionView: View {
 
     let models: [RunnableModel]
     @Binding var selectedModel: RunnableModel?
+    @State private var quickSettingsTarget: RunnableModel?
 
     var body: some View {
         List {
-            ForEach(models) { model in
-                Button {
-                    select(model)
-                } label: {
-                    selectionRow(
-                        title: model.model.displayName,
-                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                        isSelected: selectedModel?.id == model.id
+            Section {
+                ForEach(models) { model in
+                    Button {
+                        select(model)
+                    } label: {
+                        selectionRow(
+                            title: model.model.displayName,
+                            subtitle: "\(model.provider.name) · \(model.model.modelName)",
+                            isSelected: selectedModel?.id == model.id
+                        )
+                    }
+                    .highPriorityGesture(
+                        LongPressGesture(minimumDuration: 0.45)
+                            .onEnded { _ in
+                                presentSettings(for: model)
+                            }
                     )
+                    .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
+                    .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
+                        presentSettings(for: model)
+                    }
                 }
+            } footer: {
+                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
             }
         }
         .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
+        .navigationDestination(item: $quickSettingsTarget) { model in
+            WatchQuickModelSettingsView(runnableModel: model)
+        }
     }
 
     private func select(_ model: RunnableModel) {
         selectedModel = model
         dismiss()
+    }
+
+    private func presentSettings(for model: RunnableModel) {
+        WKInterfaceDevice.current().play(.click)
+        quickSettingsTarget = model
     }
 
     @ViewBuilder
@@ -580,5 +604,29 @@ private struct ModelSelectionView: View {
                 weight: .regular
             )
         )
+    }
+}
+
+private struct WatchQuickModelSettingsView: View {
+    @State private var provider: Provider
+    private let modelID: UUID
+
+    init(runnableModel: RunnableModel) {
+        _provider = State(initialValue: runnableModel.provider)
+        modelID = runnableModel.model.id
+    }
+
+    var body: some View {
+        if let modelIndex = provider.models.firstIndex(where: { $0.id == modelID }) {
+            ModelSettingsView(
+                model: $provider.models[modelIndex],
+                provider: provider,
+                onSave: saveProvider
+            )
+        }
+    }
+
+    private func saveProvider() {
+        ChatService.shared.saveProviderFromManagement(provider)
     }
 }

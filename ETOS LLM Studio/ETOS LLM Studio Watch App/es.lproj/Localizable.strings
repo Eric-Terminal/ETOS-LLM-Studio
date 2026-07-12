@@ -4979,3 +4979,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "从 URL 导入角色卡" = "Importar tarjeta de personaje desde URL";
 "头像链接" = "URL del avatar";
 "从 URL 载入头像" = "Cargar avatar desde URL";
+"轻点切换模型，长按打开设置" = "Toca para cambiar de modelo; mantén pulsado para abrir los ajustes.";
+"长按可打开模型设置" = "Mantén pulsado para abrir los ajustes del modelo.";
+"打开模型设置" = "Abrir los ajustes del modelo";

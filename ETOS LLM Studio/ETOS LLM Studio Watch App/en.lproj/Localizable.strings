@@ -4901,3 +4901,6 @@
 "从 URL 导入角色卡" = "Import Character Card from URL";
 "头像链接" = "Avatar URL";
 "从 URL 载入头像" = "Load Avatar from URL";
+"轻点切换模型，长按打开设置" = "Tap to switch models; touch and hold to open settings.";
+"长按可打开模型设置" = "Touch and hold to open model settings.";
+"打开模型设置" = "Open Model Settings";
