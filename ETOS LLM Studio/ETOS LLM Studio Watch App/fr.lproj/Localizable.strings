@@ -4983,7 +4983,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "长按可打开模型设置" = "Maintenez pour ouvrir les réglages du modèle.";
 "打开模型设置" = "Ouvrir les réglages du modèle";
 "选定文字" = "Sélectionner le texte";
-"拖动手指选择文字；滚动数码表冠可浏览全文。" = "Faites glisser le doigt sur le texte pour le sélectionner ; tournez la Digital Crown pour parcourir le message.";
+"拖动选择文字；停留在顶部或底部可继续滚动，转动数码表冠可浏览全文。" = "Faites glisser pour sélectionner le texte ; maintenez en haut ou en bas pour continuer à défiler, ou tournez la Digital Crown.";
 "填充格式" = "Format d’insertion";
 "填充 Markdown" = "Insérer le Markdown";
 "填充纯文本" = "Insérer le texte brut";

@@ -4983,7 +4983,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "长按可打开模型设置" = "Mantén pulsado para abrir los ajustes del modelo.";
 "打开模型设置" = "Abrir los ajustes del modelo";
 "选定文字" = "Seleccionar texto";
-"拖动手指选择文字；滚动数码表冠可浏览全文。" = "Desliza el dedo sobre el texto para seleccionarlo; gira la Digital Crown para ver el mensaje completo.";
+"拖动选择文字；停留在顶部或底部可继续滚动，转动数码表冠可浏览全文。" = "Arrastra para seleccionar texto; mantén el dedo arriba o abajo para seguir desplazándote, o gira la Digital Crown.";
 "填充格式" = "Formato de inserción";
 "填充 Markdown" = "Insertar Markdown";
 "填充纯文本" = "Insertar texto sin formato";

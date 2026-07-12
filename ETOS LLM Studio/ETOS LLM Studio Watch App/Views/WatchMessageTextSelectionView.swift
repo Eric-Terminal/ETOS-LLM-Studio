@@ -14,31 +14,50 @@ struct WatchMessageTextSelectionView: View {
     let onCommit: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var content: WatchSelectableMessageContent?
     @State private var geometryIndex = WatchTextSelectionGeometryIndex.empty
     @State private var selectionAnchorTokenID: Int?
     @State private var selectionEndTokenID: Int?
     @State private var isDraggingSelection = false
+    @State private var viewportHeight: CGFloat = 0
+    @State private var autoScrollDirection: WatchTextSelectionAutoScrollDirection?
+    @State private var autoScrollStrength: CGFloat = 0
+    @State private var autoScrollTask: Task<Void, Never>?
     @State private var showsFillFormatDialog = false
 
-    private let coordinateSpaceName = "watchMessageTextSelection"
+    private let viewportCoordinateSpaceName = "watchMessageTextSelectionViewport"
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading) {
-                Text(NSLocalizedString("拖动手指选择文字；滚动数码表冠可浏览全文。", comment: "Watch text selection guidance"))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("拖动选择文字；停留在顶部或底部可继续滚动，转动数码表冠可浏览全文。", comment: "Watch text selection guidance"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
 
-                if let content {
-                    selectableText(content)
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
+                    if let content {
+                        selectableText(content, scrollProxy: scrollProxy)
+                    } else {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+            }
+            .coordinateSpace(name: viewportCoordinateSpaceName)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: WatchTextSelectionViewportHeightKey.self,
+                        value: proxy.size.height
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
+            .onPreferenceChange(WatchTextSelectionViewportHeightKey.self) { height in
+                viewportHeight = height
+            }
         }
         .navigationTitle(NSLocalizedString("选定文字", comment: "Message text selection title"))
         .navigationBarTitleDisplayMode(.inline)
@@ -95,10 +114,16 @@ struct WatchMessageTextSelectionView: View {
             guard !Task.isCancelled else { return }
             content = prepared
         }
+        .onDisappear {
+            stopAutoScroll()
+        }
     }
 
     @ViewBuilder
-    private func selectableText(_ content: WatchSelectableMessageContent) -> some View {
+    private func selectableText(
+        _ content: WatchSelectableMessageContent,
+        scrollProxy: ScrollViewProxy
+    ) -> some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(content.paragraphTokenRanges.indices, id: \.self) { paragraphIndex in
                 let tokenRange = content.paragraphTokenRanges[paragraphIndex]
@@ -116,9 +141,8 @@ struct WatchMessageTextSelectionView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .coordinateSpace(name: coordinateSpaceName)
         .contentShape(Rectangle())
-        .highPriorityGesture(selectionGesture)
+        .highPriorityGesture(selectionGesture(scrollProxy: scrollProxy))
         .onPreferenceChange(WatchTextSelectionTokenFramesKey.self) { frames in
             geometryIndex = WatchTextSelectionGeometryIndex(frames: frames)
         }
@@ -131,6 +155,7 @@ struct WatchMessageTextSelectionView: View {
         return Text(token.text)
             .etFont(.body, sampleText: token.text)
             .fixedSize()
+            .id(token.id)
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -141,15 +166,15 @@ struct WatchMessageTextSelectionView: View {
                 GeometryReader { proxy in
                     Color.clear.preference(
                         key: WatchTextSelectionTokenFramesKey.self,
-                        value: [token.id: proxy.frame(in: .named(coordinateSpaceName))]
+                        value: [token.id: proxy.frame(in: .named(viewportCoordinateSpaceName))]
                     )
                 }
             }
             .accessibilityHidden(true)
     }
 
-    private var selectionGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named(coordinateSpaceName))
+    private func selectionGesture(scrollProxy: ScrollViewProxy) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(viewportCoordinateSpaceName))
             .onChanged { value in
                 guard let tokenID = geometryIndex.tokenID(nearest: value.location) else { return }
                 if !isDraggingSelection {
@@ -160,10 +185,78 @@ struct WatchMessageTextSelectionView: View {
                 } else if selectionEndTokenID != tokenID {
                     selectionEndTokenID = tokenID
                 }
+                updateAutoScroll(at: value.location.y, scrollProxy: scrollProxy)
             }
             .onEnded { _ in
                 isDraggingSelection = false
+                stopAutoScroll()
             }
+    }
+
+    private func updateAutoScroll(at locationY: CGFloat, scrollProxy: ScrollViewProxy) {
+        guard viewportHeight > 0 else {
+            stopAutoScroll()
+            return
+        }
+
+        let edgeState = WatchTextSelectionAutoScrollPolicy.edgeState(
+            locationY: locationY,
+            viewportHeight: viewportHeight
+        )
+        let nextDirection = edgeState?.direction
+        let nextStrength = edgeState?.strength ?? 0
+
+        if autoScrollDirection == nextDirection {
+            autoScrollStrength = nextStrength
+            return
+        }
+        stopAutoScroll()
+        guard let nextDirection else { return }
+
+        autoScrollDirection = nextDirection
+        autoScrollStrength = nextStrength
+        WKInterfaceDevice.current().play(nextDirection == .up ? .directionUp : .directionDown)
+        autoScrollTask = Task { @MainActor in
+            while !Task.isCancelled,
+                  isDraggingSelection,
+                  autoScrollDirection == nextDirection {
+                let delay: UInt64 = autoScrollStrength > 0.65 ? 70_000_000 : 115_000_000
+                try? await Task.sleep(nanoseconds: delay)
+                guard !Task.isCancelled else { break }
+                guard advanceSelection(nextDirection, scrollProxy: scrollProxy) else { break }
+            }
+        }
+    }
+
+    @discardableResult
+    private func advanceSelection(
+        _ direction: WatchTextSelectionAutoScrollDirection,
+        scrollProxy: ScrollViewProxy
+    ) -> Bool {
+        guard let content, !content.tokens.isEmpty, let selectionEndTokenID else { return false }
+        guard let targetTokenID = WatchTextSelectionAutoScrollPolicy.targetTokenID(
+            currentTokenID: selectionEndTokenID,
+            direction: direction,
+            strength: autoScrollStrength,
+            tokenCount: content.tokens.count
+        ) else { return false }
+
+        self.selectionEndTokenID = targetTokenID
+        if reduceMotion {
+            scrollProxy.scrollTo(targetTokenID, anchor: direction.anchor)
+        } else {
+            withAnimation(.linear(duration: 0.1)) {
+                scrollProxy.scrollTo(targetTokenID, anchor: direction.anchor)
+            }
+        }
+        return true
+    }
+
+    private func stopAutoScroll() {
+        autoScrollTask?.cancel()
+        autoScrollTask = nil
+        autoScrollDirection = nil
+        autoScrollStrength = 0
     }
 
     private var selectedTokenRange: ClosedRange<Int>? {
@@ -188,6 +281,62 @@ struct WatchMessageTextSelectionView: View {
         guard !text.isEmpty else { return }
         WKInterfaceDevice.current().play(.success)
         onCommit(text)
+    }
+}
+
+enum WatchTextSelectionAutoScrollDirection: Equatable {
+    case up
+    case down
+
+    var step: Int {
+        self == .up ? -1 : 1
+    }
+
+    var anchor: UnitPoint {
+        self == .up ? .top : .bottom
+    }
+}
+
+struct WatchTextSelectionAutoScrollEdgeState: Equatable {
+    let direction: WatchTextSelectionAutoScrollDirection
+    let strength: CGFloat
+}
+
+enum WatchTextSelectionAutoScrollPolicy {
+    static func edgeState(
+        locationY: CGFloat,
+        viewportHeight: CGFloat
+    ) -> WatchTextSelectionAutoScrollEdgeState? {
+        guard viewportHeight > 0 else { return nil }
+        let edgeInset = min(max(viewportHeight * 0.2, 28), 44)
+        if locationY < edgeInset {
+            return WatchTextSelectionAutoScrollEdgeState(
+                direction: .up,
+                strength: min(max((edgeInset - locationY) / edgeInset, 0), 1)
+            )
+        }
+        if locationY > viewportHeight - edgeInset {
+            return WatchTextSelectionAutoScrollEdgeState(
+                direction: .down,
+                strength: min(max((locationY - (viewportHeight - edgeInset)) / edgeInset, 0), 1)
+            )
+        }
+        return nil
+    }
+
+    static func targetTokenID(
+        currentTokenID: Int,
+        direction: WatchTextSelectionAutoScrollDirection,
+        strength: CGFloat,
+        tokenCount: Int
+    ) -> Int? {
+        guard tokenCount > 0 else { return nil }
+        let tokenStride = strength > 0.65 ? 2 : 1
+        let target = min(
+            max(currentTokenID + direction.step * tokenStride, 0),
+            tokenCount - 1
+        )
+        return target == currentTokenID ? nil : target
     }
 }
 
@@ -343,6 +492,14 @@ private struct WatchTextSelectionTokenFramesKey: PreferenceKey {
 
     static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
+    }
+}
+
+private struct WatchTextSelectionViewportHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
