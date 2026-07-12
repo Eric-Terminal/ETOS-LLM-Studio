@@ -126,6 +126,45 @@ struct RoleplayCompatibilityTests {
         #expect(context.variables.messageVariables(messageID: firstMessage.id, versionIndex: 0)["指定楼层"] == .string("第三层"))
         #expect(context.variables.chat["不应写入"] == nil)
     }
+
+    @Test("激活后的 EJS 世界书条目保留所属世界书上下文")
+    func rendersActivatedWorldbookEntryInItsOwnContext() async {
+        let otherChild = WorldbookEntry(uid: 1, comment: "子条目", content: "错误世界书", keys: [])
+        let targetChild = WorldbookEntry(uid: 1, comment: "子条目", content: "目标世界书", keys: [])
+        let targetRoot = WorldbookEntry(
+            uid: 2,
+            comment: "动态条目",
+            content: "<%= await getwi('子条目') %>",
+            keys: []
+        )
+        let otherBook = Worldbook(name: "其他世界书", entries: [otherChild])
+        let targetBook = Worldbook(name: "目标世界书", entries: [targetChild, targetRoot])
+        let injection = WorldbookInjection(
+            worldbookID: targetBook.id,
+            worldbookName: targetBook.name,
+            entryID: targetRoot.id,
+            entryComment: targetRoot.comment,
+            content: targetRoot.content,
+            position: .after,
+            outletName: nil,
+            order: 100,
+            depth: nil,
+            role: .system,
+            triggerScore: 1
+        )
+        var evaluation = WorldbookEvaluationResult.empty
+        evaluation.after = [injection]
+        var context = RoleplayMacroContext()
+
+        let rendered = await RoleplayPromptTemplateRenderer.renderWorldbookEvaluation(
+            evaluation,
+            worldbooks: [otherBook, targetBook],
+            chatHistory: [],
+            macroContext: &context
+        )
+
+        #expect(rendered.after.first?.content == "目标世界书")
+    }
     #endif
 
     @Test("导入 Character Card V3 的角色资料、世界书、正则和助手脚本")
@@ -150,7 +189,13 @@ struct RoleplayCompatibilityTests {
             "character_book": {
               "name": "星野世界书",
               "entries": [
-                { "id": 1, "keys": ["车站"], "content": "车站位于海边。", "enabled": true }
+                {
+                  "id": 1,
+                  "keys": ["车站"],
+                  "content": "车站位于海边。",
+                  "enabled": true,
+                  "extensions": { "useProbability": true, "probability": 30 }
+                }
               ]
             },
             "extensions": {
@@ -192,6 +237,45 @@ struct RoleplayCompatibilityTests {
         #expect(result.character.helperScripts.first?.buttons.first?.name == "确认")
         #expect(result.embeddedWorldbook?.name == "星野世界书")
         #expect(result.embeddedWorldbook?.entries.first?.content == "车站位于海边。")
+        #expect(result.embeddedWorldbook?.entries.first?.probability == 30)
+        #expect(result.embeddedWorldbook?.entries.first?.useProbability == true)
+    }
+
+    @Test("导入新旧酒馆助手字段时拆开 value 包装并按脚本 ID 去重")
+    func importDeduplicatedHelperScripts() throws {
+        let scriptID = "00000000-0000-0000-0000-000000000010"
+        let payload: [String: Any] = [
+            "spec": "chara_card_v3",
+            "data": [
+                "name": "兼容脚本角色",
+                "extensions": [
+                    "TavernHelper_scripts": [[
+                        "type": "script",
+                        "value": [
+                            "id": scriptID,
+                            "name": "旧脚本",
+                            "enabled": true,
+                            "content": "window.legacy = true;"
+                        ]
+                    ]],
+                    "tavern_helper": [
+                        "scripts": [[
+                            "type": "script",
+                            "id": scriptID,
+                            "name": "新脚本",
+                            "enabled": true,
+                            "content": "window.modern = true;"
+                        ]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let result = try RoleplayCardImportService().importCard(from: data, fileName: "helper.json")
+
+        #expect(result.character.helperScripts.count == 1)
+        #expect(result.character.helperScripts.first?.name == "新脚本")
+        #expect(result.character.helperScripts.first?.content == "window.modern = true;")
     }
 
     @Test("从 PNG chara 文本块导入 V2 角色卡")
@@ -318,6 +402,19 @@ struct RoleplayCompatibilityTests {
         let output = RoleplayMacroResolver.resolve("{{{问候}}} / {{{char}}}", context: context)
 
         #expect(output == "旅行者，去海边吧 / 星野")
+    }
+
+    @Test("宏兼容 User-name 与有副作用的本地和全局变量")
+    func resolvesSideEffectVariableMacros() {
+        var context = RoleplayMacroContext(persona: PersonaProfile(name: "旅行者"))
+        let output = RoleplayMacroResolver.resolve(
+            "{{User-name}} {{setvar::状态::已开启}}{{getvar::状态}} {{setglobalvar::天气::晴}}",
+            context: &context
+        )
+
+        #expect(output == "旅行者 已开启 ")
+        #expect(context.variables.chat["状态"] == .string("已开启"))
+        #expect(context.variables.global["天气"] == .string("晴"))
     }
 
     @Test("宏兼容旧名称、楼层、裁剪、注释与日期格式")
@@ -957,6 +1054,18 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("getButtonEvent"))
     }
 
+    @Test("HTML 提取识别角色正则生成的裸前端片段")
+    func extractBareRoleplayHTML() {
+        let extraction = RoleplayHTMLExtractor.extract(from: """
+        <style>.status { color: red; }</style>
+        <div class="status">状态栏</div>
+        """)
+
+        #expect(extraction.remainingText.isEmpty)
+        #expect(extraction.documents.count == 1)
+        #expect(extraction.documents.first?.source.contains("状态栏") == true)
+    }
+
     @Test("酒馆助手脚本使用 ES Module 并由原生 MVU 接管 MagVarUpdate")
     func makeHelperScriptModuleDocument() {
         let source = RoleplayHelperScriptDocument.source("""
@@ -968,6 +1077,7 @@ struct RoleplayCompatibilityTests {
         #expect(source.contains("await import(moduleURL)"))
         #expect(source.contains("MagicalAstrogy\\/MagVarUpdate"))
         #expect(source.contains("window.z = await import"))
+        #expect(source.contains("registerMvuSchema = schema => window.registerVariableSchema(schema)"))
     }
 
 #if canImport(JavaScriptCore)

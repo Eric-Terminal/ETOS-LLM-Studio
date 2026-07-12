@@ -17,7 +17,7 @@ extension ChatService {
     ) async throws -> String {
         let dictionary = config.roleplayDictionary ?? [:]
         let allMessages = Persistence.loadMessages(for: sessionID)
-        guard let resolved = RoleplayRuntime.resolve(sessionID: sessionID, messages: allMessages, store: store) else {
+        guard var resolved = RoleplayRuntime.resolve(sessionID: sessionID, messages: allMessages, store: store) else {
             let fallback = dictionary["user_input"]?.roleplayString ?? ""
             return try await generateDetachedChatCompletion(
                 userPrompt: fallback,
@@ -34,7 +34,10 @@ extension ChatService {
         } else {
             history = allMessages
         }
-        let transformedHistory = RoleplayRuntime.transformedRequestMessages(history, resolved: resolved)
+        let transformedHistory = RoleplayRuntime.transformedRequestMessages(history, resolved: &resolved)
+        if resolved.variables != store.variableSnapshot(sessionID: sessionID) {
+            store.saveVariableSnapshot(resolved.variables, sessionID: sessionID)
+        }
         let overrides = dictionary["overrides"]?.roleplayDictionary ?? [:]
         var templateMacroContext = resolved.macroContext
         let builtins = await roleplayGenerationBuiltins(
@@ -105,8 +108,7 @@ extension ChatService {
             regexRules: resolved.regexRules,
             macroContext: &macroContext
         )
-        let macro = macroContext
-        let evaluated = await WorldbookEngine().evaluateAsync(.init(
+        var evaluated = await WorldbookEngine().evaluateAsync(.init(
             sessionID: sessionID,
             worldbooks: books,
             messages: history,
@@ -117,6 +119,14 @@ extension ChatService {
             scenario: resolved.characters.first?.scenario,
             creatorNotes: resolved.characters.first?.creatorNotes
         ))
+        evaluated = await RoleplayPromptTemplateRenderer.renderWorldbookEvaluation(
+            evaluated,
+            worldbooks: books,
+            chatHistory: history,
+            regexRules: resolved.regexRules,
+            macroContext: &macroContext
+        )
+        let macro = macroContext
         let outletValues = Dictionary(grouping: evaluated.outlet) {
             $0.outletName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }.reduce(into: [String: String]()) { result, item in

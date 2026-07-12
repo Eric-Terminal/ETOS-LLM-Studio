@@ -43,8 +43,13 @@ extension ChatService {
         roleplayStore: RoleplayStore = .shared
     ) -> ChatMessage {
         var updated = visualMessage(from: message, rules: rules)
-        guard message.role == .assistant,
-              let sessionID,
+        let placement: RoleplayRegexPlacement
+        switch message.role {
+        case .user: placement = .userInput
+        case .assistant: placement = .aiOutput
+        case .system, .tool, .error: return updated
+        }
+        guard let sessionID,
               let resolved = RoleplayRuntime.resolve(
                 sessionID: sessionID,
                 messages: messages,
@@ -55,6 +60,7 @@ extension ChatService {
         updated.content = RoleplayRuntime.visualContent(
             updated.content,
             resolved: resolved,
+            placement: placement,
             depth: depth
         )
         return updated

@@ -69,7 +69,7 @@ public enum RoleplayHTMLExtractor {
 
     public static func isFrontend(_ content: String) -> Bool {
         content.range(
-            of: #"(?:<!doctype\s+html\b|<html\b|<head\b|<body\b|class\s*=\s*['\"][^'\"]*\bTH-render\b)"#,
+            of: #"(?:<!doctype\s+html\b|<(?:html|head|body|style|script|div|section|article|main|details|table|form|img|svg|canvas|video|audio|iframe)\b|class\s*=\s*['\"][^'\"]*\bTH-render\b)"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
     }

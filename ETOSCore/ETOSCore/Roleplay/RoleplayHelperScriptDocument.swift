@@ -21,7 +21,14 @@ public enum RoleplayHelperScriptDocument {
     /^\s*import\s+['"]https?:\/\/[^'"]*\/MagicalAstrogy\/MagVarUpdate(?:@[^\/'"]+)?\/artifact\/bundle\.js['"]\s*;?\s*$/gmi,
     ''
   );
+  source = source.replace(
+    /^\s*import\s*\{\s*registerMvuSchema\s*\}\s*from\s*['"]https?:\/\/[^'"]*\/mvu_zod\.js['"]\s*;?\s*$/gmi,
+    'const registerMvuSchema = schema => window.registerVariableSchema(schema);'
+  );
   try {
+    if (document.readyState === 'loading') {
+      await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+    }
     if (/\bz\s*\./.test(source) && !window.z) {
       window.z = await import('https://testingcf.jsdelivr.net/npm/zod@4.3.6/+esm');
     }

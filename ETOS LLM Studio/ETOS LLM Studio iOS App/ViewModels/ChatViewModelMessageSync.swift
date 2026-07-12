@@ -242,13 +242,14 @@ extension ChatViewModel {
                     return html
                 }
                 let html: RoleplayHTMLExtraction?
-                if sourceMessage.role == .assistant, htmlRenderingEnabled, let displayedHTML {
+                let supportsRoleplayHTML = sourceMessage.role == .assistant || sourceMessage.role == .user
+                if supportsRoleplayHTML, htmlRenderingEnabled, let displayedHTML {
                     html = RoleplayHTMLExtraction(
                         remainingText: "",
                         documents: [RoleplayHTMLDocument(id: 0, source: displayedHTML)]
                     )
                 } else {
-                    html = sourceMessage.role == .assistant && htmlRenderingEnabled
+                    html = supportsRoleplayHTML && htmlRenderingEnabled
                         ? RoleplayHTMLExtractor.extract(from: visualMessage.content)
                         : nil
                 }

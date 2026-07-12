@@ -68,6 +68,11 @@ public struct RoleplayMacroContext: Sendable {
 
 public enum RoleplayMacroResolver {
     public static func resolve(_ input: String, context: RoleplayMacroContext) -> String {
+        var context = context
+        return resolve(input, context: &context)
+    }
+
+    public static func resolve(_ input: String, context: inout RoleplayMacroContext) -> String {
         guard input.contains("{{") || input.range(of: #"<(?:USER|BOT|CHAR|GROUP|CHARIFNOTGROUP)>"#, options: [.regularExpression, .caseInsensitive]) != nil else {
             return input
         }
@@ -75,6 +80,7 @@ public enum RoleplayMacroResolver {
         output = replaceMacroComments(in: output)
         output = replaceTrimMacros(in: output)
         output = replaceCustomMacros(in: output, values: context.customValues)
+        output = replaceSetVariableMacros(in: output, context: &context)
         output = replaceVariableMacros(output, context: context, formatted: true)
         output = replaceVariableMacros(output, context: context, formatted: false)
         output = replaceListMacro(output, name: "random") { values, _ in
@@ -137,6 +143,7 @@ public enum RoleplayMacroResolver {
 
         var values: [String: String] = [
             "user": context.persona?.name ?? "User",
+            "user-name": context.persona?.name ?? "User",
             "persona": context.persona?.description ?? "",
             "char": context.character?.name ?? "Assistant",
             "description": context.character?.description ?? "",
@@ -184,6 +191,40 @@ public enum RoleplayMacroResolver {
         return values.reduce(input) { output, item in
             output.replacingOccurrences(of: item.key, with: item.value, options: .caseInsensitive)
         }
+    }
+
+    private static func replaceSetVariableMacros(
+        in input: String,
+        context: inout RoleplayMacroContext
+    ) -> String {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\{\{\s*(setvar|setglobalvar)::([^:}]+)::([^}]*)\}\}"#,
+            options: [.caseInsensitive]
+        ) else { return input }
+        let source = input as NSString
+        let matches = regex.matches(in: input, range: NSRange(location: 0, length: source.length))
+        guard !matches.isEmpty else { return input }
+
+        for match in matches where match.numberOfRanges > 3 {
+            let command = source.substring(with: match.range(at: 1)).lowercased()
+            let path = source.substring(with: match.range(at: 2))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !path.isEmpty else { continue }
+            let value = source.substring(with: match.range(at: 3))
+            context.variables.setValue(
+                .string(value),
+                scope: command == "setglobalvar" ? .global : .chat,
+                path: path,
+                messageID: context.messageID,
+                versionIndex: context.messageVersionIndex
+            )
+        }
+
+        let result = NSMutableString(string: input)
+        for match in matches.reversed() {
+            result.replaceCharacters(in: match.range, with: "")
+        }
+        return result as String
     }
 
     private static func replaceMacroComments(in input: String) -> String {

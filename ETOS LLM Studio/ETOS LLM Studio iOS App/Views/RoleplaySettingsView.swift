@@ -468,7 +468,7 @@ private struct RoleplaySessionBindingView: View {
                                 Text(String(format: NSLocalizedString("开场白 %d", comment: "Greeting number"), index + 1)).tag(index)
                             }
                         }
-                        .onChange(of: selectedGreetingIndex) { _, _ in persist() }
+                        .onChange(of: selectedGreetingIndex) { _, _ in persist(seedGreeting: true) }
                     }
                 }
 

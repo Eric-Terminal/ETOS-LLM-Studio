@@ -309,7 +309,18 @@ public struct RoleplayCardImportService {
            let scripts = settings["scripts"] as? [Any] {
             candidates.append(contentsOf: scripts)
         }
-        return candidates.flatMap(parseScriptTree)
+        var scripts: [RoleplayHelperScript] = []
+        var indexesByID: [UUID: Int] = [:]
+        for script in candidates.flatMap(parseScriptTree) {
+            if let index = indexesByID[script.id] {
+                // 新版 tavern_helper 位于旧字段之后，保留信息更完整的新版本。
+                scripts[index] = script
+            } else {
+                indexesByID[script.id] = scripts.count
+                scripts.append(script)
+            }
+        }
+        return scripts
     }
 
     private func parseInitialVariables(from extensions: [String: Any]) -> [String: JSONValue] {
@@ -334,6 +345,9 @@ public struct RoleplayCardImportService {
 
     private func parseScriptTree(_ raw: Any) -> [RoleplayHelperScript] {
         guard let dictionary = raw as? [String: Any] else { return [] }
+        if let value = dictionary["value"] {
+            return parseScriptTree(value)
+        }
         if string(dictionary["type"]) == "folder" {
             guard bool(dictionary["enabled"]) ?? true,
                   let children = dictionary["scripts"] as? [Any] else { return [] }

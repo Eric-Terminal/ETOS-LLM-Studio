@@ -453,7 +453,7 @@ public struct WorldbookImportService {
         let position = positionFromRaw(rawPositionValue)
 
         let order = intValue(dict["priority"]) ?? intValue(dict["order"]) ?? 100
-        let probabilityRaw = doubleValue(dict["probability"]) ?? 100
+        let probabilityRaw = doubleValue(dict["probability"]) ?? doubleValue(extensionDict?["probability"]) ?? 100
         let probability = probabilityRaw <= 1 ? probabilityRaw * 100 : probabilityRaw
         let outletName =
             stringValue(dict["outletName"]) ??

@@ -131,7 +131,6 @@ extension ChatBubble {
         let shouldRenderAsOutgoing = isOutgoing || isError
         if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
-           message.role == .assistant,
            extraction.containsHTML {
             VStack(alignment: .leading) {
                 if !extraction.remainingText.isEmpty {

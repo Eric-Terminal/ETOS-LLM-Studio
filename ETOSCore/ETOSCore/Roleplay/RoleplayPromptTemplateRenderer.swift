@@ -121,6 +121,108 @@ enum RoleplayPromptTemplateRenderer {
         return rendered
     }
 
+    static func renderWorldbookEvaluation(
+        _ evaluation: WorldbookEvaluationResult,
+        worldbooks: [Worldbook],
+        chatHistory: [ChatMessage],
+        regexRules: [RoleplayRegexRule] = [],
+        macroContext: inout RoleplayMacroContext
+    ) async -> WorldbookEvaluationResult {
+        var rendered = evaluation
+        rendered.before = await renderInjections(
+            rendered.before,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        rendered.after = await renderInjections(
+            rendered.after,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        rendered.anTop = await renderInjections(
+            rendered.anTop,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        rendered.anBottom = await renderInjections(
+            rendered.anBottom,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        rendered.emTop = await renderInjections(
+            rendered.emTop,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        rendered.emBottom = await renderInjections(
+            rendered.emBottom,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        for index in rendered.atDepth.indices {
+            rendered.atDepth[index].items = await renderInjections(
+                rendered.atDepth[index].items,
+                worldbooks: worldbooks,
+                chatHistory: chatHistory,
+                regexRules: regexRules,
+                macroContext: &macroContext
+            )
+        }
+        rendered.outlet = await renderInjections(
+            rendered.outlet,
+            worldbooks: worldbooks,
+            chatHistory: chatHistory,
+            regexRules: regexRules,
+            macroContext: &macroContext
+        )
+        return rendered
+    }
+
+    private static func renderInjections(
+        _ injections: [WorldbookInjection],
+        worldbooks: [Worldbook],
+        chatHistory: [ChatMessage],
+        regexRules: [RoleplayRegexRule],
+        macroContext: inout RoleplayMacroContext
+    ) async -> [WorldbookInjection] {
+        let indexes = injections.indices.filter { injections[$0].content.contains("<%") }
+        guard !indexes.isEmpty else { return injections }
+        let entries = indexes.map { index in
+            let injection = injections[index]
+            return worldbooks.first(where: { $0.id == injection.worldbookID })?
+                .entries.first(where: { $0.id == injection.entryID })
+        }
+        guard let envelope = await render(
+            indexes.map { injections[$0].content },
+            worldbooks: worldbooks,
+            messages: chatHistory,
+            regexRules: regexRules,
+            macroContext: macroContext,
+            currentEntries: entries,
+            currentWorldbookNames: indexes.map { injections[$0].worldbookName }
+        ) else { return injections }
+
+        var updated = injections
+        for (offset, index) in indexes.enumerated() where envelope.outputs.indices.contains(offset) {
+            updated[index].content = envelope.outputs[offset]
+        }
+        apply(envelope, to: &macroContext)
+        log(envelope.errors)
+        return updated
+    }
+
     private static func apply(
         _ envelope: RenderedEnvelope,
         to macroContext: inout RoleplayMacroContext
@@ -861,6 +963,12 @@ enum RoleplayPromptTemplateRenderer {
               selectActivatedEntries,
               getWorldInfoActivatedData: (name, keywords, condition = {}) => selectActivatedEntries(entriesFor(name), keywords, condition),
               loadWorldInfoJSON: name => ({ entries: Object.fromEntries(entriesFor(name).map(entry => [String(entry.uid), entry])) }),
+              toastr: {
+                error: message => { errors.push(String(message)); },
+                warning: message => { errors.push(String(message)); },
+                info: () => undefined,
+                success: () => undefined
+              },
               _: {
                 get: getPath, set: setPath, unset: deletePath, has: hasPath, cloneDeep: clone,
                 isArray: Array.isArray,

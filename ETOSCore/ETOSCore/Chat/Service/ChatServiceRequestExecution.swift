@@ -72,14 +72,22 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             session: sessionForRequest
         )
-        let resolvedRoleplay = RoleplayRuntime.resolve(
+        var resolvedRoleplay = RoleplayRuntime.resolve(
             sessionID: currentSessionID,
             messages: preparedRequestMessages,
             store: roleplayStore
         )
-        var requestMessages = resolvedRoleplay.map {
-            RoleplayRuntime.transformedRequestMessages(preparedRequestMessages, resolved: $0)
-        } ?? preparedRequestMessages
+        var requestMessages = preparedRequestMessages
+        if var resolved = resolvedRoleplay {
+            requestMessages = RoleplayRuntime.transformedRequestMessages(
+                preparedRequestMessages,
+                resolved: &resolved
+            )
+            if resolved.variables != roleplayStore.variableSnapshot(sessionID: currentSessionID) {
+                roleplayStore.saveVariableSnapshot(resolved.variables, sessionID: currentSessionID)
+            }
+            resolvedRoleplay = resolved
+        }
         let helperScriptIDs = resolvedRoleplay?.characters.flatMap { character in
             character.helperScripts.filter(\.enabled).map(\.id)
         } ?? []
@@ -187,7 +195,7 @@ extension ChatService {
             regexRules: resolvedRoleplay?.regexRules ?? [],
             macroContext: &promptTemplateMacroContext
         )
-        let worldbookResult = await worldbookEngine.evaluateAsync(
+        var worldbookResult = await worldbookEngine.evaluateAsync(
             .init(
                 sessionID: currentSessionID,
                 worldbooks: boundWorldbooks,
@@ -201,6 +209,13 @@ extension ChatService {
                 scenario: resolvedRoleplay?.characters.first?.scenario,
                 creatorNotes: resolvedRoleplay?.characters.first?.creatorNotes
             )
+        )
+        worldbookResult = await RoleplayPromptTemplateRenderer.renderWorldbookEvaluation(
+            worldbookResult,
+            worldbooks: boundWorldbooks,
+            chatHistory: requestMessages,
+            regexRules: resolvedRoleplay?.regexRules ?? [],
+            macroContext: &promptTemplateMacroContext
         )
 
         var messagesToSend: [ChatMessage] = []

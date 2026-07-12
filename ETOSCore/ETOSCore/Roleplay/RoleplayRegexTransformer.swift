@@ -39,11 +39,21 @@ public enum RoleplayRegexTransformer {
         rules: [RoleplayRegexRule],
         context: RoleplayRegexContext
     ) -> String {
+        var context = context
+        return apply(input, rules: rules, context: &context)
+    }
+
+    public static func apply(
+        _ input: String,
+        rules: [RoleplayRegexRule],
+        context: inout RoleplayRegexContext
+    ) -> String {
         guard !input.isEmpty, !rules.isEmpty else { return input }
-        return rules.reduce(input) { output, rule in
-            guard shouldRun(rule, context: context) else { return output }
-            return apply(rule, to: output, context: context)
+        var output = input
+        for rule in rules where shouldRun(rule, context: context) {
+            output = apply(rule, to: output, context: &context)
         }
+        return output
     }
 
     private static func shouldRun(_ rule: RoleplayRegexRule, context: RoleplayRegexContext) -> Bool {
@@ -63,11 +73,11 @@ public enum RoleplayRegexTransformer {
     private static func apply(
         _ rule: RoleplayRegexRule,
         to input: String,
-        context: RoleplayRegexContext
+        context: inout RoleplayRegexContext
     ) -> String {
         var pattern = rule.findRegex
         if rule.substituteRegex != 0 {
-            let resolved = RoleplayMacroResolver.resolve(pattern, context: context.macroContext)
+            let resolved = RoleplayMacroResolver.resolve(pattern, context: &context.macroContext)
             pattern = rule.substituteRegex == 2 ? NSRegularExpression.escapedPattern(for: resolved) : resolved
         }
         let parsed = parsedPattern(pattern)
@@ -83,7 +93,7 @@ public enum RoleplayRegexTransformer {
                 match: match,
                 source: source,
                 trimStrings: rule.trimStrings,
-                macroContext: context.macroContext
+                macroContext: &context.macroContext
             )
             result.replaceCharacters(in: match.range, with: expanded)
         }
@@ -126,7 +136,7 @@ public enum RoleplayRegexTransformer {
         match: NSTextCheckingResult,
         source: NSString,
         trimStrings: [String],
-        macroContext: RoleplayMacroContext
+        macroContext: inout RoleplayMacroContext
     ) -> String {
         guard let tokenRegex = try? NSRegularExpression(
             pattern: #"\$(\$|&|`|'|\d{1,2}|<([A-Za-z_][A-Za-z0-9_]*)>)"#
@@ -163,6 +173,6 @@ public enum RoleplayRegexTransformer {
             }
             result.replaceCharacters(in: token.range, with: filtered)
         }
-        return RoleplayMacroResolver.resolve(result as String, context: macroContext)
+        return RoleplayMacroResolver.resolve(result as String, context: &macroContext)
     }
 }

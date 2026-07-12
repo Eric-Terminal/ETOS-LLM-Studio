@@ -17,6 +17,7 @@ struct RoleplaySettingsView: View {
     @State private var personas: [PersonaProfile] = []
     @State private var selectedCharacterID: UUID?
     @State private var selectedPersonaID: UUID?
+    @State private var selectedGreetingIndex = 0
     @State private var htmlRenderingEnabled = true
     @State private var helperScriptsEnabled = true
     @State private var importURLText = ""
@@ -55,6 +56,24 @@ struct RoleplaySettingsView: View {
 
                     Toggle(NSLocalizedString("启用助手脚本", comment: "Enable roleplay helper scripts"), isOn: $helperScriptsEnabled)
                         .onChange(of: helperScriptsEnabled) { _, _ in persist() }
+                }
+
+                if !selectedCharacterGreetings.isEmpty {
+                    Section(NSLocalizedString("开场白", comment: "Roleplay greeting section")) {
+                        Picker(
+                            NSLocalizedString("候选开场白", comment: "Alternate greeting picker"),
+                            selection: $selectedGreetingIndex
+                        ) {
+                            ForEach(selectedCharacterGreetings.indices, id: \.self) { index in
+                                Text(String(
+                                    format: NSLocalizedString("开场白 %d", comment: "Greeting number"),
+                                    index + 1
+                                ))
+                                .tag(index)
+                            }
+                        }
+                        .onChange(of: selectedGreetingIndex) { _, _ in persist(seedGreeting: true) }
+                    }
                 }
             }
 
@@ -180,17 +199,25 @@ struct RoleplaySettingsView: View {
         }
     }
 
+    private var selectedCharacterGreetings: [String] {
+        guard let selectedCharacterID,
+              let character = characters.first(where: { $0.id == selectedCharacterID }) else { return [] }
+        return [character.firstMessage] + character.alternateGreetings
+    }
+
     private func reloadBinding() {
         guard let sessionID = viewModel.currentSession?.id,
               let binding = ChatService.shared.roleplayBinding(sessionID: sessionID) else {
             selectedCharacterID = nil
             selectedPersonaID = nil
+            selectedGreetingIndex = 0
             htmlRenderingEnabled = true
             helperScriptsEnabled = true
             return
         }
         selectedCharacterID = binding.characterIDs.first
         selectedPersonaID = binding.personaID
+        selectedGreetingIndex = binding.selectedGreetingIndex
         htmlRenderingEnabled = binding.htmlRenderingEnabled
         helperScriptsEnabled = binding.helperScriptsEnabled
     }
@@ -205,6 +232,7 @@ struct RoleplaySettingsView: View {
             sessionID: sessionID,
             characterIDs: [selectedCharacterID],
             personaID: selectedPersonaID,
+            selectedGreetingIndex: selectedGreetingIndex,
             htmlRenderingEnabled: htmlRenderingEnabled,
             helperScriptsEnabled: helperScriptsEnabled,
             seedGreetingIfEmpty: seedGreeting

@@ -106,7 +106,17 @@ enum RoleplayRuntime {
         _ messages: [ChatMessage],
         resolved: ResolvedRoleplaySession
     ) -> [ChatMessage] {
-        messages.enumerated().map { index, message in
+        var resolved = resolved
+        return transformedRequestMessages(messages, resolved: &resolved)
+    }
+
+    static func transformedRequestMessages(
+        _ messages: [ChatMessage],
+        resolved: inout ResolvedRoleplaySession
+    ) -> [ChatMessage] {
+        var macroContext = resolved.macroContext
+        let regexRules = resolved.regexRules
+        let transformedMessages = messages.enumerated().map { index, message in
             let placement: RoleplayRegexPlacement?
             switch message.role {
             case .user: placement = .userInput
@@ -114,32 +124,39 @@ enum RoleplayRuntime {
             case .system, .tool, .error: placement = nil
             }
             var transformed = message
-            var content = RoleplayMacroResolver.resolve(message.content, context: resolved.macroContext)
+            var content = RoleplayMacroResolver.resolve(message.content, context: &macroContext)
             if let placement {
                 let depth = max(0, messages.count - index - 1)
-                content = RoleplayRegexTransformer.apply(
-                    content,
-                    rules: resolved.regexRules,
-                    context: .init(
-                        placement: placement,
-                        depth: depth,
-                        macroContext: resolved.macroContext
-                    )
+                var regexContext = RoleplayRegexContext(
+                    placement: placement,
+                    depth: depth,
+                    macroContext: macroContext
                 )
                 content = RoleplayRegexTransformer.apply(
                     content,
-                    rules: resolved.regexRules,
-                    context: .init(
-                        placement: placement,
-                        isPrompt: true,
-                        depth: depth,
-                        macroContext: resolved.macroContext
-                    )
+                    rules: regexRules,
+                    context: &regexContext
                 )
+                macroContext = regexContext.macroContext
+                regexContext = RoleplayRegexContext(
+                    placement: placement,
+                    isPrompt: true,
+                    depth: depth,
+                    macroContext: macroContext
+                )
+                content = RoleplayRegexTransformer.apply(
+                    content,
+                    rules: regexRules,
+                    context: &regexContext
+                )
+                macroContext = regexContext.macroContext
             }
             transformed.content = content
             return transformed
         }
+        resolved.variables = macroContext.variables
+        resolved.macroContext = macroContext
+        return transformedMessages
     }
 
     static func resolvedWorldbooks(
@@ -162,13 +179,14 @@ enum RoleplayRuntime {
     static func visualContent(
         _ content: String,
         resolved: ResolvedRoleplaySession,
+        placement: RoleplayRegexPlacement = .aiOutput,
         depth: Int? = nil
     ) -> String {
         var output = RoleplayRegexTransformer.apply(
             content,
             rules: resolved.regexRules,
             context: .init(
-                placement: .aiOutput,
+                placement: placement,
                 depth: depth,
                 macroContext: resolved.macroContext
             )
@@ -177,7 +195,7 @@ enum RoleplayRuntime {
             output,
             rules: resolved.regexRules,
             context: .init(
-                placement: .aiOutput,
+                placement: placement,
                 isMarkdown: true,
                 depth: depth,
                 macroContext: resolved.macroContext
@@ -246,8 +264,21 @@ enum RoleplayRuntime {
             )
         }
         let commandSource: String
-        if let resolved = resolve(sessionID: sessionID, messages: previousMessages, store: store) {
-            commandSource = RoleplayMacroResolver.resolve(content, context: resolved.macroContext)
+        if var resolved = resolve(sessionID: sessionID, messages: previousMessages, store: store) {
+            resolved.macroContext.variables = snapshot
+            var regexContext = RoleplayRegexContext(
+                placement: .aiOutput,
+                isMarkdown: true,
+                depth: 0,
+                macroContext: resolved.macroContext
+            )
+            _ = RoleplayRegexTransformer.apply(
+                content,
+                rules: resolved.regexRules,
+                context: &regexContext
+            )
+            commandSource = RoleplayMacroResolver.resolve(content, context: &regexContext.macroContext)
+            snapshot = regexContext.macroContext.variables
         } else {
             commandSource = content
         }

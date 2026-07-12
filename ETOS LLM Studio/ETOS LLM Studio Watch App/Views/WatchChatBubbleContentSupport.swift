@@ -38,7 +38,6 @@ extension ChatBubble {
                 && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
         if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
-           message.role == .assistant,
            extraction.containsHTML {
             VStack(alignment: .leading) {
                 if !extraction.remainingText.isEmpty {
