@@ -12,12 +12,11 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
-    @Test("世界书隔离策略会显式屏蔽内置工具")
-    func testWorldbookIsolationPolicySuppressesBuiltInAppTools() async throws {
+    @Test("会话隔离策略无需绑定世界书即可屏蔽记忆与工具")
+    func testSessionIsolationPolicySuppressesMemoryAndToolsWithoutWorldbook() async throws {
         await cleanup()
 
         var isolatedSession = ChatSession(id: UUID(), name: "隔离策略会话")
-        isolatedSession.lorebookIDs = [UUID()]
         isolatedSession.worldbookContextIsolationEnabled = true
 
         let normalPolicy = chatService.auxiliaryContextPolicy(
@@ -35,8 +34,47 @@ extension ChatServiceTests {
 
         #expect(normalPolicy.includeBuiltInAppTools)
         #expect(normalPolicy.includeMCPTools)
+        #expect(normalPolicy.enableMemory)
+        #expect(normalPolicy.enableMemoryWrite)
         #expect(!isolatedPolicy.includeBuiltInAppTools)
         #expect(!isolatedPolicy.includeMCPTools)
+        #expect(!isolatedPolicy.includeShortcutTools)
+        #expect(!isolatedPolicy.includeSkills)
+        #expect(!isolatedPolicy.enableMemory)
+        #expect(!isolatedPolicy.enableMemoryWrite)
+        #expect(!isolatedPolicy.enableMemoryActiveRetrieval)
+
+        await cleanup()
+    }
+
+    @Test("会话隔离无需绑定世界书即可移除历史工具调用")
+    func testSessionIsolationRemovesHistoricalToolCallsWithoutWorldbook() async throws {
+        await cleanup()
+
+        var isolatedSession = ChatSession(id: UUID(), name: "历史工具隔离会话")
+        isolatedSession.worldbookContextIsolationEnabled = true
+        let historicalToolCall = InternalToolCall(
+            id: "historical-tool-call",
+            toolName: "test_tool",
+            arguments: "{}"
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "保留这条消息"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [historicalToolCall]),
+            ChatMessage(role: .tool, content: "不应发送", toolCalls: [historicalToolCall])
+        ]
+
+        let preparedMessages = chatService.preparedMessagesForRequest(
+            from: messages,
+            loadingMessageID: UUID(),
+            session: isolatedSession
+        )
+
+        #expect(preparedMessages.count == 1)
+        #expect(preparedMessages.first?.role == .user)
+        #expect(preparedMessages.first?.content == "保留这条消息")
+        #expect(!preparedMessages.contains(where: { $0.role == .tool }))
+        #expect(!preparedMessages.contains(where: { !($0.toolCalls?.isEmpty ?? true) }))
 
         await cleanup()
     }

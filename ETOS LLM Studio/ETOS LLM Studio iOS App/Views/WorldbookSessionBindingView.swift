@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责 iOS 当前会话与世界书的绑定和隔离发送设置。
+// 负责 iOS 当前会话与世界书的绑定设置。
 // ============================================================================
 
 import SwiftUI
@@ -43,20 +43,6 @@ struct WorldbookSessionBindingView: View {
                 }
                 .pickerStyle(.segmented)
                 .tint(.blue)
-            }
-
-            Section {
-                Toggle(
-                    NSLocalizedString("绑定世界书时屏蔽记忆与工具", comment: "Worldbook isolation toggle"),
-                    isOn: Binding(
-                        get: { currentSession?.worldbookContextIsolationEnabled ?? false },
-                        set: { updateIsolationMode($0) }
-                    )
-                )
-
-                Text(NSLocalizedString("开启后，在当前会话已绑定世界书时，只发送全局提示词、话题提示词、增强提示词和世界书，不发送记忆系统、MCP 与快捷指令工具调用。", comment: "Worldbook isolation description"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -115,12 +101,6 @@ struct WorldbookSessionBindingView: View {
             selected.insert(id)
         }
         session.lorebookIDs = selected.sorted(by: { $0.uuidString < $1.uuidString })
-        persistSessionSettings(session)
-    }
-
-    private func updateIsolationMode(_ isEnabled: Bool) {
-        guard var session = currentSession else { return }
-        session.worldbookContextIsolationEnabled = isEnabled
         persistSessionSettings(session)
     }
 

@@ -345,13 +345,11 @@ struct WorldbookSettingsView: View {
         let boundSet = Set(session.lorebookIDs)
         let boundBookCount = worldbooks.filter { boundSet.contains($0.id) }.count
         let totalBookCount = worldbooks.count
-        let base = String(
+        return String(
             format: NSLocalizedString("%d/%d 本", comment: "Bound worldbook count summary"),
             boundBookCount,
             totalBookCount
         )
-        guard session.worldbookContextIsolationEnabled else { return base }
-        return "\(base) · \(NSLocalizedString("已启用隔离发送", comment: "Isolation enabled summary"))"
     }
 
     private func enabledEntrySummary(for book: Worldbook) -> String {

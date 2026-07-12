@@ -54,6 +54,20 @@ struct RoleplaySettingsView: View {
                         .onChange(of: helperScriptsEnabled) { _, _ in persist() }
                 }
 
+                Section {
+                    Toggle(
+                        NSLocalizedString("屏蔽记忆与工具", comment: "Session memory and tool isolation toggle"),
+                        isOn: Binding(
+                            get: { viewModel.currentSession?.worldbookContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation($0) }
+                        )
+                    )
+
+                    Text(NSLocalizedString("开启后，当前会话不会向模型发送记忆上下文、工具定义或历史工具调用。", comment: "Session memory and tool isolation description"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 if !selectedCharacterGreetings.isEmpty {
                     Section(NSLocalizedString("开场白", comment: "Roleplay greeting section")) {
                         Picker(
@@ -161,6 +175,17 @@ struct RoleplaySettingsView: View {
             htmlRenderingEnabled: htmlRenderingEnabled,
             helperScriptsEnabled: helperScriptsEnabled,
             seedGreetingIfEmpty: seedGreeting
+        )
+    }
+
+    private func updateContextIsolation(_ isEnabled: Bool) {
+        guard var session = viewModel.currentSession else { return }
+        session.worldbookContextIsolationEnabled = isEnabled
+        viewModel.currentSession = session
+        ChatService.shared.updateWorldbookSessionSettings(
+            sessionID: session.id,
+            worldbookIDs: session.lorebookIDs,
+            worldbookContextIsolationEnabled: isEnabled
         )
     }
 }

@@ -45,7 +45,7 @@ extension ChatService {
             )
         }
 
-        logger.info("当前会话已启用世界书隔离发送，将屏蔽长期记忆与工具上下文。")
+        logger.info("当前会话已启用记忆与工具隔离，将屏蔽长期记忆与工具上下文。")
         return AuxiliaryContextPolicy(
             enableMemory: false,
             enableMemoryWrite: false,

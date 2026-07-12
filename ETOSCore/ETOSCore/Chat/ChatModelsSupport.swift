@@ -577,7 +577,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public var lorebookIDs: [UUID]
     /// 绑定到当前会话的标签 ID，标签实体由 SessionTag 单独维护。
     public var tagIDs: [UUID]
-    /// 开启后，仅在当前会话已绑定世界书时生效，发送时会屏蔽记忆与工具上下文。
+    /// 开启后，当前会话发送请求时会屏蔽记忆与工具上下文。
     public var worldbookContextIsolationEnabled: Bool
     @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
     public var worldbookIDs: [UUID] {
@@ -586,9 +586,9 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     }
     public var isTemporary: Bool = false
 
-    /// 仅当会话已绑定世界书且用户开启隔离时，才真正启用 RP 隔离发送。
+    /// 当前会话是否启用了记忆与工具隔离。
     public var isWorldbookContextIsolationActive: Bool {
-        worldbookContextIsolationEnabled && !lorebookIDs.isEmpty
+        worldbookContextIsolationEnabled
     }
 
     public init(

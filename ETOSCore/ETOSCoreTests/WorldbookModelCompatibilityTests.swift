@@ -64,6 +64,6 @@ struct WorldbookModelCompatibilityTests {
 
         #expect(session.id == id)
         #expect(session.worldbookContextIsolationEnabled == true)
-        #expect(session.isWorldbookContextIsolationActive == false)
+        #expect(session.isWorldbookContextIsolationActive == true)
     }
 }
