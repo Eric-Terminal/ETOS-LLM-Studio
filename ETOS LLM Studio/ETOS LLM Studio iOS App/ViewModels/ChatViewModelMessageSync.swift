@@ -204,7 +204,8 @@ extension ChatViewModel {
         let rules = MessageRegexRuleStore.shared.rules
         let sessionID = currentSession?.id
         let sourceMessages = allMessagesForSession
-        let needsRoleplayPreparation = message.role == .assistant && sessionID != nil
+        let supportsRoleplayRendering = message.role == .assistant || message.role == .user
+        let needsRoleplayPreparation = supportsRoleplayRendering && sessionID != nil
         guard Self.hasVisualRegexRule(in: rules, for: message) || needsRoleplayPreparation else {
             visualMessagePrepareTasks[message.id]?.cancel()
             visualMessagePrepareTasks.removeValue(forKey: message.id)

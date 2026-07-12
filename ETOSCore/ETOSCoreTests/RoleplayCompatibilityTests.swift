@@ -17,6 +17,41 @@ import JavaScriptCore
 @Suite("角色扮演与酒馆兼容")
 struct RoleplayCompatibilityTests {
 
+    @Test("酒馆助手可修改最终生成提示词并回写原消息")
+    func mutatesFinalPromptThroughHelperScriptBridge() async {
+        let bridge = RoleplayPromptMutationBridge()
+        let sessionID = UUID()
+        let scriptID = UUID()
+        let observer = NotificationCenter.default.addObserver(
+            forName: RoleplayPromptMutationNotification.requested,
+            object: nil,
+            queue: nil
+        ) { notification in
+            guard notification.userInfo?[RoleplayPromptMutationNotification.sessionIDKey] as? UUID == sessionID,
+                  notification.userInfo?[RoleplayPromptMutationNotification.scriptIDKey] as? UUID == scriptID,
+                  let requestID = notification.userInfo?[RoleplayPromptMutationNotification.requestIDKey] as? String,
+                  let prompt = notification.userInfo?[RoleplayPromptMutationNotification.promptKey] as? [[String: String]],
+                  prompt.count == 2 else { return }
+            Task {
+                await bridge.receive(
+                    requestID: requestID,
+                    contents: ["系统提示已替换", prompt[1]["content"] ?? ""]
+                )
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let original = [
+            ChatMessage(role: .system, content: "{{ERA:player.hp}}"),
+            ChatMessage(role: .user, content: "继续")
+        ]
+        let mutated = await bridge.mutate(original, sessionID: sessionID, scriptIDs: [scriptID])
+
+        #expect(mutated[0].content == "系统提示已替换")
+        #expect(mutated[1].content == "继续")
+        #expect(mutated.map(\.id) == original.map(\.id))
+    }
+
     @Test("世界书 outlet 宏只在引用位置展开")
     func resolvesWorldbookOutletMacrosAtReferenceSite() {
         let resolved = RoleplayMacroResolver.resolveWorldbookOutlets(
@@ -1276,6 +1311,28 @@ struct RoleplayCompatibilityTests {
         """)?.toString()
         #expect(macro == "旅行者=42")
         #expect(context.evaluateScript("substitudeMacros('{{{user}}}/{{{char}}}')")?.toString() == "旅行者/星野")
+        context.evaluateScript("""
+        eventOn('era:getCurrentVars', () => {
+          eventEmit('era:queryResult', { value: '已由 ERA 替换' });
+        });
+        eventOn(tavern_events.GENERATE_AFTER_DATA, data => {
+          const receive = result => {
+            eventRemoveListener('era:queryResult', receive);
+            data.prompt[0].content = result.value;
+          };
+          eventOn('era:queryResult', receive);
+          eventEmit('era:getCurrentVars');
+        });
+        __etosMutatePrompt(
+          'prompt-mutation-request',
+          [{ role: 'system', content: '{{ERA:player.hp}}' }]
+        );
+        """)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        #expect(context.evaluateScript("""
+        posted.find(item => item.action === 'prompt_mutation_response' && item.request_id === 'prompt-mutation-request')
+          ?.prompt?.[0]?.content
+        """)?.toString() == "已由 ERA 替换")
         #expect(context.evaluateScript("posted.some(item => item.action === 'replace_variables')")?.toBool() == true)
     }
 

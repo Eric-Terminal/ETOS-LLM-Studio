@@ -348,6 +348,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         private var buttonObserver: NSObjectProtocol? = nil
         private var requestObserver: NSObjectProtocol? = nil
         private var macroObserver: NSObjectProtocol? = nil
+        private var promptMutationObserver: NSObjectProtocol? = nil
         private var eventObserver: NSObjectProtocol? = nil
 
         init(
@@ -384,6 +385,13 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
             ) { [weak self] notification in
                 self?.handleMacroExpansion(notification)
             }
+            promptMutationObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayPromptMutationNotification.requested,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handlePromptMutation(notification)
+            }
             eventObserver = NotificationCenter.default.addObserver(
                 forName: RoleplayEventBridge.didEmitNotification,
                 object: nil,
@@ -397,6 +405,7 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
             if let buttonObserver { NotificationCenter.default.removeObserver(buttonObserver) }
             if let requestObserver { NotificationCenter.default.removeObserver(requestObserver) }
             if let macroObserver { NotificationCenter.default.removeObserver(macroObserver) }
+            if let promptMutationObserver { NotificationCenter.default.removeObserver(promptMutationObserver) }
             if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
         }
 
@@ -446,6 +455,17 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
                   let data = try? JSONSerialization.data(withJSONObject: [requestID, text]),
                   let arguments = String(data: data, encoding: .utf8) else { return }
             webView?.evaluateJavaScript("window.__etosExpandMacros?.(...\(arguments));")
+        }
+
+        private func handlePromptMutation(_ notification: Notification) {
+            guard let scriptID,
+                  notification.userInfo?[RoleplayPromptMutationNotification.sessionIDKey] as? UUID == sessionID,
+                  notification.userInfo?[RoleplayPromptMutationNotification.scriptIDKey] as? UUID == scriptID,
+                  let requestID = notification.userInfo?[RoleplayPromptMutationNotification.requestIDKey] as? String,
+                  let prompt = notification.userInfo?[RoleplayPromptMutationNotification.promptKey] as? [[String: String]],
+                  let data = try? JSONSerialization.data(withJSONObject: [requestID, prompt]),
+                  let arguments = String(data: data, encoding: .utf8) else { return }
+            webView?.evaluateJavaScript("window.__etosMutatePrompt?.(...\(arguments));")
         }
 
         private func handleRoleplayEvent(_ notification: Notification) {

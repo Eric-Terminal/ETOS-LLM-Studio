@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 让助手脚本注册的动态宏参与原生聊天与 generate 提示词构建。
+// 让助手脚本注册的动态宏和可变生成事件参与原生提示词构建。
 // ============================================================================
 
 import Foundation
@@ -58,6 +58,81 @@ public actor RoleplayMacroExpansionBridge {
                     RoleplayMacroExpansionNotification.sessionIDKey: sessionID,
                     RoleplayMacroExpansionNotification.scriptIDKey: scriptID,
                     RoleplayMacroExpansionNotification.textKey: text
+                ]
+            )
+        }
+    }
+
+    private func expire(requestID: String) {
+        guard let request = pending.removeValue(forKey: requestID) else { return }
+        request.continuation.resume(returning: nil)
+    }
+}
+
+public enum RoleplayPromptMutationNotification {
+    public static let requested = Notification.Name("com.ETOS.roleplayPromptMutation.requested")
+    public static let requestIDKey = "requestID"
+    public static let sessionIDKey = "sessionID"
+    public static let scriptIDKey = "scriptID"
+    public static let promptKey = "prompt"
+}
+
+/// 将最终请求提示词交给酒馆助手脚本，并接收 `GENERATE_AFTER_DATA` 对原对象的修改。
+public actor RoleplayPromptMutationBridge {
+    public static let shared = RoleplayPromptMutationBridge()
+
+    private struct PendingRequest {
+        var continuation: CheckedContinuation<[String]?, Never>
+        var timeout: Task<Void, Never>
+    }
+
+    private var pending: [String: PendingRequest] = [:]
+
+    public func mutate(
+        _ messages: [ChatMessage],
+        sessionID: UUID,
+        scriptIDs: [UUID]
+    ) async -> [ChatMessage] {
+        var output = messages
+        for scriptID in scriptIDs {
+            guard let contents = await requestMutation(output, sessionID: sessionID, scriptID: scriptID),
+                  contents.count == output.count else { continue }
+            for index in output.indices {
+                output[index].content = contents[index]
+            }
+        }
+        return output
+    }
+
+    public func receive(requestID: String, contents: [String]) {
+        guard let request = pending.removeValue(forKey: requestID) else { return }
+        request.timeout.cancel()
+        request.continuation.resume(returning: contents)
+    }
+
+    private func requestMutation(
+        _ messages: [ChatMessage],
+        sessionID: UUID,
+        scriptID: UUID
+    ) async -> [String]? {
+        let requestID = UUID().uuidString
+        let prompt = messages.map { message in
+            ["role": message.role.rawValue, "content": message.content]
+        }
+        return await withCheckedContinuation { continuation in
+            let timeout = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await self?.expire(requestID: requestID)
+            }
+            pending[requestID] = PendingRequest(continuation: continuation, timeout: timeout)
+            NotificationCenter.default.post(
+                name: RoleplayPromptMutationNotification.requested,
+                object: nil,
+                userInfo: [
+                    RoleplayPromptMutationNotification.requestIDKey: requestID,
+                    RoleplayPromptMutationNotification.sessionIDKey: sessionID,
+                    RoleplayPromptMutationNotification.scriptIDKey: scriptID,
+                    RoleplayPromptMutationNotification.promptKey: prompt
                 ]
             )
         }

@@ -97,6 +97,7 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
         private var buttonObserver: NSObjectProtocol? = nil
         private var requestObserver: NSObjectProtocol? = nil
         private var macroObserver: NSObjectProtocol? = nil
+        private var promptMutationObserver: NSObjectProtocol? = nil
         private var eventObserver: NSObjectProtocol? = nil
 
         init(sessionID: UUID?, messageID: UUID?, versionIndex: Int, scriptID: UUID?) {
@@ -156,6 +157,23 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
                       let arguments = String(data: data, encoding: .utf8) else { return }
                 WatchWebKitRuntime.evaluate("window.__etosExpandMacros?.(...\(arguments));", in: webView)
             }
+            promptMutationObserver = NotificationCenter.default.addObserver(
+                forName: RoleplayPromptMutationNotification.requested,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self,
+                      let sessionID,
+                      let scriptID,
+                      notification.userInfo?[RoleplayPromptMutationNotification.sessionIDKey] as? UUID == sessionID,
+                      notification.userInfo?[RoleplayPromptMutationNotification.scriptIDKey] as? UUID == scriptID,
+                      let requestID = notification.userInfo?[RoleplayPromptMutationNotification.requestIDKey] as? String,
+                      let prompt = notification.userInfo?[RoleplayPromptMutationNotification.promptKey] as? [[String: String]],
+                      let webView = self.webView,
+                      let data = try? JSONSerialization.data(withJSONObject: [requestID, prompt]),
+                      let arguments = String(data: data, encoding: .utf8) else { return }
+                WatchWebKitRuntime.evaluate("window.__etosMutatePrompt?.(...\(arguments));", in: webView)
+            }
             eventObserver = NotificationCenter.default.addObserver(
                 forName: RoleplayEventBridge.didEmitNotification,
                 object: nil,
@@ -178,6 +196,7 @@ struct WatchRuntimeHTMLWebView: _UIViewRepresentable {
             if let buttonObserver { NotificationCenter.default.removeObserver(buttonObserver) }
             if let requestObserver { NotificationCenter.default.removeObserver(requestObserver) }
             if let macroObserver { NotificationCenter.default.removeObserver(macroObserver) }
+            if let promptMutationObserver { NotificationCenter.default.removeObserver(promptMutationObserver) }
             if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
         }
     }

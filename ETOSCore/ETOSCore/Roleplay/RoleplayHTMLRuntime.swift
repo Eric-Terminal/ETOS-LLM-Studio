@@ -1212,6 +1212,15 @@ public enum RoleplayHTMLDocumentFactory {
     request_id: requestID,
     text: api.substitudeMacros(String(text ?? ''), {})
   });
+  window.__etosMutatePrompt = async (requestID, prompt) => {
+    const data = { prompt: Array.isArray(prompt) ? clone(prompt) : [] };
+    try {
+      await emitLocal(window.tavern_events?.GENERATE_AFTER_DATA || 'generate_after_data', data, false);
+    } catch (error) {
+      console.error(error);
+    }
+    post({ action: 'prompt_mutation_response', request_id: requestID, prompt: data.prompt });
+  };
   const reportHeight = () => post({ action: 'height', value: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 1) });
   window.addEventListener('DOMContentLoaded', () => {
     installVirtualChatDOM();

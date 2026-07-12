@@ -88,8 +88,11 @@ extension ChatService {
             }
             resolvedRoleplay = resolved
         }
-        let helperScriptIDs = resolvedRoleplay?.characters.flatMap { character in
-            character.helperScripts.filter(\.enabled).map(\.id)
+        let helperScriptIDs = resolvedRoleplay.map { resolved -> [UUID] in
+            guard resolved.binding.helperScriptsEnabled else { return [] }
+            return resolved.characters.flatMap { character in
+                character.helperScripts.filter(\.enabled).map(\.id)
+            }
         } ?? []
         if !helperScriptIDs.isEmpty {
             for index in requestMessages.indices where requestMessages[index].content.contains("{{") {
@@ -390,6 +393,14 @@ extension ChatService {
         }
         messagesToSend = filePreprocessing.messages
         fileAttachments = filePreprocessing.fileAttachments
+
+        if !helperScriptIDs.isEmpty {
+            messagesToSend = await RoleplayPromptMutationBridge.shared.mutate(
+                messagesToSend,
+                sessionID: currentSessionID,
+                scriptIDs: helperScriptIDs
+            )
+        }
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
             persistSentSystemPromptSnapshot(

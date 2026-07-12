@@ -208,6 +208,17 @@ public enum RoleplayBridgeDispatcher {
             guard let requestID = payload["request_id"] as? String,
                   let text = payload["text"] as? String else { return }
             Task { await RoleplayMacroExpansionBridge.shared.receive(requestID: requestID, text: text) }
+        case "prompt_mutation_response":
+            guard let requestID = payload["request_id"] as? String,
+                  let prompt = payload["prompt"] as? [[String: Any]] else { return }
+            let contents = prompt.compactMap { $0["content"] as? String }
+            guard contents.count == prompt.count else { return }
+            Task {
+                await RoleplayPromptMutationBridge.shared.receive(
+                    requestID: requestID,
+                    contents: contents
+                )
+            }
         case "event":
             guard let name = payload["name"] as? String else { return }
             NotificationCenter.default.post(

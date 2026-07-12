@@ -58,7 +58,9 @@ extension ChatService {
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .joined(separator: "\n\n")
         )
-        let scriptIDs = resolved.characters.flatMap { $0.helperScripts.filter(\.enabled).map(\.id) }
+        let scriptIDs = resolved.binding.helperScriptsEnabled
+            ? resolved.characters.flatMap { $0.helperScripts.filter(\.enabled).map(\.id) }
+            : []
         if !scriptIDs.isEmpty {
             for index in requestMessages.indices where requestMessages[index].content.contains("{{") {
                 requestMessages[index].content = await RoleplayMacroExpansionBridge.shared.expand(
@@ -81,6 +83,13 @@ extension ChatService {
         )
         if templateMacroContext.variables != store.variableSnapshot(sessionID: sessionID) {
             store.saveVariableSnapshot(templateMacroContext.variables, sessionID: sessionID)
+        }
+        if !scriptIDs.isEmpty {
+            requestMessages = await RoleplayPromptMutationBridge.shared.mutate(
+                requestMessages,
+                sessionID: sessionID,
+                scriptIDs: scriptIDs
+            )
         }
         return try await generateDetachedChatCompletion(
             messages: requestMessages,
