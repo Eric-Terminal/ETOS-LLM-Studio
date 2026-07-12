@@ -283,6 +283,18 @@ public final class RoleplayStore: @unchecked Sendable {
 
     private func notifyChange(kind: String) {
         WatchDatabaseSyncService.markDatabaseChanged(.config)
+
+        // 酒馆脚本会在后台更新变量，通知必须回到主线程后再驱动 SwiftUI 状态。
+        guard !Thread.isMainThread else {
+            postChangeNotifications(kind: kind)
+            return
+        }
+        DispatchQueue.main.async {
+            self.postChangeNotifications(kind: kind)
+        }
+    }
+
+    private func postChangeNotifications(kind: String) {
         NotificationCenter.default.post(
             name: Self.didChangeNotification,
             object: self,
