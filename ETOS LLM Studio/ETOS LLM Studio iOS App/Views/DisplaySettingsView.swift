@@ -186,6 +186,14 @@ struct DisplaySettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                Section(NSLocalizedString("聊天界面", comment: "设置聊天界面分组")) {
+                    NavigationLink {
+                        ChatQuickActionSettingsView()
+                    } label: {
+                        SettingsListIconLabel("聊天快捷功能", icon: .chatQuickAction)
+                    }
+                }
             }
             .tabItem {
                 Label(NSLocalizedString("界面与交互", comment: ""), systemImage: "slider.horizontal.3")

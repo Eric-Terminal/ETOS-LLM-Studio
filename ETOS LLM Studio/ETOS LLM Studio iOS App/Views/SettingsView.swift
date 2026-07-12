@@ -84,14 +84,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("聊天界面", comment: "设置聊天界面分组")) {
-                NavigationLink {
-                    ChatQuickActionSettingsView()
-                } label: {
-                    SettingsListIconLabel("聊天快捷功能", icon: .chatQuickAction)
-                }
-            }
-            
             Section(NSLocalizedString("对话行为", comment: "设置对话行为分组")) {
                 NavigationLink {
                     SessionListView().environmentObject(viewModel)
