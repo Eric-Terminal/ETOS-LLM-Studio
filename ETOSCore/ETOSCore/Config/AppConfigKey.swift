@@ -199,6 +199,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchUseThirdPartyKeyboard = "watch.keyboard.useThirdPartyKeyboard"
     case localDebugLastServerAddress = "localDebug.lastServerAddress"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
+    case chatQuickActionIDs = "ui.chatQuickActionIDs"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case providerDetailGroupByMainstream = "providerDetail.groupByMainstream"
@@ -451,6 +452,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .bool(true)
             #endif
+        case .chatQuickActionIDs:
+            return .text("temporaryChat")
         case .restoreLastSessionOnLaunch:
             return .bool(false)
         case .providerDetailGroupByMainstream:

@@ -13,6 +13,68 @@ import os.log
 extension ChatService {
     // MARK: - 公开方法 (会话管理)
 
+    public func isTemporaryChatEnabled(for sessionID: UUID?) -> Bool {
+        guard let sessionID else { return false }
+        ephemeralSessionLock.lock()
+        defer { ephemeralSessionLock.unlock() }
+        return ephemeralSessionIDs.contains(sessionID)
+    }
+
+    public func temporaryChatMessageCount(for sessionID: UUID) -> Int? {
+        guard isTemporaryChatEnabled(for: sessionID) else { return nil }
+        return runtimeMessagesSnapshot(for: sessionID)?.count ?? 0
+    }
+
+    /// 切换到唯一的运行期临时会话；其消息在关闭临时模式前不会写入会话数据库。
+    public func enableTemporaryChat() {
+        createNewSession()
+        guard let sessionID = currentSessionSubject.value?.id else { return }
+        ephemeralSessionLock.lock()
+        ephemeralSessionIDs.insert(sessionID)
+        ephemeralSessionLock.unlock()
+    }
+
+    /// 将当前临时对话转为正式会话，并一次性写入完整消息快照。
+    @discardableResult
+    public func saveCurrentTemporaryChat() -> Bool {
+        guard var currentSession = currentSessionSubject.value,
+              isTemporaryChatEnabled(for: currentSession.id) else {
+            return false
+        }
+
+        ephemeralSessionLock.lock()
+        ephemeralSessionIDs.remove(currentSession.id)
+        ephemeralSessionLock.unlock()
+
+        let messages = messagesSnapshot(for: currentSession.id)
+        guard !messages.isEmpty else {
+            logger.info("已关闭空白临时对话，未创建会话记录。")
+            return true
+        }
+
+        if currentSession.isTemporary {
+            currentSession.isTemporary = false
+            if currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name"),
+               let firstUserMessage = messages.first(where: {
+                   $0.role == .user && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+               }) {
+                currentSession.name = String(firstUserMessage.content.prefix(20))
+            }
+        }
+
+        currentSessionSubject.send(currentSession)
+        var updatedSessions = chatSessionsSubject.value
+        if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
+            updatedSessions[index] = currentSession
+        }
+        chatSessionsSubject.send(updatedSessions)
+        persistMessages(messages, for: currentSession.id)
+        Persistence.saveChatSessions(updatedSessions)
+        persistLastActiveSessionIDIfNeeded(currentSession)
+        logger.info("临时对话已落盘: \(currentSession.id.uuidString)")
+        return true
+    }
+
     public func createNewSession() {
         var updatedSessions = chatSessionsSubject.value
 
@@ -135,6 +197,9 @@ extension ChatService {
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
+            ephemeralSessionLock.lock()
+            ephemeralSessionIDs.remove(session.id)
+            ephemeralSessionLock.unlock()
             clearRuntimeMessagesSnapshot(for: session.id)
             let messages = Persistence.loadMessages(for: session.id)
             deletedSessionMessages.append(contentsOf: messages)

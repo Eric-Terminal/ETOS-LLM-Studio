@@ -28,7 +28,9 @@ struct ChatView: View {
     @State var showScrollToBottom = false
     @State var shouldKeepBottomPinned = true
     @State var suppressAutoScrollOnce = false
-    @State var navigationDestination: ChatNavigationDestination?
+    @State var navigationDestination: ChatQuickAction?
+    @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
+    @State var isTemporaryChatEnabled = false
     @State var editingMessage: ChatMessage?
     @State var showBranchOptions = false
     @State var messageToBranch: ChatMessage?
@@ -62,6 +64,7 @@ struct ChatView: View {
     @State var isSelectedMessagesExportPresented = false
     @State var showSelectedMessagesDeleteConfirm = false
     @State var activeChatPickerSheet: ChatPickerSheet?
+    @State var chatPickerDismissDestination: ChatQuickAction?
     @State var activeChatPickerDetent: PresentationDetent = .medium
     @State var quickModelSettingsTarget: RunnableModel?
     @State var isChatLayoutLandscape = false
@@ -270,6 +273,8 @@ struct ChatView: View {
     var body: some View {
         applyPresentationModifiers(to: adaptiveChatLayout)
             .onAppear {
+                reloadChatQuickActions()
+                refreshTemporaryChatState()
                 refreshChatToolPermissionAutoPresentationBlocker()
             }
             .onDisappear {
@@ -278,7 +283,11 @@ struct ChatView: View {
             .onChange(of: chatToolPermissionAutoPresentationBlocked) { _, _ in
                 refreshChatToolPermissionAutoPresentationBlocker()
             }
+            .onChange(of: appConfig.chatQuickActionIDs) { _, _ in
+                reloadChatQuickActions()
+            }
             .onChange(of: viewModel.currentSession?.id) { _, _ in
+                refreshTemporaryChatState()
                 if isMessageSelectionMode {
                     exitMessageSelection()
                 }

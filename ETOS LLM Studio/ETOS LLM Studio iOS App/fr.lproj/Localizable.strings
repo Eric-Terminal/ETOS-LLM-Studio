@@ -5006,3 +5006,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "复制为纯文本" = "Copier en texte brut";
 "复制格式" = "Format de copie";
 "选择需要复制的格式。" = "Choisissez le format à copier.";
+"临时对话" = "Discussion temporaire";
+"快捷功能" = "Actions rapides";
+"聊天界面" = "Interface de discussion";
+"聊天快捷功能" = "Actions rapides de discussion";
+"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。" = "Avec une seule action, le bouton l’exécute directement. Avec plusieurs, il ouvre un menu rapide. Conservez au moins une action.";

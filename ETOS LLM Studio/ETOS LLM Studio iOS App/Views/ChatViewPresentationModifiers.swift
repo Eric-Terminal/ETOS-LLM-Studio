@@ -13,10 +13,7 @@ extension ChatView {
     func applyPresentationModifiers<Content: View>(to content: Content) -> some View {
         content
             .navigationDestination(item: $navigationDestination) { destination in
-                switch destination {
-                case .settings:
-                    SettingsView()
-                }
+                quickActionDestinationView(for: destination)
             }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {

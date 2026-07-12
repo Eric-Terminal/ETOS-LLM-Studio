@@ -5006,3 +5006,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "复制为纯文本" = "Copiar como texto sin formato";
 "复制格式" = "Formato de copia";
 "选择需要复制的格式。" = "Elige el formato que quieres copiar.";
+"临时对话" = "Chat temporal";
+"快捷功能" = "Acciones rápidas";
+"聊天界面" = "Interfaz de chat";
+"聊天快捷功能" = "Acciones rápidas del chat";
+"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。" = "Con una acción seleccionada, el botón la ejecuta directamente. Con varias, abre un menú rápido. Mantén al menos una acción seleccionada.";

@@ -33,6 +33,9 @@ extension ChatViewModel {
         if session.id == currentSession?.id {
             return allMessagesForSession.count
         }
+        if let temporaryCount = chatService.temporaryChatMessageCount(for: session.id) {
+            return temporaryCount
+        }
         return Persistence.loadMessageCount(for: session.id)
     }
 
@@ -61,6 +64,19 @@ extension ChatViewModel {
 
     func createNewSession() {
         chatService.createNewSession()
+    }
+
+    func isTemporaryChatEnabled(for sessionID: UUID?) -> Bool {
+        chatService.isTemporaryChatEnabled(for: sessionID)
+    }
+
+    func enableTemporaryChat() {
+        chatService.enableTemporaryChat()
+    }
+
+    @discardableResult
+    func saveCurrentTemporarySession() -> Bool {
+        chatService.saveCurrentTemporaryChat()
     }
 
     func reloadPersistedDataAfterLegacyJSONMigration() {

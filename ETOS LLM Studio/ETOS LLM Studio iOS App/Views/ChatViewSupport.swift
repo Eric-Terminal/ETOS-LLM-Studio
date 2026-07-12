@@ -24,12 +24,6 @@ enum TelegramColors {
     static let scrollButtonShadow = Color.black.opacity(0.15)
 }
 
-enum ChatNavigationDestination: String, Identifiable {
-    case settings
-
-    var id: String { rawValue }
-}
-
 struct SessionPickerInfoPayload: Identifiable {
     let id = UUID()
     let session: ChatSession

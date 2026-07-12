@@ -149,7 +149,7 @@ extension ChatService {
         )
         logger.info("生图占位消息已创建: loadingMessageID=\(loadingMessage.id.uuidString)")
 
-        if currentSession.isTemporary {
+        if currentSession.isTemporary && !isTemporaryChatEnabled(for: currentSession.id) {
             currentSession.name = String(trimmedPrompt.prefix(20))
             currentSession.isTemporary = false
             currentSessionSubject.send(currentSession)
@@ -160,8 +160,16 @@ extension ChatService {
             chatSessionsSubject.send(updatedSessions)
             Persistence.saveChatSessions(updatedSessions)
             logger.info("生图请求已跳过自动标题生成: session=\(currentSession.id.uuidString)")
-        } else {
+        } else if !currentSession.isTemporary {
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+        } else if currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
+            currentSession.name = String(trimmedPrompt.prefix(20))
+            currentSessionSubject.send(currentSession)
+            var updatedSessions = chatSessionsSubject.value
+            if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
+                updatedSessions[index] = currentSession
+                chatSessionsSubject.send(updatedSessions)
+            }
         }
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)

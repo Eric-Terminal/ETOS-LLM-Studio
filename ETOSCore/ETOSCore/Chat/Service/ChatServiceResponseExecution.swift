@@ -139,6 +139,7 @@ extension ChatService {
 
     func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {
         storeRuntimeMessagesSnapshot(messages, for: sessionID)
+        guard !isTemporaryChatEnabled(for: sessionID) else { return }
         let persisted = normalizedMessagesForPersistence(messages)
         Persistence.saveMessages(persisted, for: sessionID)
     }

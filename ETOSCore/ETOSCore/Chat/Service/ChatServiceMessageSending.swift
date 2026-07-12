@@ -224,7 +224,9 @@ extension ChatService {
         // UI 上通过 audioFileName 属性标识这是一条语音消息
 
         // 处理临时会话的转换
-        if currentSession.isTemporary, let sessionTitleSource = primaryUserMessage {
+        if currentSession.isTemporary,
+           !isTemporaryChatEnabled(for: currentSession.id),
+           let sessionTitleSource = primaryUserMessage {
             wasTemporarySession = true // 标记此为首次交互
             currentSession.name = String(sessionTitleSource.content.prefix(20))
             currentSession.isTemporary = false
@@ -247,9 +249,18 @@ extension ChatService {
             } else {
                 logger.info("跳过自动标题生成：首条消息为空或仅包含附件占位。")
             }
-        } else {
+        } else if !currentSession.isTemporary {
             // 老会话重新收到消息时，将其排到列表顶部
             promoteSessionToTopIfNeeded(sessionID: currentSession.id)
+        } else if let sessionTitleSource = primaryUserMessage,
+                  currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
+            currentSession.name = String(sessionTitleSource.content.prefix(20))
+            currentSessionSubject.send(currentSession)
+            var updatedSessions = chatSessionsSubject.value
+            if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
+                updatedSessions[index] = currentSession
+                chatSessionsSubject.send(updatedSessions)
+            }
         }
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)

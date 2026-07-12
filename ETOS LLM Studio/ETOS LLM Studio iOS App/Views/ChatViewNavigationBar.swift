@@ -27,12 +27,7 @@ extension ChatView {
 
             Spacer(minLength: 12)
 
-            Button {
-                navigationDestination = .settings
-            } label: {
-                navBarIconLabel(systemName: "gearshape", accessibilityLabel: "设置")
-            }
-            .buttonStyle(.plain)
+            navBarQuickActionButton
         }
         .padding(.horizontal, 16)
         .padding(.vertical, navBarVerticalPadding)
@@ -129,7 +124,7 @@ extension ChatView {
                     .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
             )
             .contentShape(Circle())
-            .accessibilityLabel(NSLocalizedString(accessibilityLabel, comment: "导航栏图标无障碍标签"))
+            .accessibilityLabel(accessibilityLabel)
     }
 
     var navBarCenterPill: some View {
@@ -299,6 +294,10 @@ extension ChatView {
         activeChatPickerDetent = .medium
         quickModelSettingsTarget = nil
         resetSessionPickerSearchState()
+        if let destination = chatPickerDismissDestination {
+            chatPickerDismissDestination = nil
+            navigationDestination = destination
+        }
     }
 
     func handleChatLayoutChange(isLandscape: Bool) {

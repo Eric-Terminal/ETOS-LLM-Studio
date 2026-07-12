@@ -83,6 +83,14 @@ struct SettingsView: View {
                     SettingsListIconLabel("开启新对话", icon: .newConversation)
                 }
             }
+
+            Section(NSLocalizedString("聊天界面", comment: "设置聊天界面分组")) {
+                NavigationLink {
+                    ChatQuickActionSettingsView()
+                } label: {
+                    SettingsListIconLabel("聊天快捷功能", icon: .chatQuickAction)
+                }
+            }
             
             Section(NSLocalizedString("对话行为", comment: "设置对话行为分组")) {
                 NavigationLink {
@@ -428,6 +436,7 @@ struct SettingsListIcon {
 extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green)
+    static let chatQuickAction = SettingsListIcon(systemName: "ellipsis.circle", backgroundColor: .indigo)
     static let sessionHistory = SettingsListIcon(systemName: "clock", backgroundColor: .indigo)
     static let providerManagement = SettingsListIcon(systemName: "cube", backgroundColor: .orange)
     static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple)
