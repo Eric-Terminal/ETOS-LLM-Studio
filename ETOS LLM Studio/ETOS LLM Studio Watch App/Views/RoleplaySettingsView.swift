@@ -20,10 +20,6 @@ struct RoleplaySettingsView: View {
     @State private var selectedGreetingIndex = 0
     @State private var htmlRenderingEnabled = true
     @State private var helperScriptsEnabled = true
-    @State private var importURLText = ""
-    @State private var isImporting = false
-    @State private var importError: String?
-    @State private var isAddingPersona = false
 
     var body: some View {
         List {
@@ -77,69 +73,17 @@ struct RoleplaySettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("角色卡", comment: "Roleplay character cards section")) {
-                TextField(
-                    NSLocalizedString("角色卡链接", comment: "Roleplay card URL field"),
-                    text: $importURLText.watchKeyboardNewlineBinding()
-                )
-
-                Button {
-                    importCardFromURL()
+            Section {
+                NavigationLink {
+                    WatchRoleplayCharacterLibraryView()
                 } label: {
-                    Label(
-                        NSLocalizedString("从 URL 导入角色卡", comment: "Import roleplay card from URL"),
-                        systemImage: "link.badge.plus"
-                    )
-                }
-                .disabled(isImporting)
-
-                if isImporting {
-                    ProgressView()
+                    Label(NSLocalizedString("角色卡", comment: "Roleplay character cards title"), systemImage: "person.crop.rectangle.stack")
                 }
 
-                if characters.isEmpty {
-                    Text(NSLocalizedString("暂无角色卡。", comment: "No roleplay characters"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(characters) { character in
-                        NavigationLink {
-                            WatchRoleplayCharacterDetailView(character: character)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(character.name)
-                                Text(String(
-                                    format: NSLocalizedString("正则 %d · 脚本 %d", comment: "Watch roleplay card counts"),
-                                    character.regexRules.count,
-                                    character.helperScripts.count
-                                ))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .onDelete { offsets in
-                        for index in offsets {
-                            ChatService.shared.deleteRoleplayCharacter(id: characters[index].id)
-                        }
-                        reload()
-                    }
-                }
-            }
-
-            Section(NSLocalizedString("用户身份", comment: "Roleplay personas section")) {
-                Button {
-                    isAddingPersona = true
+                NavigationLink {
+                    WatchPersonaLibraryView()
                 } label: {
-                    Label(NSLocalizedString("新增用户身份", comment: "Add persona"), systemImage: "person.badge.plus")
-                }
-                ForEach(personas) { persona in
-                    Text(persona.name)
-                }
-                .onDelete { offsets in
-                    for index in offsets {
-                        ChatService.shared.deletePersonaProfile(id: personas[index].id)
-                    }
-                    reload()
+                    Label(NSLocalizedString("用户身份", comment: "Roleplay personas title"), systemImage: "person.text.rectangle")
                 }
             }
 
@@ -158,30 +102,11 @@ struct RoleplaySettingsView: View {
                     Label(NSLocalizedString("管理与绑定世界书", comment: "Manage roleplay lorebooks"), systemImage: "books.vertical")
                 }
             }
-
-            if let importError {
-                Section(NSLocalizedString("导入错误", comment: "Import error section")) {
-                    Text(importError)
-                        .etFont(.footnote)
-                        .foregroundStyle(.red)
-                }
-            }
         }
         .navigationTitle(NSLocalizedString("酒馆兼容", comment: "Watch roleplay compatibility title"))
-        .sheet(isPresented: $isAddingPersona) {
-            WatchPersonaEditorView { persona, avatarData in
-                Task {
-                    _ = await Task.detached(priority: .utility) {
-                        ChatService.shared.savePersonaProfile(persona, avatarData: avatarData)
-                    }.value
-                    isAddingPersona = false
-                    reload()
-                }
-            }
-        }
         .task { reload() }
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
-            reloadBinding()
+            reload()
         }
     }
 
@@ -237,6 +162,89 @@ struct RoleplaySettingsView: View {
             helperScriptsEnabled: helperScriptsEnabled,
             seedGreetingIfEmpty: seedGreeting
         )
+    }
+}
+
+private struct WatchRoleplayCharacterLibraryView: View {
+    @State private var characters: [RoleplayCharacter] = []
+    @State private var importURLText = ""
+    @State private var isImporting = false
+    @State private var importError: String?
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("导入", comment: "Import section")) {
+                TextField(
+                    NSLocalizedString("角色卡链接", comment: "Roleplay card URL field"),
+                    text: $importURLText.watchKeyboardNewlineBinding()
+                )
+
+                Button {
+                    importCardFromURL()
+                } label: {
+                    Label(
+                        NSLocalizedString("从 URL 导入角色卡", comment: "Import roleplay card from URL"),
+                        systemImage: "link.badge.plus"
+                    )
+                }
+                .disabled(isImporting)
+
+                if isImporting {
+                    ProgressView()
+                }
+            }
+
+            if let importError {
+                Section(NSLocalizedString("导入错误", comment: "Import error section")) {
+                    Text(importError)
+                        .etFont(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section(NSLocalizedString("角色卡", comment: "Roleplay character cards section")) {
+                if characters.isEmpty {
+                    Text(NSLocalizedString("暂无角色卡。", comment: "No roleplay characters"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(characters) { character in
+                        NavigationLink {
+                            WatchRoleplayCharacterDetailView(character: character)
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(character.name)
+                                Text(String(
+                                    format: NSLocalizedString("正则 %d · 脚本 %d", comment: "Watch roleplay card counts"),
+                                    character.regexRules.count,
+                                    character.helperScripts.count
+                                ))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .onDelete { offsets in
+                        for index in offsets {
+                            ChatService.shared.deleteRoleplayCharacter(id: characters[index].id)
+                        }
+                        reload()
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("角色卡", comment: "Roleplay character cards title"))
+        .task { reload() }
+        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
+            reload()
+        }
+    }
+
+    private func reload() {
+        Task {
+            characters = await Task.detached(priority: .utility) {
+                ChatService.shared.loadRoleplayCharacters().sorted { $0.updatedAt > $1.updatedAt }
+            }.value
+        }
     }
 
     private func importCardFromURL() {
@@ -297,6 +305,64 @@ struct RoleplaySettingsView: View {
             if contentType.contains("zip") { return "\(fileName.isEmpty ? "character-card" : fileName).charx" }
         }
         return "\(fileName.isEmpty ? "character-card" : fileName).json"
+    }
+}
+
+private struct WatchPersonaLibraryView: View {
+    @State private var personas: [PersonaProfile] = []
+    @State private var isAddingPersona = false
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    isAddingPersona = true
+                } label: {
+                    Label(NSLocalizedString("新增用户身份", comment: "Add persona"), systemImage: "person.badge.plus")
+                }
+            }
+
+            Section(NSLocalizedString("用户身份", comment: "Roleplay personas section")) {
+                if personas.isEmpty {
+                    Text(NSLocalizedString("暂无用户身份。", comment: "No personas"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(personas) { persona in
+                        Text(persona.name)
+                    }
+                    .onDelete { offsets in
+                        for index in offsets {
+                            ChatService.shared.deletePersonaProfile(id: personas[index].id)
+                        }
+                        reload()
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("用户身份", comment: "Roleplay personas title"))
+        .sheet(isPresented: $isAddingPersona) {
+            WatchPersonaEditorView { persona, avatarData in
+                Task {
+                    _ = await Task.detached(priority: .utility) {
+                        ChatService.shared.savePersonaProfile(persona, avatarData: avatarData)
+                    }.value
+                    isAddingPersona = false
+                    reload()
+                }
+            }
+        }
+        .task { reload() }
+        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
+            reload()
+        }
+    }
+
+    private func reload() {
+        Task {
+            personas = await Task.detached(priority: .utility) {
+                ChatService.shared.loadPersonaProfiles().sorted { $0.updatedAt > $1.updatedAt }
+            }.value
+        }
     }
 }
 
