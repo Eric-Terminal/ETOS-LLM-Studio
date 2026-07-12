@@ -56,7 +56,7 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .temporaryChat: return "eye.slash"
+        case .temporaryChat: return "ghost"
         case .settings: return "gearshape"
         case .toolCenter: return "wrench"
         case .dailyPulse: return "sparkles"
@@ -187,7 +187,7 @@ extension ChatView {
         guard action == .temporaryChat, isTemporaryChatEnabled else {
             return action.systemImage
         }
-        return "eye.slash.fill"
+        return "ghost.fill"
     }
 
     func performQuickAction(_ action: ChatQuickAction) {
