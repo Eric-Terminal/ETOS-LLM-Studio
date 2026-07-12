@@ -293,7 +293,7 @@ public class ChatService {
         return Persistence.loadMessages(for: sessionID)
     }
 
-    private func runtimeMessagesSnapshot(for sessionID: UUID) -> [ChatMessage]? {
+    func runtimeMessagesSnapshot(for sessionID: UUID) -> [ChatMessage]? {
         runtimeMessagesLock.lock()
         defer { runtimeMessagesLock.unlock() }
         return runtimeMessagesBySessionID[sessionID]
