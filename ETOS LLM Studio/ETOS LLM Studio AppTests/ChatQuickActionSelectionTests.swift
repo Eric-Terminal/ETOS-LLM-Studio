@@ -7,9 +7,9 @@ import Testing
 
 @Suite("聊天快捷功能配置测试")
 struct ChatQuickActionSelectionTests {
-    @Test("临时对话使用 Safari 无痕浏览图标")
-    func temporaryChatUsesPrivateBrowsingSymbol() {
-        #expect(ChatQuickAction.temporaryChat.systemImage == "hand.raised")
+    @Test("临时对话使用隐私图标")
+    func temporaryChatUsesPrivacySymbol() {
+        #expect(ChatQuickAction.temporaryChat.systemImage == "eye.slash")
     }
 
     @Test("空配置和未知配置回退到临时对话")
