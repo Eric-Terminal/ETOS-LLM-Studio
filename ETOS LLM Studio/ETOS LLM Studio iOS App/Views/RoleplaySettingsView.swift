@@ -54,7 +54,20 @@ private struct RoleplayCharacterLibraryView: View {
                 }
             }
 
-            Section(NSLocalizedString("导入", comment: "Import section")) {
+            Section {
+                NavigationLink {
+                    RoleplayCharacterProfileEditorView(
+                        character: RoleplayCharacter(
+                            name: "",
+                            sourceSpec: "chara_card_v2",
+                            sourceSpecVersion: "2.0"
+                        ),
+                        isCreating: true
+                    )
+                } label: {
+                    Label(NSLocalizedString("新增角色卡", comment: "Add character card"), systemImage: "person.badge.plus")
+                }
+
                 Button {
                     isImporting = true
                 } label: {

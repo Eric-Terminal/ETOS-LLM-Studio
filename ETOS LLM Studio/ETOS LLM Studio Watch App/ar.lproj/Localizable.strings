@@ -5059,6 +5059,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "初始变量必须填写为 JSON 对象，并会在绑定角色卡时注入角色变量作用域。" = "Initial variables must be a JSON object and are injected into the character scope when the card is bound.";
 "保存角色卡资料" = "Save Character Profile";
 "角色卡资料" = "Character Profile";
+"新增角色卡" = "إضافة بطاقة شخصية";
 "无法保存角色卡" = "Unable to Save Character";
 "角色名称不能为空。" = "Character name cannot be empty.";
 "初始变量必须是有效的 JSON 对象。" = "Initial variables must be a valid JSON object.";

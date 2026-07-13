@@ -371,6 +371,7 @@ private struct RoleplayHelperScriptEditorView: View {
 struct RoleplayCharacterProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
+    private let isCreating: Bool
     @State private var character: RoleplayCharacter
     @State private var greetingDrafts: [RoleplayGreetingDraft]
     @State private var tagsText: String
@@ -378,7 +379,8 @@ struct RoleplayCharacterProfileEditorView: View {
     @State private var isSaving = false
     @State private var errorText: String?
 
-    init(character: RoleplayCharacter) {
+    init(character: RoleplayCharacter, isCreating: Bool = false) {
+        self.isCreating = isCreating
         self._character = State(initialValue: character)
         self._greetingDrafts = State(initialValue: character.alternateGreetings.enumerated().map {
             RoleplayGreetingDraft(number: $0.offset + 1, text: $0.element)
@@ -489,7 +491,11 @@ struct RoleplayCharacterProfileEditorView: View {
                 .disabled(isSaving)
             }
         }
-        .navigationTitle(NSLocalizedString("角色卡资料", comment: "Character card profile title"))
+        .navigationTitle(
+            isCreating
+                ? NSLocalizedString("新增角色卡", comment: "Add character card title")
+                : NSLocalizedString("角色卡资料", comment: "Character card profile title")
+        )
         .navigationBarTitleDisplayMode(.inline)
         .alert(
             NSLocalizedString("无法保存角色卡", comment: "Unable to save character card"),
