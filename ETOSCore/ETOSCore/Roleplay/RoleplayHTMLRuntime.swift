@@ -37,6 +37,7 @@ public struct RoleplayHTMLExtraction: Codable, Hashable, Sendable {
     public var containsHTML: Bool { !documents.isEmpty }
 }
 
+/// 从显示变换结果中提取本地 Widget；不创建模型工具调用，也不改写持久化消息。
 public enum RoleplayHTMLExtractor {
     public static func extract(from content: String) -> RoleplayHTMLExtraction {
         guard isFrontend(content) || content.contains("```") else {
@@ -49,18 +50,39 @@ public enum RoleplayHTMLExtractor {
         let source = content as NSString
         let matches = fenceRegex.matches(in: content, range: NSRange(location: 0, length: source.length))
         var documents: [RoleplayHTMLDocument] = []
-        let remaining = NSMutableString(string: content)
-        for match in matches.reversed() {
+        let remaining = NSMutableString()
+        var cursor = 0
+
+        // 酒馆正则经常在同一条回复中混合裸 HTML 与 HTML 围栏；两者都应由 App 本地承载，不能留给 Markdown。
+        func appendOutsideFence(_ range: NSRange) {
+            guard range.length > 0 else { return }
+            let segment = source.substring(with: range)
+            guard let frontendRange = firstFrontendRange(in: segment) else {
+                remaining.append(segment)
+                return
+            }
+            let segmentSource = segment as NSString
+            remaining.append(segmentSource.substring(to: frontendRange.location))
+            documents.append(RoleplayHTMLDocument(
+                id: range.location + frontendRange.location,
+                source: segmentSource.substring(from: frontendRange.location)
+            ))
+        }
+
+        for match in matches {
             guard match.numberOfRanges > 2 else { continue }
+            appendOutsideFence(NSRange(location: cursor, length: match.range.location - cursor))
             let languageIsHTML = match.range(at: 1).location != NSNotFound
             let candidate = source.substring(with: match.range(at: 2))
-            guard languageIsHTML || isFrontend(candidate) else { continue }
-            documents.insert(.init(id: match.range.location, source: candidate), at: 0)
-            remaining.replaceCharacters(in: match.range, with: "")
+            if languageIsHTML || isFrontend(candidate) {
+                documents.append(.init(id: match.range.location, source: candidate))
+            } else {
+                remaining.append(source.substring(with: match.range))
+            }
+            cursor = NSMaxRange(match.range)
         }
-        if documents.isEmpty, isFrontend(content) {
-            return .init(remainingText: "", documents: [.init(id: 0, source: content)])
-        }
+        appendOutsideFence(NSRange(location: cursor, length: source.length - cursor))
+        documents.sort { $0.id < $1.id }
         return .init(
             remainingText: (remaining as String).trimmingCharacters(in: .whitespacesAndNewlines),
             documents: documents
@@ -68,11 +90,31 @@ public enum RoleplayHTMLExtractor {
     }
 
     public static func isFrontend(_ content: String) -> Bool {
-        content.range(
-            of: #"(?:<!doctype\s+html\b|<(?:html|head|body|style|script|div|section|article|main|details|table|form|img|svg|canvas|video|audio|iframe)\b|class\s*=\s*['\"][^'\"]*\bTH-render\b)"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
+        firstFrontendRange(in: content) != nil
     }
+
+    private static func firstFrontendRange(in content: String) -> NSRange? {
+        let fullRange = NSRange(location: 0, length: (content as NSString).length)
+        let tagPattern = #"(?:<!doctype\s+html\b|<(?:html|head|body|style|script|div|section|article|main|details|table|form|img|svg|canvas|video|audio|iframe)\b)"#
+        let classPattern = #"class\s*=\s*['\"][^'\"]*\bTH-render\b"#
+        let tagRange = (try? NSRegularExpression(pattern: tagPattern, options: [.caseInsensitive]))?
+            .firstMatch(in: content, range: fullRange)?.range
+        let classRange = (try? NSRegularExpression(pattern: classPattern, options: [.caseInsensitive]))?
+            .firstMatch(in: content, range: fullRange)?.range
+
+        var classTagRange: NSRange?
+        if let classRange {
+            let prefix = (content as NSString).substring(to: classRange.location) as NSString
+            let openingTag = prefix.range(of: "<", options: .backwards)
+            if openingTag.location != NSNotFound {
+                classTagRange = NSRange(location: openingTag.location, length: 1)
+            }
+        }
+        return [tagRange, classTagRange]
+            .compactMap { $0 }
+            .min { $0.location < $1.location }
+    }
+
 }
 
 public enum RoleplayHTMLDocumentFactory {

@@ -468,7 +468,7 @@ struct RoleplayCompatibilityTests {
         #expect(output == "旅行者/星野 3 继续者行旅 1970-01-01 ")
     }
 
-    @Test("角色与 Persona 提示词和请求正则按会话上下文组装")
+    @Test("角色与 Persona 提示词只向请求应用 promptOnly 正则")
     func assembleRoleplayPromptAndRequestMessages() {
         let character = RoleplayCharacter(
             name: "星野",
@@ -483,6 +483,12 @@ struct RoleplayCompatibilityTests {
                     replaceString: "公开",
                     placements: [.userInput],
                     promptOnly: true
+                ),
+                RoleplayRegexRule(
+                    findRegex: "状态栏",
+                    replaceString: "<div>不应发送的 HTML</div>",
+                    placements: [.userInput],
+                    markdownOnly: true
                 )
             ]
         )
@@ -499,7 +505,7 @@ struct RoleplayCompatibilityTests {
         let prompt = RoleplayRuntime.roleplaySystemPrompt(resolved)
         let postHistory = RoleplayRuntime.postHistoryPrompt(resolved)
         let messages = RoleplayRuntime.transformedRequestMessages(
-            [ChatMessage(role: .user, content: "{{user}} 的秘密")],
+            [ChatMessage(role: .user, content: "{{user}} 的秘密与状态栏")],
             resolved: resolved
         )
 
@@ -507,7 +513,8 @@ struct RoleplayCompatibilityTests {
         #expect(prompt.contains("保持 星野 身份"))
         #expect(prompt.contains("来自北方"))
         #expect(postHistory == "继续称呼 旅行者")
-        #expect(messages.first?.content == "旅行者 的公开")
+        #expect(messages.first?.content == "旅行者 的公开与状态栏")
+        #expect(messages.first?.content.contains("<div>") == false)
     }
 
     @Test("消息变量按消息版本隔离")
@@ -1099,6 +1106,24 @@ struct RoleplayCompatibilityTests {
         #expect(extraction.remainingText.isEmpty)
         #expect(extraction.documents.count == 1)
         #expect(extraction.documents.first?.source.contains("状态栏") == true)
+    }
+
+    @Test("HTML 提取同时承载裸片段与围栏页面")
+    func extractMixedBareAndFencedRoleplayHTML() {
+        let extraction = RoleplayHTMLExtractor.extract(from: """
+        叙事正文
+
+        <div class="variables"><details>变量面板</details></div>
+
+        ```html
+        <!doctype html><html><body><main>状态栏</main></body></html>
+        ```
+        """)
+
+        #expect(extraction.remainingText == "叙事正文")
+        #expect(extraction.documents.count == 2)
+        #expect(extraction.documents[0].source.contains("变量面板"))
+        #expect(extraction.documents[1].source.contains("状态栏"))
     }
 
     @Test("酒馆助手脚本使用 ES Module 并由原生 MVU 接管 MagVarUpdate")

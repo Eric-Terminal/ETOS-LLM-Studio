@@ -129,17 +129,6 @@ enum RoleplayRuntime {
                 let depth = max(0, messages.count - index - 1)
                 var regexContext = RoleplayRegexContext(
                     placement: placement,
-                    depth: depth,
-                    macroContext: macroContext
-                )
-                content = RoleplayRegexTransformer.apply(
-                    content,
-                    rules: regexRules,
-                    context: &regexContext
-                )
-                macroContext = regexContext.macroContext
-                regexContext = RoleplayRegexContext(
-                    placement: placement,
                     isPrompt: true,
                     depth: depth,
                     macroContext: macroContext
