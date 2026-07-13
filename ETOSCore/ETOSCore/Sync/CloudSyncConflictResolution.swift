@@ -192,7 +192,8 @@ extension CloudSyncManager {
                 ($0.storageKey, $0.payload.checksum)
             }
         )
-        return !local.isEmpty && !remote.isEmpty && local != remote
+        // 没有可信基线时，一端为空既可能是首次接入，也可能代表有意删除，不能自动猜测。
+        return local != remote
     }
 
     nonisolated static func filterRecords(

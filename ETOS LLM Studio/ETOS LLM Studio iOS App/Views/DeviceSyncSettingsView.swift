@@ -106,7 +106,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("iCloud 漫游同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("开启后会自动增量同步。此按钮只会立即检查远端变化并上传本机变化，不会强制覆盖任一端。首次发现两套不同数据时，会先让你选择保留哪一套。", comment: ""))
+                Text(NSLocalizedString("点击后会先拉取并应用远端增删改，再上传本机尚未同步的新增、修改和删除，全部成功后才保存新游标。不会清空游标或强制覆盖；本设备首次同步且两端状态不一致时，会先让你选择数据来源。", comment: ""))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {
@@ -138,7 +138,7 @@ struct DeviceSyncSettingsView: View {
         } message: {
             if let conflict = cloudSyncManager.initialConflict {
                 Text(String(
-                    format: NSLocalizedString("此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；选择前不会修改任何数据。执行覆盖前会自动创建安全快照。", comment: ""),
+                    format: NSLocalizedString("此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；App 无法安全判断一端为空是首次接入还是有意删除。选择前不会修改任何数据，执行覆盖前会自动创建安全快照。", comment: ""),
                     conflict.localRecordCount,
                     conflict.iCloudRecordCount
                 ))

@@ -14,8 +14,8 @@ import CloudKit
 @Suite("CloudSyncManager 逐记录同步测试")
 struct CloudSyncManagerTests {
     @MainActor
-    @Test("首次接入空 Zone 会逐条发布全部本地逻辑记录")
-    func initialSyncPublishesEveryLocalRecord() async {
+    @Test("首次接入空 Zone 也会裁决并在确认后发布完整本地世代")
+    func initialLocalDataRequiresDecisionBeforePublishing() async {
         let context = makeTestContext(name: "initial")
         defer { context.cleanup() }
         let providers = [makeProvider(name: "提供商 A"), makeProvider(name: "提供商 B")]
@@ -25,15 +25,20 @@ struct CloudSyncManagerTests {
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
+            #expect(manager.state == .waitingForInitialDecision)
+            #expect(manager.initialConflict?.localRecordCount == 2)
+            #expect(manager.initialConflict?.iCloudRecordCount == 0)
+            await manager.resolveInitialConflict(using: .useThisDevice)
         }
 
-        let mutations = await transport.mutations
-        #expect(mutations.count == 1)
-        #expect(mutations[0].records.count == 2)
-        #expect(Set(mutations[0].records.map(\.payload.type)) == [.provider])
-        #expect(Set(mutations[0].records.map(\.payload.recordID)) == Set(providers.map { $0.id.uuidString }))
-        #expect(mutations[0].deletedRecordNames.isEmpty)
-        #expect(await transport.committedTokens == [Data("token-1".utf8)])
+        let generations = await transport.publishedGenerations
+        let records = await transport.currentGenerationRecords
+        #expect(generations.count == 1)
+        #expect(records.count == 2)
+        #expect(Set(records.map(\.payload.type)) == [.provider])
+        #expect(Set(records.map(\.payload.recordID)) == Set(providers.map { $0.id.uuidString }))
+        #expect(records.allSatisfy { $0.payload.generationID == generations[0].id })
+        #expect(manager.initialConflict == nil)
     }
 
     @MainActor
@@ -51,6 +56,7 @@ struct CloudSyncManagerTests {
             .empty(token: "token-2")
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -99,6 +105,7 @@ struct CloudSyncManagerTests {
             .empty(token: "token-2")
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -147,6 +154,7 @@ struct CloudSyncManagerTests {
             .empty(token: "token-2")
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -159,6 +167,53 @@ struct CloudSyncManagerTests {
         #expect(mutations[1].records.isEmpty)
         #expect(mutations[1].deletedRecordNames.count == 1)
         #expect(mutations[1].deletedRecordNames[0].contains("provider"))
+    }
+
+    @MainActor
+    @Test("立即同步不会用旧远端记录复活本机待上传删除")
+    func pendingLocalDeletionWinsOverStaleRemoteRecord() async {
+        let context = makeTestContext(name: "pending-local-deletion")
+        defer { context.cleanup() }
+        let provider = makeProvider(name: "已在本机删除")
+        let state = SnapshotState(
+            package: SyncPackage(options: [.providers], providers: [provider])
+        )
+        let recorder = AppliedDeltaRecorder()
+        let transport = MockCloudSyncTransport(fetchResults: [.empty(token: "token-1")])
+        let manager = makeManager(
+            context: context,
+            state: state,
+            transport: transport,
+            recorder: recorder
+        )
+        await establishTrustedEmptyBaseline(manager)
+
+        await withCloudSyncEnabled {
+            await manager.performSync(options: .fullSync)
+            let publishedRecord = await transport.mutations[0].records[0]
+            state.setPackage(SyncPackage(options: [.providers]))
+            await transport.enqueue(
+                CloudSyncFetchResult(
+                    records: [
+                        makeProviderRecord(
+                            provider: provider,
+                            recordName: publishedRecord.recordName,
+                            updatedAt: context.now.addingTimeInterval(60)
+                        )
+                    ],
+                    deletedRecordNames: [],
+                    changeTokenData: Data("token-2".utf8)
+                )
+            )
+            await manager.performSync(options: .fullSync)
+        }
+
+        let mutations = await transport.mutations
+        #expect(recorder.deltas.isEmpty)
+        #expect(state.currentPackage.providers.isEmpty)
+        #expect(mutations.count == 2)
+        #expect(mutations[1].records.isEmpty)
+        #expect(mutations[1].deletedRecordNames == [mutations[0].records[0].recordName])
     }
 
     @MainActor
@@ -190,6 +245,7 @@ struct CloudSyncManagerTests {
             transport: transport,
             recorder: recorder
         )
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -224,6 +280,7 @@ struct CloudSyncManagerTests {
             transport: transport,
             recorder: recorder
         )
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -245,7 +302,7 @@ struct CloudSyncManagerTests {
     }
 
     @MainActor
-    @Test("新设备无 token 时可由当前独立 Records 重建完整状态")
+    @Test("空的新设备无基线时先裁决再由 iCloud Records 重建完整状态")
     func newDeviceCanBootstrapFromCurrentRecords() async {
         let context = makeTestContext(name: "new-device")
         defer { context.cleanup() }
@@ -276,14 +333,19 @@ struct CloudSyncManagerTests {
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
+            #expect(manager.state == .waitingForInitialDecision)
+            #expect(manager.initialConflict?.localRecordCount == 0)
+            #expect(manager.initialConflict?.iCloudRecordCount == 2)
+            await manager.resolveInitialConflict(using: .useICloud)
         }
 
         #expect(Set(state.currentPackage.providers.map(\.id)) == [providerA.id, providerB.id])
         #expect(await transport.mutations.isEmpty)
+        #expect(manager.initialConflict == nil)
     }
 
     @MainActor
-    @Test("iCloud 账号切换会丢弃旧账号发布基线并重新合并")
+    @Test("iCloud 账号切换会丢弃旧账号基线并等待重新裁决")
     func accountChangeResetsPublishedBaseline() async {
         let context = makeTestContext(name: "account-change")
         defer { context.cleanup() }
@@ -303,6 +365,7 @@ struct CloudSyncManagerTests {
             )
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager, accountIdentifier: "account-a")
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -310,9 +373,10 @@ struct CloudSyncManagerTests {
         }
 
         let mutations = await transport.mutations
-        #expect(mutations.count == 2)
-        #expect(mutations[1].records.map(\.payload.recordID) == [provider.id.uuidString])
-        #expect(mutations[1].deletedRecordNames.isEmpty)
+        #expect(mutations.count == 1)
+        #expect(manager.state == .waitingForInitialDecision)
+        #expect(manager.initialConflict?.localRecordCount == 1)
+        #expect(manager.initialConflict?.iCloudRecordCount == 0)
     }
 
     @MainActor
@@ -346,6 +410,7 @@ struct CloudSyncManagerTests {
             transport: transport,
             recorder: recorder
         )
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -371,6 +436,7 @@ struct CloudSyncManagerTests {
         )
         let transport = MockCloudSyncTransport(fetchResults: [.empty(token: "token-1")])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -412,6 +478,7 @@ struct CloudSyncManagerTests {
             .empty(token: "token-2")
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -455,6 +522,7 @@ struct CloudSyncManagerTests {
             transport: transport,
             recorder: recorder
         )
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -497,6 +565,7 @@ struct CloudSyncManagerTests {
             .empty(token: "token-2")
         ])
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -547,6 +616,7 @@ struct CloudSyncManagerTests {
         ])
         await transport.failNextModification()
         let manager = makeManager(context: context, state: state, transport: transport)
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -732,6 +802,7 @@ struct CloudSyncManagerTests {
             transport: transport,
             recorder: recorder
         )
+        await establishTrustedEmptyBaseline(manager)
 
         await withCloudSyncEnabled {
             await manager.performSync(options: .fullSync)
@@ -774,6 +845,19 @@ struct CloudSyncManagerTests {
             },
             safetyBackupCreator: {},
             now: { context.now }
+        )
+    }
+
+    @MainActor
+    private func establishTrustedEmptyBaseline(
+        _ manager: CloudSyncManager,
+        accountIdentifier: String = "test-account"
+    ) async {
+        await manager.savePublishedState(
+            CloudSyncPublishedState(
+                accountIdentifier: accountIdentifier,
+                hasCompletedInitialPull: true
+            )
         )
     }
 

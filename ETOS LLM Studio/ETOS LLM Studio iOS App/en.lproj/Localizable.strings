@@ -4015,18 +4015,18 @@
 "立即同步" = "Sync Now";
 "开启后会自动在同一 Apple ID 的设备间同步支持的数据。" = "After it is enabled, supported data syncs automatically across devices signed in to the same Apple ID.";
 "立即检查并同步" = "Check and Sync Now";
-"开启后会自动增量同步。此按钮只会立即检查远端变化并上传本机变化，不会强制覆盖任一端。首次发现两套不同数据时，会先让你选择保留哪一套。" = "Changes sync automatically. This button only checks for remote changes and uploads local changes now; it does not force either side to overwrite the other. If two different data sets are found during initial setup, you will choose which one to keep.";
+"点击后会先拉取并应用远端增删改，再上传本机尚未同步的新增、修改和删除，全部成功后才保存新游标。不会清空游标或强制覆盖；本设备首次同步且两端状态不一致时，会先让你选择数据来源。" = "The app first downloads and applies remote additions, edits, and deletions, then uploads unsynced local additions, edits, and deletions. It saves the new cursor only after everything succeeds. It never clears the cursor or forces an overwrite; on this device’s first sync, any mismatch prompts you to choose the source.";
 "发现两套不同的数据" = "Two Different Data Sets Found";
 "使用 iCloud 数据" = "Use iCloud Data";
 "使用此设备数据覆盖 iCloud" = "Replace iCloud with This Device";
 "暂不同步" = "Not Now";
-"此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；选择前不会修改任何数据。执行覆盖前会自动创建安全快照。" = "This device does not have a trusted iCloud sync baseline. It has %d local records and iCloud has %d records. Nothing changes until you choose. A safety snapshot is created before replacement.";
+"此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；App 无法安全判断一端为空是首次接入还是有意删除。选择前不会修改任何数据，执行覆盖前会自动创建安全快照。" = "This device does not yet have a trusted iCloud sync baseline. It has %d local records and iCloud has %d. The app cannot safely tell whether an empty side means first setup or an intentional deletion. Nothing changes until you choose, and a safety snapshot is created before replacement.";
 "等待选择数据来源" = "Waiting for Data Source";
 "正在创建安全备份…" = "Creating a safety backup…";
 "正在使用 iCloud 数据替换此设备…" = "Replacing this device with iCloud data…";
 "正在使用此设备数据重建 iCloud…" = "Rebuilding iCloud from this device…";
 "iCloud 新数据集校验失败，原有同步基线未被替换。" = "The new iCloud data set could not be verified. The existing sync baseline was not replaced.";
-"iCloud 首次同步裁决说明" = "iCloud Roaming Sync uses per-record incremental changes, and every device keeps its own sync cursor. After being offline, powered off, or unopened for a long time, a device simply fetches changes it has not processed yet; no manual choice is needed.\n\nCheck and Sync Now skips the automatic-sync delay. It does not clear the cursor or overwrite either side. The app pauses for a decision only when the device has no trusted baseline and both this device and iCloud contain different data. Use iCloud Data fully replaces synchronized local data. Replace iCloud with This Device publishes a new cloud data generation that other devices then follow. A safety snapshot is created before either replacement.";
+"iCloud 首次同步裁决说明" = "iCloud Roaming Sync uses per-record incremental changes, and every device keeps its own sync cursor. After being offline, powered off, or unopened for a long time, a device fetches only changes it has not processed.\n\nCheck and Sync Now first downloads remote additions, edits, and deletions after the cursor. It recognizes and protects local pending changes and deletions so an older remote record cannot overwrite a deletion waiting to upload. It then uploads local additions, edits, and deletions, and saves the new cursor and baseline only after everything succeeds. It does not clear the cursor or force either side to replace the other.\n\nThe app pauses for a decision only when the device has no trusted baseline and its state differs from iCloud, even if either side is empty. Use iCloud Data fully replaces synchronized local data. Replace iCloud with This Device publishes a new cloud data generation that other devices then follow. A safety snapshot is created before either replacement.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
 
 "当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "This .elsbackup snapshot is encrypted. The data import entry cannot decrypt and merge it yet; use Restore from Snapshot, or choose an unencrypted snapshot.";
