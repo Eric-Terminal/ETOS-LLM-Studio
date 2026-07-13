@@ -196,6 +196,33 @@ private struct RoleplayCharacterDetailView: View {
                 detail(NSLocalizedString("作者", comment: "Creator"), character.creator)
                 detail(NSLocalizedString("版本", comment: "Version"), character.characterVersion)
                 detail(NSLocalizedString("格式", comment: "Format"), [character.sourceSpec, character.sourceSpecVersion].compactMap { $0 }.joined(separator: " "))
+                NavigationLink {
+                    RoleplayCharacterProfileEditorView(character: character)
+                } label: {
+                    Label(NSLocalizedString("查看与编辑完整资料", comment: "View and edit complete character profile"), systemImage: "square.and.pencil")
+                }
+            }
+
+            Section(NSLocalizedString("角色定义", comment: "Character definition section")) {
+                preview(NSLocalizedString("角色描述", comment: "Character description"), character.description)
+                preview(NSLocalizedString("性格摘要", comment: "Character personality summary"), character.personality)
+                preview(NSLocalizedString("场景", comment: "Character scenario"), character.scenario)
+            }
+
+            Section(NSLocalizedString("对话资料", comment: "Character conversation data")) {
+                preview(NSLocalizedString("首条消息", comment: "Character first message"), character.firstMessage)
+                detail(NSLocalizedString("候选开场白", comment: "Alternate greetings"), "\(character.alternateGreetings.count)")
+                preview(NSLocalizedString("示例对话", comment: "Character example messages"), character.messageExamples)
+            }
+
+            Section(NSLocalizedString("提示词覆盖", comment: "Character prompt overrides")) {
+                preview(NSLocalizedString("系统提示词", comment: "Character system prompt"), character.systemPrompt)
+                preview(NSLocalizedString("历史后指令", comment: "Character post-history instructions"), character.postHistoryInstructions)
+            }
+
+            Section(NSLocalizedString("创作者资料", comment: "Character creator metadata")) {
+                preview(NSLocalizedString("创作者备注", comment: "Character creator notes"), character.creatorNotes)
+                detail(NSLocalizedString("标签", comment: "Tags"), "\(character.tags.count)")
             }
 
             Section(NSLocalizedString("兼容性报告", comment: "Roleplay compatibility report")) {
@@ -243,6 +270,8 @@ private struct RoleplayCharacterDetailView: View {
                 }
                 detail(NSLocalizedString("初始变量", comment: "Roleplay initial variables"), "\(character.initialVariables.count)")
                 detail(NSLocalizedString("可选开场白", comment: "Available greetings"), "\(availableGreetingCount)")
+                detail(NSLocalizedString("资源文件", comment: "Character asset files"), "\(character.assets?.count ?? 0)")
+                detail(NSLocalizedString("扩展字段", comment: "Character extension fields"), "\(character.extensions.count)")
             }
         }
         .navigationTitle(character.name)
@@ -258,6 +287,17 @@ private struct RoleplayCharacterDetailView: View {
             Text(value.isEmpty ? "—" : value)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func preview(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading) {
+            Text(title)
+                .etFont(.subheadline)
+            Text(value.isEmpty ? NSLocalizedString("未填写", comment: "Empty character field") : value)
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
         }
     }
 

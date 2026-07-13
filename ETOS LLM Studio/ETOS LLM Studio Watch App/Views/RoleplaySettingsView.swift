@@ -471,6 +471,24 @@ private struct WatchRoleplayCharacterDetailView: View {
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
                 }
+                NavigationLink {
+                    WatchRoleplayCharacterProfileEditorView(character: character)
+                } label: {
+                    Label(NSLocalizedString("查看与编辑完整资料", comment: "View and edit complete character profile"), systemImage: "pencil")
+                }
+            }
+            Section(NSLocalizedString("角色定义", comment: "Character definition section")) {
+                if !character.description.isEmpty {
+                    Text(character.description)
+                        .etFont(.footnote)
+                        .lineLimit(4)
+                }
+                if !character.firstMessage.isEmpty {
+                    Text(character.firstMessage)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                }
             }
             Section(NSLocalizedString("内容", comment: "Character content")) {
                 NavigationLink {
@@ -497,6 +515,10 @@ private struct WatchRoleplayCharacterDetailView: View {
                     }
                     .disabled(isCreatingEmbeddedWorldbook)
                 }
+                contentRow(NSLocalizedString("初始变量", comment: "Character initial variables"), count: character.initialVariables.count)
+                contentRow(NSLocalizedString("可选开场白", comment: "Available greetings"), count: availableGreetingCount)
+                contentRow(NSLocalizedString("资源文件", comment: "Character asset files"), count: character.assets?.count ?? 0)
+                contentRow(NSLocalizedString("扩展字段", comment: "Character extension fields"), count: character.extensions.count)
             }
             Section(NSLocalizedString("兼容性报告", comment: "Roleplay compatibility report")) {
                 ForEach(character.compatibilityReport.items) { item in
@@ -521,6 +543,10 @@ private struct WatchRoleplayCharacterDetailView: View {
             Text("\(count)")
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var availableGreetingCount: Int {
+        character.alternateGreetings.count + (character.firstMessage.isEmpty ? 0 : 1)
     }
 
     private func reload() {

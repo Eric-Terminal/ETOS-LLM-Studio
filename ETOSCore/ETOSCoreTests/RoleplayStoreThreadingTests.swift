@@ -45,20 +45,34 @@ struct RoleplayStoreThreadingTests {
         let store = RoleplayStore.shared
         var character = RoleplayCharacter(
             name: "内容编辑回归测试",
+            description: "旧描述",
+            firstMessage: "旧开场白",
+            alternateGreetings: ["旧候选开场白"],
             regexRules: [RoleplayRegexRule(scriptName: "旧正则", findRegex: "old")],
             helperScripts: [RoleplayHelperScript(name: "旧脚本", content: "old")],
+            initialVariables: ["score": .int(1)],
             extensions: ["vendor": .string("preserved")]
         )
         defer { store.deleteCharacter(id: character.id) }
         store.upsertCharacter(character)
 
+        character.description = "新描述"
+        character.firstMessage = "新开场白"
+        character.alternateGreetings = ["新候选开场白一", "新候选开场白二"]
+        character.systemPrompt = "新系统提示词"
         character.regexRules = [RoleplayRegexRule(scriptName: "新正则", findRegex: "new")]
         character.helperScripts = [RoleplayHelperScript(name: "新脚本", content: "new")]
+        character.initialVariables = ["score": .int(2)]
         store.upsertCharacter(character)
 
         let saved = store.character(id: character.id)
+        #expect(saved?.description == "新描述")
+        #expect(saved?.firstMessage == "新开场白")
+        #expect(saved?.alternateGreetings.count == 2)
+        #expect(saved?.systemPrompt == "新系统提示词")
         #expect(saved?.regexRules.first?.scriptName == "新正则")
         #expect(saved?.helperScripts.first?.content == "new")
+        #expect(saved?.initialVariables["score"] == .int(2))
         #expect(saved?.extensions["vendor"] == .string("preserved"))
     }
 

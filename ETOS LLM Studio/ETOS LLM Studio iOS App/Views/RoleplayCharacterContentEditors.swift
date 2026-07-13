@@ -367,3 +367,223 @@ private struct RoleplayHelperScriptEditorView: View {
         }
     }
 }
+
+struct RoleplayCharacterProfileEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var character: RoleplayCharacter
+    @State private var greetingDrafts: [RoleplayGreetingDraft]
+    @State private var tagsText: String
+    @State private var initialVariablesJSON: String
+    @State private var isSaving = false
+    @State private var errorText: String?
+
+    init(character: RoleplayCharacter) {
+        self._character = State(initialValue: character)
+        self._greetingDrafts = State(initialValue: character.alternateGreetings.enumerated().map {
+            RoleplayGreetingDraft(number: $0.offset + 1, text: $0.element)
+        })
+        self._tagsText = State(initialValue: character.tags.joined(separator: ", "))
+        self._initialVariablesJSON = State(initialValue: Self.jsonString(character.initialVariables))
+    }
+
+    var body: some View {
+        Form {
+            Section(NSLocalizedString("基本信息", comment: "Character basic information")) {
+                TextField(NSLocalizedString("名称", comment: "Character name"), text: $character.name)
+                TextField(NSLocalizedString("作者", comment: "Character creator"), text: $character.creator)
+                TextField(NSLocalizedString("版本", comment: "Character version"), text: $character.characterVersion)
+                TextField(NSLocalizedString("标签（逗号分隔）", comment: "Character tags separated by commas"), text: $tagsText, axis: .vertical)
+            }
+
+            multilineSection(
+                NSLocalizedString("角色描述", comment: "Character description"),
+                text: $character.description,
+                minimumHeight: 180
+            )
+            multilineSection(
+                NSLocalizedString("性格摘要", comment: "Character personality summary"),
+                text: $character.personality
+            )
+            multilineSection(
+                NSLocalizedString("场景", comment: "Character scenario"),
+                text: $character.scenario
+            )
+            multilineSection(
+                NSLocalizedString("首条消息", comment: "Character first message"),
+                text: $character.firstMessage,
+                minimumHeight: 180
+            )
+
+            Section(NSLocalizedString("候选开场白", comment: "Alternate greetings")) {
+                if greetingDrafts.isEmpty {
+                    Text(NSLocalizedString("暂无候选开场白。", comment: "No alternate greetings"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach($greetingDrafts) { $draft in
+                        VStack(alignment: .leading) {
+                            Text(String(
+                                format: NSLocalizedString("开场白 %d", comment: "Greeting number"),
+                                draft.number
+                            ))
+                            .etFont(.subheadline)
+                            TextEditor(text: $draft.text)
+                                .frame(minHeight: 140)
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                greetingDrafts.removeAll { $0.id == draft.id }
+                                renumberGreetingDrafts()
+                            } label: {
+                                Label(NSLocalizedString("删除", comment: "Delete"), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    greetingDrafts.append(RoleplayGreetingDraft(number: greetingDrafts.count + 1))
+                } label: {
+                    Label(NSLocalizedString("新增开场白", comment: "Add alternate greeting"), systemImage: "plus")
+                }
+            }
+
+            multilineSection(
+                NSLocalizedString("示例对话", comment: "Character example messages"),
+                text: $character.messageExamples,
+                minimumHeight: 180
+            )
+            multilineSection(
+                NSLocalizedString("系统提示词", comment: "Character system prompt"),
+                text: $character.systemPrompt
+            )
+            multilineSection(
+                NSLocalizedString("历史后指令", comment: "Character post-history instructions"),
+                text: $character.postHistoryInstructions
+            )
+            multilineSection(
+                NSLocalizedString("创作者备注", comment: "Character creator notes"),
+                text: $character.creatorNotes
+            )
+
+            Section {
+                TextEditor(text: $initialVariablesJSON)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 180)
+            } header: {
+                Text(NSLocalizedString("初始变量", comment: "Character initial variables"))
+            } footer: {
+                Text(NSLocalizedString("初始变量必须填写为 JSON 对象，并会在绑定角色卡时注入角色变量作用域。", comment: "Character initial variables explanation"))
+            }
+
+            Section {
+                Button {
+                    save()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Label(NSLocalizedString("保存角色卡资料", comment: "Save character profile"), systemImage: "checkmark")
+                    }
+                }
+                .disabled(isSaving)
+            }
+        }
+        .navigationTitle(NSLocalizedString("角色卡资料", comment: "Character card profile title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            NSLocalizedString("无法保存角色卡", comment: "Unable to save character card"),
+            isPresented: Binding(
+                get: { errorText != nil },
+                set: { if !$0 { errorText = nil } }
+            )
+        ) {
+            Button(NSLocalizedString("好的", comment: "OK")) {}
+        } message: {
+            Text(errorText ?? "")
+        }
+    }
+
+    private func multilineSection(
+        _ title: String,
+        text: Binding<String>,
+        minimumHeight: CGFloat = 120
+    ) -> some View {
+        Section(title) {
+            TextEditor(text: text)
+                .frame(minHeight: minimumHeight)
+        }
+    }
+
+    private func renumberGreetingDrafts() {
+        for index in greetingDrafts.indices {
+            greetingDrafts[index].number = index + 1
+        }
+    }
+
+    private func save() {
+        guard !isSaving else { return }
+        let trimmedName = character.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorText = NSLocalizedString("角色名称不能为空。", comment: "Character name cannot be empty")
+            return
+        }
+        let variablesJSON = initialVariablesJSON
+        let greetings = greetingDrafts.map(\.text)
+        let tags = tagsText
+        let sourceCharacter = character
+        isSaving = true
+        Task {
+            do {
+                try await Task.detached(priority: .utility) {
+                    guard let data = variablesJSON.data(using: .utf8),
+                          let initialVariables = try? JSONDecoder().decode([String: JSONValue].self, from: data) else {
+                        throw RoleplayCharacterProfileEditorError.invalidInitialVariables
+                    }
+                    var updated = sourceCharacter
+                    updated.name = trimmedName
+                    updated.tags = tags.components(separatedBy: CharacterSet(charactersIn: ",，\n"))
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    updated.alternateGreetings = greetings
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    updated.initialVariables = initialVariables
+                    ChatService.shared.saveRoleplayCharacter(updated)
+                }.value
+                dismiss()
+            } catch {
+                errorText = error.localizedDescription
+                isSaving = false
+            }
+        }
+    }
+
+    private static func jsonString(_ values: [String: JSONValue]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(values),
+              let string = String(data: data, encoding: .utf8) else { return "{}" }
+        return string
+    }
+}
+
+private struct RoleplayGreetingDraft: Identifiable {
+    let id: UUID
+    var number: Int
+    var text: String
+
+    init(id: UUID = UUID(), number: Int, text: String = "") {
+        self.id = id
+        self.number = number
+        self.text = text
+    }
+}
+
+private enum RoleplayCharacterProfileEditorError: LocalizedError {
+    case invalidInitialVariables
+
+    var errorDescription: String? {
+        NSLocalizedString("初始变量必须是有效的 JSON 对象。", comment: "Invalid character initial variables")
+    }
+}

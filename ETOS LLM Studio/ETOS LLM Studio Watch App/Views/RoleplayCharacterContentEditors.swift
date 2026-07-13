@@ -232,3 +232,179 @@ private struct WatchRoleplayHelperScriptEditorView: View {
         }
     }
 }
+
+struct WatchRoleplayCharacterProfileEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var character: RoleplayCharacter
+    @State private var greetingDrafts: [WatchRoleplayGreetingDraft]
+    @State private var tagsText: String
+    @State private var initialVariablesJSON: String
+    @State private var isSaving = false
+    @State private var errorText: String?
+
+    init(character: RoleplayCharacter) {
+        self._character = State(initialValue: character)
+        self._greetingDrafts = State(initialValue: character.alternateGreetings.enumerated().map {
+            WatchRoleplayGreetingDraft(number: $0.offset + 1, text: $0.element)
+        })
+        self._tagsText = State(initialValue: character.tags.joined(separator: ", "))
+        self._initialVariablesJSON = State(initialValue: Self.jsonString(character.initialVariables))
+    }
+
+    var body: some View {
+        Form {
+            Section(NSLocalizedString("基本信息", comment: "Character basic information")) {
+                TextField(NSLocalizedString("名称", comment: "Character name"), text: $character.name.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("作者", comment: "Character creator"), text: $character.creator.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("版本", comment: "Character version"), text: $character.characterVersion.watchKeyboardNewlineBinding())
+                TextField(NSLocalizedString("标签（逗号分隔）", comment: "Character tags separated by commas"), text: $tagsText.watchKeyboardNewlineBinding())
+            }
+
+            watchMultilineSection(NSLocalizedString("角色描述", comment: "Character description"), text: $character.description)
+            watchMultilineSection(NSLocalizedString("性格摘要", comment: "Character personality summary"), text: $character.personality)
+            watchMultilineSection(NSLocalizedString("场景", comment: "Character scenario"), text: $character.scenario)
+            watchMultilineSection(NSLocalizedString("首条消息", comment: "Character first message"), text: $character.firstMessage)
+
+            Section(NSLocalizedString("候选开场白", comment: "Alternate greetings")) {
+                if greetingDrafts.isEmpty {
+                    Text(NSLocalizedString("暂无候选开场白。", comment: "No alternate greetings"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach($greetingDrafts) { $draft in
+                        TextField(
+                            String(format: NSLocalizedString("开场白 %d", comment: "Greeting number"), draft.number),
+                            text: $draft.text.watchKeyboardNewlineBinding(),
+                            axis: .vertical
+                        )
+                        Button(role: .destructive) {
+                            greetingDrafts.removeAll { $0.id == draft.id }
+                            renumberGreetingDrafts()
+                        } label: {
+                            Label(NSLocalizedString("删除此开场白", comment: "Delete this greeting"), systemImage: "trash")
+                        }
+                    }
+                }
+                Button {
+                    greetingDrafts.append(WatchRoleplayGreetingDraft(number: greetingDrafts.count + 1))
+                } label: {
+                    Label(NSLocalizedString("新增开场白", comment: "Add alternate greeting"), systemImage: "plus")
+                }
+            }
+
+            watchMultilineSection(NSLocalizedString("示例对话", comment: "Character example messages"), text: $character.messageExamples)
+            watchMultilineSection(NSLocalizedString("系统提示词", comment: "Character system prompt"), text: $character.systemPrompt)
+            watchMultilineSection(NSLocalizedString("历史后指令", comment: "Character post-history instructions"), text: $character.postHistoryInstructions)
+            watchMultilineSection(NSLocalizedString("创作者备注", comment: "Character creator notes"), text: $character.creatorNotes)
+
+            Section(NSLocalizedString("初始变量", comment: "Character initial variables")) {
+                TextField(
+                    NSLocalizedString("JSON 对象", comment: "JSON object field"),
+                    text: $initialVariablesJSON.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
+                .font(.system(.body, design: .monospaced))
+            }
+
+            if let errorText {
+                Section {
+                    Text(errorText)
+                        .etFont(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button {
+                    save()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Label(NSLocalizedString("保存角色卡资料", comment: "Save character profile"), systemImage: "checkmark")
+                    }
+                }
+                .disabled(isSaving)
+            }
+        }
+        .navigationTitle(NSLocalizedString("角色卡资料", comment: "Character card profile title"))
+    }
+
+    private func watchMultilineSection(_ title: String, text: Binding<String>) -> some View {
+        Section(title) {
+            TextField(title, text: text.watchKeyboardNewlineBinding(), axis: .vertical)
+        }
+    }
+
+    private func renumberGreetingDrafts() {
+        for index in greetingDrafts.indices {
+            greetingDrafts[index].number = index + 1
+        }
+    }
+
+    private func save() {
+        guard !isSaving else { return }
+        let trimmedName = character.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorText = NSLocalizedString("角色名称不能为空。", comment: "Character name cannot be empty")
+            return
+        }
+        let variablesJSON = initialVariablesJSON
+        let greetings = greetingDrafts.map(\.text)
+        let tags = tagsText
+        let sourceCharacter = character
+        isSaving = true
+        Task {
+            do {
+                try await Task.detached(priority: .utility) {
+                    guard let data = variablesJSON.data(using: .utf8),
+                          let initialVariables = try? JSONDecoder().decode([String: JSONValue].self, from: data) else {
+                        throw WatchRoleplayCharacterProfileEditorError.invalidInitialVariables
+                    }
+                    var updated = sourceCharacter
+                    updated.name = trimmedName
+                    updated.tags = tags.components(separatedBy: CharacterSet(charactersIn: ",，\n"))
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    updated.alternateGreetings = greetings
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    updated.initialVariables = initialVariables
+                    ChatService.shared.saveRoleplayCharacter(updated)
+                }.value
+                dismiss()
+            } catch {
+                errorText = error.localizedDescription
+                isSaving = false
+            }
+        }
+    }
+
+    private static func jsonString(_ values: [String: JSONValue]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(values),
+              let string = String(data: data, encoding: .utf8) else { return "{}" }
+        return string
+    }
+}
+
+private struct WatchRoleplayGreetingDraft: Identifiable {
+    let id: UUID
+    var number: Int
+    var text: String
+
+    init(id: UUID = UUID(), number: Int, text: String = "") {
+        self.id = id
+        self.number = number
+        self.text = text
+    }
+}
+
+private enum WatchRoleplayCharacterProfileEditorError: LocalizedError {
+    case invalidInitialVariables
+
+    var errorDescription: String? {
+        NSLocalizedString("初始变量必须是有效的 JSON 对象。", comment: "Invalid character initial variables")
+    }
+}
