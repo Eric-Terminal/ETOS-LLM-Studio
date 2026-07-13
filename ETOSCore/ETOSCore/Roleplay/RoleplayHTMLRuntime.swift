@@ -254,6 +254,25 @@ public enum RoleplayHTMLAdaptiveHeightRuntime {
 }
 
 public enum RoleplayHTMLDocumentFactory {
+    public static func makeVariableUpdateScript(
+        variableSnapshot: RoleplayVariableSnapshot,
+        messageID: UUID,
+        messageVersionIndex: Int
+    ) -> String {
+        let scopedVariables = makeScopedVariables(
+            variableSnapshot: variableSnapshot,
+            messageID: messageID,
+            messageVersionIndex: messageVersionIndex,
+            scriptID: nil,
+            scriptInitialVariables: [:]
+        )
+        let messageVariables = variableSnapshot.messageVariables(
+            messageID: messageID,
+            versionIndex: messageVersionIndex
+        )
+        return "window.__etosReplaceVariableState?.(\(jsonLiteral(.dictionary(scopedVariables))), \(jsonLiteral(.dictionary(messageVariables))));"
+    }
+
     public static func makeDocument(
         source: String,
         variables: [String: JSONValue],
@@ -350,21 +369,13 @@ public enum RoleplayHTMLDocumentFactory {
         scriptButtons: [RoleplayScriptButton],
         scriptInitialVariables: [String: JSONValue]
     ) -> String {
-        var scopedVariables = Dictionary(uniqueKeysWithValues: RoleplayVariableScope.allCases.map { scope in
-            if scope == .script, let scriptID, let variableSnapshot {
-                var stored = variableSnapshot.scriptVariables(scriptID: scriptID)
-                stored.merge(scriptInitialVariables) { existing, _ in existing }
-                return (scope.rawValue, JSONValue.dictionary(stored))
-            }
-            return (
-                scope.rawValue,
-                JSONValue.dictionary(variableSnapshot?.scopedVariables(
-                    scope,
-                    messageID: messageID,
-                    versionIndex: messageVersionIndex
-                ) ?? [:])
-            )
-        })
+        var scopedVariables = makeScopedVariables(
+            variableSnapshot: variableSnapshot,
+            messageID: messageID,
+            messageVersionIndex: messageVersionIndex,
+            scriptID: scriptID,
+            scriptInitialVariables: scriptInitialVariables
+        )
         if variableSnapshot == nil {
             scopedVariables[RoleplayVariableScope.chat.rawValue] = .dictionary(variables)
         }
@@ -1366,6 +1377,21 @@ public enum RoleplayHTMLDocumentFactory {
   window.translate = text => String(text ?? '');
   window.getContext = window.SillyTavern.getContext;
   window.__etosEmitScriptButton = name => emitLocal(api.getButtonEvent(name));
+  window.__etosReplaceVariableState = (nextScopes, nextMessageVariables) => {
+    const previous = api.getAllVariables();
+    scopedVariables = clone(nextScopes || {});
+    if (!currentScriptID) {
+      const message = chatMessages[currentMessageIndex];
+      if (message) {
+        const swipe = message.swipe_id || 0;
+        message.data = clone(nextMessageVariables || {});
+        message.swipes_data ||= [];
+        message.swipes_data[swipe] = message.data;
+        scopedVariables.message = clone(message.data);
+      }
+    }
+    return emitLocal('mag_variable_update_ended', api.getAllVariables(), previous);
+  };
   window.__etosReceiveEvent = (name, args, source) => {
     if (source === currentIframeName) return undefined;
     const values = Array.isArray(args) ? args : [];
@@ -1426,6 +1452,30 @@ public enum RoleplayHTMLDocumentFactory {
             return "\"\""
         }
         return output
+    }
+
+    private static func makeScopedVariables(
+        variableSnapshot: RoleplayVariableSnapshot?,
+        messageID: UUID?,
+        messageVersionIndex: Int,
+        scriptID: UUID?,
+        scriptInitialVariables: [String: JSONValue]
+    ) -> [String: JSONValue] {
+        Dictionary(uniqueKeysWithValues: RoleplayVariableScope.allCases.map { scope in
+            if scope == .script, let scriptID, let variableSnapshot {
+                var stored = variableSnapshot.scriptVariables(scriptID: scriptID)
+                stored.merge(scriptInitialVariables) { existing, _ in existing }
+                return (scope.rawValue, JSONValue.dictionary(stored))
+            }
+            return (
+                scope.rawValue,
+                JSONValue.dictionary(variableSnapshot?.scopedVariables(
+                    scope,
+                    messageID: messageID,
+                    versionIndex: messageVersionIndex
+                ) ?? [:])
+            )
+        })
     }
 
     private static func jsonLiteral(_ value: JSONValue) -> String {

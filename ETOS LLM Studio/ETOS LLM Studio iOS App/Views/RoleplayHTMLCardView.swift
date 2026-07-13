@@ -19,6 +19,7 @@ struct RoleplayHTMLCardView: View {
     @State private var documents: [PreparedRoleplayHTMLDocument] = []
     @State private var heights: [Int: CGFloat] = [:]
     @State private var variableRevision = 0
+    @State private var contentRevision = 0
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -29,6 +30,8 @@ struct RoleplayHTMLCardView: View {
                     messageID: messageID,
                     versionIndex: versionIndex,
                     scriptID: nil,
+                    contentIdentity: document.contentIdentity,
+                    variableUpdateJavaScript: document.variableUpdateJavaScript,
                     height: Binding(
                         get: { heights[document.id] ?? 180 },
                         set: { heights[document.id] = max(1, $0) }
@@ -38,11 +41,13 @@ struct RoleplayHTMLCardView: View {
             }
         }
         .task(id: preparationKey) {
+            let key = preparationKey
             let extraction = extraction
             let sessionID = sessionID
             let messageID = messageID
             let versionIndex = versionIndex
-            documents = await Task.detached(priority: .utility) {
+            let contentRevision = contentRevision
+            let prepared = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
@@ -60,6 +65,12 @@ struct RoleplayHTMLCardView: View {
                 return extraction.documents.map { document in
                     PreparedRoleplayHTMLDocument(
                         id: document.id,
+                        contentIdentity: "\(sessionID.uuidString)|\(messageID.uuidString)|\(versionIndex)|\(document.id)|\(extraction.hashValue)|\(contentRevision)",
+                        variableUpdateJavaScript: RoleplayHTMLDocumentFactory.makeVariableUpdateScript(
+                            variableSnapshot: snapshot,
+                            messageID: messageID,
+                            messageVersionIndex: versionIndex
+                        ),
                         html: RoleplayHTMLDocumentFactory.makeDocument(
                             source: document.source,
                             variables: variables,
@@ -81,9 +92,14 @@ struct RoleplayHTMLCardView: View {
                     )
                 }
             }.value
+            guard !Task.isCancelled, key == preparationKey else { return }
+            documents = prepared
         }
-        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { notification in
             variableRevision &+= 1
+            if notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String == RoleplayStore.libraryChangeKind {
+                contentRevision &+= 1
+            }
         }
     }
 
@@ -271,6 +287,8 @@ private struct RoleplayScriptButtonAction: Identifiable, Sendable {
 
 private struct PreparedRoleplayHTMLDocument: Identifiable, Sendable {
     let id: Int
+    let contentIdentity: String
+    let variableUpdateJavaScript: String
     let html: String
 }
 
@@ -287,6 +305,8 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
     let messageID: UUID
     let versionIndex: Int
     let scriptID: UUID?
+    var contentIdentity: String? = nil
+    var variableUpdateJavaScript: String? = nil
     @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator {
@@ -328,9 +348,18 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.loadedHTML != html else { return }
-        context.coordinator.loadedHTML = html
-        webView.loadHTMLString(html, baseURL: Persistence.getImageDirectory())
+        let identity = contentIdentity ?? html
+        if context.coordinator.loadedContentIdentity != identity {
+            context.coordinator.loadedContentIdentity = identity
+            context.coordinator.loadedVariableUpdateJavaScript = variableUpdateJavaScript
+            context.coordinator.beginNavigation()
+            webView.loadHTMLString(html, baseURL: Persistence.getImageDirectory())
+            return
+        }
+        guard let variableUpdateJavaScript,
+              context.coordinator.loadedVariableUpdateJavaScript != variableUpdateJavaScript else { return }
+        context.coordinator.loadedVariableUpdateJavaScript = variableUpdateJavaScript
+        context.coordinator.applyVariableUpdate(variableUpdateJavaScript)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -347,8 +376,11 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         let versionIndex: Int
         let scriptID: UUID?
         @Binding var height: CGFloat
-        var loadedHTML: String?
+        var loadedContentIdentity: String?
+        var loadedVariableUpdateJavaScript: String?
         weak var webView: WKWebView?
+        private var navigationFinished = false
+        private var pendingVariableUpdateJavaScript: String?
         private var buttonObserver: NSObjectProtocol? = nil
         private var requestObserver: NSObjectProtocol? = nil
         private var macroObserver: NSObjectProtocol? = nil
@@ -411,6 +443,19 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
             if let macroObserver { NotificationCenter.default.removeObserver(macroObserver) }
             if let promptMutationObserver { NotificationCenter.default.removeObserver(promptMutationObserver) }
             if let eventObserver { NotificationCenter.default.removeObserver(eventObserver) }
+        }
+
+        func beginNavigation() {
+            navigationFinished = false
+            pendingVariableUpdateJavaScript = nil
+        }
+
+        func applyVariableUpdate(_ javaScript: String) {
+            guard navigationFinished else {
+                pendingVariableUpdateJavaScript = javaScript
+                return
+            }
+            webView?.evaluateJavaScript(javaScript)
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -483,6 +528,11 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            navigationFinished = true
+            if let pendingVariableUpdateJavaScript {
+                self.pendingVariableUpdateJavaScript = nil
+                webView.evaluateJavaScript(pendingVariableUpdateJavaScript)
+            }
             webView.evaluateJavaScript("window.__etosReportHeight?.();")
         }
 

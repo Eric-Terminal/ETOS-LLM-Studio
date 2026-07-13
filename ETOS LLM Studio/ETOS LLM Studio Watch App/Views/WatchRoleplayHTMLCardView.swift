@@ -49,11 +49,12 @@ struct WatchRoleplayHTMLCardView: View {
             }
         }
         .task(id: preparationKey) {
+            let key = preparationKey
             let extraction = extraction
             let sessionID = sessionID
             let messageID = messageID
             let versionIndex = versionIndex
-            documents = await Task.detached(priority: .utility) {
+            let prepared = await Task.detached(priority: .utility) {
                 let store = RoleplayStore.shared
                 let snapshot = store.variableSnapshot(sessionID: sessionID)
                 let chatMessages = Persistence.loadMessages(for: sessionID)
@@ -99,6 +100,8 @@ struct WatchRoleplayHTMLCardView: View {
                     )
                 }
             }.value
+            guard !Task.isCancelled, key == preparationKey else { return }
+            documents = prepared
         }
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
             variableRevision &+= 1
