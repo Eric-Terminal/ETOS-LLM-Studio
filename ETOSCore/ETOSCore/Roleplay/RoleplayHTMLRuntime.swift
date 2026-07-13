@@ -167,12 +167,34 @@ public enum RoleplayHTMLAdaptiveHeightRuntime {
       bodyTop + body.offsetHeight,
       marker.getBoundingClientRect().bottom
     );
-    for (const element of body.querySelectorAll('*')) {
-      if (element === marker) continue;
+    const clippingOverflowValues = new Set(['hidden', 'clip', 'auto', 'scroll']);
+    const visitVisibleElement = (element, inheritedClipBottom = Number.POSITIVE_INFINITY) => {
+      if (element === marker) return;
       const style = window.getComputedStyle(element);
-      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.contentVisibility === 'hidden' ||
+        Number.parseFloat(style.opacity) === 0
+      ) return;
       const rect = element.getBoundingClientRect();
-      if (Number.isFinite(rect.bottom)) contentBottom = Math.max(contentBottom, rect.bottom);
+      if (!Number.isFinite(rect.bottom)) return;
+
+      contentBottom = Math.max(contentBottom, Math.min(rect.bottom, inheritedClipBottom));
+      const clipBottom = clippingOverflowValues.has(style.overflowY)
+        ? Math.min(inheritedClipBottom, rect.bottom)
+        : inheritedClipBottom;
+
+      // 关闭的 details 只渲染 summary；继续遍历会把尚未展开的正文提前算入高度。
+      if (element instanceof HTMLDetailsElement && !element.open) {
+        const summary = Array.from(element.children).find(child => child.tagName === 'SUMMARY');
+        if (summary) visitVisibleElement(summary, clipBottom);
+        return;
+      }
+      for (const child of element.children) visitVisibleElement(child, clipBottom);
+    };
+    for (const element of body.children) {
+      visitVisibleElement(element);
     }
     return Math.max(Math.ceil(contentBottom - bodyTop), 1);
   };
@@ -189,7 +211,7 @@ public enum RoleplayHTMLAdaptiveHeightRuntime {
   window.__etosReportHeight = reportHeight;
 
   const start = () => {
-    if (started || !document.body) return;
+    if (started || !document.body?.getBoundingClientRect) return;
     started = true;
     const marker = prepareAdaptiveHeightLayout();
     heightResizeObserver = new ResizeObserver(reportHeight);
