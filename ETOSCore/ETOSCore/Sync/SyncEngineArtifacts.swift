@@ -267,6 +267,18 @@ extension SyncEngine {
             .filter { isCandidateAppStorageKey($0.key) && isPropertyListEncodableValue($0.value) }
     }
 
+    static func defaultSynchronizedAppStorageSnapshot() -> Data? {
+        let defaults = AppConfigKey.allCases.reduce(into: [String: Any]()) { result, key in
+            guard key.participatesInSync,
+                  isCandidateAppStorageKey(key.rawValue),
+                  isPropertyListEncodableValue(key.defaultValue.anyValue) else {
+                return
+            }
+            result[key.rawValue] = key.defaultValue.anyValue
+        }
+        return encodeAppStorageSnapshot(defaults)
+    }
+
     static func normalizedAppConfigSnapshot(
         _ snapshot: [String: Any],
         legacyGlobalSystemPrompt: String?

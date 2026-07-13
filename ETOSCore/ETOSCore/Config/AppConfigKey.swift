@@ -500,6 +500,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .chatComposerDraft,
              .lastActiveSessionID,
              .syncAutoSyncEnabled,
+             .cloudSyncEnabled,
+             .cloudSyncAutoSyncEnabled,
              .appToolsKnownDefaultToolIDs,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,

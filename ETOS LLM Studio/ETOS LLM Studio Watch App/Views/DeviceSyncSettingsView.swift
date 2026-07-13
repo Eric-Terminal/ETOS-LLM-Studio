@@ -99,7 +99,7 @@ struct DeviceSyncSettingsView: View {
                             ProgressView()
                                 .padding(.trailing, 4)
                         }
-                        Label(NSLocalizedString("立即同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
+                        Label(NSLocalizedString("立即检查并同步", comment: ""), systemImage: "arrow.triangle.2.circlepath")
                         Spacer()
                     }
                 }
@@ -107,7 +107,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("iCloud 漫游同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("开启后会自动在同一 Apple ID 的设备间同步支持的数据。", comment: ""))
+                Text(NSLocalizedString("开启后会自动增量同步。此按钮只会立即检查远端变化并上传本机变化，不会强制覆盖任一端。首次发现两套不同数据时，会先让你选择保留哪一套。", comment: ""))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -117,6 +117,36 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
+        .confirmationDialog(
+            NSLocalizedString("发现两套不同的数据", comment: ""),
+            isPresented: Binding(
+                get: { cloudSyncManager.initialConflict != nil },
+                set: { if !$0 { cloudSyncManager.dismissInitialConflictPrompt() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("使用 iCloud 数据", comment: "")) {
+                Task {
+                    await cloudSyncManager.resolveInitialConflict(using: .useICloud)
+                }
+            }
+            Button(NSLocalizedString("使用此设备数据覆盖 iCloud", comment: ""), role: .destructive) {
+                Task {
+                    await cloudSyncManager.resolveInitialConflict(using: .useThisDevice)
+                }
+            }
+            Button(NSLocalizedString("暂不同步", comment: ""), role: .cancel) {
+                cloudSyncManager.dismissInitialConflictPrompt()
+            }
+        } message: {
+            if let conflict = cloudSyncManager.initialConflict {
+                Text(String(
+                    format: NSLocalizedString("此设备尚未建立可信的 iCloud 同步基线。本机有 %d 条记录，iCloud 有 %d 条记录；选择前不会修改任何数据。执行覆盖前会自动创建安全快照。", comment: ""),
+                    conflict.localRecordCount,
+                    conflict.iCloudRecordCount
+                ))
+            }
+        }
         .confirmationDialog(
             NSLocalizedString("选择 Apple Watch 同步方式", comment: ""),
             isPresented: $isWatchSyncStrategyDialogPresented,
@@ -169,7 +199,10 @@ struct DeviceSyncSettingsView: View {
     }
 
     private var syncIntroDetails: String {
-        NSLocalizedString("同步与备份说明正文", comment: "")
+        [
+            NSLocalizedString("同步与备份说明正文", comment: ""),
+            NSLocalizedString("iCloud 首次同步裁决说明", comment: "")
+        ].joined(separator: "\n\n")
     }
 
     private func settingsIntroCard(
@@ -256,6 +289,10 @@ struct DeviceSyncSettingsView: View {
                     Text(message)
                         .etFont(.caption)
                 }
+            case .waitingForInitialDecision:
+                Label(NSLocalizedString("等待选择数据来源", comment: ""), systemImage: "arrow.triangle.branch")
+                    .etFont(.caption)
+                    .foregroundStyle(.orange)
             case .success(let summary):
                 VStack(alignment: .leading, spacing: 2) {
                     Label(NSLocalizedString("成功", comment: ""), systemImage: "checkmark.circle")

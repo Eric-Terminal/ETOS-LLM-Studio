@@ -19,7 +19,7 @@ let cloudSyncLogger = Logger(
     category: "CloudSync"
 )
 
-private struct CloudSyncPublishedRecordState: Codable, Equatable, Sendable {
+struct CloudSyncPublishedRecordState: Codable, Equatable, Sendable {
     let recordName: String
     let type: SyncRecordType
     let recordID: String
@@ -39,9 +39,10 @@ private struct CloudSyncPublishedRecordState: Codable, Equatable, Sendable {
     }
 }
 
-private struct CloudSyncPublishedState: Codable, Sendable {
+struct CloudSyncPublishedState: Codable, Sendable {
     var schemaVersion = 3
     var accountIdentifier: String?
+    var generationID: String?
     var hasCompletedInitialPull = false
     var recordsByKey: [String: CloudSyncPublishedRecordState] = [:]
 }
@@ -52,7 +53,7 @@ private struct CloudSyncRemoteResolution: @unchecked Sendable {
     let publishedState: CloudSyncPublishedState
 }
 
-private struct CloudSyncApplyBatch: @unchecked Sendable {
+struct CloudSyncApplyBatch: @unchecked Sendable {
     let delta: SyncDeltaPackage
     let manifest: SyncManifest
 }
@@ -62,6 +63,7 @@ public final class CloudSyncManager: ObservableObject {
     public enum SyncState: Equatable {
         case idle
         case syncing(String)
+        case waitingForInitialDecision
         case success(SyncMergeSummary)
         case failed(String)
     }
@@ -74,23 +76,26 @@ public final class CloudSyncManager: ObservableObject {
     private static let deviceIdentifierKey = "cloudSync.deviceIdentifier"
     private static let publishedStateKey = "cloudSync.publishedRecordState.v3"
 
-    @Published public private(set) var state: SyncState = .idle
-    @Published public private(set) var lastSummary: SyncMergeSummary = .empty
-    @Published public private(set) var lastUpdatedAt: Date?
+    @Published public internal(set) var state: SyncState = .idle
+    @Published public internal(set) var lastSummary: SyncMergeSummary = .empty
+    @Published public internal(set) var lastUpdatedAt: Date?
+    @Published public internal(set) var initialConflict: CloudSyncInitialConflict?
 
     private let transportFactory: @Sendable () -> any CloudSyncTransport
-    private let userDefaults: UserDefaults
+    let userDefaults: UserDefaults
     private let snapshotBuilder: @Sendable (SyncOptions) -> SyncLocalSnapshot
-    private let deltaApplier: @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary
-    private let now: @Sendable () -> Date
-    private lazy var transport: any CloudSyncTransport = transportFactory()
+    let deltaApplier: @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary
+    let safetyBackupCreator: @Sendable () async throws -> Void
+    let now: @Sendable () -> Date
+    lazy var transport: any CloudSyncTransport = transportFactory()
     private var hasActivatedRealtimeSync = false
     private var realtimeSyncCancellables: Set<AnyCancellable> = []
     private var pendingRealtimeSyncTask: Task<Void, Never>?
-    private var isPerformingSync = false
-    private var needsSyncAfterCurrentRun = false
-    private var isApplyingRemoteRecords = false
-    private var suppressRealtimeSyncUntil: Date?
+    var isPerformingSync = false
+    var needsSyncAfterCurrentRun = false
+    var isApplyingRemoteRecords = false
+    var suppressRealtimeSyncUntil: Date?
+    var pendingInitialConflict: CloudSyncPendingInitialConflict?
 
     convenience init(
         userDefaults: UserDefaults = .standard,
@@ -104,6 +109,7 @@ public final class CloudSyncManager: ObservableObject {
                 remoteManifest: manifest
             )
         },
+        safetyBackupCreator: @escaping @Sendable () async throws -> Void = CloudSyncSafetyBackup.create,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.init(
@@ -111,6 +117,7 @@ public final class CloudSyncManager: ObservableObject {
             userDefaults: userDefaults,
             snapshotBuilder: snapshotBuilder,
             deltaApplier: deltaApplier,
+            safetyBackupCreator: safetyBackupCreator,
             now: now
         )
     }
@@ -128,6 +135,7 @@ public final class CloudSyncManager: ObservableObject {
                 remoteManifest: manifest
             )
         },
+        safetyBackupCreator: @escaping @Sendable () async throws -> Void = CloudSyncSafetyBackup.create,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.init(
@@ -135,6 +143,7 @@ public final class CloudSyncManager: ObservableObject {
             userDefaults: userDefaults,
             snapshotBuilder: snapshotBuilder,
             deltaApplier: deltaApplier,
+            safetyBackupCreator: safetyBackupCreator,
             now: now
         )
     }
@@ -144,12 +153,14 @@ public final class CloudSyncManager: ObservableObject {
         userDefaults: UserDefaults,
         snapshotBuilder: @escaping @Sendable (SyncOptions) -> SyncLocalSnapshot,
         deltaApplier: @escaping @MainActor @Sendable (SyncDeltaPackage, SyncManifest) async -> SyncMergeSummary,
+        safetyBackupCreator: @escaping @Sendable () async throws -> Void,
         now: @escaping @Sendable () -> Date
     ) {
         self.transportFactory = transportFactory
         self.userDefaults = userDefaults
         self.snapshotBuilder = snapshotBuilder
         self.deltaApplier = deltaApplier
+        self.safetyBackupCreator = safetyBackupCreator
         self.now = now
     }
 
@@ -170,6 +181,7 @@ public final class CloudSyncManager: ObservableObject {
                         )
                     } else {
                         self.cancelPendingRealtimeSync()
+                        self.initialConflict = nil
                     }
                 }
             }
@@ -239,6 +251,11 @@ public final class CloudSyncManager: ObservableObject {
             }
             return
         }
+        if let pendingInitialConflict {
+            initialConflict = pendingInitialConflict.summary
+            state = .waitingForInitialDecision
+            return
+        }
         if isPerformingSync {
             needsSyncAfterCurrentRun = true
             return
@@ -262,7 +279,12 @@ public final class CloudSyncManager: ObservableObject {
             let cloudOptions = normalizedCloudOptions(from: options)
             let localBeforePull = await buildLocalSnapshot(options: cloudOptions)
             var publishedState = await loadPublishedState()
-            let fetchResult = try await transport.fetchChanges()
+            var fetchResult: CloudSyncFetchResult
+            if publishedState.hasCompletedInitialPull {
+                fetchResult = try await transport.fetchChanges()
+            } else {
+                fetchResult = try await transport.fetchFullSnapshot()
+            }
             if fetchResult.requiresBaselineReset
                 || (publishedState.accountIdentifier != nil
                     && publishedState.accountIdentifier != fetchResult.accountIdentifier) {
@@ -272,6 +294,54 @@ public final class CloudSyncManager: ObservableObject {
             } else {
                 publishedState.accountIdentifier = fetchResult.accountIdentifier
             }
+
+            if let generation = fetchResult.generation,
+               publishedState.hasCompletedInitialPull,
+               publishedState.generationID != generation.id {
+                if !fetchResult.isFullSnapshot {
+                    fetchResult = try await transport.fetchFullSnapshot()
+                }
+                try await adoptAuthoritativeCloudGeneration(
+                    fetchResult,
+                    localSnapshot: localBeforePull
+                )
+                return
+            }
+
+            let effectiveGenerationID = fetchResult.generation?.id
+                ?? publishedState.generationID
+            publishedState.generationID = effectiveGenerationID
+            let unfilteredFetchResult = fetchResult
+            fetchResult = await runOnSnapshotBuildQueue {
+                Self.filterRecords(
+                    in: unfilteredFetchResult,
+                    generationID: effectiveGenerationID
+                )
+            }
+
+            let requiresInitialDecision: Bool
+            if publishedState.hasCompletedInitialPull {
+                requiresInitialDecision = false
+            } else {
+                let remoteRecords = fetchResult.records
+                requiresInitialDecision = await runOnSnapshotBuildQueue {
+                    Self.requiresInitialDecision(
+                        localSnapshot: localBeforePull,
+                        remoteRecords: remoteRecords
+                    )
+                }
+            }
+            if requiresInitialDecision {
+                let summary = CloudSyncInitialConflict(
+                    localRecordCount: localBeforePull.manifest.records.count,
+                    iCloudRecordCount: fetchResult.records.count
+                )
+                pendingInitialConflict = CloudSyncPendingInitialConflict(summary: summary)
+                initialConflict = summary
+                state = .waitingForInitialDecision
+                return
+            }
+
             let stateBeforePull = publishedState
             let localPending = await runOnSnapshotBuildQueue {
                 Self.pendingLocalChanges(
@@ -373,7 +443,7 @@ public final class CloudSyncManager: ObservableObject {
         AppConfigStore.shared.cloudSyncEnabled
     }
 
-    private func currentDeviceIdentifier() async -> String {
+    func currentDeviceIdentifier() async -> String {
         let defaults = userDefaults
         return await runOnSnapshotBuildQueue {
             if let existing = Self.loadTextState(
@@ -392,7 +462,7 @@ public final class CloudSyncManager: ObservableObject {
         }
     }
 
-    private func buildLocalSnapshot(options: SyncOptions) async -> SyncLocalSnapshot {
+    func buildLocalSnapshot(options: SyncOptions) async -> SyncLocalSnapshot {
         await Persistence.flushPendingMessageWritesForSyncSnapshotAsync()
         let buildSnapshot = snapshotBuilder
         return await runOnSnapshotBuildQueue {
@@ -541,7 +611,7 @@ public final class CloudSyncManager: ObservableObject {
         )
     }
 
-    nonisolated private static func makeApplyBatches(
+    nonisolated static func makeApplyBatches(
         records: [CloudSyncRecordChange],
         deletions: [SyncDeleteRecord],
         deletionTimestamp: Date
@@ -607,8 +677,13 @@ public final class CloudSyncManager: ObservableObject {
                 includeRecordKeys: [descriptor.storageKey]
             )
             guard !package.options.isEmpty else { continue }
-            let recordName = Self.cloudRecordName(for: descriptor)
+            let recordName = publishedState.recordsByKey[descriptor.storageKey]?.recordName
+                ?? Self.cloudRecordName(
+                    for: descriptor,
+                    generationID: publishedState.generationID
+                )
             let payload = CloudSyncRecordPayload(
+                generationID: publishedState.generationID,
                 type: descriptor.type,
                 recordID: descriptor.recordID,
                 checksum: descriptor.checksum,
@@ -760,9 +835,15 @@ public final class CloudSyncManager: ObservableObject {
         return lhs.type.rawValue < rhs.type.rawValue
     }
 
-    nonisolated private static func cloudRecordName(for descriptor: SyncRecordDescriptor) -> String {
+    nonisolated static func cloudRecordName(
+        for descriptor: SyncRecordDescriptor,
+        generationID: String? = nil
+    ) -> String {
         let key = descriptor.storageKey
-        return "record.\(descriptor.type.rawValue).\(Data(key.utf8).sha256Hex)"
+        let generationPrefix = generationID.map {
+            "generation.\(Data($0.utf8).sha256Hex.prefix(16))."
+        } ?? ""
+        return "\(generationPrefix)record.\(descriptor.type.rawValue).\(Data(key.utf8).sha256Hex)"
     }
 
     private func removePublishedRecord(
@@ -775,7 +856,7 @@ public final class CloudSyncManager: ObservableObject {
         state.recordsByKey[key] = nil
     }
 
-    private func runOnSnapshotBuildQueue<T>(
+    func runOnSnapshotBuildQueue<T>(
         _ operation: @escaping () -> T
     ) async -> T {
         await withCheckedContinuation { continuation in
@@ -801,7 +882,7 @@ public final class CloudSyncManager: ObservableObject {
         needsSyncAfterCurrentRun = false
     }
 
-    private func loadPublishedState() async -> CloudSyncPublishedState {
+    func loadPublishedState() async -> CloudSyncPublishedState {
         let defaults = userDefaults
         return await runOnSnapshotBuildQueue {
             guard let data = Self.loadDataState(
@@ -815,7 +896,7 @@ public final class CloudSyncManager: ObservableObject {
         }
     }
 
-    private func savePublishedState(_ state: CloudSyncPublishedState) async {
+    func savePublishedState(_ state: CloudSyncPublishedState) async {
         let defaults = userDefaults
         await runOnSnapshotBuildQueue {
             guard let data = try? JSONEncoder().encode(state) else { return }
@@ -877,7 +958,7 @@ public final class CloudSyncManager: ObservableObject {
         .fullSync
     }
 
-    private func userVisibleMessage(for error: Error) -> String {
+    func userVisibleMessage(for error: Error) -> String {
         if let cloudError = error as? CloudSyncManagerError {
             return cloudError.localizedDescription
         }
@@ -906,6 +987,7 @@ enum CloudSyncManagerError: LocalizedError {
     case invalidAsset
     case decodeFailed
     case subscriptionUnavailable
+    case generationVerificationFailed
 
     var errorDescription: String? {
         switch self {
@@ -917,6 +999,8 @@ enum CloudSyncManagerError: LocalizedError {
             return NSLocalizedString("iCloud 同步快照解析失败。", comment: "")
         case .subscriptionUnavailable:
             return NSLocalizedString("CloudKit 订阅不可用。", comment: "")
+        case .generationVerificationFailed:
+            return NSLocalizedString("iCloud 新数据集校验失败，原有同步基线未被替换。", comment: "")
         }
     }
 }

@@ -93,6 +93,13 @@ enum SyncCheckpointStore {
         }
     }
 
+    static func removeAllTombstones(channel: String, userDefaults: UserDefaults) {
+        var state = load(channel: channel, userDefaults: userDefaults)
+        guard !state.tombstones.isEmpty else { return }
+        state.tombstones.removeAll()
+        save(state, channel: channel, userDefaults: userDefaults)
+    }
+
     private static func normalized(_ channel: String) -> String {
         channel.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: " ", with: "_")
     }

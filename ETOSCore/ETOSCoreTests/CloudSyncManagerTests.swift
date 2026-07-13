@@ -558,6 +558,191 @@ struct CloudSyncManagerTests {
         #expect(await transport.mutations[0].records[0].payload.recordID == provider.id.uuidString)
     }
 
+    @MainActor
+    @Test("首次接入时两端数据不同会暂停并等待用户裁决")
+    func initialDivergenceWaitsForUserDecision() async {
+        let context = makeTestContext(name: "initial-conflict")
+        defer { context.cleanup() }
+        let localProvider = makeProvider(name: "本地版本")
+        let remoteProvider = makeProvider(name: "iCloud 版本")
+        let state = SnapshotState(
+            package: SyncPackage(options: [.providers], providers: [localProvider])
+        )
+        let transport = MockCloudSyncTransport(fetchResults: [
+            CloudSyncFetchResult(
+                records: [makeProviderRecord(provider: remoteProvider, recordName: "record.provider.remote")],
+                deletedRecordNames: [],
+                changeTokenData: Data("conflict-token".utf8),
+                isFullSnapshot: true
+            )
+        ])
+        let recorder = AppliedDeltaRecorder()
+        let manager = makeManager(
+            context: context,
+            state: state,
+            transport: transport,
+            recorder: recorder
+        )
+
+        await withCloudSyncEnabled {
+            await manager.performSync(options: .fullSync)
+        }
+
+        #expect(manager.initialConflict?.localRecordCount == 1)
+        #expect(manager.initialConflict?.iCloudRecordCount == 1)
+        #expect(manager.state == .waitingForInitialDecision)
+        #expect(recorder.deltas.isEmpty)
+        #expect(await transport.mutations.isEmpty)
+        #expect(await transport.committedTokens.isEmpty)
+    }
+
+    @MainActor
+    @Test("选择 iCloud 会先清空本地同步数据再重放远端完整状态")
+    func choosingICloudAuthoritativelyReplacesLocalData() async {
+        let context = makeTestContext(name: "choose-icloud")
+        defer { context.cleanup() }
+        let localProvider = makeProvider(name: "本地版本")
+        let remoteProvider = makeProvider(name: "iCloud 版本")
+        let remoteResult = CloudSyncFetchResult(
+            records: [makeProviderRecord(provider: remoteProvider, recordName: "record.provider.remote")],
+            deletedRecordNames: [],
+            changeTokenData: Data("remote-token".utf8),
+            isFullSnapshot: true
+        )
+        let state = SnapshotState(
+            package: SyncPackage(options: [.providers], providers: [localProvider])
+        )
+        let recorder = AppliedDeltaRecorder { delta in
+            if !delta.deletions.isEmpty {
+                state.setPackage(SyncPackage(options: [.providers]))
+                return SyncMergeSummary(importedProviders: delta.deletions.count)
+            }
+            if delta.package.options.contains(.providers) {
+                state.setPackage(delta.package)
+                return SyncMergeSummary(importedProviders: delta.package.providers.count)
+            }
+            return .empty
+        }
+        let transport = MockCloudSyncTransport(fetchResults: [remoteResult, remoteResult])
+        let manager = makeManager(
+            context: context,
+            state: state,
+            transport: transport,
+            recorder: recorder
+        )
+
+        await withCloudSyncEnabled {
+            await manager.performSync(options: .fullSync)
+            await manager.resolveInitialConflict(using: .useICloud)
+        }
+
+        #expect(state.currentPackage.providers.map(\.id) == [remoteProvider.id])
+        #expect(recorder.deltas.first?.deletions.map(\.recordID) == [localProvider.id.uuidString])
+        #expect(manager.initialConflict == nil)
+        #expect(await transport.committedTokens == [Data("remote-token".utf8)])
+    }
+
+    @MainActor
+    @Test("选择此设备会发布完整新世代并在指针切换后建立新基线")
+    func choosingThisDevicePublishesNewGeneration() async {
+        let context = makeTestContext(name: "choose-device")
+        defer { context.cleanup() }
+        let localProvider = makeProvider(name: "本地权威版本")
+        let remoteProvider = makeProvider(name: "旧云端版本")
+        let remoteResult = CloudSyncFetchResult(
+            records: [makeProviderRecord(provider: remoteProvider, recordName: "record.provider.remote")],
+            deletedRecordNames: [],
+            changeTokenData: Data("old-token".utf8),
+            isFullSnapshot: true
+        )
+        let state = SnapshotState(
+            package: SyncPackage(options: [.providers], providers: [localProvider])
+        )
+        let transport = MockCloudSyncTransport(fetchResults: [remoteResult, remoteResult])
+        let manager = makeManager(context: context, state: state, transport: transport)
+
+        await withCloudSyncEnabled {
+            await manager.performSync(options: .fullSync)
+            await manager.resolveInitialConflict(using: .useThisDevice)
+        }
+
+        let generations = await transport.publishedGenerations
+        let currentGenerationRecords = await transport.currentGenerationRecords
+        #expect(generations.count == 1)
+        #expect(currentGenerationRecords.map(\.payload.recordID) == [localProvider.id.uuidString])
+        #expect(currentGenerationRecords.allSatisfy {
+            $0.payload.generationID == generations[0].id
+        })
+        #expect(manager.initialConflict == nil)
+    }
+
+    @MainActor
+    @Test("已同步设备看到新世代后会以完整云端状态替换本地")
+    func remoteGenerationChangeAuthoritativelyReplacesLocalData() async {
+        let context = makeTestContext(name: "remote-generation")
+        defer { context.cleanup() }
+        let initialProvider = makeProvider(name: "旧本地版本")
+        let remoteProvider = makeProvider(name: "新世代版本")
+        let generation = CloudSyncGeneration(
+            id: "generation-b",
+            updatedAt: context.now,
+            sourceDeviceID: "other-device"
+        )
+        let remoteRecord = makeProviderRecord(
+            provider: remoteProvider,
+            recordName: "generation.b.record.provider",
+            generationID: generation.id
+        )
+        let generationResult = CloudSyncFetchResult(
+            records: [remoteRecord],
+            deletedRecordNames: [],
+            changeTokenData: Data("generation-token".utf8),
+            isFullSnapshot: false,
+            generation: generation
+        )
+        let fullGenerationResult = CloudSyncFetchResult(
+            records: [remoteRecord],
+            deletedRecordNames: [],
+            changeTokenData: Data("generation-full-token".utf8),
+            isFullSnapshot: true,
+            generation: generation
+        )
+        let state = SnapshotState(
+            package: SyncPackage(options: [.providers], providers: [initialProvider])
+        )
+        let recorder = AppliedDeltaRecorder { delta in
+            if !delta.deletions.isEmpty {
+                state.setPackage(SyncPackage(options: [.providers]))
+                return SyncMergeSummary(importedProviders: delta.deletions.count)
+            }
+            if delta.package.options.contains(.providers) {
+                state.setPackage(delta.package)
+                return SyncMergeSummary(importedProviders: delta.package.providers.count)
+            }
+            return .empty
+        }
+        let transport = MockCloudSyncTransport(fetchResults: [
+            .empty(token: "initial-token"),
+            generationResult,
+            fullGenerationResult
+        ])
+        let manager = makeManager(
+            context: context,
+            state: state,
+            transport: transport,
+            recorder: recorder
+        )
+
+        await withCloudSyncEnabled {
+            await manager.performSync(options: .fullSync)
+            await manager.performSync(options: .fullSync)
+        }
+
+        #expect(state.currentPackage.providers.map(\.id) == [remoteProvider.id])
+        #expect(await transport.mutations.count == 1)
+        #expect(await transport.committedTokens.last == Data("generation-full-token".utf8))
+    }
+
     #if canImport(CloudKit)
     @Test("逐记录同步使用独立 V3 Zone 和资源字段")
     func cloudRecordTransportUsesDedicatedZone() {
@@ -587,6 +772,7 @@ struct CloudSyncManagerTests {
             deltaApplier: { delta, manifest in
                 recorder.apply(delta, manifest: manifest)
             },
+            safetyBackupCreator: {},
             now: { context.now }
         )
     }
@@ -625,6 +811,7 @@ struct CloudSyncManagerTests {
     private func makeProviderRecord(
         provider: Provider,
         recordName: String,
+        generationID: String? = nil,
         updatedAt: Date = Date(timeIntervalSince1970: 1_729_999_000)
     ) -> CloudSyncRecordChange {
         let package = SyncPackage(
@@ -636,6 +823,7 @@ struct CloudSyncManagerTests {
         return CloudSyncRecordChange(
             recordName: recordName,
             payload: CloudSyncRecordPayload(
+                generationID: generationID,
                 type: .provider,
                 recordID: provider.id.uuidString,
                 checksum: checksum,
@@ -701,9 +889,16 @@ private struct CloudMutation: @unchecked Sendable {
 private actor MockCloudSyncTransport: CloudSyncTransport {
     private var fetchResults: [CloudSyncFetchResult]
     private var shouldFailNextModification = false
+    private var currentRecords: [CloudSyncRecordChange] = []
+    private var currentGeneration: CloudSyncGeneration?
     private(set) var mutations: [CloudMutation] = []
+    private(set) var publishedGenerations: [CloudSyncGeneration] = []
     private(set) var committedTokens: [Data] = []
     private(set) var fetchCount = 0
+
+    var currentGenerationRecords: [CloudSyncRecordChange] {
+        currentRecords
+    }
 
     init(fetchResults: [CloudSyncFetchResult]) {
         self.fetchResults = fetchResults
@@ -727,11 +922,44 @@ private actor MockCloudSyncTransport: CloudSyncTransport {
     }
 
     func fetchChanges() async throws -> CloudSyncFetchResult {
-        fetchCount += 1
-        guard !fetchResults.isEmpty else {
-            return .empty(token: "token-\(fetchCount)")
+        nextFetchResult(isFullSnapshot: false)
+    }
+
+    func fetchFullSnapshot() async throws -> CloudSyncFetchResult {
+        nextFetchResult(isFullSnapshot: true)
+    }
+
+    func publishGeneration(
+        records: [CloudSyncRecordChange],
+        generation: CloudSyncGeneration,
+        replacingRecordNames: [String]
+    ) async throws {
+        if shouldFailNextModification {
+            shouldFailNextModification = false
+            throw MockCloudSyncError.forcedFailure
         }
-        return fetchResults.removeFirst()
+        currentRecords = records
+        currentGeneration = generation
+        publishedGenerations.append(generation)
+    }
+
+    private func nextFetchResult(isFullSnapshot: Bool) -> CloudSyncFetchResult {
+        fetchCount += 1
+        if !fetchResults.isEmpty {
+            let result = fetchResults.removeFirst()
+            if result.isFullSnapshot || isFullSnapshot {
+                currentRecords = result.records
+                currentGeneration = result.generation
+            }
+            return result
+        }
+        return CloudSyncFetchResult(
+            records: currentRecords,
+            deletedRecordNames: [],
+            changeTokenData: Data("token-\(fetchCount)".utf8),
+            isFullSnapshot: isFullSnapshot,
+            generation: currentGeneration
+        )
     }
 
     func commitFetchedChanges(_ result: CloudSyncFetchResult) async {

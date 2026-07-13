@@ -17,9 +17,11 @@ import CloudKit
 // 业务语义已经变为逐逻辑记录，避免生产环境升级时还要额外部署 Record Type。
 let cloudSyncRecordType = "CloudSyncSnapshot"
 let cloudSyncRecordZoneName = "CloudSyncRecordsV3"
+let cloudSyncGenerationRecordName = "control.sync-generation"
 
 struct CloudSyncRecordPayload: Codable, @unchecked Sendable {
     let schemaVersion: Int
+    let generationID: String?
     let type: SyncRecordType
     let recordID: String
     let checksum: String
@@ -29,6 +31,7 @@ struct CloudSyncRecordPayload: Codable, @unchecked Sendable {
 
     init(
         schemaVersion: Int = 3,
+        generationID: String? = nil,
         type: SyncRecordType,
         recordID: String,
         checksum: String,
@@ -37,6 +40,7 @@ struct CloudSyncRecordPayload: Codable, @unchecked Sendable {
         package: SyncPackage
     ) {
         self.schemaVersion = schemaVersion
+        self.generationID = generationID
         self.type = type
         self.recordID = recordID
         self.checksum = checksum
@@ -52,6 +56,26 @@ struct CloudSyncRecordPayload: Codable, @unchecked Sendable {
             checksum: checksum,
             updatedAt: updatedAt
         )
+    }
+}
+
+/// 指向当前权威数据集的控制记录。只有新世代完整上传成功后才会切换该指针。
+struct CloudSyncGeneration: Codable, Equatable, Sendable {
+    let schemaVersion: Int
+    let id: String
+    let updatedAt: Date
+    let sourceDeviceID: String
+
+    init(
+        schemaVersion: Int = 1,
+        id: String,
+        updatedAt: Date,
+        sourceDeviceID: String
+    ) {
+        self.schemaVersion = schemaVersion
+        self.id = id
+        self.updatedAt = updatedAt
+        self.sourceDeviceID = sourceDeviceID
     }
 }
 
@@ -71,6 +95,7 @@ struct CloudSyncFetchResult: @unchecked Sendable {
     let accountIdentifier: String
     let isFullSnapshot: Bool
     let requiresBaselineReset: Bool
+    let generation: CloudSyncGeneration?
 
     init(
         records: [CloudSyncRecordChange],
@@ -78,7 +103,8 @@ struct CloudSyncFetchResult: @unchecked Sendable {
         changeTokenData: Data?,
         accountIdentifier: String = "test-account",
         isFullSnapshot: Bool = false,
-        requiresBaselineReset: Bool = false
+        requiresBaselineReset: Bool = false,
+        generation: CloudSyncGeneration? = nil
     ) {
         self.records = records
         self.deletedRecordNames = deletedRecordNames
@@ -86,12 +112,19 @@ struct CloudSyncFetchResult: @unchecked Sendable {
         self.accountIdentifier = accountIdentifier
         self.isFullSnapshot = isFullSnapshot
         self.requiresBaselineReset = requiresBaselineReset
+        self.generation = generation
     }
 }
 
 protocol CloudSyncTransport {
     func modify(records: [CloudSyncRecordChange], deletingRecordNames: [String]) async throws
     func fetchChanges() async throws -> CloudSyncFetchResult
+    func fetchFullSnapshot() async throws -> CloudSyncFetchResult
+    func publishGeneration(
+        records: [CloudSyncRecordChange],
+        generation: CloudSyncGeneration,
+        replacingRecordNames: [String]
+    ) async throws
     func commitFetchedChanges(_ result: CloudSyncFetchResult) async
     func subscribeToChanges() async throws
 }
@@ -181,6 +214,49 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
+    func fetchFullSnapshot() async throws -> CloudSyncFetchResult {
+        try await ensureAvailableAccount()
+        let accountIdentifier = try await currentAccountIdentifier()
+        let storedAccountIdentifier = loadAccountIdentifier()
+        let accountChanged = storedAccountIdentifier != nil
+            && storedAccountIdentifier != accountIdentifier
+        let zoneWasCreated = try await ensureCloudSyncZoneExists()
+        return try await fetchChanges(
+            previousServerChangeTokenData: nil,
+            accountIdentifier: accountIdentifier,
+            requiresBaselineReset: accountChanged || zoneWasCreated
+        )
+    }
+
+    func publishGeneration(
+        records: [CloudSyncRecordChange],
+        generation: CloudSyncGeneration,
+        replacingRecordNames: [String]
+    ) async throws {
+        try await ensureAvailableAccount()
+        _ = try await ensureCloudSyncZoneExists()
+
+        for chunk in records.chunked(into: Self.modifyBatchSize) {
+            try await save(records: chunk)
+        }
+
+        // 控制记录是原子切换点；在它写入前，其他设备仍只认可旧世代。
+        try await save(generation: generation)
+
+        let currentRecordNames = Set(records.map(\.recordName))
+        let obsoleteRecordNames = replacingRecordNames.filter {
+            !currentRecordNames.contains($0)
+        }
+        do {
+            for chunk in obsoleteRecordNames.chunked(into: Self.modifyBatchSize) {
+                try await delete(recordNames: chunk)
+            }
+        } catch {
+            // 世代已经成功切换，旧记录只占空间且不会再参与同步，后续覆盖时会再次清理。
+            cloudSyncLogger.error("清理旧 iCloud 同步世代失败: \(error.localizedDescription)")
+        }
+    }
+
     func commitFetchedChanges(_ result: CloudSyncFetchResult) async {
         if let changeTokenData = result.changeTokenData {
             saveZoneChangeTokenData(changeTokenData)
@@ -223,6 +299,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
 
         var recordsByName: [String: CloudSyncRecordChange] = [:]
         var deletedRecordNames = Set<String>()
+        var generation: CloudSyncGeneration?
         var currentToken = token
         var latestChangeTokenData: Data?
         var hasMoreChanges = false
@@ -238,6 +315,10 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             for modificationResult in result.modificationResultsByID.values {
                 let modification = try modificationResult.get()
                 guard modification.record.recordType == cloudSyncRecordType else { continue }
+                if modification.record.recordID.recordName == cloudSyncGenerationRecordName {
+                    generation = try makeGeneration(from: modification.record)
+                    continue
+                }
                 let change = try makeRecordChange(from: modification.record)
                 recordsByName[change.recordName] = change
                 deletedRecordNames.remove(change.recordName)
@@ -265,7 +346,8 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             changeTokenData: latestChangeTokenData,
             accountIdentifier: accountIdentifier,
             isFullSnapshot: token == nil,
-            requiresBaselineReset: requiresBaselineReset
+            requiresBaselineReset: requiresBaselineReset,
+            generation: generation
         )
     }
 
@@ -326,6 +408,48 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
+    private func save(generation: CloudSyncGeneration) async throws {
+        let recordID = CKRecord.ID(
+            recordName: cloudSyncGenerationRecordName,
+            zoneID: cloudSyncRecordZoneID
+        )
+        let fetched = try await database.records(for: [recordID])
+        let record: CKRecord
+        if let result = fetched[recordID] {
+            do {
+                record = try result.get()
+            } catch let error as CKError where error.code == .unknownItem {
+                record = CKRecord(recordType: cloudSyncRecordType, recordID: recordID)
+            }
+        } else {
+            record = CKRecord(recordType: cloudSyncRecordType, recordID: recordID)
+        }
+
+        let tempURL = try SyncTemporaryFileCleaner.makeFileURL(
+            prefix: "cloud-generation",
+            fileExtension: "json"
+        )
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        try JSONEncoder().encode(generation).write(to: tempURL, options: [.atomic])
+
+        record[Self.schemaVersionKey] = generation.schemaVersion as NSNumber
+        record[Self.deviceIdentifierKey] = generation.sourceDeviceID as NSString
+        record[Self.checksumKey] = generation.id as NSString
+        record[Self.updatedAtKey] = generation.updatedAt as NSDate
+        record[Self.optionsRawValueKey] = 0 as NSNumber
+        record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)
+
+        let result = try await database.modifyRecords(
+            saving: [record],
+            deleting: [],
+            savePolicy: .allKeys,
+            atomically: true
+        )
+        for saveResult in result.saveResults.values {
+            _ = try saveResult.get()
+        }
+    }
+
     private func delete(recordNames: [String]) async throws {
         guard !recordNames.isEmpty else { return }
         let recordIDs = recordNames.map {
@@ -362,6 +486,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
 
         let resolvedPayload = CloudSyncRecordPayload(
             schemaVersion: decoded.schemaVersion,
+            generationID: decoded.generationID,
             type: decoded.type,
             recordID: decoded.recordID,
             checksum: (record[Self.checksumKey] as? String) ?? decoded.checksum,
@@ -374,6 +499,27 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         return CloudSyncRecordChange(
             recordName: record.recordID.recordName,
             payload: resolvedPayload
+        )
+    }
+
+    private func makeGeneration(from record: CKRecord) throws -> CloudSyncGeneration {
+        guard let asset = record[Self.payloadAssetKey] as? CKAsset,
+              let assetURL = asset.fileURL else {
+            throw CloudSyncManagerError.invalidAsset
+        }
+        let data = try Data(contentsOf: assetURL)
+        guard let decoded = try? JSONDecoder().decode(CloudSyncGeneration.self, from: data),
+              decoded.schemaVersion == 1 else {
+            throw CloudSyncManagerError.decodeFailed
+        }
+        return CloudSyncGeneration(
+            schemaVersion: decoded.schemaVersion,
+            id: (record[Self.checksumKey] as? String) ?? decoded.id,
+            updatedAt: record.modificationDate
+                ?? (record[Self.updatedAtKey] as? Date)
+                ?? decoded.updatedAt,
+            sourceDeviceID: (record[Self.deviceIdentifierKey] as? String)
+                ?? decoded.sourceDeviceID
         )
     }
 
@@ -512,6 +658,18 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
     }
 
     func fetchChanges() async throws -> CloudSyncFetchResult {
+        throw CloudSyncManagerError.unavailableAccount
+    }
+
+    func fetchFullSnapshot() async throws -> CloudSyncFetchResult {
+        throw CloudSyncManagerError.unavailableAccount
+    }
+
+    func publishGeneration(
+        records: [CloudSyncRecordChange],
+        generation: CloudSyncGeneration,
+        replacingRecordNames: [String]
+    ) async throws {
         throw CloudSyncManagerError.unavailableAccount
     }
 
