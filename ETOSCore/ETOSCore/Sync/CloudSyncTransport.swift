@@ -3,7 +3,8 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// iCloud 同步的 CloudKit 传输实现、同步摘要辅助和快照校验载体。
+// CloudKit 逐逻辑记录传输层。CloudKit Zone 的 change token 只作为每台设备的
+// 增量游标；业务数据始终以可独立新增、更新和删除的 Record 保存。
 // ============================================================================
 
 import Foundation
@@ -12,40 +13,120 @@ import os.log
 import CloudKit
 #endif
 
-private let cloudSyncSnapshotRecordType = "CloudSyncSnapshot"
-private let cloudSyncSnapshotZoneName = "CloudSyncSnapshots"
+// 复用已部署的 CloudSyncSnapshot schema；新的 Zone 与 Record 命名负责隔离旧快照数据。
+// 业务语义已经变为逐逻辑记录，避免生产环境升级时还要额外部署 Record Type。
+let cloudSyncRecordType = "CloudSyncSnapshot"
+let cloudSyncRecordZoneName = "CloudSyncRecordsV3"
+
+struct CloudSyncRecordPayload: Codable, @unchecked Sendable {
+    let schemaVersion: Int
+    let type: SyncRecordType
+    let recordID: String
+    let checksum: String
+    let updatedAt: Date
+    let sourceDeviceID: String
+    let package: SyncPackage
+
+    init(
+        schemaVersion: Int = 3,
+        type: SyncRecordType,
+        recordID: String,
+        checksum: String,
+        updatedAt: Date,
+        sourceDeviceID: String,
+        package: SyncPackage
+    ) {
+        self.schemaVersion = schemaVersion
+        self.type = type
+        self.recordID = recordID
+        self.checksum = checksum
+        self.updatedAt = updatedAt
+        self.sourceDeviceID = sourceDeviceID
+        self.package = package
+    }
+
+    var descriptor: SyncRecordDescriptor {
+        SyncRecordDescriptor(
+            type: type,
+            recordID: recordID,
+            checksum: checksum,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+struct CloudSyncRecordChange: @unchecked Sendable {
+    let recordName: String
+    let payload: CloudSyncRecordPayload
+
+    var storageKey: String {
+        SyncRecordDescriptor.key(type: payload.type, recordID: payload.recordID)
+    }
+}
+
+struct CloudSyncFetchResult: @unchecked Sendable {
+    let records: [CloudSyncRecordChange]
+    let deletedRecordNames: [String]
+    let changeTokenData: Data?
+    let accountIdentifier: String
+    let isFullSnapshot: Bool
+    let requiresBaselineReset: Bool
+
+    init(
+        records: [CloudSyncRecordChange],
+        deletedRecordNames: [String],
+        changeTokenData: Data?,
+        accountIdentifier: String = "test-account",
+        isFullSnapshot: Bool = false,
+        requiresBaselineReset: Bool = false
+    ) {
+        self.records = records
+        self.deletedRecordNames = deletedRecordNames
+        self.changeTokenData = changeTokenData
+        self.accountIdentifier = accountIdentifier
+        self.isFullSnapshot = isFullSnapshot
+        self.requiresBaselineReset = requiresBaselineReset
+    }
+}
+
+protocol CloudSyncTransport {
+    func modify(records: [CloudSyncRecordChange], deletingRecordNames: [String]) async throws
+    func fetchChanges() async throws -> CloudSyncFetchResult
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async
+    func subscribeToChanges() async throws
+}
 
 #if canImport(CloudKit)
-let cloudSyncSnapshotZoneID = CKRecordZone.ID(
-    zoneName: cloudSyncSnapshotZoneName,
+let cloudSyncRecordZoneID = CKRecordZone.ID(
+    zoneName: cloudSyncRecordZoneName,
     ownerName: CKCurrentUserDefaultName
 )
 
-let cloudSyncSnapshotDesiredKeys: [CKRecord.FieldKey] = [
+let cloudSyncRecordDesiredKeys: [CKRecord.FieldKey] = [
     "schemaVersion",
     "deviceID",
-    "updatedAt",
     "checksum",
+    "updatedAt",
     "optionsRawValue",
     "payloadAsset"
 ]
-#endif
 
-#if canImport(CloudKit)
 struct CloudKitCloudSyncTransport: CloudSyncTransport {
     private static let schemaVersionKey = "schemaVersion"
     private static let deviceIdentifierKey = "deviceID"
-    private static let updatedAtKey = "updatedAt"
     private static let checksumKey = "checksum"
+    private static let updatedAtKey = "updatedAt"
     private static let optionsRawValueKey = "optionsRawValue"
     private static let payloadAssetKey = "payloadAsset"
-    private static let zoneSubscriptionID = "cloudSync.snapshots.zone.subscription.v1"
-    private static let legacyDatabaseSubscriptionID = "cloudSync.snapshots.database.subscription.v1"
-    private let userDefaults: UserDefaults
+    private static let zoneSubscriptionID = "cloudSync.records.zone.subscription.v3"
+    private static let changeTokenKey = "cloudSync.recordZoneChangeToken.v3"
+    private static let accountIdentifierKey = "cloudSync.accountIdentifier.v3"
     private static let containerIdentifier = "iCloud.com.ericterminal.els"
+    private static let modifyBatchSize = 100
 
     private let container: CKContainer
     private let database: CKDatabase
+    private let userDefaults: UserDefaults
 
     init(
         container: CKContainer = CKContainer(identifier: containerIdentifier),
@@ -57,55 +138,78 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         self.userDefaults = userDefaults
     }
 
-    func upload(snapshot: CloudSyncRemoteSnapshot) async throws {
+    func modify(records: [CloudSyncRecordChange], deletingRecordNames: [String]) async throws {
+        guard !records.isEmpty || !deletingRecordNames.isEmpty else { return }
         try await ensureAvailableAccount()
-        try await ensureCloudSyncZoneExists()
+        _ = try await ensureCloudSyncZoneExists()
 
-        let recordID = CKRecord.ID(recordName: snapshot.recordName, zoneID: cloudSyncSnapshotZoneID)
-        let record = try await fetchExistingSnapshotRecord(recordID: recordID)
-            ?? CKRecord(recordType: cloudSyncSnapshotRecordType, recordID: recordID)
-        record[Self.schemaVersionKey] = snapshot.snapshot.schemaVersion as NSNumber
-        record[Self.deviceIdentifierKey] = snapshot.deviceID as NSString
-        record[Self.updatedAtKey] = snapshot.updatedAt as NSDate
-        record[Self.checksumKey] = snapshot.checksum as NSString
-        record[Self.optionsRawValueKey] = snapshot.snapshot.optionsRawValue as NSNumber
-
-        let tempURL = try SyncTemporaryFileCleaner.makeFileURL(prefix: "cloud-sync", fileExtension: "json")
-        let encodedSnapshot = try JSONEncoder().encode(snapshot.snapshot)
-        try encodedSnapshot.write(to: tempURL, options: [.atomic])
-        record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)
-
-        do {
-            _ = try await modifyRecords(saving: [record])
-        } catch {
-            try? FileManager.default.removeItem(at: tempURL)
-            throw error
+        let recordChunks = records.chunked(into: Self.modifyBatchSize)
+        for chunk in recordChunks {
+            try await save(records: chunk)
         }
 
-        try? FileManager.default.removeItem(at: tempURL)
+        let deletionChunks = deletingRecordNames.chunked(into: Self.modifyBatchSize)
+        for chunk in deletionChunks {
+            try await delete(recordNames: chunk)
+        }
     }
 
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult {
+    func fetchChanges() async throws -> CloudSyncFetchResult {
         try await ensureAvailableAccount()
-        try await ensureCloudSyncZoneExists()
+        let accountIdentifier = try await currentAccountIdentifier()
+        let storedAccountIdentifier = loadAccountIdentifier()
+        let accountChanged = storedAccountIdentifier != nil
+            && storedAccountIdentifier != accountIdentifier
+        let zoneWasCreated = try await ensureCloudSyncZoneExists()
+        let storedTokenData = accountChanged || zoneWasCreated
+            ? nil
+            : loadZoneChangeTokenData()
 
         do {
-            return try await fetchSnapshots(
-                excludingDeviceID: deviceID,
-                previousServerChangeTokenData: loadZoneChangeTokenData()
+            return try await fetchChanges(
+                previousServerChangeTokenData: storedTokenData,
+                accountIdentifier: accountIdentifier,
+                requiresBaselineReset: accountChanged || zoneWasCreated
             )
         } catch let error as CKError where error.code == .changeTokenExpired {
             saveZoneChangeTokenData(nil)
-            return try await fetchSnapshots(
-                excludingDeviceID: deviceID,
-                previousServerChangeTokenData: nil
+            return try await fetchChanges(
+                previousServerChangeTokenData: nil,
+                accountIdentifier: accountIdentifier,
+                requiresBaselineReset: false
             )
         }
     }
 
-    private func fetchSnapshots(
-        excludingDeviceID deviceID: String,
-        previousServerChangeTokenData: Data?
+    func commitFetchedChanges(_ result: CloudSyncFetchResult) async {
+        if let changeTokenData = result.changeTokenData {
+            saveZoneChangeTokenData(changeTokenData)
+        }
+        saveAccountIdentifier(result.accountIdentifier)
+    }
+
+    func subscribeToChanges() async throws {
+        try await ensureAvailableAccount()
+        _ = try await ensureCloudSyncZoneExists()
+
+        if try await hasSubscription(withID: Self.zoneSubscriptionID) {
+            return
+        }
+
+        let subscription = CKRecordZoneSubscription(
+            zoneID: cloudSyncRecordZoneID,
+            subscriptionID: Self.zoneSubscriptionID
+        )
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+        _ = try await save(subscription)
+    }
+
+    private func fetchChanges(
+        previousServerChangeTokenData: Data?,
+        accountIdentifier: String,
+        requiresBaselineReset: Bool
     ) async throws -> CloudSyncFetchResult {
         let token: CKServerChangeToken?
         if let previousServerChangeTokenData {
@@ -117,32 +221,32 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             token = nil
         }
 
-        var snapshots: [CloudSyncRemoteSnapshot] = []
+        var recordsByName: [String: CloudSyncRecordChange] = [:]
+        var deletedRecordNames = Set<String>()
         var currentToken = token
         var latestChangeTokenData: Data?
         var hasMoreChanges = false
 
         repeat {
             let result = try await database.recordZoneChanges(
-                inZoneWith: cloudSyncSnapshotZoneID,
+                inZoneWith: cloudSyncRecordZoneID,
                 since: currentToken,
-                desiredKeys: cloudSyncSnapshotDesiredKeys,
+                desiredKeys: cloudSyncRecordDesiredKeys,
                 resultsLimit: 200
             )
 
             for modificationResult in result.modificationResultsByID.values {
-                switch modificationResult {
-                case .success(let modification):
-                    do {
-                        let snapshot = try makeSnapshot(from: modification.record)
-                        guard snapshot.deviceID != deviceID else { continue }
-                        snapshots.append(snapshot)
-                    } catch {
-                        cloudSyncLogger.error("解析 CloudKit 记录失败: \(error.localizedDescription)")
-                    }
-                case .failure(let error):
-                    cloudSyncLogger.error("获取 CloudKit 记录失败: \(error.localizedDescription)")
-                }
+                let modification = try modificationResult.get()
+                guard modification.record.recordType == cloudSyncRecordType else { continue }
+                let change = try makeRecordChange(from: modification.record)
+                recordsByName[change.recordName] = change
+                deletedRecordNames.remove(change.recordName)
+            }
+
+            for deletion in result.deletions where deletion.recordType == cloudSyncRecordType {
+                let recordName = deletion.recordID.recordName
+                recordsByName[recordName] = nil
+                deletedRecordNames.insert(recordName)
             }
 
             latestChangeTokenData = try archivedChangeTokenData(from: result.changeToken)
@@ -151,107 +255,138 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         } while hasMoreChanges
 
         return CloudSyncFetchResult(
-            snapshots: snapshots.sorted { lhs, rhs in
-                lhs.updatedAt > rhs.updatedAt
+            records: recordsByName.values.sorted { lhs, rhs in
+                if lhs.payload.updatedAt == rhs.payload.updatedAt {
+                    return lhs.recordName < rhs.recordName
+                }
+                return lhs.payload.updatedAt < rhs.payload.updatedAt
             },
-            changeTokenData: latestChangeTokenData
+            deletedRecordNames: deletedRecordNames.sorted(),
+            changeTokenData: latestChangeTokenData,
+            accountIdentifier: accountIdentifier,
+            isFullSnapshot: token == nil,
+            requiresBaselineReset: requiresBaselineReset
         )
     }
 
-    func commitFetchedChanges(_ result: CloudSyncFetchResult) async {
-        guard let changeTokenData = result.changeTokenData else { return }
-        saveZoneChangeTokenData(changeTokenData)
-    }
-
-    func subscribeToChanges() async throws {
-        try await ensureAvailableAccount()
-        try await ensureCloudSyncZoneExists()
-
-        if try await hasSubscription(withID: Self.zoneSubscriptionID) {
-            try? await deleteSubscription(withID: Self.legacyDatabaseSubscriptionID)
-            return
+    private func save(records changes: [CloudSyncRecordChange]) async throws {
+        guard !changes.isEmpty else { return }
+        let recordIDs = changes.map {
+            CKRecord.ID(recordName: $0.recordName, zoneID: cloudSyncRecordZoneID)
         }
-
-        let subscription = CKRecordZoneSubscription(
-            zoneID: cloudSyncSnapshotZoneID,
-            subscriptionID: Self.zoneSubscriptionID
-        )
-        let notificationInfo = CKSubscription.NotificationInfo()
-        notificationInfo.shouldSendContentAvailable = true
-        subscription.notificationInfo = notificationInfo
-        _ = try await save(subscription)
-        try? await deleteSubscription(withID: Self.legacyDatabaseSubscriptionID)
-    }
-
-    private func ensureCloudSyncZoneExists() async throws {
-        let fetched = try await database.recordZones(for: [cloudSyncSnapshotZoneID])
-        if case .success = fetched[cloudSyncSnapshotZoneID] {
-            return
-        }
-
-        _ = try await database.modifyRecordZones(
-            saving: [CKRecordZone(zoneID: cloudSyncSnapshotZoneID)],
-            deleting: []
-        )
-    }
-
-    private func hasSubscription(withID subscriptionID: String) async throws -> Bool {
-        do {
-            _ = try await fetchSubscription(withID: subscriptionID)
-            return true
-        } catch let error as CKError where error.code == .unknownItem {
-            return false
-        }
-    }
-
-    private func loadZoneChangeTokenData() -> Data? {
-        if userDefaults === UserDefaults.standard {
-            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
-            return Persistence.readAppConfigData(key: Self.zoneChangeTokenKey)
-        }
-        return userDefaults.data(forKey: Self.zoneChangeTokenKey)
-    }
-
-    private func saveZoneChangeTokenData(_ data: Data?) {
-        if userDefaults === UserDefaults.standard {
-            if let data {
-                Persistence.writeAppConfig(key: Self.zoneChangeTokenKey, data: data)
-            } else {
-                Persistence.deleteAppConfig(key: Self.zoneChangeTokenKey)
+        let fetched = try await database.records(for: recordIDs)
+        var temporaryURLs: [URL] = []
+        defer {
+            for url in temporaryURLs {
+                try? FileManager.default.removeItem(at: url)
             }
-        } else if let data {
-            userDefaults.set(data, forKey: Self.zoneChangeTokenKey)
-        } else {
-            userDefaults.removeObject(forKey: Self.zoneChangeTokenKey)
+        }
+
+        var recordsToSave: [CKRecord] = []
+        recordsToSave.reserveCapacity(changes.count)
+        for (change, recordID) in zip(changes, recordIDs) {
+            let existingRecord: CKRecord?
+            if let result = fetched[recordID] {
+                do {
+                    existingRecord = try result.get()
+                } catch let error as CKError where error.code == .unknownItem {
+                    existingRecord = nil
+                }
+            } else {
+                existingRecord = nil
+            }
+
+            let record = existingRecord
+                ?? CKRecord(recordType: cloudSyncRecordType, recordID: recordID)
+            let payload = change.payload
+            record[Self.schemaVersionKey] = payload.schemaVersion as NSNumber
+            record[Self.deviceIdentifierKey] = payload.sourceDeviceID as NSString
+            record[Self.checksumKey] = payload.checksum as NSString
+            record[Self.updatedAtKey] = payload.updatedAt as NSDate
+            record[Self.optionsRawValueKey] = payload.package.options.rawValue as NSNumber
+
+            let tempURL = try SyncTemporaryFileCleaner.makeFileURL(
+                prefix: "cloud-record",
+                fileExtension: "json"
+            )
+            try JSONEncoder().encode(payload).write(to: tempURL, options: [.atomic])
+            temporaryURLs.append(tempURL)
+            record[Self.payloadAssetKey] = CKAsset(fileURL: tempURL)
+            recordsToSave.append(record)
+        }
+
+        let result = try await database.modifyRecords(
+            saving: recordsToSave,
+            deleting: [],
+            savePolicy: .allKeys,
+            atomically: false
+        )
+        for saveResult in result.saveResults.values {
+            _ = try saveResult.get()
         }
     }
 
-    private func archivedChangeTokenData(from token: CKServerChangeToken) throws -> Data {
-        try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
+    private func delete(recordNames: [String]) async throws {
+        guard !recordNames.isEmpty else { return }
+        let recordIDs = recordNames.map {
+            CKRecord.ID(recordName: $0, zoneID: cloudSyncRecordZoneID)
+        }
+        let result = try await database.modifyRecords(
+            saving: [],
+            deleting: recordIDs,
+            savePolicy: .ifServerRecordUnchanged,
+            atomically: false
+        )
+        for deleteResult in result.deleteResults.values {
+            do {
+                try deleteResult.get()
+            } catch let error as CKError where error.code == .unknownItem {
+                continue
+            }
+        }
     }
 
-    private func makeSnapshot(from record: CKRecord) throws -> CloudSyncRemoteSnapshot {
-        let recordName = record.recordID.recordName
-        let deviceID = record[Self.deviceIdentifierKey] as? String ?? ""
-        let updatedAt = record.modificationDate ?? (record[Self.updatedAtKey] as? Date) ?? .distantPast
-        let checksum = record[Self.checksumKey] as? String ?? ""
+    private func makeRecordChange(from record: CKRecord) throws -> CloudSyncRecordChange {
         guard let asset = record[Self.payloadAssetKey] as? CKAsset,
               let assetURL = asset.fileURL else {
             throw CloudSyncManagerError.invalidAsset
         }
-
         let data = try Data(contentsOf: assetURL)
-        guard let snapshot = try? JSONDecoder().decode(CloudSyncSnapshot.self, from: data) else {
+        guard let decoded = try? JSONDecoder().decode(CloudSyncRecordPayload.self, from: data) else {
             throw CloudSyncManagerError.decodeFailed
         }
 
-        return CloudSyncRemoteSnapshot(
-            recordName: recordName,
-            deviceID: deviceID.isEmpty ? snapshot.deviceID : deviceID,
-            updatedAt: updatedAt,
-            checksum: checksum.isEmpty ? data.sha256Hex : checksum,
-            snapshot: snapshot
+        guard decoded.schemaVersion == 3 else {
+            throw CloudSyncManagerError.decodeFailed
+        }
+
+        let resolvedPayload = CloudSyncRecordPayload(
+            schemaVersion: decoded.schemaVersion,
+            type: decoded.type,
+            recordID: decoded.recordID,
+            checksum: (record[Self.checksumKey] as? String) ?? decoded.checksum,
+            updatedAt: record.modificationDate
+                ?? (record[Self.updatedAtKey] as? Date)
+                ?? decoded.updatedAt,
+            sourceDeviceID: (record[Self.deviceIdentifierKey] as? String) ?? decoded.sourceDeviceID,
+            package: decoded.package
         )
+        return CloudSyncRecordChange(
+            recordName: record.recordID.recordName,
+            payload: resolvedPayload
+        )
+    }
+
+    private func ensureCloudSyncZoneExists() async throws -> Bool {
+        let fetched = try await database.recordZones(for: [cloudSyncRecordZoneID])
+        if case .success = fetched[cloudSyncRecordZoneID] {
+            return false
+        }
+        _ = try await database.modifyRecordZones(
+            saving: [CKRecordZone(zoneID: cloudSyncRecordZoneID)],
+            deleting: []
+        )
+        return true
     }
 
     private func ensureAvailableAccount() async throws {
@@ -266,28 +401,33 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             container.accountStatus { status, error in
                 if let error {
                     continuation.resume(throwing: error)
-                    return
+                } else {
+                    continuation.resume(returning: status)
                 }
-                continuation.resume(returning: status)
             }
         }
     }
 
-    private func fetchExistingSnapshotRecord(recordID: CKRecord.ID) async throws -> CKRecord? {
+    private func currentAccountIdentifier() async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            container.fetchUserRecordID { recordID, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let recordID {
+                    continuation.resume(returning: recordID.recordName)
+                } else {
+                    continuation.resume(throwing: CloudSyncManagerError.unavailableAccount)
+                }
+            }
+        }
+    }
+
+    private func hasSubscription(withID subscriptionID: String) async throws -> Bool {
         do {
-            return try await database.record(for: recordID)
+            _ = try await fetchSubscription(withID: subscriptionID)
+            return true
         } catch let error as CKError where error.code == .unknownItem {
-            return nil
-        }
-    }
-
-    private func modifyRecords(saving records: [CKRecord]) async throws -> [CKRecord] {
-        let result = try await database.modifyRecords(saving: records, deleting: [])
-        return try records.compactMap { record in
-            guard let saveResult = result.saveResults[record.recordID] else {
-                return nil
-            }
-            return try saveResult.get()
+            return false
         }
     }
 
@@ -296,9 +436,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             database.fetch(withSubscriptionID: subscriptionID) { subscription, error in
                 if let error {
                     continuation.resume(throwing: error)
-                    return
-                }
-                if let subscription {
+                } else if let subscription {
                     continuation.resume(returning: subscription)
                 } else {
                     continuation.resume(throwing: CloudSyncManagerError.subscriptionUnavailable)
@@ -312,9 +450,7 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
             database.save(subscription) { savedSubscription, error in
                 if let error {
                     continuation.resume(throwing: error)
-                    return
-                }
-                if let savedSubscription {
+                } else if let savedSubscription {
                     continuation.resume(returning: savedSubscription)
                 } else {
                     continuation.resume(throwing: CloudSyncManagerError.subscriptionUnavailable)
@@ -323,31 +459,59 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
         }
     }
 
-    private func deleteSubscription(withID subscriptionID: String) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            database.delete(withSubscriptionID: subscriptionID) { _, error in
-                if let error {
-                    if let ckError = error as? CKError, ckError.code == .unknownItem {
-                        continuation.resume(returning: ())
-                    } else {
-                        continuation.resume(throwing: error)
-                    }
-                    return
-                }
-                continuation.resume(returning: ())
+    private func loadZoneChangeTokenData() -> Data? {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.readAppConfigData(key: Self.changeTokenKey)
+        }
+        return userDefaults.data(forKey: Self.changeTokenKey)
+    }
+
+    private func saveZoneChangeTokenData(_ data: Data?) {
+        if userDefaults === UserDefaults.standard {
+            if let data {
+                Persistence.writeAppConfig(key: Self.changeTokenKey, data: data)
+            } else {
+                Persistence.deleteAppConfig(key: Self.changeTokenKey)
             }
+        } else if let data {
+            userDefaults.set(data, forKey: Self.changeTokenKey)
+        } else {
+            userDefaults.removeObject(forKey: Self.changeTokenKey)
         }
     }
 
-    private static let zoneChangeTokenKey = "cloudSync.snapshotChangeToken"
+    private func loadAccountIdentifier() -> String? {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+            return Persistence.readAppConfigText(key: Self.accountIdentifierKey)
+        }
+        return userDefaults.string(forKey: Self.accountIdentifierKey)
+    }
+
+    private func saveAccountIdentifier(_ identifier: String) {
+        if userDefaults === UserDefaults.standard {
+            Persistence.writeAppConfig(
+                key: Self.accountIdentifierKey,
+                text: identifier,
+                typeHint: "text"
+            )
+        } else {
+            userDefaults.set(identifier, forKey: Self.accountIdentifierKey)
+        }
+    }
+
+    private func archivedChangeTokenData(from token: CKServerChangeToken) throws -> Data {
+        try NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true)
+    }
 }
 #else
 struct CloudKitCloudSyncTransport: CloudSyncTransport {
-    func upload(snapshot: CloudSyncRemoteSnapshot) async throws {
+    func modify(records: [CloudSyncRecordChange], deletingRecordNames: [String]) async throws {
         throw CloudSyncManagerError.unavailableAccount
     }
 
-    func fetchSnapshots(excludingDeviceID deviceID: String) async throws -> CloudSyncFetchResult {
+    func fetchChanges() async throws -> CloudSyncFetchResult {
         throw CloudSyncManagerError.unavailableAccount
     }
 
@@ -359,65 +523,11 @@ struct CloudKitCloudSyncTransport: CloudSyncTransport {
 }
 #endif
 
-extension SyncMergeSummary {
-    var hasAnyImportedChange: Bool {
-        importedProviders > 0
-            || importedSessions > 0
-            || importedBackgrounds > 0
-            || importedMemories > 0
-            || importedMCPServers > 0
-            || importedAudioFiles > 0
-            || importedImageFiles > 0
-            || importedSkills > 0
-            || importedShortcutTools > 0
-            || importedWorldbooks > 0
-            || importedFeedbackTickets > 0
-            || importedDailyPulseRuns > 0
-            || importedUsageEvents > 0
-            || importedFontFiles > 0
-            || importedFontRouteConfigurations > 0
-            || importedAppStorageValues > 0
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0, !isEmpty else { return isEmpty ? [] : [self] }
+        return stride(from: 0, to: count, by: size).map { start in
+            Array(self[start..<Swift.min(start + size, count)])
+        }
     }
-
-    mutating func accumulate(_ other: SyncMergeSummary) {
-        importedProviders += other.importedProviders
-        skippedProviders += other.skippedProviders
-        importedSessions += other.importedSessions
-        skippedSessions += other.skippedSessions
-        importedBackgrounds += other.importedBackgrounds
-        skippedBackgrounds += other.skippedBackgrounds
-        importedMemories += other.importedMemories
-        skippedMemories += other.skippedMemories
-        importedMCPServers += other.importedMCPServers
-        skippedMCPServers += other.skippedMCPServers
-        importedAudioFiles += other.importedAudioFiles
-        skippedAudioFiles += other.skippedAudioFiles
-        importedImageFiles += other.importedImageFiles
-        skippedImageFiles += other.skippedImageFiles
-        importedSkills += other.importedSkills
-        skippedSkills += other.skippedSkills
-        importedShortcutTools += other.importedShortcutTools
-        skippedShortcutTools += other.skippedShortcutTools
-        importedWorldbooks += other.importedWorldbooks
-        skippedWorldbooks += other.skippedWorldbooks
-        importedFeedbackTickets += other.importedFeedbackTickets
-        skippedFeedbackTickets += other.skippedFeedbackTickets
-        importedDailyPulseRuns += other.importedDailyPulseRuns
-        skippedDailyPulseRuns += other.skippedDailyPulseRuns
-        importedUsageEvents += other.importedUsageEvents
-        skippedUsageEvents += other.skippedUsageEvents
-        importedFontFiles += other.importedFontFiles
-        skippedFontFiles += other.skippedFontFiles
-        importedFontRouteConfigurations += other.importedFontRouteConfigurations
-        skippedFontRouteConfigurations += other.skippedFontRouteConfigurations
-        importedAppStorageValues += other.importedAppStorageValues
-        skippedAppStorageValues += other.skippedAppStorageValues
-    }
-}
-
-struct CloudSyncDigestPayload: Codable {
-    let schemaVersion: Int
-    let optionsRawValue: Int
-    let package: SyncPackage
-    let deletions: [SyncDeleteRecord]
 }

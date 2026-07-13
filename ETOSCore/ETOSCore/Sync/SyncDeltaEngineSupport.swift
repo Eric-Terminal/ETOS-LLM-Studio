@@ -81,9 +81,19 @@ extension SyncDeltaEngine {
         let fontFiles = package.fontFiles.filter { shouldKeep(.fontFile, $0.assetID.uuidString) }
         let shouldFilterFontRoute = !shouldKeep(.fontRouteConfiguration, "global.font.route")
         let fontRouteConfigurationData = shouldFilterFontRoute ? nil : package.fontRouteConfigurationData
-        let shouldFilterAppStorage = !shouldKeep(.appStorage, "global.app.storage")
-        let appStorageSnapshot = shouldFilterAppStorage ? nil : package.appStorageSnapshot
-        let globalSystemPrompt = shouldFilterAppStorage ? nil : package.globalSystemPrompt
+        let filteredAppStorageValues: [String: Any]
+        if let data = package.appStorageSnapshot,
+           let values = SyncEngine.decodeAppStorageSnapshot(data) {
+            filteredAppStorageValues = values.filter { shouldKeep(.appStorage, $0.key) }
+        } else {
+            filteredAppStorageValues = [:]
+        }
+        let appStorageSnapshot = filteredAppStorageValues.isEmpty
+            ? nil
+            : SyncEngine.encodeAppStorageSnapshot(filteredAppStorageValues)
+        let globalSystemPrompt = filteredAppStorageValues[AppConfigKey.systemPrompt.rawValue] == nil
+            ? nil
+            : package.globalSystemPrompt
 
         var options = package.options
         if package.options.contains(.providers), !package.providers.isEmpty, providers.isEmpty { options.remove(.providers) }
@@ -116,9 +126,8 @@ extension SyncDeltaEngine {
             options.remove(.fontFiles)
         }
         if package.options.contains(.appStorage),
-           (package.appStorageSnapshot != nil || package.globalSystemPrompt != nil),
-           appStorageSnapshot == nil,
-           globalSystemPrompt == nil {
+           package.appStorageSnapshot != nil,
+           appStorageSnapshot == nil {
             options.remove(.appStorage)
         }
 
@@ -369,15 +378,21 @@ extension SyncDeltaEngine {
             }
         }
 
-        if package.options.contains(.appStorage), let snapshot = package.appStorageSnapshot {
-            records.append(
-                SyncRecordDescriptor(
+        if package.options.contains(.appStorage),
+           let snapshot = package.appStorageSnapshot,
+           let values = SyncEngine.decodeAppStorageSnapshot(snapshot) {
+            records.append(contentsOf: values.keys.sorted().compactMap { key in
+                guard let value = values[key],
+                      let encoded = SyncEngine.encodeAppStorageSnapshot([key: value]) else {
+                    return nil
+                }
+                return SyncRecordDescriptor(
                     type: .appStorage,
-                    recordID: "global.app.storage",
-                    checksum: snapshot.sha256Hex,
+                    recordID: key,
+                    checksum: encoded.sha256Hex,
                     updatedAt: .distantPast
                 )
-            )
+            })
         }
 
         return records
@@ -446,9 +461,22 @@ extension SyncDeltaEngine {
             fontRouteConfigurationData = full.fontRouteConfigurationData
         }
 
-        if keys.contains(SyncRecordDescriptor.key(type: .appStorage, recordID: "global.app.storage")) {
-            appStorageSnapshot = full.appStorageSnapshot
-            globalSystemPrompt = full.globalSystemPrompt
+        let appStorageKeys = Set(keys.compactMap { key -> String? in
+            guard let descriptor = descriptorFromKey(key), descriptor.type == .appStorage else {
+                return nil
+            }
+            return descriptor.recordID
+        })
+        if !appStorageKeys.isEmpty,
+           let snapshot = full.appStorageSnapshot,
+           let values = SyncEngine.decodeAppStorageSnapshot(snapshot) {
+            let scopedValues = values.filter { appStorageKeys.contains($0.key) }
+            if !scopedValues.isEmpty {
+                appStorageSnapshot = SyncEngine.encodeAppStorageSnapshot(scopedValues)
+                if appStorageKeys.contains(AppConfigKey.systemPrompt.rawValue) {
+                    globalSystemPrompt = full.globalSystemPrompt
+                }
+            }
         }
 
         var options: SyncOptions = []

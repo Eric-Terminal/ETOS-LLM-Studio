@@ -428,15 +428,21 @@ public enum SyncPackageTransferService {
             }
         }
 
-        if package.options.contains(.appStorage), let snapshot = package.appStorageSnapshot {
-            descriptors.append(
-                SyncRecordDescriptor(
+        if package.options.contains(.appStorage),
+           let snapshot = package.appStorageSnapshot,
+           let values = SyncEngine.decodeAppStorageSnapshot(snapshot) {
+            descriptors.append(contentsOf: values.keys.sorted().compactMap { key in
+                guard let value = values[key],
+                      let encoded = SyncEngine.encodeAppStorageSnapshot([key: value]) else {
+                    return nil
+                }
+                return SyncRecordDescriptor(
                     type: .appStorage,
-                    recordID: "global.app.storage",
-                    checksum: snapshot.sha256Hex,
+                    recordID: key,
+                    checksum: encoded.sha256Hex,
                     updatedAt: generatedAt
                 )
-            )
+            })
         }
 
         return SyncManifest(

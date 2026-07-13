@@ -14,7 +14,10 @@ public enum SyncEngine {
     static let appStorageExcludedExactKeys: Set<String> = [
         "cloudSync.deviceIdentifier",
         "cloudSync.appliedSnapshotChecksums",
-        "cloudSync.snapshotChangeToken"
+        "cloudSync.snapshotChangeToken",
+        "cloudSync.recordZoneChangeToken.v3",
+        "cloudSync.accountIdentifier.v3",
+        "cloudSync.publishedRecordState.v3"
     ]
     static let appStorageExcludedPrefixes: [String] = [
         "sync.delta.version-tracker.",

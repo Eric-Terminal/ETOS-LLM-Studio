@@ -86,6 +86,28 @@ struct SyncPackageTransferServiceTests {
         #expect(decoded.appStorageSnapshot == Data([0x04, 0x05, 0x06]))
     }
 
+    @Test("导出清单按设置键生成独立记录")
+    func testExportManifestContainsOneRecordPerAppConfigKey() throws {
+        let keys = [
+            AppConfigKey.systemPrompt.rawValue,
+            AppConfigKey.appToolsChatToolsEnabled.rawValue
+        ]
+        let snapshot = SyncEngine.encodeAppStorageSnapshot([
+            keys[0]: "提示词",
+            keys[1]: true
+        ])
+        let package = SyncPackage(
+            options: [.appStorage],
+            appStorageSnapshot: snapshot
+        )
+
+        let exported = try SyncPackageTransferService.exportPackage(package)
+        let envelope = try SyncPackageTransferService.decodeEnvelope(from: exported.data)
+        let appConfigRecords = envelope.manifest.records.filter { $0.type == .appStorage }
+
+        #expect(Set(appConfigRecords.map(\.recordID)) == Set(keys))
+    }
+
     @Test("清理临时导出文件只删除过期 ETOS 导出包")
     func testCleanupTemporaryExportFilesRemovesOnlyStaleExports() throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
