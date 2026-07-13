@@ -121,9 +121,6 @@ struct ChatView: View {
     let reasoningPreviewMaxHeightLimit: CGFloat = 220
     let sessionPickerMaxSessionsPerPage = 100
     let sessionPickerInfiniteScrollTriggerRemainingCount = 5
-    var scrollToBottomButtonBottomPadding: CGFloat {
-        max(chatInputBarHeight + 16, 92)
-    }
     var tabBarCompensation: CGFloat {
         guard !isKeyboardVisible else { return 0 }
         let measuredTabBarHeight = UITabBarController().tabBar.frame.height
@@ -934,20 +931,22 @@ extension ChatView {
                                 )
                             }
                         )
+                        // 按钮锚定整个底部输入区顶部，角色脚本栏出现时与输入框同步上移。
+                        .overlay(alignment: .topTrailing) {
+                            if showScrollToBottom {
+                                telegramScrollToBottomButton {
+                                    handleScrollToBottomButtonTap()
+                                }
+                                .padding(.trailing, 16)
+                                .alignmentGuide(.top) { dimensions in
+                                    dimensions[.bottom] + 16
+                                }
+                                .transition(.scale.combined(with: .opacity))
+                            }
+                        }
                 }
                 .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
                     handleChatInputBarHeightChange(newHeight)
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    // Telegram 风格的滚动到底部按钮
-                    if showScrollToBottom {
-                        telegramScrollToBottomButton {
-                            handleScrollToBottomButtonTap()
-                        }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, scrollToBottomButtonBottomPadding)
-                        .transition(.scale.combined(with: .opacity))
-                    }
                 }
 
                 if shouldShowLocalResourceUsageFloatingPanel {
