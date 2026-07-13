@@ -171,7 +171,7 @@ extension ChatView {
             if #available(iOS 26.0, *) {
                 Circle()
                     .fill(Color.clear)
-                    .glassEffect(.clear, in: Circle())
+                    .glassEffect(.clear.interactive(), in: Circle())
                     .overlay(
                         Circle()
                             .fill(navBarGlassOverlayColor)
@@ -196,7 +196,7 @@ extension ChatView {
             if #available(iOS 26.0, *) {
                 Capsule()
                     .fill(Color.clear)
-                    .glassEffect(.clear, in: Capsule())
+                    .glassEffect(.clear.interactive(), in: Capsule())
                     .overlay(
                         Capsule()
                             .fill(navBarGlassOverlayColor)

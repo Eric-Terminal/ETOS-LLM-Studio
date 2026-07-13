@@ -704,7 +704,7 @@ struct TelegramMessageComposer: View {
             if #available(iOS 26.0, *) {
                 Circle()
                     .fill(Color.clear)
-                    .glassEffect(.clear, in: Circle())
+                    .glassEffect(.clear.interactive(), in: Circle())
                     .overlay(
                         Circle()
                             .fill(fill.opacity(0.82))
@@ -732,7 +732,7 @@ struct TelegramMessageComposer: View {
                 if #available(iOS 26.0, *) {
                     Circle()
                         .fill(Color.clear)
-                        .glassEffect(.clear, in: Circle())
+                        .glassEffect(.clear.interactive(), in: Circle())
                         .overlay(
                             Circle()
                                 .fill(glassOverlayColor)
