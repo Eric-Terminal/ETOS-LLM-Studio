@@ -1089,6 +1089,8 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("ResizeObserver"))
         #expect(document.contains("__etosHeightMarker"))
         #expect(document.contains("document.addEventListener('toggle', reportHeight, true)"))
+        #expect(document.contains("body.querySelectorAll('*')"))
+        #expect(document.contains("__etosAdaptiveHeightInstalled"))
         #expect(document.contains("element.style.setProperty(property, value, 'important')"))
         #expect(document.contains("scopeVariables"))
         #expect(document.contains("deleteVariable"))

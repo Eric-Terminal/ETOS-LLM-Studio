@@ -302,6 +302,11 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "etosRoleplay")
+        controller.addUserScript(WKUserScript(
+            source: RoleplayHTMLAdaptiveHeightRuntime.source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.userContentController = controller
@@ -475,6 +480,10 @@ struct RoleplayHTMLWebView: UIViewRepresentable {
                   let data = try? JSONSerialization.data(withJSONObject: [name, arguments, source]),
                   let payload = String(data: data, encoding: .utf8) else { return }
             webView?.evaluateJavaScript("window.__etosReceiveEvent?.(...\(payload));")
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.evaluateJavaScript("window.__etosReportHeight?.();")
         }
 
         func webView(
