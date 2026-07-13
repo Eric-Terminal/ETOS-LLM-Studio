@@ -194,6 +194,18 @@ extension ChatView {
 
                 if showsCreateButton {
                     Button {
+                        performQuickAction(.settings)
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .etFont(.system(size: 14, weight: .semibold))
+                            .foregroundColor(TelegramColors.navBarText)
+                            .frame(width: 32, height: 32)
+                            .background(sessionPickerFooterButtonBackground)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("设置", comment: "横屏会话侧栏设置入口"))
+
+                    Button {
                         createSessionFromPicker()
                     } label: {
                         Image(systemName: "plus")
