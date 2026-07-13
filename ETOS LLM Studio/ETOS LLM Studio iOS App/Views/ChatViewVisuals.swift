@@ -120,7 +120,7 @@ extension ChatView {
                 )
                 .frame(maxWidth: .infinity)
                 .frame(height: navBarHeight + adaptiveHeight)
-                .ignoresSafeArea(.container, edges: .top)
+                .ignoresSafeArea(.container, edges: [.top, .horizontal])
                 .allowsHitTesting(false)
         }
     }
