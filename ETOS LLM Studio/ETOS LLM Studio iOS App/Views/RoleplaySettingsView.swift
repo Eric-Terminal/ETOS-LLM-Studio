@@ -182,7 +182,12 @@ private struct RoleplayCharacterLibraryView: View {
 }
 
 private struct RoleplayCharacterDetailView: View {
-    let character: RoleplayCharacter
+    @State private var character: RoleplayCharacter
+    @State private var isCreatingEmbeddedWorldbook = false
+
+    init(character: RoleplayCharacter) {
+        self._character = State(initialValue: character)
+    }
 
     var body: some View {
         List {
@@ -212,13 +217,38 @@ private struct RoleplayCharacterDetailView: View {
             }
 
             Section(NSLocalizedString("内容", comment: "Content section")) {
-                detail(NSLocalizedString("角色正则", comment: "Roleplay character regex"), "\(character.regexRules.count)")
-                detail(NSLocalizedString("助手脚本", comment: "Roleplay helper scripts"), "\(character.helperScripts.count)")
+                NavigationLink {
+                    RoleplayRegexRulesView(characterID: character.id)
+                } label: {
+                    detail(NSLocalizedString("角色正则", comment: "Roleplay character regex"), "\(character.regexRules.count)")
+                }
+                NavigationLink {
+                    RoleplayHelperScriptsView(characterID: character.id)
+                } label: {
+                    detail(NSLocalizedString("助手脚本", comment: "Roleplay helper scripts"), "\(character.helperScripts.count)")
+                }
+                if let worldbookID = character.embeddedWorldbookID {
+                    NavigationLink {
+                        WorldbookDetailView(worldbookID: worldbookID)
+                    } label: {
+                        detail(NSLocalizedString("内嵌世界书", comment: "Embedded lorebook"), NSLocalizedString("编辑", comment: "Edit"))
+                    }
+                } else {
+                    Button {
+                        createEmbeddedWorldbook()
+                    } label: {
+                        Label(NSLocalizedString("创建内嵌世界书", comment: "Create embedded lorebook"), systemImage: "books.vertical.fill")
+                    }
+                    .disabled(isCreatingEmbeddedWorldbook)
+                }
                 detail(NSLocalizedString("初始变量", comment: "Roleplay initial variables"), "\(character.initialVariables.count)")
-                detail(NSLocalizedString("候选开场白", comment: "Alternate greetings"), "\(character.alternateGreetings.count)")
+                detail(NSLocalizedString("可选开场白", comment: "Available greetings"), "\(availableGreetingCount)")
             }
         }
         .navigationTitle(character.name)
+        .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
+            reload()
+        }
     }
 
     private func detail(_ title: String, _ value: String) -> some View {
@@ -248,6 +278,42 @@ private struct RoleplayCharacterDetailView: View {
         case .unsupported: return .red
         }
     }
+
+    private var availableGreetingCount: Int {
+        character.alternateGreetings.count + (character.firstMessage.isEmpty ? 0 : 1)
+    }
+
+    private func reload() {
+        let characterID = character.id
+        Task {
+            if let updated = await Task.detached(priority: .utility, operation: {
+                ChatService.shared.loadRoleplayCharacters().first { $0.id == characterID }
+            }).value {
+                character = updated
+            }
+        }
+    }
+
+    private func createEmbeddedWorldbook() {
+        guard !isCreatingEmbeddedWorldbook else { return }
+        isCreatingEmbeddedWorldbook = true
+        let characterID = character.id
+        let worldbookName = String(
+            format: NSLocalizedString("%@ 的世界书", comment: "Default embedded lorebook name"),
+            character.name
+        )
+        Task {
+            await Task.detached(priority: .utility) {
+                let worldbook = Worldbook(name: worldbookName, entries: [])
+                ChatService.shared.saveWorldbook(worldbook)
+                guard var updated = ChatService.shared.loadRoleplayCharacters().first(where: { $0.id == characterID }) else { return }
+                updated.embeddedWorldbookID = worldbook.id
+                ChatService.shared.saveRoleplayCharacter(updated)
+            }.value
+            isCreatingEmbeddedWorldbook = false
+            reload()
+        }
+    }
 }
 
 private struct PersonaLibraryView: View {
@@ -261,6 +327,13 @@ private struct PersonaLibraryView: View {
                 Text(NSLocalizedString("Persona 表示一场角色扮演中的用户身份，与现实用户资料和长期记忆相互独立。", comment: "Persona explanation"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
+            }
+            Section {
+                Button {
+                    editingPersona = PersonaProfile(name: "")
+                } label: {
+                    Label(NSLocalizedString("新增用户身份", comment: "Add persona"), systemImage: "person.badge.plus")
+                }
             }
             Section(String(format: NSLocalizedString("用户身份 (%d)", comment: "Persona count"), personas.count)) {
                 if personas.isEmpty {
@@ -292,13 +365,6 @@ private struct PersonaLibraryView: View {
             }
         }
         .navigationTitle(NSLocalizedString("用户身份", comment: "Persona title"))
-        .toolbar {
-            Button {
-                editingPersona = PersonaProfile(name: "")
-            } label: {
-                Label(NSLocalizedString("新增用户身份", comment: "Add persona"), systemImage: "plus")
-            }
-        }
         .sheet(item: $editingPersona) { persona in
             PersonaEditorView(persona: persona) { persona, avatarData in
                 Task {
@@ -426,6 +492,8 @@ private struct RoleplaySessionBindingView: View {
     @State private var selectedCharacterID: UUID?
     @State private var selectedPersonaID: UUID?
     @State private var selectedGreetingIndex = 0
+    @State private var greetingOptions: [GreetingOption] = []
+    @State private var selectedGreetingPreview: String?
     @State private var htmlRenderingEnabled = true
     @State private var helperScriptsEnabled = true
 
@@ -438,21 +506,19 @@ private struct RoleplaySessionBindingView: View {
                 )
             } else {
                 Section(NSLocalizedString("角色与用户身份", comment: "Roleplay character and persona section")) {
-                    Picker(NSLocalizedString("角色卡", comment: "Roleplay character card"), selection: $selectedCharacterID) {
+                    Picker(NSLocalizedString("角色卡", comment: "Roleplay character card"), selection: selectedCharacterBinding) {
                         Text(NSLocalizedString("未绑定", comment: "Not bound")).tag(UUID?.none)
                         ForEach(characters) { character in
                             Text(character.name).tag(Optional(character.id))
                         }
                     }
-                    .onChange(of: selectedCharacterID) { _, _ in persist(seedGreeting: true) }
 
-                    Picker(NSLocalizedString("用户身份", comment: "Roleplay persona"), selection: $selectedPersonaID) {
+                    Picker(NSLocalizedString("用户身份", comment: "Roleplay persona"), selection: selectedPersonaBinding) {
                         Text(NSLocalizedString("默认用户", comment: "Default user persona")).tag(UUID?.none)
                         ForEach(personas) { persona in
                             Text(persona.name).tag(Optional(persona.id))
                         }
                     }
-                    .onChange(of: selectedPersonaID) { _, _ in persist() }
                 }
 
                 Section {
@@ -469,14 +535,21 @@ private struct RoleplaySessionBindingView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if !selectedCharacterGreetings.isEmpty {
+                if !greetingOptions.isEmpty {
                     Section(NSLocalizedString("开场白", comment: "Roleplay greeting section")) {
-                        Picker(NSLocalizedString("候选开场白", comment: "Alternate greeting picker"), selection: $selectedGreetingIndex) {
-                            ForEach(selectedCharacterGreetings.indices, id: \.self) { index in
-                                Text(String(format: NSLocalizedString("开场白 %d", comment: "Greeting number"), index + 1)).tag(index)
+                        Picker(NSLocalizedString("候选开场白", comment: "Alternate greeting picker"), selection: selectedGreetingBinding) {
+                            ForEach(greetingOptions) { option in
+                                Text(String(format: NSLocalizedString("开场白 %d", comment: "Greeting number"), option.number))
+                                    .tag(option.index)
                             }
                         }
-                        .onChange(of: selectedGreetingIndex) { _, _ in persist(seedGreeting: true) }
+
+                        if let selectedGreetingPreview {
+                            Text(selectedGreetingPreview)
+                                .etFont(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(5)
+                        }
                     }
                 }
 
@@ -511,14 +584,69 @@ private struct RoleplaySessionBindingView: View {
         .navigationTitle(NSLocalizedString("当前会话", comment: "Roleplay current session title"))
         .task { load() }
         .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { _ in
-            loadBinding()
+            load()
         }
     }
 
-    private var selectedCharacterGreetings: [String] {
-        guard let selectedCharacterID,
-              let character = characters.first(where: { $0.id == selectedCharacterID }) else { return [] }
-        return [character.firstMessage] + character.alternateGreetings
+    private struct GreetingOption: Identifiable {
+        let index: Int
+        let number: Int
+        let text: String
+        var id: Int { index }
+    }
+
+    private var selectedCharacterBinding: Binding<UUID?> {
+        Binding(
+            get: { selectedCharacterID },
+            set: { characterID in
+                selectedCharacterID = characterID
+                updateGreetingOptions(for: characterID, preferredIndex: nil)
+                persist(seedGreeting: true)
+            }
+        )
+    }
+
+    private var selectedPersonaBinding: Binding<UUID?> {
+        Binding(
+            get: { selectedPersonaID },
+            set: { personaID in
+                selectedPersonaID = personaID
+                persist()
+            }
+        )
+    }
+
+    private var selectedGreetingBinding: Binding<Int> {
+        Binding(
+            get: { selectedGreetingIndex },
+            set: { greetingIndex in
+                selectedGreetingIndex = greetingIndex
+                selectedGreetingPreview = greetingOptions.first { $0.index == greetingIndex }?.text
+                persist(seedGreeting: true)
+            }
+        )
+    }
+
+    private func updateGreetingOptions(for characterID: UUID?, preferredIndex: Int?) {
+        guard let characterID,
+              let character = characters.first(where: { $0.id == characterID }) else {
+            greetingOptions = []
+            selectedGreetingIndex = 0
+            selectedGreetingPreview = nil
+            return
+        }
+        let available = ([character.firstMessage] + character.alternateGreetings).enumerated().compactMap { index, text -> (Int, String)? in
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : (index, trimmed)
+        }
+        greetingOptions = available.enumerated().map { displayIndex, item in
+            GreetingOption(index: item.0, number: displayIndex + 1, text: item.1)
+        }
+        let availableIndices = Set(greetingOptions.map(\.index))
+        selectedGreetingIndex = preferredIndex.flatMap { availableIndices.contains($0) ? $0 : nil }
+            ?? greetingOptions.first?.index
+            ?? 0
+        selectedGreetingPreview = greetingOptions.first { $0.index == selectedGreetingIndex }?.text
     }
 
     private func load() {
@@ -543,11 +671,12 @@ private struct RoleplaySessionBindingView: View {
             selectedGreetingIndex = 0
             htmlRenderingEnabled = true
             helperScriptsEnabled = true
+            updateGreetingOptions(for: nil, preferredIndex: nil)
             return
         }
         selectedCharacterID = binding.characterIDs.first
         selectedPersonaID = binding.personaID
-        selectedGreetingIndex = binding.selectedGreetingIndex
+        updateGreetingOptions(for: selectedCharacterID, preferredIndex: binding.selectedGreetingIndex)
         htmlRenderingEnabled = binding.htmlRenderingEnabled
         helperScriptsEnabled = binding.helperScriptsEnabled
     }

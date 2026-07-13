@@ -3,14 +3,14 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 验证角色扮演存储的界面变更通知始终由主线程发布。
+// 验证角色扮演存储的线程约束与角色卡内容持久化。
 // ============================================================================
 
 import Foundation
 import Testing
 @testable import ETOSCore
 
-@Suite("角色扮演存储线程", .serialized)
+@Suite("角色扮演存储", .serialized)
 struct RoleplayStoreThreadingTests {
     @Test("后台保存完成后在主线程发布变更通知")
     func postsChangeNotificationOnMainThread() async {
@@ -38,6 +38,28 @@ struct RoleplayStoreThreadingTests {
         observer.remove()
         store.deleteCharacter(id: character.id)
         #expect(wasDeliveredOnMainThread)
+    }
+
+    @Test("角色卡内容编辑后保留扩展字段")
+    func persistsEditableCharacterContentWithoutDroppingExtensions() {
+        let store = RoleplayStore.shared
+        var character = RoleplayCharacter(
+            name: "内容编辑回归测试",
+            regexRules: [RoleplayRegexRule(scriptName: "旧正则", findRegex: "old")],
+            helperScripts: [RoleplayHelperScript(name: "旧脚本", content: "old")],
+            extensions: ["vendor": .string("preserved")]
+        )
+        defer { store.deleteCharacter(id: character.id) }
+        store.upsertCharacter(character)
+
+        character.regexRules = [RoleplayRegexRule(scriptName: "新正则", findRegex: "new")]
+        character.helperScripts = [RoleplayHelperScript(name: "新脚本", content: "new")]
+        store.upsertCharacter(character)
+
+        let saved = store.character(id: character.id)
+        #expect(saved?.regexRules.first?.scriptName == "新正则")
+        #expect(saved?.helperScripts.first?.content == "new")
+        #expect(saved?.extensions["vendor"] == .string("preserved"))
     }
 }
 

@@ -17,6 +17,10 @@ extension ChatService {
         roleplayStore.loadPersonas()
     }
 
+    public func saveRoleplayCharacter(_ character: RoleplayCharacter) {
+        roleplayStore.upsertCharacter(character)
+    }
+
     public func roleplayBinding(sessionID: UUID) -> SessionRoleplayBinding? {
         roleplayStore.binding(sessionID: sessionID)
     }
