@@ -24,8 +24,6 @@ extension ContentView {
                     versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0
                 )
 
-                WatchRoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
-
                 if showScrollToBottomButton {
                     scrollToBottomButton(proxy: proxy)
                 }

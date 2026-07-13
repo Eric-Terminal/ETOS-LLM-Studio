@@ -3,9 +3,10 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责 watchOS 聊天输入栏、附件预览、模型切换与语音入口。
+// 本文件负责 watchOS 聊天输入栏、附件预览、模型控制、语音与角色脚本入口。
 // ============================================================================
 
+import Foundation
 import SwiftUI
 import ETOSCore
 
@@ -32,6 +33,9 @@ struct WatchInputBubbleView: View {
     @State private var resourceUsageTask: Task<Void, Never>?
     @State private var speechPreviewFinalizeTask: Task<Void, Never>?
     @State private var isDraftEditorPresented = false
+    @State private var roleplayScriptActions: [WatchRoleplayScriptButtonAction] = []
+    @State private var roleplayScriptRevision = 0
+    @State private var isRoleplayScriptActionMenuPresented = false
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -43,10 +47,15 @@ struct WatchInputBubbleView: View {
         isRequestControlsPresented
             || isAttachmentImportPresented
             || isDraftEditorPresented
+            || isRoleplayScriptActionMenuPresented
             || viewModel.showSpeechErrorAlert
             || viewModel.showAttachmentImportErrorAlert
             || viewModel.showDimensionMismatchAlert
             || viewModel.showMemoryEmbeddingErrorAlert
+    }
+
+    private var roleplayScriptPreparationKey: String {
+        "\(viewModel.currentSession?.id.uuidString ?? "none")|\(roleplayScriptRevision)"
     }
 
     @ViewBuilder
@@ -228,6 +237,20 @@ struct WatchInputBubbleView: View {
                 }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if !roleplayScriptActions.isEmpty {
+                    Button {
+                        isRoleplayScriptActionMenuPresented = true
+                    } label: {
+                        Image(systemName: "curlybraces.square")
+                            .etFont(.system(size: 16, weight: .semibold))
+                            .frame(width: inputControlHeight, height: inputControlHeight)
+                            .contentShape(Circle())
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel(NSLocalizedString("助手脚本", comment: "Watch roleplay script actions"))
+                    .tint(.indigo)
+                }
+
                 Button {
                     attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
                     isAttachmentImportPresented = true
@@ -319,6 +342,18 @@ struct WatchInputBubbleView: View {
                     placeholder: inputPlaceholderText
                 )
             }
+            .confirmationDialog(
+                NSLocalizedString("助手脚本", comment: "Watch roleplay script action menu"),
+                isPresented: $isRoleplayScriptActionMenuPresented,
+                titleVisibility: .visible
+            ) {
+                ForEach(roleplayScriptActions) { action in
+                    Button(action.name) {
+                        performRoleplayScriptAction(action)
+                    }
+                }
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) { }
+            }
             .alert(NSLocalizedString("语音输入错误", comment: ""), isPresented: Binding(
                 get: { viewModel.showSpeechErrorAlert },
                 set: { viewModel.showSpeechErrorAlert = $0 }
@@ -348,6 +383,14 @@ struct WatchInputBubbleView: View {
             .onAppear {
                 updateResourceUsageSampling()
                 refreshInputLocalPresentationBlocker()
+            }
+            .task(id: roleplayScriptPreparationKey) {
+                await loadRoleplayScriptActions()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)) { notification in
+                if notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String == RoleplayStore.libraryChangeKind {
+                    roleplayScriptRevision &+= 1
+                }
             }
             .onChange(of: viewModel.selectedModel?.id) { _, _ in
                 updateResourceUsageSampling()
@@ -407,6 +450,42 @@ struct WatchInputBubbleView: View {
         viewModel.cancelSpeechRecording()
     }
 
+    @MainActor
+    private func loadRoleplayScriptActions() async {
+        guard let sessionID = viewModel.currentSession?.id else {
+            roleplayScriptActions = []
+            return
+        }
+        roleplayScriptActions = await Task.detached(priority: .utility) { () -> [WatchRoleplayScriptButtonAction] in
+            let store = RoleplayStore.shared
+            guard let binding = store.binding(sessionID: sessionID), binding.helperScriptsEnabled else { return [] }
+            return binding.characterIDs.compactMap(store.character(id:)).flatMap { character in
+                character.helperScripts.filter(\.enabled).flatMap { script in
+                    script.buttons.filter(\.visible).map {
+                        WatchRoleplayScriptButtonAction(
+                            sessionID: sessionID,
+                            scriptID: script.id,
+                            buttonID: $0.id,
+                            name: $0.name
+                        )
+                    }
+                }
+            }
+        }.value
+    }
+
+    private func performRoleplayScriptAction(_ action: WatchRoleplayScriptButtonAction) {
+        NotificationCenter.default.post(
+            name: RoleplayScriptButtonNotification.requested,
+            object: nil,
+            userInfo: [
+                RoleplayScriptButtonNotification.sessionIDKey: action.sessionID,
+                RoleplayScriptButtonNotification.scriptIDKey: action.scriptID,
+                RoleplayScriptButtonNotification.buttonNameKey: action.name
+            ]
+        )
+    }
+
     private func scheduleInlineAudioAttachment() {
         speechPreviewFinalizeTask?.cancel()
         speechPreviewFinalizeTask = Task { @MainActor in
@@ -446,6 +525,14 @@ struct WatchInputBubbleView: View {
         resourceUsageTask?.cancel()
         resourceUsageTask = nil
     }
+}
+
+private struct WatchRoleplayScriptButtonAction: Identifiable, Sendable {
+    var id: String { "\(scriptID.uuidString):\(buttonID.uuidString)" }
+    let sessionID: UUID
+    let scriptID: UUID
+    let buttonID: UUID
+    let name: String
 }
 
 struct WatchPendingAttachmentRowView: View {
