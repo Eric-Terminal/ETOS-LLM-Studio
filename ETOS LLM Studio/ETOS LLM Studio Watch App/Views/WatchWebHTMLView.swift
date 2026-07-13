@@ -20,6 +20,23 @@ struct WatchWebHTMLPageItem: Identifiable, Hashable {
     let id = UUID()
     let title: String
     let html: String
+    let sessionID: UUID?
+    let messageID: UUID?
+    let versionIndex: Int
+
+    init(
+        title: String,
+        html: String,
+        sessionID: UUID? = nil,
+        messageID: UUID? = nil,
+        versionIndex: Int = 0
+    ) {
+        self.title = title
+        self.html = html
+        self.sessionID = sessionID
+        self.messageID = messageID
+        self.versionIndex = versionIndex
+    }
 }
 
 struct WatchWebHTMLPage: View {
@@ -28,7 +45,12 @@ struct WatchWebHTMLPage: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        WatchRuntimeHTMLWebView(html: item.html)
+        WatchRuntimeHTMLWebView(
+            html: item.html,
+            sessionID: item.sessionID,
+            messageID: item.messageID,
+            versionIndex: item.versionIndex
+        )
             .ignoresSafeArea()
             .navigationTitle(item.title)
             .toolbar {
@@ -504,6 +526,13 @@ private enum WatchWebKitRuntime {
         let backForwardSelector = NSSelectorFromString("setAllowsBackForwardNavigationGestures:")
         if webView.responds(to: backForwardSelector) {
             webView.setValue(true, forKey: "allowsBackForwardNavigationGestures")
+        }
+        // 全屏 HTML 由网页滚动视图承载，确保触控和数码表冠都能继续浏览长内容。
+        if let scrollView = webView.value(forKey: "scrollView") as? NSObject {
+            scrollView.setValue(true, forKey: "scrollEnabled")
+            scrollView.setValue(true, forKey: "alwaysBounceVertical")
+            scrollView.setValue(false, forKey: "alwaysBounceHorizontal")
+            scrollView.setValue(true, forKey: "showsVerticalScrollIndicator")
         }
     }
 

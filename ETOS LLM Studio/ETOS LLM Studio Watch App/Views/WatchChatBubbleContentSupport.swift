@@ -59,7 +59,9 @@ extension ChatBubble {
                     sessionID: roleplaySessionID,
                     messageID: message.id,
                     versionIndex: message.getCurrentVersionIndex()
-                )
+                ) { item in
+                    webHTMLPageItem = item
+                }
             }
         } else {
             ETAdvancedMarkdownRenderer(

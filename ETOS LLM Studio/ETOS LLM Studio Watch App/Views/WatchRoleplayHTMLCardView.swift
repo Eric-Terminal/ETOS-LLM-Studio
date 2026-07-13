@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// watchOS 聊天气泡中的酒馆助手 HTML 承载层。
+// watchOS 聊天气泡中的酒馆助手 HTML 入口与后台脚本承载层。
 // ============================================================================
 
 import ETOSCore
@@ -14,6 +14,7 @@ struct WatchRoleplayHTMLCardView: View {
     let sessionID: UUID
     let messageID: UUID
     let versionIndex: Int
+    let onOpenDocument: (WatchWebHTMLPageItem) -> Void
 
     @State private var documents: [WatchPreparedRoleplayHTMLDocument] = []
     @State private var variableRevision = 0
@@ -21,13 +22,30 @@ struct WatchRoleplayHTMLCardView: View {
     var body: some View {
         VStack(alignment: .leading) {
             ForEach(documents) { document in
-                WatchRuntimeHTMLWebView(
-                    html: document.html,
-                    sessionID: sessionID,
-                    messageID: messageID,
-                    versionIndex: versionIndex
-                )
-                .frame(height: 220)
+                Button {
+                    onOpenDocument(WatchWebHTMLPageItem(
+                        title: document.title,
+                        html: document.html,
+                        sessionID: sessionID,
+                        messageID: messageID,
+                        versionIndex: versionIndex
+                    ))
+                } label: {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading) {
+                            Text(document.title)
+                                .etFont(.caption2.weight(.semibold))
+                            Text(NSLocalizedString("点按在手表上查看完整渲染。", comment: "Open complete roleplay HTML rendering on watch"))
+                                .etFont(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.forward")
+                            .etFont(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
         }
         .task(id: preparationKey) {
@@ -50,9 +68,16 @@ struct WatchRoleplayHTMLCardView: View {
                 let additionalWorldbookNames = binding?.additionalWorldbookIDs.compactMap { id in
                     worldbooks.first(where: { $0.id == id })?.name
                 } ?? []
-                return extraction.documents.map { document in
+                let hasMultipleDocuments = extraction.documents.count > 1
+                return extraction.documents.enumerated().map { offset, document in
                     WatchPreparedRoleplayHTMLDocument(
                         id: document.id,
+                        title: hasMultipleDocuments
+                            ? String(
+                                format: NSLocalizedString("角色卡 HTML %d", comment: "Numbered roleplay HTML page title"),
+                                offset + 1
+                            )
+                            : NSLocalizedString("角色卡 HTML", comment: "Roleplay HTML page title"),
                         html: RoleplayHTMLDocumentFactory.makeDocument(
                             source: document.source,
                             variables: variables,
@@ -260,6 +285,7 @@ private struct WatchRoleplayScriptButtonAction: Identifiable, Sendable {
 
 private struct WatchPreparedRoleplayHTMLDocument: Identifiable, Sendable {
     let id: Int
+    let title: String
     let html: String
 }
 

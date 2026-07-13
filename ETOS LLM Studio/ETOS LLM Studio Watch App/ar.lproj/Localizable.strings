@@ -5051,3 +5051,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "初始变量必须是有效的 JSON 对象。" = "Initial variables must be a valid JSON object.";
 "JSON 对象" = "JSON Object";
 "删除此开场白" = "Delete This Greeting";
+"角色卡 HTML" = "HTML لبطاقة الشخصية";
+"角色卡 HTML %d" = "HTML لبطاقة الشخصية %d";

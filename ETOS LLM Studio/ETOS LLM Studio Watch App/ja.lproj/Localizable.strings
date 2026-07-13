@@ -4967,3 +4967,5 @@
 "初始变量必须是有效的 JSON 对象。" = "Initial variables must be a valid JSON object.";
 "JSON 对象" = "JSON Object";
 "删除此开场白" = "Delete This Greeting";
+"角色卡 HTML" = "キャラクターカード HTML";
+"角色卡 HTML %d" = "キャラクターカード HTML %d";

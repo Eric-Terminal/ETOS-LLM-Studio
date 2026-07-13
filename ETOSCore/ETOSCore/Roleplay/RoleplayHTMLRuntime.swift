@@ -1267,11 +1267,82 @@ public enum RoleplayHTMLDocumentFactory {
     post({ action: 'prompt_mutation_response', request_id: requestID, prompt: data.prompt });
     setTimeout(() => activePromptMutationRequests.delete(requestID), 5000);
   };
-  const reportHeight = () => post({ action: 'height', value: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, 1) });
+  let heightReportFrame = 0;
+  let heightResizeObserver;
+  let lastReportedHeight = 0;
+  const prepareAdaptiveHeightLayout = () => {
+    const enforceStyle = (element, property, value) => {
+      if (element.style.getPropertyValue(property) !== value || element.style.getPropertyPriority(property) !== 'important') {
+        element.style.setProperty(property, value, 'important');
+      }
+    };
+    for (const element of [document.documentElement, document.body]) {
+      enforceStyle(element, 'height', 'auto');
+      enforceStyle(element, 'min-height', '1px');
+      enforceStyle(element, 'overflow-x', 'hidden');
+      enforceStyle(element, 'overflow-y', 'visible');
+    }
+    let marker = document.getElementById('__etosHeightMarker');
+    if (!marker) {
+      marker = document.createElement('div');
+      marker.id = '__etosHeightMarker';
+      marker.setAttribute('aria-hidden', 'true');
+      marker.style.cssText = 'display:block!important;clear:both!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none!important;';
+      document.body.appendChild(marker);
+    }
+    return marker;
+  };
+  const measuredContentHeight = () => {
+    const body = document.body;
+    const marker = prepareAdaptiveHeightLayout();
+    const bodyTop = body.getBoundingClientRect().top;
+    let contentBottom = Math.max(
+      bodyTop + body.offsetHeight,
+      marker.getBoundingClientRect().bottom
+    );
+    for (const element of body.children) {
+      if (element === marker) continue;
+      const rect = element.getBoundingClientRect();
+      if (Number.isFinite(rect.bottom)) contentBottom = Math.max(contentBottom, rect.bottom);
+    }
+    return Math.max(Math.ceil(contentBottom - bodyTop), 1);
+  };
+  const reportHeight = () => {
+    if (heightReportFrame) cancelAnimationFrame(heightReportFrame);
+    heightReportFrame = requestAnimationFrame(() => {
+      heightReportFrame = 0;
+      const value = measuredContentHeight();
+      if (Math.abs(value - lastReportedHeight) < 1) return;
+      lastReportedHeight = value;
+      post({ action: 'height', value });
+    });
+  };
+  const observeAdaptiveHeight = () => {
+    const marker = prepareAdaptiveHeightLayout();
+    heightResizeObserver = new ResizeObserver(reportHeight);
+    heightResizeObserver.observe(document.body);
+    for (const element of document.body.children) {
+      if (element !== marker) heightResizeObserver.observe(element);
+    }
+    new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes || []) {
+          if (node instanceof Element && node !== marker) heightResizeObserver.observe(node);
+        }
+      }
+      reportHeight();
+    }).observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true });
+    document.addEventListener('toggle', reportHeight, true);
+    document.addEventListener('load', reportHeight, true);
+    document.addEventListener('input', reportHeight, true);
+    document.addEventListener('change', reportHeight, true);
+    window.addEventListener('resize', reportHeight);
+    document.fonts?.ready.then(reportHeight);
+    reportHeight();
+  };
   window.addEventListener('DOMContentLoaded', () => {
     installVirtualChatDOM();
-    reportHeight();
-    new ResizeObserver(reportHeight).observe(document.documentElement);
+    observeAdaptiveHeight();
     emitLocal('message_iframe_render_started', currentIframeName);
     requestAnimationFrame(() => emitLocal('message_iframe_render_ended', currentIframeName));
     emitLocal('app_ready');

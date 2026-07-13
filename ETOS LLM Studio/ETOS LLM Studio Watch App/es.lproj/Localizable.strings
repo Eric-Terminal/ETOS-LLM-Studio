@@ -5051,3 +5051,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "初始变量必须是有效的 JSON 对象。" = "Initial variables must be a valid JSON object.";
 "JSON 对象" = "JSON Object";
 "删除此开场白" = "Delete This Greeting";
+"角色卡 HTML" = "HTML de la tarjeta de personaje";
+"角色卡 HTML %d" = "HTML de la tarjeta de personaje %d";
