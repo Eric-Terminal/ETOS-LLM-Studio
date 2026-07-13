@@ -345,7 +345,7 @@ private struct WatchSelectableMessageContent: Sendable {
     let tokens: [WatchSelectableMessageToken]
     let paragraphTokenRanges: [Range<Int>]
 
-    static func prepare(markdown: String) -> Self {
+    nonisolated static func prepare(markdown: String) -> Self {
         let plainText = MessageTextSelectionSupport.plainText(fromMarkdown: markdown)
         var tokens: [WatchSelectableMessageToken] = []
         var paragraphTokenRanges: [Range<Int>] = []
@@ -429,7 +429,7 @@ private enum WatchSelectableMessageTokenKind: Equatable {
     case whitespace
     case individual
 
-    init(character: Character) {
+    nonisolated init(character: Character) {
         let isASCIIWord = character.unicodeScalars.allSatisfy { scalar in
             scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || scalar == "_")
         }
