@@ -162,11 +162,17 @@ public enum RoleplayHTMLAdaptiveHeightRuntime {
     const body = document.body;
     if (!body) return 1;
     const marker = prepareAdaptiveHeightLayout();
-    const bodyTop = body.getBoundingClientRect().top;
-    let contentBottom = Math.max(
-      bodyTop + body.offsetHeight,
-      marker.getBoundingClientRect().bottom
-    );
+    const rootTop = document.documentElement.getBoundingClientRect().top;
+    const bodyStyle = window.getComputedStyle(body);
+    const cssPixels = value => {
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const bodyBottomSpacing =
+      cssPixels(bodyStyle.paddingBottom) +
+      cssPixels(bodyStyle.borderBottomWidth) +
+      cssPixels(bodyStyle.marginBottom);
+    let contentBottom = marker.getBoundingClientRect().bottom + bodyBottomSpacing;
     const clippingOverflowValues = new Set(['hidden', 'clip', 'auto', 'scroll']);
     const visitVisibleElement = (element, inheritedClipBottom = Number.POSITIVE_INFINITY) => {
       if (element === marker) return;
@@ -196,7 +202,7 @@ public enum RoleplayHTMLAdaptiveHeightRuntime {
     for (const element of body.children) {
       visitVisibleElement(element);
     }
-    return Math.max(Math.ceil(contentBottom - bodyTop), 1);
+    return Math.max(Math.ceil(contentBottom - rootTop), 1);
   };
   const reportHeight = () => {
     if (heightReportFrame) cancelAnimationFrame(heightReportFrame);
