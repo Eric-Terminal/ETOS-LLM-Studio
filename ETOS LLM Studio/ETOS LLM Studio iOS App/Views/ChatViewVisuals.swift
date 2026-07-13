@@ -155,7 +155,7 @@ extension ChatView {
         Image(systemName: "chevron.down")
             .etFont(.system(size: 16, weight: .semibold))
             .foregroundColor(scrollToBottomButtonIconColor)
-            .frame(width: 40, height: 40)
+            .frame(width: scrollToBottomButtonSize, height: scrollToBottomButtonSize)
             .contentShape(Circle())
     }
 

@@ -113,6 +113,8 @@ struct ChatView: View {
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
     let bottomPinnedDistanceThreshold: CGFloat = 24
     let scrollToBottomButtonRevealDistance: CGFloat = 48
+    let scrollToBottomButtonSize: CGFloat = 40
+    let scrollToBottomButtonInputSpacing: CGFloat = 16
     let landscapeSessionSidebarMinWidth: CGFloat = 220
     let landscapeSessionSidebarMaxWidth: CGFloat = 300
     let landscapeSessionSidebarWidthRatio: CGFloat = 0.32
@@ -938,9 +940,7 @@ extension ChatView {
                                     handleScrollToBottomButtonTap()
                                 }
                                 .padding(.trailing, 16)
-                                .alignmentGuide(.top) { dimensions in
-                                    dimensions[.bottom] + 16
-                                }
+                                .offset(y: -(scrollToBottomButtonSize + scrollToBottomButtonInputSpacing))
                                 .transition(.scale.combined(with: .opacity))
                             }
                         }
