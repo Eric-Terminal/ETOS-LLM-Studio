@@ -922,8 +922,8 @@ extension ChatView {
                 // Telegram 风格：底部输入栏
                 .safeAreaInset(edge: .bottom) {
                     VStack(spacing: 0) {
-                        RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
                         telegramInputBar
+                        RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
                     }
                         .frame(width: chatViewportWidth)
                         .background(

@@ -224,13 +224,14 @@ struct RoleplaySettingsView: View {
 
     private func persist(seedGreeting: Bool = false) {
         guard let sessionID = viewModel.currentSession?.id else { return }
-        guard let selectedCharacterID else {
+        let characterIDs = selectedCharacterID.map { [$0] } ?? []
+        guard !characterIDs.isEmpty || selectedPersonaID != nil else {
             ChatService.shared.unbindRoleplay(sessionID: sessionID)
             return
         }
         ChatService.shared.bindRoleplay(
             sessionID: sessionID,
-            characterIDs: [selectedCharacterID],
+            characterIDs: characterIDs,
             personaID: selectedPersonaID,
             selectedGreetingIndex: selectedGreetingIndex,
             htmlRenderingEnabled: htmlRenderingEnabled,

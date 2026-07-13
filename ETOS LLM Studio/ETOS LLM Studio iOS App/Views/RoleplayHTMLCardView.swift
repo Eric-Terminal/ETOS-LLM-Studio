@@ -221,7 +221,6 @@ struct RoleplayScriptButtonBar: View {
                 .padding(.horizontal)
             }
             .padding(.vertical, 4)
-            .background(.ultraThinMaterial)
         }
         Color.clear
             .frame(width: 0, height: 0)

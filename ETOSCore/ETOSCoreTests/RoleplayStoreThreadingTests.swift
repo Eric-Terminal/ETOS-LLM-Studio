@@ -61,6 +61,27 @@ struct RoleplayStoreThreadingTests {
         #expect(saved?.helperScripts.first?.content == "new")
         #expect(saved?.extensions["vendor"] == .string("preserved"))
     }
+
+    @Test("未绑定角色卡时仍可保存用户身份")
+    func persistsPersonaWithoutCharacterBinding() {
+        let store = RoleplayStore.shared
+        let sessionID = UUID()
+        let persona = PersonaProfile(name: "独立用户身份")
+        defer {
+            store.removeBinding(sessionID: sessionID)
+            store.deletePersona(id: persona.id)
+        }
+        store.upsertPersona(persona)
+        store.upsertBinding(SessionRoleplayBinding(
+            sessionID: sessionID,
+            characterIDs: [],
+            personaID: persona.id
+        ))
+
+        let binding = store.binding(sessionID: sessionID)
+        #expect(binding?.characterIDs.isEmpty == true)
+        #expect(binding?.personaID == persona.id)
+    }
 }
 
 private final class NotificationObserverToken: @unchecked Sendable {
