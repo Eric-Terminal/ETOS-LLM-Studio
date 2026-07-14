@@ -69,6 +69,7 @@ enum WatchChatTranscriptImageRenderer {
         let rootFont = AppFontAdapter.adaptedFont(from: .body)
         let canvas = WatchChatTranscriptCanvas(
             rows: rows,
+            continuationContext: preparedExport.continuationContext,
             configuration: configuration,
             backgroundImage: assets.backgroundImage,
             providers: providers
@@ -402,6 +403,7 @@ private struct WatchChatTranscriptRenderRow: Identifiable {
 @MainActor
 private struct WatchChatTranscriptCanvas: View {
     let rows: [WatchChatTranscriptRenderRow]
+    let continuationContext: ConversationContinuationContext?
     let configuration: WatchChatTranscriptImageConfiguration
     let backgroundImage: UIImage?
     let providers: [Provider]
@@ -409,6 +411,12 @@ private struct WatchChatTranscriptCanvas: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+
+            if let continuationContext {
+                WatchChatTranscriptContinuationContextCard(context: continuationContext)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+            }
 
             VStack(spacing: 0) {
                 ForEach(rows) { row in
@@ -528,6 +536,48 @@ private struct WatchChatTranscriptCanvas: View {
         configuration.prefersDarkAppearance
             ? Color.white.opacity(0.35)
             : Color.black.opacity(0.12)
+    }
+}
+
+private struct WatchChatTranscriptContinuationContextCard: View {
+    let context: ConversationContinuationContext
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Label(
+                NSLocalizedString("续聊上下文", comment: "Continuation context export card title"),
+                systemImage: "rectangle.compress.vertical"
+            )
+            .etFont(.footnote.weight(.semibold))
+            .foregroundStyle(.tint)
+
+            Text(context.summary)
+                .etFont(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(context.retainedMessages) { message in
+                VStack(alignment: .leading) {
+                    Text(roleTitle(message.role))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(message.content)
+                        .etFont(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func roleTitle(_ role: MessageRole) -> String {
+        switch role {
+        case .system: return NSLocalizedString("系统", comment: "Continuation export role")
+        case .user: return NSLocalizedString("用户", comment: "Continuation export role")
+        case .assistant: return NSLocalizedString("助手", comment: "Continuation export role")
+        case .tool: return NSLocalizedString("工具", comment: "Continuation export role")
+        case .error: return NSLocalizedString("错误", comment: "Continuation export role")
+        }
     }
 }
 

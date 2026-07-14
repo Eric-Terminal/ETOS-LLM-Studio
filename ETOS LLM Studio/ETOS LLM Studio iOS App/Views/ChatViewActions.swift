@@ -81,15 +81,22 @@ extension ChatView {
                 let imageConfiguration = format == .png
                     ? transcriptSwiftUIImageConfiguration(session: session)
                     : nil
-                let sourceMessages = await Task.detached(priority: .userInitiated) {
-                    if let messages {
-                        return messages
+                let exportSource = await Task.detached(priority: .userInitiated) {
+                    let resolvedMessages: [ChatMessage]
+                    if let suppliedMessages = messages {
+                        resolvedMessages = suppliedMessages
                     } else if let session {
-                        return Persistence.loadMessages(for: session.id)
+                        resolvedMessages = Persistence.loadMessages(for: session.id)
                     } else {
-                        return []
+                        resolvedMessages = []
                     }
+                    let continuationContext = try? session.flatMap {
+                        try Persistence.loadConversationContinuationContext(for: $0.id)
+                    }
+                    return (resolvedMessages, continuationContext)
                 }.value
+                let sourceMessages = exportSource.0
+                let continuationContext = exportSource.1
 
                 let output: ChatTranscriptExportOutput
                 switch format {
@@ -102,6 +109,7 @@ extension ChatView {
                             session: session,
                             messages: sourceMessages,
                             includeReasoning: includeReasoning,
+                            continuationContext: continuationContext,
                             upToMessageID: upToMessageID,
                             selectedMessageIDs: selectedMessageIDs
                         )
@@ -124,6 +132,7 @@ extension ChatView {
                             format: format,
                             includeReasoning: includeReasoning,
                             includeSystemPrompt: includeSystemPrompt,
+                            continuationContext: continuationContext,
                             upToMessageID: upToMessageID,
                             selectedMessageIDs: selectedMessageIDs
                         )

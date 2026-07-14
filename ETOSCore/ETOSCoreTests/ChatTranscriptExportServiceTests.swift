@@ -46,6 +46,57 @@ struct ChatTranscriptExportServiceTests {
         #expect(text.contains("<long_term_memory>记忆内容</long_term_memory>"))
     }
 
+    @Test("完整导出会保留一等续聊上下文")
+    func testFullExportIncludesConversationContinuationContext() throws {
+        let retained = [
+            ChatMessage(role: .user, content: "最近问题原文"),
+            ChatMessage(role: .assistant, content: "最近回答原文")
+        ]
+        let session = ChatSession(id: UUID(), name: "续聊会话")
+        let continuation = ConversationContinuationContext(
+            childSessionID: session.id,
+            sourceSessionID: UUID(),
+            sourceSessionNameSnapshot: "原始会话",
+            sourceThroughMessageID: retained[1].id,
+            summary: "较早对话的完整摘要",
+            retainedMessages: retained,
+            retainedRoundCount: 1,
+            compressionModelIdentifier: "model",
+            sourceMessageCount: 8,
+            summarizedMessageCount: 6
+        )
+
+        let output = try ChatTranscriptExportService().export(
+            session: session,
+            messages: [],
+            format: .markdown,
+            continuationContext: continuation
+        )
+
+        let text = String(decoding: output.data, as: UTF8.self)
+        #expect(text.contains("## 续聊上下文"))
+        #expect(text.contains("原始会话"))
+        #expect(text.contains("较早对话的完整摘要"))
+        #expect(text.contains("最近问题原文"))
+        #expect(text.contains("最近回答原文"))
+
+        let prepared = try ChatTranscriptExportService().prepareImageExport(
+            session: session,
+            messages: [],
+            continuationContext: continuation
+        )
+        #expect(prepared.messages.isEmpty)
+        #expect(prepared.continuationContext == continuation)
+
+        let png = try ChatTranscriptExportService().export(
+            session: session,
+            messages: [],
+            format: .png,
+            continuationContext: continuation
+        )
+        #expect(png.data.starts(with: Data([0x89, 0x50, 0x4E, 0x47])))
+    }
+
     @Test("不包含思考导出时会移除推理段落并标记文件名")
     func testExportWithoutReasoningRemovesReasoningSections() throws {
         let service = ChatTranscriptExportService()

@@ -69,12 +69,17 @@ enum ChatTranscriptSwiftUIImageRenderer {
             sourceMessages: sourceMessages,
             includeReasoning: includeReasoning
         )
-        let totalHeight = try measureHeight(rows: rows, configuration: configuration)
+        let totalHeight = try measureHeight(
+            rows: rows,
+            continuationContext: preparedExport.continuationContext,
+            configuration: configuration
+        )
         let scale = try renderScale(width: configuration.width, height: totalHeight)
         let tileCount = max(1, Int(ceil(totalHeight / configuration.viewportHeight)))
 
         let canvas = ChatTranscriptExportCanvas(
             rows: rows,
+            continuationContext: preparedExport.continuationContext,
             configuration: configuration,
             backgroundImage: resolvedBackgroundImage,
             totalHeight: totalHeight,
@@ -250,9 +255,14 @@ enum ChatTranscriptSwiftUIImageRenderer {
 
     private static func measureHeight(
         rows: [ChatTranscriptRenderedRow],
+        continuationContext: ConversationContinuationContext?,
         configuration: ChatTranscriptSwiftUIImageConfiguration
     ) throws -> CGFloat {
-        let foreground = ChatTranscriptExportForeground(rows: rows, configuration: configuration)
+        let foreground = ChatTranscriptExportForeground(
+            rows: rows,
+            continuationContext: continuationContext,
+            configuration: configuration
+        )
             .frame(width: configuration.width)
             .fixedSize(horizontal: false, vertical: true)
             .environment(\.colorScheme, configuration.prefersDarkAppearance ? .dark : .light)
@@ -501,6 +511,7 @@ private struct ChatTranscriptRenderedRow: Identifiable {
 @MainActor
 private struct ChatTranscriptExportCanvas: View {
     let rows: [ChatTranscriptRenderedRow]
+    let continuationContext: ConversationContinuationContext?
     let configuration: ChatTranscriptSwiftUIImageConfiguration
     let backgroundImage: UIImage?
     let totalHeight: CGFloat
@@ -514,7 +525,11 @@ private struct ChatTranscriptExportCanvas: View {
                 totalHeight: totalHeight,
                 tileCount: tileCount
             )
-            ChatTranscriptExportForeground(rows: rows, configuration: configuration)
+            ChatTranscriptExportForeground(
+                rows: rows,
+                continuationContext: continuationContext,
+                configuration: configuration
+            )
         }
         .frame(width: configuration.width, height: totalHeight, alignment: .top)
         .clipped()
@@ -524,6 +539,7 @@ private struct ChatTranscriptExportCanvas: View {
 @MainActor
 private struct ChatTranscriptExportForeground: View {
     let rows: [ChatTranscriptRenderedRow]
+    let continuationContext: ConversationContinuationContext?
     let configuration: ChatTranscriptSwiftUIImageConfiguration
 
     var body: some View {
@@ -531,6 +547,12 @@ private struct ChatTranscriptExportForeground: View {
             ChatTranscriptExportHeader(configuration: configuration)
 
             VStack(spacing: 0) {
+                if let continuationContext {
+                    ChatTranscriptContinuationContextCard(context: continuationContext)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                }
+
                 ForEach(rows) { row in
                     ChatBubble(
                         messageState: row.state,
@@ -579,6 +601,65 @@ private struct ChatTranscriptExportForeground: View {
             ChatTranscriptExportComposer(configuration: configuration)
         }
         .frame(width: configuration.width)
+    }
+}
+
+private struct ChatTranscriptContinuationContextCard: View {
+    let context: ConversationContinuationContext
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Label(
+                NSLocalizedString("续聊上下文", comment: "Continuation context export card title"),
+                systemImage: "rectangle.compress.vertical"
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.tint)
+
+            Text(String(
+                format: NSLocalizedString("来自“%@”", comment: "Continuation context export source"),
+                context.sourceSessionNameSnapshot
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Text(context.summary)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !context.retainedMessages.isEmpty {
+                Divider()
+                Text(NSLocalizedString("最近对话原文", comment: "Continuation context retained messages heading"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(context.retainedMessages) { message in
+                    VStack(alignment: .leading) {
+                        Text(roleTitle(message.role))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(message.content)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.28), lineWidth: 1)
+        }
+    }
+
+    private func roleTitle(_ role: MessageRole) -> String {
+        switch role {
+        case .system: return NSLocalizedString("系统", comment: "Continuation export role")
+        case .user: return NSLocalizedString("用户", comment: "Continuation export role")
+        case .assistant: return NSLocalizedString("助手", comment: "Continuation export role")
+        case .tool: return NSLocalizedString("工具", comment: "Continuation export role")
+        case .error: return NSLocalizedString("错误", comment: "Continuation export role")
+        }
     }
 }
 
