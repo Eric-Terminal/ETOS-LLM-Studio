@@ -56,6 +56,9 @@ struct ContentView: View {
     @State var attachmentSourceText: String = ""
     @State var importSourceHistory: [String] = []
     @State var presentedAskUserInputRequest: AppToolAskUserInputRequest?
+    @State var continuationContext: ConversationContinuationContext?
+    @State var isContinuationSourceSessionAvailable = false
+    @State var isContextCompressionPresented = false
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -174,6 +177,14 @@ struct ContentView: View {
         }
         .onChange(of: appConfig.watchAttachmentLastSource) { _, _ in
             refreshAttachmentSourceHistory()
+        }
+        .task(id: viewModel.currentSession?.id) {
+            await reloadContinuationContext()
+        }
+        .onChange(of: viewModel.chatSessions) { _, sessions in
+            isContinuationSourceSessionAvailable = continuationContext.map { context in
+                sessions.contains { $0.id == context.sourceSessionID }
+            } ?? false
         }
         .onDisappear {
             pendingHistoryResetWorkItem?.cancel()

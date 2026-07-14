@@ -11,6 +11,7 @@ import ETOSCore
 
 enum ChatQuickAction: String, CaseIterable, Identifiable {
     case temporaryChat
+    case contextCompression
     case settings
     case toolCenter
     case dailyPulse
@@ -29,6 +30,8 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         switch self {
         case .temporaryChat:
             return NSLocalizedString("临时对话", comment: "聊天快捷功能标题")
+        case .contextCompression:
+            return NSLocalizedString("压缩为续聊", comment: "聊天快捷功能标题")
         case .settings:
             return NSLocalizedString("设置", comment: "聊天快捷功能标题")
         case .toolCenter:
@@ -57,6 +60,7 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .temporaryChat: return "eye.slash"
+        case .contextCompression: return "rectangle.compress.vertical"
         case .settings: return "gearshape"
         case .toolCenter: return "wrench"
         case .dailyPulse: return "sparkles"
@@ -193,6 +197,11 @@ extension ChatView {
     func performQuickAction(_ action: ChatQuickAction) {
         if action == .temporaryChat {
             setTemporaryChatEnabled(!isTemporaryChatEnabled)
+        } else if action == .contextCompression {
+            guard let session = viewModel.currentSession,
+                  !session.isTemporary,
+                  !viewModel.allMessagesForSession.isEmpty || continuationContext != nil else { return }
+            contextCompressionSourceSession = session
         } else {
             navigationDestination = action
         }
@@ -218,7 +227,7 @@ extension ChatView {
     @ViewBuilder
     func quickActionDestinationView(for action: ChatQuickAction) -> some View {
         switch action {
-        case .temporaryChat:
+        case .temporaryChat, .contextCompression:
             EmptyView()
         case .settings:
             SettingsView()

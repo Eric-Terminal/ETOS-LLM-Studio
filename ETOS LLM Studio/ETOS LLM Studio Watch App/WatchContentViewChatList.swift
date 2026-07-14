@@ -18,7 +18,7 @@ extension ContentView {
             isSending: viewModel.isSendingMessage
         )
         return List {
-            if viewModel.messages.isEmpty {
+            if viewModel.messages.isEmpty && continuationContext == nil {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
 
@@ -55,6 +55,25 @@ extension ContentView {
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8))
+            }
+
+            if let continuationContext {
+                NavigationLink {
+                    WatchConversationContinuationDetailView(
+                        context: continuationContext,
+                        sourceSessionAvailable: isContinuationSourceSessionAvailable,
+                        onOpenSource: {
+                            _ = viewModel.setCurrentSessionIfExists(
+                                sessionID: continuationContext.sourceSessionID
+                            )
+                        }
+                    )
+                } label: {
+                    WatchConversationContinuationCard(context: continuationContext)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 6, trailing: 8))
             }
 
             ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in
@@ -269,6 +288,23 @@ extension ContentView {
                     } label: {
                         Image(systemName: "gearshape.fill")
                     }
+                }
+            }
+
+            if !isMessageSelectionMode {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isContextCompressionPresented = true
+                    } label: {
+                        Image(systemName: "rectangle.compress.vertical")
+                            .accessibilityLabel(
+                                NSLocalizedString("压缩为续聊", comment: "Context compression toolbar action")
+                            )
+                    }
+                    .disabled(
+                        viewModel.currentSession?.isTemporary != false
+                            || (viewModel.allMessagesForSession.isEmpty && continuationContext == nil)
+                    )
                 }
             }
         }

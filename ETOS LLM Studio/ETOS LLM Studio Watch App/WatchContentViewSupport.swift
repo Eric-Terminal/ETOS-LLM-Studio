@@ -40,6 +40,25 @@ extension ContentView {
             }
             .appLockOverlayLayer()
         }
+        .sheet(isPresented: $isContextCompressionPresented) {
+            if let session = viewModel.currentSession {
+                NavigationStack {
+                    WatchContextCompressionOptionsView(
+                        session: session,
+                        models: viewModel.activatedChatModels,
+                        selectedModelID: viewModel.selectedModel?.id,
+                        onCompress: { options, progress in
+                            try await viewModel.createCompressedContinuation(
+                                from: session.id,
+                                options: options,
+                                progress: progress
+                            )
+                        }
+                    )
+                }
+                .appLockOverlayLayer()
+            }
+        }
         .sheet(item: $viewModel.activeSheet) { item in
             sheetView(for: item)
                 .appLockOverlayLayer()
@@ -214,6 +233,7 @@ extension ContentView {
     var watchModalBlocksAskUserInputPresentation: Bool {
         isSettingsPresented
             || isSessionListPresented
+            || isContextCompressionPresented
             || viewModel.activeSheet != nil
             || fullErrorContent != nil
             || messageActionsTarget != nil

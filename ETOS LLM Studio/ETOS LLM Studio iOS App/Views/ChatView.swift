@@ -42,6 +42,11 @@ struct ChatView: View {
     @State var sessionDraftName: String = ""
     @State var sessionToDelete: ChatSession?
     @State var sessionInfo: SessionPickerInfoPayload?
+    @State var contextCompressionSourceSession: ChatSession?
+    @State var pendingContextCompressionSourceSession: ChatSession?
+    @State var continuationContext: ConversationContinuationContext?
+    @State var isContinuationSourceSessionAvailable = false
+    @State var isContinuationContextExpanded = false
     @State var showGhostSessionAlert = false
     @State var ghostSession: ChatSession?
     @State var sessionPickerSearchText: String = ""
@@ -287,9 +292,18 @@ struct ChatView: View {
             }
             .onChange(of: viewModel.currentSession?.id) { _, _ in
                 refreshTemporaryChatState()
+                isContinuationContextExpanded = false
                 if isMessageSelectionMode {
                     exitMessageSelection()
                 }
+            }
+            .task(id: viewModel.currentSession?.id) {
+                await reloadContinuationContext()
+            }
+            .onChange(of: viewModel.chatSessions) { _, sessions in
+                isContinuationSourceSessionAvailable = continuationContext.map { context in
+                    sessions.contains { $0.id == context.sourceSessionID }
+                } ?? false
             }
     }
 
@@ -300,6 +314,7 @@ struct ChatView: View {
             || messageActionSheetPayload != nil
             || fullErrorContent != nil
             || sessionInfo != nil
+            || contextCompressionSourceSession != nil
             || exportSharePayload != nil
             || activeChatPickerSheet != nil
             || showBranchOptions
@@ -701,6 +716,21 @@ extension ChatView {
 
                             // 历史加载提示
                             historyBanner
+
+                            if let continuationContext {
+                                ConversationContinuationBubble(
+                                    context: continuationContext,
+                                    isExpanded: $isContinuationContextExpanded,
+                                    sourceSessionAvailable: isContinuationSourceSessionAvailable,
+                                    onOpenSource: {
+                                        _ = viewModel.setCurrentSessionIfExists(
+                                            sessionID: continuationContext.sourceSessionID
+                                        )
+                                    }
+                                )
+                                .padding(.horizontal, 12)
+                                .padding(.bottom, 8)
+                            }
 
                             // 消息列表
                             ForEach(Array(displayedMessages.enumerated()), id: \.element.id) { index, state in

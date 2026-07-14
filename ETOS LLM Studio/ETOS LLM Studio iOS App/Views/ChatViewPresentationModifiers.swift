@@ -143,6 +143,22 @@ extension ChatView {
             .sheet(item: $sessionInfo) { info in
                 SessionPickerInfoSheet(payload: info)
             }
+            .sheet(item: $contextCompressionSourceSession) { session in
+                ContextCompressionOptionsView(
+                    session: session,
+                    models: viewModel.activatedChatModels,
+                    selectedModelID: viewModel.selectedModel?.id,
+                    onCompress: { options, progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: options,
+                            progress: progress
+                        )
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
             .sheet(item: $exportSharePayload) { payload in
                 ActivityShareSheet(activityItems: [payload.fileURL])
             }

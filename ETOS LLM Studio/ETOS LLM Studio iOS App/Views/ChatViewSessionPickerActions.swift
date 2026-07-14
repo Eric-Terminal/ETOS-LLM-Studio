@@ -372,6 +372,9 @@ extension ChatView {
                 viewModel.setCurrentSession(newSession)
                 dismissSessionPickerAfterSelection()
             },
+            onCompress: {
+                presentContextCompression(for: session)
+            },
             onDeleteLastMessage: {
                 viewModel.deleteLastMessage(for: session)
             },
@@ -398,6 +401,16 @@ extension ChatView {
                 )
             }
         )
+    }
+
+    func presentContextCompression(for session: ChatSession) {
+        guard !session.isTemporary else { return }
+        if activeChatPickerSheet == .session {
+            pendingContextCompressionSourceSession = session
+            activeChatPickerSheet = nil
+        } else {
+            contextCompressionSourceSession = session
+        }
     }
 
     func sessionPickerSearchResultRow(_ result: SessionHistorySearchResult) -> some View {
