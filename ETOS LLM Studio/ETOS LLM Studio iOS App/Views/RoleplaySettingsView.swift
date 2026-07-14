@@ -737,7 +737,15 @@ private struct RoleplaySessionBindingView: View {
     private func persist(seedGreeting: Bool = false) {
         guard let sessionID = currentSession?.id else { return }
         let characterIDs = selectedCharacterID.map { [$0] } ?? []
-        guard !characterIDs.isEmpty || selectedPersonaID != nil else {
+        let additionalWorldbookIDs = ChatService.shared
+            .roleplayBinding(sessionID: sessionID)?
+            .additionalWorldbookIDs ?? []
+        // 未绑定角色时仍保留非默认承载设置；恢复默认后才移除空绑定。
+        guard !characterIDs.isEmpty
+                || selectedPersonaID != nil
+                || !additionalWorldbookIDs.isEmpty
+                || !htmlRenderingEnabled
+                || !helperScriptsEnabled else {
             ChatService.shared.unbindRoleplay(sessionID: sessionID)
             return
         }
@@ -745,6 +753,7 @@ private struct RoleplaySessionBindingView: View {
             sessionID: sessionID,
             characterIDs: characterIDs,
             personaID: selectedPersonaID,
+            additionalWorldbookIDs: additionalWorldbookIDs,
             selectedGreetingIndex: selectedGreetingIndex,
             htmlRenderingEnabled: htmlRenderingEnabled,
             helperScriptsEnabled: helperScriptsEnabled,

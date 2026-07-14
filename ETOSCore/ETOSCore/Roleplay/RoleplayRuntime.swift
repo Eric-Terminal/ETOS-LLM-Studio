@@ -202,7 +202,7 @@ enum RoleplayRuntime {
         previousMessages: [ChatMessage],
         store: RoleplayStore
     ) -> RoleplayMVUResult? {
-        guard store.binding(sessionID: sessionID) != nil else { return nil }
+        guard store.binding(sessionID: sessionID)?.characterIDs.isEmpty == false else { return nil }
         var snapshot = store.variableSnapshot(sessionID: sessionID)
         let storedSnapshot = snapshot
         let existing = snapshot.messageVariables(messageID: messageID, versionIndex: versionIndex)
