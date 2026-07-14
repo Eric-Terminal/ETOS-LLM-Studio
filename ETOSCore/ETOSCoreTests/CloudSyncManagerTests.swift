@@ -664,6 +664,12 @@ struct CloudSyncManagerTests {
         #expect(recorder.deltas.isEmpty)
         #expect(await transport.mutations.isEmpty)
         #expect(await transport.committedTokens.isEmpty)
+
+        manager.dismissInitialConflictPrompt()
+        #expect(manager.initialConflict == nil)
+        manager.restoreInitialConflictPrompt()
+        #expect(manager.initialConflict?.localRecordCount == 1)
+        #expect(manager.initialConflict?.iCloudRecordCount == 1)
     }
 
     @MainActor

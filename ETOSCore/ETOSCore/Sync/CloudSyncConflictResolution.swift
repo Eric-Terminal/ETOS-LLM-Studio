@@ -92,6 +92,12 @@ public extension CloudSyncManager {
         initialConflict = nil
     }
 
+    func restoreInitialConflictPrompt() {
+        guard let pendingInitialConflict else { return }
+        initialConflict = pendingInitialConflict.summary
+        state = .waitingForInitialDecision
+    }
+
     func resolveInitialConflict(using resolution: CloudSyncInitialResolution) async {
         guard isEnabled, let pending = pendingInitialConflict else { return }
         guard !isPerformingSync else {
