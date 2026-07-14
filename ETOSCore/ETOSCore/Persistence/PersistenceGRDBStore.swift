@@ -452,6 +452,10 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v7_conversation_continuation_contexts") { db in
+            try Self.createConversationContinuationContextTable(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -459,12 +463,23 @@ final class PersistenceGRDBStore {
     private func repairCoreSchemaIfNeeded() throws {
         try dbPool.write { db in
             try createCoreTablesIfMissing(db)
+            try Self.createConversationContinuationContextTable(db)
             try requireColumns(db, table: "sessions", columns: ["id", "name"])
             try requireColumns(db, table: "messages", columns: ["id", "session_id", "role", "content"])
             try requireColumns(db, table: "request_logs", columns: ["id", "request_id", "provider_name", "model_id"])
             try requireColumns(db, table: "session_folders", columns: ["id", "name"])
             try requireColumns(db, table: "session_tags", columns: ["id", "name"])
             try requireColumns(db, table: "session_tag_assignments", columns: ["session_id", "tag_id"])
+            try requireColumns(
+                db,
+                table: "conversation_continuation_contexts",
+                columns: [
+                    "id", "child_session_id", "source_session_id", "source_session_name_snapshot",
+                    "source_through_message_id", "summary", "retained_messages_json",
+                    "retained_round_count", "compression_model_identifier", "prompt_version",
+                    "source_message_count", "summarized_message_count", "created_at"
+                ]
+            )
 
             try ensureColumn(db, table: "sessions", column: "topic_prompt", definition: "topic_prompt TEXT")
             try ensureColumn(db, table: "sessions", column: "enhanced_prompt", definition: "enhanced_prompt TEXT")

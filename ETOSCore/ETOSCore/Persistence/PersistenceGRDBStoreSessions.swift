@@ -182,7 +182,7 @@ extension PersistenceGRDBStore {
         return assignments
     }
 
-    private func saveSessionTagAssignments(
+    func saveSessionTagAssignments(
         _ db: Database,
         sessionID: UUID,
         tagIDs: [UUID],
@@ -478,7 +478,11 @@ extension PersistenceGRDBStore {
                     db,
                     sql: "SELECT DISTINCT audio_file_name FROM messages WHERE audio_file_name IS NOT NULL AND audio_file_name != ''"
                 )
-                return Set(names)
+                var result = Set(names)
+                for context in try loadAllConversationContinuationContexts(db) {
+                    result.formUnion(context.retainedMessages.compactMap(\.audioFileName))
+                }
+                return result
             }
         } catch {
             logger.error("查询音频文件引用失败: \(error.localizedDescription)")
@@ -500,6 +504,9 @@ extension PersistenceGRDBStore {
                         allNames.formUnion(names)
                     }
                 }
+                for context in try loadAllConversationContinuationContexts(db) {
+                    allNames.formUnion(context.retainedMessages.flatMap { $0.imageFileNames ?? [] })
+                }
                 return allNames
             }
         } catch {
@@ -516,7 +523,8 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT s.id FROM sessions s
                     LEFT JOIN messages m ON m.session_id = s.id
-                    WHERE m.id IS NULL
+                    LEFT JOIN conversation_continuation_contexts c ON c.child_session_id = s.id
+                    WHERE m.id IS NULL AND c.id IS NULL
                     """
                 )
                 return orphanedIDs.compactMap { UUID(uuidString: $0) }

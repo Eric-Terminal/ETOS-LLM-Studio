@@ -365,14 +365,18 @@ extension Persistence {
     }
 
     private static func loadMessagesReferencingStoredAttachments(excludingSessionIDs: Set<UUID>) -> [ChatMessage] {
-        loadChatSessions()
+        let remainingSessions = loadChatSessions()
             .filter { !excludingSessionIDs.contains($0.id) }
-            .flatMap { loadMessages(for: $0.id) }
-            .filter {
-                $0.audioFileName != nil
-                    || ($0.imageFileNames?.isEmpty == false)
-                    || ($0.fileFileNames?.isEmpty == false)
-            }
+        let regularMessages = remainingSessions.flatMap { loadMessages(for: $0.id) }
+        let continuationMessages = remainingSessions.compactMap {
+            try? loadConversationContinuationContext(for: $0.id)
+        }.flatMap(\.retainedMessages)
+
+        return (regularMessages + continuationMessages).filter {
+            $0.audioFileName != nil
+                || ($0.imageFileNames?.isEmpty == false)
+                || ($0.fileFileNames?.isEmpty == false)
+        }
     }
 
     /// 获取用于存储字体文件的目录URL

@@ -47,6 +47,21 @@ struct SessionRecordFilePayload: Codable {
     let session: SessionMetaPayload
     let prompts: SessionPromptsPayload
     let messages: [ChatMessage]
+    let continuationContext: ConversationContinuationContext?
+
+    init(
+        schemaVersion: Int,
+        session: SessionMetaPayload,
+        prompts: SessionPromptsPayload,
+        messages: [ChatMessage],
+        continuationContext: ConversationContinuationContext? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.session = session
+        self.prompts = prompts
+        self.messages = messages
+        self.continuationContext = continuationContext
+    }
 }
 
 struct LegacyMessagesReadResult {

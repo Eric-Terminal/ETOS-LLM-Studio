@@ -70,7 +70,8 @@ extension Persistence {
                 schemaVersion: sessionStoreSchemaVersion,
                 session: updatedMeta,
                 prompts: baseRecord.prompts,
-                messages: baseRecord.messages
+                messages: baseRecord.messages,
+                continuationContext: baseRecord.continuationContext
             )
             try writeSessionRecordFile(updatedRecord, for: sessionID)
         } catch {
@@ -206,7 +207,8 @@ extension Persistence {
                     schemaVersion: sessionStoreSchemaVersion,
                     session: record.session,
                     prompts: record.prompts,
-                    messages: normalized.messages
+                    messages: normalized.messages,
+                    continuationContext: record.continuationContext
                 )
                 try writeSessionRecordFile(rewritten, for: sessionID)
                 logger.info("\(migrationLogPrefix) 会话 \(sessionID.uuidString) 的消息文件已规范化。")
@@ -270,6 +272,7 @@ extension Persistence {
 
     static func makeSessionRecordPayload(session: ChatSession, messages: [ChatMessage]) -> SessionRecordFilePayload {
         let preservedSummary = (try? loadSessionSummaryFile(for: session.id))?.session
+        let preservedContinuationContext = (try? loadSessionRecordFile(for: session.id))?.continuationContext
         return SessionRecordFilePayload(
             schemaVersion: sessionStoreSchemaVersion,
             session: SessionMetaPayload(
@@ -286,7 +289,8 @@ extension Persistence {
                 topicPrompt: session.topicPrompt,
                 enhancedPrompt: session.enhancedPrompt
             ),
-            messages: messages
+            messages: messages,
+            continuationContext: preservedContinuationContext
         )
     }
 
