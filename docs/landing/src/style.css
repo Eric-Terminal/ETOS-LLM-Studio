@@ -39,7 +39,9 @@
   --font-display:
     'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
     system-ui, 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  --font-mono:
+    'JetBrains Mono', 'SF Mono', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', ui-monospace, monospace;
 }
 
 .dark {
