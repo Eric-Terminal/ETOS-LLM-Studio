@@ -142,6 +142,9 @@ extension ChatService {
 
     func persistLastActiveSessionIDIfNeeded(_ session: ChatSession?) {
         guard let session, !session.isTemporary else { return }
-        AppConfigStore.persistSynchronously(.text(session.id.uuidString), for: .lastActiveSessionID)
+        let sessionID = session.id.uuidString
+        Task.detached(priority: .utility) {
+            AppConfigStore.persistSynchronously(.text(sessionID), for: .lastActiveSessionID)
+        }
     }
 }

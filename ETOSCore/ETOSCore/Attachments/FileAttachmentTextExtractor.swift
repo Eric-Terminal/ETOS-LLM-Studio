@@ -99,6 +99,12 @@ public struct FileAttachmentTextExtractor {
     public init() {}
 
     public func extractText(from attachment: FileAttachment) throws -> String {
+        let extractedText = try extractTextPreservingLayout(from: attachment)
+        return normalizeWhitespace(in: extractedText)
+    }
+
+    /// 为无截断上下文压缩保留原始换行和空白，不执行展示用途的空白归一化。
+    public func extractTextPreservingLayout(from attachment: FileAttachment) throws -> String {
         let fileName = (attachment.fileName as NSString).lastPathComponent
         let fileExtension = (fileName as NSString).pathExtension.lowercased()
         let extractedText: String
@@ -121,11 +127,10 @@ public struct FileAttachmentTextExtractor {
             }
         }
 
-        let normalized = normalizeWhitespace(in: extractedText)
-        guard !normalized.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FileAttachmentTextExtractionError.emptyText(fileName: fileName)
         }
-        return normalized
+        return extractedText
     }
 
     private func extractDOCXText(from data: Data, fileName: String) throws -> String {

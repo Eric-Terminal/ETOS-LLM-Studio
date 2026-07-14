@@ -15,6 +15,7 @@ final class MockAPIAdapter: APIAdapter {
     var receivedReasoningSummaryMessages: [ChatMessage]?
     var receivedConversationSummaryMessages: [ChatMessage]?
     var receivedConversationProfileMessages: [ChatMessage]?
+    var receivedContextCompressionMessages: [ChatMessage]?
     var receivedTools: [InternalToolDefinition]?
     var receivedAudioAttachments: [UUID: AudioAttachment]?
     var receivedImageAttachments: [UUID: [ImageAttachment]]?
@@ -30,6 +31,9 @@ final class MockAPIAdapter: APIAdapter {
             receivedReasoningSummaryMessages = messages
             receivedReasoningSummaryModel = model
             return URLRequest(url: URL(string: "https://fake.url/reasoning-summary")!)
+        } else if messages.first?.content.contains("续聊上下文压缩助手") == true {
+            receivedContextCompressionMessages = messages
+            return URLRequest(url: URL(string: "https://fake.url/chat")!)
         } else if messages.first?.content.contains("会话压缩助手") == true {
             receivedConversationSummaryMessages = messages
             return URLRequest(url: URL(string: "https://fake.url/chat")!)

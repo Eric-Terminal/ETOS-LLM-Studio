@@ -118,4 +118,32 @@ struct ContextCompressionPlannerTests {
         #expect(source[0].semanticContent.contains("上海"))
         #expect(source[0].semanticContent.contains("晴，28°C"))
     }
+
+    @Test func continuationProjectionUsesSpecialHandoffAndExactRecentRoles() {
+        let retained = [
+            ChatMessage(role: .user, content: "最近问题"),
+            ChatMessage(role: .assistant, content: "最近回答")
+        ]
+        let context = ConversationContinuationContext(
+            childSessionID: UUID(),
+            sourceSessionID: UUID(),
+            sourceSessionNameSnapshot: "来源会话",
+            sourceThroughMessageID: retained.last?.id ?? UUID(),
+            summary: "交接摘要",
+            retainedMessages: retained,
+            retainedRoundCount: 1,
+            compressionModelIdentifier: "model",
+            sourceMessageCount: 6,
+            summarizedMessageCount: 4
+        )
+
+        let projected = ContextCompressionPromptBuilder.continuationRequestMessages(context)
+
+        #expect(projected.count == 3)
+        #expect(projected[0].id == context.id)
+        #expect(projected[0].content.contains("<conversation_continuation"))
+        #expect(projected[0].content.contains("交接摘要"))
+        #expect(projected.dropFirst().map(\.role) == [.user, .assistant])
+        #expect(projected.dropFirst().map(\.content) == ["最近问题", "最近回答"])
+    }
 }

@@ -67,6 +67,22 @@ extension ChatService {
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
             ? currentSessionSnapshot
             : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
+        let continuationMessages: [ChatMessage]
+        do {
+            continuationMessages = try await Task.detached(priority: .userInitiated) {
+                try Persistence.loadConversationContinuationContext(for: currentSessionID)
+            }.value.map(ContextCompressionPromptBuilder.continuationRequestMessages) ?? []
+        } catch {
+            addErrorMessage(
+                String(
+                    format: NSLocalizedString("错误: 无法读取续聊上下文：%@", comment: "Continuation context load error"),
+                    error.localizedDescription
+                ),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
         let preparedRequestMessages = preparedMessagesForRequest(
             from: messages,
             loadingMessageID: loadingMessageID,
@@ -246,6 +262,7 @@ extension ChatService {
         if !finalSystemPrompt.isEmpty {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
+        messagesToSend.append(contentsOf: continuationMessages)
 
         var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {

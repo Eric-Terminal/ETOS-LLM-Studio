@@ -124,6 +124,7 @@ public enum ContextCompressionError: LocalizedError, Equatable {
     case emptySummary
     case sourceSessionNotFound
     case compressionModelNotFound
+    case unableToReduceSummaries
 
     public var errorDescription: String? {
         switch self {
@@ -153,6 +154,8 @@ public enum ContextCompressionError: LocalizedError, Equatable {
             return NSLocalizedString("找不到要压缩的原会话。", comment: "Context compression source session missing error")
         case .compressionModelNotFound:
             return NSLocalizedString("找不到可用于上下文压缩的聊天模型。", comment: "Context compression model missing error")
+        case .unableToReduceSummaries:
+            return NSLocalizedString("模型多次归并后仍无法形成单一续聊摘要，未创建新会话。", comment: "Context compression synthesis reduction error")
         }
     }
 }

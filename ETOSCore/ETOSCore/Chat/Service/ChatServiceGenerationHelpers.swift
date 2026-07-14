@@ -375,7 +375,10 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        audioAttachments: [UUID: AudioAttachment] = [:],
+        imageAttachments: [UUID: [ImageAttachment]] = [:],
+        fileAttachments: [UUID: [FileAttachment]] = [:]
     ) async throws -> String {
         let requestMessages = messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !requestMessages.isEmpty else { return "" }
@@ -395,6 +398,9 @@ extension ChatService {
         )
 
         if LocalModelProviderBridge.isLocalRunnableModel(targetModel) {
+            guard audioAttachments.isEmpty, imageAttachments.isEmpty, fileAttachments.isEmpty else {
+                throw DetachedCompletionError.unsupportedAttachments
+            }
             return try await generateDetachedLocalLLMCompletion(
                 runnableModel: targetModel,
                 requestMessages: requestMessages,
@@ -418,9 +424,9 @@ extension ChatService {
             commonPayload: commonPayload,
             messages: requestMessages,
             tools: nil,
-            audioAttachments: [:],
-            imageAttachments: [:],
-            fileAttachments: [:]
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
         ) else {
             throw DetachedCompletionError.buildRequestFailed
         }

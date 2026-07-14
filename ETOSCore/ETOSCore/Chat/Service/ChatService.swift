@@ -132,6 +132,7 @@ public class ChatService {
         case noAvailableModel
         case unsupportedAdapter
         case buildRequestFailed
+        case unsupportedAttachments
 
         public var errorDescription: String? {
             switch self {
@@ -141,6 +142,8 @@ public class ChatService {
                 return NSLocalizedString("当前模型对应的适配器不可用，无法执行 Detached Completion。", comment: "Detached completion adapter unavailable error")
             case .buildRequestFailed:
                 return NSLocalizedString("Detached Completion 请求构建失败。", comment: "Detached completion build request error")
+            case .unsupportedAttachments:
+                return NSLocalizedString("当前 Detached Completion 模型不支持这组附件。", comment: "Detached completion attachments unsupported error")
             }
         }
     }
