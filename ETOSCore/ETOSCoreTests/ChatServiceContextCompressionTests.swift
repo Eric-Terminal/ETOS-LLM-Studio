@@ -79,7 +79,7 @@ extension ChatServiceTests {
             content: "继续聊",
             aiTemperature: 0.2,
             aiTopP: 1,
-            systemPrompt: "",
+            systemPrompt: "固定系统提示",
             maxChatHistory: 1,
             enableStreaming: false,
             enhancedPrompt: nil,
@@ -89,12 +89,112 @@ extension ChatServiceTests {
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
-        #expect(sentMessages.contains { $0.content.contains("<conversation_continuation") })
+        let systemIndex = try #require(sentMessages.firstIndex {
+            $0.role == .system && $0.content.contains("固定系统提示")
+        })
+        let continuationIndex = try #require(sentMessages.firstIndex {
+            $0.content.contains("<conversation_continuation")
+        })
+        let retainedUserIndex = try #require(sentMessages.firstIndex {
+            $0.content == "必须保留的最近问题"
+        })
+        let currentUserIndex = try #require(sentMessages.firstIndex {
+            $0.content == "继续聊"
+        })
+        #expect(systemIndex < continuationIndex)
+        #expect(continuationIndex < retainedUserIndex)
+        #expect(retainedUserIndex < currentUserIndex)
         #expect(sentMessages.contains { $0.content.contains("压缩摘要") })
         #expect(sentMessages.contains { $0.content == "必须保留的最近问题" })
         #expect(sentMessages.contains { $0.content == "必须保留的最近回答" })
         #expect(sentMessages.contains { $0.content == "继续聊" })
 
         chatService.deleteSessions([child, source])
+    }
+
+    @Test("空摘要不会创建残缺续聊会话")
+    func emptyCompressionSummaryDoesNotCreateSession() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "  \n")
+        let source = chatService.createSavedSession(
+            name: "空摘要来源",
+            initialMessages: [ChatMessage(role: .user, content: "需要摘要的内容")]
+        )
+        let sessionIDsBeforeCompression = Set(chatService.chatSessionsSubject.value.map(\.id))
+
+        await #expect(throws: ContextCompressionError.emptySummary) {
+            _ = try await chatService.createCompressedContinuation(
+                from: source.id,
+                options: ContextCompressionOptions(retainedRoundCount: 0)
+            )
+        }
+
+        #expect(Set(chatService.chatSessionsSubject.value.map(\.id)) == sessionIDsBeforeCompression)
+        chatService.deleteSessions([source])
+    }
+
+    @Test("已取消的压缩不会创建新会话")
+    func cancelledCompressionDoesNotCreateSession() async {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        let source = chatService.createSavedSession(
+            name: "取消压缩来源",
+            initialMessages: [ChatMessage(role: .user, content: "不会被部分保存")]
+        )
+        let sessionIDsBeforeCompression = Set(chatService.chatSessionsSubject.value.map(\.id))
+
+        let error = await Task { () -> Error? in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                _ = try await chatService.createCompressedContinuation(
+                    from: source.id,
+                    options: ContextCompressionOptions(retainedRoundCount: 0)
+                )
+                return nil
+            } catch {
+                return error
+            }
+        }.value
+
+        #expect(error is CancellationError)
+        #expect(Set(chatService.chatSessionsSubject.value.map(\.id)) == sessionIDsBeforeCompression)
+        chatService.deleteSessions([source])
+    }
+
+    @Test("续聊会话可以再次压缩并形成来源链")
+    func continuationSessionCanBeCompressedAgain() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "链式续聊摘要")
+        let source = chatService.createSavedSession(
+            name: "链式来源",
+            initialMessages: [
+                ChatMessage(role: .user, content: "第一轮问题"),
+                ChatMessage(role: .assistant, content: "第一轮回答"),
+                ChatMessage(role: .user, content: "第二轮问题"),
+                ChatMessage(role: .assistant, content: "第二轮回答")
+            ]
+        )
+        let child = try await chatService.createCompressedContinuation(
+            from: source.id,
+            options: ContextCompressionOptions(retainedRoundCount: 1)
+        )
+        let firstContext = try #require(
+            try Persistence.loadConversationContinuationContext(for: child.id)
+        )
+        let grandchild = try await chatService.createCompressedContinuation(
+            from: child.id,
+            options: ContextCompressionOptions(retainedRoundCount: 1)
+        )
+        let secondContext = try #require(
+            try Persistence.loadConversationContinuationContext(for: grandchild.id)
+        )
+
+        #expect(secondContext.sourceSessionID == child.id)
+        #expect(try Persistence.loadConversationContinuationContext(for: child.id) == firstContext)
+        #expect(Persistence.loadMessages(for: source.id).count == 4)
+
+        chatService.deleteSessions([grandchild, child, source])
     }
 }

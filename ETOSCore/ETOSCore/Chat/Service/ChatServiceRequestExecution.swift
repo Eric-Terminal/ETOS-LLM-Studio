@@ -262,7 +262,6 @@ extension ChatService {
         if !finalSystemPrompt.isEmpty {
             messagesToSend.append(ChatMessage(role: .system, content: finalSystemPrompt))
         }
-        messagesToSend.append(contentsOf: continuationMessages)
 
         var chatHistory = requestMessages
         if maxChatHistory > 0 && chatHistory.count > maxChatHistory {
@@ -324,6 +323,13 @@ extension ChatService {
                 messagesToSend[index].content,
                 outlets: worldbookOutlets
             )
+        }
+
+        // 续聊上下文是已持久化的固定交接，不参与角色模板、正则和宏替换。
+        // 将它放在首个系统提示词之后，也确保 maxChatHistory 永远不会裁掉这段上下文。
+        if !continuationMessages.isEmpty {
+            let insertionIndex = messagesToSend.first?.role == .system ? 1 : 0
+            messagesToSend.insert(contentsOf: continuationMessages, at: insertionIndex)
         }
 
         var audioAttachments: [UUID: AudioAttachment] = [:]
@@ -412,11 +418,42 @@ extension ChatService {
         fileAttachments = filePreprocessing.fileAttachments
 
         if !helperScriptIDs.isEmpty {
-            messagesToSend = await RoleplayPromptMutationBridge.shared.mutate(
-                messagesToSend,
-                sessionID: currentSessionID,
-                scriptIDs: helperScriptIDs
-            )
+            if continuationMessages.isEmpty {
+                messagesToSend = await RoleplayPromptMutationBridge.shared.mutate(
+                    messagesToSend,
+                    sessionID: currentSessionID,
+                    scriptIDs: helperScriptIDs
+                )
+            } else {
+                let protectedMessageIDs = Set(continuationMessages.map(\.id))
+                let firstProtectedIndex = messagesToSend.firstIndex {
+                    protectedMessageIDs.contains($0.id)
+                }
+                let lastProtectedIndex = messagesToSend.lastIndex {
+                    protectedMessageIDs.contains($0.id)
+                }
+                if let firstProtectedIndex, let lastProtectedIndex {
+                    let prefixSource = Array(messagesToSend[..<firstProtectedIndex])
+                    let prefix = prefixSource.isEmpty
+                        ? []
+                        : await RoleplayPromptMutationBridge.shared.mutate(
+                            prefixSource,
+                            sessionID: currentSessionID,
+                            scriptIDs: helperScriptIDs
+                        )
+                    let protectedMessages = Array(messagesToSend[firstProtectedIndex...lastProtectedIndex])
+                    let suffixStartIndex = messagesToSend.index(after: lastProtectedIndex)
+                    let suffixSource = Array(messagesToSend[suffixStartIndex...])
+                    let suffix = suffixSource.isEmpty
+                        ? []
+                        : await RoleplayPromptMutationBridge.shared.mutate(
+                            suffixSource,
+                            sessionID: currentSessionID,
+                            scriptIDs: helperScriptIDs
+                        )
+                    messagesToSend = prefix + protectedMessages + suffix
+                }
+            }
         }
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {

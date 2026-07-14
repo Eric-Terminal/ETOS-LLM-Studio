@@ -11,6 +11,49 @@ import Testing
 @testable import ETOSCore
 
 struct ContextCompressionPlannerTests {
+    @Test func shortConversationUsesSingleCompleteChunk() throws {
+        let messages = [
+            ChatMessage(role: .user, content: "简短问题"),
+            ChatMessage(role: .assistant, content: "简短回答")
+        ]
+        let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
+        let plan = try ContextCompressionPlanner.makePlan(
+            sourceMessages: source,
+            retainedRoundCount: 0,
+            inputTokenBudget: 512
+        )
+
+        #expect(plan.chunks.count == 1)
+        #expect(plan.chunks[0].fragments.map(\.sourceMessageID) == messages.map(\.id))
+        #expect(plan.chunks[0].fragments.map(\.content) == messages.map(\.content))
+    }
+
+    @Test func longConversationChunksCoverEveryMessageWithoutLoss() throws {
+        let messages = (0..<12).map { index in
+            ChatMessage(
+                role: index.isMultiple(of: 2) ? .user : .assistant,
+                content: "第\(index)条：" + String(repeating: "完整语义单元。", count: 18)
+            )
+        }
+        let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
+        let plan = try ContextCompressionPlanner.makePlan(
+            sourceMessages: source,
+            retainedRoundCount: 0,
+            inputTokenBudget: 180
+        )
+
+        #expect(plan.chunks.count > 1)
+        for message in messages {
+            let rebuilt = plan.chunks
+                .flatMap(\.fragments)
+                .filter { $0.sourceMessageID == message.id }
+                .sorted { $0.fragmentIndex < $1.fragmentIndex }
+                .map(\.content)
+                .joined()
+            #expect(rebuilt == message.content)
+        }
+    }
+
     @Test func retainsRecentCompleteRounds() throws {
         let messages = [
             ChatMessage(role: .system, content: "系统前言"),
@@ -117,6 +160,24 @@ struct ContextCompressionPlannerTests {
         #expect(source[0].semanticContent.contains("weather"))
         #expect(source[0].semanticContent.contains("上海"))
         #expect(source[0].semanticContent.contains("晴，28°C"))
+    }
+
+    @Test func synthesisPromptIncludesEveryStageSummary() throws {
+        let summaries = [
+            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段一唯一事实"),
+            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段二未决问题"),
+            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段三明确约定")
+        ]
+
+        let prompt = try ContextCompressionPromptBuilder.synthesisUserPrompt(
+            summaries,
+            focusInstruction: "保留所有阶段"
+        )
+
+        #expect(prompt.contains("阶段一唯一事实"))
+        #expect(prompt.contains("阶段二未决问题"))
+        #expect(prompt.contains("阶段三明确约定"))
+        #expect(prompt.contains("保留所有阶段"))
     }
 
     @Test func continuationProjectionUsesSpecialHandoffAndExactRecentRoles() {
