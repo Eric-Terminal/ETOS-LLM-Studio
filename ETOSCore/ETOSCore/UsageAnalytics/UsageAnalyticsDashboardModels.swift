@@ -194,7 +194,9 @@ public struct UsageAnalyticsRankItem: Identifiable, Hashable, Sendable {
         self.title = title
         self.subtitle = subtitle
         self.requestCount = requestCount
-        self.totalTokens = max(resolvedTokenTotals.totalTokens, totalTokens, inferredTotalTokens)
+        self.totalTokens = hasCacheTokens && nonCacheTotalTokens > 0
+            ? inferredTotalTokens
+            : max(resolvedTokenTotals.totalTokens, totalTokens, inferredTotalTokens)
         self.costSummary = costSummary
         self.errorCount = errorCount
         self.tokenTotals = resolvedTokenTotals

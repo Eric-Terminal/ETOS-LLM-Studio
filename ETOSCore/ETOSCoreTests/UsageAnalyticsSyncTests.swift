@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import ETOSCore
 
-@Suite("用量统计同步测试")
+@Suite("用量统计同步测试", .serialized)
 struct UsageAnalyticsSyncTests {
 
     @Test("缓存命中率会兼容不同服务商 Token 口径")
@@ -68,7 +68,7 @@ struct UsageAnalyticsSyncTests {
 
         let providerID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")
         let sessionID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")
-        let firstDay = Date(timeIntervalSince1970: 1_744_156_800) // 2025-04-12 00:00:00 UTC
+        let firstDay = Date(timeIntervalSince1970: 1_744_416_000) // 2025-04-12 00:00:00 UTC
         let secondDay = firstDay.addingTimeInterval(86_400)
 
         Persistence.appendUsageAnalyticsEvent(
