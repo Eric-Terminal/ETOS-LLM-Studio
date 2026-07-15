@@ -17,6 +17,14 @@ public enum ContextCompressionReminderPolicy {
         min(max(value, minimumTokenThreshold), maximumTokenThreshold)
     }
 
+    public static func resolvedTokenThreshold(from draft: String, fallback: Int) -> Int {
+        let trimmedDraft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Int(trimmedDraft) else {
+            return normalizedTokenThreshold(fallback)
+        }
+        return normalizedTokenThreshold(value)
+    }
+
     public static func shouldRemind(
         estimatedTokens: Int,
         isEnabled: Bool,

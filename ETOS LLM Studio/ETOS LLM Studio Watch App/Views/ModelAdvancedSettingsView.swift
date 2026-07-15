@@ -15,6 +15,8 @@ import ETOSCore
 /// 偏好设置视图
 struct ModelAdvancedSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var contextCompressionReminderThresholdDraft: String = ""
+    @State private var isEditingContextCompressionReminderThreshold = false
 
     // MARK: - 绑定
 
@@ -238,16 +240,16 @@ struct ModelAdvancedSettingsView: View {
                 if appConfig.enableContextCompressionReminder {
                     TextField(
                         NSLocalizedString("提醒阈值（Token）", comment: "Context compression reminder token threshold"),
-                        value: $appConfig.contextCompressionReminderTokenThreshold,
-                        formatter: numberFormatter
+                        text: $contextCompressionReminderThresholdDraft,
+                        onEditingChanged: { isEditing in
+                            isEditingContextCompressionReminderThreshold = isEditing
+                            if !isEditing {
+                                commitContextCompressionReminderThresholdDraft()
+                            }
+                        },
+                        onCommit: commitContextCompressionReminderThresholdDraft
                     )
                     .monospacedDigit()
-                    .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, value in
-                        let normalized = ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
-                        if normalized != value {
-                            appConfig.contextCompressionReminderTokenThreshold = normalized
-                        }
-                    }
 
                     Text(NSLocalizedString(
                         "达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。",
@@ -306,8 +308,20 @@ struct ModelAdvancedSettingsView: View {
         }
         .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
         .onAppear {
+            syncContextCompressionReminderThresholdDraft()
             normalizeSamplingParametersIfNeeded()
         }
+        .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, _ in
+            if !isEditingContextCompressionReminderThreshold {
+                syncContextCompressionReminderThresholdDraft()
+            }
+        }
+        .onChange(of: appConfig.enableContextCompressionReminder) { _, isEnabled in
+            if !isEnabled {
+                commitContextCompressionReminderThresholdDraft()
+            }
+        }
+        .onDisappear(perform: commitContextCompressionReminderThresholdDraft)
     }
 
     private func samplingParameterField(title: String, value: Binding<Double>) -> some View {
@@ -392,6 +406,24 @@ struct ModelAdvancedSettingsView: View {
     private func normalizeSamplingParametersIfNeeded() {
         handleTemperatureChange(aiTemperature)
         handleTopPChange(aiTopP)
+    }
+
+    private func syncContextCompressionReminderThresholdDraft() {
+        contextCompressionReminderThresholdDraft = String(
+            appConfig.contextCompressionReminderTokenThreshold
+        )
+    }
+
+    private func commitContextCompressionReminderThresholdDraft() {
+        let resolvedThreshold = ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: contextCompressionReminderThresholdDraft,
+            fallback: appConfig.contextCompressionReminderTokenThreshold
+        )
+        if appConfig.contextCompressionReminderTokenThreshold != resolvedThreshold {
+            appConfig.contextCompressionReminderTokenThreshold = resolvedThreshold
+        }
+        contextCompressionReminderThresholdDraft = String(resolvedThreshold)
+        isEditingContextCompressionReminderThreshold = false
     }
 
     private func normalizedSamplingValue(_ value: Double, in range: ClosedRange<Double>) -> Double {

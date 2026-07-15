@@ -100,6 +100,25 @@ struct ContextCompressionReminderEstimatorTests {
         ))
     }
 
+    @Test func resolvesThresholdDraftAfterEditingCompletes() {
+        #expect(ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: "64000",
+            fallback: 32_000
+        ) == 64_000)
+        #expect(ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: "",
+            fallback: 32_000
+        ) == 32_000)
+        #expect(ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: "999",
+            fallback: 32_000
+        ) == ContextCompressionReminderPolicy.minimumTokenThreshold)
+        #expect(ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: "3000000",
+            fallback: 32_000
+        ) == ContextCompressionReminderPolicy.maximumTokenThreshold)
+    }
+
     @Test func skipsFreshContinuationUntilConversationGrows() {
         let childSessionID = UUID()
         let context = ConversationContinuationContext(

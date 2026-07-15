@@ -17,6 +17,10 @@ private enum ModelAdvancedSettingsTab: Hashable {
     case generationOutput
 }
 
+private enum ModelAdvancedSettingsFocusedField: Hashable {
+    case contextCompressionReminderThreshold
+}
+
 struct ModelAdvancedSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var selectedTab: ModelAdvancedSettingsTab = .promptInjection
@@ -24,6 +28,8 @@ struct ModelAdvancedSettingsView: View {
     @State private var selectedGlobalPromptDraft: String = ""
     @State private var topicPromptDraft: String = ""
     @State private var enhancedPromptDraft: String = ""
+    @State private var contextCompressionReminderThresholdDraft: String = ""
+    @FocusState private var focusedField: ModelAdvancedSettingsFocusedField?
 
     @Binding var aiTemperature: Double
     @Binding var aiTopP: Double
@@ -267,17 +273,20 @@ struct ModelAdvancedSettingsView: View {
                         )) {
                             TextField(
                                 NSLocalizedString("Token", comment: "Token threshold field placeholder"),
-                                value: $appConfig.contextCompressionReminderTokenThreshold,
-                                formatter: numberFormatter
+                                text: $contextCompressionReminderThresholdDraft
                             )
+                            .keyboardType(.numberPad)
+                            .submitLabel(.done)
                             .multilineTextAlignment(.trailing)
                             .monospacedDigit()
                             .frame(width: 100)
-                            .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, value in
-                                let normalized = ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
-                                if normalized != value {
-                                    appConfig.contextCompressionReminderTokenThreshold = normalized
-                                }
+                            .focused(
+                                $focusedField,
+                                equals: .contextCompressionReminderThreshold
+                            )
+                            .onSubmit {
+                                commitContextCompressionReminderThresholdDraft()
+                                focusedField = nil
                             }
                         }
                     }
@@ -389,10 +398,37 @@ struct ModelAdvancedSettingsView: View {
                     }
                 }
             }
+            ToolbarItemGroup(placement: .keyboard) {
+                if focusedField == .contextCompressionReminderThreshold {
+                    Spacer()
+                    Button(NSLocalizedString("完成", comment: "Finish numeric input action")) {
+                        commitContextCompressionReminderThresholdDraft()
+                        focusedField = nil
+                    }
+                }
+            }
         }
         .onAppear {
             syncPromptDrafts()
+            syncContextCompressionReminderThresholdDraft()
             normalizeSamplingParametersIfNeeded()
+        }
+        .onChange(of: focusedField) { oldValue, newValue in
+            if oldValue == .contextCompressionReminderThreshold,
+               newValue != .contextCompressionReminderThreshold {
+                commitContextCompressionReminderThresholdDraft()
+            }
+        }
+        .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, _ in
+            if focusedField != .contextCompressionReminderThreshold {
+                syncContextCompressionReminderThresholdDraft()
+            }
+        }
+        .onChange(of: appConfig.enableContextCompressionReminder) { _, isEnabled in
+            if !isEnabled {
+                commitContextCompressionReminderThresholdDraft()
+                focusedField = nil
+            }
         }
         .onChange(of: selectedGlobalSystemPromptEntryID) { _, _ in
             syncSelectedGlobalPromptDraft()
@@ -413,7 +449,10 @@ struct ModelAdvancedSettingsView: View {
                 enhancedPromptDraft = newValue
             }
         }
-        .onDisappear(perform: persistPromptDrafts)
+        .onDisappear {
+            commitContextCompressionReminderThresholdDraft()
+            persistPromptDrafts()
+        }
     }
 
     private var temperatureBinding: Binding<Double> {
@@ -535,6 +574,23 @@ struct ModelAdvancedSettingsView: View {
     private func syncPromptDrafts() {
         syncSelectedGlobalPromptDraft()
         syncSessionPromptDrafts()
+    }
+
+    private func syncContextCompressionReminderThresholdDraft() {
+        contextCompressionReminderThresholdDraft = String(
+            appConfig.contextCompressionReminderTokenThreshold
+        )
+    }
+
+    private func commitContextCompressionReminderThresholdDraft() {
+        let resolvedThreshold = ContextCompressionReminderPolicy.resolvedTokenThreshold(
+            from: contextCompressionReminderThresholdDraft,
+            fallback: appConfig.contextCompressionReminderTokenThreshold
+        )
+        if appConfig.contextCompressionReminderTokenThreshold != resolvedThreshold {
+            appConfig.contextCompressionReminderTokenThreshold = resolvedThreshold
+        }
+        contextCompressionReminderThresholdDraft = String(resolvedThreshold)
     }
 
     private func syncSelectedGlobalPromptDraft() {
