@@ -126,6 +126,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case aiTopPEnabled = "aiTopPEnabled"
     case systemPrompt = "systemPrompt"
     case maxChatHistory = "maxChatHistory"
+    case enableContextCompressionReminder = "contextCompression.reminder.enabled"
+    case contextCompressionReminderTokenThreshold = "contextCompression.reminder.tokenThreshold"
     case enableStreaming = "enableStreaming"
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
     case requestLogEnabled = "logs.request.enabled"
@@ -315,6 +317,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("[]")
         case .maxChatHistory:
             return .integer(0)
+        case .enableContextCompressionReminder:
+            return .bool(true)
+        case .contextCompressionReminderTokenThreshold:
+            return .integer(ContextCompressionReminderPolicy.defaultTokenThreshold)
         case .enableStreaming:
             #if os(watchOS)
             return .bool(false)

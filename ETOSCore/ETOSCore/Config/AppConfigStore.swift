@@ -182,6 +182,12 @@ public final class AppConfigStore: ObservableObject {
     @Published public var aiTopPEnabled: Bool { didSet { write(.aiTopPEnabled, aiTopPEnabled) } }
     @Published public var systemPrompt: String { didSet { write(.systemPrompt, systemPrompt) } }
     @Published public var maxChatHistory: Int { didSet { write(.maxChatHistory, maxChatHistory) } }
+    @Published public var enableContextCompressionReminder: Bool {
+        didSet { write(.enableContextCompressionReminder, enableContextCompressionReminder) }
+    }
+    @Published public var contextCompressionReminderTokenThreshold: Int {
+        didSet { write(.contextCompressionReminderTokenThreshold, contextCompressionReminderTokenThreshold) }
+    }
     @Published public var enableStreaming: Bool { didSet { write(.enableStreaming, enableStreaming) } }
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
     @Published public var requestLogEnabled: Bool { didSet { write(.requestLogEnabled, requestLogEnabled) } }
@@ -342,6 +348,10 @@ public final class AppConfigStore: ObservableObject {
         aiTopPEnabled = Self.boolValue(.aiTopPEnabled, userDefaults: userDefaults)
         systemPrompt = Self.textValue(.systemPrompt, userDefaults: userDefaults)
         maxChatHistory = Self.integerValue(.maxChatHistory, userDefaults: userDefaults)
+        enableContextCompressionReminder = Self.boolValue(.enableContextCompressionReminder, userDefaults: userDefaults)
+        contextCompressionReminderTokenThreshold = ContextCompressionReminderPolicy.normalizedTokenThreshold(
+            Self.integerValue(.contextCompressionReminderTokenThreshold, userDefaults: userDefaults)
+        )
         enableStreaming = Self.boolValue(.enableStreaming, userDefaults: userDefaults)
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
         requestLogEnabled = Self.boolValue(.requestLogEnabled, userDefaults: userDefaults)
@@ -800,6 +810,8 @@ public final class AppConfigStore: ObservableObject {
         case .aiTopPEnabled: return .bool(aiTopPEnabled)
         case .systemPrompt: return .text(systemPrompt)
         case .maxChatHistory: return .integer(maxChatHistory)
+        case .enableContextCompressionReminder: return .bool(enableContextCompressionReminder)
+        case .contextCompressionReminderTokenThreshold: return .integer(contextCompressionReminderTokenThreshold)
         case .enableStreaming: return .bool(enableStreaming)
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
         case .requestLogEnabled: return .bool(requestLogEnabled)
@@ -948,6 +960,7 @@ public final class AppConfigStore: ObservableObject {
         case .localModelCacheEnabled: localModelCacheEnabled = value
         case .aiTemperatureEnabled: aiTemperatureEnabled = value
         case .aiTopPEnabled: aiTopPEnabled = value
+        case .enableContextCompressionReminder: enableContextCompressionReminder = value
         case .enableStreaming: enableStreaming = value
         case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
         case .requestLogEnabled: requestLogEnabled = value
@@ -996,6 +1009,8 @@ public final class AppConfigStore: ObservableObject {
     private func setInteger(_ value: Int, for key: AppConfigKey) {
         switch key {
         case .maxChatHistory: maxChatHistory = value
+        case .contextCompressionReminderTokenThreshold:
+            contextCompressionReminderTokenThreshold = Self.normalizedIntegerValue(value, for: key)
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
@@ -1357,6 +1372,8 @@ public final class AppConfigStore: ObservableObject {
 
     private nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
         switch key {
+        case .contextCompressionReminderTokenThreshold:
+            return ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit:
             return max(1, value)
