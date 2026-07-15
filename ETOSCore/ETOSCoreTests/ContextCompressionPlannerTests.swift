@@ -191,4 +191,77 @@ struct ContextCompressionPlannerTests {
         #expect(projected.dropFirst().map(\.role) == [.user, .assistant])
         #expect(projected.dropFirst().map(\.content) == ["最近问题", "最近回答"])
     }
+
+    @Test func continuationDisplayPairsToolResultWithoutDuplicatingToolMessage() {
+        let call = InternalToolCall(
+            id: "call-1",
+            toolName: "read_file",
+            arguments: "{\"path\":\"README.md\"}"
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "读取文件"),
+            ChatMessage(role: .assistant, content: "我来读取。", toolCalls: [call]),
+            ChatMessage(
+                role: .tool,
+                content: "文件完整内容",
+                toolCalls: [InternalToolCall(
+                    id: call.id,
+                    toolName: call.toolName,
+                    arguments: call.arguments,
+                    result: "文件完整内容"
+                )]
+            ),
+            ChatMessage(role: .assistant, content: "读取完成。")
+        ]
+
+        let items = ConversationContinuationRetainedContentPlanner.makeItems(from: messages)
+        let messageContents = items.compactMap { item -> String? in
+            guard case .message(let message) = item else { return nil }
+            return message.content
+        }
+        let tools = items.compactMap { item -> ConversationContinuationRetainedTool? in
+            guard case .tool(let tool) = item else { return nil }
+            return tool
+        }
+
+        #expect(messageContents == ["读取文件", "我来读取。", "读取完成。"])
+        guard tools.count == 1, let tool = tools.first else {
+            Issue.record("工具调用没有正确合并为单条展示记录")
+            return
+        }
+        #expect(tool.toolCallID == call.id)
+        #expect(tool.result == "文件完整内容")
+    }
+
+    @Test func continuationDisplayKeepsToolPlacementAndOrphanResults() {
+        let call = InternalToolCall(
+            id: "call-before-content",
+            toolName: "search",
+            arguments: "{}",
+            result: "搜索结果"
+        )
+        let assistant = ChatMessage(
+            role: .assistant,
+            content: "整理后的回答",
+            toolCalls: [call],
+            toolCallsPlacement: .afterReasoning
+        )
+        let orphan = ChatMessage(role: .tool, content: "旧数据中的孤立工具结果")
+
+        let items = ConversationContinuationRetainedContentPlanner.makeItems(
+            from: [assistant, orphan]
+        )
+
+        guard items.count == 3,
+              case .tool(let firstTool) = items[0],
+              case .message(let message) = items[1],
+              case .tool(let orphanTool) = items[2] else {
+            Issue.record("展示顺序或类型不符合预期")
+            return
+        }
+        #expect(firstTool.toolName == "search")
+        #expect(message.content == "整理后的回答")
+        #expect(orphanTool.toolCallID == nil)
+        #expect(orphanTool.result == "旧数据中的孤立工具结果")
+    }
 }

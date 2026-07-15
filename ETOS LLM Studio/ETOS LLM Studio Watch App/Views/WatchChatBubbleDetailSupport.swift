@@ -477,12 +477,14 @@ struct WatchToolCallLongTextPreview: View {
     let textCharacterCount: Int
     let needsExpansion: Bool
     let lineLimit: Int?
+    let customTextColor: Color?
 
     init(
         title: String,
         text: String,
         usesMonospacedFont: Bool,
-        lineLimit: Int? = nil
+        lineLimit: Int? = nil,
+        customTextColor: Color? = nil
     ) {
         self.title = title
         self.text = text
@@ -493,6 +495,27 @@ struct WatchToolCallLongTextPreview: View {
         self.textCharacterCount = characterCount
         self.needsExpansion = expands
         self.displayedText = expands ? String(text.prefix(WatchToolCallTextPreviewConstants.previewLimit)) : text
+        self.customTextColor = customTextColor
+    }
+
+    init(
+        title: String,
+        text: String,
+        usesMonospacedFont: Bool,
+        displayedText: String,
+        textCharacterCount: Int,
+        needsExpansion: Bool,
+        lineLimit: Int? = nil,
+        customTextColor: Color? = nil
+    ) {
+        self.title = title
+        self.text = text
+        self.usesMonospacedFont = usesMonospacedFont
+        self.displayedText = displayedText
+        self.textCharacterCount = textCharacterCount
+        self.needsExpansion = needsExpansion
+        self.lineLimit = lineLimit
+        self.customTextColor = customTextColor
     }
 
     var body: some View {
@@ -502,7 +525,7 @@ struct WatchToolCallLongTextPreview: View {
             if needsExpansion {
                 Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), WatchToolCallTextPreviewConstants.previewLimit, textCharacterCount))
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(customTextColor ?? .secondary)
 
                 NavigationLink {
                     WatchToolCallPagedTextView(title: title, text: text)
@@ -519,13 +542,13 @@ struct WatchToolCallLongTextPreview: View {
         if usesMonospacedFont {
             Text(displayedText)
                 .etFont(.caption2.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text(displayedText)
                 .etFont(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
         }

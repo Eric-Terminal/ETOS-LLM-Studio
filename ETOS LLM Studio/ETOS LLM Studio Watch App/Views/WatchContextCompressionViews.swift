@@ -24,6 +24,70 @@ struct WatchContextCompressionReminderNotificationKey: Hashable {
     let tokenThreshold: Int
 }
 
+private struct WatchConversationContinuationTextPreview: Sendable {
+    let full: String
+    let displayed: String
+    let characterCount: Int
+    let isTruncated: Bool
+
+    nonisolated init(text: String, limit: Int) {
+        let characterCount = text.count
+        self.full = text
+        self.displayed = characterCount > limit
+            ? String(text.prefix(limit))
+            : text
+        self.characterCount = characterCount
+        self.isTruncated = characterCount > limit
+    }
+}
+
+private struct WatchConversationContinuationToolContent: Identifiable, Sendable {
+    let tool: ConversationContinuationRetainedTool
+    let arguments: WatchConversationContinuationTextPreview
+    let result: WatchConversationContinuationTextPreview
+
+    var id: String { tool.id }
+
+    nonisolated init(tool: ConversationContinuationRetainedTool) {
+        self.tool = tool
+        self.arguments = WatchConversationContinuationTextPreview(
+            text: tool.arguments,
+            limit: WatchToolCallTextPreviewConstants.previewLimit
+        )
+        self.result = WatchConversationContinuationTextPreview(
+            text: tool.result,
+            limit: WatchToolCallTextPreviewConstants.previewLimit
+        )
+    }
+}
+
+private enum WatchConversationContinuationRetainedDisplayItem: Identifiable, Sendable {
+    case message(ConversationContinuationRetainedMessage)
+    case tool(WatchConversationContinuationToolContent)
+
+    var id: String {
+        switch self {
+        case .message(let message):
+            return "message:\(message.id.uuidString)"
+        case .tool(let tool):
+            return tool.id
+        }
+    }
+
+    nonisolated static func make(
+        from messages: [ChatMessage]
+    ) -> [WatchConversationContinuationRetainedDisplayItem] {
+        ConversationContinuationRetainedContentPlanner.makeItems(from: messages).map { item in
+            switch item {
+            case .message(let message):
+                return .message(message)
+            case .tool(let tool):
+                return .tool(WatchConversationContinuationToolContent(tool: tool))
+            }
+        }
+    }
+}
+
 struct WatchConversationContinuationCard: View {
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
 
@@ -137,6 +201,7 @@ struct WatchConversationContinuationDetailView: View {
     let onInsertText: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var retainedDisplayItems: [WatchConversationContinuationRetainedDisplayItem]?
 
     var body: some View {
         List {
@@ -181,30 +246,56 @@ struct WatchConversationContinuationDetailView: View {
 
             if !context.retainedMessages.isEmpty {
                 Section(NSLocalizedString("最近对话原文", comment: "Continuation context retained messages heading")) {
-                    ForEach(context.retainedMessages) { message in
-                        NavigationLink {
-                            WatchMessageTextSelectionView(message: message) { text in
-                                onInsertText(text)
-                                dismiss()
-                            }
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(roleTitle(message.role))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(assistantSecondaryTextColor)
-                                WatchContinuationMarkdownView(
-                                    contentID: message.id,
-                                    content: message.content,
-                                    enableAdvancedRenderer: enableAdvancedRenderer,
-                                    customTextColor: assistantTextColorOverride,
-                                    customTextStyleColors: assistantTextStyleColors
-                                )
+                    if let retainedDisplayItems {
+                        ForEach(retainedDisplayItems) { item in
+                            switch item {
+                            case .message(let message):
+                                NavigationLink {
+                                    WatchMessageTextSelectionView(
+                                        message: ChatMessage(
+                                            id: message.id,
+                                            role: message.role,
+                                            content: message.content
+                                        )
+                                    ) { text in
+                                        onInsertText(text)
+                                        dismiss()
+                                    }
+                                } label: {
+                                    VStack(alignment: .leading) {
+                                        Text(roleTitle(message.role))
+                                            .etFont(.caption2)
+                                            .foregroundStyle(assistantSecondaryTextColor)
+                                        WatchContinuationMarkdownView(
+                                            contentID: message.id,
+                                            content: message.content,
+                                            enableAdvancedRenderer: enableAdvancedRenderer,
+                                            customTextColor: assistantTextColorOverride,
+                                            customTextStyleColors: assistantTextStyleColors
+                                        )
+                                    }
+                                }
+                                .accessibilityHint(NSLocalizedString(
+                                    "选定文字",
+                                    comment: "Open retained message text selection"
+                                ))
+                            case .tool(let tool):
+                                NavigationLink {
+                                    WatchConversationContinuationToolDetailView(
+                                        content: tool,
+                                        secondaryTextColor: assistantSecondaryTextColor
+                                    )
+                                } label: {
+                                    WatchConversationContinuationToolRow(
+                                        content: tool,
+                                        primaryTextColor: assistantPrimaryTextColor,
+                                        secondaryTextColor: assistantSecondaryTextColor
+                                    )
+                                }
                             }
                         }
-                        .accessibilityHint(NSLocalizedString(
-                            "选定文字",
-                            comment: "Open retained message text selection"
-                        ))
+                    } else {
+                        ProgressView()
                     }
                 }
             }
@@ -221,6 +312,12 @@ struct WatchConversationContinuationDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("续聊上下文", comment: "Continuation context detail title"))
+        .task(id: context.id) {
+            let messages = context.retainedMessages
+            retainedDisplayItems = await Task.detached(priority: .utility) {
+                WatchConversationContinuationRetainedDisplayItem.make(from: messages)
+            }.value
+        }
     }
 
     private var summaryMessage: ChatMessage {
@@ -241,6 +338,10 @@ struct WatchConversationContinuationDetailView: View {
         assistantTextColorOverride?.opacity(0.78) ?? .secondary
     }
 
+    private var assistantPrimaryTextColor: Color {
+        assistantTextColorOverride ?? .primary
+    }
+
     private func roleTitle(_ role: MessageRole) -> String {
         switch role {
         case .system:
@@ -255,6 +356,98 @@ struct WatchConversationContinuationDetailView: View {
             return NSLocalizedString("错误", comment: "Continuation retained message role")
         }
     }
+}
+
+private struct WatchConversationContinuationToolRow: View {
+    let content: WatchConversationContinuationToolContent
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+
+    var body: some View {
+        HStack {
+            Image(systemName: "wrench.and.screwdriver")
+                .foregroundStyle(.tint)
+
+            VStack(alignment: .leading) {
+                Text(toolDisplayLabel)
+                    .etFont(.footnote.weight(.semibold))
+                    .foregroundStyle(primaryTextColor)
+                Text(statusTitle)
+                    .etFont(.caption2)
+                    .foregroundStyle(secondaryTextColor)
+            }
+        }
+    }
+
+    private var toolDisplayLabel: String {
+        continuationToolDisplayLabel(content.tool.toolName)
+    }
+
+    private var statusTitle: String {
+        content.result.full.isEmpty
+            ? NSLocalizedString("工具调用", comment: "Continuation tool call without a stored result")
+            : NSLocalizedString("已完成", comment: "Completed continuation tool call")
+    }
+}
+
+private struct WatchConversationContinuationToolDetailView: View {
+    let content: WatchConversationContinuationToolContent
+    let secondaryTextColor: Color
+
+    var body: some View {
+        List {
+            if !content.arguments.full.isEmpty {
+                Section(NSLocalizedString("参数", comment: "Tool arguments section title")) {
+                    WatchToolCallLongTextPreview(
+                        title: NSLocalizedString("参数", comment: "Tool arguments section title"),
+                        text: content.arguments.full,
+                        usesMonospacedFont: true,
+                        displayedText: content.arguments.displayed,
+                        textCharacterCount: content.arguments.characterCount,
+                        needsExpansion: content.arguments.isTruncated,
+                        customTextColor: secondaryTextColor
+                    )
+                }
+            }
+
+            if !content.result.full.isEmpty {
+                Section(NSLocalizedString("工具结果", comment: "Tool result section title")) {
+                    WatchToolCallLongTextPreview(
+                        title: NSLocalizedString("工具结果", comment: "Tool result section title"),
+                        text: content.result.full,
+                        usesMonospacedFont: true,
+                        displayedText: content.result.displayed,
+                        textCharacterCount: content.result.characterCount,
+                        needsExpansion: content.result.isTruncated,
+                        customTextColor: secondaryTextColor
+                    )
+                }
+            }
+        }
+        .navigationTitle(continuationToolDisplayLabel(content.tool.toolName))
+    }
+}
+
+private func continuationToolDisplayLabel(_ toolName: String?) -> String {
+    guard let toolName, !toolName.isEmpty else {
+        return NSLocalizedString("工具结果", comment: "Standalone continuation tool result title")
+    }
+    if toolName == "save_memory" {
+        return NSLocalizedString("添加记忆", comment: "Tool label for saving memory.")
+    }
+    if let label = MCPManager.shared.displayLabel(for: toolName) {
+        return label
+    }
+    if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+        return label
+    }
+    if let label = SkillManager.shared.displayLabel(for: toolName) {
+        return label
+    }
+    if let label = AppToolManager.shared.displayLabel(for: toolName) {
+        return label
+    }
+    return toolName
 }
 
 private struct WatchContinuationMarkdownView: View {

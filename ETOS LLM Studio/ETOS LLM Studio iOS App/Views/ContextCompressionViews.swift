@@ -35,42 +35,6 @@ enum ConversationContinuationExpansionState: Hashable {
     }
 }
 
-private struct ConversationContinuationMarkdownContent: Sendable {
-    static let previewCharacterLimit = 5_000
-
-    let full: String
-    let preview: String
-    let isPreviewTruncated: Bool
-
-    nonisolated static func make(
-        context: ConversationContinuationContext,
-        summaryHeading: String,
-        retainedHeading: String,
-        roleTitles: [String]
-    ) -> ConversationContinuationMarkdownContent {
-        var sections = ["## \(summaryHeading)\n\n\(context.summary)"]
-        if !context.retainedMessages.isEmpty {
-            var retainedSections = ["## \(retainedHeading)"]
-            retainedSections.reserveCapacity(context.retainedMessages.count + 1)
-            for (index, message) in context.retainedMessages.enumerated() {
-                retainedSections.append("### \(roleTitles[index])\n\n\(message.content)")
-            }
-            sections.append(retainedSections.joined(separator: "\n\n"))
-        }
-
-        let full = sections.joined(separator: "\n\n")
-        let isPreviewTruncated = full.count > previewCharacterLimit
-        let preview = isPreviewTruncated
-            ? String(full.prefix(previewCharacterLimit)) + "\n\n…"
-            : full
-        return ConversationContinuationMarkdownContent(
-            full: full,
-            preview: preview,
-            isPreviewTruncated: isPreviewTruncated
-        )
-    }
-}
-
 struct ConversationContinuationBubble: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -86,9 +50,11 @@ struct ConversationContinuationBubble: View {
     let onExpansionStateChange: (ConversationContinuationExpansionState) -> Void
     let onOpenSource: () -> Void
 
-    @State private var markdownContent: ConversationContinuationMarkdownContent?
-    @State private var preparedPreview: ETPreparedMarkdownRenderPayload?
-    @State private var preparedFull: ETPreparedMarkdownRenderPayload?
+    @State private var displayContent: ConversationContinuationDisplayContent?
+    @State private var preparedPreview: [String: ETPreparedMarkdownRenderPayload] = [:]
+    @State private var preparedFull: [String: ETPreparedMarkdownRenderPayload] = [:]
+    @State private var expandedToolIDs: Set<String> = []
+    @State private var isPreparingFull = false
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -125,7 +91,7 @@ struct ConversationContinuationBubble: View {
                     .overlay(assistantSecondaryTextColor.opacity(0.35))
 
                 VStack(alignment: .leading) {
-                    renderedMarkdown
+                    renderedContent
 
                     Button(action: onOpenSource) {
                         Label(
@@ -144,7 +110,7 @@ struct ConversationContinuationBubble: View {
                         Spacer()
 
                         if expansionState == .preview,
-                           markdownContent?.isPreviewTruncated == true {
+                           displayContent?.isPreviewTruncated == true {
                             Button(NSLocalizedString(
                                 "完全展开",
                                 comment: "Fully expand continuation context action"
@@ -194,12 +160,43 @@ struct ConversationContinuationBubble: View {
     }
 
     @ViewBuilder
-    private var renderedMarkdown: some View {
-        let content = expansionState == .full ? markdownContent?.full : markdownContent?.preview
-        let prepared = expansionState == .full ? preparedFull : preparedPreview
-        if let content,
-           let prepared,
-           prepared.sourceText == content {
+    private var renderedContent: some View {
+        if let displayContent {
+            let segments = expansionState == .full
+                ? displayContent.full
+                : displayContent.preview
+            let prepared = expansionState == .full ? preparedFull : preparedPreview
+            VStack(alignment: .leading) {
+                ForEach(segments) { segment in
+                    switch segment {
+                    case .markdown(let id, let content):
+                        continuationMarkdown(
+                            content,
+                            prepared: prepared[id]
+                        )
+                    case .tool(let tool):
+                        ConversationContinuationToolDisclosure(
+                            content: tool,
+                            isExpanded: toolExpansionBinding(for: tool.id),
+                            primaryTextColor: assistantPrimaryTextColor,
+                            secondaryTextColor: assistantSecondaryTextColor
+                        )
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+    }
+
+    @ViewBuilder
+    private func continuationMarkdown(
+        _ content: String,
+        prepared: ETPreparedMarkdownRenderPayload?
+    ) -> some View {
+        if let prepared, prepared.sourceText == content {
             ETAdvancedMarkdownRenderer(
                 content: content,
                 preparedContent: prepared,
@@ -211,11 +208,23 @@ struct ConversationContinuationBubble: View {
                 customTextStyleColors: assistantTextStyleColors
             )
             .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
+    }
+
+    private func toolExpansionBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedToolIDs.contains(id) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedToolIDs.insert(id)
+                } else {
+                    expandedToolIDs.remove(id)
+                }
+            }
+        )
     }
 
     private var contextSubtitle: String {
@@ -308,6 +317,9 @@ struct ConversationContinuationBubble: View {
     }
 
     private func setExpansionState(_ newState: ConversationContinuationExpansionState) {
+        if newState == .collapsed {
+            expandedToolIDs.removeAll()
+        }
         if reduceMotion {
             expansionState = newState
         } else {
@@ -320,9 +332,11 @@ struct ConversationContinuationBubble: View {
 
     @MainActor
     private func preparePreview() async {
-        markdownContent = nil
-        preparedPreview = nil
-        preparedFull = nil
+        displayContent = nil
+        preparedPreview = [:]
+        preparedFull = [:]
+        expandedToolIDs.removeAll()
+        isPreparingFull = false
 
         let contextID = context.id
         let context = context
@@ -334,9 +348,17 @@ struct ConversationContinuationBubble: View {
             "最近对话原文",
             comment: "Continuation context retained messages heading"
         )
-        let roleTitles = context.retainedMessages.map { roleTitle($0.role) }
+        let roleTitles = Dictionary(
+            uniqueKeysWithValues: [
+                MessageRole.system,
+                .user,
+                .assistant,
+                .tool,
+                .error
+            ].map { ($0.rawValue, roleTitle($0)) }
+        )
         let content = await Task.detached(priority: .utility) {
-            ConversationContinuationMarkdownContent.make(
+            ConversationContinuationDisplayContent.make(
                 context: context,
                 summaryHeading: summaryHeading,
                 retainedHeading: retainedHeading,
@@ -345,22 +367,42 @@ struct ConversationContinuationBubble: View {
         }.value
         guard !Task.isCancelled, self.context.id == contextID else { return }
 
-        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: content.preview)
+        displayContent = content
+        let prepared = await prepareMarkdownSegments(content.preview)
         guard !Task.isCancelled, self.context.id == contextID else { return }
-        markdownContent = content
         preparedPreview = prepared
         if !content.isPreviewTruncated {
             preparedFull = prepared
+        } else if expansionState == .full {
+            await prepareFullContent()
         }
     }
 
     @MainActor
     private func prepareFullContent() async {
-        guard preparedFull == nil, let markdownContent else { return }
+        guard preparedFull.isEmpty,
+              !isPreparingFull,
+              let displayContent else { return }
+        isPreparingFull = true
+        defer { isPreparingFull = false }
         let contextID = context.id
-        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: markdownContent.full)
+        let prepared = await prepareMarkdownSegments(displayContent.full)
         guard !Task.isCancelled, context.id == contextID else { return }
         preparedFull = prepared
+    }
+
+    @MainActor
+    private func prepareMarkdownSegments(
+        _ segments: [ConversationContinuationContentSegment]
+    ) async -> [String: ETPreparedMarkdownRenderPayload] {
+        var prepared: [String: ETPreparedMarkdownRenderPayload] = [:]
+        for segment in segments {
+            guard case .markdown(let id, let content) = segment else { continue }
+            prepared[id] = await ETMarkdownPrecomputeWorker.shared.prepare(source: content)
+            try? Task.checkCancellation()
+            if Task.isCancelled { return [:] }
+        }
+        return prepared
     }
 }
 

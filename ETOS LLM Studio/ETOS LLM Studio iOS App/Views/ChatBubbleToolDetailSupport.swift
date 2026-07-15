@@ -302,11 +302,13 @@ struct ToolCallLongTextPreview: View {
     let displayedText: String
     let textCharacterCount: Int
     let needsExpansion: Bool
+    let customTextColor: Color?
 
     init(
         title: String,
         text: String,
-        usesMonospacedFont: Bool
+        usesMonospacedFont: Bool,
+        customTextColor: Color? = nil
     ) {
         self.title = title
         self.text = text
@@ -316,6 +318,25 @@ struct ToolCallLongTextPreview: View {
         self.textCharacterCount = characterCount
         self.needsExpansion = expands
         self.displayedText = expands ? String(text.prefix(ToolCallTextPreviewConstants.previewLimit)) : text
+        self.customTextColor = customTextColor
+    }
+
+    init(
+        title: String,
+        text: String,
+        usesMonospacedFont: Bool,
+        displayedText: String,
+        textCharacterCount: Int,
+        needsExpansion: Bool,
+        customTextColor: Color? = nil
+    ) {
+        self.title = title
+        self.text = text
+        self.usesMonospacedFont = usesMonospacedFont
+        self.displayedText = displayedText
+        self.textCharacterCount = textCharacterCount
+        self.needsExpansion = needsExpansion
+        self.customTextColor = customTextColor
     }
 
     var body: some View {
@@ -325,7 +346,7 @@ struct ToolCallLongTextPreview: View {
             if needsExpansion {
                 Text(String(format: NSLocalizedString("已显示前 %d 个字符，共 %d 个字符。", comment: ""), ToolCallTextPreviewConstants.previewLimit, textCharacterCount))
                     .etFont(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(customTextColor ?? .secondary)
 
                 NavigationLink {
                     ToolCallPagedTextView(title: title, text: text)
@@ -342,13 +363,13 @@ struct ToolCallLongTextPreview: View {
         if usesMonospacedFont {
             Text(displayedText)
                 .etFont(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text(displayedText)
                 .etFont(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(customTextColor ?? .secondary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
