@@ -835,9 +835,10 @@ struct CloudSyncManagerTests {
         context: TestContext,
         state: SnapshotState,
         transport: MockCloudSyncTransport,
-        recorder: AppliedDeltaRecorder = AppliedDeltaRecorder()
+        recorder: AppliedDeltaRecorder? = nil
     ) -> CloudSyncManager {
-        CloudSyncManager(
+        let recorder = recorder ?? AppliedDeltaRecorder()
+        return CloudSyncManager(
             transport: transport,
             userDefaults: context.defaults,
             snapshotBuilder: { _ in

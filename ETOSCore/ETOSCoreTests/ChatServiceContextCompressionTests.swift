@@ -8,6 +8,7 @@
 
 import Foundation
 import Testing
+import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {

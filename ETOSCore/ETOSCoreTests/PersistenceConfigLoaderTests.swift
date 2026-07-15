@@ -301,8 +301,9 @@ extension PersistenceTests {
                     Date().timeIntervalSince1970
                 ]
             )
+            return true
         }
-        #expect(inserted != nil)
+        #expect(inserted == true)
         defer {
             if let loaded = ConfigLoader.loadProviders().first(where: { $0.id == providerID }) {
                 ConfigLoader.deleteProvider(loaded)

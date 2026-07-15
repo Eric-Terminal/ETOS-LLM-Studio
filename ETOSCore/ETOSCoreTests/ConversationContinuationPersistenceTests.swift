@@ -31,8 +31,9 @@ struct ConversationContinuationPersistenceTests {
 
             try store.createConversationContinuationSession(session: child, context: context)
 
+            let persistedContext = try store.loadConversationContinuationContext(for: child.id)
             #expect(store.loadChatSessions().map(\.id) == [child.id, source.id])
-            #expect(try store.loadConversationContinuationContext(for: child.id) == context)
+            try expectPersistedContext(persistedContext, matches: context)
             #expect(store.loadMessages(for: child.id).isEmpty)
             #expect(!store.sessionIDsWithoutMessageData().contains(child.id))
         }
@@ -48,7 +49,8 @@ struct ConversationContinuationPersistenceTests {
 
             store.deleteSessionArtifacts(sessionID: source.id)
 
-            #expect(try store.loadConversationContinuationContext(for: child.id) == context)
+            let persistedContext = try store.loadConversationContinuationContext(for: child.id)
+            try expectPersistedContext(persistedContext, matches: context)
             #expect(store.loadChatSessions().contains { $0.id == child.id })
         }
     }
@@ -63,7 +65,8 @@ struct ConversationContinuationPersistenceTests {
 
             store.deleteSessionArtifacts(sessionID: child.id)
 
-            #expect(try store.loadConversationContinuationContext(for: child.id) == nil)
+            let persistedContext = try store.loadConversationContinuationContext(for: child.id)
+            #expect(persistedContext == nil)
         }
     }
 
@@ -80,8 +83,9 @@ struct ConversationContinuationPersistenceTests {
                     context: context
                 )
             }
+            let persistedContext = try store.loadConversationContinuationContext(for: existingChild.id)
             #expect(store.loadChatSessions().first?.name == "已有会话")
-            #expect(try store.loadConversationContinuationContext(for: existingChild.id) == nil)
+            #expect(persistedContext == nil)
         }
     }
 
@@ -104,6 +108,28 @@ struct ConversationContinuationPersistenceTests {
             estimatedSourceTokens: 900,
             estimatedResultTokens: 120
         )
+    }
+
+    private func expectPersistedContext(
+        _ persistedContext: ConversationContinuationContext?,
+        matches expectedContext: ConversationContinuationContext
+    ) throws {
+        let persistedContext = try #require(persistedContext)
+        #expect(persistedContext.id == expectedContext.id)
+        #expect(persistedContext.childSessionID == expectedContext.childSessionID)
+        #expect(persistedContext.sourceSessionID == expectedContext.sourceSessionID)
+        #expect(persistedContext.sourceSessionNameSnapshot == expectedContext.sourceSessionNameSnapshot)
+        #expect(persistedContext.sourceThroughMessageID == expectedContext.sourceThroughMessageID)
+        #expect(abs(persistedContext.createdAt.timeIntervalSince(expectedContext.createdAt)) < 0.001)
+        #expect(persistedContext.summary == expectedContext.summary)
+        #expect(persistedContext.retainedMessages == expectedContext.retainedMessages)
+        #expect(persistedContext.retainedRoundCount == expectedContext.retainedRoundCount)
+        #expect(persistedContext.compressionModelIdentifier == expectedContext.compressionModelIdentifier)
+        #expect(persistedContext.promptVersion == expectedContext.promptVersion)
+        #expect(persistedContext.sourceMessageCount == expectedContext.sourceMessageCount)
+        #expect(persistedContext.summarizedMessageCount == expectedContext.summarizedMessageCount)
+        #expect(persistedContext.estimatedSourceTokens == expectedContext.estimatedSourceTokens)
+        #expect(persistedContext.estimatedResultTokens == expectedContext.estimatedResultTokens)
     }
 
     private func withStore(_ body: (PersistenceGRDBStore) throws -> Void) throws {

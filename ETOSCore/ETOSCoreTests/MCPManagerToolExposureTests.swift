@@ -10,7 +10,7 @@ import Testing
 import Foundation
 @testable import ETOSCore
 
-@Suite("MCP 管理器工具暴露测试")
+@Suite("MCP 管理器工具暴露测试", .serialized)
 struct MCPManagerToolExposureTests {
 
     @Test("MCP 默认超时为三分钟且最多重试三次")
@@ -101,6 +101,9 @@ struct MCPManagerToolExposureTests {
     @MainActor
     @Test("MCP 管理器可按绑定回写服务器顺序")
     func testSetServerOrderReordersManagerAndPersists() {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         manager.reloadServers()
         let originalOrder = manager.servers.map(\.id)
@@ -157,7 +160,10 @@ struct MCPManagerToolExposureTests {
 
     @MainActor
     @Test("MCP 聊天总开关关闭时 chatToolsForLLM 返回空数组")
-    func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() {
+    func testChatToolsForLLMReturnsEmptyWhenGlobalSwitchDisabled() throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         let originalServers = MCPServerStore.loadServers()
         let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
@@ -218,16 +224,20 @@ struct MCPManagerToolExposureTests {
         manager.reloadServers()
         let exposedTools = manager.chatToolsForLLM()
         #expect(exposedTools.count == 1)
-        #expect(exposedTools[0].name == "mcp_tool_alpha")
+        let exposedTool = try #require(exposedTools.first)
+        #expect(exposedTool.name == "mcp_tool_alpha")
 
         manager.setChatToolsEnabled(false)
         #expect(manager.chatToolsForLLM().isEmpty)
-        #expect(manager.approvalPolicy(for: exposedTools[0].name) == .alwaysDeny)
+        #expect(manager.approvalPolicy(for: exposedTool.name) == .alwaysDeny)
     }
 
     @MainActor
     @Test("MCP 聊天总开关关闭时不会按缓存乐观恢复并自动连接")
     func testDisabledGlobalSwitchSkipsLaunchAutoConnect() {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let manager = MCPManager.shared
         let originalServers = MCPServerStore.loadServers()
         let originalMetadata = Dictionary(uniqueKeysWithValues: originalServers.map { server in
@@ -292,5 +302,17 @@ struct MCPManagerToolExposureTests {
         #expect(manager.inFlightConnections[server.id] == nil)
         #expect(manager.clients[server.id] == nil)
         #expect(manager.status(for: server).connectionState == .idle)
+    }
+
+    private func enableRelationalPersistence() -> Bool? {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        return previousOverride
+    }
+
+    private func restorePersistenceOverride(_ previousOverride: Bool?) {
+        Persistence.grdbEnabledOverrideForTests = previousOverride
+        Persistence.resetGRDBStoreForTests()
     }
 }

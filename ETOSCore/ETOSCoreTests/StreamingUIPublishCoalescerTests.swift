@@ -16,15 +16,18 @@ struct StreamingUIPublishCoalescerTests {
         let start = Date(timeIntervalSince1970: 1_000)
         var coalescer = StreamingUIPublishCoalescer(interval: 0.060)
 
-        #expect(coalescer.shouldPublish(now: start))
+        let initialPublish = coalescer.shouldPublish(now: start)
+        #expect(initialPublish)
         #expect(coalescer.lastPublishedAt == start)
         #expect(coalescer.hasPendingUpdate == false)
 
-        #expect(coalescer.shouldPublish(now: start.addingTimeInterval(0.030)) == false)
+        let throttledPublish = coalescer.shouldPublish(now: start.addingTimeInterval(0.030))
+        #expect(throttledPublish == false)
         #expect(coalescer.hasPendingUpdate == true)
 
         let nextAllowed = start.addingTimeInterval(0.061)
-        #expect(coalescer.shouldPublish(now: nextAllowed))
+        let resumedPublish = coalescer.shouldPublish(now: nextAllowed)
+        #expect(resumedPublish)
         #expect(coalescer.lastPublishedAt == nextAllowed)
         #expect(coalescer.hasPendingUpdate == false)
     }
@@ -34,13 +37,17 @@ struct StreamingUIPublishCoalescerTests {
         let start = Date(timeIntervalSince1970: 2_000)
         var coalescer = StreamingUIPublishCoalescer(interval: 0.080)
 
-        #expect(coalescer.shouldFlushPending(now: start) == false)
-        #expect(coalescer.shouldPublish(now: start))
-        #expect(coalescer.shouldPublish(now: start.addingTimeInterval(0.020)) == false)
+        let emptyFlush = coalescer.shouldFlushPending(now: start)
+        let initialPublish = coalescer.shouldPublish(now: start)
+        let throttledPublish = coalescer.shouldPublish(now: start.addingTimeInterval(0.020))
+        #expect(emptyFlush == false)
+        #expect(initialPublish)
+        #expect(throttledPublish == false)
         #expect(coalescer.hasPendingUpdate == true)
 
         let flushDate = start.addingTimeInterval(0.025)
-        #expect(coalescer.shouldFlushPending(now: flushDate))
+        let pendingFlush = coalescer.shouldFlushPending(now: flushDate)
+        #expect(pendingFlush)
         #expect(coalescer.lastPublishedAt == flushDate)
         #expect(coalescer.hasPendingUpdate == false)
     }

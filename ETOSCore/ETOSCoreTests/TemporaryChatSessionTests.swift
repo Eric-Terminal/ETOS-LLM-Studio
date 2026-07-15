@@ -3,9 +3,10 @@
 // ============================================================================
 
 import Testing
+import Combine
 @testable import ETOSCore
 
-@Suite("临时对话会话测试")
+@Suite("临时对话会话测试", .serialized)
 struct TemporaryChatSessionTests {
     @Test("临时对话关闭前只保留内存快照，关闭后完整落盘")
     func temporaryMessagesPersistOnlyAfterSavingSession() throws {
@@ -17,7 +18,7 @@ struct TemporaryChatSessionTests {
         }
 
         let messages = [ChatMessage(role: .user, content: "只存在于内存")]
-        service.persistMessages(messages, for: session.id)
+        service.persistAndPublishMessages(messages, for: session.id)
 
         #expect(service.isTemporaryChatEnabled(for: session.id))
         #expect(service.messagesForSessionActivation(session.id) == messages)

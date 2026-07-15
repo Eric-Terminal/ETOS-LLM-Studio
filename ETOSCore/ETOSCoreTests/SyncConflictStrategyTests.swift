@@ -11,7 +11,7 @@ import Foundation
 import Combine
 @testable import ETOSCore
 
-@Suite("同步冲突策略测试")
+@Suite("同步冲突策略测试", .serialized)
 struct SyncConflictStrategyTests {
 
     @Test("会话尾部追加与同消息增量更新会合并到原会话")
@@ -320,7 +320,10 @@ struct SyncConflictStrategyTests {
     }
 
     @Test("提供商新增嵌套键值时会深度合并")
-    func testProvidersDeepMergeWhenIncomingAddsNestedValues() async {
+    func testProvidersDeepMergeWhenIncomingAddsNestedValues() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -370,12 +373,14 @@ struct SyncConflictStrategyTests {
 
         #expect(summary.importedProviders == 1)
         #expect(mergedProviders.count == 1)
-        #expect(mergedProviders[0].apiKeys == ["local-key", "incoming-key"])
-        #expect(mergedProviders[0].headerOverrides["Authorization"] == "Bearer {{apiKey}}")
-        #expect(mergedProviders[0].headerOverrides["X-Trace-Id"] == "sync")
-        #expect(mergedProviders[0].models[0].isActivated == true)
+        let mergedProvider = try #require(mergedProviders.first)
+        let mergedModel = try #require(mergedProvider.models.first)
+        #expect(mergedProvider.apiKeys == ["local-key", "incoming-key"])
+        #expect(mergedProvider.headerOverrides["Authorization"] == "Bearer {{apiKey}}")
+        #expect(mergedProvider.headerOverrides["X-Trace-Id"] == "sync")
+        #expect(mergedModel.isActivated == true)
 
-        if case let .dictionary(responseDict)? = mergedProviders[0].models[0].overrideParameters["response"] {
+        if case let .dictionary(responseDict)? = mergedModel.overrideParameters["response"] {
             #expect(responseDict["format"] == .string("json"))
             #expect(responseDict["schema"] == .dictionary(["name": .string("sync-schema")]))
         } else {
@@ -385,6 +390,9 @@ struct SyncConflictStrategyTests {
 
     @Test("同步导入会使用对端模型能力形状覆盖本地")
     func testProviderSyncUsesIncomingModelCapabilityShape() async {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -433,7 +441,10 @@ struct SyncConflictStrategyTests {
     }
 
     @Test("提供商同键不同值时会优先保留本地且不生成重复项")
-    func testProvidersPreferLocalWhenSameHeaderKeyHasDifferentValue() async {
+    func testProvidersPreferLocalWhenSameHeaderKeyHasDifferentValue() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -466,12 +477,16 @@ struct SyncConflictStrategyTests {
 
         #expect(summary.importedProviders == 1)
         #expect(mergedProviders.count == 1)
-        #expect(mergedProviders[0].headerOverrides["X-Mode"] == "local")
-        #expect(mergedProviders[0].apiKeys == ["local-key", "remote-key"])
+        let mergedProvider = try #require(mergedProviders.first)
+        #expect(mergedProvider.headerOverrides["X-Mode"] == "local")
+        #expect(mergedProvider.apiKeys == ["local-key", "remote-key"])
     }
 
     @Test("提供商 API 格式别名冲突时会归一化并合并")
-    func testProvidersNormalizeAliasFormatWithoutDuplication() async {
+    func testProvidersNormalizeAliasFormatWithoutDuplication() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -504,12 +519,16 @@ struct SyncConflictStrategyTests {
 
         #expect(summary.importedProviders == 1)
         #expect(mergedProviders.count == 1)
-        #expect(mergedProviders[0].apiFormat == "openai-compatible")
-        #expect(mergedProviders[0].apiKeys == ["local-key", "remote-key"])
+        let mergedProvider = try #require(mergedProviders.first)
+        #expect(mergedProvider.apiFormat == "openai-compatible")
+        #expect(mergedProvider.apiKeys == ["local-key", "remote-key"])
     }
 
     @Test("同步前已有同名同地址重复项时会自动压缩为一份")
-    func testProvidersCompactedBeforeApplyingIncomingPackage() async {
+    func testProvidersCompactedBeforeApplyingIncomingPackage() async throws {
+        let previousPersistenceOverride = enableRelationalPersistence()
+        defer { restorePersistenceOverride(previousPersistenceOverride) }
+
         let originalProviders = ConfigLoader.loadProviders()
         defer {
             resetProviders(to: originalProviders)
@@ -545,8 +564,9 @@ struct SyncConflictStrategyTests {
 
         #expect(summary.importedProviders == 0)
         #expect(mergedProviders.count == 1)
-        #expect(mergedProviders[0].apiKeys == ["a-key", "b-key"])
-        #expect(mergedProviders[0].models.count == 2)
+        let mergedProvider = try #require(mergedProviders.first)
+        #expect(mergedProvider.apiKeys == ["a-key", "b-key"])
+        #expect(mergedProvider.models.count == 2)
     }
 
     @Test("双端用户画像更新会拼接并标记待去重")
@@ -673,6 +693,18 @@ struct SyncConflictStrategyTests {
         for provider in providers {
             ConfigLoader.saveProvider(provider)
         }
+    }
+
+    private func enableRelationalPersistence() -> Bool? {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        return previousOverride
+    }
+
+    private func restorePersistenceOverride(_ previousOverride: Bool?) {
+        Persistence.grdbEnabledOverrideForTests = previousOverride
+        Persistence.resetGRDBStoreForTests()
     }
 
     private func resetSessions(to snapshots: [SyncedSession]) {

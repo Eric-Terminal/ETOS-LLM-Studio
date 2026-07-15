@@ -225,6 +225,7 @@ struct ProviderOrderTests {
             id: id,
             name: name,
             baseURL: "https://example.com",
+            chatEndpointPath: Provider.defaultChatEndpointPath,
             apiFormat: "openai-compatible",
             proxyIsEnabled: nil,
             proxyType: nil,
