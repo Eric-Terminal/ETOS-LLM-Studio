@@ -12,6 +12,8 @@ import ETOSCore
 extension ChatView {
     func applyPresentationModifiers<Content: View>(to content: Content) -> some View {
         content
+            // 取消 Sheet 压暗后仍阻止底层聊天控件误触。
+            .allowsHitTesting(messageActionSheetPayload == nil)
             .navigationDestination(item: $navigationDestination) { destination in
                 quickActionDestinationView(for: destination)
             }
@@ -123,6 +125,8 @@ extension ChatView {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(Color.clear)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             }
             .sheet(isPresented: $isSelectedMessagesExportPresented) {
                 SelectedMessagesExportSheet(selectionCount: selectedMessageIDs.count) { format, includeReasoning, includeSystemPrompt in

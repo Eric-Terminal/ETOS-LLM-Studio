@@ -187,6 +187,8 @@ struct MessageActionSheet: View {
                 exportSection
                 messageInfoSection
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
             .navigationTitle(NSLocalizedString("消息操作", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
