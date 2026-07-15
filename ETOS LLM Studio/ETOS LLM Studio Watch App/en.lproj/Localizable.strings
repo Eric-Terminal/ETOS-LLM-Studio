@@ -5060,3 +5060,14 @@
 "当前会话没有可以压缩的对话内容。" = "The current chat has no conversation content to compress.";
 "当前 Detached Completion 模型不支持这组附件。" = "The current Detached Completion model does not support these attachments.";
 "上下文压缩" = "Context Compression";
+"上下文压缩提醒" = "Context Compression Reminder";
+"提醒阈值（Token）" = "Reminder Threshold (Tokens)";
+"Token" = "Token";
+"达到估算阈值后，聊天页会提示压缩；点击提示会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。" = "When the estimate reaches this threshold, the chat shows a compression reminder. Tapping it immediately creates a continuation using the default options while preserving the original chat. The token count is approximate; attachments are not read and no model is called for the reminder.";
+"达到阈值后，聊天页会显示一键压缩提醒；原会话会完整保留。" = "When the threshold is reached, the chat shows a one-tap compression reminder. The original chat is fully preserved.";
+"建议压缩上下文" = "Consider Compressing Context";
+"当前对话约 %@ Token，已达到 %@ Token 的提醒阈值。" = "This chat is about %@ tokens and has reached the %@-token reminder threshold.";
+"点击后立即按默认参数创建续聊会话" = "Tap to immediately create a continuation using the default options";
+"正在压缩为续聊" = "Compressing into a Continuation";
+"原会话“%@”会完整保留。" = "The original chat “%@” will be fully preserved.";
+"约 %@ / %@ Token" = "About %@ / %@ tokens";

@@ -7,6 +7,8 @@
 // ============================================================================
 
 import Foundation
+import Combine
+import os
 
 extension ChatService {
     private static let contextCompressionInputTokenBudget = 12_000

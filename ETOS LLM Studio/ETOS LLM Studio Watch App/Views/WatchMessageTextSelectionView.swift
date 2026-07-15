@@ -424,7 +424,7 @@ private struct WatchSelectableMessageToken: Identifiable, Sendable {
     let upperCharacterOffset: Int
 }
 
-private enum WatchSelectableMessageTokenKind: Equatable {
+nonisolated private enum WatchSelectableMessageTokenKind: Equatable {
     case asciiWord
     case whitespace
     case individual

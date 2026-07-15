@@ -76,6 +76,11 @@ extension ContentView {
                             _ = viewModel.setCurrentSessionIfExists(
                                 sessionID: continuationContext.sourceSessionID
                             )
+                        },
+                        onInsertText: { text in
+                            viewModel.applyToolInputDraftRequest(
+                                AppToolInputDraftRequest(text: text, mode: .append)
+                            )
                         }
                     )
                 } label: {

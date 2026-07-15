@@ -93,6 +93,7 @@ struct WatchConversationContinuationDetailView: View {
     let context: ConversationContinuationContext
     let sourceSessionAvailable: Bool
     let onOpenSource: () -> Void
+    let onInsertText: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -117,22 +118,42 @@ struct WatchConversationContinuationDetailView: View {
             }
 
             Section(NSLocalizedString("较早对话摘要", comment: "Continuation context summary heading")) {
-                Text(context.summary)
-                    .etFont(.footnote)
-                    .textSelection(.enabled)
+                NavigationLink {
+                    WatchMessageTextSelectionView(message: summaryMessage) { text in
+                        onInsertText(text)
+                        dismiss()
+                    }
+                } label: {
+                    Text(context.summary)
+                        .etFont(.footnote)
+                }
+                .accessibilityHint(NSLocalizedString(
+                    "选定文字",
+                    comment: "Open continuation summary text selection"
+                ))
             }
 
             if !context.retainedMessages.isEmpty {
                 Section(NSLocalizedString("最近对话原文", comment: "Continuation context retained messages heading")) {
                     ForEach(context.retainedMessages) { message in
-                        VStack(alignment: .leading) {
-                            Text(roleTitle(message.role))
-                                .etFont(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text(message.content)
-                                .etFont(.footnote)
-                                .textSelection(.enabled)
+                        NavigationLink {
+                            WatchMessageTextSelectionView(message: message) { text in
+                                onInsertText(text)
+                                dismiss()
+                            }
+                        } label: {
+                            VStack(alignment: .leading) {
+                                Text(roleTitle(message.role))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(message.content)
+                                    .etFont(.footnote)
+                            }
                         }
+                        .accessibilityHint(NSLocalizedString(
+                            "选定文字",
+                            comment: "Open retained message text selection"
+                        ))
                     }
                 }
             }
@@ -149,6 +170,10 @@ struct WatchConversationContinuationDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("续聊上下文", comment: "Continuation context detail title"))
+    }
+
+    private var summaryMessage: ChatMessage {
+        ChatMessage(id: context.id, role: .system, content: context.summary)
     }
 
     private func roleTitle(_ role: MessageRole) -> String {
