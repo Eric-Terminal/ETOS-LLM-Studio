@@ -25,6 +25,15 @@ public enum ContextCompressionReminderPolicy {
         isEnabled
             && estimatedTokens >= normalizedTokenThreshold(tokenThreshold)
     }
+
+    public static func shouldEvaluateReminder(
+        messageCount: Int,
+        currentSessionID: UUID,
+        continuationContext: ConversationContinuationContext?
+    ) -> Bool {
+        guard let continuationContext else { return true }
+        return continuationContext.childSessionID == currentSessionID && messageCount > 0
+    }
 }
 
 public enum ContextCompressionReminderEstimator {

@@ -100,6 +100,43 @@ struct ContextCompressionReminderEstimatorTests {
         ))
     }
 
+    @Test func skipsFreshContinuationUntilConversationGrows() {
+        let childSessionID = UUID()
+        let context = ConversationContinuationContext(
+            childSessionID: childSessionID,
+            sourceSessionID: UUID(),
+            sourceSessionNameSnapshot: "Source",
+            sourceThroughMessageID: UUID(),
+            summary: "Summary",
+            retainedMessages: [],
+            retainedRoundCount: 0,
+            compressionModelIdentifier: "model",
+            sourceMessageCount: 1,
+            summarizedMessageCount: 1
+        )
+
+        #expect(!ContextCompressionReminderPolicy.shouldEvaluateReminder(
+            messageCount: 0,
+            currentSessionID: childSessionID,
+            continuationContext: context
+        ))
+        #expect(ContextCompressionReminderPolicy.shouldEvaluateReminder(
+            messageCount: 1,
+            currentSessionID: childSessionID,
+            continuationContext: context
+        ))
+        #expect(!ContextCompressionReminderPolicy.shouldEvaluateReminder(
+            messageCount: 1,
+            currentSessionID: UUID(),
+            continuationContext: context
+        ))
+        #expect(ContextCompressionReminderPolicy.shouldEvaluateReminder(
+            messageCount: 0,
+            currentSessionID: childSessionID,
+            continuationContext: nil
+        ))
+    }
+
     @Test func exposesEnabledReminderDefaults() {
         #expect(AppConfigKey.enableContextCompressionReminder.defaultValue == .bool(true))
         #expect(

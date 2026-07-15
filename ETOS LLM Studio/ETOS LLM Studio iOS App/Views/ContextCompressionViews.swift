@@ -720,6 +720,13 @@ extension ChatView {
         }
         let messages = viewModel.allMessagesForSession
         let context = continuationContext
+        guard ContextCompressionReminderPolicy.shouldEvaluateReminder(
+            messageCount: messages.count,
+            currentSessionID: sessionID,
+            continuationContext: context
+        ) else {
+            return
+        }
         let estimate = await Task.detached(priority: .utility) {
             ContextCompressionReminderEstimator.estimate(
                 messages: messages,
@@ -741,7 +748,7 @@ extension ChatView {
         }
         let notificationKey = ContextCompressionReminderNotificationKey(
             sessionID: session.id,
-            continuationID: continuationContext?.id,
+            continuationID: context?.id,
             tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
         )
         guard contextCompressionReminderNotificationKeys.insert(notificationKey).inserted else { return }
