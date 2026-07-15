@@ -3,70 +3,37 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 将压缩分块、阶段摘要与续聊上下文投影为模型可读消息。
+// 将完整摘要输入与续聊上下文投影为模型可读消息。
 // ============================================================================
 
 import Foundation
 
-struct ContextCompressionSummaryInput: Sendable {
-    let coveredMessageIDs: [UUID]
-    let summary: String
-}
-
 enum ContextCompressionPromptBuilder {
-    private struct FragmentPayload: Encodable {
+    private struct MessagePayload: Encodable {
         let sourceMessageID: UUID
         let role: String
-        let fragmentIndex: Int
-        let fragmentCount: Int
         let content: String
-    }
-
-    private struct SummaryPayload: Encodable {
-        let coveredMessageIDs: [UUID]
-        let summary: String
     }
 
     static var systemPrompt: String {
         BuiltInPromptStore.render(.contextCompressionSystem)
     }
 
-    static func chunkUserPrompt(
-        _ chunk: ContextCompressionChunk,
+    static func summaryUserPrompt(
+        _ messages: [ContextCompressionSourceMessage],
         focusInstruction: String?
     ) throws -> String {
-        let payload = chunk.fragments.map {
-            FragmentPayload(
-                sourceMessageID: $0.sourceMessageID,
-                role: $0.role.rawValue,
-                fragmentIndex: $0.fragmentIndex + 1,
-                fragmentCount: $0.fragmentCount,
-                content: $0.content
+        let payload = messages.map {
+            MessagePayload(
+                sourceMessageID: $0.message.id,
+                role: $0.message.role.rawValue,
+                content: $0.semanticContent
             )
         }
         return BuiltInPromptStore.render(
-            .contextCompressionChunk,
+            .contextCompressionSummary,
             variables: [
                 "conversation": try encode(payload),
-                "focus": normalizedFocusInstruction(focusInstruction)
-            ]
-        )
-    }
-
-    static func synthesisUserPrompt(
-        _ summaries: [ContextCompressionSummaryInput],
-        focusInstruction: String?
-    ) throws -> String {
-        let payload = summaries.map {
-            SummaryPayload(
-                coveredMessageIDs: $0.coveredMessageIDs,
-                summary: $0.summary
-            )
-        }
-        return BuiltInPromptStore.render(
-            .contextCompressionSynthesis,
-            variables: [
-                "partial_summaries": try encode(payload),
                 "focus": normalizedFocusInstruction(focusInstruction)
             ]
         )

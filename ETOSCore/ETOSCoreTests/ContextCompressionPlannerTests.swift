@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 验证上下文压缩 Planner 的完整轮次保留与无截断覆盖约束。
+// 验证上下文压缩 Planner 的单次完整输入与最近轮次保留约束。
 // ============================================================================
 
 import Foundation
@@ -11,7 +11,7 @@ import Testing
 @testable import ETOSCore
 
 struct ContextCompressionPlannerTests {
-    @Test func shortConversationUsesSingleCompleteChunk() throws {
+    @Test func completeConversationUsesSingleSummaryInput() throws {
         let messages = [
             ChatMessage(role: .user, content: "简短问题"),
             ChatMessage(role: .assistant, content: "简短回答")
@@ -19,39 +19,28 @@ struct ContextCompressionPlannerTests {
         let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
         let plan = try ContextCompressionPlanner.makePlan(
             sourceMessages: source,
-            retainedRoundCount: 0,
-            inputTokenBudget: 512
+            retainedRoundCount: 0
         )
 
-        #expect(plan.chunks.count == 1)
-        #expect(plan.chunks[0].fragments.map(\.sourceMessageID) == messages.map(\.id))
-        #expect(plan.chunks[0].fragments.map(\.content) == messages.map(\.content))
+        #expect(plan.summaryMessages.map { $0.message.id } == messages.map(\.id))
+        #expect(plan.summaryMessages.map(\.semanticContent) == messages.map(\.content))
     }
 
-    @Test func longConversationChunksCoverEveryMessageWithoutLoss() throws {
+    @Test func longConversationRemainsOneCompleteSummaryInput() throws {
         let messages = (0..<12).map { index in
             ChatMessage(
                 role: index.isMultiple(of: 2) ? .user : .assistant,
-                content: "第\(index)条：" + String(repeating: "完整语义单元。", count: 18)
+                content: "第\(index)条：" + String(repeating: "完整语义单元。", count: 1_000)
             )
         }
         let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
         let plan = try ContextCompressionPlanner.makePlan(
             sourceMessages: source,
-            retainedRoundCount: 0,
-            inputTokenBudget: 180
+            retainedRoundCount: 0
         )
 
-        #expect(plan.chunks.count > 1)
-        for message in messages {
-            let rebuilt = plan.chunks
-                .flatMap(\.fragments)
-                .filter { $0.sourceMessageID == message.id }
-                .sorted { $0.fragmentIndex < $1.fragmentIndex }
-                .map(\.content)
-                .joined()
-            #expect(rebuilt == message.content)
-        }
+        #expect(plan.summaryMessages.count == messages.count)
+        #expect(plan.summaryMessages.map(\.semanticContent) == messages.map(\.content))
     }
 
     @Test func retainsRecentCompleteRounds() throws {
@@ -69,8 +58,7 @@ struct ContextCompressionPlannerTests {
         let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
         let plan = try ContextCompressionPlanner.makePlan(
             sourceMessages: source,
-            retainedRoundCount: 2,
-            inputTokenBudget: 512
+            retainedRoundCount: 2
         )
 
         #expect(plan.retainedRoundCount == 2)
@@ -80,23 +68,18 @@ struct ContextCompressionPlannerTests {
         #expect(plan.summarizedMessageCount == 3)
     }
 
-    @Test func oversizedMessageReassemblesWithoutLoss() throws {
+    @Test func oversizedMessageRemainsIntact() throws {
         let content = Array(repeating: "组合字符 e\u{301}、Emoji 👨‍👩‍👧‍👦。下一句！\n", count: 24).joined()
         let message = ChatMessage(role: .user, content: content)
         let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: [message])
         let plan = try ContextCompressionPlanner.makePlan(
             sourceMessages: source,
-            retainedRoundCount: 0,
-            inputTokenBudget: 180
+            retainedRoundCount: 0
         )
 
-        let fragments = plan.chunks.flatMap(\.fragments)
-            .filter { $0.sourceMessageID == message.id }
-            .sorted { $0.fragmentIndex < $1.fragmentIndex }
-
-        #expect(fragments.count > 1)
-        #expect(fragments.map(\.content).joined() == content)
-        #expect(plan.chunks.allSatisfy { $0.estimatedTokens <= 180 })
+        #expect(plan.summaryMessages.count == 1)
+        #expect(plan.summaryMessages[0].message.id == message.id)
+        #expect(plan.summaryMessages[0].semanticContent == content)
     }
 
     @Test func keepsSelectedResponseAttemptOnly() throws {
@@ -162,22 +145,23 @@ struct ContextCompressionPlannerTests {
         #expect(source[0].semanticContent.contains("晴，28°C"))
     }
 
-    @Test func synthesisPromptIncludesEveryStageSummary() throws {
-        let summaries = [
-            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段一唯一事实"),
-            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段二未决问题"),
-            ContextCompressionSummaryInput(coveredMessageIDs: [UUID()], summary: "阶段三明确约定")
+    @Test func summaryPromptIncludesEveryCompleteMessage() throws {
+        let messages = [
+            ChatMessage(role: .user, content: "开头唯一事实"),
+            ChatMessage(role: .assistant, content: "中间未决问题"),
+            ChatMessage(role: .user, content: "结尾明确约定")
         ]
+        let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: messages)
 
-        let prompt = try ContextCompressionPromptBuilder.synthesisUserPrompt(
-            summaries,
-            focusInstruction: "保留所有阶段"
+        let prompt = try ContextCompressionPromptBuilder.summaryUserPrompt(
+            source,
+            focusInstruction: "保留所有消息"
         )
 
-        #expect(prompt.contains("阶段一唯一事实"))
-        #expect(prompt.contains("阶段二未决问题"))
-        #expect(prompt.contains("阶段三明确约定"))
-        #expect(prompt.contains("保留所有阶段"))
+        #expect(prompt.contains("开头唯一事实"))
+        #expect(prompt.contains("中间未决问题"))
+        #expect(prompt.contains("结尾明确约定"))
+        #expect(prompt.contains("保留所有消息"))
     }
 
     @Test func continuationProjectionUsesSpecialHandoffAndExactRecentRoles() {

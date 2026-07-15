@@ -5092,3 +5092,7 @@
 "正在压缩为续聊" = "Compressing into a Continuation";
 "原会话“%@”会完整保留。" = "The original chat “%@” will be fully preserved.";
 "约 %@ / %@ Token" = "About %@ / %@ tokens";
+"正在生成续聊摘要…" = "Generating continuation summary…";
+"最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。" = "Recent turns stay verbatim. All earlier history is summarized in one pass, and the original chat remains unchanged.";
+"续聊压缩摘要提示词" = "Continuation Summary Prompt";
+"控制续聊会话以单次请求完整摘要较早对话。" = "Controls complete one-pass summarization of earlier conversation for a continuation chat.";

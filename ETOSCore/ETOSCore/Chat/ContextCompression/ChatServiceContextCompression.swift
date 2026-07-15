@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 执行附件语义提取、完整覆盖分块摘要、递归归并与续聊会话创建。
+// 执行附件语义提取、单次完整摘要与续聊会话创建。
 // ============================================================================
 
 import Foundation
@@ -11,20 +11,6 @@ import Combine
 import os
 
 extension ChatService {
-    private static let contextCompressionInputTokenBudget = 12_000
-    private static let contextCompressionNodeMetadataTokenEstimate = 128
-    private static let contextCompressionMaximumSynthesisLevels = 8
-
-    private struct ContextCompressionSummaryNode: Sendable {
-        let coveredMessageIDs: [UUID]
-        let summary: String
-
-        var estimatedTokens: Int {
-            ContextCompressionTokenEstimator.estimate(summary)
-                + ChatService.contextCompressionNodeMetadataTokenEstimate
-        }
-    }
-
     @discardableResult
     public func createCompressedContinuation(
         from sourceSessionID: UUID,
@@ -57,8 +43,7 @@ extension ChatService {
         )
         let plan = try ContextCompressionPlanner.makePlan(
             sourceMessages: preparedSourceMessages,
-            retainedRoundCount: options.retainedRoundCount,
-            inputTokenBudget: Self.contextCompressionInputTokenBudget
+            retainedRoundCount: options.retainedRoundCount
         )
         let finalSummary = try await generateContextCompressionSummary(
             plan: plan,
@@ -100,7 +85,7 @@ extension ChatService {
             sourceMessageCount: plan.sourceMessageCount,
             summarizedMessageCount: plan.summarizedMessageCount,
             estimatedSourceTokens: plan.estimatedSourceTokens,
-            estimatedResultTokens: ContextCompressionTokenEstimator.estimate(finalSummary)
+            estimatedResultTokens: ContextCompressionReminderEstimator.estimate(text: finalSummary)
         )
 
         try await Task.detached(priority: .userInitiated) {
@@ -320,70 +305,20 @@ extension ChatService {
         sourceSessionID: UUID,
         progress: @escaping @MainActor @Sendable (ContextCompressionProgress) -> Void
     ) async throws -> String {
-        guard !plan.chunks.isEmpty else {
+        guard !plan.summaryMessages.isEmpty else {
             return NSLocalizedString("较早历史无需摘要；最近对话已按原文保留。", comment: "Continuation context with retained messages only")
         }
 
-        var nodes: [ContextCompressionSummaryNode] = []
-        for (index, chunk) in plan.chunks.enumerated() {
-            try Task.checkCancellation()
-            await progress(ContextCompressionProgress(
-                phase: .summarizing(completed: index, total: plan.chunks.count)
-            ))
-            let summary = try await generateContextCompressionCompletion(
-                userPrompt: ContextCompressionPromptBuilder.chunkUserPrompt(
-                    chunk,
-                    focusInstruction: options.focusInstruction
-                ),
-                compressionModel: compressionModel,
-                sourceSessionID: sourceSessionID
-            )
-            nodes.append(ContextCompressionSummaryNode(
-                coveredMessageIDs: orderedUniqueMessageIDs(in: chunk.fragments),
-                summary: summary
-            ))
-        }
-        await progress(ContextCompressionProgress(
-            phase: .summarizing(completed: plan.chunks.count, total: plan.chunks.count)
-        ))
-
-        var level = 1
-        while nodes.count > 1 {
-            guard level <= Self.contextCompressionMaximumSynthesisLevels else {
-                throw ContextCompressionError.unableToReduceSummaries
-            }
-            try Task.checkCancellation()
-            await progress(ContextCompressionProgress(phase: .synthesizing(level: level)))
-            let expandedNodes = try splitOversizedContextCompressionNodes(nodes)
-            let groups = groupContextCompressionNodes(expandedNodes)
-            var synthesizedNodes: [ContextCompressionSummaryNode] = []
-            for group in groups {
-                let prompt = try ContextCompressionPromptBuilder.synthesisUserPrompt(
-                    group.map {
-                        ContextCompressionSummaryInput(
-                            coveredMessageIDs: $0.coveredMessageIDs,
-                            summary: $0.summary
-                        )
-                    },
-                    focusInstruction: options.focusInstruction
-                )
-                let summary = try await generateContextCompressionCompletion(
-                    userPrompt: prompt,
-                    compressionModel: compressionModel,
-                    sourceSessionID: sourceSessionID
-                )
-                synthesizedNodes.append(ContextCompressionSummaryNode(
-                    coveredMessageIDs: orderedUniqueMessageIDs(in: group),
-                    summary: summary
-                ))
-            }
-            nodes = synthesizedNodes
-            level += 1
-        }
-        guard let summary = nodes.first?.summary else {
-            throw ContextCompressionError.emptySummary
-        }
-        return summary
+        try Task.checkCancellation()
+        await progress(ContextCompressionProgress(phase: .summarizing))
+        return try await generateContextCompressionCompletion(
+            userPrompt: ContextCompressionPromptBuilder.summaryUserPrompt(
+                plan.summaryMessages,
+                focusInstruction: options.focusInstruction
+            ),
+            compressionModel: compressionModel,
+            sourceSessionID: sourceSessionID
+        )
     }
 
     private func generateContextCompressionCompletion(
@@ -405,70 +340,4 @@ extension ChatService {
         return summary
     }
 
-    private func splitOversizedContextCompressionNodes(
-        _ nodes: [ContextCompressionSummaryNode]
-    ) throws -> [ContextCompressionSummaryNode] {
-        var result: [ContextCompressionSummaryNode] = []
-        for node in nodes {
-            guard node.estimatedTokens > Self.contextCompressionInputTokenBudget else {
-                result.append(node)
-                continue
-            }
-            let message = ChatMessage(role: .user, content: node.summary)
-            let source = try ContextCompressionSourceMessage(message: message)
-            let plan = try ContextCompressionPlanner.makePlan(
-                sourceMessages: [source],
-                retainedRoundCount: 0,
-                inputTokenBudget: Self.contextCompressionInputTokenBudget
-            )
-            for fragment in plan.chunks.flatMap(\.fragments) {
-                result.append(ContextCompressionSummaryNode(
-                    coveredMessageIDs: node.coveredMessageIDs,
-                    summary: fragment.content
-                ))
-            }
-        }
-        return result
-    }
-
-    private func groupContextCompressionNodes(
-        _ nodes: [ContextCompressionSummaryNode]
-    ) -> [[ContextCompressionSummaryNode]] {
-        var groups: [[ContextCompressionSummaryNode]] = []
-        var current: [ContextCompressionSummaryNode] = []
-        var currentTokens = 0
-
-        for node in nodes {
-            if !current.isEmpty,
-               currentTokens + node.estimatedTokens > Self.contextCompressionInputTokenBudget {
-                groups.append(current)
-                current = []
-                currentTokens = 0
-            }
-            current.append(node)
-            currentTokens += node.estimatedTokens
-        }
-        if !current.isEmpty {
-            groups.append(current)
-        }
-        return groups
-    }
-
-    private func orderedUniqueMessageIDs(
-        in fragments: [ContextCompressionFragment]
-    ) -> [UUID] {
-        var seen = Set<UUID>()
-        return fragments.compactMap { fragment in
-            seen.insert(fragment.sourceMessageID).inserted ? fragment.sourceMessageID : nil
-        }
-    }
-
-    private func orderedUniqueMessageIDs(
-        in nodes: [ContextCompressionSummaryNode]
-    ) -> [UUID] {
-        var seen = Set<UUID>()
-        return nodes.flatMap(\.coveredMessageIDs).compactMap { messageID in
-            seen.insert(messageID).inserted ? messageID : nil
-        }
-    }
 }

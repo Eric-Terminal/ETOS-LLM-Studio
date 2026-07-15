@@ -11,6 +11,36 @@ import Testing
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("超长历史只发起一次完整摘要请求")
+    func longContextCompressionUsesOneCompleteRequest() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "一次生成的完整摘要")
+        let beginning = "开头唯一事实-" + String(repeating: "甲", count: 8_000)
+        let ending = "结尾唯一约定-" + String(repeating: "乙", count: 8_000)
+        let source = chatService.createSavedSession(
+            name: "单次摘要来源",
+            initialMessages: [
+                ChatMessage(role: .user, content: beginning),
+                ChatMessage(role: .assistant, content: "中间回答"),
+                ChatMessage(role: .user, content: ending)
+            ]
+        )
+
+        let child = try await chatService.createCompressedContinuation(
+            from: source.id,
+            options: ContextCompressionOptions(retainedRoundCount: 0)
+        )
+
+        let request = try #require(mockAdapter.receivedContextCompressionMessages)
+        let userPrompt = try #require(request.last(where: { $0.role == .user }))
+        #expect(mockAdapter.contextCompressionRequestCount == 1)
+        #expect(userPrompt.content.contains("开头唯一事实"))
+        #expect(userPrompt.content.contains("结尾唯一约定"))
+
+        chatService.deleteSessions([child, source])
+    }
+
     @Test("上下文压缩创建独立续聊会话并保留原会话")
     func contextCompressionCreatesIndependentContinuationSession() async throws {
         await cleanup()

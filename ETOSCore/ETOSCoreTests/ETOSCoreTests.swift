@@ -108,6 +108,7 @@ struct ChatServiceTests {
         mockAdapter.receivedConversationSummaryMessages = nil
         mockAdapter.receivedConversationProfileMessages = nil
         mockAdapter.receivedContextCompressionMessages = nil
+        mockAdapter.contextCompressionRequestCount = 0
         mockAdapter.receivedTools = nil
         mockAdapter.receivedAudioAttachments = nil
         mockAdapter.receivedImageAttachments = nil

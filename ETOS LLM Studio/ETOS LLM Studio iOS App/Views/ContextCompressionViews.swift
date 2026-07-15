@@ -306,17 +306,8 @@ struct ContextCompressionOneTapView: View {
         switch progress.phase {
         case .preparing:
             return NSLocalizedString("正在准备完整对话与附件…", comment: "One-tap compression preparing progress")
-        case .summarizing(let completed, let total):
-            return String(
-                format: NSLocalizedString("正在摘要分块 %d/%d…", comment: "One-tap compression chunk progress"),
-                completed,
-                total
-            )
-        case .synthesizing(let level):
-            return String(
-                format: NSLocalizedString("正在进行第 %d 层归并…", comment: "One-tap compression synthesis progress"),
-                level
-            )
+        case .summarizing:
+            return NSLocalizedString("正在生成续聊摘要…", comment: "One-tap compression summary progress")
         case .saving:
             return NSLocalizedString("正在保存并切换到新会话…", comment: "One-tap compression saving progress")
         }
@@ -384,7 +375,7 @@ struct ContextCompressionOptionsView: View {
                     }
                 } footer: {
                     Text(NSLocalizedString(
-                        "最近轮次会按原角色和原文保留；更早内容会完整分片并递归归并，不会通过截断或丢弃旧消息缩短输入。",
+                        "最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。",
                         comment: "Context compression retention explanation"
                     ))
                 }
@@ -493,17 +484,8 @@ struct ContextCompressionOptionsView: View {
         switch progress.phase {
         case .preparing:
             return NSLocalizedString("正在准备完整对话与附件…", comment: "Context compression preparing progress")
-        case .summarizing(let completed, let total):
-            return String(
-                format: NSLocalizedString("正在摘要分块 %d/%d…", comment: "Context compression chunk progress"),
-                completed,
-                total
-            )
-        case .synthesizing(let level):
-            return String(
-                format: NSLocalizedString("正在进行第 %d 层归并…", comment: "Context compression synthesis progress"),
-                level
-            )
+        case .summarizing:
+            return NSLocalizedString("正在生成续聊摘要…", comment: "Context compression summary progress")
         case .saving:
             return NSLocalizedString("正在保存并切换到新会话…", comment: "Context compression saving progress")
         }

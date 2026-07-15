@@ -5149,3 +5149,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "正在压缩为续聊" = "Compression en cours pour créer une suite";
 "原会话“%@”会完整保留。" = "La discussion d’origine « %@ » sera entièrement conservée.";
 "约 %@ / %@ Token" = "Environ %@ / %@ tokens";
+"正在生成续聊摘要…" = "Génération du résumé de continuation…";
+"最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。" = "Les échanges récents restent dans leur texte d’origine. Le reste de l’historique est résumé en une seule passe et la conversation d’origine reste inchangée.";
+"续聊压缩摘要提示词" = "Invite de résumé de continuation";
+"控制续聊会话以单次请求完整摘要较早对话。" = "Contrôle le résumé complet en une seule requête de l’historique antérieur pour poursuivre la conversation.";
