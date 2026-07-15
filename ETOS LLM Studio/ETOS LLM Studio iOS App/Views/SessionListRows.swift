@@ -188,6 +188,7 @@ struct SessionRow: View {
     let onSelect: () -> Void
     let onRename: () -> Void
     let onBranch: (Bool) -> Void
+    let onCompress: () -> Void
     let onMoveToFolder: (UUID?) -> Void
     let onDeleteLastMessage: () -> Void
     let onDelete: () -> Void
@@ -294,6 +295,16 @@ struct SessionRow: View {
         } label: {
             Label(NSLocalizedString("复制历史创建分支", comment: ""), systemImage: "arrow.triangle.branch")
         }
+
+        Button {
+            onCompress()
+        } label: {
+            Label(
+                NSLocalizedString("压缩为续聊", comment: "Context compression session action"),
+                systemImage: "rectangle.compress.vertical"
+            )
+        }
+        .disabled(session.isTemporary)
 
         Button {
             onDeleteLastMessage()
