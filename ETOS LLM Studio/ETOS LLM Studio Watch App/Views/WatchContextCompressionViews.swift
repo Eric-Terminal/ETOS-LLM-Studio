@@ -25,7 +25,12 @@ struct WatchContextCompressionReminderNotificationKey: Hashable {
 }
 
 struct WatchConversationContinuationCard: View {
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+
     let context: ConversationContinuationContext
+    let enableBackground: Bool
+    let enableLiquidGlass: Bool
+    let enableNoBubbleUI: Bool
 
     var body: some View {
         HStack {
@@ -35,20 +40,96 @@ struct WatchConversationContinuationCard: View {
             VStack(alignment: .leading) {
                 Text(NSLocalizedString("续聊上下文", comment: "Continuation context card title"))
                     .etFont(.footnote.weight(.semibold))
+                    .foregroundStyle(assistantPrimaryTextColor)
                 Text(context.sourceSessionNameSnapshot)
                     .etFont(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(assistantSecondaryTextColor)
                     .lineLimit(1)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(assistantContentInsets)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(assistantBubbleBackground)
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    enableNoBubbleUI ? Color.clear : Color.accentColor.opacity(0.28),
+                    lineWidth: 1
+                )
+        }
         .contentShape(Rectangle())
+    }
+
+    private var activeAppearanceProfile: ChatAppearanceProfile {
+        appearanceProfileManager.activeProfile
+    }
+
+    private var assistantBubbleColorOverride: Color? {
+        let slot = activeAppearanceProfile.assistantBubble
+        guard slot.isEnabled else { return nil }
+        let fallback = Color(.sRGB, red: 0.949, green: 0.949, blue: 0.969, opacity: 1)
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: fallback)
+    }
+
+    private var assistantTextColorOverride: Color? {
+        let slot = activeAppearanceProfile.assistantLightText
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .primary)
+    }
+
+    private var assistantPrimaryTextColor: Color {
+        assistantTextColorOverride ?? .primary
+    }
+
+    private var assistantSecondaryTextColor: Color {
+        assistantTextColorOverride?.opacity(0.78) ?? .secondary
+    }
+
+    private var assistantContentInsets: EdgeInsets {
+        enableNoBubbleUI
+            ? EdgeInsets(top: 6, leading: 2, bottom: 6, trailing: 2)
+            : EdgeInsets(top: 10, leading: 8, bottom: 10, trailing: 8)
+    }
+
+    private var assistantFallbackBackground: Color {
+        if let assistantBubbleColorOverride {
+            return enableBackground
+                ? assistantBubbleColorOverride.opacity(0.7)
+                : assistantBubbleColorOverride
+        }
+        return enableBackground ? Color.black.opacity(0.3) : Color(white: 0.3)
+    }
+
+    private var assistantLiquidGlassBackground: Color {
+        assistantBubbleColorOverride.map { enableBackground ? $0.opacity(0.5) : $0 }
+            ?? Color.clear
+    }
+
+    @ViewBuilder
+    private var assistantBubbleBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        if enableNoBubbleUI {
+            shape.fill(Color.clear)
+        } else if enableLiquidGlass {
+            if #available(watchOS 26.0, *) {
+                shape
+                    .fill(assistantLiquidGlassBackground)
+                    .glassEffect(.clear, in: shape)
+                    .clipShape(shape)
+            } else {
+                shape.fill(assistantFallbackBackground)
+            }
+        } else {
+            shape.fill(assistantFallbackBackground)
+        }
     }
 }
 
 struct WatchConversationContinuationDetailView: View {
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+
     let context: ConversationContinuationContext
     let enableAdvancedRenderer: Bool
     let sourceSessionAvailable: Bool
@@ -87,7 +168,9 @@ struct WatchConversationContinuationDetailView: View {
                     WatchContinuationMarkdownView(
                         contentID: context.id,
                         content: context.summary,
-                        enableAdvancedRenderer: enableAdvancedRenderer
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        customTextColor: assistantTextColorOverride,
+                        customTextStyleColors: assistantTextStyleColors
                     )
                 }
                 .accessibilityHint(NSLocalizedString(
@@ -108,11 +191,13 @@ struct WatchConversationContinuationDetailView: View {
                             VStack(alignment: .leading) {
                                 Text(roleTitle(message.role))
                                     .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(assistantSecondaryTextColor)
                                 WatchContinuationMarkdownView(
                                     contentID: message.id,
                                     content: message.content,
-                                    enableAdvancedRenderer: enableAdvancedRenderer
+                                    enableAdvancedRenderer: enableAdvancedRenderer,
+                                    customTextColor: assistantTextColorOverride,
+                                    customTextStyleColors: assistantTextStyleColors
                                 )
                             }
                         }
@@ -142,6 +227,20 @@ struct WatchConversationContinuationDetailView: View {
         ChatMessage(id: context.id, role: .system, content: context.summary)
     }
 
+    private var assistantTextColorOverride: Color? {
+        let slot = appearanceProfileManager.activeProfile.assistantLightText
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(from: slot.hex, fallback: .primary)
+    }
+
+    private var assistantTextStyleColors: ChatAppearanceTextStyleColors {
+        appearanceProfileManager.activeProfile.assistantLightTextStyles
+    }
+
+    private var assistantSecondaryTextColor: Color {
+        assistantTextColorOverride?.opacity(0.78) ?? .secondary
+    }
+
     private func roleTitle(_ role: MessageRole) -> String {
         switch role {
         case .system:
@@ -162,6 +261,8 @@ private struct WatchContinuationMarkdownView: View {
     let contentID: UUID
     let content: String
     let enableAdvancedRenderer: Bool
+    let customTextColor: Color?
+    let customTextStyleColors: ChatAppearanceTextStyleColors
 
     @State private var preparedContent: ETPreparedMarkdownRenderPayload?
 
@@ -176,7 +277,8 @@ private struct WatchContinuationMarkdownView: View {
                     isOutgoing: false,
                     enableAdvancedRenderer: enableAdvancedRenderer,
                     enableMathRendering: enableAdvancedRenderer,
-                    customTextColor: .primary
+                    customTextColor: customTextColor,
+                    customTextStyleColors: customTextStyleColors
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {

@@ -8,6 +8,7 @@
 
 import SwiftUI
 import ETOSCore
+import UIKit
 
 struct ContextCompressionReminderRefreshKey: Hashable {
     let sessionID: UUID?
@@ -72,10 +73,15 @@ private struct ConversationContinuationMarkdownContent: Sendable {
 
 struct ConversationContinuationBubble: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
 
     let context: ConversationContinuationContext
     @Binding var expansionState: ConversationContinuationExpansionState
     let enableAdvancedRenderer: Bool
+    let enableBackground: Bool
+    let enableLiquidGlass: Bool
+    let enableNoBubbleUI: Bool
     let sourceSessionAvailable: Bool
     let onExpansionStateChange: (ConversationContinuationExpansionState) -> Void
     let onOpenSource: () -> Void
@@ -96,9 +102,10 @@ struct ConversationContinuationBubble: View {
                     VStack(alignment: .leading) {
                         Text(NSLocalizedString("续聊上下文", comment: "Continuation context bubble title"))
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(assistantPrimaryTextColor)
                         Text(contextSubtitle)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(assistantSecondaryTextColor)
                             .lineLimit(2)
                     }
 
@@ -106,7 +113,7 @@ struct ConversationContinuationBubble: View {
 
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(assistantSecondaryTextColor)
                         .rotationEffect(.degrees(expansionState.isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -115,6 +122,7 @@ struct ConversationContinuationBubble: View {
 
             if expansionState.isExpanded {
                 Divider()
+                    .overlay(assistantSecondaryTextColor.opacity(0.35))
 
                 VStack(alignment: .leading) {
                     renderedMarkdown
@@ -160,12 +168,21 @@ struct ConversationContinuationBubble: View {
                 .transition(.opacity)
             }
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, enableNoBubbleUI ? 2 : 16)
+        .padding(.vertical, enableNoBubbleUI ? 6 : 16)
+        .background(assistantBubbleBackground)
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.accentColor.opacity(0.28), lineWidth: 1)
+                .stroke(
+                    enableNoBubbleUI ? Color.clear : Color.accentColor.opacity(0.28),
+                    lineWidth: 1
+                )
         }
+        .shadow(
+            color: enableNoBubbleUI ? .clear : Color.black.opacity(0.08),
+            radius: 3,
+            y: 1
+        )
         .accessibilityElement(children: .contain)
         .task(id: context.id) {
             await preparePreview()
@@ -190,7 +207,8 @@ struct ConversationContinuationBubble: View {
                 isOutgoing: false,
                 enableAdvancedRenderer: enableAdvancedRenderer,
                 enableMathRendering: enableAdvancedRenderer,
-                customTextColor: nil
+                customTextColor: assistantTextColorOverride,
+                customTextStyleColors: assistantTextStyleColors
             )
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -210,6 +228,68 @@ struct ConversationContinuationBubble: View {
             context.summarizedMessageCount,
             context.retainedRoundCount
         )
+    }
+
+    private var activeAppearanceProfile: ChatAppearanceProfile {
+        appearanceProfileManager.activeProfile
+    }
+
+    private var assistantBubbleFill: Color {
+        let slot = activeAppearanceProfile.assistantBubble
+        if slot.isEnabled {
+            let color = ChatAppearanceColorCodec.color(
+                from: slot.hex,
+                fallback: Color(uiColor: .secondarySystemBackground)
+            )
+            return color.opacity(enableBackground ? 0.75 : 1)
+        }
+        return enableBackground
+            ? Color(uiColor: .secondarySystemBackground).opacity(0.75)
+            : Color(uiColor: .systemBackground)
+    }
+
+    private var assistantTextColorOverride: Color? {
+        let slot = colorScheme == .dark
+            ? activeAppearanceProfile.assistantDarkText
+            : activeAppearanceProfile.assistantLightText
+        guard slot.isEnabled else { return nil }
+        return ChatAppearanceColorCodec.color(
+            from: slot.hex,
+            fallback: colorScheme == .dark ? .white : .primary
+        )
+    }
+
+    private var assistantTextStyleColors: ChatAppearanceTextStyleColors {
+        colorScheme == .dark
+            ? activeAppearanceProfile.assistantDarkTextStyles
+            : activeAppearanceProfile.assistantLightTextStyles
+    }
+
+    private var assistantPrimaryTextColor: Color {
+        assistantTextColorOverride ?? .primary
+    }
+
+    private var assistantSecondaryTextColor: Color {
+        assistantTextColorOverride?.opacity(0.78) ?? .secondary
+    }
+
+    @ViewBuilder
+    private var assistantBubbleBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        if enableNoBubbleUI {
+            shape.fill(Color.clear)
+        } else if enableLiquidGlass {
+            if #available(iOS 26.0, *) {
+                shape
+                    .fill(assistantBubbleFill)
+                    .glassEffect(.clear, in: shape)
+                    .clipShape(shape)
+            } else {
+                shape.fill(assistantBubbleFill)
+            }
+        } else {
+            shape.fill(assistantBubbleFill)
+        }
     }
 
     private func roleTitle(_ role: MessageRole) -> String {

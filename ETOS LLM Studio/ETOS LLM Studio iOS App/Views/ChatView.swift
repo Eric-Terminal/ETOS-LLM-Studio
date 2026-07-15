@@ -737,6 +737,9 @@ extension ChatView {
                                     context: continuationContext,
                                     expansionState: $continuationExpansionState,
                                     enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
+                                    enableBackground: viewModel.enableBackground,
+                                    enableLiquidGlass: isLiquidGlassEnabled,
+                                    enableNoBubbleUI: viewModel.enableNoBubbleUI,
                                     sourceSessionAvailable: isContinuationSourceSessionAvailable,
                                     onExpansionStateChange: handleContinuationExpansionStateChange,
                                     onOpenSource: {

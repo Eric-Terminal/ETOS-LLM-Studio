@@ -75,7 +75,12 @@ extension ContentView {
                         }
                     )
                 } label: {
-                    WatchConversationContinuationCard(context: continuationContext)
+                    WatchConversationContinuationCard(
+                        context: continuationContext,
+                        enableBackground: viewModel.enableBackground,
+                        enableLiquidGlass: isLiquidGlassEnabled,
+                        enableNoBubbleUI: viewModel.enableNoBubbleUI
+                    )
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
