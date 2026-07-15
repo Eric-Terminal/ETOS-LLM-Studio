@@ -38,6 +38,7 @@ struct ContentView: View {
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
     @State private var newAPIProviderImportNoticeMessage: String?
     @State private var newAPIProviderImportErrorMessage: String?
+    @State private var didEnterBackgroundSinceLastActivation = false
     
     var body: some View {
         contentWithMigrationOverlays
@@ -59,9 +60,15 @@ struct ContentView: View {
                 case .active:
                     appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
+                    if didEnterBackgroundSinceLastActivation {
+                        ChatService.shared.openNewSessionIfRestoreWindowExpired()
+                        didEnterBackgroundSinceLastActivation = false
+                    }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
                     appLockManager.handleSceneDidEnterBackground()
+                    ChatService.recordAppDidEnterBackground()
+                    didEnterBackgroundSinceLastActivation = true
                     Task {
                         await AppConfigStore.shared.flushPendingWrites()
                     }

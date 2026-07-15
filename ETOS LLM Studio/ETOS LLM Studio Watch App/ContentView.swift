@@ -51,6 +51,7 @@ struct ContentView: View {
     @State var launchRecoveryErrorMessage: String?
     @State var rootBodyFont: Font = .body
     @State var legacyMigrationErrorMessage: String?
+    @State var didEnterBackgroundSinceLastActivation = false
     @State var isRequestControlsPresented = false
     @State var isAttachmentImportPresented = false
     @State var attachmentSourceText: String = ""
@@ -261,8 +262,14 @@ struct ContentView: View {
             switch newPhase {
             case .active:
                 appLockManager.handleSceneDidBecomeActive()
+                if didEnterBackgroundSinceLastActivation {
+                    ChatService.shared.openNewSessionIfRestoreWindowExpired()
+                    didEnterBackgroundSinceLastActivation = false
+                }
             case .background:
                 appLockManager.handleSceneDidEnterBackground()
+                ChatService.recordAppDidEnterBackground()
+                didEnterBackgroundSinceLastActivation = true
                 Task {
                     await AppConfigStore.shared.flushPendingWrites()
                 }

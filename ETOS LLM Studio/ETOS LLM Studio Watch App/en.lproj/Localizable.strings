@@ -1731,6 +1731,12 @@
 "启动保护备份" = "Startup Protection Backup";
 "启动时创建数据库备份点" = "Create Database Backup on Launch";
 "启动时打开历史会话" = "Open History on Launch";
+"启动会话" = "Session on Launch";
+"始终新建" = "Always New";
+"始终恢复" = "Always Restore";
+"短时间内恢复" = "Restore If Recent";
+"恢复期限（分钟）" = "Restore Window (Minutes)";
+"离开时间未超过该期限时恢复上次会话；超过后打开新对话。" = "Restore the last session when the app was left within this window; otherwise, open a new conversation.";
 "启动时自动同步" = "Auto-sync on Launch";
 "启用 iCloud 同步" = "Enable iCloud Sync";
 "启用全局代理" = "Enable Global Proxy";

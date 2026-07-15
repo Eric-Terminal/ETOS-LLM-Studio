@@ -245,7 +245,7 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Section {
-                    Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
+                    LaunchSessionSettingsRows()
                     Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
                     LabeledContent(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title")) {
                         TextField(NSLocalizedString("秒", comment: "Seconds placeholder"), value: sendDelayBinding, formatter: sendDelayFormatter)
@@ -553,6 +553,10 @@ struct ModelAdvancedSettingsView: View {
 
     private var sessionContextIntroDetails: String {
         introDetails([
+            (
+                NSLocalizedString("启动会话", comment: "Launch session behavior setting"),
+                NSLocalizedString("离开时间未超过该期限时恢复上次会话；超过后打开新对话。", comment: "Recent session restore behavior explanation")
+            ),
             (
                 NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"),
                 NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer")

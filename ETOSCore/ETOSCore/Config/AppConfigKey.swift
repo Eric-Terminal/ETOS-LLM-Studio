@@ -99,6 +99,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case providerOrderIDs = "providerOrder.ids"
     case selectedRunnableModelID = "selectedRunnableModelID"
     case lastActiveSessionID = "launch.lastActiveSessionID"
+    case lastAppBackgroundedAt = "launch.lastAppBackgroundedAt"
     case localModelsEnabled = "localModels.enabled"
     case localModelPerformanceMonitorEnabled = "localModels.performanceMonitor.enabled"
     case localModelCacheEnabled = "localModels.cache.enabled"
@@ -205,6 +206,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
+    case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
+    case restoreLastSessionWithinMinutes = "launch.restoreLastSessionWithinMinutes"
     case providerDetailGroupByMainstream = "providerDetail.groupByMainstream"
     case backgroundCropTarget = "backgroundCropTarget"
     case shortcutBridgeShortcutName = "shortcut.bridgeShortcutName"
@@ -268,6 +271,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .selectedRunnableModelID,
              .lastActiveSessionID:
             return .text("")
+        case .lastAppBackgroundedAt:
+            return .real(0)
         case .localModelsEnabled,
              .localModelPerformanceMonitorEnabled:
             return .bool(false)
@@ -463,8 +468,11 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #endif
         case .chatQuickActionIDs:
             return .text("temporaryChat")
-        case .restoreLastSessionOnLaunch:
+        case .restoreLastSessionOnLaunch,
+             .restoreLastSessionOnlyIfRecent:
             return .bool(false)
+        case .restoreLastSessionWithinMinutes:
+            return .integer(LaunchSessionPolicy.defaultRestoreWindowMinutes)
         case .providerDetailGroupByMainstream:
             return .bool(true)
         case .backgroundCropTarget:
@@ -508,6 +516,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         switch self {
         case .chatComposerDraft,
              .lastActiveSessionID,
+             .lastAppBackgroundedAt,
              .syncAutoSyncEnabled,
              .cloudSyncEnabled,
              .cloudSyncAutoSyncEnabled,

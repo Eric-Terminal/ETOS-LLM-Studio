@@ -296,6 +296,10 @@ public final class AppConfigStore: ObservableObject {
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
+    @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
+    @Published public var restoreLastSessionWithinMinutes: Int {
+        didSet { write(.restoreLastSessionWithinMinutes, restoreLastSessionWithinMinutes) }
+    }
     @Published public var providerDetailGroupByMainstream: Bool { didSet { write(.providerDetailGroupByMainstream, providerDetailGroupByMainstream) } }
     @Published public var backgroundCropTarget: String { didSet { write(.backgroundCropTarget, backgroundCropTarget) } }
     @Published public var shortcutBridgeShortcutName: String { didSet { write(.shortcutBridgeShortcutName, shortcutBridgeShortcutName) } }
@@ -315,6 +319,28 @@ public final class AppConfigStore: ObservableObject {
     @Published public var lastAnnouncementId: Int { didSet { write(.lastAnnouncementId, lastAnnouncementId) } }
     @Published public var hideAnnouncementSection: Bool { didSet { write(.hideAnnouncementSection, hideAnnouncementSection) } }
     @Published public var hiddenAnnouncementKeys: String { didSet { write(.hiddenAnnouncementKeys, hiddenAnnouncementKeys) } }
+
+    public var launchSessionBehavior: LaunchSessionBehavior {
+        get {
+            LaunchSessionPolicy.behavior(
+                restoreLastSession: restoreLastSessionOnLaunch,
+                onlyIfRecent: restoreLastSessionOnlyIfRecent
+            )
+        }
+        set {
+            switch newValue {
+            case .newSession:
+                restoreLastSessionOnLaunch = false
+                restoreLastSessionOnlyIfRecent = false
+            case .alwaysRestore:
+                restoreLastSessionOnlyIfRecent = false
+                restoreLastSessionOnLaunch = true
+            case .restoreIfRecent:
+                restoreLastSessionOnlyIfRecent = true
+                restoreLastSessionOnLaunch = true
+            }
+        }
+    }
 
     public init(userDefaults: UserDefaults = .standard) {
         let userDefaultsInitialValues = Self.initialValues(userDefaults: userDefaults)
@@ -458,6 +484,8 @@ public final class AppConfigStore: ObservableObject {
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
         restoreLastSessionOnLaunch = Self.boolValue(.restoreLastSessionOnLaunch, userDefaults: userDefaults)
+        restoreLastSessionOnlyIfRecent = Self.boolValue(.restoreLastSessionOnlyIfRecent, userDefaults: userDefaults)
+        restoreLastSessionWithinMinutes = Self.integerValue(.restoreLastSessionWithinMinutes, userDefaults: userDefaults)
         providerDetailGroupByMainstream = Self.boolValue(.providerDetailGroupByMainstream, userDefaults: userDefaults)
         backgroundCropTarget = Self.textValue(.backgroundCropTarget, userDefaults: userDefaults)
         shortcutBridgeShortcutName = Self.textValue(.shortcutBridgeShortcutName, userDefaults: userDefaults)
@@ -806,6 +834,7 @@ public final class AppConfigStore: ObservableObject {
              .providerOrderIDs,
              .selectedRunnableModelID,
              .lastActiveSessionID,
+             .lastAppBackgroundedAt,
              .appToolsChatToolsEnabled,
              .appToolsEnabledToolIDs,
              .appToolsKnownDefaultToolIDs,
@@ -913,6 +942,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
+        case .restoreLastSessionOnlyIfRecent: return .bool(restoreLastSessionOnlyIfRecent)
+        case .restoreLastSessionWithinMinutes: return .integer(restoreLastSessionWithinMinutes)
         case .providerDetailGroupByMainstream: return .bool(providerDetailGroupByMainstream)
         case .backgroundCropTarget: return .text(backgroundCropTarget)
         case .shortcutBridgeShortcutName: return .text(shortcutBridgeShortcutName)
@@ -1019,6 +1050,7 @@ public final class AppConfigStore: ObservableObject {
         case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
+        case .restoreLastSessionOnlyIfRecent: restoreLastSessionOnlyIfRecent = value
         case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value
         case .includeSystemTimeInPrompt: includeSystemTimeInPrompt = value
         case .enablePeriodicTimeLandmark: enablePeriodicTimeLandmark = value
@@ -1039,6 +1071,8 @@ public final class AppConfigStore: ObservableObject {
         case .maxChatHistory: maxChatHistory = value
         case .contextCompressionReminderTokenThreshold:
             contextCompressionReminderTokenThreshold = Self.normalizedIntegerValue(value, for: key)
+        case .restoreLastSessionWithinMinutes:
+            restoreLastSessionWithinMinutes = Self.normalizedIntegerValue(value, for: key)
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
@@ -1403,6 +1437,8 @@ public final class AppConfigStore: ObservableObject {
         switch key {
         case .contextCompressionReminderTokenThreshold:
             return ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
+        case .restoreLastSessionWithinMinutes:
+            return LaunchSessionPolicy.normalizedRestoreWindowMinutes(value)
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit:
             return max(1, value)

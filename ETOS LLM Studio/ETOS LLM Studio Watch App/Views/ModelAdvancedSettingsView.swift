@@ -190,7 +190,7 @@ struct ModelAdvancedSettingsView: View {
 
             // MARK: Section 3：会话与上下文
             Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
-                Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
+                LaunchSessionSettingsRows()
                 Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
                 HStack {
                     Text(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"))
@@ -384,6 +384,7 @@ struct ModelAdvancedSettingsView: View {
             (
                 NSLocalizedString("会话与上下文", comment: ""),
                 [
+                    NSLocalizedString("离开时间未超过该期限时恢复上次会话；超过后打开新对话。", comment: "Recent session restore behavior explanation"),
                     NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"),
                     NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""),
                     NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "Watch context compression reminder settings explanation")
