@@ -156,9 +156,21 @@ extension Persistence {
         return parts.joined(separator: "\n")
     }
 
-    private static func setLaunchRecoveryNotice(_ message: String?) {
+    private static func setLaunchRecoveryNotice(
+        _ message: String?,
+        persistToConfigStore: Bool = true
+    ) {
         launchBackupAndRecoveryLock.lock()
         pendingLaunchRecoveryNotice = message
+        launchBackupAndRecoveryLock.unlock()
+
+        guard persistToConfigStore else { return }
+        persistPendingLaunchRecoveryNotice()
+    }
+
+    static func persistPendingLaunchRecoveryNotice() {
+        launchBackupAndRecoveryLock.lock()
+        let message = pendingLaunchRecoveryNotice
         launchBackupAndRecoveryLock.unlock()
 
         if let message {
@@ -377,7 +389,11 @@ extension Persistence {
         }
     }
 
-    static func quarantineDatabaseAfterInitializationFailure(kind: LaunchDatabaseKind, error: Error) -> Bool {
+    static func quarantineDatabaseAfterInitializationFailure(
+        kind: LaunchDatabaseKind,
+        error: Error,
+        persistRecoveryNotice: Bool = true
+    ) -> Bool {
         if hasUsableLaunchBackup(for: kind) {
             setPendingLaunchRecoveryRequest(for: [kind])
             logger.error("数据库初始化失败，已等待用户确认启动备份恢复(\(kind.displayName)): \(error.localizedDescription)")
@@ -408,10 +424,13 @@ extension Persistence {
                 from: URL(fileURLWithPath: sourceURL.path + "-shm"),
                 to: URL(fileURLWithPath: destinationURL.path + "-shm")
             )
-            setLaunchRecoveryNotice(String(
-                format: NSLocalizedString("检测到%@无法打开或迁移，已隔离损坏文件并自动重建。", comment: "Launch database quarantine notice"),
-                kind.localizedDisplayName
-            ))
+            setLaunchRecoveryNotice(
+                String(
+                    format: NSLocalizedString("检测到%@无法打开或迁移，已隔离损坏文件并自动重建。", comment: "Launch database quarantine notice"),
+                    kind.localizedDisplayName
+                ),
+                persistToConfigStore: persistRecoveryNotice
+            )
             logger.error("数据库初始化失败，已隔离后自动重建(\(kind.displayName)): \(error.localizedDescription)")
             return true
         } catch {

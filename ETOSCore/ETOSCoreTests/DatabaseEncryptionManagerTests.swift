@@ -114,29 +114,16 @@ struct DatabaseEncryptionManagerTests {
         #expect(snapshot[AppConfigKey.databaseEncryptionEnabled.rawValue] == nil)
     }
 
-    @Test("数据库配置会在存在主密码时创建 SQLCipher 加密库")
-    @MainActor
+    @Test("加密数据库配置会创建 SQLCipher 加密库")
     func testDatabaseConfigurationCreatesEncryptedDatabase() throws {
-        let backup = AppConfigStore.shared.databaseEncryptionEnabled
-        let previousOverride = Persistence.grdbEnabledOverrideForTests
-        Persistence.grdbEnabledOverrideForTests = true
-        Persistence.resetGRDBStoreForTests()
-        defer {
-            try? DatabaseEncryptionManager.shared.deletePassphrase(verificationPassphrase: "database-passphrase")
-            AppConfigStore.shared.databaseEncryptionEnabled = backup
-            Persistence.grdbEnabledOverrideForTests = previousOverride
-            Persistence.resetGRDBStoreForTests()
-        }
-
-        try DatabaseEncryptionManager.shared.savePassphrase("database-passphrase", confirmation: "database-passphrase")
-        AppConfigStore.shared.databaseEncryptionEnabled = true
+        let passphrase = Data("database-passphrase".utf8)
 
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ETOS-SQLCipher-Test-\(UUID().uuidString)", isDirectory: false)
             .appendingPathExtension("sqlite")
         defer { try? FileManager.default.removeItem(at: databaseURL) }
 
-        let configuration = Persistence.makeDatabaseConfiguration(qos: .userInitiated, mmapSize: 1_048_576)
+        let configuration = Persistence.makeEncryptedDatabaseConfiguration(passphrase: passphrase)
         let queue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
         try queue.write { db in
             try db.execute(sql: "CREATE TABLE encrypted_data(value TEXT)")
@@ -145,7 +132,7 @@ struct DatabaseEncryptionManagerTests {
         }
         try queue.close()
 
-        #expect(Persistence.isDatabaseHealthy(at: databaseURL, encrypted: true) == true)
+        #expect(Persistence.isDatabaseHealthy(at: databaseURL, encrypted: true, passphrase: passphrase) == true)
         #expect(Persistence.isDatabaseHealthy(at: databaseURL, encrypted: false) == false)
     }
 

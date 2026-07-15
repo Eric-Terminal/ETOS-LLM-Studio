@@ -86,49 +86,63 @@ extension Persistence {
             return store
         }
 
-        auxiliaryStoreLock.lock()
-        defer { auxiliaryStoreLock.unlock() }
+        var shouldPersistRecoveryNotice = false
+        let resolvedStore: PersistenceAuxiliaryGRDBStore? = {
+            auxiliaryStoreLock.lock()
+            defer { auxiliaryStoreLock.unlock() }
 
-        if let store = cachedAuxiliaryStores[kind] {
-            return store
-        }
-
-        if let failedAt = lastAuxiliaryStoreInitializationFailedAt[kind],
-           Date().timeIntervalSince(failedAt) < auxiliaryStoreRetryInterval {
-            return nil
-        }
-
-        do {
-            let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
-            migrateLegacyAuxiliaryStoreFileIfNeeded(kind: kind, targetURL: databaseURL)
-            let store = try PersistenceAuxiliaryGRDBStore(
-                databaseURL: databaseURL,
-                loggerCategory: kind.loggerCategory
-            )
-            cachedAuxiliaryStores[kind] = store
-            lastAuxiliaryStoreInitializationFailedAt[kind] = nil
-            return store
-        } catch {
-            let launchKind: LaunchDatabaseKind = kind == .config ? .config : .memory
-            if quarantineDatabaseAfterInitializationFailure(kind: launchKind, error: error) {
-                do {
-                    let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
-                    let store = try PersistenceAuxiliaryGRDBStore(
-                        databaseURL: databaseURL,
-                        loggerCategory: kind.loggerCategory
-                    )
-                    cachedAuxiliaryStores[kind] = store
-                    lastAuxiliaryStoreInitializationFailedAt[kind] = nil
-                    logger.info("辅助数据库已自动重建(\(kind.rawValue))。")
-                    return store
-                } catch {
-                    logger.error("辅助数据库自动重建后仍初始化失败(\(kind.rawValue)): \(String(describing: error))")
-                }
+            if let store = cachedAuxiliaryStores[kind] {
+                return store
             }
-            lastAuxiliaryStoreInitializationFailedAt[kind] = Date()
-            logger.error("辅助存储初始化失败(\(kind.rawValue)): \(String(describing: error))")
-            return nil
+
+            if let failedAt = lastAuxiliaryStoreInitializationFailedAt[kind],
+               Date().timeIntervalSince(failedAt) < auxiliaryStoreRetryInterval {
+                return nil
+            }
+
+            do {
+                let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
+                migrateLegacyAuxiliaryStoreFileIfNeeded(kind: kind, targetURL: databaseURL)
+                let store = try PersistenceAuxiliaryGRDBStore(
+                    databaseURL: databaseURL,
+                    loggerCategory: kind.loggerCategory
+                )
+                cachedAuxiliaryStores[kind] = store
+                lastAuxiliaryStoreInitializationFailedAt[kind] = nil
+                return store
+            } catch {
+                let launchKind: LaunchDatabaseKind = kind == .config ? .config : .memory
+                // 恢复通知会写入配置分库，必须等辅助分库锁释放后再持久化。
+                if quarantineDatabaseAfterInitializationFailure(
+                    kind: launchKind,
+                    error: error,
+                    persistRecoveryNotice: false
+                ) {
+                    do {
+                        let databaseURL = auxiliaryStoreDatabaseURL(for: kind)
+                        let store = try PersistenceAuxiliaryGRDBStore(
+                            databaseURL: databaseURL,
+                            loggerCategory: kind.loggerCategory
+                        )
+                        cachedAuxiliaryStores[kind] = store
+                        lastAuxiliaryStoreInitializationFailedAt[kind] = nil
+                        shouldPersistRecoveryNotice = true
+                        logger.info("辅助数据库已自动重建(\(kind.rawValue))。")
+                        return store
+                    } catch {
+                        logger.error("辅助数据库自动重建后仍初始化失败(\(kind.rawValue)): \(String(describing: error))")
+                    }
+                }
+                lastAuxiliaryStoreInitializationFailedAt[kind] = Date()
+                logger.error("辅助存储初始化失败(\(kind.rawValue)): \(String(describing: error))")
+                return nil
+            }
+        }()
+
+        if shouldPersistRecoveryNotice {
+            persistPendingLaunchRecoveryNotice()
         }
+        return resolvedStore
     }
 
     static func auxiliaryStoreDatabaseURL(for kind: AuxiliaryStoreKind) -> URL {
