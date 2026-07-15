@@ -313,8 +313,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .aiTopP:
             return .real(1.0)
         case .aiTemperatureEnabled,
-             .aiTopPEnabled,
-             .enableOpenAIStreamIncludeUsage,
+             .aiTopPEnabled:
+            return .bool(false)
+        case .enableOpenAIStreamIncludeUsage,
              .enableAutoSessionNaming:
             return .bool(true)
         case .systemPrompt:
@@ -402,10 +403,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableAutoReasoningPreview,
              .enableResponsiveReasoningPreviewHeight,
              .enableBackground,
-             .enableReasoningSummary,
              .enableChatTopBlurFade:
             return .bool(true)
         case .enableAutoRotateBackground,
+             .enableReasoningSummary,
              .enableLiquidGlass,
              .enableNoBubbleUI:
             return .bool(false)

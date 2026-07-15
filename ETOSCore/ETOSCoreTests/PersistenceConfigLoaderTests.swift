@@ -37,6 +37,13 @@ extension PersistenceTests {
         }
     }
 
+    @Test("可选采样参数与思考摘要默认关闭")
+    func testOptionalGenerationSettingsDefaultToDisabled() {
+        #expect(AppConfigKey.aiTemperatureEnabled.defaultValue == .bool(false))
+        #expect(AppConfigKey.aiTopPEnabled.defaultValue == .bool(false))
+        #expect(AppConfigKey.enableReasoningSummary.defaultValue == .bool(false))
+    }
+
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {
