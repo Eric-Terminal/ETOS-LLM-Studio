@@ -150,6 +150,9 @@ public struct UpdateTimelineState: Codable, Hashable, Sendable {
     }
 
     public var summaryCommits: [UpdateTimelineCommit] {
+        if status == .unknown {
+            return Array(cachedCommits.prefix(30))
+        }
         guard let current = storedCurrentSHA?.lowercased(), !current.isEmpty else {
             return cachedCommits
         }
