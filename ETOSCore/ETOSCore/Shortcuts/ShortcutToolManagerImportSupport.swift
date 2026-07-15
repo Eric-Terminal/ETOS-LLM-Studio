@@ -438,6 +438,9 @@ extension ShortcutToolManager {
 
     func clipboardText() -> String? {
         #if os(iOS)
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return nil
+        }
         return UIPasteboard.general.string
         #else
         return nil
@@ -446,6 +449,9 @@ extension ShortcutToolManager {
 
     func openSystemURL(_ url: URL) async -> Bool {
         #if os(iOS)
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return false
+        }
         return await withCheckedContinuation { continuation in
             UIApplication.shared.open(url, options: [:]) { success in
                 continuation.resume(returning: success)
