@@ -18,12 +18,24 @@ private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "Storage
 // MARK: - 存储工具类
 
 public enum StorageUtility {
+    private static let resolvedDocumentsDirectory: URL = {
+        let fileManager = FileManager.default
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil else {
+            return fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        }
+
+        // 测试不能读写模拟器长期保留的 Documents，否则不同测试运行会相互污染。
+        let directory = fileManager.temporaryDirectory
+            .appendingPathComponent("ETOSCoreTests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
     
     // MARK: - 目录访问
     
     /// 获取 Documents 目录
     public static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        resolvedDocumentsDirectory
     }
     
     /// 获取指定类别的目录 URL

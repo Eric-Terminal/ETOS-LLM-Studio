@@ -13,8 +13,7 @@ extension Persistence {
     /// 获取用于存储聊天记录的目录URL
     /// - Returns: 存储目录的URL路径
     public static func getChatsDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let chatsDirectory = paths[0].appendingPathComponent("ChatSessions")
+        let chatsDirectory = StorageUtility.documentsDirectory.appendingPathComponent("ChatSessions")
         if !FileManager.default.fileExists(atPath: chatsDirectory.path) {
             logger.info("Chat history directory does not exist, creating: \(chatsDirectory.path)")
             try? FileManager.default.createDirectory(at: chatsDirectory, withIntermediateDirectories: true)

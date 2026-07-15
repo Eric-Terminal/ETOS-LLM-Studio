@@ -53,7 +53,7 @@ struct PersistenceCoreTests {
     }
 
     private var memoryStoreSQLiteURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
             .appendingPathComponent("Memory")
             .appendingPathComponent("memory-store.sqlite")
     }

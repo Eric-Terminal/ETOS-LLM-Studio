@@ -30,8 +30,7 @@ extension AppToolManager {
         case .chat:
             return Persistence.getChatsDirectory().appendingPathComponent("chat-store.sqlite", isDirectory: false)
         case .config:
-            let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-                ?? Persistence.getChatsDirectory().deletingLastPathComponent()
+            let documents = StorageUtility.documentsDirectory
             let configDirectory = documents.appendingPathComponent("Config", isDirectory: true)
             if !FileManager.default.fileExists(atPath: configDirectory.path) {
                 try? FileManager.default.createDirectory(at: configDirectory, withIntermediateDirectories: true)

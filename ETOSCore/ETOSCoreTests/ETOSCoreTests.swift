@@ -162,7 +162,7 @@ struct ChatServiceTests {
     }
 }
 
-@Suite("Persistence Tests")
+@Suite("Persistence Tests", .serialized)
 struct PersistenceTests {
     var chatsDirectory: URL {
         Persistence.getChatsDirectory()
@@ -209,7 +209,7 @@ struct PersistenceTests {
     }
 
     var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
 
     var configDirectory: URL {
@@ -422,6 +422,8 @@ struct PersistenceTests {
         for session in sessions {
             Persistence.deleteSessionArtifacts(sessionID: session.id)
         }
+        // 先关闭数据库连接再删除文件，避免 SQLite 继续操作已解除链接的旧文件。
+        Persistence.resetGRDBStoreForTests()
         removeIfExists(currentIndexFileURL)
         removeIfExists(foldersFileURL)
         removeIfExists(currentSessionsDirectory)
@@ -460,6 +462,7 @@ struct PersistenceTests {
         removeIfExists(legacyMemoryStoreSQLiteURL)
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
+        Persistence.resetGRDBStoreForTests()
     }
 }
 

@@ -22,7 +22,7 @@ public enum SkillStore {
     }
 
     private static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
 
     public static var skillsDirectory: URL {

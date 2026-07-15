@@ -67,7 +67,7 @@ public struct ConfigLoader {
 
     /// 获取用户专属的根目录 URL
     static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
     
     /// 获取存放提供商配置的目录 URL

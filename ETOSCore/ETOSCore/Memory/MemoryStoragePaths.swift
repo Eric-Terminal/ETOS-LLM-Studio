@@ -57,7 +57,6 @@ enum MemoryStoragePaths {
         if let overrideRootDirectory {
             return overrideRootDirectory
         }
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        return paths[0].appendingPathComponent(directoryName, isDirectory: true)
+        return StorageUtility.documentsDirectory.appendingPathComponent(directoryName, isDirectory: true)
     }
 }

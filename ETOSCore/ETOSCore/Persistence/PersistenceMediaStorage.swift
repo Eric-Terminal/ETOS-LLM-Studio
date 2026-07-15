@@ -15,8 +15,7 @@ extension Persistence {
     /// 获取用于存储音频文件的目录URL
     /// - Returns: 音频存储目录的URL路径
     public static func getAudioDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let audioDirectory = paths[0].appendingPathComponent("AudioFiles")
+        let audioDirectory = StorageUtility.documentsDirectory.appendingPathComponent("AudioFiles")
         if !FileManager.default.fileExists(atPath: audioDirectory.path) {
             mediaStorageLogger.info("Audio directory does not exist, creating: \(audioDirectory.path)")
             try? FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
@@ -112,8 +111,7 @@ extension Persistence {
     /// 获取用于存储图片文件的目录URL
     /// - Returns: 图片存储目录的URL路径
     public static func getImageDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let imageDirectory = paths[0].appendingPathComponent("ImageFiles")
+        let imageDirectory = StorageUtility.documentsDirectory.appendingPathComponent("ImageFiles")
         if !FileManager.default.fileExists(atPath: imageDirectory.path) {
             mediaStorageLogger.info("Image directory does not exist, creating: \(imageDirectory.path)")
             try? FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
@@ -207,8 +205,7 @@ extension Persistence {
     /// 获取用于存储文件附件的目录URL
     /// - Returns: 文件附件存储目录的URL路径
     public static func getFileDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let fileDirectory = paths[0].appendingPathComponent("FileAttachments")
+        let fileDirectory = StorageUtility.documentsDirectory.appendingPathComponent("FileAttachments")
         if !FileManager.default.fileExists(atPath: fileDirectory.path) {
             mediaStorageLogger.info("File attachment directory does not exist, creating: \(fileDirectory.path)")
             try? FileManager.default.createDirectory(at: fileDirectory, withIntermediateDirectories: true)
@@ -382,8 +379,7 @@ extension Persistence {
     /// 获取用于存储字体文件的目录URL
     /// - Returns: 字体存储目录的URL路径
     public static func getFontDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let fontDirectory = paths[0].appendingPathComponent("FontFiles")
+        let fontDirectory = StorageUtility.documentsDirectory.appendingPathComponent("FontFiles")
         if !FileManager.default.fileExists(atPath: fontDirectory.path) {
             mediaStorageLogger.info("Font directory does not exist, creating: \(fontDirectory.path)")
             try? FileManager.default.createDirectory(at: fontDirectory, withIntermediateDirectories: true)

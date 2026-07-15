@@ -16,7 +16,7 @@ extension MCPServerStore {
     static let allRecordBlobKeys = [recordBlobKey, legacyRecordBlobKey]
 
     static var legacyServersDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
             .appendingPathComponent("MCPServers")
     }
 

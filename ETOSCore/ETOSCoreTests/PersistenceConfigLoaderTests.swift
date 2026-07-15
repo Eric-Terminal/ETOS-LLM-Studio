@@ -47,6 +47,7 @@ extension PersistenceTests {
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {
+        await AppConfigStore.shared.waitForPersistentStoreLoaded()
         let suiteName = "AppConfigBackfill-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         let key = AppConfigKey.titleGenerationModelIdentifier
@@ -125,7 +126,7 @@ extension PersistenceTests {
     }
 
     private var providersDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
             .appendingPathComponent("Providers")
     }
 

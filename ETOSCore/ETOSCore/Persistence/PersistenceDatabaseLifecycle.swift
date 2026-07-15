@@ -16,7 +16,7 @@ extension Persistence {
             return override
         }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            return false
+            return true
         }
         return true
     }
@@ -293,7 +293,6 @@ extension Persistence {
         pendingLaunchRecoveryRequest = nil
         pendingLaunchRecoveryKinds = []
         launchBackupAndRecoveryLock.unlock()
-        deleteAppConfig(key: launchRecoveryNoticeKey)
     }
 
     public static func consumeLaunchRecoveryNotice() -> String? {

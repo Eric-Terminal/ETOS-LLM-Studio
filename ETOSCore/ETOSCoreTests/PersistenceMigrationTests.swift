@@ -89,7 +89,7 @@ extension PersistenceTests {
     }
 
     @Test("旧 JSON 快照已导入但缺少标记时会自动清理遗留 JSON")
-    func testBootstrapGRDBCleansLegacyJSONWhenSnapshotAlreadyImportedWithoutMeta() throws {
+    func testBootstrapGRDBCleansLegacyJSONWhenSnapshotAlreadyImportedWithoutMeta() async throws {
         cleanup(sessions: [])
 
         let sessionID = UUID()
@@ -128,6 +128,10 @@ extension PersistenceTests {
 
         Persistence.resetGRDBStoreForTests()
         Persistence.bootstrapGRDBStoreOnLaunch()
+        _ = try await Persistence.migrateLegacyJSONIncrementally(
+            shouldCleanupLegacyJSONAfterImport: true,
+            throttleInterval: 0
+        )
 
         let loadedMessages = Persistence.loadMessages(for: sessionID)
         #expect(loadedMessages.map(\.content) == persistedMessages.map(\.content))
@@ -138,7 +142,7 @@ extension PersistenceTests {
     }
 
     @Test("跨会话重复消息ID不会阻止 GRDB 启动迁移清理旧 JSON")
-    func testBootstrapGRDBMigratesDuplicateMessageIDsAcrossSessions() throws {
+    func testBootstrapGRDBMigratesDuplicateMessageIDsAcrossSessions() async throws {
         cleanup(sessions: [])
 
         let duplicatedMessageID = UUID()
@@ -169,6 +173,10 @@ extension PersistenceTests {
         }
 
         Persistence.bootstrapGRDBStoreOnLaunch()
+        _ = try await Persistence.migrateLegacyJSONIncrementally(
+            shouldCleanupLegacyJSONAfterImport: true,
+            throttleInterval: 0
+        )
 
         let loadedFirst = Persistence.loadMessages(for: firstSession.id)
         let loadedSecond = Persistence.loadMessages(for: secondSession.id)
@@ -242,6 +250,14 @@ extension PersistenceTests {
 
     @Test("Migrate Legacy Session Store To Current Layout And Cleanup Legacy Files")
     func testMigrateLegacySessionStoreToCurrentLayoutAndCleanupLegacyFiles() throws {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
         let sessionId = UUID()
         let legacySession = ChatSession(
             id: sessionId,
@@ -296,6 +312,14 @@ extension PersistenceTests {
 
     @Test("Migrate Legacy Directory To Root Layout And Delete Old Folder")
     func testMigrateLegacyDirectoryToRootLayoutAndDeleteOldFolder() throws {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
         struct LegacySessionIndexFile: Encodable {
             struct Item: Encodable {
                 let id: UUID

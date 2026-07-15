@@ -23,7 +23,7 @@ public struct ShortcutToolStore {
     private static let legacyBlobKeys = [grdbBlobKey, legacyGrdbBlobKey]
 
     private static var documentsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        StorageUtility.documentsDirectory
     }
 
     public static var storageDirectory: URL {

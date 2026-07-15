@@ -12,7 +12,7 @@ import Foundation
 
 extension PersistenceTests {
     @Test("GRDB 启动迁移后自动清理旧 JSON 会话文件")
-    func testBootstrapGRDBImportAndCleanupLegacyJSON() throws {
+    func testBootstrapGRDBImportAndCleanupLegacyJSON() async throws {
         cleanup(sessions: [])
 
         let sessionID = UUID()
@@ -38,6 +38,10 @@ extension PersistenceTests {
         }
 
         Persistence.bootstrapGRDBStoreOnLaunch()
+        _ = try await Persistence.migrateLegacyJSONIncrementally(
+            shouldCleanupLegacyJSONAfterImport: true,
+            throttleInterval: 0
+        )
 
         let loadedSessions = Persistence.loadChatSessions()
         #expect(loadedSessions.contains(where: { $0.id == sessionID }))
