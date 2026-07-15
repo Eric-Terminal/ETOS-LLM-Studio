@@ -3173,6 +3173,14 @@
 "表" = "Tables";
 "警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。" = "Warning: inserting <time> directly into the leading system prompt may reduce context cache hit rate. If possible, send it at the end or use the system time tool instead.\n\nWhen landmarks are enabled, a system landmark is automatically inserted into history by time window to indicate the request time at that position.";
 "请求控制" = "Request Controls";
+"输入栏样式" = "Input Bar Style";
+"自适应" = "Adaptive";
+"经典" = "Classic";
+"自适应输入栏会在当前模型、请求控制和语音输入之间连续切换；经典样式保留原有布局。" = "The adaptive input bar transitions smoothly between the current model, request controls, and voice input. Classic keeps the original layout.";
+"当前模型没有可用的请求控制。" = "The current model has no available request controls.";
+"开始语音输入" = "Start Voice Input";
+"停止生成" = "Stop Generating";
+"发送" = "Send";
 "请至少提供 name_query 或 content_query 其中之一。" = "Provide at least one of name_query or content_query.";
 "请识别这张图片中的所有可见文字，并只返回识别到的文字。不要解释、不要总结、不要使用 Markdown；如果没有可识别文字，请返回“未识别到文字”。" = "Identify all visible text in this image and return only the recognized text. Do not explain, summarize, or use Markdown. If no text is recognizable, return \"No text recognized\".";
 "请输入快照密码后恢复。" = "Enter the snapshot password to restore.";

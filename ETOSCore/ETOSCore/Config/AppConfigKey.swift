@@ -204,6 +204,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localDebugLastServerAddress = "localDebug.lastServerAddress"
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
+    case chatComposerStyle = "chat.composer.style"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
@@ -454,6 +455,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .watchBackgroundLastSource,
              .chatComposerDraft:
             return .text("")
+        case .chatComposerStyle:
+            return .text(ChatComposerStyle.adaptive.rawValue)
         case .watchAttachmentSourceHistory,
              .watchBackgroundSourceHistory:
             return .text("[]")

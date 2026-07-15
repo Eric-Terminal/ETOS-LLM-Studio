@@ -17,7 +17,8 @@ import ETOSCore
 struct TelegramMessageComposer: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) private var colorScheme
-    @ObservedObject private var appConfig = AppConfigStore.shared
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
+    @ObservedObject var appConfig = AppConfigStore.shared
     @Binding var text: String
     let isSending: Bool
     let sendAction: () -> Void
@@ -32,12 +33,15 @@ struct TelegramMessageComposer: View {
     @State private var showAudioImporter = false
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
-    @State private var isExpandedComposer = false
+    @State var isExpandedComposer = false
+    @State var isRequestControlsExpanded = false
+    @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
-    @StateObject private var inlineSpeechRecorder = InlineSpeechRecorderController()
+    @StateObject var inlineSpeechRecorder = InlineSpeechRecorderController()
+    @Namespace var adaptiveGlassNamespace
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
-    @State private var inlineSpeechPreparedTranscript: String?
+    @State var inlineSpeechPreparedTranscript: String?
     @State private var showInlineSpeechError = false
     @State private var inlineSpeechErrorMessage: String?
 
@@ -61,7 +65,10 @@ struct TelegramMessageComposer: View {
         return max(160 * effectiveFontScale, min(rawHeight, 360 * effectiveFontScale))
     }
     private var composerReservedHeight: CGFloat {
-        max(controlSize, compactInputHeight) + 16
+        if usesAdaptiveComposer {
+            return adaptiveControlSize + 16
+        }
+        return max(controlSize, compactInputHeight) + 16
     }
     private var estimatedCompactInputWidth: CGFloat {
         max(0, UIScreen.main.bounds.width - 16 * 2 - controlSize * 2 - 12 * 2)
@@ -138,10 +145,22 @@ struct TelegramMessageComposer: View {
         }
         .onChange(of: focus.wrappedValue) { _, isFocused in
             if isFocused {
+                if isRequestControlsExpanded {
+                    withAnimation(adaptiveComposerAnimation) {
+                        isRequestControlsExpanded = false
+                    }
+                }
                 handleAutoExpand(for: text)
             } else if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                     isExpandedComposer = false
+                }
+            }
+        }
+        .onChange(of: appConfig.chatComposerStyle) { _, _ in
+            if isRequestControlsExpanded {
+                withAnimation(adaptiveComposerAnimation) {
+                    isRequestControlsExpanded = false
                 }
             }
         }
@@ -218,11 +237,14 @@ struct TelegramMessageComposer: View {
             .frame(maxWidth: .infinity, alignment: .bottom)
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
             .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
+            .animation(adaptiveComposerAnimation, value: isRequestControlsExpanded)
     }
 
     @ViewBuilder
     private var composerContent: some View {
-        if inlineSpeechRecorder.phase.isActive {
+        if usesAdaptiveComposer {
+            adaptiveComposerContent
+        } else if inlineSpeechRecorder.phase.isActive {
             inlineSpeechComposer
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -283,7 +305,7 @@ struct TelegramMessageComposer: View {
         )
     }
 
-    private func attachmentMenuButton(size: CGFloat) -> some View {
+    func attachmentMenuButton(size: CGFloat) -> some View {
         Menu {
             Button {
                 showImagePicker = true
@@ -323,7 +345,7 @@ struct TelegramMessageComposer: View {
                 .frame(width: size, height: size)
                 .background(glassCircleBackground)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ComposerPressButtonStyle())
     }
 
     private func actionControlButton(size: CGFloat) -> some View {
@@ -346,7 +368,7 @@ struct TelegramMessageComposer: View {
                 .frame(width: size, height: size)
                 .background(actionBackground)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ComposerPressButtonStyle())
         .disabled(!isSending && hasContent && !viewModel.canSendMessage)
     }
 
@@ -426,7 +448,7 @@ struct TelegramMessageComposer: View {
         .frame(maxWidth: .infinity, minHeight: controlSize)
     }
 
-    private func startInlineSpeechRecording() {
+    func startInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
         inlineSpeechPreparedTranscript = nil
@@ -446,7 +468,7 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func stopInlineSpeechRecording() {
+    func stopInlineSpeechRecording() {
         inlineSpeechRecorder.stopForPreview()
         if viewModel.sendSpeechAsAudio {
             scheduleInlineAudioAttachment()
@@ -455,7 +477,7 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func confirmInlineSpeechRecording() {
+    func confirmInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
         if viewModel.sendSpeechAsAudio {
@@ -469,7 +491,7 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func cancelInlineSpeechRecording() {
+    func cancelInlineSpeechRecording() {
         inlineSpeechFinalizeTask?.cancel()
         inlineSpeechFinalizeTask = nil
         inlineSpeechPreparedTranscript = nil
@@ -699,7 +721,7 @@ struct TelegramMessageComposer: View {
     }
 
     @ViewBuilder
-    private func actionCircleBackground(fill: Color) -> some View {
+    func actionCircleBackground(fill: Color) -> some View {
         if isLiquidGlassEnabled {
             if #available(iOS 26.0, *) {
                 Circle()
@@ -726,7 +748,7 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private var glassCircleBackground: some View {
+    var glassCircleBackground: some View {
         Group {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {

@@ -3085,6 +3085,14 @@
 "请在 iPhone 端查看完整渲染效果。" = "View the full rendered result on iPhone.";
 "请求 %d · 成功 %d · 错误 %d" = "Requests %d · Success %d · Errors %d";
 "请求控制" = "Request Controls";
+"输入栏样式" = "Стиль панели ввода";
+"自适应" = "Адаптивный";
+"经典" = "Классический";
+"自适应输入栏会在当前模型、请求控制和语音输入之间连续切换；经典样式保留原有布局。" = "Адаптивная панель плавно переключается между текущей моделью, параметрами запроса и голосовым вводом. Классический стиль сохраняет прежнюю компоновку.";
+"当前模型没有可用的请求控制。" = "Для текущей модели нет доступных параметров запроса.";
+"开始语音输入" = "Начать голосовой ввод";
+"停止生成" = "Остановить генерацию";
+"发送" = "Отправить";
 "请至少提供 name_query 或 content_query 其中之一。" = "Provide at least one of name_query or content_query.";
 "请识别这张图片中的所有可见文字，并只返回识别到的文字。不要解释、不要总结、不要使用 Markdown；如果没有可识别文字，请返回“未识别到文字”。" = "Identify all visible text in this image and return only the recognized text. Do not explain, summarize, or use Markdown. If no text is recognizable, return \"No text recognized\".";
 "请输入快照密码后恢复。" = "Enter the snapshot password to restore.";

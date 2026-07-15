@@ -294,6 +294,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
+    @Published public var chatComposerStyle: String { didSet { write(.chatComposerStyle, chatComposerStyle) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
@@ -480,6 +481,9 @@ public final class AppConfigStore: ObservableObject {
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
+        chatComposerStyle = ChatComposerStyle.normalized(
+            Self.textValue(.chatComposerStyle, userDefaults: userDefaults)
+        ).rawValue
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
@@ -526,11 +530,7 @@ public final class AppConfigStore: ObservableObject {
                 result[key.rawValue] = normalizedRealValue(stored, for: key)
             case .text(let defaultValue):
                 let stored = Persistence.readAppConfigText(key: key.rawValue) ?? defaultValue
-                if key == .reasoningContentEchoMode {
-                    result[key.rawValue] = ReasoningContentEchoMode.normalized(stored).rawValue
-                } else {
-                    result[key.rawValue] = stored
-                }
+                result[key.rawValue] = normalizedTextValue(stored, for: key)
             }
         }
         return result
@@ -550,9 +550,7 @@ public final class AppConfigStore: ObservableObject {
             AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
         }
         if let stored = Persistence.readAppConfigText(key: key.rawValue) {
-            let normalized = key == .reasoningContentEchoMode
-                ? ReasoningContentEchoMode.normalized(stored).rawValue
-                : stored
+            let normalized = normalizedTextValue(stored, for: key)
             snapshotCache.set(normalized, for: key)
             return normalized
         }
@@ -940,6 +938,7 @@ public final class AppConfigStore: ObservableObject {
         case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
+        case .chatComposerStyle: return .text(chatComposerStyle)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .restoreLastSessionOnlyIfRecent: return .bool(restoreLastSessionOnlyIfRecent)
@@ -1151,6 +1150,8 @@ public final class AppConfigStore: ObservableObject {
         case .watchBackgroundLastSource: watchBackgroundLastSource = value
         case .watchBackgroundSourceHistory: watchBackgroundSourceHistory = value
         case .chatQuickActionIDs: chatQuickActionIDs = value
+        case .chatComposerStyle:
+            chatComposerStyle = ChatComposerStyle.normalized(value).rawValue
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
         case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value
@@ -1349,7 +1350,7 @@ public final class AppConfigStore: ObservableObject {
 
     private static func textValue(_ key: AppConfigKey, userDefaults: UserDefaults) -> String {
         if case .text(let value) = cachedValue(for: key) ?? userDefaultsValue(for: key, userDefaults: userDefaults) ?? key.defaultValue {
-            return value
+            return normalizedTextValue(value, for: key)
         }
         return ""
     }
@@ -1377,7 +1378,7 @@ public final class AppConfigStore: ObservableObject {
             if let values = object as? [String: String] {
                 return .text(encodeStringDictionary(values))
             }
-            return coerceString(object).map(AppConfigValue.text)
+            return coerceString(object).map { .text(normalizedTextValue($0, for: key)) }
         }
     }
 
@@ -1391,7 +1392,11 @@ public final class AppConfigStore: ObservableObject {
         case .real(let value):
             return Persistence.writeAppConfig(key: key.rawValue, real: normalizedRealValue(value, for: key), typeHint: "real")
         case .text(let value):
-            return Persistence.writeAppConfig(key: key.rawValue, text: value, typeHint: "text")
+            return Persistence.writeAppConfig(
+                key: key.rawValue,
+                text: normalizedTextValue(value, for: key),
+                typeHint: "text"
+            )
         }
     }
 
@@ -1405,10 +1410,7 @@ public final class AppConfigStore: ObservableObject {
         case .real:
             return coerceDouble(value).map { .real(normalizedRealValue($0, for: key)) }
         case .text:
-            if key == .reasoningContentEchoMode {
-                return coerceString(value).map { .text(ReasoningContentEchoMode.normalized($0).rawValue) }
-            }
-            return coerceString(value).map(AppConfigValue.text)
+            return coerceString(value).map { .text(normalizedTextValue($0, for: key)) }
         }
     }
 
@@ -1426,8 +1428,19 @@ public final class AppConfigStore: ObservableObject {
             return .integer(normalizedIntegerValue(value, for: key))
         case .real(let value):
             return .real(normalizedRealValue(value, for: key))
-        case .text(let value) where key == .reasoningContentEchoMode:
-            return .text(ReasoningContentEchoMode.normalized(value).rawValue)
+        case .text(let value):
+            return .text(normalizedTextValue(value, for: key))
+        default:
+            return value
+        }
+    }
+
+    private nonisolated static func normalizedTextValue(_ value: String, for key: AppConfigKey) -> String {
+        switch key {
+        case .reasoningContentEchoMode:
+            return ReasoningContentEchoMode.normalized(value).rawValue
+        case .chatComposerStyle:
+            return ChatComposerStyle.normalized(value).rawValue
         default:
             return value
         }
