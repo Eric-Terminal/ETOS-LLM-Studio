@@ -200,6 +200,11 @@ extension ContentView {
                         settingsDestination = nil
                         isSessionListPresented = true
                     },
+                    isContextCompressionAvailable: viewModel.currentSession?.isTemporary == false
+                        && (!viewModel.allMessagesForSession.isEmpty || continuationContext != nil),
+                    onOpenContextCompression: {
+                        isContextCompressionPresented = true
+                    },
                     onHandleInputAction: { state in
                         switch state {
                         case .stop:
@@ -299,23 +304,6 @@ extension ContentView {
                     } label: {
                         Image(systemName: "gearshape.fill")
                     }
-                }
-            }
-
-            if !isMessageSelectionMode {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isContextCompressionPresented = true
-                    } label: {
-                        Image(systemName: "rectangle.compress.vertical")
-                            .accessibilityLabel(
-                                NSLocalizedString("压缩为续聊", comment: "Context compression toolbar action")
-                            )
-                    }
-                    .disabled(
-                        viewModel.currentSession?.isTemporary != false
-                            || (viewModel.allMessagesForSession.isEmpty && continuationContext == nil)
-                    )
                 }
             }
         }

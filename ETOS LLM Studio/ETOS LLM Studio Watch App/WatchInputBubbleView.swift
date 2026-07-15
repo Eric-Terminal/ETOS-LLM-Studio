@@ -22,6 +22,8 @@ struct WatchInputBubbleView: View {
     let inputPlaceholderText: String
     let inputBubbleVerticalPadding: CGFloat
     let onOpenSessionHistory: () -> Void
+    let isContextCompressionAvailable: Bool
+    let onOpenContextCompression: () -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
     let onSpeechInputLayoutWillChange: () -> Void
     let onRememberAttachmentSource: (String) -> Void
@@ -303,6 +305,18 @@ struct WatchInputBubbleView: View {
                 .labelStyle(.iconOnly)
                 .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
                 .tint(.blue)
+
+                Button {
+                    onOpenContextCompression()
+                } label: {
+                    Image(systemName: "rectangle.compress.vertical")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: inputControlHeight, height: inputControlHeight)
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(NSLocalizedString("压缩为续聊", comment: "Context compression input action"))
+                .tint(.indigo)
+                .disabled(!isContextCompressionAvailable)
             }
             .sheet(isPresented: $isRequestControlsPresented) {
                 if let selectedModel = viewModel.selectedModel {
