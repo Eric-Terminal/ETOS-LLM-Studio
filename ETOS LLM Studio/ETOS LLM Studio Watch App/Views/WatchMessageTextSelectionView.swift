@@ -1,7 +1,7 @@
 // ============================================================================
 // WatchMessageTextSelectionView.swift
 // ============================================================================
-// watchOS 消息文字选择页：触摸拖动建立连续选区，提交后回填聊天输入框。
+// watchOS 消息文字选择页：触摸拖动建立连续选区，可回填输入框或发起局部重写。
 // ============================================================================
 
 import SwiftUI
@@ -11,6 +11,7 @@ import ETOSCore
 
 struct WatchMessageTextSelectionView: View {
     let message: ChatMessage
+    let onRewriteSelection: ((MessageRewriteSelectionTarget) -> Void)?
     let onCommit: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -25,8 +26,20 @@ struct WatchMessageTextSelectionView: View {
     @State private var autoScrollStrength: CGFloat = 0
     @State private var autoScrollTask: Task<Void, Never>?
     @State private var showsFillFormatDialog = false
+    @State private var showsSelectionActionDialog = false
+    @State private var showsSelectionMappingError = false
 
     private let viewportCoordinateSpaceName = "watchMessageTextSelectionViewport"
+
+    init(
+        message: ChatMessage,
+        onRewriteSelection: ((MessageRewriteSelectionTarget) -> Void)? = nil,
+        onCommit: @escaping (String) -> Void
+    ) {
+        self.message = message
+        self.onRewriteSelection = onRewriteSelection
+        self.onCommit = onCommit
+    }
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -75,7 +88,7 @@ struct WatchMessageTextSelectionView: View {
             ToolbarItem(placement: .confirmationAction) {
                 if selectedTokenRange != nil {
                     Button {
-                        commitSelection()
+                        confirmSelectionAction()
                     } label: {
                         Image(systemName: "checkmark")
                     }
@@ -105,6 +118,27 @@ struct WatchMessageTextSelectionView: View {
             Button(NSLocalizedString("取消", comment: "Cancel input fill format selection"), role: .cancel) { }
         } message: {
             Text(NSLocalizedString("选择填充到输入框的格式。", comment: "Watch input fill format guidance"))
+        }
+        .confirmationDialog(
+            NSLocalizedString("使用选区", comment: "Watch selected text action dialog title"),
+            isPresented: $showsSelectionActionDialog,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("填入输入框", comment: "Insert selected text into watch composer")) {
+                commitSelection()
+            }
+            Button(NSLocalizedString("重写选区", comment: "Rewrite selected assistant message text")) {
+                rewriteSelection()
+            }
+            Button(NSLocalizedString("取消", comment: "Cancel selected text action"), role: .cancel) { }
+        }
+        .alert(
+            NSLocalizedString("无法重写这个选区", comment: "Selection rewrite mapping failure title"),
+            isPresented: $showsSelectionMappingError
+        ) {
+            Button(NSLocalizedString("好的", comment: "Dismiss selection rewrite mapping failure"), role: .cancel) { }
+        } message: {
+            Text(NSLocalizedString("这个选区包含无法安全对应到原始 Markdown 的内容，请缩小选区后重试。", comment: "Selection rewrite mapping failure guidance"))
         }
         .task(id: message.id) {
             let markdown = message.content
@@ -277,6 +311,38 @@ struct WatchMessageTextSelectionView: View {
         commit(selectedText)
     }
 
+    private func confirmSelectionAction() {
+        if onRewriteSelection == nil {
+            commitSelection()
+        } else {
+            showsSelectionActionDialog = true
+        }
+    }
+
+    private func rewriteSelection() {
+        guard let content,
+              let selectedTokenRange,
+              let onRewriteSelection else {
+            return
+        }
+        let firstToken = content.tokens[selectedTokenRange.lowerBound]
+        let lastToken = content.tokens[selectedTokenRange.upperBound]
+        let range = firstToken.lowerUTF16Offset..<lastToken.upperUTF16Offset
+
+        Task { @MainActor in
+            let target = await Task.detached(priority: .userInitiated) {
+                content.document.rewriteTarget(displayUTF16Range: range)
+            }.value
+            guard let target else {
+                WKInterfaceDevice.current().play(.failure)
+                showsSelectionMappingError = true
+                return
+            }
+            WKInterfaceDevice.current().play(.success)
+            onRewriteSelection(target)
+        }
+    }
+
     private func commit(_ text: String) {
         guard !text.isEmpty else { return }
         WKInterfaceDevice.current().play(.success)
@@ -341,12 +407,15 @@ enum WatchTextSelectionAutoScrollPolicy {
 }
 
 private struct WatchSelectableMessageContent: Sendable {
-    let plainText: String
+    let document: MessageSelectableTextDocument
     let tokens: [WatchSelectableMessageToken]
     let paragraphTokenRanges: [Range<Int>]
 
+    var plainText: String { document.plainText }
+
     nonisolated static func prepare(markdown: String) -> Self {
-        let plainText = MessageTextSelectionSupport.plainText(fromMarkdown: markdown)
+        let document = MessageTextSelectionSupport.selectableDocument(fromMarkdown: markdown)
+        let plainText = document.plainText
         var tokens: [WatchSelectableMessageToken] = []
         var paragraphTokenRanges: [Range<Int>] = []
         var paragraphStart = 0
@@ -354,6 +423,8 @@ private struct WatchSelectableMessageContent: Sendable {
         var currentStart = 0
         var currentKind: WatchSelectableMessageTokenKind?
         var characterOffset = 0
+        var utf16Offset = 0
+        var currentUTF16Start = 0
 
         func appendedCurrentToken() -> WatchSelectableMessageToken? {
             guard !currentText.isEmpty else { return nil }
@@ -361,7 +432,9 @@ private struct WatchSelectableMessageContent: Sendable {
                 id: tokens.count,
                 text: currentText,
                 lowerCharacterOffset: currentStart,
-                upperCharacterOffset: characterOffset
+                upperCharacterOffset: characterOffset,
+                lowerUTF16Offset: currentUTF16Start,
+                upperUTF16Offset: utf16Offset
             )
         }
 
@@ -375,16 +448,21 @@ private struct WatchSelectableMessageContent: Sendable {
                 paragraphTokenRanges.append(paragraphStart..<tokens.count)
                 paragraphStart = tokens.count
                 characterOffset += 1
+                utf16Offset += 1
                 continue
             }
+
+            let characterUTF16Count = String(character).utf16.count
 
             if character.isWhitespace {
                 if currentText.isEmpty {
                     currentStart = characterOffset
+                    currentUTF16Start = utf16Offset
                 }
                 currentText.append(character)
                 currentKind = .whitespace
                 characterOffset += 1
+                utf16Offset += characterUTF16Count
                 continue
             }
 
@@ -398,10 +476,12 @@ private struct WatchSelectableMessageContent: Sendable {
 
             if currentText.isEmpty {
                 currentStart = characterOffset
+                currentUTF16Start = utf16Offset
                 currentKind = kind
             }
             currentText.append(character)
             characterOffset += 1
+            utf16Offset += characterUTF16Count
         }
 
         if let token = appendedCurrentToken() {
@@ -410,7 +490,7 @@ private struct WatchSelectableMessageContent: Sendable {
         paragraphTokenRanges.append(paragraphStart..<tokens.count)
 
         return Self(
-            plainText: plainText,
+            document: document,
             tokens: tokens,
             paragraphTokenRanges: paragraphTokenRanges
         )
@@ -422,6 +502,8 @@ private struct WatchSelectableMessageToken: Identifiable, Sendable {
     let text: String
     let lowerCharacterOffset: Int
     let upperCharacterOffset: Int
+    let lowerUTF16Offset: Int
+    let upperUTF16Offset: Int
 }
 
 nonisolated private enum WatchSelectableMessageTokenKind: Equatable {

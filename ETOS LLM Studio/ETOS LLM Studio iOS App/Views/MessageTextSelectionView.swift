@@ -11,15 +11,39 @@ import ETOSCore
 
 struct MessageTextSelectionView: View {
     let message: ChatMessage
+    let onRewriteSelection: ((MessageRewriteSelectionTarget) -> Void)?
     let onAskAI: (String) -> Void
 
-    @State private var plainText: String?
+    @State private var selectableDocument: MessageSelectableTextDocument?
     @State private var showsCopyFormatDialog = false
+    @State private var showsSelectionMappingError = false
+
+    init(
+        message: ChatMessage,
+        onRewriteSelection: ((MessageRewriteSelectionTarget) -> Void)? = nil,
+        onAskAI: @escaping (String) -> Void
+    ) {
+        self.message = message
+        self.onRewriteSelection = onRewriteSelection
+        self.onAskAI = onAskAI
+    }
 
     var body: some View {
         Group {
-            if let plainText {
-                MessageSelectableTextView(text: plainText, onAskAI: onAskAI)
+            if let selectableDocument {
+                MessageSelectableTextView(
+                    text: selectableDocument.plainText,
+                    onAskAI: onAskAI,
+                    onRewriteSelection: onRewriteSelection.map { callback in
+                        { range in
+                            resolveRewriteSelection(
+                                range,
+                                document: selectableDocument,
+                                callback: callback
+                            )
+                        }
+                    }
+                )
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -36,7 +60,7 @@ struct MessageTextSelectionView: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .accessibilityLabel(NSLocalizedString("复制内容", comment: "Copy full message content"))
-                .disabled(plainText == nil)
+                .disabled(selectableDocument == nil)
             }
         }
         .confirmationDialog(
@@ -48,19 +72,44 @@ struct MessageTextSelectionView: View {
                 copyToPasteboard(message.content)
             }
             Button(NSLocalizedString("复制为纯文本", comment: "Copy message as plain text")) {
-                copyToPasteboard(plainText ?? message.content)
+                copyToPasteboard(selectableDocument?.plainText ?? message.content)
             }
             Button(NSLocalizedString("取消", comment: "Cancel copy format selection"), role: .cancel) { }
         } message: {
             Text(NSLocalizedString("选择需要复制的格式。", comment: "Copy format dialog guidance"))
         }
+        .alert(
+            NSLocalizedString("无法重写这个选区", comment: "Selection rewrite mapping failure title"),
+            isPresented: $showsSelectionMappingError
+        ) {
+            Button(NSLocalizedString("好的", comment: "Dismiss selection rewrite mapping failure"), role: .cancel) { }
+        } message: {
+            Text(NSLocalizedString("这个选区包含无法安全对应到原始 Markdown 的内容，请缩小选区后重试。", comment: "Selection rewrite mapping failure guidance"))
+        }
         .task(id: message.id) {
             let markdown = message.content
             let prepared = await Task.detached(priority: .userInitiated) {
-                MessageTextSelectionSupport.plainText(fromMarkdown: markdown)
+                MessageTextSelectionSupport.selectableDocument(fromMarkdown: markdown)
             }.value
             guard !Task.isCancelled else { return }
-            plainText = prepared
+            selectableDocument = prepared
+        }
+    }
+
+    private func resolveRewriteSelection(
+        _ range: Range<Int>,
+        document: MessageSelectableTextDocument,
+        callback: @escaping (MessageRewriteSelectionTarget) -> Void
+    ) {
+        Task { @MainActor in
+            let target = await Task.detached(priority: .userInitiated) {
+                document.rewriteTarget(displayUTF16Range: range)
+            }.value
+            guard let target else {
+                showsSelectionMappingError = true
+                return
+            }
+            callback(target)
         }
     }
 
@@ -74,9 +123,13 @@ struct MessageTextSelectionView: View {
 struct MessageSelectableTextView: UIViewRepresentable {
     let text: String
     let onAskAI: (String) -> Void
+    let onRewriteSelection: ((Range<Int>) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onAskAI: onAskAI)
+        Coordinator(
+            onAskAI: onAskAI,
+            onRewriteSelection: onRewriteSelection
+        )
     }
 
     func makeUIView(context: Context) -> UITextView {
@@ -85,6 +138,7 @@ struct MessageSelectableTextView: UIViewRepresentable {
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.onAskAI = onAskAI
+        context.coordinator.onRewriteSelection = onRewriteSelection
         guard textView.text != text else { return }
         textView.text = text
     }
@@ -109,9 +163,14 @@ struct MessageSelectableTextView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UITextViewDelegate {
         var onAskAI: (String) -> Void
+        var onRewriteSelection: ((Range<Int>) -> Void)?
 
-        init(onAskAI: @escaping (String) -> Void) {
+        init(
+            onAskAI: @escaping (String) -> Void,
+            onRewriteSelection: ((Range<Int>) -> Void)? = nil
+        ) {
             self.onAskAI = onAskAI
+            self.onRewriteSelection = onRewriteSelection
         }
 
         func textView(
@@ -141,7 +200,17 @@ struct MessageSelectableTextView: UIViewRepresentable {
                     self?.onAskAI(selectedText)
                 }
             }
-            return UIMenu(children: [askAction] + suggestedActions)
+            var customActions: [UIMenuElement] = [askAction]
+            if onRewriteSelection != nil {
+                let rewriteAction = UIAction(
+                    title: NSLocalizedString("重写选区", comment: "Rewrite selected assistant message text"),
+                    image: UIImage(systemName: "wand.and.stars")
+                ) { [weak self] _ in
+                    self?.onRewriteSelection?(rangeLocation..<(rangeLocation + rangeLength))
+                }
+                customActions.append(rewriteAction)
+            }
+            return UIMenu(children: customActions + suggestedActions)
         }
     }
 }

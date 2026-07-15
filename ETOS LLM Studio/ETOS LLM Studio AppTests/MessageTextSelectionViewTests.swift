@@ -22,10 +22,13 @@ struct MessageTextSelectionViewTests {
     }
 
     @MainActor
-    @Test("选区菜单在系统操作前提供询问 AI")
-    func selectionMenuIncludesAskAIAction() throws {
+    @Test("助手回复选区菜单在系统操作前提供询问 AI 和重写选区")
+    func selectionMenuIncludesAISelectionActions() throws {
         let content = "引用这段文字继续提问"
-        let coordinator = MessageSelectableTextView.Coordinator(onAskAI: { _ in })
+        let coordinator = MessageSelectableTextView.Coordinator(
+            onAskAI: { _ in },
+            onRewriteSelection: { _ in }
+        )
         let textView = MessageSelectableTextView.makeTextView(
             text: content,
             delegate: coordinator
@@ -39,9 +42,12 @@ struct MessageTextSelectionViewTests {
             )
         )
         let askAction = try #require(menu.children.first as? UIAction)
+        let rewriteAction = try #require(menu.children.dropFirst().first as? UIAction)
 
         #expect(textView.delegate === coordinator)
         #expect(askAction.title == NSLocalizedString("询问 AI", comment: "Ask AI about selected message text"))
         #expect(askAction.image != nil)
+        #expect(rewriteAction.title == NSLocalizedString("重写选区", comment: "Rewrite selected assistant message text"))
+        #expect(rewriteAction.image != nil)
     }
 }

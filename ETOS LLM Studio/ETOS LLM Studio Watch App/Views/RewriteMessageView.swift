@@ -9,6 +9,7 @@ import ETOSCore
 
 struct RewriteMessageView: View {
     let message: ChatMessage
+    let selectionTarget: MessageRewriteSelectionTarget?
     let referenceVersions: [MessageRewriteReferenceVersion]
     let onSubmit: (String, [MessageRewriteReferenceVersion]) -> Void
 
@@ -26,6 +27,17 @@ struct RewriteMessageView: View {
 
     var body: some View {
         Form {
+            if let selectionTarget {
+                Section {
+                    Text(selectionTarget.displayText)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(5)
+                } header: {
+                    Text(NSLocalizedString("选中内容", comment: "Partial rewrite selected content section"))
+                }
+            }
+
             Section {
                 TextField(
                     NSLocalizedString("输入重写要求", comment: "Message rewrite input placeholder"),
@@ -39,7 +51,7 @@ struct RewriteMessageView: View {
                 Text(rewriteFooterText)
             }
 
-            if !referenceVersions.isEmpty {
+            if selectionTarget == nil, !referenceVersions.isEmpty {
                 Section {
                     ForEach(referenceVersions) { version in
                         Button {
@@ -61,13 +73,19 @@ struct RewriteMessageView: View {
                     RewriteMessageOriginalPreviewView(content: message.content)
                 } label: {
                     Label(
-                        NSLocalizedString("原文预览", comment: "Message rewrite original preview section"),
+                        selectionTarget == nil
+                            ? NSLocalizedString("原文预览", comment: "Message rewrite original preview section")
+                            : NSLocalizedString("全文上下文", comment: "Partial rewrite full context section"),
                         systemImage: "doc.text.magnifyingglass"
                     )
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("重写回复", comment: "Message rewrite navigation title"))
+        .navigationTitle(
+            selectionTarget == nil
+                ? NSLocalizedString("重写回复", comment: "Message rewrite navigation title")
+                : NSLocalizedString("重写选区", comment: "Partial rewrite navigation title")
+        )
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -93,6 +111,9 @@ struct RewriteMessageView: View {
     }
 
     private var rewriteFooterText: String {
+        if selectionTarget != nil {
+            return NSLocalizedString("只替换选中内容，并保存为可切回原文的新版本。", comment: "Watch partial rewrite footer")
+        }
         if referenceVersions.isEmpty {
             return NSLocalizedString("只会发送当前回复和重写要求。", comment: "Watch message rewrite footer")
         }

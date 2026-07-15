@@ -29,6 +29,7 @@ extension ChatView {
                 NavigationStack {
                     RewriteMessageView(
                         message: payload.message,
+                        selectionTarget: payload.selectionTarget,
                         referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
                             for: payload.message,
                             in: viewModel.allMessagesForSession
@@ -37,7 +38,8 @@ extension ChatView {
                         viewModel.rewriteMessage(
                             payload.message,
                             instruction: instruction,
-                            referenceVersions: referenceVersions
+                            referenceVersions: referenceVersions,
+                            selectionTarget: payload.selectionTarget
                         )
                     }
                 }
@@ -127,6 +129,14 @@ extension ChatView {
                                 viewModel.addFileAttachment(attachment)
                                 composerFocused = true
                             }
+                        }
+                    },
+                    onRewriteSelection: { target, message in
+                        dismissMessageActionSheet {
+                            viewModel.messageRewritePayload = ChatViewModel.MessageRewritePayload(
+                                message: message,
+                                selectionTarget: target
+                            )
                         }
                     },
                     onSelectMultiple: { message in

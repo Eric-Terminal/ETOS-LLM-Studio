@@ -21,6 +21,7 @@ struct MessageActionsView: View {
     let onInsertText: (String) -> Void
     let onEdit: () -> Void
     let onRewrite: () -> Void
+    let onRewriteSelection: (MessageRewriteSelectionTarget) -> Void
     let onRetry: (ChatMessage) -> Void
     let onSpeak: (ChatMessage) -> Void
     let onStopSpeaking: () -> Void
@@ -49,6 +50,7 @@ struct MessageActionsView: View {
         onInsertText: @escaping (String) -> Void,
         onEdit: @escaping () -> Void,
         onRewrite: @escaping () -> Void,
+        onRewriteSelection: @escaping (MessageRewriteSelectionTarget) -> Void,
         onRetry: @escaping (ChatMessage) -> Void,
         onSpeak: @escaping (ChatMessage) -> Void,
         onStopSpeaking: @escaping () -> Void,
@@ -75,6 +77,7 @@ struct MessageActionsView: View {
         self.onInsertText = onInsertText
         self.onEdit = onEdit
         self.onRewrite = onRewrite
+        self.onRewriteSelection = onRewriteSelection
         self.onRetry = onRetry
         self.onSpeak = onSpeak
         self.onStopSpeaking = onStopSpeaking
@@ -217,7 +220,13 @@ struct MessageActionsView: View {
                 }
 
                 NavigationLink {
-                    WatchMessageTextSelectionView(message: message) { text in
+                    WatchMessageTextSelectionView(
+                        message: message,
+                        onRewriteSelection: canRewrite ? { target in
+                            onRewriteSelection(target)
+                            dismiss()
+                        } : nil
+                    ) { text in
                         onInsertText(text)
                         dismiss()
                     }

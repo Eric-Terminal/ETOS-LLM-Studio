@@ -67,6 +67,12 @@ struct WatchMessageActionsNavigationTarget: Identifiable, Hashable {
 
 struct WatchMessageRewriteNavigationTarget: Identifiable, Hashable {
     let id: UUID
+    let selectionTarget: MessageRewriteSelectionTarget?
+
+    init(id: UUID, selectionTarget: MessageRewriteSelectionTarget? = nil) {
+        self.id = id
+        self.selectionTarget = selectionTarget
+    }
 }
 
 struct WatchSelectedMessagesExportNavigationTarget: Identifiable, Hashable {

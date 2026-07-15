@@ -32,6 +32,7 @@ struct MessageActionSheet: View {
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
     let onAskAI: (String, ChatMessage) -> Void
+    let onRewriteSelection: (MessageRewriteSelectionTarget, ChatMessage) -> Void
     let onSelectMultiple: (ChatMessage) -> Void
     let onJumpToMessage: (Int) -> Bool
 
@@ -136,7 +137,12 @@ struct MessageActionSheet: View {
                     }
 
                     NavigationLink {
-                        MessageTextSelectionView(message: message) { selectedText in
+                        MessageTextSelectionView(
+                            message: message,
+                            onRewriteSelection: canRewrite ? { target in
+                                onRewriteSelection(target, message)
+                            } : nil
+                        ) { selectedText in
                             onAskAI(selectedText, message)
                         }
                     } label: {

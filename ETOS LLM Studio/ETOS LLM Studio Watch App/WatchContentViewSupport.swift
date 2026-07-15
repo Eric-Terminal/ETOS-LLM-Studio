@@ -128,7 +128,7 @@ extension ContentView {
         }
         .sheet(item: $messageRewriteTarget) { target in
             NavigationStack {
-                rewriteMessageView(for: target.id)
+                rewriteMessageView(for: target)
             }
             .appLockOverlayLayer()
         }
@@ -576,6 +576,12 @@ extension ContentView {
                 onRewrite: {
                     messageRewriteTarget = WatchMessageRewriteNavigationTarget(id: message.id)
                 },
+                onRewriteSelection: { target in
+                    messageRewriteTarget = WatchMessageRewriteNavigationTarget(
+                        id: message.id,
+                        selectionTarget: target
+                    )
+                },
                 onRetry: { message in
                     viewModel.retryMessage(message)
                 },
@@ -624,10 +630,11 @@ extension ContentView {
     }
 
     @ViewBuilder
-    func rewriteMessageView(for messageID: UUID) -> some View {
-        if let message = viewModel.allMessagesForSession.first(where: { $0.id == messageID }) {
+    func rewriteMessageView(for target: WatchMessageRewriteNavigationTarget) -> some View {
+        if let message = viewModel.allMessagesForSession.first(where: { $0.id == target.id }) {
             RewriteMessageView(
                 message: message,
+                selectionTarget: target.selectionTarget,
                 referenceVersions: MessageRewriteReferenceSupport.referenceVersions(
                     for: message,
                     in: viewModel.allMessagesForSession
@@ -636,7 +643,8 @@ extension ContentView {
                 viewModel.rewriteMessage(
                     message,
                     instruction: instruction,
-                    referenceVersions: referenceVersions
+                    referenceVersions: referenceVersions,
+                    selectionTarget: target.selectionTarget
                 )
             }
         } else {

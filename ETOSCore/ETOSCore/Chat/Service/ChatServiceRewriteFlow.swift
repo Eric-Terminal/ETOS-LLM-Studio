@@ -18,6 +18,7 @@ extension ChatService {
         case emptyInstruction
         case emptyOriginalContent
         case emptyRewriteResult
+        case selectionOutdated
 
         public var errorDescription: String? {
             switch self {
@@ -33,6 +34,8 @@ extension ChatService {
                 return NSLocalizedString("这条回复没有可重写的正文。", comment: "Rewrite message error")
             case .emptyRewriteResult:
                 return NSLocalizedString("AI 返回了空内容，请调整重写要求后重试。", comment: "Rewrite message error")
+            case .selectionOutdated:
+                return NSLocalizedString("原回复已发生变化，请重新选择要重写的文字。", comment: "Partial rewrite stale selection error")
             }
         }
     }
@@ -42,7 +45,8 @@ extension ChatService {
         instruction: String,
         aiTemperature: Double,
         sessionID: UUID? = nil,
-        referenceVersions: [MessageRewriteReferenceVersion] = []
+        referenceVersions: [MessageRewriteReferenceVersion] = [],
+        selectionTarget: MessageRewriteSelectionTarget? = nil
     ) async throws {
         await waitForInitialPersistenceStateIfNeeded()
 
@@ -70,8 +74,7 @@ extension ChatService {
         }
 
         let originalMessage = messages[messageIndex]
-        let originalContent = originalMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !originalContent.isEmpty else {
+        guard !originalMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MessageRewriteError.emptyOriginalContent
         }
 
@@ -84,6 +87,17 @@ extension ChatService {
         let refreshedMessage = updatedMessages[refreshedMessageIndex]
         guard refreshedMessage.role == .assistant else {
             throw MessageRewriteError.unsupportedMessageRole
+        }
+        let originalContent = refreshedMessage.content
+        guard !originalContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MessageRewriteError.emptyOriginalContent
+        }
+        if let selectionTarget,
+           selectionTarget.replacingSelection(
+                in: originalContent,
+                with: selectionTarget.sourceText
+           ) == nil {
+            throw MessageRewriteError.selectionOutdated
         }
 
         let attemptMetadata = prepareRewriteAttemptMetadata(
@@ -102,7 +116,9 @@ extension ChatService {
         )
         loadingMessage.modelReference = refreshedMessage.modelReference
         loadingMessage.costEstimate = refreshedMessage.costEstimate
-        loadingMessage.sentSystemPromptSnapshot = BuiltInPromptStore.render(.messageRewriteSystem)
+        loadingMessage.sentSystemPromptSnapshot = BuiltInPromptStore.render(
+            selectionTarget == nil ? .messageRewriteSystem : .messagePartialRewriteSystem
+        )
 
         let insertionIndex = rewriteInsertionIndex(
             in: updatedMessages,
@@ -132,17 +148,39 @@ extension ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             let targetModel = self.detachedChatCompletionFallbackModel()
-            let rewrittenContent = try await self.generateRewriteContent(
-                originalContent: originalContent,
-                instruction: trimmedInstruction,
-                referenceVersions: referenceVersions,
-                aiTemperature: aiTemperature,
-                sessionID: resolvedSessionID,
-                runnableModel: targetModel
-            )
-            let sanitizedContent = rewrittenContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !sanitizedContent.isEmpty else {
-                throw MessageRewriteError.emptyRewriteResult
+            let sanitizedContent: String
+            if let selectionTarget {
+                let replacement = try await self.generatePartialRewriteReplacement(
+                    originalContent: originalContent,
+                    selectionTarget: selectionTarget,
+                    instruction: trimmedInstruction,
+                    aiTemperature: aiTemperature,
+                    sessionID: resolvedSessionID,
+                    runnableModel: targetModel
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !replacement.isEmpty else {
+                    throw MessageRewriteError.emptyRewriteResult
+                }
+                guard let reconstructed = selectionTarget.replacingSelection(
+                    in: originalContent,
+                    with: replacement
+                ) else {
+                    throw MessageRewriteError.selectionOutdated
+                }
+                sanitizedContent = reconstructed
+            } else {
+                let rewrittenContent = try await self.generateRewriteContent(
+                    originalContent: originalContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                    instruction: trimmedInstruction,
+                    referenceVersions: referenceVersions,
+                    aiTemperature: aiTemperature,
+                    sessionID: resolvedSessionID,
+                    runnableModel: targetModel
+                )
+                sanitizedContent = rewrittenContent.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !sanitizedContent.isEmpty else {
+                    throw MessageRewriteError.emptyRewriteResult
+                }
             }
             let modelReference = targetModel.map {
                 MessageModelReference(
@@ -220,6 +258,34 @@ extension ChatService {
                 ]
             )
         }
+
+        return try await generateDetachedChatCompletion(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            temperature: aiTemperature,
+            runnableModel: runnableModel,
+            requestSource: .messageRewrite,
+            sessionID: sessionID
+        )
+    }
+
+    private func generatePartialRewriteReplacement(
+        originalContent: String,
+        selectionTarget: MessageRewriteSelectionTarget,
+        instruction: String,
+        aiTemperature: Double,
+        sessionID: UUID,
+        runnableModel: RunnableModel?
+    ) async throws -> String {
+        let systemPrompt = BuiltInPromptStore.render(.messagePartialRewriteSystem)
+        let userPrompt = BuiltInPromptStore.render(
+            .messagePartialRewriteUser,
+            variables: [
+                "instruction": instruction,
+                "selection": selectionTarget.sourceText,
+                "original": originalContent
+            ]
+        )
 
         return try await generateDetachedChatCompletion(
             systemPrompt: systemPrompt,
