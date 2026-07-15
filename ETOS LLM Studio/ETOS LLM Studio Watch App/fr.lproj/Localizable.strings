@@ -5162,3 +5162,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "拖动可调整顺序，轻扫可删除；输入栏两侧会按这里的顺序显示。" = "Faites glisser pour réorganiser et balayez pour supprimer. Les actions des deux côtés apparaissent dans cet ordre.";
 "输入操作" = "Actions de saisie";
 "功能入口" = "Raccourcis de fonctions";
+"仅绑定角色卡时可见" = "Visible uniquement lorsqu’une carte de personnage est liée";

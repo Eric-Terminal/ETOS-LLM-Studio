@@ -5162,3 +5162,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "拖动可调整顺序，轻扫可删除；输入栏两侧会按这里的顺序显示。" = "Arrastra para reordenar y desliza para eliminar. Las acciones rápidas de ambos lados aparecen en este orden.";
 "输入操作" = "Acciones de entrada";
 "功能入口" = "Accesos a funciones";
+"仅绑定角色卡时可见" = "Visible solo al vincular una tarjeta de personaje";

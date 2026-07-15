@@ -109,6 +109,11 @@ extension WatchInputQuickAction {
         }
     }
 
+    var settingsDescription: String? {
+        guard self == .roleplayScripts else { return nil }
+        return NSLocalizedString("仅绑定角色卡时可见", comment: "Watch roleplay script quick action visibility")
+    }
+
     var tint: Color {
         switch self {
         case .requestControls, .agentSkills, .roleplay:
@@ -151,7 +156,7 @@ struct WatchInputQuickActionSettingsView: View {
     private func quickActionSection(for edge: WatchInputQuickActionEdge) -> some View {
         Section {
             ForEach(appConfig.watchInputQuickActionSettings.actions(for: edge)) { action in
-                Label(action.title, systemImage: action.systemImage)
+                WatchInputQuickActionSettingsLabel(action: action)
             }
             .onDelete { offsets in
                 deleteActions(at: offsets, from: edge)
@@ -227,7 +232,7 @@ private struct WatchInputQuickActionPickerView: View {
                     assign(action)
                 } label: {
                     HStack {
-                        Label(action.title, systemImage: action.systemImage)
+                        WatchInputQuickActionSettingsLabel(action: action)
                         Spacer()
                         if let assignedEdge = assignedEdge(for: action) {
                             if assignedEdge == targetEdge {
@@ -280,6 +285,21 @@ private struct WatchInputQuickActionPickerView: View {
             trailingActions: trailingActions
         )
         appConfig.watchInputQuickActionSettings = configuration
+    }
+}
+
+private struct WatchInputQuickActionSettingsLabel: View {
+    let action: WatchInputQuickAction
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Label(action.title, systemImage: action.systemImage)
+            if let description = action.settingsDescription {
+                Text(description)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
