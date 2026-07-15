@@ -7,6 +7,7 @@
 // ============================================================================
 
 import SwiftUI
+import UIKit
 import ETOSCore
 
 private enum ModelAdvancedSettingsTab: Hashable {
@@ -302,6 +303,12 @@ struct ModelAdvancedSettingsView: View {
 
                 }
             }
+            .background {
+                SettingsKeyboardDismissTapView {
+                    focusedField = nil
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
             .tabItem {
                 Label(NSLocalizedString("会话与上下文", comment: ""), systemImage: "bubble.left.and.bubble.right")
             }
@@ -740,6 +747,72 @@ struct ModelAdvancedSettingsView: View {
             session.enhancedPrompt = enhancedPromptDraft
             currentSession = session
             ChatService.shared.updateSession(session)
+        }
+    }
+}
+
+private struct SettingsKeyboardDismissTapView: UIViewRepresentable {
+    let onTapOutsideTextInput: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onTapOutsideTextInput: onTapOutsideTextInput)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        UIView(frame: .zero)
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onTapOutsideTextInput = onTapOutsideTextInput
+        DispatchQueue.main.async { [weak uiView, weak coordinator = context.coordinator] in
+            coordinator?.attach(to: uiView?.window)
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onTapOutsideTextInput: () -> Void
+        private weak var window: UIWindow?
+        private lazy var tapGesture: UITapGestureRecognizer = {
+            let gesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            gesture.cancelsTouchesInView = false
+            gesture.delegate = self
+            return gesture
+        }()
+
+        init(onTapOutsideTextInput: @escaping () -> Void) {
+            self.onTapOutsideTextInput = onTapOutsideTextInput
+        }
+
+        func attach(to newWindow: UIWindow?) {
+            guard window !== newWindow else { return }
+            detach()
+            window = newWindow
+            newWindow?.addGestureRecognizer(tapGesture)
+        }
+
+        func detach() {
+            window?.removeGestureRecognizer(tapGesture)
+            window = nil
+        }
+
+        @objc private func handleTap() {
+            window?.endEditing(true)
+            onTapOutsideTextInput()
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var touchedView: UIView? = touch.view
+            while let currentView = touchedView {
+                if currentView is UITextField || currentView is UITextView {
+                    return false
+                }
+                touchedView = currentView.superview
+            }
+            return true
         }
     }
 }
