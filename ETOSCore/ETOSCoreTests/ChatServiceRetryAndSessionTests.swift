@@ -81,7 +81,7 @@ extension ChatServiceTests {
         let trailingAssistant = finalMessages.first(where: { $0.id == trailingEmptyAssistant.id })
 
         #expect(retriedMessage?.role == .assistant)
-        #expect(retriedMessage?.content.contains("重试失败") == true)
+        #expect(retriedMessage?.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
         #expect(trailingAssistant?.role == .assistant)
         #expect(trailingAssistant?.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true)
 

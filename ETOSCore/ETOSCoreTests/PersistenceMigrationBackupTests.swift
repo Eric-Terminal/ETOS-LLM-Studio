@@ -58,8 +58,7 @@ extension PersistenceTests {
     func testLaunchBackupCreatesSlimChatStoreBackup() {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let session = ChatSession(id: UUID(), name: "Launch Backup Session", isTemporary: false)
         let messages = [
@@ -67,15 +66,10 @@ extension PersistenceTests {
             ChatMessage(role: .assistant, content: "launch-backup-assistant")
         ]
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [session])
@@ -523,8 +517,7 @@ extension PersistenceTests {
     func testLaunchBackupRequestsConfirmationBeforeRestoringCorruptedChatStore() throws {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let session = ChatSession(id: UUID(), name: "Corrupted Launch Session", isTemporary: false)
         let messages = [
@@ -532,15 +525,10 @@ extension PersistenceTests {
             ChatMessage(role: .assistant, content: "recover-assistant")
         ]
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [session])
@@ -581,8 +569,7 @@ extension PersistenceTests {
     func testLaunchBackupKeepsPreviousBackupWhenNewBackupFails() throws {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let oldSession = ChatSession(id: UUID(), name: "Old Backup Session", isTemporary: false)
         let oldMessages = [
@@ -594,7 +581,6 @@ extension PersistenceTests {
         ]
         var didRestrictBackupDirectory = false
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
@@ -604,11 +590,7 @@ extension PersistenceTests {
                     ofItemAtPath: chatStoreBackupDirectory.path
                 )
             }
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [oldSession, newSession])
@@ -639,8 +621,7 @@ extension PersistenceTests {
     func testLaunchBackupRotationCleansTemporaryAndPreviousFiles() throws {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let oldSession = ChatSession(id: UUID(), name: "Old Rotation Backup", isTemporary: false)
         let newSession = ChatSession(id: UUID(), name: "New Rotation Backup", isTemporary: false)
@@ -648,15 +629,10 @@ extension PersistenceTests {
         let legacyTemporaryURL = chatStoreBackupSQLiteURL.appendingPathExtension("tmp")
         let previousURL = chatStoreBackupSQLiteURL.appendingPathExtension("previous")
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             removeIfExists(creatingURL)
@@ -691,23 +667,17 @@ extension PersistenceTests {
     func testBootstrapGRDBDoesNotCreateLaunchBackupImmediately() {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let session = ChatSession(id: UUID(), name: "Deferred Backup Session", isTemporary: false)
         let messages = [
             ChatMessage(role: .user, content: "deferred-backup-user")
         ]
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [session])
@@ -725,23 +695,17 @@ extension PersistenceTests {
     func testScheduleLaunchBackupAfterStartupCreatesBackup() async {
         cleanup(sessions: [])
 
-        let defaults = UserDefaults.standard
-        let previousBackupEnabled = defaults.object(forKey: Persistence.launchBackupEnabledKey)
+        let previousBackupEnabled = enableLaunchBackupForTest()
         let previousOverride = Persistence.grdbEnabledOverrideForTests
         let session = ChatSession(id: UUID(), name: "Scheduled Backup Session", isTemporary: false)
         let messages = [
             ChatMessage(role: .assistant, content: "scheduled-backup-assistant")
         ]
 
-        defaults.set(true, forKey: Persistence.launchBackupEnabledKey)
         Persistence.grdbEnabledOverrideForTests = true
         Persistence.resetGRDBStoreForTests()
         defer {
-            if let previousBackupEnabled = previousBackupEnabled as? Bool {
-                defaults.set(previousBackupEnabled, forKey: Persistence.launchBackupEnabledKey)
-            } else {
-                defaults.removeObject(forKey: Persistence.launchBackupEnabledKey)
-            }
+            restoreLaunchBackupAfterTest(previousBackupEnabled)
             Persistence.grdbEnabledOverrideForTests = previousOverride
             Persistence.resetGRDBStoreForTests()
             cleanup(sessions: [session])

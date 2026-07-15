@@ -372,7 +372,8 @@ struct AppLogCenterTests {
 
         await store.deleteRunFile(relativePath: "2026-03-07/run-a.jsonl")
 
-        let folders = await store.loadDayFolders()
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-03-08T12:00:00Z"))
+        let folders = await store.loadDayFolders(now: now)
         #expect(folders.count == 1)
         #expect(folders.first?.day == "2026-03-07")
         #expect(folders.first?.runs.count == 1)
@@ -406,7 +407,8 @@ struct AppLogCenterTests {
 
         await store.deleteDayFolder(day: "2026-03-07")
 
-        let folders = await store.loadDayFolders()
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-03-08T12:00:00Z"))
+        let folders = await store.loadDayFolders(now: now)
         #expect(folders.count == 1)
         #expect(folders.first?.day == "2026-03-08")
     }

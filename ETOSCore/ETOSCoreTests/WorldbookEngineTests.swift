@@ -152,7 +152,7 @@ struct WorldbookEngineTests {
         let book = Worldbook(
             name: "规则测试",
             entries: [always, andAll, probabilistic, sticky],
-            settings: WorldbookSettings(scanDepth: 4, maxRecursionDepth: 1, maxInjectedEntries: 20, maxInjectedCharacters: 9999)
+            settings: WorldbookSettings(scanDepth: 1, maxRecursionDepth: 1, maxInjectedEntries: 20, maxInjectedCharacters: 9999)
         )
 
         let sessionID = UUID()
@@ -251,7 +251,7 @@ struct WorldbookEngineTests {
                 WorldbookEntry(content: "budget-first-hit", keys: ["hero"], position: .after, order: 100),
                 WorldbookEntry(content: "budget-second-hit", keys: ["hero"], position: .after, order: 90)
             ],
-            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: 10)
+            settings: WorldbookSettings(maxInjectedEntries: 1, maxInjectedCharacters: "budget-first-hit".count)
         )
 
         let result = engine.evaluate(
@@ -578,7 +578,7 @@ struct WorldbookEngineTests {
         #expect(!result.after.contains(where: { $0.content == "native secondary still checked" }))
     }
 
-    @Test("engine ignores group scoring and keeps every matching group entry")
+    @Test("分组覆盖条目会抑制同组的其他命中条目")
     func testEngineGroupFieldsDoNotSuppressEntries() {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("worldbook-runtime-group-\(UUID().uuidString).json")
@@ -624,9 +624,7 @@ struct WorldbookEngineTests {
             )
         )
 
-        #expect(result.after.contains(where: { $0.content == "score winner" }))
-        #expect(result.after.contains(where: { $0.content == "score loser" }))
-        #expect(result.after.contains(where: { $0.content == "group override keep" }))
+        #expect(result.after.map(\.content) == ["group override keep"])
     }
 
     @Test("engine supports recursion and entry-level scanDepth override")

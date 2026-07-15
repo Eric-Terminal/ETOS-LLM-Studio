@@ -114,7 +114,7 @@ struct ChatTranscriptExportServiceTests {
 
         let text = String(decoding: output.data, as: UTF8.self)
         #expect(output.suggestedFileName.contains("不含思考"))
-        #expect(text.contains("思考/推理：不包含"))
+        #expect(text.contains("- 思考/推理: 不包含"))
         #expect(!text.contains("### 推理"))
         #expect(!text.contains("这段推理不应被导出"))
     }

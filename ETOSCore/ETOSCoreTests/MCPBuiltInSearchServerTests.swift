@@ -50,8 +50,6 @@ struct MCPBuiltInSearchServerTests {
             return
         }
         #expect(text.contains("Swift MCP"))
-        #expect(text.contains("https://swift.org"))
-        #expect(text.contains("https://modelcontextprotocol.io"))
 
         guard case let .dictionary(structuredContent)? = resultObject["structuredContent"],
               case let .string(provider)? = structuredContent["provider"],
@@ -61,6 +59,16 @@ struct MCPBuiltInSearchServerTests {
         }
         #expect(provider == "etos_builtin_web_search")
         #expect(items.count == 2)
+        #expect(items.contains { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(url)? = fields["url"] else { return false }
+            return url == "https://swift.org/"
+        })
+        #expect(items.contains { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(url)? = fields["url"] else { return false }
+            return url == "https://modelcontextprotocol.io/"
+        })
 
         await client.disconnect()
     }

@@ -12,7 +12,7 @@ import Foundation
 import SQLite3
 @testable import ETOSCore
 
-@Suite("ChatService Integration Tests")
+@Suite("ChatService Integration Tests", .serialized)
 struct ChatServiceTests {
     var memoryManager: MemoryManager!
     var mockAdapter: MockAPIAdapter!
@@ -20,6 +20,12 @@ struct ChatServiceTests {
     var dummyModel: RunnableModel!
 
     init() async {
+        let existingSessions = Persistence.loadChatSessions()
+        for session in existingSessions {
+            Persistence.deleteSessionArtifacts(sessionID: session.id)
+        }
+        Persistence.saveChatSessions([])
+
         for provider in ConfigLoader.loadProviders() {
             ConfigLoader.deleteProvider(provider)
         }
@@ -463,6 +469,28 @@ struct PersistenceTests {
         removeIfExists(legacyMemoryStoreSQLiteWALURL)
         removeIfExists(legacyMemoryStoreSQLiteSHMURL)
         Persistence.resetGRDBStoreForTests()
+    }
+
+    func enableLaunchBackupForTest() -> Int? {
+        let previousValue = Persistence.readAppConfigInteger(key: Persistence.launchBackupEnabledKey)
+        _ = Persistence.writeAppConfig(
+            key: Persistence.launchBackupEnabledKey,
+            integer: 1,
+            typeHint: AppConfigKey.syncBackupCreateOnLaunch.typeHint
+        )
+        return previousValue
+    }
+
+    func restoreLaunchBackupAfterTest(_ previousValue: Int?) {
+        if let previousValue {
+            _ = Persistence.writeAppConfig(
+                key: Persistence.launchBackupEnabledKey,
+                integer: previousValue,
+                typeHint: AppConfigKey.syncBackupCreateOnLaunch.typeHint
+            )
+        } else {
+            _ = Persistence.deleteAppConfig(key: Persistence.launchBackupEnabledKey)
+        }
     }
 }
 

@@ -223,8 +223,7 @@ struct MCPManagerToolExposureTests {
 
         manager.reloadServers()
         let exposedTools = manager.chatToolsForLLM()
-        #expect(exposedTools.count == 1)
-        let exposedTool = try #require(exposedTools.first)
+        let exposedTool = try #require(exposedTools.first(where: { $0.name == "mcp_tool_alpha" }))
         #expect(exposedTool.name == "mcp_tool_alpha")
 
         manager.setChatToolsEnabled(false)

@@ -399,8 +399,8 @@ struct AppToolManagerTests {
             toolName: AppToolKind.getSystemTime.toolName,
             argumentsJSON: "{}"
         )
-        #expect(result.contains("当前系统本地时间"))
-        #expect(result.contains("ISO8601"))
+        #expect(result.contains("当前系统时间"))
+        #expect(result.contains("时区"))
     }
 
     @MainActor

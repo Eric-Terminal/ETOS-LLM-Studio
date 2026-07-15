@@ -12,7 +12,7 @@ import Testing
 import Foundation
 @testable import ETOSCore
 
-@Suite("字体路由与同步测试")
+@Suite("字体路由与同步测试", .serialized)
 struct FontRouteSyncTests {
 
     @Test("字体同步打包会携带字体文件与路由配置")
@@ -400,7 +400,7 @@ struct FontRouteSyncTests {
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
             #expect(
-                FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == valid.postScriptName
+                FontLibrary.resolvePostScriptName(for: .body, sampleText: "∞∑") == valid.postScriptName
             )
         }
     }
@@ -437,6 +437,7 @@ struct FontRouteSyncTests {
 
         try? fileManager.removeItem(at: fontDirectory)
         try fileManager.createDirectory(at: fontDirectory, withIntermediateDirectories: true)
+        FontLibrary.preloadRuntimeCache(forceReload: true)
 
         defer {
             try? fileManager.removeItem(at: fontDirectory)
@@ -444,6 +445,7 @@ struct FontRouteSyncTests {
                 try? fileManager.copyItem(at: backupDirectory, to: fontDirectory)
             }
             try? fileManager.removeItem(at: backupRoot)
+            FontLibrary.preloadRuntimeCache(forceReload: true)
         }
 
         try await body()

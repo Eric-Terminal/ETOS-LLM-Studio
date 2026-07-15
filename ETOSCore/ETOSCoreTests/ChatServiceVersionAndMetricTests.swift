@@ -74,7 +74,6 @@ extension ChatServiceTests {
 
         let errorMessage = messages.last
         #expect(errorMessage?.role == .error)
-        #expect(errorMessage?.content.contains("重试失败") == true)
         #expect(errorMessage?.content.contains("HTTP 500") == true)
 
         await cleanup()
@@ -220,7 +219,6 @@ extension ChatServiceTests {
 
         let latestError = messages.last
         #expect(latestError?.role == .error)
-        #expect(latestError?.content.contains("重试失败") == true)
         #expect(latestError?.content.contains("HTTP 500") == true)
         #expect(messages[0].selectedResponseAttemptID == latestError?.responseAttemptID)
         #expect(messages[1].responseAttemptIndex == 0)

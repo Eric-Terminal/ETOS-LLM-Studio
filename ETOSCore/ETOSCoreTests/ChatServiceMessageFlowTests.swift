@@ -252,16 +252,18 @@ extension ChatServiceTests {
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
-        let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
-        #expect(userMessage.content.contains("请处理这个附件"))
-        #expect(userMessage.content.components(separatedBy: "<file_attachments>").count - 1 == 1)
-        #expect(userMessage.content.contains("<file name=\"notes.txt\">"))
-        #expect(userMessage.content.contains("<file name=\"todo.txt\">"))
-        #expect(userMessage.content.contains("附件原文"))
-        #expect(userMessage.content.contains("第二份附件"))
-        #expect(userMessage.content.contains("</file_attachments>"))
-        #expect(!userMessage.content.contains("以下内容来自文件附件文本提取："))
-        #expect(!userMessage.content.contains("文件："))
+        let userMessages = sentMessages.filter { $0.role == .user }
+        let combinedContent = userMessages.map(\.content).joined(separator: "\n")
+        #expect(userMessages.count == 3)
+        #expect(userMessages.first?.content == "请处理这个附件")
+        #expect(combinedContent.components(separatedBy: "<file_attachments>").count - 1 == 2)
+        #expect(combinedContent.contains("<file name=\"notes.txt\">"))
+        #expect(combinedContent.contains("<file name=\"todo.txt\">"))
+        #expect(combinedContent.contains("附件原文"))
+        #expect(combinedContent.contains("第二份附件"))
+        #expect(combinedContent.contains("</file_attachments>"))
+        #expect(!combinedContent.contains("以下内容来自文件附件文本提取："))
+        #expect(!combinedContent.contains("文件："))
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
@@ -333,6 +335,7 @@ extension ChatServiceTests {
             models: [ocrModel]
         )
         ConfigLoader.saveProvider(ocrProvider)
+        chatService.reloadProviders()
         defer {
             Persistence.deleteAppConfig(key: AppConfigKey.ocrModelIdentifier.rawValue)
             ConfigLoader.deleteProvider(ocrProvider)
@@ -369,15 +372,17 @@ extension ChatServiceTests {
         )
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
-        let userMessage = try #require(sentMessages.last(where: { $0.role == .user }))
-        #expect(userMessage.content.contains("请读取图片文字"))
-        #expect(userMessage.content.components(separatedBy: "<image_ocr_attachments>").count - 1 == 1)
-        #expect(userMessage.content.contains("<image name=\"receipt.png\">"))
-        #expect(userMessage.content.contains("<image name=\"menu.png\">"))
-        #expect(userMessage.content.contains("图片识别文字"))
-        #expect(userMessage.content.contains("</image_ocr_attachments>"))
-        #expect(!userMessage.content.contains("以下内容来自图片 OCR 提取："))
-        #expect(!userMessage.content.contains("图片 1（"))
+        let userMessages = sentMessages.filter { $0.role == .user }
+        let combinedContent = userMessages.map(\.content).joined(separator: "\n")
+        #expect(userMessages.count == 3)
+        #expect(userMessages.first?.content == "请读取图片文字")
+        #expect(combinedContent.components(separatedBy: "<image_ocr_attachments>").count - 1 == 2)
+        #expect(combinedContent.contains("<image name=\"receipt.png\">"))
+        #expect(combinedContent.contains("<image name=\"menu.png\">"))
+        #expect(combinedContent.contains("图片识别文字"))
+        #expect(combinedContent.contains("</image_ocr_attachments>"))
+        #expect(!combinedContent.contains("以下内容来自图片 OCR 提取："))
+        #expect(!combinedContent.contains("图片 1（"))
         #expect(mockAdapter.receivedImageAttachments?.isEmpty == true)
     }
 
@@ -444,6 +449,21 @@ extension ChatServiceTests {
 
         setupMockResponsesForChatAndTitle()
         mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已收到")
+
+        let visionModel = Model(
+            modelName: "vision-chat-model",
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image]
+        )
+        let visionProvider = Provider(
+            name: "Vision Chat Test Provider",
+            baseURL: "https://fake.url",
+            apiKeys: ["key-vision"],
+            apiFormat: "openai-compatible",
+            models: [visionModel]
+        )
+        chatService.setSelectedModel(RunnableModel(provider: visionProvider, model: visionModel))
 
         let audioAttachment = AudioAttachment(
             data: Data([0x00, 0x01, 0x02]),
@@ -765,7 +785,8 @@ extension ChatServiceTests {
     func testConversationSummary_UsesTwoThousandCharacterLimit() async throws {
         await cleanup()
 
-        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let session = createPermanentTestSession(name: "会话摘要长度测试")
+        let sessionID = session.id
         let longUserContent = String(repeating: "甲", count: 2_500)
         let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
         let messages = [
@@ -805,8 +826,7 @@ extension ChatServiceTests {
 
         let summarySystemPrompt = mockAdapter.receivedConversationSummaryMessages?.first(where: { $0.role == .system })?.content ?? ""
         let summaryUserPrompt = mockAdapter.receivedConversationSummaryMessages?.last(where: { $0.role == .user })?.content ?? ""
-        #expect(summarySystemPrompt.contains("长期记忆"))
-        #expect(summarySystemPrompt.contains("敏感隐私"))
+        #expect(summarySystemPrompt == BuiltInPromptStore.render(.conversationSummarySystem))
         #expect(summaryUserPrompt.contains(String(repeating: "甲", count: 2_000)))
         #expect(!summaryUserPrompt.contains(String(repeating: "甲", count: 2_001)))
 
@@ -817,7 +837,8 @@ extension ChatServiceTests {
     func testConversationProfile_DoesNotTruncateGeneratedProfile() async throws {
         await cleanup()
 
-        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let session = createPermanentTestSession(name: "用户画像长度测试")
+        let sessionID = session.id
         let loadingMessage = ChatMessage(role: .assistant, content: "", requestedAt: Date())
         let messages = [
             ChatMessage(role: .user, content: "第一轮问题", requestedAt: Date()),
@@ -857,7 +878,7 @@ extension ChatServiceTests {
         try await Task.sleep(for: .milliseconds(500))
 
         let profileSystemPrompt = mockAdapter.receivedConversationProfileMessages?.first(where: { $0.role == .system })?.content ?? ""
-        #expect(profileSystemPrompt.contains("不设固定长度上限"))
+        #expect(profileSystemPrompt == BuiltInPromptStore.render(.conversationProfileUpdateSystem))
         #expect(ConversationMemoryManager.loadUserProfile()?.content == longProfile)
 
         await cleanup()

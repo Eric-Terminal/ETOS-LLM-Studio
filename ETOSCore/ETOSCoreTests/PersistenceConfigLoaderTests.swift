@@ -343,6 +343,7 @@ extension PersistenceTests {
 
     @Test("加载旧版无 apiKeys 字段的 Provider 文件时会迁移到 SQLite")
     func testLoadProvidersMigratesLegacyCredentialStoreToSQLite() throws {
+        #expect(ConfigLoader.saveProvidersToSQLite([]))
         let provider = Provider(
             id: UUID(),
             name: "legacy-\(UUID().uuidString)",
@@ -371,6 +372,7 @@ extension PersistenceTests {
 
     @Test("加载提供商时会修复重复 ID 并规范化文件")
     func testLoadProvidersRepairDuplicateIDsAndNormalizeFiles() throws {
+        #expect(ConfigLoader.saveProvidersToSQLite([]))
         let token = "repair-\(UUID().uuidString)"
         let duplicateProviderID = UUID()
         let duplicateModelID = UUID()
@@ -397,6 +399,12 @@ extension PersistenceTests {
 
         let rawFileA = "\(token)-manual-a.json"
         let rawFileB = "\(token)-manual-b.json"
+        defer {
+            let createdProviders = ConfigLoader.loadProviders().filter { $0.name.hasPrefix(token) }
+            cleanup(providers: createdProviders)
+            try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
+            try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
+        }
 
         try writeLegacyProviderFile(providerA, fileName: rawFileA)
         try writeLegacyProviderFile(providerB, fileName: rawFileB)
@@ -420,8 +428,5 @@ extension PersistenceTests {
         #expect(secondLoad.count == 2)
         #expect(Set(secondLoad.map(\.id)).count == 2)
 
-        cleanup(providers: secondLoad)
-        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileA))
-        try? FileManager.default.removeItem(at: providersDirectory.appendingPathComponent(rawFileB))
     }
 }

@@ -117,6 +117,7 @@ struct MCPMigrationV4Tests {
                     display_name TEXT NOT NULL,
                     notes TEXT,
                     is_selected_for_chat INTEGER NOT NULL DEFAULT 0,
+                    sort_index INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL DEFAULT 'idle',
                     transport_kind TEXT NOT NULL,
                     endpoint_url TEXT,
@@ -250,7 +251,18 @@ private func prepareConfigDatabase(
     let queue = try DatabaseQueue(path: databaseURL.path)
     try queue.write { db in
         try db.execute(sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
-        for migration in appliedMigrations {
+        let migrationsAfterV4 = [
+            "v5_enforce_enum_check_constraints",
+            "v6_create_global_system_prompt_tables",
+            "v7_add_provider_model_capability_shape",
+            "v8_add_provider_model_request_body_controls",
+            "v9_create_app_config_table",
+            "v10_add_provider_model_pricing",
+            "v11_add_mcp_server_order",
+            "v12_allow_personal_data_mcp_transport",
+            "v13_add_provider_chat_endpoint_path"
+        ]
+        for migration in appliedMigrations + migrationsAfterV4 {
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",
                 arguments: [migration]

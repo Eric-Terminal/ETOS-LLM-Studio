@@ -28,7 +28,8 @@ final class MockAPIAdapter: APIAdapter {
     var receivedChatStreamFlags: [Bool] = []
 
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
-        if messages.first?.content.contains("思考摘要助手") == true {
+        let firstContent = messages.first?.content
+        if firstContent == BuiltInPromptStore.render(.reasoningSummarySystem) {
             receivedReasoningSummaryMessages = messages
             receivedReasoningSummaryModel = model
             return URLRequest(url: URL(string: "https://fake.url/reasoning-summary")!)
@@ -36,11 +37,11 @@ final class MockAPIAdapter: APIAdapter {
             receivedContextCompressionMessages = messages
             contextCompressionRequestCount += 1
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
-        } else if messages.first?.content.contains("会话压缩助手") == true {
+        } else if firstContent == BuiltInPromptStore.render(.conversationSummarySystem) {
             receivedConversationSummaryMessages = messages
             return URLRequest(url: URL(string: "https://fake.url/chat")!)
-        } else if messages.first?.content.contains("用户画像整理助手") == true ||
-                    messages.first?.content.contains("用户画像去重助手") == true {
+        } else if firstContent == BuiltInPromptStore.render(.conversationProfileUpdateSystem) ||
+                    firstContent == BuiltInPromptStore.render(.conversationProfileDedupSystem) {
             receivedConversationProfileMessages = messages
             return URLRequest(url: URL(string: "https://fake.url/conversation-profile")!)
         } else if messages.first?.content.contains("为本次对话生成一个简短、精炼的标题") == true {

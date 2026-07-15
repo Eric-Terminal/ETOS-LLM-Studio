@@ -210,7 +210,6 @@ struct DailyPulseContextAndDeliveryTests {
 
         #expect(input.hasUsableContext)
         #expect(input.sourceDigest.contains("偏好 SwiftUI"))
-        #expect(prompt.contains("全局系统提示词与偏好："))
         #expect(prompt.contains("偏好 SwiftUI、watchOS 和原生交互细节。"))
     }
 

@@ -480,7 +480,8 @@ extension ChatServiceTests {
             conversationProfile: nil,
             includeSystemTime: false
         )
-        #expect(promptWithTime.contains("): 用户喜欢喝抹茶拿铁。"))
+        #expect(promptWithTime.contains("updated_at="))
+        #expect(promptWithTime.contains("用户喜欢喝抹茶拿铁。"))
 
         Persistence.writeAppConfig(
             key: AppConfigKey.memorySendUpdateTime.rawValue,
@@ -495,8 +496,8 @@ extension ChatServiceTests {
             conversationProfile: nil,
             includeSystemTime: false
         )
-        #expect(promptWithoutTime.contains("- 用户喜欢喝抹茶拿铁。"))
-        #expect(!promptWithoutTime.contains("): 用户喜欢喝抹茶拿铁。"))
+        #expect(promptWithoutTime.contains("用户喜欢喝抹茶拿铁。"))
+        #expect(!promptWithoutTime.contains("updated_at="))
 
         await cleanup()
     }
@@ -684,7 +685,7 @@ extension ChatServiceTests {
         )
         store.saveWorldbooks([book])
 
-        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "测试会话")
+        var session = createPermanentTestSession(name: "测试会话")
         session.lorebookIDs = [book.id]
         chatService.setCurrentSession(session)
 
@@ -734,7 +735,7 @@ extension ChatServiceTests {
         )
         store.saveWorldbooks([book])
 
-        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "顺序测试会话")
+        var session = createPermanentTestSession(name: "顺序测试会话")
         session.lorebookIDs = [book.id]
         session.topicPrompt = "topic-order-hit"
         chatService.setCurrentSession(session)
@@ -785,7 +786,7 @@ extension ChatServiceTests {
         )
         store.saveWorldbooks([book])
 
-        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "共存会话")
+        var session = createPermanentTestSession(name: "共存会话")
         session.lorebookIDs = [book.id]
         chatService.setCurrentSession(session)
 
@@ -875,7 +876,7 @@ extension ChatServiceTests {
         )
         store.saveWorldbooks([firstBook, secondBook])
 
-        var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "多本绑定会话")
+        var session = createPermanentTestSession(name: "多本绑定会话")
         session.lorebookIDs = [firstBook.id, secondBook.id]
         chatService.setCurrentSession(session)
 

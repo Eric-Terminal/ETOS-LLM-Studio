@@ -11,7 +11,7 @@ import Foundation
 import SQLite3
 @testable import ETOSCore
 
-@Suite("Persistence Core Tests")
+@Suite("Persistence Core Tests", .serialized)
 struct PersistenceCoreTests {
     private struct LegacySessionRecord: Decodable {
         struct SessionMeta: Decodable {
@@ -106,6 +106,14 @@ struct PersistenceCoreTests {
         let session1 = ChatSession(id: UUID(), name: "Session 1", isTemporary: false)
         let session2 = ChatSession(id: UUID(), name: "Session 2", topicPrompt: "Test Topic", isTemporary: false)
         let sessionsToSave = [session1, session2]
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            cleanup(sessions: sessionsToSave)
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
 
         Persistence.saveChatSessions(sessionsToSave)
         let loadedSessions = Persistence.loadChatSessions()
@@ -118,7 +126,6 @@ struct PersistenceCoreTests {
         #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session1.id).path))
         #expect(FileManager.default.fileExists(atPath: currentSessionFileURL(session2.id).path))
 
-        cleanup(sessions: sessionsToSave)
     }
 
     @Test("Save and Load Session Folders with Session Assignment")
@@ -153,6 +160,15 @@ struct PersistenceCoreTests {
             ChatMessage(role: .user, content: "Hello", requestedAt: requestedAt),
             ChatMessage(role: .assistant, content: "Hi there!")
         ]
+        let cleanupSession = ChatSession(id: sessionId, name: "cleanup", isTemporary: false)
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = false
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            cleanup(sessions: [cleanupSession])
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
 
         Persistence.saveMessages(messagesToSave, for: sessionId)
         let loadedMessages = Persistence.loadMessages(for: sessionId)
@@ -174,7 +190,6 @@ struct PersistenceCoreTests {
             Issue.record("会话文件不存在或格式不正确。")
         }
 
-        cleanup(sessions: [ChatSession(id: sessionId, name: "cleanup", isTemporary: false)])
     }
 
     @Test("GRDB backend can count messages without loading full array")

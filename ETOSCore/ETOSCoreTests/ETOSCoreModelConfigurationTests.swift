@@ -398,7 +398,7 @@ struct RequestBodyOverrideModeTests {
     func testChatModelCanDeclareEmbeddingCapability() throws {
         let model = Model(
             modelName: "chat-with-embedding",
-            capabilities: [.toolCalling, .embedding]
+            capabilities: [ModelCapability.toolCalling, .embedding]
         )
 
         #expect(model.kind == .chat)
