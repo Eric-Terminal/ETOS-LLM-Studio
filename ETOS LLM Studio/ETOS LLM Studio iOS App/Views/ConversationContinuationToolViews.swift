@@ -61,8 +61,8 @@ enum ConversationContinuationContentSegment: Identifiable, Sendable {
 }
 
 struct ConversationContinuationDisplayContent: Sendable {
-    static let previewCharacterLimit = 5_000
-    private static let toolPreviewCharacterCost = 32
+    nonisolated static let previewCharacterLimit = 5_000
+    private nonisolated static let toolPreviewCharacterCost = 32
 
     let full: [ConversationContinuationContentSegment]
     let preview: [ConversationContinuationContentSegment]

@@ -11,7 +11,7 @@ import ETOSCore
 import SwiftUI
 
 enum WatchToolCallTextPreviewConstants {
-    static let previewLimit = 3_000
+    nonisolated static let previewLimit = 3_000
 }
 
 func watchFormattedToolCallJSONOrRaw(_ raw: String) -> String {

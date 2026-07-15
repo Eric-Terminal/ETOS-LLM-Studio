@@ -73,64 +73,7 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        appNavigationContent
-        .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
-        .onAppear {
-            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
-            refreshRootBodyFont()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
-            pushNativeChatIfNeeded()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .syncFontsUpdated)
-                .receive(on: DispatchQueue.main)
-        ) { _ in
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
-            _ = isEnabled
-            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontCustomScale) { _, newValue in
-            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
-            if normalizedValue != newValue {
-                appConfig.fontCustomScale = normalizedValue
-            }
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.appLanguage) { _, newValue in
-            AppLanguageRuntime.apply(rawValue: newValue)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
-            openDailyPulse()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
-            openFeedbackFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
-            openChatSessionFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
-            openContextCompressionFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
-            openAchievementJournalFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
-            openUpdateTimelineFromNotification()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore)) { notification in
-            guard let fileURL = notification.object as? URL else { return }
-            incomingSnapshotRestorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
-            Task { @MainActor in
-                openDailyPulseContinuationIfNeeded()
-            }
-        }
+        notificationAwareContent
         .alert(NSLocalizedString("记忆系统需要更新", comment: ""), isPresented: $viewModel.showDimensionMismatchAlert) {
             Button(NSLocalizedString("确定", comment: ""), role: .cancel) {}
         } message: {
@@ -184,6 +127,72 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var notificationAwareContent: some View {
+        appNavigationContent
+        .environment(\.font, rootBodyFont)
+        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
+        .onAppear {
+            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
+            refreshRootBodyFont()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
+            pushNativeChatIfNeeded()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
+            refreshRootBodyFont()
+        }
+        .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
+            _ = isEnabled
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+            refreshRootBodyFont()
+        }
+        .onChange(of: appConfig.fontCustomScale) { _, newValue in
+            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+            if normalizedValue != newValue {
+                appConfig.fontCustomScale = normalizedValue
+            }
+            refreshRootBodyFont()
+        }
+        .onChange(of: appConfig.appLanguage) { _, newValue in
+            AppLanguageRuntime.apply(rawValue: newValue)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
+            openDailyPulse()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenFeedback)) { _ in
+            openFeedbackFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
+            openChatSessionFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
+            openContextCompressionFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
+            openAchievementJournalFromNotification()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
+            openUpdateTimelineFromNotification()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore),
+            perform: handleIncomingSnapshotRestore
+        )
+        .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
+            Task { @MainActor in
+                openDailyPulseContinuationIfNeeded()
+            }
+        }
+    }
+
+    private func handleIncomingSnapshotRestore(_ notification: Notification) {
+        guard let fileURL = notification.object as? URL else { return }
+        incomingSnapshotRestorePayload = IncomingSnapshotRestorePayload(fileURL: fileURL)
     }
 
     private var appNavigationContent: some View {

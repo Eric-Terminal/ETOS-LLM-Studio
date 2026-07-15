@@ -11,7 +11,7 @@ import SwiftUI
 import ETOSCore
 
 enum ToolCallTextPreviewConstants {
-    static let previewLimit = 3_000
+    nonisolated static let previewLimit = 3_000
 }
 
 func formattedToolCallJSONOrRaw(_ raw: String) -> String {
