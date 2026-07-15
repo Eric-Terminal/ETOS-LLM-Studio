@@ -59,6 +59,8 @@ struct ContentView: View {
     @State var continuationContext: ConversationContinuationContext?
     @State var isContinuationSourceSessionAvailable = false
     @State var isContextCompressionPresented = false
+    @State var contextCompressionReminderSourceSession: ChatSession?
+    @State var contextCompressionEstimatedTokens = 0
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -180,6 +182,9 @@ struct ContentView: View {
         }
         .task(id: viewModel.currentSession?.id) {
             await reloadContinuationContext()
+        }
+        .task(id: contextCompressionReminderRefreshKey) {
+            await refreshContextCompressionReminderEstimate()
         }
         .onChange(of: viewModel.chatSessions) { _, sessions in
             isContinuationSourceSessionAvailable = continuationContext.map { context in

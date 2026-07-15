@@ -44,6 +44,8 @@ struct ChatView: View {
     @State var sessionInfo: SessionPickerInfoPayload?
     @State var contextCompressionSourceSession: ChatSession?
     @State var pendingContextCompressionSourceSession: ChatSession?
+    @State var contextCompressionReminderSourceSession: ChatSession?
+    @State var contextCompressionEstimatedTokens = 0
     @State var continuationContext: ConversationContinuationContext?
     @State var isContinuationSourceSessionAvailable = false
     @State var isContinuationContextExpanded = false
@@ -300,6 +302,9 @@ struct ChatView: View {
             .task(id: viewModel.currentSession?.id) {
                 await reloadContinuationContext()
             }
+            .task(id: contextCompressionReminderRefreshKey) {
+                await refreshContextCompressionReminderEstimate()
+            }
             .onChange(of: viewModel.chatSessions) { _, sessions in
                 isContinuationSourceSessionAvailable = continuationContext.map { context in
                     sessions.contains { $0.id == context.sourceSessionID }
@@ -315,6 +320,7 @@ struct ChatView: View {
             || fullErrorContent != nil
             || sessionInfo != nil
             || contextCompressionSourceSession != nil
+            || contextCompressionReminderSourceSession != nil
             || exportSharePayload != nil
             || activeChatPickerSheet != nil
             || showBranchOptions
@@ -716,6 +722,16 @@ extension ChatView {
 
                             // 历史加载提示
                             historyBanner
+
+                            if shouldShowContextCompressionReminder {
+                                ContextCompressionReminderCard(
+                                    estimatedTokens: contextCompressionEstimatedTokens,
+                                    threshold: appConfig.contextCompressionReminderTokenThreshold,
+                                    onCompress: presentOneTapContextCompression
+                                )
+                                .padding(.horizontal, 12)
+                                .padding(.bottom, 8)
+                            }
 
                             if let continuationContext {
                                 ConversationContinuationBubble(

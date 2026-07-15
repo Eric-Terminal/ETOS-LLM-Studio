@@ -9,6 +9,62 @@
 import SwiftUI
 import ETOSCore
 
+struct WatchContextCompressionReminderRefreshKey: Hashable {
+    let sessionID: UUID?
+    let messageVersion: Int
+    let isSending: Bool
+    let continuationID: UUID?
+    let reminderEnabled: Bool
+    let tokenThreshold: Int
+}
+
+struct WatchContextCompressionReminderCard: View {
+    let estimatedTokens: Int
+    let threshold: Int
+    let onCompress: () -> Void
+
+    var body: some View {
+        Button(action: onCompress) {
+            HStack {
+                Image(systemName: "rectangle.compress.vertical")
+                    .foregroundStyle(.tint)
+
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString(
+                        "建议压缩上下文",
+                        comment: "Watch context compression reminder title"
+                    ))
+                    .etFont(.footnote.weight(.semibold))
+
+                    Text(String(
+                        format: NSLocalizedString(
+                            "约 %@ / %@ Token",
+                            comment: "Watch context compression reminder token detail"
+                        ),
+                        estimatedTokens.formatted(.number),
+                        threshold.formatted(.number)
+                    ))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(NSLocalizedString(
+            "点击后立即按默认参数创建续聊会话",
+            comment: "Watch context compression reminder accessibility hint"
+        ))
+    }
+}
+
 struct WatchConversationContinuationCard: View {
     let context: ConversationContinuationContext
 
@@ -107,6 +163,125 @@ struct WatchConversationContinuationDetailView: View {
             return NSLocalizedString("工具", comment: "Continuation retained message role")
         case .error:
             return NSLocalizedString("错误", comment: "Continuation retained message role")
+        }
+    }
+}
+
+struct WatchContextCompressionOneTapView: View {
+    typealias ProgressHandler = @MainActor @Sendable (ContextCompressionProgress) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    let session: ChatSession
+    let onCompress: (@escaping ProgressHandler) async throws -> ChatSession
+
+    @State private var progress = ContextCompressionProgress(phase: .preparing)
+    @State private var compressionTask: Task<Void, Never>?
+    @State private var hasStarted = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            ProgressView()
+
+            Text(NSLocalizedString(
+                "正在压缩为续聊",
+                comment: "Watch one-tap context compression progress title"
+            ))
+            .etFont(.headline)
+            .multilineTextAlignment(.center)
+
+            Text(progressText(progress))
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Text(String(
+                format: NSLocalizedString(
+                    "原会话“%@”会完整保留。",
+                    comment: "Watch one-tap context compression source preservation"
+                ),
+                session.name
+            ))
+            .etFont(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+
+            Spacer()
+
+            Button(role: .destructive) {
+                compressionTask?.cancel()
+            } label: {
+                Label(NSLocalizedString(
+                    "停止",
+                    comment: "Stop watch one-tap context compression action"
+                ), systemImage: "stop.fill")
+            }
+            .disabled(compressionTask == nil)
+        }
+        .navigationTitle(NSLocalizedString(
+            "压缩为续聊",
+            comment: "Watch one-tap context compression navigation title"
+        ))
+        .onAppear(perform: startIfNeeded)
+        .onDisappear {
+            compressionTask?.cancel()
+        }
+        .interactiveDismissDisabled(compressionTask != nil)
+        .alert(NSLocalizedString(
+            "压缩失败",
+            comment: "Watch one-tap context compression failure title"
+        ), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("关闭", comment: "Close watch one-tap compression error")) {
+                dismiss()
+            }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func startIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        compressionTask = Task {
+            do {
+                _ = try await onCompress { newProgress in
+                    progress = newProgress
+                }
+                compressionTask = nil
+                dismiss()
+            } catch is CancellationError {
+                compressionTask = nil
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                compressionTask = nil
+            }
+        }
+    }
+
+    private func progressText(_ progress: ContextCompressionProgress) -> String {
+        switch progress.phase {
+        case .preparing:
+            return NSLocalizedString("正在准备对话与附件…", comment: "Watch one-tap compression preparing progress")
+        case .summarizing(let completed, let total):
+            return String(
+                format: NSLocalizedString("摘要 %d/%d…", comment: "Watch one-tap compression chunk progress"),
+                completed,
+                total
+            )
+        case .synthesizing(let level):
+            return String(
+                format: NSLocalizedString("第 %d 层归并…", comment: "Watch one-tap compression synthesis progress"),
+                level
+            )
+        case .saving:
+            return NSLocalizedString("正在保存新会话…", comment: "Watch one-tap compression saving progress")
         }
     }
 }
@@ -273,6 +448,58 @@ struct WatchContextCompressionOptionsView: View {
 }
 
 extension ContentView {
+    var contextCompressionReminderRefreshKey: WatchContextCompressionReminderRefreshKey {
+        WatchContextCompressionReminderRefreshKey(
+            sessionID: viewModel.currentSession?.id,
+            messageVersion: viewModel.allMessageIdentityVersion,
+            isSending: viewModel.isSendingMessage,
+            continuationID: continuationContext?.id,
+            reminderEnabled: appConfig.enableContextCompressionReminder,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
+    }
+
+    var shouldShowContextCompressionReminder: Bool {
+        guard let session = viewModel.currentSession,
+              !session.isTemporary,
+              !viewModel.isSendingMessage,
+              !viewModel.activatedChatModels.isEmpty else {
+            return false
+        }
+        return ContextCompressionReminderPolicy.shouldRemind(
+            estimatedTokens: contextCompressionEstimatedTokens,
+            isEnabled: appConfig.enableContextCompressionReminder,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
+    }
+
+    @MainActor
+    func refreshContextCompressionReminderEstimate() async {
+        guard appConfig.enableContextCompressionReminder,
+              let sessionID = viewModel.currentSession?.id,
+              viewModel.currentSession?.isTemporary == false else {
+            contextCompressionEstimatedTokens = 0
+            return
+        }
+        let messages = viewModel.allMessagesForSession
+        let context = continuationContext
+        let estimate = await Task.detached(priority: .utility) {
+            ContextCompressionReminderEstimator.estimate(
+                messages: messages,
+                continuationContext: context
+            )
+        }.value
+        guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
+        contextCompressionEstimatedTokens = estimate
+    }
+
+    func presentOneTapContextCompression() {
+        guard let session = viewModel.currentSession,
+              !session.isTemporary,
+              !viewModel.isSendingMessage else { return }
+        contextCompressionReminderSourceSession = session
+    }
+
     @MainActor
     func reloadContinuationContext() async {
         guard let sessionID = viewModel.currentSession?.id else {

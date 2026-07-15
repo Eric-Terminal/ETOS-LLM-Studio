@@ -59,6 +59,23 @@ extension ContentView {
                 .appLockOverlayLayer()
             }
         }
+        .sheet(item: $contextCompressionReminderSourceSession) { session in
+            NavigationStack {
+                WatchContextCompressionOneTapView(
+                    session: session,
+                    onCompress: { progress in
+                        try await viewModel.createCompressedContinuation(
+                            from: session.id,
+                            options: ContextCompressionOptions(
+                                compressionModelIdentifier: viewModel.selectedModel?.id
+                            ),
+                            progress: progress
+                        )
+                    }
+                )
+            }
+            .appLockOverlayLayer()
+        }
         .sheet(item: $viewModel.activeSheet) { item in
             sheetView(for: item)
                 .appLockOverlayLayer()
@@ -234,6 +251,7 @@ extension ContentView {
         isSettingsPresented
             || isSessionListPresented
             || isContextCompressionPresented
+            || contextCompressionReminderSourceSession != nil
             || viewModel.activeSheet != nil
             || fullErrorContent != nil
             || messageActionsTarget != nil

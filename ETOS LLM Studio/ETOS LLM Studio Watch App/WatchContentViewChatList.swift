@@ -57,6 +57,16 @@ extension ContentView {
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8))
             }
 
+            if shouldShowContextCompressionReminder {
+                WatchContextCompressionReminderCard(
+                    estimatedTokens: contextCompressionEstimatedTokens,
+                    threshold: appConfig.contextCompressionReminderTokenThreshold,
+                    onCompress: presentOneTapContextCompression
+                )
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 6, trailing: 8))
+            }
+
             if let continuationContext {
                 NavigationLink {
                     WatchConversationContinuationDetailView(

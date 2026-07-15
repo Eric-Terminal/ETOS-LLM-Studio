@@ -255,9 +255,45 @@ struct ModelAdvancedSettingsView: View {
                             .frame(width: 80)
                     }
 
+                    Toggle(
+                        NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
+                        isOn: $appConfig.enableContextCompressionReminder
+                    )
+
+                    if appConfig.enableContextCompressionReminder {
+                        LabeledContent(NSLocalizedString(
+                            "提醒阈值（Token）",
+                            comment: "Context compression reminder token threshold"
+                        )) {
+                            TextField(
+                                NSLocalizedString("Token", comment: "Token threshold field placeholder"),
+                                value: $appConfig.contextCompressionReminderTokenThreshold,
+                                formatter: numberFormatter
+                            )
+                            .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .frame(width: 100)
+                            .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, value in
+                                let normalized = ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
+                                if normalized != value {
+                                    appConfig.contextCompressionReminderTokenThreshold = normalized
+                                }
+                            }
+                        }
+                    }
+
                     Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
+
+                    if appConfig.enableContextCompressionReminder {
+                        Text(NSLocalizedString(
+                            "达到估算阈值后，聊天页会提示压缩；点击提示会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。",
+                            comment: "Context compression reminder settings explanation"
+                        ))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
             .tabItem {

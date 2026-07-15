@@ -229,6 +229,33 @@ struct ModelAdvancedSettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 60)
                 }
+
+                Toggle(
+                    NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
+                    isOn: $appConfig.enableContextCompressionReminder
+                )
+
+                if appConfig.enableContextCompressionReminder {
+                    TextField(
+                        NSLocalizedString("提醒阈值（Token）", comment: "Context compression reminder token threshold"),
+                        value: $appConfig.contextCompressionReminderTokenThreshold,
+                        formatter: numberFormatter
+                    )
+                    .monospacedDigit()
+                    .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, value in
+                        let normalized = ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
+                        if normalized != value {
+                            appConfig.contextCompressionReminderTokenThreshold = normalized
+                        }
+                    }
+
+                    Text(NSLocalizedString(
+                        "达到阈值后，聊天页会显示一键压缩提醒；原会话会完整保留。",
+                        comment: "Watch context compression reminder settings explanation"
+                    ))
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
 
             // MARK: Section 4：生成与输出
