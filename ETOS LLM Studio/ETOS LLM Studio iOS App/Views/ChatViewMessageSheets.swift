@@ -77,15 +77,6 @@ struct MessageActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    NavigationLink {
-                        MessageTextSelectionView(message: message)
-                    } label: {
-                        Label(
-                            NSLocalizedString("选定文字", comment: "Open message text selection"),
-                            systemImage: "character.cursor.ibeam"
-                        )
-                    }
-
                     if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
                         Button {
                             onDownloadImages(imageFileNames)
@@ -141,6 +132,15 @@ struct MessageActionSheet: View {
                                 systemImage: isSpeakingThisMessage ? "stop.circle" : "speaker.wave.2"
                             )
                         }
+                    }
+
+                    NavigationLink {
+                        MessageTextSelectionView(message: message)
+                    } label: {
+                        Label(
+                            NSLocalizedString("选定文字", comment: "Open message text selection"),
+                            systemImage: "character.cursor.ibeam"
+                        )
                     }
 
                     Button {
