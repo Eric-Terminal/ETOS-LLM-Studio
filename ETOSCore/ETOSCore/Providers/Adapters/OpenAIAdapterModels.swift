@@ -95,7 +95,7 @@ extension OpenAIAdapter {
                     tool_calls = try container.decodeIfPresent([OpenAIToolCall].self, forKey: .tool_calls)
                     reasoning_content = try container.decodeIfPresent(String.self, forKey: .reasoning_content)
 
-                    if let stringContent = try container.decodeIfPresent(String.self, forKey: .content) {
+                    if let stringContent = try? container.decodeIfPresent(String.self, forKey: .content) {
                         content = stringContent
                     } else if let contentParts = try container.decodeIfPresent([ContentPart].self, forKey: .content) {
                         let text = contentParts.compactMap(\.textFragment).joined()

@@ -58,7 +58,7 @@ struct OpenAIAdapterAdvancedTests {
     @Test("OpenAI 流式工具参数片段允许省略 type")
     func testStreamingToolArgumentDeltaAllowsMissingType() throws {
         let line = """
-        data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}}]}
+        data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}
         """
 
         let part = adapter.parseStreamingResponse(line: line)
@@ -1329,14 +1329,12 @@ struct OpenAIAdapterAdvancedTests {
         )
         let contentType = try #require(request.value(forHTTPHeaderField: "Content-Type"))
         let bodyData = try #require(request.httpBody)
-        let bodyString = String(data: bodyData, encoding: .utf8) ?? ""
-
         #expect(request.url?.absoluteString == "https://api.test.com/v1/images/edits")
         #expect(request.httpMethod == "POST")
         #expect(contentType.contains("multipart/form-data; boundary="))
-        #expect(bodyString.contains("name=\"model\""))
-        #expect(bodyString.contains("name=\"prompt\""))
-        #expect(bodyString.contains("name=\"image\""))
-        #expect(bodyString.contains("filename=\"ref.png\""))
+        #expect(bodyData.range(of: Data(#"name="model""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"name="prompt""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"name="image""#.utf8)) != nil)
+        #expect(bodyData.range(of: Data(#"filename="ref.png""#.utf8)) != nil)
     }
 }
