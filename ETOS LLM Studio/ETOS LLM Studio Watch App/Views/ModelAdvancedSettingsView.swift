@@ -250,7 +250,7 @@ struct ModelAdvancedSettingsView: View {
                     }
 
                     Text(NSLocalizedString(
-                        "达到阈值后，聊天页会显示一键压缩提醒；原会话会完整保留。",
+                        "达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。",
                         comment: "Watch context compression reminder settings explanation"
                     ))
                     .etFont(.caption)

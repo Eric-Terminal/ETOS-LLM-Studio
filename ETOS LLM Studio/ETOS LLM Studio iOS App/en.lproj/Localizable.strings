@@ -5096,3 +5096,6 @@
 "最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。" = "Recent turns stay verbatim. All earlier history is summarized in one pass, and the original chat remains unchanged.";
 "续聊压缩摘要提示词" = "Continuation Summary Prompt";
 "控制续聊会话以单次请求完整摘要较早对话。" = "Controls complete one-pass summarization of earlier conversation for a continuation chat.";
+"完全展开" = "Expand Fully";
+"会话“%@”约有 %@ Token，已达到 %@ Token 的提醒阈值。点击即可压缩为续聊。" = "Chat “%@” has about %@ tokens and has reached the %@-token reminder threshold. Tap to compress it into a continuation.";
+"达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。" = "When the estimate reaches this threshold, the system sends a notification. Tapping it immediately creates a continuation with the default options while preserving the original chat. The token count is approximate; attachments are not read and no model is called for the reminder.";

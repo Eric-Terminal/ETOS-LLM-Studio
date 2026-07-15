@@ -18,51 +18,10 @@ struct WatchContextCompressionReminderRefreshKey: Hashable {
     let tokenThreshold: Int
 }
 
-struct WatchContextCompressionReminderCard: View {
-    let estimatedTokens: Int
-    let threshold: Int
-    let onCompress: () -> Void
-
-    var body: some View {
-        Button(action: onCompress) {
-            HStack {
-                Image(systemName: "rectangle.compress.vertical")
-                    .foregroundStyle(.tint)
-
-                VStack(alignment: .leading) {
-                    Text(NSLocalizedString(
-                        "建议压缩上下文",
-                        comment: "Watch context compression reminder title"
-                    ))
-                    .etFont(.footnote.weight(.semibold))
-
-                    Text(String(
-                        format: NSLocalizedString(
-                            "约 %@ / %@ Token",
-                            comment: "Watch context compression reminder token detail"
-                        ),
-                        estimatedTokens.formatted(.number),
-                        threshold.formatted(.number)
-                    ))
-                    .etFont(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .etFont(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint(NSLocalizedString(
-            "点击后立即按默认参数创建续聊会话",
-            comment: "Watch context compression reminder accessibility hint"
-        ))
-    }
+struct WatchContextCompressionReminderNotificationKey: Hashable {
+    let sessionID: UUID
+    let continuationID: UUID?
+    let tokenThreshold: Int
 }
 
 struct WatchConversationContinuationCard: View {
@@ -91,6 +50,7 @@ struct WatchConversationContinuationCard: View {
 
 struct WatchConversationContinuationDetailView: View {
     let context: ConversationContinuationContext
+    let enableAdvancedRenderer: Bool
     let sourceSessionAvailable: Bool
     let onOpenSource: () -> Void
     let onInsertText: (String) -> Void
@@ -124,8 +84,11 @@ struct WatchConversationContinuationDetailView: View {
                         dismiss()
                     }
                 } label: {
-                    Text(context.summary)
-                        .etFont(.footnote)
+                    WatchContinuationMarkdownView(
+                        contentID: context.id,
+                        content: context.summary,
+                        enableAdvancedRenderer: enableAdvancedRenderer
+                    )
                 }
                 .accessibilityHint(NSLocalizedString(
                     "选定文字",
@@ -146,8 +109,11 @@ struct WatchConversationContinuationDetailView: View {
                                 Text(roleTitle(message.role))
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
-                                Text(message.content)
-                                    .etFont(.footnote)
+                                WatchContinuationMarkdownView(
+                                    contentID: message.id,
+                                    content: message.content,
+                                    enableAdvancedRenderer: enableAdvancedRenderer
+                                )
                             }
                         }
                         .accessibilityHint(NSLocalizedString(
@@ -188,6 +154,38 @@ struct WatchConversationContinuationDetailView: View {
             return NSLocalizedString("工具", comment: "Continuation retained message role")
         case .error:
             return NSLocalizedString("错误", comment: "Continuation retained message role")
+        }
+    }
+}
+
+private struct WatchContinuationMarkdownView: View {
+    let contentID: UUID
+    let content: String
+    let enableAdvancedRenderer: Bool
+
+    @State private var preparedContent: ETPreparedMarkdownRenderPayload?
+
+    var body: some View {
+        Group {
+            if let preparedContent,
+               preparedContent.sourceText == content {
+                ETAdvancedMarkdownRenderer(
+                    content: content,
+                    preparedContent: preparedContent,
+                    enableMarkdown: true,
+                    isOutgoing: false,
+                    enableAdvancedRenderer: enableAdvancedRenderer,
+                    enableMathRendering: enableAdvancedRenderer,
+                    customTextColor: .primary
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 32)
+            }
+        }
+        .task(id: contentID) {
+            preparedContent = await ETMarkdownPrecomputeWorker.shared.prepare(source: content)
         }
     }
 }
@@ -466,26 +464,11 @@ extension ContentView {
         )
     }
 
-    var shouldShowContextCompressionReminder: Bool {
-        guard let session = viewModel.currentSession,
-              !session.isTemporary,
-              !viewModel.isSendingMessage,
-              !viewModel.activatedChatModels.isEmpty else {
-            return false
-        }
-        return ContextCompressionReminderPolicy.shouldRemind(
-            estimatedTokens: contextCompressionEstimatedTokens,
-            isEnabled: appConfig.enableContextCompressionReminder,
-            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
-        )
-    }
-
     @MainActor
     func refreshContextCompressionReminderEstimate() async {
         guard appConfig.enableContextCompressionReminder,
               let sessionID = viewModel.currentSession?.id,
               viewModel.currentSession?.isTemporary == false else {
-            contextCompressionEstimatedTokens = 0
             return
         }
         let messages = viewModel.allMessagesForSession
@@ -497,14 +480,29 @@ extension ContentView {
             )
         }.value
         guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
-        contextCompressionEstimatedTokens = estimate
-    }
 
-    func presentOneTapContextCompression() {
         guard let session = viewModel.currentSession,
-              !session.isTemporary,
-              !viewModel.isSendingMessage else { return }
-        contextCompressionReminderSourceSession = session
+              !viewModel.isSendingMessage,
+              !viewModel.activatedChatModels.isEmpty,
+              ContextCompressionReminderPolicy.shouldRemind(
+                estimatedTokens: estimate,
+                isEnabled: appConfig.enableContextCompressionReminder,
+                tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+              ) else {
+            return
+        }
+        let notificationKey = WatchContextCompressionReminderNotificationKey(
+            sessionID: session.id,
+            continuationID: continuationContext?.id,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
+        guard contextCompressionReminderNotificationKeys.insert(notificationKey).inserted else { return }
+        _ = await AppLocalNotificationCenter.shared.postContextCompressionReminder(
+            sessionID: session.id,
+            sessionName: session.name,
+            estimatedTokens: estimate,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
     }
 
     @MainActor

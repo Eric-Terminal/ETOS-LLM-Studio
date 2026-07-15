@@ -60,7 +60,7 @@ struct ContentView: View {
     @State var isContinuationSourceSessionAvailable = false
     @State var isContextCompressionPresented = false
     @State var contextCompressionReminderSourceSession: ChatSession?
-    @State var contextCompressionEstimatedTokens = 0
+    @State var contextCompressionReminderNotificationKeys: Set<WatchContextCompressionReminderNotificationKey> = []
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -100,6 +100,9 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
                 openChatSessionFromNotification()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
+                openContextCompressionFromNotification()
             }
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
                 openAchievementJournalFromNotification()
@@ -190,6 +193,11 @@ struct ContentView: View {
             isContinuationSourceSessionAvailable = continuationContext.map { context in
                 sessions.contains { $0.id == context.sourceSessionID }
             } ?? false
+            if notificationCenter.pendingContextCompressionSessionID != nil {
+                Task { @MainActor in
+                    openContextCompressionFromNotification()
+                }
+            }
         }
         .onDisappear {
             pendingHistoryResetWorkItem?.cancel()

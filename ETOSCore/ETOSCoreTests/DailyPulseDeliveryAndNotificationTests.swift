@@ -300,6 +300,18 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(!AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: ["route": "feedback"]))
     }
 
+    @Test("上下文压缩通知路由会携带目标会话")
+    func contextCompressionNotificationRouteDetection() {
+        let expectedSessionID = UUID()
+        let userInfo = AppLocalNotificationCenter.contextCompressionUserInfo(
+            sessionID: expectedSessionID
+        )
+
+        #expect(AppLocalNotificationCenter.notificationTargetsContextCompression(userInfo: userInfo))
+        #expect(userInfo["session_id"] as? String == expectedSessionID.uuidString)
+        #expect(!AppLocalNotificationCenter.notificationTargetsContextCompression(userInfo: ["route": "chatSession"]))
+    }
+
     @MainActor
     @Test("聊天会话通知点击后会写入待处理会话路由数据")
     func chatSessionNotificationTapStoresPendingRoute() {
@@ -320,6 +332,23 @@ struct DailyPulseDeliveryAndNotificationTests {
 
         #expect(center.consumePendingRoute() == .chatSession)
         #expect(center.consumePendingChatSessionID() == expectedSessionID)
+    }
+
+    @MainActor
+    @Test("上下文压缩通知点击后会写入待压缩会话")
+    func contextCompressionNotificationTapStoresPendingRoute() {
+        let center = AppLocalNotificationCenter.shared
+        _ = center.consumePendingRoute()
+        _ = center.consumePendingContextCompressionSessionID()
+
+        let expectedSessionID = UUID()
+        center.handleNotificationResponseUserInfo(
+            AppLocalNotificationCenter.contextCompressionUserInfo(sessionID: expectedSessionID),
+            actionIdentifier: "unit-test"
+        )
+
+        #expect(center.consumePendingRoute() == .contextCompression)
+        #expect(center.consumePendingContextCompressionSessionID() == expectedSessionID)
     }
 #endif
 }

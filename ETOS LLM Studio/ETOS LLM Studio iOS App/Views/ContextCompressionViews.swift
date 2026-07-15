@@ -18,56 +18,55 @@ struct ContextCompressionReminderRefreshKey: Hashable {
     let tokenThreshold: Int
 }
 
-struct ContextCompressionReminderCard: View {
-    let estimatedTokens: Int
-    let threshold: Int
-    let onCompress: () -> Void
+struct ContextCompressionReminderNotificationKey: Hashable {
+    let sessionID: UUID
+    let continuationID: UUID?
+    let tokenThreshold: Int
+}
 
-    var body: some View {
-        Button(action: onCompress) {
-            HStack {
-                Image(systemName: "rectangle.compress.vertical")
-                    .foregroundStyle(.tint)
+enum ConversationContinuationExpansionState: Hashable {
+    case collapsed
+    case preview
+    case full
 
-                VStack(alignment: .leading) {
-                    Text(NSLocalizedString(
-                        "建议压缩上下文",
-                        comment: "Context compression reminder title"
-                    ))
-                    .font(.subheadline.weight(.semibold))
+    var isExpanded: Bool {
+        self != .collapsed
+    }
+}
 
-                    Text(String(
-                        format: NSLocalizedString(
-                            "当前对话约 %@ Token，已达到 %@ Token 的提醒阈值。",
-                            comment: "Context compression reminder token detail"
-                        ),
-                        estimatedTokens.formatted(.number),
-                        threshold.formatted(.number)
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-                }
+private struct ConversationContinuationMarkdownContent: Sendable {
+    static let previewCharacterLimit = 5_000
 
-                Spacer()
+    let full: String
+    let preview: String
+    let isPreviewTruncated: Bool
 
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+    nonisolated static func make(
+        context: ConversationContinuationContext,
+        summaryHeading: String,
+        retainedHeading: String,
+        roleTitles: [String]
+    ) -> ConversationContinuationMarkdownContent {
+        var sections = ["## \(summaryHeading)\n\n\(context.summary)"]
+        if !context.retainedMessages.isEmpty {
+            var retainedSections = ["## \(retainedHeading)"]
+            retainedSections.reserveCapacity(context.retainedMessages.count + 1)
+            for (index, message) in context.retainedMessages.enumerated() {
+                retainedSections.append("### \(roleTitles[index])\n\n\(message.content)")
             }
-            .contentShape(Rectangle())
+            sections.append(retainedSections.joined(separator: "\n\n"))
         }
-        .buttonStyle(.plain)
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
-        }
-        .accessibilityHint(NSLocalizedString(
-            "点击后立即按默认参数创建续聊会话",
-            comment: "Context compression reminder accessibility hint"
-        ))
+
+        let full = sections.joined(separator: "\n\n")
+        let isPreviewTruncated = full.count > previewCharacterLimit
+        let preview = isPreviewTruncated
+            ? String(full.prefix(previewCharacterLimit)) + "\n\n…"
+            : full
+        return ConversationContinuationMarkdownContent(
+            full: full,
+            preview: preview,
+            isPreviewTruncated: isPreviewTruncated
+        )
     }
 }
 
@@ -75,20 +74,20 @@ struct ConversationContinuationBubble: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let context: ConversationContinuationContext
-    @Binding var isExpanded: Bool
+    @Binding var expansionState: ConversationContinuationExpansionState
+    let enableAdvancedRenderer: Bool
     let sourceSessionAvailable: Bool
+    let onExpansionStateChange: (ConversationContinuationExpansionState) -> Void
     let onOpenSource: () -> Void
+
+    @State private var markdownContent: ConversationContinuationMarkdownContent?
+    @State private var preparedPreview: ETPreparedMarkdownRenderPayload?
+    @State private var preparedFull: ETPreparedMarkdownRenderPayload?
 
     var body: some View {
         VStack(alignment: .leading) {
             Button {
-                if reduceMotion {
-                    isExpanded.toggle()
-                } else {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
-                        isExpanded.toggle()
-                    }
-                }
+                setExpansionState(expansionState.isExpanded ? .collapsed : .preview)
             } label: {
                 HStack {
                     Image(systemName: "rectangle.compress.vertical")
@@ -108,43 +107,17 @@ struct ConversationContinuationBubble: View {
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .rotationEffect(.degrees(expansionState.isExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            if isExpanded {
+            if expansionState.isExpanded {
                 Divider()
 
                 VStack(alignment: .leading) {
-                    Text(NSLocalizedString("较早对话摘要", comment: "Continuation context summary heading"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text(context.summary)
-                        .font(.callout)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if !context.retainedMessages.isEmpty {
-                        Text(NSLocalizedString("最近对话原文", comment: "Continuation context retained messages heading"))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.top)
-
-                        ForEach(context.retainedMessages) { message in
-                            VStack(alignment: .leading) {
-                                Text(roleTitle(message.role))
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(message.content)
-                                    .font(.callout)
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
+                    renderedMarkdown
 
                     Button(action: onOpenSource) {
                         Label(
@@ -158,6 +131,31 @@ struct ConversationContinuationBubble: View {
                     .buttonStyle(.borderless)
                     .disabled(!sourceSessionAvailable)
                     .padding(.top)
+
+                    HStack {
+                        Spacer()
+
+                        if expansionState == .preview,
+                           markdownContent?.isPreviewTruncated == true {
+                            Button(NSLocalizedString(
+                                "完全展开",
+                                comment: "Fully expand continuation context action"
+                            )) {
+                                setExpansionState(.full)
+                            }
+                            .buttonStyle(.borderless)
+                        }
+
+                        Button(NSLocalizedString(
+                            "收起",
+                            comment: "Collapse continuation context action"
+                        )) {
+                            setExpansionState(.collapsed)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .font(.footnote)
+                    .padding(.top)
                 }
                 .transition(.opacity)
             }
@@ -169,6 +167,37 @@ struct ConversationContinuationBubble: View {
                 .stroke(Color.accentColor.opacity(0.28), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
+        .task(id: context.id) {
+            await preparePreview()
+        }
+        .task(id: expansionState) {
+            guard expansionState == .full else { return }
+            await prepareFullContent()
+        }
+    }
+
+    @ViewBuilder
+    private var renderedMarkdown: some View {
+        let content = expansionState == .full ? markdownContent?.full : markdownContent?.preview
+        let prepared = expansionState == .full ? preparedFull : preparedPreview
+        if let content,
+           let prepared,
+           prepared.sourceText == content {
+            ETAdvancedMarkdownRenderer(
+                content: content,
+                preparedContent: prepared,
+                enableMarkdown: true,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableAdvancedRenderer,
+                customTextColor: nil
+            )
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
     }
 
     private var contextSubtitle: String {
@@ -196,6 +225,62 @@ struct ConversationContinuationBubble: View {
         case .error:
             return NSLocalizedString("错误", comment: "Continuation retained message role")
         }
+    }
+
+    private func setExpansionState(_ newState: ConversationContinuationExpansionState) {
+        if reduceMotion {
+            expansionState = newState
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+                expansionState = newState
+            }
+        }
+        onExpansionStateChange(newState)
+    }
+
+    @MainActor
+    private func preparePreview() async {
+        markdownContent = nil
+        preparedPreview = nil
+        preparedFull = nil
+
+        let contextID = context.id
+        let context = context
+        let summaryHeading = NSLocalizedString(
+            "较早对话摘要",
+            comment: "Continuation context summary heading"
+        )
+        let retainedHeading = NSLocalizedString(
+            "最近对话原文",
+            comment: "Continuation context retained messages heading"
+        )
+        let roleTitles = context.retainedMessages.map { roleTitle($0.role) }
+        let content = await Task.detached(priority: .utility) {
+            ConversationContinuationMarkdownContent.make(
+                context: context,
+                summaryHeading: summaryHeading,
+                retainedHeading: retainedHeading,
+                roleTitles: roleTitles
+            )
+        }.value
+        guard !Task.isCancelled, self.context.id == contextID else { return }
+
+        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: content.preview)
+        guard !Task.isCancelled, self.context.id == contextID else { return }
+        markdownContent = content
+        preparedPreview = prepared
+        if !content.isPreviewTruncated {
+            preparedFull = prepared
+        }
+    }
+
+    @MainActor
+    private func prepareFullContent() async {
+        guard preparedFull == nil, let markdownContent else { return }
+        let contextID = context.id
+        let prepared = await ETMarkdownPrecomputeWorker.shared.prepare(source: markdownContent.full)
+        guard !Task.isCancelled, context.id == contextID else { return }
+        preparedFull = prepared
     }
 }
 
@@ -504,26 +589,11 @@ extension ChatView {
         )
     }
 
-    var shouldShowContextCompressionReminder: Bool {
-        guard let session = viewModel.currentSession,
-              !session.isTemporary,
-              !viewModel.isSendingMessage,
-              !viewModel.activatedChatModels.isEmpty else {
-            return false
-        }
-        return ContextCompressionReminderPolicy.shouldRemind(
-            estimatedTokens: contextCompressionEstimatedTokens,
-            isEnabled: appConfig.enableContextCompressionReminder,
-            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
-        )
-    }
-
     @MainActor
     func refreshContextCompressionReminderEstimate() async {
         guard appConfig.enableContextCompressionReminder,
               let sessionID = viewModel.currentSession?.id,
               viewModel.currentSession?.isTemporary == false else {
-            contextCompressionEstimatedTokens = 0
             return
         }
         let messages = viewModel.allMessagesForSession
@@ -536,14 +606,41 @@ extension ChatView {
         }.value
         try? Task.checkCancellation()
         guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
-        contextCompressionEstimatedTokens = estimate
+
+        guard let session = viewModel.currentSession,
+              !viewModel.isSendingMessage,
+              !viewModel.activatedChatModels.isEmpty,
+              ContextCompressionReminderPolicy.shouldRemind(
+                estimatedTokens: estimate,
+                isEnabled: appConfig.enableContextCompressionReminder,
+                tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+              ) else {
+            return
+        }
+        let notificationKey = ContextCompressionReminderNotificationKey(
+            sessionID: session.id,
+            continuationID: continuationContext?.id,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
+        guard contextCompressionReminderNotificationKeys.insert(notificationKey).inserted else { return }
+        _ = await AppLocalNotificationCenter.shared.postContextCompressionReminder(
+            sessionID: session.id,
+            sessionName: session.name,
+            estimatedTokens: estimate,
+            tokenThreshold: appConfig.contextCompressionReminderTokenThreshold
+        )
     }
 
-    func presentOneTapContextCompression() {
-        guard let session = viewModel.currentSession,
-              !session.isTemporary,
-              !viewModel.isSendingMessage else { return }
+    @MainActor
+    func presentPendingContextCompressionNotification() async {
+        guard let sessionID = localNotificationCenter.pendingContextCompressionSessionID,
+              let session = viewModel.chatSessions.first(where: { $0.id == sessionID }),
+              !session.isTemporary else {
+            return
+        }
+        _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
         contextCompressionReminderSourceSession = session
+        _ = localNotificationCenter.consumePendingContextCompressionSessionID()
     }
 
     @MainActor

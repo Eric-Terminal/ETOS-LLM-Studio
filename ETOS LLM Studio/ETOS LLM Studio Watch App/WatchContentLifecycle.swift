@@ -44,6 +44,18 @@ extension ContentView {
         openChatSession(sessionID: sessionID)
     }
 
+    func openContextCompressionFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        guard let sessionID = notificationCenter.pendingContextCompressionSessionID,
+              let session = viewModel.chatSessions.first(where: { $0.id == sessionID }),
+              !session.isTemporary else {
+            return
+        }
+        openChatSession(sessionID: sessionID)
+        contextCompressionReminderSourceSession = session
+        _ = notificationCenter.consumePendingContextCompressionSessionID()
+    }
+
     func openAchievementJournalFromNotification() {
         _ = notificationCenter.consumePendingRoute()
         openAchievementJournal()

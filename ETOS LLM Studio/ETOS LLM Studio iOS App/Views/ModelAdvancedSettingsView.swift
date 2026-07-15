@@ -288,7 +288,7 @@ struct ModelAdvancedSettingsView: View {
 
                     if appConfig.enableContextCompressionReminder {
                         Text(NSLocalizedString(
-                            "达到估算阈值后，聊天页会提示压缩；点击提示会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。",
+                            "达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。",
                             comment: "Context compression reminder settings explanation"
                         ))
                         .etFont(.footnote)

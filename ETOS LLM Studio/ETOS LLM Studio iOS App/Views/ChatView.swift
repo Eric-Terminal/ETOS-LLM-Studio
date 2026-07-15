@@ -25,6 +25,7 @@ struct ChatView: View {
     @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var ttsManager = TTSManager.shared
+    @ObservedObject var localNotificationCenter = AppLocalNotificationCenter.shared
     @State var showScrollToBottom = false
     @State var shouldKeepBottomPinned = true
     @State var suppressAutoScrollOnce = false
@@ -45,10 +46,10 @@ struct ChatView: View {
     @State var contextCompressionSourceSession: ChatSession?
     @State var pendingContextCompressionSourceSession: ChatSession?
     @State var contextCompressionReminderSourceSession: ChatSession?
-    @State var contextCompressionEstimatedTokens = 0
+    @State var contextCompressionReminderNotificationKeys: Set<ContextCompressionReminderNotificationKey> = []
     @State var continuationContext: ConversationContinuationContext?
     @State var isContinuationSourceSessionAvailable = false
-    @State var isContinuationContextExpanded = false
+    @State var continuationExpansionState: ConversationContinuationExpansionState = .collapsed
     @State var showGhostSessionAlert = false
     @State var ghostSession: ChatSession?
     @State var sessionPickerSearchText: String = ""
@@ -294,7 +295,7 @@ struct ChatView: View {
             }
             .onChange(of: viewModel.currentSession?.id) { _, _ in
                 refreshTemporaryChatState()
-                isContinuationContextExpanded = false
+                continuationExpansionState = .collapsed
                 if isMessageSelectionMode {
                     exitMessageSelection()
                 }
@@ -305,10 +306,18 @@ struct ChatView: View {
             .task(id: contextCompressionReminderRefreshKey) {
                 await refreshContextCompressionReminderEstimate()
             }
+            .task(id: localNotificationCenter.pendingContextCompressionSessionID) {
+                await presentPendingContextCompressionNotification()
+            }
             .onChange(of: viewModel.chatSessions) { _, sessions in
                 isContinuationSourceSessionAvailable = continuationContext.map { context in
                     sessions.contains { $0.id == context.sourceSessionID }
                 } ?? false
+                if localNotificationCenter.pendingContextCompressionSessionID != nil {
+                    Task { @MainActor in
+                        await presentPendingContextCompressionNotification()
+                    }
+                }
             }
     }
 
@@ -723,21 +732,13 @@ extension ChatView {
                             // 历史加载提示
                             historyBanner
 
-                            if shouldShowContextCompressionReminder {
-                                ContextCompressionReminderCard(
-                                    estimatedTokens: contextCompressionEstimatedTokens,
-                                    threshold: appConfig.contextCompressionReminderTokenThreshold,
-                                    onCompress: presentOneTapContextCompression
-                                )
-                                .padding(.horizontal, 12)
-                                .padding(.bottom, 8)
-                            }
-
                             if let continuationContext {
                                 ConversationContinuationBubble(
                                     context: continuationContext,
-                                    isExpanded: $isContinuationContextExpanded,
+                                    expansionState: $continuationExpansionState,
+                                    enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
                                     sourceSessionAvailable: isContinuationSourceSessionAvailable,
+                                    onExpansionStateChange: handleContinuationExpansionStateChange,
                                     onOpenSource: {
                                         _ = viewModel.setCurrentSessionIfExists(
                                             sessionID: continuationContext.sourceSessionID

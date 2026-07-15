@@ -113,6 +113,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenChatSession)) { _ in
             openChatSessionFromNotification()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestContextCompression)) { _ in
+            openContextCompressionFromNotification()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenAchievementJournal)) { _ in
             openAchievementJournalFromNotification()
         }
@@ -398,6 +401,12 @@ struct ContentView: View {
         openChatSession(sessionID: sessionID)
     }
 
+    private func openContextCompressionFromNotification() {
+        _ = notificationCenter.consumePendingRoute()
+        guard let sessionID = notificationCenter.pendingContextCompressionSessionID else { return }
+        openChatSession(sessionID: sessionID)
+    }
+
     private func openAchievementJournalFromNotification() {
         _ = notificationCenter.consumePendingRoute()
         openAchievementJournal()
@@ -449,6 +458,10 @@ struct ContentView: View {
                 openFeedback(issueNumber: notificationCenter.consumePendingFeedbackIssueNumber())
             case .chatSession:
                 if let sessionID = notificationCenter.consumePendingChatSessionID() {
+                    openChatSession(sessionID: sessionID)
+                }
+            case .contextCompression:
+                if let sessionID = notificationCenter.pendingContextCompressionSessionID {
                     openChatSession(sessionID: sessionID)
                 }
             case .achievementJournal:

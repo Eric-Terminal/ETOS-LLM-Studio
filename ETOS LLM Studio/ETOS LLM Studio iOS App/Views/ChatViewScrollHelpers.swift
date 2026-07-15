@@ -231,6 +231,12 @@ extension ChatView {
         }
     }
 
+    func handleContinuationExpansionStateChange(_ state: ConversationContinuationExpansionState) {
+        guard state.isExpanded else { return }
+        // 主动展开会改变滚动内容高度，不应继续把当前位置视为“锁定底部”。
+        shouldKeepBottomPinned = false
+    }
+
     func handleChatInputBarHeightChange(_ newHeight: CGFloat) {
         let heightDelta = abs(newHeight - chatInputBarHeight)
         guard heightDelta > 0.5 else {

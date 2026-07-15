@@ -5153,3 +5153,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。" = "Les échanges récents restent dans leur texte d’origine. Le reste de l’historique est résumé en une seule passe et la conversation d’origine reste inchangée.";
 "续聊压缩摘要提示词" = "Invite de résumé de continuation";
 "控制续聊会话以单次请求完整摘要较早对话。" = "Contrôle le résumé complet en une seule requête de l’historique antérieur pour poursuivre la conversation.";
+"会话“%@”约有 %@ Token，已达到 %@ Token 的提醒阈值。点击即可压缩为续聊。" = "La discussion « %@ » contient environ %@ tokens et a atteint le seuil de %@ tokens. Touchez pour la compresser en discussion de suivi.";
+"达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。" = "Lorsque le seuil est atteint, le système envoie une notification. Touchez-la pour créer immédiatement une discussion de suivi avec les options par défaut, tout en conservant intégralement la discussion d’origine.";

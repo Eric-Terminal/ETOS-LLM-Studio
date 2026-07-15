@@ -210,6 +210,8 @@ extension ContentView {
                     openFeedbackFromNotification()
                 case .chatSession:
                     openChatSessionFromNotification()
+                case .contextCompression:
+                    openContextCompressionFromNotification()
                 case .achievementJournal:
                     openAchievementJournalFromNotification()
                 case .updateTimeline:

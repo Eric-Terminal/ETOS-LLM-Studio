@@ -5153,3 +5153,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "最近轮次会保留原文，其余历史将一次性生成续聊摘要，原会话不会改变。" = "Los turnos recientes conservan su texto original. El resto del historial se resume en una sola pasada y la conversación original no cambia.";
 "续聊压缩摘要提示词" = "Prompt de resumen de continuación";
 "控制续聊会话以单次请求完整摘要较早对话。" = "Controla el resumen completo del historial anterior en una sola solicitud para continuar la conversación.";
+"会话“%@”约有 %@ Token，已达到 %@ Token 的提醒阈值。点击即可压缩为续聊。" = "El chat «%@» tiene unos %@ tokens y ha alcanzado el umbral de %@ tokens. Toca para comprimirlo en una continuación.";
+"达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。" = "Cuando se alcance el umbral, el sistema enviará una notificación. Al tocarla, se creará de inmediato una continuación con las opciones predeterminadas y se conservará por completo el chat original.";
