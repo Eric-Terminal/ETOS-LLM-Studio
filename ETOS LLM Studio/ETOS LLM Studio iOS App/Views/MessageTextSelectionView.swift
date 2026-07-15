@@ -16,13 +16,9 @@ struct MessageTextSelectionView: View {
     @State private var showsCopyFormatDialog = false
 
     var body: some View {
-        ScrollView {
+        Group {
             if let plainText {
-                Text(plainText)
-                    .etFont(.body, sampleText: plainText)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+                MessageSelectableTextView(text: plainText)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -70,5 +66,35 @@ struct MessageTextSelectionView: View {
     private func copyToPasteboard(_ text: String) {
         UIPasteboard.general.string = text
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+}
+
+// UITextView 在可拖拽 Sheet 中仍由系统完整处理长按、选区拖动与复制菜单。
+struct MessageSelectableTextView: UIViewRepresentable {
+    let text: String
+
+    func makeUIView(context: Context) -> UITextView {
+        Self.makeTextView(text: text)
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        guard textView.text != text else { return }
+        textView.text = text
+    }
+
+    @MainActor
+    static func makeTextView(text: String) -> UITextView {
+        let textView = UITextView()
+        textView.text = text
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.textColor = .label
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = true
+        textView.adjustsFontForContentSizeCategory = true
+        textView.textContainerInset = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        textView.textContainer.lineFragmentPadding = 0
+        return textView
     }
 }
