@@ -253,12 +253,12 @@ struct ChatServiceConcurrentSessionInteractionTests {
         )
 
         let storedMessages = Persistence.loadMessages(for: testSession.id)
+        let assistantMessage = storedMessages.first { $0.role == .assistant }
+        let errorMessage = storedMessages.first { $0.role == .error }
         #expect(storedMessages.count == 3)
-        #expect(storedMessages[0].role == .user)
-        #expect(storedMessages[1].role == .assistant)
-        #expect(storedMessages[1].content == "第一段回复")
-        #expect(storedMessages[2].role == .error)
-        #expect(storedMessages[2].content.contains("网络连接已经断开。"))
+        #expect(storedMessages.map(\.role) == [.user, .assistant, .error])
+        #expect(assistantMessage?.content == "第一段回复")
+        #expect(errorMessage?.content.contains("网络连接已经断开。") == true)
     }
 
     @MainActor
@@ -324,9 +324,10 @@ struct ChatServiceConcurrentSessionInteractionTests {
         )
 
         let storedMessages = Persistence.loadMessages(for: testSession.id)
+        let assistantMessage = storedMessages.first { $0.role == .assistant }
         #expect(storedMessages.count == 3)
-        #expect(storedMessages[1].role == .assistant)
-        #expect(storedMessages[1].content == "第一段回复")
+        #expect(storedMessages.map(\.role) == [.user, .assistant, .error])
+        #expect(assistantMessage?.content == "第一段回复")
 
         let errorMessage = try #require(storedMessages.last)
         #expect(errorMessage.role == .error)
@@ -731,7 +732,7 @@ private final class ControlledStreamingURLProtocol: URLProtocol {
                 url: requestURL,
                 statusCode: 200,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+                headerFields: ["Content-Type": "text/event-stream; charset=utf-8"]
             )!
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 
@@ -954,7 +955,7 @@ private final class StreamingFailureURLProtocol: URLProtocol {
                 url: requestURL,
                 statusCode: 200,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+                headerFields: ["Content-Type": "text/event-stream; charset=utf-8"]
             )!
             self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 

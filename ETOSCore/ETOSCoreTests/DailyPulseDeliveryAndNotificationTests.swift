@@ -9,6 +9,9 @@
 import Foundation
 import Testing
 @testable import ETOSCore
+#if canImport(UserNotifications)
+import UserNotifications
+#endif
 
 @Suite("每日脉冲交付与通知测试")
 struct DailyPulseDeliveryAndNotificationTests {
@@ -267,6 +270,14 @@ struct DailyPulseDeliveryAndNotificationTests {
     }
 
 #if canImport(UserNotifications)
+    @Test("未宿主单元测试不会访问系统通知中心")
+    @MainActor
+    func unhostedUnitTestsDoNotAccessSystemNotificationCenter() async {
+        let center = AppLocalNotificationCenter.shared
+        #expect(await center.requestAuthorizationIfNeeded() == false)
+        #expect(await center.refreshAuthorizationStatus() == .denied)
+    }
+
     @Test("Daily Pulse 通知路由能识别目标 userInfo")
     func dailyPulseNotificationRouteDetection() {
         let userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(

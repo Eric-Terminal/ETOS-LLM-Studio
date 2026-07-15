@@ -114,6 +114,9 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     @Published public private(set) var pendingContextCompressionSessionID: UUID?
 
     private var didConfigure = false
+    private nonisolated static var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
 
     private override init() {
         super.init()
@@ -122,6 +125,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public func configureIfNeeded() {
         guard !didConfigure else { return }
         didConfigure = true
+        guard !Self.isRunningUnitTests else { return }
         UNUserNotificationCenter.current().delegate = self
         registerNotificationCategories()
         Task {
@@ -131,6 +135,10 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
 
     @discardableResult
     public func refreshAuthorizationStatus() async -> UNAuthorizationStatus {
+        guard !Self.isRunningUnitTests else {
+            authorizationStatus = .denied
+            return .denied
+        }
         configureIfNeeded()
         let settings = await currentNotificationSettings()
         authorizationStatus = settings.authorizationStatus
@@ -141,6 +149,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public func requestAuthorizationIfNeeded(
         options: UNAuthorizationOptions = [.alert, .sound, .badge]
     ) async -> Bool {
+        guard !Self.isRunningUnitTests else { return false }
         configureIfNeeded()
         let status = await refreshAuthorizationStatus()
         switch status {
@@ -163,6 +172,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
 
     @discardableResult
     public func addNotificationRequest(_ request: UNNotificationRequest) async -> Bool {
+        guard !Self.isRunningUnitTests else { return false }
         configureIfNeeded()
         return await withCheckedContinuation { continuation in
             UNUserNotificationCenter.current().add(request) { error in
@@ -206,12 +216,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     }
 
     public func removePendingRequests(withIdentifiers identifiers: [String]) {
-        guard !identifiers.isEmpty else { return }
+        guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
     public func removeDeliveredRequests(withIdentifiers identifiers: [String]) {
-        guard !identifiers.isEmpty else { return }
+        guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
