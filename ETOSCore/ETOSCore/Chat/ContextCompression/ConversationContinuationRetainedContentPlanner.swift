@@ -82,19 +82,21 @@ public enum ConversationContinuationRetainedContentPlanner {
                 continue
             }
 
-            let toolItems = (message.toolCalls ?? []).enumerated().compactMap { index, call in
-                guard emittedAssistantToolCallIDs.insert(call.id).inserted else { return nil }
-                let directResult = normalized(call.result)
-                let result = directResult.isEmpty
-                    ? toolResultsByCallID[call.id] ?? ""
-                    : directResult
-                return makeToolItem(
-                    sourceMessageID: message.id,
-                    call: call,
-                    result: result,
-                    ordinal: index
-                )
-            }
+            let toolItems: [ConversationContinuationRetainedItem] = (message.toolCalls ?? [])
+                .enumerated()
+                .compactMap { index, call -> ConversationContinuationRetainedItem? in
+                    guard emittedAssistantToolCallIDs.insert(call.id).inserted else { return nil }
+                    let directResult = normalized(call.result)
+                    let result = directResult.isEmpty
+                        ? toolResultsByCallID[call.id] ?? ""
+                        : directResult
+                    return makeToolItem(
+                        sourceMessageID: message.id,
+                        call: call,
+                        result: result,
+                        ordinal: index
+                    )
+                }
             let messageItem = makeMessageItem(message)
 
             if message.toolCallsPlacement == .afterReasoning {
