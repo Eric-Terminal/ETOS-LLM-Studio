@@ -110,6 +110,46 @@ struct AnthropicAdapterTests {
         #expect(content[1]["id"] as? String == "toolu_1")
     }
 
+    @Test("Anthropic 并行工具结果合并至同一条 user 消息")
+    func testAnthropicParallelToolResultsShareSingleUserMessage() throws {
+        let firstCall = InternalToolCall(
+            id: "call_00_weather",
+            toolName: "get_weather",
+            arguments: #"{"city":"上海"}"#
+        )
+        let secondCall = InternalToolCall(
+            id: "call_01_time",
+            toolName: "get_time",
+            arguments: #"{"timezone":"Asia/Shanghai"}"#
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "查询上海的天气和时间"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [firstCall, secondCall]),
+            ChatMessage(role: .tool, content: "晴，28°C", toolCalls: [firstCall]),
+            ChatMessage(role: .tool, content: "20:14", toolCalls: [secondCall])
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: makeAnthropicModel(),
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(payload["messages"] as? [[String: Any]])
+        try #require(payloadMessages.count == 3)
+        let assistantContent = try #require(payloadMessages[1]["content"] as? [[String: Any]])
+        let toolResultContent = try #require(payloadMessages[2]["content"] as? [[String: Any]])
+
+        #expect(payloadMessages.compactMap { $0["role"] as? String } == ["user", "assistant", "user"])
+        #expect(assistantContent.compactMap { $0["id"] as? String } == ["call_00_weather", "call_01_time"])
+        #expect(toolResultContent.compactMap { $0["tool_use_id"] as? String } == ["call_00_weather", "call_01_time"])
+    }
+
     @Test("Anthropic 流式增量保留 thinking signature")
     func testAnthropicStreamingDeltaPreservesThinkingSignature() throws {
         let line = """

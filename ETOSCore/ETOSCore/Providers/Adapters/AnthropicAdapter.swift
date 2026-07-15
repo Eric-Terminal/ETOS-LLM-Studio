@@ -219,10 +219,19 @@ public class AnthropicAdapter: APIAdapter {
                         "tool_use_id": toolCall.id,
                         "content": msg.content
                     ]
-                    anthropicMessages.append([
-                        "role": "user",
-                        "content": [toolResultBlock]
-                    ])
+                    // Anthropic 要求同一轮并行调用的所有结果位于紧随其后的同一条 user 消息中。
+                    if let lastIndex = anthropicMessages.indices.last,
+                       anthropicMessages[lastIndex]["role"] as? String == "user",
+                       var contentBlocks = anthropicMessages[lastIndex]["content"] as? [[String: Any]],
+                       contentBlocks.allSatisfy({ $0["type"] as? String == "tool_result" }) {
+                        contentBlocks.append(toolResultBlock)
+                        anthropicMessages[lastIndex]["content"] = contentBlocks
+                    } else {
+                        anthropicMessages.append([
+                            "role": "user",
+                            "content": [toolResultBlock]
+                        ])
+                    }
                 }
                 continue
             default:
