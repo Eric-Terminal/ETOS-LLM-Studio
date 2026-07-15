@@ -59,6 +59,12 @@ extension ContentView {
                 .appLockOverlayLayer()
             }
         }
+        .sheet(item: $watchInputQuickActionDestination) { action in
+            NavigationStack {
+                watchInputQuickActionDestinationView(for: action)
+            }
+            .appLockOverlayLayer()
+        }
         .sheet(item: $contextCompressionReminderSourceSession) { session in
             NavigationStack {
                 WatchContextCompressionOneTapView(
@@ -253,6 +259,7 @@ extension ContentView {
         isSettingsPresented
             || isSessionListPresented
             || isContextCompressionPresented
+            || watchInputQuickActionDestination != nil
             || contextCompressionReminderSourceSession != nil
             || viewModel.activeSheet != nil
             || fullErrorContent != nil

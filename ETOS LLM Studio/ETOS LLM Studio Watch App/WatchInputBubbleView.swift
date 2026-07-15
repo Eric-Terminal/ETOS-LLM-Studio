@@ -21,9 +21,8 @@ struct WatchInputBubbleView: View {
     let inputStrokeColor: Color
     let inputPlaceholderText: String
     let inputBubbleVerticalPadding: CGFloat
-    let onOpenSessionHistory: () -> Void
     let isContextCompressionAvailable: Bool
-    let onOpenContextCompression: () -> Void
+    let onPerformQuickAction: (WatchInputQuickAction) -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
     let onSpeechInputLayoutWillChange: () -> Void
     let onRememberAttachmentSource: (String) -> Void
@@ -32,6 +31,7 @@ struct WatchInputBubbleView: View {
     @Binding var isRequestControlsPresented: Bool
     @Binding var isAttachmentImportPresented: Bool
     @Binding var attachmentSourceText: String
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var resourceUsageTask: Task<Void, Never>?
     @State private var speechPreviewFinalizeTask: Task<Void, Never>?
     @State private var isDraftEditorPresented = false
@@ -239,84 +239,14 @@ struct WatchInputBubbleView: View {
                 }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if !roleplayScriptActions.isEmpty {
-                    Button {
-                        isRoleplayScriptActionMenuPresented = true
-                    } label: {
-                        Image(systemName: "curlybraces.square")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("助手脚本", comment: "Watch roleplay script actions"))
-                    .tint(.indigo)
-                }
-
-                Button {
-                    attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
-                    isAttachmentImportPresented = true
-                } label: {
-                    Image(systemName: "plus")
-                        .etFont(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                        .contentShape(Circle())
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("添加附件", comment: ""))
-                .tint(.blue)
-                .disabled(viewModel.attachmentImportInProgress)
-
-                if !viewModel.userInput.isEmpty || hasPendingAttachments {
-                    Button(role: .destructive) {
-                        viewModel.clearUserInput()
-                        viewModel.clearAllAttachments()
-                    } label: {
-                        Image(systemName: "trash")
-                            .etFont(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                            .contentShape(Circle())
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("清空输入", comment: ""))
+                ForEach(appConfig.watchInputQuickActionSettings.trailingActions) { action in
+                    quickActionButton(action)
                 }
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                if let selectedModel = viewModel.selectedModel,
-                   !selectedModel.model.requestBodyControls.filter(\.isEnabled).isEmpty {
-                    Button {
-                        isRequestControlsPresented = true
-                    } label: {
-                        Image(systemName: "slider.vertical.3")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: inputControlHeight, height: inputControlHeight)
-                    }
-                    .labelStyle(.iconOnly)
-                    .accessibilityLabel(NSLocalizedString("请求控制", comment: ""))
-                    .tint(.purple)
+                ForEach(appConfig.watchInputQuickActionSettings.leadingActions) { action in
+                    quickActionButton(action)
                 }
-                Button {
-                    onOpenSessionHistory()
-                } label: {
-                    Image(systemName: "list.bullet.rectangle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("历史会话", comment: ""))
-                .tint(.blue)
-
-                Button {
-                    onOpenContextCompression()
-                } label: {
-                    Image(systemName: "rectangle.compress.vertical")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: inputControlHeight, height: inputControlHeight)
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(NSLocalizedString("压缩为续聊", comment: "Context compression input action"))
-                .tint(.indigo)
-                .disabled(!isContextCompressionAvailable)
             }
             .sheet(isPresented: $isRequestControlsPresented) {
                 if let selectedModel = viewModel.selectedModel {
@@ -418,6 +348,92 @@ struct WatchInputBubbleView: View {
                 speechPreviewFinalizeTask = nil
                 setInputLocalPresentationBlocked(false)
             }
+    }
+
+    @ViewBuilder
+    private func quickActionButton(_ action: WatchInputQuickAction) -> some View {
+        if shouldShowQuickAction(action) {
+            if action == .clearInput {
+                Button(role: .destructive) {
+                    performQuickAction(action)
+                } label: {
+                    quickActionIcon(action)
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(action.title)
+            } else {
+                Button {
+                    performQuickAction(action)
+                } label: {
+                    quickActionIcon(action)
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(action.title)
+                .tint(action.tint)
+                .disabled(isQuickActionDisabled(action))
+            }
+        }
+    }
+
+    private func quickActionIcon(_ action: WatchInputQuickAction) -> some View {
+        Image(systemName: action.systemImage)
+            .etFont(.system(size: 16, weight: .semibold))
+            .frame(width: inputControlHeight, height: inputControlHeight)
+            .contentShape(Circle())
+    }
+
+    private func shouldShowQuickAction(_ action: WatchInputQuickAction) -> Bool {
+        switch action {
+        case .requestControls:
+            return viewModel.selectedModel?.model.requestBodyControls.contains(where: \.isEnabled) == true
+        case .roleplayScripts:
+            return !roleplayScriptActions.isEmpty
+        case .clearInput:
+            return !viewModel.userInput.isEmpty || hasPendingAttachments
+        default:
+            return true
+        }
+    }
+
+    private func isQuickActionDisabled(_ action: WatchInputQuickAction) -> Bool {
+        switch action {
+        case .contextCompression:
+            return !isContextCompressionAvailable
+        case .addAttachment:
+            return viewModel.attachmentImportInProgress
+        default:
+            return false
+        }
+    }
+
+    private func performQuickAction(_ action: WatchInputQuickAction) {
+        switch action {
+        case .requestControls:
+            isRequestControlsPresented = true
+        case .roleplayScripts:
+            isRoleplayScriptActionMenuPresented = true
+        case .addAttachment:
+            attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
+            isAttachmentImportPresented = true
+        case .clearInput:
+            viewModel.clearUserInput()
+            viewModel.clearAllAttachments()
+        case .sessionHistory,
+             .contextCompression,
+             .settings,
+             .toolCenter,
+             .dailyPulse,
+             .usageAnalytics,
+             .imageGallery,
+             .memory,
+             .mcp,
+             .agentSkills,
+             .shortcuts,
+             .roleplay,
+             .worldbook,
+             .extendedFeatures:
+            onPerformQuickAction(action)
+        }
     }
 
     private var isInlineSpeechComposerPresented: Bool {

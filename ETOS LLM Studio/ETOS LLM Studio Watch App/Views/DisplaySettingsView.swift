@@ -121,6 +121,14 @@ struct DisplaySettingsView: View {
                 }
             }
 
+            Section(header: Text(NSLocalizedString("界面与交互", comment: ""))) {
+                NavigationLink {
+                    WatchInputQuickActionSettingsView()
+                } label: {
+                    Text(NSLocalizedString("输入栏快捷功能", comment: "Watch input quick action settings entry"))
+                }
+            }
+
             // MARK: Section 4：全局外观
             Section(
                 header: Text(NSLocalizedString("全局外观", comment: "")),

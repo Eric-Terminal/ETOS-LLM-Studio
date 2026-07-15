@@ -268,6 +268,25 @@ public final class AppConfigStore: ObservableObject {
     @Published public var fontFallbackScope: String { didSet { write(.fontFallbackScope, fontFallbackScope) } }
     @Published public var fontCustomScale: Double { didSet { write(.fontCustomScale, fontCustomScale) } }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
+    @Published public var watchInputQuickActionConfiguration: String {
+        didSet {
+            write(.watchInputQuickActionConfiguration, watchInputQuickActionConfiguration)
+            let decoded = WatchInputQuickActionConfiguration.decoded(
+                from: watchInputQuickActionConfiguration
+            )
+            if watchInputQuickActionSettings != decoded {
+                watchInputQuickActionSettings = decoded
+            }
+        }
+    }
+    @Published public var watchInputQuickActionSettings: WatchInputQuickActionConfiguration {
+        didSet {
+            let encoded = watchInputQuickActionSettings.encodedString()
+            if watchInputQuickActionConfiguration != encoded {
+                watchInputQuickActionConfiguration = encoded
+            }
+        }
+    }
     @Published public var watchAttachmentLastSource: String { didSet { write(.watchAttachmentLastSource, watchAttachmentLastSource) } }
     @Published public var watchAttachmentSourceHistory: String { didSet { write(.watchAttachmentSourceHistory, watchAttachmentSourceHistory) } }
     @Published public var watchBackgroundLastSource: String { didSet { write(.watchBackgroundLastSource, watchBackgroundLastSource) } }
@@ -420,6 +439,14 @@ public final class AppConfigStore: ObservableObject {
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
         fontCustomScale = Self.realValue(.fontCustomScale, userDefaults: userDefaults)
         appLanguage = Self.textValue(.appLanguage, userDefaults: userDefaults)
+        let initialWatchInputQuickActionConfiguration = Self.textValue(
+            .watchInputQuickActionConfiguration,
+            userDefaults: userDefaults
+        )
+        watchInputQuickActionConfiguration = initialWatchInputQuickActionConfiguration
+        watchInputQuickActionSettings = WatchInputQuickActionConfiguration.decoded(
+            from: initialWatchInputQuickActionConfiguration
+        )
         watchAttachmentLastSource = Self.textValue(.watchAttachmentLastSource, userDefaults: userDefaults)
         watchAttachmentSourceHistory = Self.textValue(.watchAttachmentSourceHistory, userDefaults: userDefaults)
         watchBackgroundLastSource = Self.textValue(.watchBackgroundLastSource, userDefaults: userDefaults)
@@ -876,6 +903,7 @@ public final class AppConfigStore: ObservableObject {
         case .fontFallbackScope: return .text(fontFallbackScope)
         case .fontCustomScale: return .real(fontCustomScale)
         case .appLanguage: return .text(appLanguage)
+        case .watchInputQuickActionConfiguration: return .text(watchInputQuickActionConfiguration)
         case .watchAttachmentLastSource: return .text(watchAttachmentLastSource)
         case .watchAttachmentSourceHistory: return .text(watchAttachmentSourceHistory)
         case .watchBackgroundLastSource: return .text(watchBackgroundLastSource)
@@ -1083,6 +1111,7 @@ public final class AppConfigStore: ObservableObject {
         case .messageActionBarConfiguration: messageActionBarConfiguration = value
         case .fontFallbackScope: fontFallbackScope = value
         case .appLanguage: appLanguage = value
+        case .watchInputQuickActionConfiguration: watchInputQuickActionConfiguration = value
         case .watchAttachmentLastSource: watchAttachmentLastSource = value
         case .watchAttachmentSourceHistory: watchAttachmentSourceHistory = value
         case .watchBackgroundLastSource: watchBackgroundLastSource = value

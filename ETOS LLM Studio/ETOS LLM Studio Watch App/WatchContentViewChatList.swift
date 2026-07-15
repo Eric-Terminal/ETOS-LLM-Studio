@@ -194,16 +194,10 @@ extension ContentView {
                     inputStrokeColor: inputStrokeColor,
                     inputPlaceholderText: NSLocalizedString("输入...", comment: "Default input placeholder on watch"),
                     inputBubbleVerticalPadding: inputBubbleVerticalPadding,
-                    onOpenSessionHistory: {
-                        viewModel.activeSheet = nil
-                        isSettingsPresented = false
-                        settingsDestination = nil
-                        isSessionListPresented = true
-                    },
                     isContextCompressionAvailable: viewModel.currentSession?.isTemporary == false
                         && (!viewModel.allMessagesForSession.isEmpty || continuationContext != nil),
-                    onOpenContextCompression: {
-                        isContextCompressionPresented = true
+                    onPerformQuickAction: { action in
+                        performWatchInputQuickAction(action)
                     },
                     onHandleInputAction: { state in
                         switch state {

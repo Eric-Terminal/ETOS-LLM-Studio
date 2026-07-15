@@ -59,6 +59,7 @@ struct ContentView: View {
     @State var continuationContext: ConversationContinuationContext?
     @State var isContinuationSourceSessionAvailable = false
     @State var isContextCompressionPresented = false
+    @State var watchInputQuickActionDestination: WatchInputQuickAction?
     @State var contextCompressionReminderSourceSession: ChatSession?
     @State var contextCompressionReminderNotificationKeys: Set<WatchContextCompressionReminderNotificationKey> = []
 

@@ -194,6 +194,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case fontFallbackScope = "font.fallbackScope"
     case fontCustomScale = "font.customScale"
     case appLanguage = "ui.appLanguage"
+    case watchInputQuickActionConfiguration = "watch.input.quickActions.configuration"
     case watchAttachmentLastSource = "watch.attachment.lastSource"
     case watchAttachmentSourceHistory = "watch.attachment.sourceHistory"
     case watchBackgroundLastSource = "watch.background.lastSource"
@@ -441,6 +442,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(1.0)
         case .appLanguage:
             return .text("system")
+        case .watchInputQuickActionConfiguration:
+            return .text(WatchInputQuickActionConfiguration.defaultConfigurationJSON)
         case .watchAttachmentLastSource,
              .watchBackgroundLastSource,
              .chatComposerDraft:
