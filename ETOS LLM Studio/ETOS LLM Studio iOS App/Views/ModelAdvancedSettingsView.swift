@@ -29,6 +29,9 @@ struct ModelAdvancedSettingsView: View {
     @State private var topicPromptDraft: String = ""
     @State private var enhancedPromptDraft: String = ""
     @State private var contextCompressionReminderThresholdDraft: String = ""
+    @State private var isShowingPromptInjectionIntro = false
+    @State private var isShowingSessionContextIntro = false
+    @State private var isShowingGenerationOutputIntro = false
     @FocusState private var focusedField: ModelAdvancedSettingsFocusedField?
 
     @Binding var aiTemperature: Double
@@ -93,6 +96,15 @@ struct ModelAdvancedSettingsView: View {
             // MARK: - Tab 1：提示与注入
             Form {
                 Section {
+                    settingsIntroCard(
+                        title: NSLocalizedString("提示与注入", comment: ""),
+                        summary: promptInjectionIntroSummary,
+                        details: promptInjectionIntroDetails,
+                        isExpanded: $isShowingPromptInjectionIntro
+                    )
+                }
+
+                Section {
                     FullscreenMultilineTextInput(
                         identity: selectedGlobalPromptEntry?.id.uuidString ?? "global-system-prompt-none",
                         placeholder: NSLocalizedString("自定义全局系统提示词", comment: ""),
@@ -122,10 +134,6 @@ struct ModelAdvancedSettingsView: View {
                     }
                 } header: {
                     Text(NSLocalizedString("全局系统提示词", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -198,10 +206,6 @@ struct ModelAdvancedSettingsView: View {
                     }
                 } header: {
                     Text(NSLocalizedString("动态时间注入", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
                 .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
                     if newValue < 1 {
@@ -231,6 +235,15 @@ struct ModelAdvancedSettingsView: View {
             // MARK: - Tab 4：会话与上下文
             Form {
                 Section {
+                    settingsIntroCard(
+                        title: NSLocalizedString("会话与上下文", comment: ""),
+                        summary: sessionContextIntroSummary,
+                        details: sessionContextIntroDetails,
+                        isExpanded: $isShowingSessionContextIntro
+                    )
+                }
+
+                Section {
                     Toggle(NSLocalizedString("启动时打开历史会话", comment: ""), isOn: $appConfig.restoreLastSessionOnLaunch)
                     Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
                     LabeledContent(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title")) {
@@ -242,10 +255,6 @@ struct ModelAdvancedSettingsView: View {
                     }
                 } header: {
                     Text(NSLocalizedString("基础行为", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section(NSLocalizedString("上下文窗口管理", comment: "")) {
@@ -291,18 +300,6 @@ struct ModelAdvancedSettingsView: View {
                         }
                     }
 
-                    Text(NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if appConfig.enableContextCompressionReminder {
-                        Text(NSLocalizedString(
-                            "达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。",
-                            comment: "Context compression reminder settings explanation"
-                        ))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
                 }
             }
             .tabItem {
@@ -312,6 +309,15 @@ struct ModelAdvancedSettingsView: View {
 
             // MARK: - Tab 5：生成与输出
             Form {
+                Section {
+                    settingsIntroCard(
+                        title: NSLocalizedString("生成与输出", comment: ""),
+                        summary: generationOutputIntroSummary,
+                        details: generationOutputIntroDetails,
+                        isExpanded: $isShowingGenerationOutputIntro
+                    )
+                }
+
                 Section(NSLocalizedString("采样参数", comment: "")) {
                     Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
                     if aiTemperatureEnabled {
@@ -363,7 +369,7 @@ struct ModelAdvancedSettingsView: View {
                 } header: {
                     Text(NSLocalizedString("输出与思考", comment: ""))
                 } footer: {
-                    Text(outputReasoningFooterText)
+                    Text(compactOutputReasoningFooterText)
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -373,12 +379,6 @@ struct ModelAdvancedSettingsView: View {
                     Toggle(NSLocalizedString("流式附带官方 Token 用量", comment: "Enable stream include usage in OpenAI-compatible requests"), isOn: $enableOpenAIStreamIncludeUsage)
                 } header: {
                     Text(NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"))
-                } footer: {
-                    Text(
-                        "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
-                    )
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
             }
@@ -507,13 +507,142 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
-    private var outputReasoningFooterText: String {
+    private var promptInjectionIntroSummary: String {
+        [
+            NSLocalizedString("全局系统提示词", comment: ""),
+            NSLocalizedString("增强提示词", comment: ""),
+            NSLocalizedString("动态时间注入", comment: "")
+        ].joined(separator: " · ")
+    }
+
+    private var promptInjectionIntroDetails: String {
+        introDetails([
+            (
+                NSLocalizedString("全局系统提示词", comment: ""),
+                NSLocalizedString("为空时不会发送全局系统提示词。选择器中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: "")
+            ),
+            (
+                NSLocalizedString("当前话题提示词", comment: ""),
+                NSLocalizedString("仅对当前对话生效。", comment: "")
+            ),
+            (
+                NSLocalizedString("增强提示词", comment: ""),
+                NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: "")
+            ),
+            (
+                NSLocalizedString("动态时间注入", comment: ""),
+                NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。", comment: "")
+            )
+        ])
+    }
+
+    private var sessionContextIntroSummary: String {
+        [
+            NSLocalizedString("基础行为", comment: ""),
+            NSLocalizedString("上下文窗口管理", comment: ""),
+            NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle")
+        ].joined(separator: " · ")
+    }
+
+    private var sessionContextIntroDetails: String {
+        introDetails([
+            (
+                NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"),
+                NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer")
+            ),
+            (
+                NSLocalizedString("懒加载轮次", comment: ""),
+                NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: "")
+            ),
+            (
+                NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
+                NSLocalizedString("达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。", comment: "Context compression reminder settings explanation")
+            )
+        ])
+    }
+
+    private var generationOutputIntroSummary: String {
+        [
+            NSLocalizedString("采样参数", comment: ""),
+            NSLocalizedString("输出与思考", comment: ""),
+            NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title")
+        ].joined(separator: " · ")
+    }
+
+    private var generationOutputIntroDetails: String {
+        introDetails([
+            (
+                NSLocalizedString("输出与思考", comment: ""),
+                outputReasoningDetailsText
+            ),
+            (
+                NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"),
+                "\(NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description"))\n\n\(NSLocalizedString("“流式附带官方 Token 用量”会在 OpenAI 兼容流式请求中发送 stream_options.include_usage=true，部分平台若不兼容可关闭。", comment: "OpenAI stream include usage description"))"
+            )
+        ])
+    }
+
+    private var compactOutputReasoningFooterText: String {
+        let base = NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: "")
+        if reasoningContentEchoModeBinding.wrappedValue == .never {
+            return "\(base)\n\n\(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。", comment: ""))"
+        }
+        return base
+    }
+
+    private var outputReasoningDetailsText: String {
         let base = NSLocalizedString("开启思考摘要后会在思考完成后异步生成一行摘要，并显示在思考耗时后面。", comment: "")
         let compatibility = NSLocalizedString("该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。", comment: "")
         if reasoningContentEchoModeBinding.wrappedValue == .never {
-            return "\(base)\n\n\(compatibility)\n\n\(NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。", comment: ""))"
+            let warning = NSLocalizedString("选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。", comment: "")
+            return "\(base)\n\n\(compatibility)\n\n\(warning)"
         }
         return "\(base)\n\n\(compatibility)"
+    }
+
+    private func introDetails(_ sections: [(String, String)]) -> String {
+        sections
+            .map { "\($0.0)\n\($0.1)" }
+            .joined(separator: "\n\n")
+    }
+
+    private func settingsIntroCard(
+        title: String,
+        summary: String,
+        details: String,
+        isExpanded: Binding<Bool>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .etFont(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(summary)
+                .etFont(.subheadline)
+                .foregroundStyle(.primary)
+            Button {
+                isExpanded.wrappedValue = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                    .etFont(.footnote.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: isExpanded) {
+            NavigationStack {
+                ScrollView {
+                    Text(details)
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
 
     private func handleTemperatureChange(_ value: Double) {
