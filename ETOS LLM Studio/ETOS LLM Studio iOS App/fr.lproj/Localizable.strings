@@ -5177,3 +5177,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "完全展开" = "Tout développer";
 "会话“%@”约有 %@ Token，已达到 %@ Token 的提醒阈值。点击即可压缩为续聊。" = "La discussion « %@ » contient environ %@ tokens et a atteint le seuil de %@ tokens. Touchez pour la compresser en discussion de suivi.";
 "达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。" = "Lorsque l’estimation atteint ce seuil, le système envoie une notification. Touchez-la pour créer immédiatement une discussion de suivi avec les options par défaut, sans modifier la discussion d’origine. Le nombre de tokens est approximatif ; les pièces jointes ne sont pas lues et aucun modèle n’est appelé pour ce rappel.";
+"询问 AI" = "Demander à l’IA";

@@ -114,6 +114,21 @@ extension ChatView {
                             }
                         }
                     },
+                    onAskAI: { selectedText, message in
+                        dismissMessageActionSheet {
+                            Task { @MainActor in
+                                let attachment = await Task.detached(priority: .userInitiated) {
+                                    MessageExcerptAttachmentSupport.makeAttachment(
+                                        selectedText: selectedText,
+                                        sourceMessage: message
+                                    )
+                                }.value
+                                guard let attachment else { return }
+                                viewModel.addFileAttachment(attachment)
+                                composerFocused = true
+                            }
+                        }
+                    },
                     onSelectMultiple: { message in
                         dismissMessageActionSheet {
                             beginMessageSelection(with: message)

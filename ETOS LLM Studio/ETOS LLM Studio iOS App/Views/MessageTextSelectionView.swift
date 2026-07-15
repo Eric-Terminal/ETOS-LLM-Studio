@@ -11,6 +11,7 @@ import ETOSCore
 
 struct MessageTextSelectionView: View {
     let message: ChatMessage
+    let onAskAI: (String) -> Void
 
     @State private var plainText: String?
     @State private var showsCopyFormatDialog = false
@@ -18,7 +19,7 @@ struct MessageTextSelectionView: View {
     var body: some View {
         Group {
             if let plainText {
-                MessageSelectableTextView(text: plainText)
+                MessageSelectableTextView(text: plainText, onAskAI: onAskAI)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -72,18 +73,24 @@ struct MessageTextSelectionView: View {
 // UITextView 在可拖拽 Sheet 中仍由系统完整处理长按、选区拖动与复制菜单。
 struct MessageSelectableTextView: UIViewRepresentable {
     let text: String
+    let onAskAI: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onAskAI: onAskAI)
+    }
 
     func makeUIView(context: Context) -> UITextView {
-        Self.makeTextView(text: text)
+        Self.makeTextView(text: text, delegate: context.coordinator)
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.onAskAI = onAskAI
         guard textView.text != text else { return }
         textView.text = text
     }
 
     @MainActor
-    static func makeTextView(text: String) -> UITextView {
+    static func makeTextView(text: String, delegate: UITextViewDelegate? = nil) -> UITextView {
         let textView = UITextView()
         textView.text = text
         textView.font = .preferredFont(forTextStyle: .body)
@@ -95,6 +102,46 @@ struct MessageSelectableTextView: UIViewRepresentable {
         textView.adjustsFontForContentSizeCategory = true
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         textView.textContainer.lineFragmentPadding = 0
+        textView.delegate = delegate
         return textView
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var onAskAI: (String) -> Void
+
+        init(onAskAI: @escaping (String) -> Void) {
+            self.onAskAI = onAskAI
+        }
+
+        func textView(
+            _ textView: UITextView,
+            editMenuForTextIn range: NSRange,
+            suggestedActions: [UIMenuElement]
+        ) -> UIMenu? {
+            guard range.location != NSNotFound,
+                  range.length > 0,
+                  NSMaxRange(range) <= textView.textStorage.length else {
+                return nil
+            }
+
+            let sourceText = textView.text ?? ""
+            let rangeLocation = range.location
+            let rangeLength = range.length
+            let askAction = UIAction(
+                title: NSLocalizedString("询问 AI", comment: "Ask AI about selected message text"),
+                image: UIImage(systemName: "sparkles")
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    let selectedText = await Task.detached(priority: .userInitiated) {
+                        (sourceText as NSString).substring(
+                            with: NSRange(location: rangeLocation, length: rangeLength)
+                        )
+                    }.value
+                    self?.onAskAI(selectedText)
+                }
+            }
+            return UIMenu(children: [askAction] + suggestedActions)
+        }
     }
 }

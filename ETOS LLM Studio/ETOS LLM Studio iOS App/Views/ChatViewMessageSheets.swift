@@ -31,6 +31,7 @@ struct MessageActionSheet: View {
     let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
+    let onAskAI: (String, ChatMessage) -> Void
     let onSelectMultiple: (ChatMessage) -> Void
     let onJumpToMessage: (Int) -> Bool
 
@@ -135,7 +136,9 @@ struct MessageActionSheet: View {
                     }
 
                     NavigationLink {
-                        MessageTextSelectionView(message: message)
+                        MessageTextSelectionView(message: message) { selectedText in
+                            onAskAI(selectedText, message)
+                        }
                     } label: {
                         Label(
                             NSLocalizedString("选定文字", comment: "Open message text selection"),

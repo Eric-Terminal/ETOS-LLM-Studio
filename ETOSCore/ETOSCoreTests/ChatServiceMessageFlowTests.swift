@@ -265,6 +265,53 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
+    @Test("历史消息选区附件会沿文件注入链路保留来源元数据")
+    func testMessageExcerptAttachmentKeepsMetadataDuringInjection() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "历史消息选区附件测试")
+        defer { chatService.deleteSessions([session]) }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已结合引用回答")
+
+        let sourceMessage = ChatMessage(
+            id: UUID(uuidString: "C2B84C35-52D4-4BF3-938D-EA7C478D52A7")!,
+            role: .assistant,
+            content: "历史回复全文"
+        )
+        let attachment = try #require(
+            MessageExcerptAttachmentSupport.makeAttachment(
+                selectedText: "历史回复中的选区",
+                sourceMessage: sourceMessage
+            )
+        )
+
+        await chatService.sendAndProcessMessage(
+            content: "请解释这段内容",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            fileAttachments: [attachment]
+        )
+
+        let sentMessages = try #require(mockAdapter.receivedMessages)
+        let attachmentMessage = try #require(sentMessages.first(where: {
+            $0.role == .user && $0.content.contains("excerpt_from_previous_assistant_message.txt")
+        }))
+
+        #expect(attachmentMessage.content.contains("source_role: assistant"))
+        #expect(attachmentMessage.content.contains("source_message_id: C2B84C35-52D4-4BF3-938D-EA7C478D52A7"))
+        #expect(attachmentMessage.content.contains("content_type: quoted_reference"))
+        #expect(attachmentMessage.content.contains("历史回复中的选区"))
+        #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
+    }
+
     @Test("图片 OCR 文本会以结构化上下文附加")
     func testImageOCRAttachmentsAreStructuredBeforeSending() async throws {
         await cleanup()
