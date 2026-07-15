@@ -14,7 +14,7 @@ import ZIPFoundation
 import JavaScriptCore
 #endif
 
-@Suite("角色扮演与酒馆兼容")
+@Suite("角色扮演与酒馆兼容", .serialized)
 struct RoleplayCompatibilityTests {
 
     @Test("酒馆助手可修改最终生成提示词并回写原消息")
@@ -204,7 +204,7 @@ struct RoleplayCompatibilityTests {
 
     @Test("导入 Character Card V3 的角色资料、世界书、正则和助手脚本")
     func importV3JSON() throws {
-        let json = """
+        let json = #"""
         {
           "spec": "chara_card_v3",
           "spec_version": "3.0",
@@ -239,7 +239,7 @@ struct RoleplayCompatibilityTests {
                   "id": "00000000-0000-0000-0000-000000000001",
                   "scriptName": "状态栏",
                   "findRegex": "/<status>([\\s\\S]*?)<\\/status>/gi",
-                  "replaceString": "```html\\n<div>$1</div>\\n```",
+                  "replaceString": "```html\n<div>$1</div>\n```",
                   "placement": [2],
                   "markdownOnly": true,
                   "substituteRegex": 1
@@ -260,7 +260,7 @@ struct RoleplayCompatibilityTests {
             }
           }
         }
-        """
+        """#
         let data = try #require(json.data(using: .utf8))
         let result = try RoleplayCardImportService().importCard(from: data, fileName: "星野.json")
 
@@ -664,7 +664,7 @@ struct RoleplayCompatibilityTests {
             path: "stat_data.金币[0]",
             messageID: messageID,
             versionIndex: 0
-        )?.numericValue == 15)
+        ) == .int(15))
         #expect(result.updatedSnapshot.value(
             scope: .message,
             path: "stat_data.地点[0]",
@@ -1270,12 +1270,14 @@ struct RoleplayCompatibilityTests {
 
         context.evaluateScript("""
         var parsedMVUValue = -1;
-        eventOn(Mvu.events.COMMAND_PARSED, (_variables, commands) => { commands[0].args[1] = 9; });
+        var commandOverride = (_variables, commands) => { commands[0].args[1] = 9; };
+        eventOn(Mvu.events.COMMAND_PARSED, commandOverride);
         Mvu.parseMessage("_.set('value', 3); // 测试; 注释", { stat_data: { value: 1 }, initialized_lorebooks: {} })
           .then(value => { parsedMVUValue = value.stat_data.value; });
         """)
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         #expect(context.evaluateScript("parsedMVUValue")?.toInt32() == 9)
+        context.evaluateScript("eventRemoveListener(Mvu.events.COMMAND_PARSED, commandOverride)")
 
         context.evaluateScript("""
         var parsedMVUArrayLength = -1;

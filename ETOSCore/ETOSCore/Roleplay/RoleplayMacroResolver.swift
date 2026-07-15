@@ -299,14 +299,17 @@ public enum RoleplayMacroResolver {
     }
 
     private static func replaceSimpleMacros(_ input: String, values: [String: String]) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\{\{\{?\s*([^{}:]+?)\s*\}\}\}?"#) else {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\{\{\{\s*([^{}:]+?)\s*\}\}\}|\{\{\s*([^{}:]+?)\s*\}\}"#
+        ) else {
             return input
         }
         let source = input as NSString
         let result = NSMutableString(string: input)
         for match in regex.matches(in: input, range: NSRange(location: 0, length: source.length)).reversed() {
-            guard match.numberOfRanges > 1 else { continue }
-            let key = source.substring(with: match.range(at: 1)).lowercased()
+            guard match.numberOfRanges > 2 else { continue }
+            let keyRange = match.range(at: 1).location == NSNotFound ? match.range(at: 2) : match.range(at: 1)
+            let key = source.substring(with: keyRange).lowercased()
             guard let value = values[key] else { continue }
             result.replaceCharacters(in: match.range, with: value)
         }

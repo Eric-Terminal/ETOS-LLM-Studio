@@ -568,7 +568,7 @@ public enum RoleplayHTMLDocumentFactory {
         const quote = source[index] === '"' || source[index] === "'" ? source[index++] : null;
         while (index < source.length) {
           const character = source[index++];
-          if (quote && character === '\\' && index < source.length) { value += source[index++]; continue; }
+          if (quote && character === '\\\\' && index < source.length) { value += source[index++]; continue; }
           if ((quote && character === quote) || (!quote && character === ']')) break;
           value += character;
         }
