@@ -88,7 +88,13 @@ extension TelegramMessageComposer {
 
             adaptiveCenterContainer(participatesInGlassContainer: false)
 
-            adaptiveActionButton(participatesInGlassContainer: false)
+            if adaptiveShowsActionButton {
+                adaptiveActionButton(participatesInGlassContainer: false)
+                    .transition(
+                        .scale(scale: 0.82, anchor: .leading)
+                            .combined(with: .opacity)
+                    )
+            }
         }
     }
 
@@ -110,13 +116,25 @@ extension TelegramMessageComposer {
             adaptiveCenterContainer(participatesInGlassContainer: true)
                 .glassEffectID("adaptive-center", in: adaptiveGlassNamespace)
 
-            adaptiveActionButton(participatesInGlassContainer: true)
-                .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
+            if adaptiveShowsActionButton {
+                adaptiveActionButton(participatesInGlassContainer: true)
+                    .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
+                    .transition(
+                        .scale(scale: 0.82, anchor: .leading)
+                            .combined(with: .opacity)
+                    )
+            }
         }
     }
 
     private var adaptiveShowsAttachmentButton: Bool {
-        adaptivePresentation != .requestControls && adaptivePresentation != .speech
+        adaptivePresentation != .expandedText
+            && adaptivePresentation != .requestControls
+            && adaptivePresentation != .speech
+    }
+
+    private var adaptiveShowsActionButton: Bool {
+        adaptivePresentation != .requestControls
     }
 
     @ViewBuilder
@@ -230,31 +248,16 @@ extension TelegramMessageComposer {
 
         return ZStack(alignment: .topLeading) {
             adaptiveTextEditor
-                .opacity(adaptiveShowsModelName ? 0 : 1)
-                .allowsHitTesting(!adaptiveShowsModelName)
-
-            if adaptiveShowsModelName {
-                Button(action: adaptiveBeginEditing) {
-                    Text(adaptiveModelName)
-                        .etFont(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .minimumScaleFactor(0.78)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, adaptiveControlSize + 6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(ComposerPressButtonStyle())
-                .transition(.opacity)
-            }
 
             HStack(spacing: 0) {
-                adaptiveRequestControlsButton
+                if adaptiveShowsRequestControlsButton {
+                    adaptiveRequestControlsButton
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                }
 
                 Spacer(minLength: 0)
 
-                if viewModel.enableSpeechInput {
+                if adaptiveShowsSpeechButton {
                     adaptiveSpeechButton
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
@@ -270,7 +273,7 @@ extension TelegramMessageComposer {
                 )
             }
         )
-        .animation(adaptiveComposerAnimation, value: adaptiveShowsModelName)
+        .animation(adaptiveComposerAnimation, value: adaptiveShowsRequestControlsButton)
         .animation(adaptiveComposerAnimation, value: viewModel.enableSpeechInput)
     }
 
@@ -282,23 +285,36 @@ extension TelegramMessageComposer {
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(adaptivePresentation != .expandedText)
                 .padding(.vertical, adaptivePresentation == .expandedText ? 8 : 2)
-                .padding(.horizontal, adaptiveControlSize)
+                .padding(.leading, adaptiveTextLeadingInset)
+                .padding(.trailing, adaptiveTextTrailingInset)
 
-            if text.isEmpty, focus.wrappedValue {
+            if text.isEmpty {
                 Text(NSLocalizedString("Message", comment: "聊天输入框占位文本"))
                     .etFont(.system(size: 16))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .padding(.top, adaptivePresentation == .expandedText ? 16 : 10)
-                    .padding(.leading, adaptiveControlSize + 5)
+                    .padding(.leading, adaptiveTextLeadingInset + 5)
                     .allowsHitTesting(false)
             }
         }
     }
 
-    private var adaptiveShowsModelName: Bool {
-        adaptivePresentation == .requestControls
-            || (text.isEmpty && adaptivePresentation == .idle)
+    private var adaptiveShowsRequestControlsButton: Bool {
+        !adaptiveRequestControls.isEmpty && adaptivePresentation != .expandedText
+    }
+
+    private var adaptiveShowsSpeechButton: Bool {
+        viewModel.enableSpeechInput
+    }
+
+    // 只为实际显示的内置按钮预留边距，多行态把横向空间完整还给正文。
+    private var adaptiveTextLeadingInset: CGFloat {
+        adaptiveShowsRequestControlsButton ? adaptiveControlSize : 6
+    }
+
+    private var adaptiveTextTrailingInset: CGFloat {
+        adaptiveShowsSpeechButton ? adaptiveControlSize : 6
     }
 
     private var adaptiveExpandedInputHeight: CGFloat {
@@ -623,6 +639,12 @@ extension TelegramMessageComposer {
     }
 
     private func adaptiveRefreshRequestControls() {
-        adaptiveRequestControls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
+        let controls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
+        adaptiveRequestControls = controls
+        if controls.isEmpty, isRequestControlsExpanded {
+            withAnimation(adaptiveComposerAnimation) {
+                isRequestControlsExpanded = false
+            }
+        }
     }
 }
