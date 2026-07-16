@@ -31,8 +31,12 @@ struct ModelConfigurationIntroCard: View {
         .padding(.vertical, 2)
         .sheet(isPresented: $isShowingDetails) {
             ScrollView {
-                Text(NSLocalizedString("模型配置介绍正文", comment: "模型配置介绍卡片详情"))
-                    .etFont(.caption2)
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("模型配置介绍正文", comment: "模型配置介绍卡片详情"))
+                        .etFont(.caption2)
+                    Text(NSLocalizedString("Nested parameters and structured control merging", comment: "模型配置嵌套参数合并教程"))
+                        .etFont(.caption2)
+                }
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
