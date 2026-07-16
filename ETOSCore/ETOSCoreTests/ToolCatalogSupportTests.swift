@@ -125,36 +125,6 @@ struct ToolCatalogSupportTests {
         #expect(ToolCatalogSupport.appToolCategory(for: .createCustomWebKitJSTool) == .custom)
     }
 
-    @Test("拓展工具分类状态会统计启用与当前可用数量")
-    func testAppToolCategoryStatesCountsConfiguredAndAvailableTools() {
-        let tools = [
-            AppToolCatalogItem(kind: .listSandboxDirectory, isEnabled: true),
-            AppToolCatalogItem(kind: .editSandboxFile, isEnabled: false),
-            AppToolCatalogItem(kind: .querySQLite, isEnabled: true),
-            AppToolCatalogItem(kind: .mutateSQLite, isEnabled: true),
-            AppToolCatalogItem(kind: .listMemories, isEnabled: true)
-        ]
-
-        let states = ToolCatalogSupport.appToolCategoryStates(
-            tools: tools,
-            chatToolsEnabled: true,
-            isIsolatedSession: false
-        ) { kind in
-            kind == .mutateSQLite ? .alwaysDeny : .alwaysAllow
-        }
-
-        let fileState = states.first(where: { $0.category == .file })
-        let databaseState = states.first(where: { $0.category == .database })
-        let memoryState = states.first(where: { $0.category == .memory })
-
-        #expect(fileState?.totalCount == 2)
-        #expect(fileState?.configuredEnabledCount == 1)
-        #expect(fileState?.availableCount == 1)
-        #expect(databaseState?.configuredEnabledCount == 2)
-        #expect(databaseState?.availableCount == 1)
-        #expect(memoryState?.availableCount == 1)
-    }
-
     @Test("Schema 摘要会提取字段与必填项")
     func testSchemaSummaryIncludesFieldsAndRequiredKeys() {
         let schema = JSONValue.dictionary([

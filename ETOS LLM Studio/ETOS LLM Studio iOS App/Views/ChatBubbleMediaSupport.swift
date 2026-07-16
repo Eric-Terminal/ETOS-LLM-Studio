@@ -12,11 +12,6 @@ import UIKit
 import ETOSCore
 import ImageIO
 
-struct ImagePreviewWrapper: Identifiable {
-    let id = UUID()
-    let image: UIImage
-}
-
 struct ImagePreviewPayload: Identifiable {
     let id = UUID()
     let image: UIImage

@@ -430,30 +430,6 @@ struct SessionListRowContentBody: View {
     }
 }
 
-/// 兼容性外壳：保持旧的调用入口（搜索结果行依然使用此组件）。
-/// 自带头像 + 卡片背景，调用方仅需关心文本字段。
-struct SessionListRowContent: View {
-    let title: String
-    let subtitle: String?
-    let footnote: String?
-    let tags: [SessionTag]
-    let isCurrent: Bool
-    let isRunning: Bool
-
-    var body: some View {
-        SessionRowCard(isCurrent: isCurrent) {
-            SessionListRowContentBody(
-                title: title,
-                subtitle: subtitle,
-                footnote: footnote,
-                tags: tags,
-                isCurrent: isCurrent,
-                isRunning: isRunning
-            )
-        }
-    }
-}
-
 struct SessionSearchResultRowContent: View {
     let title: String
     let preview: String

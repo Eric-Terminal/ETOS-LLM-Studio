@@ -250,9 +250,7 @@ extension TelegramMessageComposer {
                         VStack(spacing: 14) {
                             ChatRequestBodyControlRows(
                                 runnableModel: selectedModel,
-                                controls: adaptiveRequestControls,
-                                onDone: adaptiveCloseRequestControls,
-                                optionPresentation: .menu
+                                controls: adaptiveRequestControls
                             )
                         }
                     }

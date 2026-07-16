@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件承载本地拓展工具管理器共用的通知名、数据库枚举、目录项与错误类型。
+// 本文件承载本地拓展工具管理器共用的通知名、数据库枚举与错误类型。
 // ============================================================================
 
 import Foundation
@@ -32,17 +32,6 @@ public enum AppToolSQLiteDatabase: String, CaseIterable, Identifiable, Hashable,
     }
 }
 
-public struct AppToolCatalogItem: Identifiable, Equatable, Sendable {
-    public let kind: AppToolKind
-    public let isEnabled: Bool
-
-    public var id: AppToolKind { kind }
-
-    public init(kind: AppToolKind, isEnabled: Bool) {
-        self.kind = kind
-        self.isEnabled = isEnabled
-    }
-}
 
 public enum AppToolApprovalPolicy: String, Codable, Hashable, CaseIterable, Sendable {
     case askEveryTime = "ask_every_time"

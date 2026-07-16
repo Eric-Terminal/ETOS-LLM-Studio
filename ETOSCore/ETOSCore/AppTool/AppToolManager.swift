@@ -88,13 +88,6 @@ public final class AppToolManager: ObservableObject {
         return builtInToolKinds.contains(kind)
     }
 
-    public var tools: [AppToolCatalogItem] {
-        AppToolKind.allCases
-            .filter { !Self.builtInToolKinds.contains($0) && $0.isAvailableOnCurrentPlatform }
-            .map { kind in
-            AppToolCatalogItem(kind: kind, isEnabled: enabledToolIDs.contains(kind.rawValue))
-        }
-    }
 
     internal var enabledToolKinds: Set<AppToolKind> {
         Set(enabledToolIDs.compactMap(AppToolKind.init(rawValue:)))

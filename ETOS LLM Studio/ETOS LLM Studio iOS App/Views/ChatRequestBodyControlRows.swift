@@ -10,17 +10,11 @@ import SwiftUI
 import UIKit
 import ETOSCore
 
-enum ChatRequestBodyOptionPresentation: Equatable {
-    case navigation
-    case menu
-}
 struct ChatRequestBodyControlRows: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let runnableModel: RunnableModel
     let controls: [ModelRequestBodyControl]
-    let onDone: () -> Void
-    let optionPresentation: ChatRequestBodyOptionPresentation
 
     @State private var state: ModelRequestBodyControlState?
     @State private var pendingSaveTask: Task<Void, Never>?
@@ -28,18 +22,6 @@ struct ChatRequestBodyControlRows: View {
     @State private var lastSliderPositions: [String: Double] = [:]
     @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
     @State private var optionTitlesByControlID: [String: [String: String]] = [:]
-
-    init(
-        runnableModel: RunnableModel,
-        controls: [ModelRequestBodyControl],
-        onDone: @escaping () -> Void,
-        optionPresentation: ChatRequestBodyOptionPresentation = .navigation
-    ) {
-        self.runnableModel = runnableModel
-        self.controls = controls
-        self.onDone = onDone
-        self.optionPresentation = optionPresentation
-    }
 
     var body: some View {
         ForEach(controls) { control in
@@ -57,16 +39,6 @@ struct ChatRequestBodyControlRows: View {
                         Text(control.title)
                         Spacer()
                         ProgressView()
-                    }
-                } else if optionPresentation == .navigation {
-                    NavigationLink {
-                        ChatRequestBodyControlDetailView(
-                            runnableModel: runnableModel,
-                            control: control,
-                            onDone: onDone
-                        )
-                    } label: {
-                        Text(control.title)
                     }
                 } else {
                     optionMenuRow(for: control)

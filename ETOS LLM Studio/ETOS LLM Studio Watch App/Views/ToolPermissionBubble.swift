@@ -2,9 +2,8 @@
 // ToolPermissionBubble.swift
 // ============================================================================
 // watchOS 工具审批卡片
-// - 主卡片只保留快速批准动作
-// - 详细权限与完整参数下沉到二级页
-// - 参数显示会优先做 JSON 格式化与常见实体反转义
+// - 主卡片平铺全部审批动作
+// - 参数预览会优先做 JSON 格式化与常见实体反转义
 // ============================================================================
 
 import SwiftUI
@@ -214,135 +213,5 @@ struct ToolPermissionBubble: View {
             shape
                 .fill(bubbleFill)
         }
-    }
-}
-
-private struct ToolPermissionDetailSheet: View {
-    let request: ToolPermissionRequest
-    let displayArguments: String
-    let onDecision: (ToolPermissionDecision) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var permissionCenter = ToolPermissionCenter.shared
-
-    private var toolName: String {
-        request.displayName ?? request.toolName
-    }
-
-    private var countdownText: String? {
-        guard let remaining = permissionCenter.autoApproveRemainingSeconds(for: request) else {
-            return nil
-        }
-        return String(format: NSLocalizedString("将在 %ds 后自动允许", comment: ""), remaining)
-    }
-
-    private var autoApproveBinding: Binding<Bool> {
-        Binding(
-            get: { !permissionCenter.isAutoApproveDisabled(for: request.toolName) },
-            set: { isEnabled in
-                permissionCenter.setAutoApproveDisabled(!isEnabled, for: request.toolName)
-            }
-        )
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                detailSection(title: NSLocalizedString("工具", comment: "Tool permission tool section title")) {
-                    Text(toolName)
-                        .etFont(.headline)
-                    if let countdownText {
-                        Text(countdownText)
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if !displayArguments.isEmpty {
-                    detailSection(title: NSLocalizedString("参数", comment: "Tool permission arguments section title")) {
-                        ScrollView {
-                            Text(displayArguments)
-                                .etFont(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(minHeight: 88, maxHeight: 150)
-                    }
-                }
-
-                detailSection(title: NSLocalizedString("更多权限", comment: "Tool permission more options section title")) {
-                    VStack(spacing: 8) {
-                        Button(NSLocalizedString("拒绝", comment: ""), role: .destructive) {
-                            resolve(.deny)
-                        }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
-
-                        Button(NSLocalizedString("保持允许", comment: "")) {
-                            resolve(.allowForTool)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .frame(maxWidth: .infinity)
-
-                        Button(NSLocalizedString("完全权限", comment: "")) {
-                            resolve(.allowAll)
-                        }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
-
-                        Button(NSLocalizedString("补充提示", comment: "")) {
-                            resolve(.supplement)
-                        }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-
-                detailSection(title: NSLocalizedString("自动批准", comment: "Tool permission auto approve section title")) {
-                    Toggle(NSLocalizedString("允许该工具自动批准", comment: ""), isOn: autoApproveBinding)
-                        .disabled(!permissionCenter.autoApproveEnabled)
-
-                    if !permissionCenter.autoApproveEnabled {
-                        Text(NSLocalizedString("全局自动批准当前未开启。", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    } else if permissionCenter.isAutoApproveDisabled(for: request.toolName) {
-                        Text(NSLocalizedString("该工具已从自动批准名单中排除。", comment: ""))
-                            .etFont(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Button(NSLocalizedString("关闭", comment: "")) {
-                    dismiss()
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 2)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-        }
-    }
-
-    @ViewBuilder
-    private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString(title, comment: "工具权限详情小节标题"))
-                .etFont(.caption2)
-                .foregroundStyle(.secondary)
-            content()
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.secondary.opacity(0.12))
-        )
-    }
-
-    private func resolve(_ decision: ToolPermissionDecision) {
-        dismiss()
-        onDecision(decision)
     }
 }

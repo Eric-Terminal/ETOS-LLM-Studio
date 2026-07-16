@@ -55,88 +55,13 @@ public struct ToolCatalogBuiltInToolState: Identifiable, Equatable, Sendable {
     }
 }
 
-public enum AppToolCatalogCategory: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
+public enum AppToolCatalogCategory: String, Hashable, Codable, Sendable {
     case interaction
     case memory
     case file
     case database
     case custom
     case feedback
-
-    public var id: String { rawValue }
-
-    public var displayName: String {
-        switch self {
-        case .interaction:
-            return NSLocalizedString("基础交互", comment: "App tool interaction category title")
-        case .memory:
-            return NSLocalizedString("记忆操作", comment: "App tool memory category title")
-        case .file:
-            return NSLocalizedString("文件操作", comment: "App tool file category title")
-        case .database:
-            return NSLocalizedString("数据库操作", comment: "App tool database category title")
-        case .custom:
-            return NSLocalizedString("自定义工具", comment: "App tool custom category title")
-        case .feedback:
-            return NSLocalizedString("反馈工单", comment: "App tool feedback category title")
-        }
-    }
-
-    public var summary: String {
-        switch self {
-        case .interaction:
-            return NSLocalizedString("让模型准备草稿或验证本地工具链路。", comment: "App tool interaction category summary")
-        case .memory:
-            return NSLocalizedString("查看、编辑和归档长期记忆。", comment: "App tool memory category summary")
-        case .file:
-            return NSLocalizedString("访问与修改应用沙盒 Documents 文件。", comment: "App tool file category summary")
-        case .database:
-            return NSLocalizedString("查看表结构、查询或受限修改 SQLite 数据。", comment: "App tool database category summary")
-        case .custom:
-            return NSLocalizedString("运行 JS 算法，或让 AI 创建可复用脚本工具。", comment: "App tool custom category summary")
-        case .feedback:
-            return NSLocalizedString("由模型整理并提交问题或建议工单。", comment: "App tool feedback category summary")
-        }
-    }
-
-    public var detailDescription: String {
-        switch self {
-        case .interaction:
-            return NSLocalizedString("基础交互类适合让 AI 把内容先放进输入框，或用回显工具确认拓展工具链路是否正常。", comment: "App tool interaction category detail")
-        case .memory:
-            return NSLocalizedString("记忆操作类用于维护已经写入的长期记忆，包含分页查看、关键词筛选、内容编辑和归档恢复。", comment: "App tool memory category detail")
-        case .file:
-            return NSLocalizedString("文件操作类只能访问应用沙盒 Documents 目录，包含读取、搜索、写入、移动、复制、删除、差异查看和撤销最近修改。", comment: "App tool file category detail")
-        case .database:
-            return NSLocalizedString("数据库操作类面向聊天、配置与记忆数据库，查询工具只读，写入工具仍受审批策略和 SQL 限制保护。", comment: "App tool database category detail")
-        case .custom:
-            return NSLocalizedString("自定义工具类包含 JavaScript 执行器与 AI 创建的脚本工具。iOS 使用明确的 JavaScriptCore 工具，watchOS 使用明确的 WebKit JavaScript bridge 工具，避免同一工具名在不同平台切换引擎。", comment: "App tool custom category detail")
-        case .feedback:
-            return NSLocalizedString("反馈工单类用于把对话里的问题、复现步骤和建议整理为反馈记录。", comment: "App tool feedback category detail")
-        }
-    }
-}
-
-public struct AppToolCatalogCategoryState: Identifiable, Equatable, Sendable {
-    public let category: AppToolCatalogCategory
-    public let tools: [AppToolCatalogItem]
-    public let configuredEnabledCount: Int
-    public let availableCount: Int
-
-    public var id: AppToolCatalogCategory { category }
-    public var totalCount: Int { tools.count }
-
-    public init(
-        category: AppToolCatalogCategory,
-        tools: [AppToolCatalogItem],
-        configuredEnabledCount: Int,
-        availableCount: Int
-    ) {
-        self.category = category
-        self.tools = tools
-        self.configuredEnabledCount = configuredEnabledCount
-        self.availableCount = availableCount
-    }
 }
 
 public enum ToolCatalogSupport {
@@ -243,35 +168,6 @@ public enum ToolCatalogSupport {
             return .custom
         case .showWidget, .askUserInput, .getSystemTime:
             return .interaction
-        }
-    }
-
-    public static func appToolCategoryStates(
-        tools: [AppToolCatalogItem],
-        chatToolsEnabled: Bool,
-        isIsolatedSession: Bool,
-        approvalPolicy: (AppToolKind) -> AppToolApprovalPolicy
-    ) -> [AppToolCatalogCategoryState] {
-        AppToolCatalogCategory.allCases.compactMap { category in
-            let categoryTools = tools.filter { appToolCategory(for: $0.kind) == category }
-            guard !categoryTools.isEmpty else { return nil }
-
-            let configuredEnabledCount = categoryTools.filter(\.isEnabled).count
-            let availableCount: Int
-            if chatToolsEnabled && !isIsolatedSession {
-                availableCount = categoryTools.filter { item in
-                    item.isEnabled && approvalPolicy(item.kind) != .alwaysDeny
-                }.count
-            } else {
-                availableCount = 0
-            }
-
-            return AppToolCatalogCategoryState(
-                category: category,
-                tools: categoryTools,
-                configuredEnabledCount: configuredEnabledCount,
-                availableCount: availableCount
-            )
         }
     }
 
