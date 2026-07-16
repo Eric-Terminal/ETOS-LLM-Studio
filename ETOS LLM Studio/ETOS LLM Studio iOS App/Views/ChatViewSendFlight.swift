@@ -5,7 +5,8 @@
 //
 // 发送时由一份临时文字快照接管输入内容，在输入栏内立即显色，
 // 再以快速横向收拢和缓慢纵向上升两条可打断弹簧飞向真实气泡。
-// 落点在布局变化时继续从当前呈现值重定向，最后通过短交叉渐变完成交接。
+// 落点在布局变化时继续从当前呈现值重定向，最后通过短交叉渐变完成交接；
+// 同轮助手回复在用户气泡落位后才显现，保持发送与响应的视觉因果。
 // ============================================================================
 
 import Foundation
@@ -254,6 +255,7 @@ extension ChatView {
     private var sendFlightHandoffDuration: Double {
         min(0.11, max(0.08, sendFlightResponse * 0.22))
     }
+    private var sendFlightReplyRevealDuration: Double { 0.16 }
     private var sendFlightVisibleDuration: Double {
         min(0.75, max(0.28, sendFlightResponse * 0.9))
     }
@@ -295,6 +297,7 @@ extension ChatView {
             flightPresentationHeight = inputBarRect.height
             flightVisualProgress = 0
             flightHandoffProgress = 0
+            flightReplyRevealProgress = 0
             flightState = SendFlightState(
                 id: flightID,
                 startedAt: Date(),
@@ -374,9 +377,46 @@ extension ChatView {
         flightState?.targetMessageID == messageID
     }
 
-    func sendFlightTargetOpacity(for messageID: UUID) -> Double {
-        guard flightState?.targetMessageID == messageID else { return 1 }
-        return Double(flightHandoffProgress)
+    func sendFlightMessageOpacity(for message: ChatMessage) -> Double {
+        guard let state = flightState else { return 1 }
+        if state.targetMessageID == message.id {
+            return Double(flightHandoffProgress)
+        }
+        guard Self.shouldDeferReplyDuringSendFlight(
+            message,
+            targetMessageID: state.targetMessageID,
+            baselineUserMessageID: state.baselineUserMessageID,
+            flightStartedAt: state.startedAt
+        ) else {
+            return 1
+        }
+        return Double(flightReplyRevealProgress)
+    }
+
+    /// 目标 ID 上报前用请求时间识别新回复，上报后改用回复组精确关联，避免首帧闪现。
+    static func shouldDeferReplyDuringSendFlight(
+        _ message: ChatMessage,
+        targetMessageID: UUID?,
+        baselineUserMessageID: UUID?,
+        flightStartedAt: Date
+    ) -> Bool {
+        switch message.role {
+        case .assistant, .tool, .error:
+            break
+        case .system, .user:
+            return false
+        }
+
+        guard let responseGroupID = message.responseGroupID else { return false }
+        if let targetMessageID {
+            return responseGroupID == targetMessageID
+        }
+
+        if let baselineUserMessageID, responseGroupID == baselineUserMessageID {
+            return false
+        }
+        guard let requestedAt = message.requestedAt else { return false }
+        return requestedAt >= flightStartedAt.addingTimeInterval(-0.2)
     }
 
     @ViewBuilder
@@ -415,6 +455,16 @@ extension ChatView {
             try? await Task.sleep(
                 nanoseconds: UInt64(sendFlightFallbackDuration * 1_000_000_000)
             )
+            guard !Task.isCancelled, flightState?.id == flightID else { return }
+
+            // 几何上报失败时也先淡出飞行层并放行回复，避免超时后整组内容突现。
+            withAnimation(.easeOut(duration: sendFlightReplyRevealDuration)) {
+                flightHandoffProgress = 1
+                flightReplyRevealProgress = 1
+            }
+            try? await Task.sleep(
+                nanoseconds: UInt64(sendFlightReplyRevealDuration * 1_000_000_000)
+            )
             guard !Task.isCancelled else { return }
             clearSendFlightWithoutAnimation(flightID: flightID)
         }
@@ -450,6 +500,16 @@ extension ChatView {
             try? await Task.sleep(
                 nanoseconds: UInt64(sendFlightHandoffDuration * 1_000_000_000)
             )
+            guard !Task.isCancelled, flightState?.id == flightID else { return }
+
+            // 用户气泡完成交接后再放行同轮回复，避免助手先悬在空白落点下方。
+            withAnimation(.easeOut(duration: sendFlightReplyRevealDuration)) {
+                flightReplyRevealProgress = 1
+            }
+
+            try? await Task.sleep(
+                nanoseconds: UInt64(sendFlightReplyRevealDuration * 1_000_000_000)
+            )
             guard !Task.isCancelled else { return }
             clearSendFlightWithoutAnimation(flightID: flightID)
         }
@@ -467,6 +527,7 @@ extension ChatView {
             flightPresentationHeight = 0
             flightVisualProgress = 0
             flightHandoffProgress = 0
+            flightReplyRevealProgress = 0
             pendingFlightCleanupTask?.cancel()
             pendingFlightCleanupTask = nil
         }

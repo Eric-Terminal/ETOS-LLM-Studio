@@ -40,6 +40,63 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(disabledOffset == 0)
     }
 
+    @Test("发送气泡落位前只延后同轮回复")
+    func testSendFlightDefersOnlyCurrentReplyGroup() {
+        let startedAt = Date()
+        let previousUserID = UUID()
+        let currentUserID = UUID()
+        let currentAssistant = ChatMessage(
+            role: .assistant,
+            content: "正在回复",
+            requestedAt: startedAt,
+            responseGroupID: currentUserID
+        )
+        let previousAssistant = ChatMessage(
+            role: .assistant,
+            content: "历史回复",
+            requestedAt: startedAt,
+            responseGroupID: previousUserID
+        )
+
+        #expect(ChatView.shouldDeferReplyDuringSendFlight(
+            currentAssistant,
+            targetMessageID: nil,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(ChatView.shouldDeferReplyDuringSendFlight(
+            currentAssistant,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            previousAssistant,
+            targetMessageID: nil,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            previousAssistant,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+
+        let currentUser = ChatMessage(
+            id: currentUserID,
+            role: .user,
+            content: "问题",
+            requestedAt: startedAt
+        )
+        #expect(!ChatView.shouldDeferReplyDuringSendFlight(
+            currentUser,
+            targetMessageID: currentUserID,
+            baselineUserMessageID: previousUserID,
+            flightStartedAt: startedAt
+        ))
+    }
+
     @Test("自动朗读触发条件判断")
     func testShouldAutoPlayAssistantMessage() {
         let messageID = UUID()

@@ -104,6 +104,7 @@ struct ChatView: View {
     @State var flightPresentationHeight: CGFloat = 0
     @State var flightVisualProgress: CGFloat = 0
     @State var flightHandoffProgress: CGFloat = 0
+    @State var flightReplyRevealProgress: CGFloat = 0
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
 
@@ -767,6 +768,7 @@ extension ChatView {
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 let reportsSendFlightTarget = isSendFlightTarget(message.id)
+                                let sendFlightOpacity = sendFlightMessageOpacity(for: message)
                                 ChatBubble(
                                     messageState: state,
                                     roleplaySessionID: viewModel.currentSession?.id,
@@ -840,8 +842,10 @@ extension ChatView {
                                         removal: .opacity
                                     )
                                 )
-                                // 临近落点时让飞行层与真实气泡短暂交叉渐变，避免文字闪接。
-                                .opacity(sendFlightTargetOpacity(for: message.id))
+                                // 用户气泡落位前压住同轮回复，维持“发送完成后才得到响应”的视觉因果。
+                                .opacity(sendFlightOpacity)
+                                .allowsHitTesting(sendFlightOpacity > 0)
+                                .accessibilityHidden(sendFlightOpacity == 0)
                                 .id(ChatScrollTargetID.message(state.id))
                                 // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
                                 .scrollTransition(
@@ -1098,6 +1102,7 @@ extension ChatView {
                 flightPresentationHeight = 0
                 flightVisualProgress = 0
                 flightHandoffProgress = 0
+                flightReplyRevealProgress = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)
