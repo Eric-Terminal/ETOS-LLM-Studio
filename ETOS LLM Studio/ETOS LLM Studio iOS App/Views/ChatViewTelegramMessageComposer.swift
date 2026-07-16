@@ -178,10 +178,17 @@ struct TelegramMessageComposer: View {
             inlineSpeechRecorder.cancel()
         }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraImagePicker(isPresented: $showCamera) { image in
-                if let image {
-                    viewModel.addImageAttachment(image)
+            ZStack {
+                // 系统相机使用黑色舞台；覆盖安全区，避免 Hosting 容器露出白边。
+                Color.black
+                    .ignoresSafeArea()
+
+                CameraImagePicker(isPresented: $showCamera) { image in
+                    if let image {
+                        viewModel.addImageAttachment(image)
+                    }
                 }
+                .ignoresSafeArea()
             }
         }
         .sheet(isPresented: $showAudioRecorder) {
