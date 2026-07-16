@@ -229,6 +229,11 @@ struct ThirdPartyImportCherryTests {
                             "id": "gpt-image-1",
                             "name": "Image",
                             "endpoint_type": "image-generation"
+                        ],
+                        [
+                            "id": "rerank-service",
+                            "name": "Rerank Service",
+                            "endpoint_type": "jina-rerank"
                         ]
                     ]
                 ]
@@ -273,6 +278,9 @@ struct ThirdPartyImportCherryTests {
         let imageModel = try #require(provider.models.first { $0.modelName == "gpt-image-1" })
         #expect(imageModel.kind == .image)
         #expect(imageModel.outputModalities == [.image])
+
+        let rerankModel = try #require(provider.models.first { $0.modelName == "rerank-service" })
+        #expect(rerankModel.kind == .chat)
     }
 
     @Test("Cherry 压缩包会提示先解压")

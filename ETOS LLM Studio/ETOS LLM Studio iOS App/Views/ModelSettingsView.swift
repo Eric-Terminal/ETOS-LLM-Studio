@@ -284,10 +284,7 @@ extension ModelSettingsView {
     }
 
     private var modelKindSelector: some View {
-        VStack {
-            modelKindPicker(options: [.chat, .image, .embedding])
-            modelKindPicker(options: [.rerank, .speechToText, .textToSpeech])
-        }
+        modelKindPicker(options: ModelKind.allCases)
     }
 
     private func modelKindPicker(options: [ModelKind]) -> some View {

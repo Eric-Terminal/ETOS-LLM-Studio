@@ -35,8 +35,12 @@ extension ChatService {
     }
 
     public var activatedSpeechModels: [RunnableModel] {
-        let speechCapable = activatedRunnableModels.filter { $0.model.supportsSpeechToText }
-        var candidates = speechCapable.isEmpty ? activatedRunnableModels : speechCapable
+        // 语音服务由用户在对应设置页显式选择；旧能力标记优先，否则展示已配置的聊天模型。
+        let configuredModels = configuredRunnableModels
+        let speechCapable = configuredModels.filter { $0.model.supportsSpeechToText }
+        var candidates = speechCapable.isEmpty
+            ? configuredModels.filter { $0.model.isChatModel }
+            : speechCapable
         if !candidates.contains(where: { $0.id == Self.systemSpeechRecognizerRunnableModel.id }) {
             candidates.insert(Self.systemSpeechRecognizerRunnableModel, at: 0)
         }
@@ -44,8 +48,12 @@ extension ChatService {
     }
 
     public var activatedTTSModels: [RunnableModel] {
-        let ttsCapable = activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
-        return ttsCapable
+        // TTS 不再要求模型承担独立类型，保留旧能力标记的优先级以兼容已有配置。
+        let configuredModels = configuredRunnableModels
+        let ttsCapable = configuredModels.filter { $0.model.supportsTextToSpeech }
+        return ttsCapable.isEmpty
+            ? configuredModels.filter { $0.model.isChatModel }
+            : ttsCapable
     }
 
     public var activatedOCRModels: [RunnableModel] {

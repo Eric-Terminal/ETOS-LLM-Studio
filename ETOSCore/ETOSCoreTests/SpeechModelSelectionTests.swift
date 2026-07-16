@@ -25,6 +25,34 @@ struct SpeechModelSelectionTests {
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
     }
 
+    @Test("没有旧版语音标记时可从已配置聊天模型中选择")
+    func testActivatedSpeechModelsFallsBackToConfiguredChatModels() {
+        let backupProviders = ConfigLoader.loadProviders()
+        defer { restoreProviders(backupProviders) }
+
+        clearAllProviders()
+
+        let chatModel = Model(
+            modelName: "transcription-compatible-model",
+            displayName: "语音识别服务",
+            isActivated: false
+        )
+        let provider = Provider(
+            name: "Speech Provider",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [chatModel]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let activated = ChatService().activatedSpeechModels
+
+        #expect(activated.count == 2)
+        #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
+        #expect(activated.contains(where: { $0.model.modelName == "transcription-compatible-model" }))
+    }
+
     @Test("存在可用语音模型时保留系统语音识别并包含远端语音模型")
     func testActivatedSpeechModelsIncludesSystemAndRemoteSpeechModels() {
         let backupProviders = ConfigLoader.loadProviders()

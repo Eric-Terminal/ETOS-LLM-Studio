@@ -30,7 +30,7 @@ struct TTSSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("专用模型", comment: "")) {
+            Section(NSLocalizedString("语音模型", comment: "")) {
                 if viewModel.ttsModels.isEmpty {
                     Text(NSLocalizedString("暂无可用 TTS 模型", comment: ""))
                         .foregroundStyle(.secondary)

@@ -98,9 +98,6 @@ extension ThirdPartyImportService {
         if endpointType == "image-generation" {
             return ImportedModelCapabilityShape(kind: .image)
         }
-        if endpointType == "jina-rerank" || capabilityTypes.contains("rerank") {
-            return ImportedModelCapabilityShape(kind: .rerank)
-        }
         if capabilityTypes.contains("embedding") {
             return ImportedModelCapabilityShape(kind: .embedding)
         }
@@ -181,7 +178,7 @@ extension ThirdPartyImportService {
         case "embedding":
             return .embedding
         case "rerank":
-            return .rerank
+            return .chat
         case "chat", "text":
             return .chat
         default:

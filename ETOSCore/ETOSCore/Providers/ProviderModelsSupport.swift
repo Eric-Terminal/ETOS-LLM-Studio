@@ -306,22 +306,13 @@ extension Model {
             "stable-diffusion",
             "qwen-image"
         ]
-        let rerankSignals = ["rerank", "re-rank"]
         let embeddingSignals = ["embedding", "embed"]
-        let speechToTextSignals = ["transcribe", "transcription", "whisper", "speech-to-text", "stt"]
-        let textToSpeechSignals = ["text-to-speech", "tts", "speech"]
 
         let kind: ModelKind
         if containsAny(normalizedName, signals: embeddingSignals) || (supportsEmbedding && !supportsGenerateContent) {
             kind = .embedding
-        } else if containsAny(normalizedName, signals: rerankSignals) {
-            kind = .rerank
         } else if containsAny(normalizedName, signals: imageModelSignals) {
             kind = .image
-        } else if containsAny(normalizedName, signals: speechToTextSignals) {
-            kind = .speechToText
-        } else if containsAny(normalizedName, signals: textToSpeechSignals) {
-            kind = .textToSpeech
         } else {
             kind = .chat
         }

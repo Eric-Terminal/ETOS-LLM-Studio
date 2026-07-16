@@ -24,9 +24,9 @@ struct TTSSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(NSLocalizedString("专用模型", comment: "")) {
+            Section(NSLocalizedString("语音模型", comment: "")) {
                 if viewModel.ttsModels.isEmpty {
-                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中给模型开启“文字转语音”能力。", comment: ""))
+                    Text(NSLocalizedString("暂无可用模型", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {

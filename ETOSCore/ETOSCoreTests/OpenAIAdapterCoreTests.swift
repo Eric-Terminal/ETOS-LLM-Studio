@@ -141,7 +141,7 @@ struct OpenAIAdapterCoreTests {
         let visionModel = models.first { $0.modelName == "qwen-vl-max" }
         let chatModel = models.first { $0.modelName == "plain-chat" }
 
-        #expect(rerankModel?.kind == .rerank)
+        #expect(rerankModel?.kind == .chat)
         #expect(imageModel?.kind == .image)
         #expect(imageModel?.supportsImageGeneration == true)
         #expect(reasoningModel?.kind == .chat)

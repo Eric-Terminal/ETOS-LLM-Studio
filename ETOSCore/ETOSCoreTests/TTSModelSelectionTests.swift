@@ -53,14 +53,14 @@ struct TTSModelSelectionTests {
         }
     }
 
-    @Test("没有 TTS 能力模型时列表为空")
-    func testActivatedTTSModelsEmptyWhenNoCapableModel() {
+    @Test("没有旧版 TTS 标记时可从已配置聊天模型中选择")
+    func testActivatedTTSModelsFallsBackToConfiguredChatModels() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
 
         clearAllProviders()
 
-        let chatModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true)
+        let chatModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: false)
         let provider = Provider(
             name: "Chat Provider",
             baseURL: "https://example.com/v1",
@@ -73,8 +73,9 @@ struct TTSModelSelectionTests {
         let service = ChatService()
         let activated = service.activatedTTSModels
 
-        #expect(activated.isEmpty)
-        #expect(service.resolveSelectedTTSModel() == nil)
+        #expect(activated.count == 1)
+        #expect(activated.first?.model.modelName == "gpt-4o")
+        #expect(service.resolveSelectedTTSModel()?.model.modelName == "gpt-4o")
     }
 
     @Test("对话模型列表会排除嵌入等专用用途模型")

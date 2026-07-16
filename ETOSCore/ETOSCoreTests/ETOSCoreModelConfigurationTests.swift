@@ -11,6 +11,14 @@ import Foundation
 import SwiftUI
 @testable import ETOSCore
 
+@Suite("模型用途配置")
+struct ModelKindConfigurationTests {
+    @Test("普通模型只提供聊天、图片生成和嵌入三种用途")
+    func exposesOnlyPrimaryModelKinds() {
+        #expect(ModelKind.allCases == [.chat, .image, .embedding])
+    }
+}
+
 @Suite("聊天颜色偏好编解码")
 struct ChatAppearanceColorCodecTests {
     @Test("支持解析 6 位十六进制并默认不透明")

@@ -209,9 +209,17 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
     case chat
     case image
     case embedding
+    // 旧版本曾把专用服务路由暴露为模型类型；保留原始值只为兼容已有配置。
     case rerank
     case speechToText
     case textToSpeech
+
+    /// 普通模型配置只呈现用户能够直接使用的三种用途。
+    public static let allCases: [ModelKind] = [
+        .chat,
+        .image,
+        .embedding
+    ]
 
     public var localizedName: String {
         switch self {
