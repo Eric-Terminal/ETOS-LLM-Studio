@@ -3,49 +3,11 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// MCP 客户端与传输层共享的 JSON-RPC 请求、响应、错误和编码包装模型。
+// MCP 客户端共享的 JSON-RPC 错误与辅助模型。
 // ============================================================================
 
 import Foundation
 
-struct JSONRPCRequest: Encodable {
-    let jsonrpc: String = "2.0"
-    let id: JSONRPCID
-    let method: String
-    let params: AnyEncodable?
-
-    init(id: JSONRPCID, method: String, params: AnyEncodable?) {
-        self.id = id
-        self.method = method
-        self.params = params
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case jsonrpc, id, method, params
-    }
-}
-
-struct JSONRPCNotification: Encodable {
-    let jsonrpc: String = "2.0"
-    let method: String
-    let params: AnyEncodable?
-
-    init(method: String, params: AnyEncodable?) {
-        self.method = method
-        self.params = params
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case jsonrpc, method, params
-    }
-}
-
-struct JSONRPCResponse<Result: Decodable>: Decodable {
-    let jsonrpc: String
-    let id: JSONRPCID?
-    let result: Result?
-    let error: JSONRPCError?
-}
 
 public struct JSONRPCError: Decodable, Hashable, Error {
     public let code: Int
@@ -98,17 +60,6 @@ public enum MCPClientError: LocalizedError {
     }
 }
 
-public struct AnyEncodable: Encodable {
-    private let _encode: (Encoder) throws -> Void
-
-    public init<T: Encodable>(_ wrapped: T) {
-        self._encode = wrapped.encode
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        try _encode(encoder)
-    }
-}
 
 func isJSONRPCMessageWithoutExpectedResponse(_ data: Data) -> Bool {
     guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {

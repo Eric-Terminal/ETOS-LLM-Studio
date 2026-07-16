@@ -765,10 +765,3 @@ public struct InternalToolCall: Codable, Hashable, Sendable {
         self.providerSpecificFields = providerSpecificFields
     }
 }
-
-/// 内部工具调用的返回结果，与服务商无关。
-public struct InternalToolResult: Codable, Hashable {
-    public let toolCallId: String
-    public let toolName: String
-    public let content: String
-}

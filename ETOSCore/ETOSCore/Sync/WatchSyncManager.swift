@@ -412,10 +412,6 @@ public final class WatchSyncManager: NSObject, ObservableObject {
         }
     }
     
-    /// 从用户设置构建同步选项
-    private func buildSyncOptionsFromSettings() -> SyncOptions {
-        watchConnectivitySyncOptions()
-    }
 
     private func sendReachableMessage(_ message: [String: Any]) async throws -> [String: Any] {
         guard let session else {

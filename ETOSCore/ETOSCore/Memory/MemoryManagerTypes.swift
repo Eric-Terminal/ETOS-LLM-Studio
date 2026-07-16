@@ -43,12 +43,6 @@ public struct MemoryWriteRequest: Sendable {
     }
 }
 
-public enum MemorySearchMode: String, Codable, Sendable {
-    case hybrid
-    case vector
-    case keyword
-}
-
 public struct MemoryEmbeddingRetryPolicy {
     public static let `default` = MemoryEmbeddingRetryPolicy()
 

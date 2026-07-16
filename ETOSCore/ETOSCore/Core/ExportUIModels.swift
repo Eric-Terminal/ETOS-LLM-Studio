@@ -3,55 +3,15 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 定义导出数据结构、轻量 UI 状态枚举与聊天外观颜色编解码工具。
+// 定义轻量 UI 状态枚举与聊天外观颜色编解码工具。
 // ============================================================================
 
 import Foundation
 import SwiftUI
 import CoreGraphics
 
-// MARK: - 导出相关模型 (待审阅)
-// 注意: 以下导出模型可能可以被简化的或由ChatMessage直接替代
 
-/// 用于导出的聊天消息数据结构
-public struct ExportableChatMessage: Codable {
-    public var role: String
-    public var content: String
-    public var reasoning: String?
-
-    public init(role: String, content: String, reasoning: String?) {
-        self.role = role
-        self.content = content
-        self.reasoning = reasoning
-    }
-}
-
-/// 用于导出提示词的结构
-public struct ExportPrompts: Codable {
-    public let globalSystemPrompt: String?
-    public let topicPrompt: String?
-    public let enhancedPrompt: String?
-
-    public init(globalSystemPrompt: String?, topicPrompt: String?, enhancedPrompt: String?) {
-        self.globalSystemPrompt = globalSystemPrompt
-        self.topicPrompt = topicPrompt
-        self.enhancedPrompt = enhancedPrompt
-    }
-}
-
-/// 完整的导出数据结构
-public struct FullExportData: Codable {
-    public let prompts: ExportPrompts
-    public let history: [ExportableChatMessage]
-
-    public init(prompts: ExportPrompts, history: [ExportableChatMessage]) {
-        self.prompts = prompts
-        self.history = history
-    }
-}
-
-// MARK: - UI状态模型 (待审阅)
-// 注意: 以下模型属于UI状态，更适合放在视图相关的代码文件中
+// MARK: - UI 状态模型
 
 /// 用于管理所有可能弹出的 Sheet 视图的枚举
 public enum ActiveSheet: Identifiable, Equatable {

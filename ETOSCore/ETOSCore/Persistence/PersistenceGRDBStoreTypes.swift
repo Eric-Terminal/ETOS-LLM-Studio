@@ -18,34 +18,6 @@ struct LegacySessionSnapshot {
     let conversationSummaryUpdatedAt: Date?
 }
 
-struct LegacySnapshot {
-    let sessions: [LegacySessionSnapshot]
-    let folders: [SessionFolder]
-    let requestLogs: [RequestLogEntry]
-    let dailyPulseRuns: [DailyPulseRun]
-    let dailyPulseFeedbackHistory: [DailyPulseFeedbackEvent]
-    let dailyPulsePendingCuration: DailyPulseCurationNote?
-    let dailyPulseExternalSignals: [DailyPulseExternalSignal]
-    let dailyPulseTasks: [DailyPulseTask]
-
-    var messageCount: Int {
-        sessions.reduce(into: 0) { partialResult, item in
-            partialResult += item.messages.count
-        }
-    }
-
-    var hasAnyData: Bool {
-        !sessions.isEmpty ||
-        !folders.isEmpty ||
-        !requestLogs.isEmpty ||
-        !dailyPulseRuns.isEmpty ||
-        !dailyPulseFeedbackHistory.isEmpty ||
-        dailyPulsePendingCuration != nil ||
-        !dailyPulseExternalSignals.isEmpty ||
-        !dailyPulseTasks.isEmpty
-    }
-}
-
 struct LegacySessionImportPlan {
     let id: UUID
     let fallbackSession: ChatSession
