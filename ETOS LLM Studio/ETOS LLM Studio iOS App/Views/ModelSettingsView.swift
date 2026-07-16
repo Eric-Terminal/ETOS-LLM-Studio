@@ -284,17 +284,14 @@ extension ModelSettingsView {
     }
 
     private var modelKindSelector: some View {
-        modelKindPicker(options: ModelKind.allCases)
-    }
-
-    private func modelKindPicker(options: [ModelKind]) -> some View {
-        Picker(NSLocalizedString("模型类型", comment: "模型类型选择器标题"), selection: kindBinding) {
-            ForEach(options, id: \.self) { kind in
-                Text(modelKindSelectionTitle(kind)).tag(kind)
+        ModelSegmentedSelectionRow(
+            options: ModelKind.allCases,
+            isSelected: { model.kind == $0 },
+            title: modelKindSelectionTitle,
+            onSelect: { kind in
+                kindBinding.wrappedValue = kind
             }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        )
     }
 
     private func modelKindSelectionTitle(_ kind: ModelKind) -> String {
@@ -304,7 +301,7 @@ extension ModelSettingsView {
     @ViewBuilder
     private var chatModelCapabilitySections: some View {
         Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
-            ModelMultiSelectionSegmentedRow(
+            ModelSegmentedSelectionRow(
                 options: ModelModality.allCases,
                 isSelected: { model.inputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -316,7 +313,7 @@ extension ModelSettingsView {
         }
 
         Section(NSLocalizedString("输出模态", comment: "聊天模型输出模态区块标题")) {
-            ModelMultiSelectionSegmentedRow(
+            ModelSegmentedSelectionRow(
                 options: [.text, .image],
                 isSelected: { model.outputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -328,7 +325,7 @@ extension ModelSettingsView {
         }
 
         Section {
-            ModelMultiSelectionSegmentedRow(
+            ModelSegmentedSelectionRow(
                 options: [.toolCalling, .reasoning],
                 isSelected: { model.capabilities.contains($0) },
                 title: { $0.localizedName },
@@ -411,7 +408,7 @@ extension ModelSettingsView {
     }
 }
 
-private struct ModelMultiSelectionSegmentedRow<Option: Hashable>: View {
+private struct ModelSegmentedSelectionRow<Option: Hashable>: View {
     let options: [Option]
     let isSelected: (Option) -> Bool
     let title: (Option) -> String
