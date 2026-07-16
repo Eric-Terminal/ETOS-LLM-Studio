@@ -187,25 +187,12 @@ struct DisplaySettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section {
-                    Picker(NSLocalizedString("输入栏样式", comment: ""), selection: chatComposerStyleBinding) {
-                        ForEach(ChatComposerStyle.allCases) { style in
-                            Text(chatComposerStyleTitle(style))
-                                .tag(style)
-                        }
-                    }
-
+                Section(NSLocalizedString("聊天界面", comment: "设置聊天界面分组")) {
                     NavigationLink {
                         ChatQuickActionSettingsView()
                     } label: {
                         SettingsListIconLabel("聊天快捷功能", icon: .chatQuickAction)
                     }
-                } header: {
-                    Text(NSLocalizedString("聊天界面", comment: "设置聊天界面分组"))
-                } footer: {
-                    Text(NSLocalizedString("自适应输入栏会在当前模型、请求控制和语音输入之间连续切换；经典样式保留原有布局。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
             .tabItem {
@@ -227,22 +214,6 @@ struct DisplaySettingsView: View {
 
     private var isAnyChatAnimationEnabled: Bool {
         appConfig.chatScrollAnimationEnabled || appConfig.chatSendAnimationEnabled
-    }
-
-    private var chatComposerStyleBinding: Binding<ChatComposerStyle> {
-        Binding(
-            get: { ChatComposerStyle.normalized(appConfig.chatComposerStyle) },
-            set: { appConfig.chatComposerStyle = $0.rawValue }
-        )
-    }
-
-    private func chatComposerStyleTitle(_ style: ChatComposerStyle) -> String {
-        switch style {
-        case .adaptive:
-            return NSLocalizedString("自适应", comment: "")
-        case .classic:
-            return NSLocalizedString("经典", comment: "")
-        }
     }
 
     @ViewBuilder

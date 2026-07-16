@@ -392,8 +392,6 @@
 "取消录音" = "Cancel recording";
 "播放录音" = "Play recording";
 "语音转写中" = "Transcribing speech";
-"添加语音附件" = "Add voice attachment";
-"开始语音转写" = "Start speech transcription";
 "快速调试" = "Quick Debug";
 "思考过程" = "Reasoning";
 "深度思考" = "Deep Thinking";
@@ -3144,7 +3142,6 @@
 "每次询问" = "Ask Every Time";
 "气泡功能栏" = "Bubble Action Bar";
 "源路径与目标路径相同，无需移动。" = "Source and destination paths are the same. No move is needed.";
-"开关与滑块可直接调整，其他选项组可进入详情选择。" = "Switches and sliders can be adjusted directly; open other option groups for more choices.";
 "滑块" = "Slider";
 "启用滑块" = "Enable Slider";
 "启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。" = "When enabled, string options snap to stops, while numeric options adjust continuously between stops. Numeric granularity defaults to 10% of the smallest gap between adjacent stops and can be overridden. At least two options are required.";
@@ -3173,10 +3170,6 @@
 "表" = "Tables";
 "警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。" = "Warning: inserting <time> directly into the leading system prompt may reduce context cache hit rate. If possible, send it at the end or use the system time tool instead.\n\nWhen landmarks are enabled, a system landmark is automatically inserted into history by time window to indicate the request time at that position.";
 "请求控制" = "Request Controls";
-"输入栏样式" = "Input Bar Style";
-"自适应" = "Adaptive";
-"经典" = "Classic";
-"自适应输入栏会在当前模型、请求控制和语音输入之间连续切换；经典样式保留原有布局。" = "The adaptive input bar transitions smoothly between the current model, request controls, and voice input. Classic keeps the original layout.";
 "当前模型没有可用的请求控制。" = "The current model has no available request controls.";
 "开始语音输入" = "Start Voice Input";
 "停止生成" = "Stop Generating";

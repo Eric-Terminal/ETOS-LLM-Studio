@@ -37,8 +37,6 @@ struct TelegramMessageComposer: View {
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
-    @State private var inputAvailableWidth: CGFloat = 0
-    @State private var compactInputWidth: CGFloat = 0
     @StateObject var inlineSpeechRecorder = InlineSpeechRecorderController()
     @Namespace var adaptiveGlassNamespace
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
@@ -46,11 +44,6 @@ struct TelegramMessageComposer: View {
     @State private var showInlineSpeechError = false
     @State private var inlineSpeechErrorMessage: String?
 
-    private let controlSize: CGFloat = 40
-    private let expandedControlSize: CGFloat = 34
-    private var effectiveFontScale: CGFloat {
-        CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
-    }
     private let inputBasePointSize: CGFloat = 16
     private var measuredInputPointSize: CGFloat {
         CGFloat(FontLibrary.scaledPointSize(Double(inputBasePointSize), scale: appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -58,30 +51,14 @@ struct TelegramMessageComposer: View {
     private var inputUIFont: UIFont {
         .systemFont(ofSize: measuredInputPointSize)
     }
-    private var compactInputHeight: CGFloat {
-        max(44, inputUIFont.lineHeight + compactTextVerticalPadding * 2 + textContainerInset * 2)
-    }
-    private var expandedInputHeight: CGFloat {
-        let rawHeight = UIScreen.main.bounds.height * 0.3
-        return max(160 * effectiveFontScale, min(rawHeight, 360 * effectiveFontScale))
-    }
     private var composerReservedHeight: CGFloat {
-        if usesAdaptiveComposer {
-            return adaptiveControlSize + 16
-        }
-        return max(controlSize, compactInputHeight) + 16
+        adaptiveControlSize + 16
     }
     private var estimatedCompactInputWidth: CGFloat {
-        max(0, UIScreen.main.bounds.width - 16 * 2 - controlSize * 2 - 12 * 2)
+        max(0, UIScreen.main.bounds.width - 16 * 2 - adaptiveControlSize * 2 - 10 * 2)
     }
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
-    private var compactTextVerticalPadding: CGFloat {
-        max(4, 4 * effectiveFontScale)
-    }
-    private var expandedTextVerticalPadding: CGFloat {
-        max(6, 6 * effectiveFontScale)
-    }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -91,19 +68,6 @@ struct TelegramMessageComposer: View {
     private var isCameraAvailable: Bool {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
-    private var composerCornerRadius: CGFloat {
-        isExpandedComposer ? 18 : compactInputHeight / 2
-    }
-    private var hasContent: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || viewModel.pendingAudioAttachment != nil
-            || !viewModel.pendingImageAttachments.isEmpty
-            || !viewModel.pendingFileAttachments.isEmpty
-    }
-    private var canQuickRetry: Bool {
-        viewModel.canQuickRetryLatestMessage
-    }
-
     var body: some View {
         VStack(spacing: 8) {
             if !viewModel.pendingImageAttachments.isEmpty || viewModel.pendingAudioAttachment != nil || !viewModel.pendingFileAttachments.isEmpty {
@@ -136,9 +100,6 @@ struct TelegramMessageComposer: View {
         .onChange(of: text) { _, newValue in
             handleAutoExpand(for: newValue)
         }
-        .onChange(of: inputAvailableWidth) { _, _ in
-            handleAutoExpand(for: text)
-        }
         .onChange(of: showAudioRecorder) { _, presented in
             if presented {
                 audioRecorderSheetDetent = .fraction(0.5)
@@ -155,13 +116,6 @@ struct TelegramMessageComposer: View {
             } else if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
                     isExpandedComposer = false
-                }
-            }
-        }
-        .onChange(of: appConfig.chatComposerStyle) { _, _ in
-            if isRequestControlsExpanded {
-                withAnimation(adaptiveComposerAnimation) {
-                    isRequestControlsExpanded = false
                 }
             }
         }
@@ -239,7 +193,7 @@ struct TelegramMessageComposer: View {
 
     private var composerOverlayContent: some View {
         // 固定占位交给外层 Color.clear，真实输入框在 overlay 中按自身高度展开。
-        composerContent
+        adaptiveComposerContent
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .fixedSize(horizontal: false, vertical: true)
@@ -247,62 +201,6 @@ struct TelegramMessageComposer: View {
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
             .animation(.spring(response: 0.3, dampingFraction: 0.86), value: inlineSpeechRecorder.phase)
             .animation(adaptiveComposerAnimation, value: isRequestControlsExpanded)
-    }
-
-    @ViewBuilder
-    private var composerContent: some View {
-        if usesAdaptiveComposer {
-            adaptiveComposerContent
-        } else if inlineSpeechRecorder.phase.isActive {
-            inlineSpeechComposer
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
-        } else {
-            composerInputRow
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
-        }
-    }
-
-    private var composerInputRow: some View {
-        HStack(alignment: .bottom, spacing: 12) {
-            if !isExpandedComposer {
-                attachmentMenuButton(size: controlSize)
-            }
-
-            inputFieldShell
-
-            if !isExpandedComposer {
-                actionControlButton(size: controlSize)
-            }
-        }
-    }
-
-    private var inputFieldShell: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            inputEditor
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(minHeight: controlSize)
-        .background(glassRoundedBackground(cornerRadius: composerCornerRadius))
-        .overlay {
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(key: InputWidthKey.self, value: proxy.size.width)
-            }
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if isExpandedComposer {
-                actionControlButton(size: expandedControlSize)
-                    .padding(.trailing, 8)
-                    .padding(.bottom, 8)
-            }
-        }
-        .onPreferenceChange(InputWidthKey.self, perform: updateInputWidth)
     }
 
     func attachmentMenuButton(
@@ -374,84 +272,6 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private func actionControlButton(size: CGFloat) -> some View {
-        Button {
-            if isSending {
-                stopAction()
-            } else if hasContent {
-                sendAction()
-            } else if canQuickRetry {
-                viewModel.quickRetryLatestMessage()
-            } else if viewModel.enableSpeechInput {
-                startInlineSpeechRecording()
-            } else {
-                focus.wrappedValue = true
-            }
-        } label: {
-            Image(systemName: actionIconName)
-                .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
-                .foregroundColor(actionForegroundColor)
-                .frame(width: size, height: size)
-                .background(actionBackground)
-        }
-        .buttonStyle(ComposerPressButtonStyle())
-        .disabled(!isSending && hasContent && !viewModel.canSendMessage)
-    }
-
-    @ViewBuilder
-    private var inputEditor: some View {
-        let targetHeight = isExpandedComposer ? expandedInputHeight : compactInputHeight
-        let verticalPadding = isExpandedComposer ? expandedTextVerticalPadding : compactTextVerticalPadding
-
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $text)
-                .etFont(.system(size: inputBasePointSize))
-                .focused(focus)
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(!isExpandedComposer)
-                // 测量实际文字视口，避免发送动画从整个输入胶囊起飞。
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: InputBarRectKey.self,
-                            value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                        )
-                    }
-                )
-                .padding(.vertical, verticalPadding)
-                .padding(.leading, textHorizontalPadding)
-                .padding(.trailing, expandedActionTrailingInset)
-
-            if text.isEmpty {
-                inputPlaceholder
-                    .padding(.top, verticalPadding + textContainerInset)
-                    .padding(.leading, textHorizontalPadding + textContainerInset)
-                    .padding(.trailing, textHorizontalPadding + textContainerInset)
-            }
-        }
-        .frame(minHeight: targetHeight, maxHeight: targetHeight)
-        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isExpandedComposer)
-    }
-
-    @ViewBuilder
-    private var inputPlaceholder: some View {
-        Text(inputPlaceholderText)
-            .etFont(.system(size: inputBasePointSize))
-            .foregroundColor(.secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .allowsHitTesting(false)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var inputPlaceholderText: String {
-        return NSLocalizedString("Message", comment: "聊天输入框占位文本")
-    }
-
-    private var expandedActionTrailingInset: CGFloat {
-        textHorizontalPadding + (isExpandedComposer ? expandedControlSize + 16 : 0)
-    }
-
     private var recorderMode: AudioRecorderSheet.Mode {
         guard audioRecorderEntryMode == .speechInput, viewModel.enableSpeechInput else {
             return .audioAttachment
@@ -463,24 +283,6 @@ struct TelegramMessageComposer: View {
             return .speechToText(model: model)
         }
         return .audioAttachment
-    }
-
-    private var inlineSpeechComposer: some View {
-        InlineSpeechComposerBar(
-            phase: inlineSpeechRecorder.phase,
-            samples: inlineSpeechRecorder.waveformSamples,
-            duration: inlineSpeechRecorder.recordingDuration,
-            isPlayingPreview: inlineSpeechRecorder.isPlayingPreview,
-            sendsAudioAttachment: viewModel.sendSpeechAsAudio,
-            transcriptPreview: inlineSpeechPreparedTranscript,
-            cancelAction: cancelInlineSpeechRecording,
-            stopAction: stopInlineSpeechRecording,
-            confirmAction: confirmInlineSpeechRecording,
-            playbackAction: {
-                inlineSpeechRecorder.togglePreviewPlayback()
-            }
-        )
-        .frame(maxWidth: .infinity, minHeight: controlSize)
     }
 
     func startInlineSpeechRecording() {
@@ -629,16 +431,6 @@ struct TelegramMessageComposer: View {
         text = viewModel.userInput
     }
 
-    private func updateInputWidth(_ width: CGFloat) {
-        if abs(width - inputAvailableWidth) > 0.5 {
-            inputAvailableWidth = width
-        }
-        let compactWidthChanged = abs(width - compactInputWidth) > 0.5
-        if !isExpandedComposer && compactWidthChanged {
-            compactInputWidth = width
-        }
-    }
-
     private func handleAutoExpand(for newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         // 复用自动展开时的文本规整结果，避免视图渲染时重复扫描草稿。
@@ -652,10 +444,7 @@ struct TelegramMessageComposer: View {
             return
         }
 
-        let baseWidth = compactInputWidth > 0
-            ? compactInputWidth
-            : (inputAvailableWidth > 0 ? inputAvailableWidth : estimatedCompactInputWidth)
-        let availableWidth = baseWidth
+        let availableWidth = estimatedCompactInputWidth
             - textHorizontalPadding * 2
             - textContainerInset * 2
         let hasExplicitNewline = newValue.contains("\n")
@@ -702,59 +491,6 @@ struct TelegramMessageComposer: View {
             lineCount += 1
         }
         return max(lineCount, 1)
-    }
-
-    private struct InputWidthKey: PreferenceKey {
-        static var defaultValue: CGFloat = 0
-
-        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-            value = nextValue()
-        }
-    }
-
-    private var actionIconName: String {
-        if isSending {
-            return "stop.fill"
-        }
-        if hasContent {
-            return "arrow.up"
-        }
-        if canQuickRetry {
-            return "arrow.clockwise"
-        }
-        if viewModel.enableSpeechInput {
-            return "mic.fill"
-        }
-        return "arrow.up"
-    }
-
-    private var actionForegroundColor: Color {
-        if isSending {
-            return .white
-        }
-        if hasContent {
-            return viewModel.canSendMessage ? .white : Color.primary.opacity(0.55)
-        }
-        if canQuickRetry {
-            return .white
-        }
-        return TelegramColors.attachButtonColor
-    }
-
-    @ViewBuilder
-    private var actionBackground: some View {
-        if isSending {
-            actionCircleBackground(fill: Color.red.opacity(0.85))
-        } else if hasContent {
-            let fillColor = viewModel.canSendMessage
-                ? TelegramColors.sendButtonColor
-                : Color.primary.opacity(0.12)
-            actionCircleBackground(fill: fillColor)
-        } else if canQuickRetry {
-            actionCircleBackground(fill: TelegramColors.sendButtonColor)
-        } else {
-            glassCircleBackground
-        }
     }
 
     @ViewBuilder

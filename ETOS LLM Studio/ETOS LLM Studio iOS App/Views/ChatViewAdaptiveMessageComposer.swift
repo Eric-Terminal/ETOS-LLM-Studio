@@ -31,10 +31,6 @@ struct ComposerPressButtonStyle: ButtonStyle {
 }
 
 extension TelegramMessageComposer {
-    var usesAdaptiveComposer: Bool {
-        ChatComposerStyle.normalized(appConfig.chatComposerStyle) == .adaptive
-    }
-
     var adaptiveControlSize: CGFloat { 44 }
 
     var adaptiveComposerAnimation: Animation? {

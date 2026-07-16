@@ -53,17 +53,6 @@ extension ChatView {
                     Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
                 }
 
-                if hasModelPickerRequestControls,
-                   ChatComposerStyle.normalized(appConfig.chatComposerStyle) == .classic {
-                    Section {
-                        nativeModelPickerRequestControlRows
-                    } header: {
-                        Text(NSLocalizedString("请求控制", comment: ""))
-                    } footer: {
-                        Text(NSLocalizedString("开关与滑块可直接调整，其他选项组可进入详情选择。", comment: ""))
-                    }
-                }
-
                 if hasMoreModelChoices {
                     Section {
                         NavigationLink {
@@ -123,31 +112,12 @@ extension ChatView {
         quickModelSettingsTarget = runnable
     }
 
-    @ViewBuilder
-    var nativeModelPickerRequestControlRows: some View {
-        if let selectedModel = viewModel.selectedModel {
-            ChatRequestBodyControlRows(
-                runnableModel: selectedModel,
-                controls: selectedModelRequestControls,
-                onDone: dismissModelPickerSheet
-            )
-        }
-    }
-
     var topModelChoices: [RunnableModel] {
         Array(viewModel.activatedConversationModels.prefix(3))
     }
 
     var hasMoreModelChoices: Bool {
         viewModel.activatedConversationModels.count > topModelChoices.count
-    }
-
-    var selectedModelRequestControls: [ModelRequestBodyControl] {
-        viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
-    }
-
-    var hasModelPickerRequestControls: Bool {
-        !selectedModelRequestControls.isEmpty
     }
 }
 
