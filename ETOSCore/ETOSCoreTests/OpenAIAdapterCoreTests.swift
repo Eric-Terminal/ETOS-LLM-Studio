@@ -42,6 +42,34 @@ struct OpenAIAdapterCoreTests {
         #expect(request.url?.absoluteString == "https://api.test.com/v1/chat/completions")
     }
 
+    @Test("OpenAI Chat 思考控制使用顶层 reasoning_effort")
+    func testOpenAIChatThinkingControlUsesTopLevelReasoningEffort() throws {
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")
+        thinkingControl.defaultOptionID = "high"
+        let model = RunnableModel(
+            provider: dummyModel.provider,
+            model: Model(
+                modelName: "gpt-5.4",
+                requestBodyControls: [thinkingControl]
+            )
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "你好")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+
+        #expect(payload["reasoning_effort"] as? String == "high")
+        #expect(payload["reasoning"] == nil)
+    }
+
     @Test("OpenAI 兼容请求支持自定义聊天端点后缀")
     func testOpenAIChatRequestUsesCustomChatEndpointPath() throws {
         let provider = Provider(

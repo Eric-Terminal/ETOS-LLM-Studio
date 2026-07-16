@@ -291,6 +291,8 @@ struct OpenAIAdapterAdvancedTests {
 
     @Test("OpenAI Responses 独立适配器默认使用 Responses 请求体")
     func testOpenAIResponsesAdapterBuildsResponsesPayloadByDefault() throws {
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")
+        thinkingControl.defaultOptionID = "high"
         let model = RunnableModel(
             provider: responsesDummyModel.provider,
             model: Model(
@@ -298,7 +300,8 @@ struct OpenAIAdapterAdvancedTests {
                 overrideParameters: [
                     "max_tokens": .int(512),
                     "messages": .array([.dictionary(["role": .string("user")])])
-                ]
+                ],
+                requestBodyControls: [thinkingControl]
             )
         )
         let messages = [ChatMessage(role: .user, content: "你好")]
@@ -325,6 +328,8 @@ struct OpenAIAdapterAdvancedTests {
         #expect(jsonPayload["messages"] == nil)
         #expect(jsonPayload["max_tokens"] == nil)
         #expect(jsonPayload["max_output_tokens"] as? Int == 512)
+        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "high")
+        #expect(jsonPayload["reasoning_effort"] == nil)
         #expect(inputItems.first?["role"] as? String == "user")
         #expect(firstTool["type"] as? String == "function")
         #expect(firstTool["name"] as? String == "save_memory")

@@ -377,7 +377,10 @@ public enum ModelRequestBodyControlDefaults {
         return temperatureControl()
     }
 
-    public static func thinkingOptionGroup(for apiFormat: String) -> ModelRequestBodyControl {
+    public static func thinkingOptionGroup(
+        for apiFormat: String,
+        modelName: String? = nil
+    ) -> ModelRequestBodyControl {
         switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
         case .anthropic:
             return ModelRequestBodyControl(
@@ -385,39 +388,73 @@ public enum ModelRequestBodyControlDefaults {
                 kind: .optionGroup,
                 defaultOptionID: "medium",
                 options: [
-                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["effort": .string("low")]),
-                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["effort": .string("medium")]),
-                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["effort": .string("high")]),
-                    ModelRequestBodyControlOption(id: "budget-2048", title: "2048", payload: ["thinking": .dictionary(["type": .string("enabled"), "budget_tokens": .int(2048)])])
+                    ModelRequestBodyControlOption(
+                        id: "off",
+                        title: NSLocalizedString("关闭", comment: ""),
+                        payload: ["thinking": .dictionary(["type": .string("disabled")])]
+                    ),
+                    ModelRequestBodyControlOption(
+                        id: "auto",
+                        title: NSLocalizedString("自动", comment: ""),
+                        payload: anthropicThinkingPayload()
+                    ),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: anthropicThinkingPayload(effort: "low")),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: anthropicThinkingPayload(effort: "medium")),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: anthropicThinkingPayload(effort: "high")),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: anthropicThinkingPayload(effort: "xhigh"))
                 ]
             )
         case .gemini:
-            func thinkingConfigPayload(_ payload: [String: JSONValue]) -> [String: JSONValue] {
-                [
-                    "generationConfig": .dictionary([
-                        "thinkingConfig": .dictionary(payload)
-                    ])
-                ]
+            let usesThinkingLevel = modelName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .contains("gemini-3") == true
+            let isGemini25Pro = modelName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .contains("gemini-2.5-pro") == true
+
+            // Gemini 3 使用枚举档位；Gemini 2.5 仍使用 token 预算。
+            let offConfig: [String: JSONValue]
+            let lowConfig: [String: JSONValue]
+            let mediumConfig: [String: JSONValue]
+            let highConfig: [String: JSONValue]
+            let xhighConfig: [String: JSONValue]
+            if usesThinkingLevel {
+                offConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("minimal")]
+                lowConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("low")]
+                mediumConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("medium")]
+                highConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("high")]
+                xhighConfig = highConfig
+            } else {
+                offConfig = isGemini25Pro
+                    ? ["includeThoughts": .bool(true)]
+                    : ["includeThoughts": .bool(false), "thinkingBudget": .int(0)]
+                lowConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(1_000)]
+                mediumConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(2_000)]
+                highConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(8_000)]
+                xhighConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(16_000)]
             }
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
                 options: [
-                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("MINIMAL")])),
-                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("LOW")])),
-                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("MEDIUM")])),
-                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: thinkingConfigPayload(["thinkingLevel": .string("HIGH")])),
-                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: thinkingConfigPayload(["thinkingBudget": .int(-1)])),
-                    ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: thinkingConfigPayload(["thinkingBudget": .int(0)]))
+                    ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: geminiThinkingPayload(offConfig)),
+                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: geminiThinkingPayload(["includeThoughts": .bool(true)])),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: geminiThinkingPayload(lowConfig)),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: geminiThinkingPayload(mediumConfig)),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: geminiThinkingPayload(highConfig)),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: geminiThinkingPayload(xhighConfig))
                 ]
             )
-        case .openAICompatible, .openAIResponses:
+        case .openAICompatible:
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
                 options: [
+                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: "")),
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: ["reasoning_effort": .string("none")]),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["reasoning_effort": .string("minimal")]),
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["reasoning_effort": .string("low")]),
@@ -426,17 +463,57 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")])
                 ]
             )
+        case .openAIResponses:
+            return ModelRequestBodyControl(
+                title: NSLocalizedString("思考预算", comment: ""),
+                kind: .optionGroup,
+                defaultOptionID: "medium",
+                options: [
+                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: "")),
+                    ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: openAIResponsesThinkingPayload(effort: "none")),
+                    ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: openAIResponsesThinkingPayload(effort: "minimal")),
+                    ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: openAIResponsesThinkingPayload(effort: "low")),
+                    ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: openAIResponsesThinkingPayload(effort: "medium")),
+                    ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: openAIResponsesThinkingPayload(effort: "high")),
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: openAIResponsesThinkingPayload(effort: "xhigh"))
+                ]
+            )
         }
     }
 
     public static func initialOptionGroupControl(
         existingControls: [ModelRequestBodyControl],
-        apiFormat: String
+        apiFormat: String,
+        modelName: String? = nil
     ) -> ModelRequestBodyControl {
         if existingControls.contains(where: { $0.kind == .optionGroup }) {
             return ModelRequestBodyControl(title: "", kind: .optionGroup)
         }
-        return thinkingOptionGroup(for: apiFormat)
+        return thinkingOptionGroup(for: apiFormat, modelName: modelName)
+    }
+
+    private static func openAIResponsesThinkingPayload(effort: String) -> [String: JSONValue] {
+        ["reasoning": .dictionary(["effort": .string(effort)])]
+    }
+
+    private static func geminiThinkingPayload(_ config: [String: JSONValue]) -> [String: JSONValue] {
+        [
+            "generationConfig": .dictionary([
+                "thinkingConfig": .dictionary(config)
+            ])
+        ]
+    }
+
+    private static func anthropicThinkingPayload(effort: String? = nil) -> [String: JSONValue] {
+        var payload: [String: JSONValue] = [
+            "thinking": .dictionary([
+                "type": .string("adaptive")
+            ])
+        ]
+        if let effort {
+            payload["output_config"] = .dictionary(["effort": .string(effort)])
+        }
+        return payload
     }
 
     private static func containsThinkingParameter(_ payload: [String: JSONValue]) -> Bool {

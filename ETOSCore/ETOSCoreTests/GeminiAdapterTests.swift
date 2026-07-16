@@ -534,15 +534,18 @@ struct GeminiAdapterTests {
         #expect(functionCall["thoughtSignature"] == nil)
     }
 
-    @Test("Gemini 默认思考控制使用原生 thinkingConfig")
-    func testGeminiDefaultThinkingControlUsesNativeThinkingConfig() throws {
+    @Test("Gemini 2.5 思考控制使用原生 thinkingBudget")
+    func testGemini25ThinkingControlUsesNativeThinkingBudget() throws {
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(
+            for: "gemini",
+            modelName: "gemini-2.5-pro"
+        )
+        thinkingControl.defaultOptionID = "medium"
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
                 modelName: "gemini-2.5-pro",
-                requestBodyControls: [
-                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
-                ]
+                requestBodyControls: [thinkingControl]
             )
         )
 
@@ -560,7 +563,8 @@ struct GeminiAdapterTests {
         let generationConfig = try #require(payload["generationConfig"] as? [String: Any])
         let thinkingConfig = try #require(generationConfig["thinkingConfig"] as? [String: Any])
 
-        #expect(thinkingConfig["thinkingLevel"] as? String == "MEDIUM")
+        #expect(thinkingConfig["thinkingBudget"] as? Int == 2_000)
+        #expect(thinkingConfig["includeThoughts"] as? Bool == true)
     }
 
     @Test("Gemini 自定义 Body 会原样和运行时工具合并")

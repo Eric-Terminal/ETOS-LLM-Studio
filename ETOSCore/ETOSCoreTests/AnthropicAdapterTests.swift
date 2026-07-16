@@ -169,20 +169,13 @@ struct AnthropicAdapterTests {
             apiKeys: ["test-key"],
             apiFormat: "anthropic"
         )
+        var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
+        thinkingControl.defaultOptionID = "medium"
         let model = RunnableModel(
             provider: provider,
             model: Model(
                 modelName: "claude-sonnet-4-6",
-                requestBodyControls: [
-                    ModelRequestBodyControl(
-                        id: "thinking-toggle",
-                        title: NSLocalizedString("开启思考", comment: ""),
-                        kind: .toggle,
-                        defaultIsActive: true,
-                        payload: ["thinking": .dictionary(["type": .string("adaptive")])]
-                    ),
-                    ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
-                ]
+                requestBodyControls: [thinkingControl]
             )
         )
 
@@ -198,9 +191,11 @@ struct AnthropicAdapterTests {
         let httpBody = try #require(request.httpBody)
         let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
         let thinking = try #require(payload["thinking"] as? [String: Any])
+        let outputConfig = try #require(payload["output_config"] as? [String: Any])
 
         #expect(thinking["type"] as? String == "adaptive")
-        #expect(payload["effort"] as? String == "medium")
+        #expect(outputConfig["effort"] as? String == "medium")
+        #expect(payload["effort"] == nil)
     }
 
     @Test("Anthropic 自定义 Body 会和运行时工具合并")

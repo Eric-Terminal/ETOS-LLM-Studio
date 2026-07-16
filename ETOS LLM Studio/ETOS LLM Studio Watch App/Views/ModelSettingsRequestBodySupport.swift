@@ -375,7 +375,8 @@ extension ModelSettingsView {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
                 existingControls: model.requestBodyControls,
-                apiFormat: provider.apiFormat
+                apiFormat: provider.apiFormat,
+                modelName: model.modelName
             )
         )
     }
@@ -403,26 +404,7 @@ extension ModelSettingsView {
                     ]
                 ]
             ]
-
-            var generationConfig: [String: Any] = [:]
-            if let temperature = overridesAny["temperature"] { generationConfig["temperature"] = temperature }
-            if let topP = overridesAny["top_p"] { generationConfig["topP"] = topP }
-            if let topK = overridesAny["top_k"] { generationConfig["topK"] = topK }
-            if let maxTokens = overridesAny["max_tokens"] { generationConfig["maxOutputTokens"] = maxTokens }
-            var thinkingConfig: [String: Any] = [:]
-            if let thinkingLevel = overridesAny["thinking_level"] {
-                thinkingConfig["thinkingLevel"] = thinkingLevel
-            }
-            if let thinkingBudget = overridesAny["thinkingBudget"] ?? overridesAny["thinking_budget"] {
-                thinkingConfig["thinkingBudget"] = thinkingBudget
-            }
-            if !thinkingConfig.isEmpty {
-                generationConfig["thinkingConfig"] = thinkingConfig
-            }
-            if !generationConfig.isEmpty {
-                payload["generationConfig"] = generationConfig
-            }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: overridesAny)
 
         case .anthropic:
             var payload: [String: Any] = [:]
@@ -450,7 +432,7 @@ extension ModelSettingsView {
             if let effort = overridesAny["effort"] {
                 payload["effort"] = effort
             }
-            return payload
+            return mergedPreviewRequestPayload(payload, with: passthroughAnthropicPreviewOverrides(overridesAny))
 
         case .openAIResponses:
             var payload = sanitizedResponsesPreviewOverrides(overridesAny)
@@ -506,6 +488,26 @@ extension ModelSettingsView {
                 return payload
             }
         }
+    }
+
+    private func mergedPreviewRequestPayload(_ base: [String: Any], with overlay: [String: Any]) -> [String: Any] {
+        var result = base
+        for (key, overlayValue) in overlay {
+            if let baseDictionary = result[key] as? [String: Any],
+               let overlayDictionary = overlayValue as? [String: Any] {
+                result[key] = mergedPreviewRequestPayload(baseDictionary, with: overlayDictionary)
+            } else if let baseArray = result[key] as? [Any],
+                      let overlayArray = overlayValue as? [Any] {
+                result[key] = baseArray + overlayArray
+            } else {
+                result[key] = overlayValue
+            }
+        }
+        return result
+    }
+
+    private func passthroughAnthropicPreviewOverrides(_ overrides: [String: Any]) -> [String: Any] {
+        overrides.filter { $0.key != "thinking_budget" }
     }
 
     private enum OpenAIPreviewMode {
