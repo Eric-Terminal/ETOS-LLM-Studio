@@ -94,15 +94,13 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
-    // 发送飞行动画：Overlay hero 状态，及输入框实时 frame（飞行起点来源）
+    // 发送飞行动画：状态、输入文字区域与当前呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
     @State var pendingFlightCleanupTask: Task<Void, Never>?
-    // 分轴弹簧动画状态：x/y 用不同 spring 形成弧线轨迹，尺寸独立高阻尼防压扁
-    @State var flightAnimPosX: CGFloat = 0
-    @State var flightAnimPosY: CGFloat = 0
-    @State var flightAnimWidth: CGFloat = 0
-    @State var flightAnimHeight: CGFloat = 0
+    @State var flightPresentationRect: CGRect = .zero
+    @State var flightVisualProgress: CGFloat = 0
+    @State var flightHandoffProgress: CGFloat = 0
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
 
@@ -765,7 +763,7 @@ extension ChatView {
                                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
-                                let hiddenForFlight = isHiddenForFlight(message)
+                                let reportsSendFlightTarget = isSendFlightTarget(message.id)
                                 ChatBubble(
                                     messageState: state,
                                     roleplaySessionID: viewModel.currentSession?.id,
@@ -824,12 +822,13 @@ extension ChatView {
                                     onOpenMore: { latestMessage in
                                         messageActionSheetPayload = MessageActionSheetPayload(message: latestMessage)
                                     },
+                                    reportsSendFlightTarget: reportsSendFlightTarget,
                                     providers: viewModel.providers
                                 )
                                 // 发送入场动画：用户气泡走 Overlay 飞行（见 flightOverlayLayer），
                                 // 真实气泡在飞行期间无动画隐身，避免两份白字文本叠加。
                                 .transition(
-                                    message.role == .user && appConfig.chatSendAnimationEnabled
+                                    message.role == .user && flightState != nil
                                     ? .identity
                                     : .asymmetric(
                                         insertion: .move(edge: .bottom)
@@ -838,11 +837,8 @@ extension ChatView {
                                         removal: .opacity
                                     )
                                 )
-                                // 飞行期间隐藏真实气泡，让飞行气泡接管视觉
-                                .opacity(hiddenForFlight ? 0 : 1)
-                                .animation(nil, value: hiddenForFlight)
-                                // 仅飞行目标消息上报整行 frame（用于推算真实落点）
-                                .background(flightTargetReporter(for: message.id))
+                                // 临近落点时让飞行层与真实气泡短暂交叉渐变，避免文字闪接。
+                                .opacity(sendFlightTargetOpacity(for: message.id))
                                 .id(ChatScrollTargetID.message(state.id))
                                 // iMessage 风格滚动波浪：纯位置偏移驱动弹性交错
                                 .scrollTransition(
@@ -1093,6 +1089,9 @@ extension ChatView {
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
                 flightState = nil
+                flightPresentationRect = .zero
+                flightVisualProgress = 0
+                flightHandoffProgress = 0
             }
             .toolbar(.hidden, for: .navigationBar)
             .toolbar(.hidden, for: .tabBar)

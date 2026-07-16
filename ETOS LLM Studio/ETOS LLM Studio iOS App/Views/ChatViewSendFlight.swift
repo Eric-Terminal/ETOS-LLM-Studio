@@ -1,291 +1,401 @@
+// ============================================================================
+// ChatViewSendFlight.swift
+// ============================================================================
+// ETOS LLM Studio
 //
-//  ChatViewSendFlight.swift
-//  ETOS LLM Studio
-//
-//  发送飞行动画（iMessage 风格「输入框 → 气泡」Overlay hero）。
-//
-//  原理：点击发送时，在聊天根 ZStack 顶层放一个临时飞行气泡，先停在输入框 shell（起点）；
-//  待真实用户气泡异步插入并测到其落点后，用欠阻尼弹簧把飞行气泡从输入框变形飞到真实落点
-//  （带 overshoot 回弹）；飞行期间真实气泡隐身，结束时无动画切回真实气泡。
-//
-//  关键设计：
-//  - 落点用「真实测量」而非估算 —— 落点随对话长短在屏幕不同高度（初始对话靠上、长对话靠下），
-//    只有量真实 frame 才不会飞错位、落地闪现。
-//  - 起飞由 `.animation(value: landingRect)` 驱动：真实落点一测到即起飞，不经异步派发，
-//    不会被发送瞬间的列表重算阻塞（避免「僵在输入框」）。
-//  - 测「整行」frame（在 ChatView 层，不侵入气泡渲染）：行右缘=气泡右缘、行顶=气泡顶，
-//    气泡尺寸用文本同步估算，组合出准确落点。
-//
+// 发送时由一份临时文字快照接管输入内容，再飞向新消息的真实正文气泡。
+// 起点、终点都来自实际布局测量；位置、尺寸与材质使用同一条可打断弹簧，
+// 最后通过短交叉渐变交还给真实气泡，避免错位、橡皮形变和落点闪接。
+// ============================================================================
 
+import Foundation
 import SwiftUI
 import ETOSCore
-import UIKit
 
 // MARK: - 飞行状态
 
-/// 一次发送飞行的状态快照。targetMessageID 为空表示消息尚未异步插入；
-/// landingRect 为空表示真实落点尚未测到（飞行气泡停在输入框等待）。
 struct SendFlightState: Equatable {
-    /// 本次飞行的唯一标识，用于异步回调中校验是否被新的发送覆盖。
     let id: UUID
-    /// 发送动作开始时间，用来在目标锁定前识别新插入的同文本用户消息。
     let startedAt: Date
-    /// 发送瞬间列表里最后一条用户消息 id，用来识别「新插入」的那条。
     let baselineUserMessageID: UUID?
-    /// 已锁定的真实气泡 id（即新插入的用户消息）。
     var targetMessageID: UUID?
-    /// 飞行气泡显示的文本（用户已输入内容）。
     let text: String
-    /// 气泡渐变起止色（复刻真实用户气泡外观）。
     let startColor: Color
     let endColor: Color
-    /// 气泡圆角。
+    let inputTextColor: Color
+    let bubbleTextColor: Color
+    let bubbleOpacity: Double
     let cornerRadius: CGFloat
-    /// 起点：输入框 shell 在 chatFlight 坐标空间内的 frame。
     let startRect: CGRect
-    /// 终点：根据真实落点行 frame 推算的气泡 frame（测到后填入，触发起飞）。
     var landingRect: CGRect?
 }
 
-// MARK: - 坐标上报 PreferenceKey
+// MARK: - 坐标上报
 
-/// 输入框 shell 的 frame（飞行起点），由 composer 持续上报。
+/// 输入编辑器实际文字视口的 frame。
 struct InputBarRectKey: PreferenceKey {
     static var defaultValue: CGRect?
+
     static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) {
-        if let next = nextValue() { value = next }
+        if let next = nextValue() {
+            value = next
+        }
     }
 }
 
-/// 飞行目标「整行」的 frame（用于推算真实落点），仅由飞行目标消息上报。
+/// 新用户消息实际正文气泡的 frame。
 struct FlightTargetRectKey: PreferenceKey {
     static var defaultValue: CGRect?
+
     static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) {
-        if let next = nextValue() { value = next }
+        if let next = nextValue() {
+            value = next
+        }
     }
 }
 
-// MARK: - 飞行气泡外观
+// MARK: - 飞行外观
 
-/// 飞行气泡复刻真实用户气泡的渐变配色，跟随外观 profile（默认 Telegram 蓝）。
 enum ChatFlightBubbleStyle {
-    static let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
-    static let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
-    /// 气泡圆角，与真实用户气泡保持一致的观感。
-    static let cornerRadius: CGFloat = 20
+    struct ResolvedStyle {
+        let startColor: Color
+        let endColor: Color
+        let inputTextColor: Color
+        let bubbleTextColor: Color
+        let bubbleOpacity: Double
+    }
 
-    /// 依据当前外观 profile 解析用户气泡的渐变起止色。
-    static func resolvedColors() -> (start: Color, end: Color) {
-        let slot = ChatAppearanceProfileManager.shared.activeProfile.userBubble
-        guard slot.isEnabled else { return (telegramBlue, telegramBlueDark) }
-        let start = ChatAppearanceColorCodec.color(from: slot.hex, fallback: telegramBlue)
-        let end = ChatAppearanceColorCodec.darkened(start, factor: 0.86)
-        return (start, end)
+    private static let telegramBlue = Color(red: 0.24, green: 0.56, blue: 0.95)
+    private static let telegramBlueDark = Color(red: 0.17, green: 0.45, blue: 0.82)
+    static let cornerRadius: CGFloat = 18
+
+    static func resolvedStyle(
+        colorScheme: ColorScheme,
+        enableBackground: Bool
+    ) -> ResolvedStyle {
+        let profile = ChatAppearanceProfileManager.shared.activeProfile
+        let bubbleSlot = profile.userBubble
+        let startColor = bubbleSlot.isEnabled
+            ? ChatAppearanceColorCodec.color(from: bubbleSlot.hex, fallback: telegramBlue)
+            : telegramBlue
+        let endColor = bubbleSlot.isEnabled
+            ? ChatAppearanceColorCodec.darkened(startColor, factor: 0.86)
+            : telegramBlueDark
+        let textSlot = colorScheme == .dark ? profile.userDarkText : profile.userLightText
+        let bubbleTextColor = textSlot.isEnabled
+            ? ChatAppearanceColorCodec.color(from: textSlot.hex, fallback: .white)
+            : .white
+
+        return ResolvedStyle(
+            startColor: startColor,
+            endColor: endColor,
+            inputTextColor: .primary,
+            bubbleTextColor: bubbleTextColor,
+            bubbleOpacity: enableBackground ? 0.85 : 1
+        )
     }
 }
 
-/// 飞行中的临时气泡：对角渐变背景 + 圆角 + 白字纯文本（复刻真实用户气泡）。
-/// 外部通过 `.frame(width:height:).position(...)` 驱动位置与尺寸的插值变形。
-struct FlyingBubbleView: View {
+/// 输入文字先保持原色，再在运动中显现气泡材质并过渡为最终文字外观。
+struct FlyingBubbleView: View, Animatable {
     let text: String
     let startColor: Color
     let endColor: Color
-    let cornerRadius: CGFloat
+    let inputTextColor: Color
+    let bubbleTextColor: Color
+    let bubbleOpacity: Double
+    let sourceCornerRadius: CGFloat
+    let targetCornerRadius: CGFloat
+    let sourceUsesBottomAlignment: Bool
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
     var body: some View {
-        Text(text)
-            .font(.body)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(
-                LinearGradient(
-                    colors: [startColor, endColor],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+        let clampedProgress = min(max(progress, 0), 1)
+        let materialProgress = Self.smoothStep(
+            min(max((clampedProgress - 0.08) / 0.62, 0), 1)
+        )
+        let targetTextProgress = Self.smoothStep(
+            min(max((clampedProgress - 0.18) / 0.64, 0), 1)
+        )
+        let horizontalInset = Self.interpolate(from: 5, to: 12, progress: materialProgress)
+        let cornerRadius = Self.interpolate(
+            from: sourceCornerRadius,
+            to: targetCornerRadius,
+            progress: materialProgress
+        )
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let sourceAlignment: Alignment = sourceUsesBottomAlignment ? .bottomLeading : .topLeading
+
+        ZStack(alignment: .topLeading) {
+            shape
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            startColor.opacity(bubbleOpacity),
+                            endColor.opacity(bubbleOpacity)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .opacity(Double(materialProgress))
+
+            Text(text)
+                .etFont(.system(size: 16))
+                .foregroundStyle(inputTextColor)
+                .padding(.horizontal, horizontalInset)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: sourceAlignment)
+                .opacity(Double(1 - targetTextProgress))
+                .clipped()
+
+            Text(text)
+                .etFont(.body)
+                .foregroundStyle(bubbleTextColor)
+                .padding(.horizontal, horizontalInset)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .opacity(Double(targetTextProgress))
+                .clipped()
+        }
+        .clipShape(shape)
+        .shadow(
+            color: Color.black.opacity(0.08 * Double(materialProgress)),
+            radius: 3 * materialProgress,
+            y: materialProgress
+        )
+    }
+
+    private static func interpolate(
+        from start: CGFloat,
+        to end: CGFloat,
+        progress: CGFloat
+    ) -> CGFloat {
+        start + (end - start) * progress
+    }
+
+    private static func smoothStep(_ value: CGFloat) -> CGFloat {
+        value * value * (3 - 2 * value)
     }
 }
 
 // MARK: - ChatView 飞行编排
 
 extension ChatView {
+    /// 将现有“响应/阻尼”设置映射为带初速度的物理弹簧，让起飞拥有连续惯性。
+    private var sendFlightSpring: Animation {
+        let response = max(0.2, appConfig.chatSendAnimationSpringResponse)
+        let dampingRatio = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
+        let angularFrequency = 2 * Double.pi / response
+        let stiffness = angularFrequency * angularFrequency
+        let damping = 2 * dampingRatio * angularFrequency
+        return .interpolatingSpring(
+            mass: 1,
+            stiffness: stiffness,
+            damping: damping,
+            initialVelocity: 0.72
+        )
+    }
 
-    /// 分轴弹簧：x 快（先靠右）、y 慢（后靠上+Q弹），形成曲线弧轨迹（贴近 iMessage）。
-    /// 尺寸弹簧高阻尼，避免弹缩变扁。
-    private var flightSpringX: Animation {
-        .spring(response: appConfig.chatSendAnimationSpringResponse * 0.72,
-                dampingFraction: max(0.38, appConfig.chatSendAnimationSpringDamping * 0.82))
+    /// 列表在飞行中继续校正布局时，从当前呈现位置平顺追随新落点。
+    private var sendFlightRetargetSpring: Animation {
+        .spring(
+            response: max(0.18, appConfig.chatSendAnimationSpringResponse * 0.48),
+            dampingFraction: 0.92
+        )
     }
-    private var flightSpringY: Animation {
-        .spring(response: appConfig.chatSendAnimationSpringResponse,
-                dampingFraction: appConfig.chatSendAnimationSpringDamping)
-    }
-    private var flightSpringSize: Animation {
-        .spring(response: appConfig.chatSendAnimationSpringResponse * 0.55,
-                dampingFraction: 0.82)
-    }
-    /// 落点迟迟没有上报时的兜底清理时长，防止飞行层残留。
-    private var flightCleanupFallbackDuration: Double { 1.4 }
-    /// 飞行可见时长，用于安排落地交接（覆盖 y 轴弹簧回弹收尾）。
-    private var flightVisibleDuration: Double { 0.65 }
 
-    /// 点击发送：飞行气泡停在输入框；真实落点测到后由 handleFlightTargetRect 起飞。
-    /// 起点无效时回退为普通发送（不飞行）。
+    private var sendFlightFallbackDuration: Double { 1.6 }
+    private var sendFlightHandoffDuration: Double { 0.14 }
+    private var sendFlightVisibleDuration: Double {
+        let response = max(0.2, appConfig.chatSendAnimationSpringResponse)
+        let damping = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
+        return min(1.3, max(0.42, response * (1.35 + (1 - damping) * 0.65)))
+    }
+
     func beginSendFlight(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // 沿用原发送 spring，驱动助手占位气泡的入场动画。
         let sendSpring = Animation.spring(response: 0.38, dampingFraction: 0.72)
+        let hasAttachments = viewModel.pendingAudioAttachment != nil
+            || !viewModel.pendingImageAttachments.isEmpty
+            || !viewModel.pendingFileAttachments.isEmpty
 
-        // 起点无效（未测得输入框 frame）或无文本时，退回普通发送。
-        guard inputBarRect.width > 1, inputBarRect.height > 1, !trimmed.isEmpty else {
-            withAnimation(sendSpring) { viewModel.sendMessage() }
+        guard !accessibilityReduceMotion,
+              isUsableSendFlightRect(inputBarRect),
+              !hasAttachments,
+              !trimmed.isEmpty else {
+            withAnimation(accessibilityReduceMotion ? .easeOut(duration: 0.12) : sendSpring) {
+                viewModel.sendMessage()
+            }
             return
         }
 
         let flightID = UUID()
-        let startedAt = Date()
-        let colors = ChatFlightBubbleStyle.resolvedColors()
+        let style = ChatFlightBubbleStyle.resolvedStyle(
+            colorScheme: colorScheme,
+            enableBackground: viewModel.enableBackground
+        )
         let baseline = viewModel.displayMessages.last { $0.message.role == .user }?.id
 
-        // 飞行气泡初始锁定在输入框位置（起点）；真实落点测到后由 handleFlightTargetRect 驱动飞向落点。
-        flightAnimPosX = inputBarRect.midX
-        flightAnimPosY = inputBarRect.midY
-        flightAnimWidth = inputBarRect.width
-        flightAnimHeight = inputBarRect.height
+        pendingFlightCleanupTask?.cancel()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            flightPresentationRect = inputBarRect
+            flightVisualProgress = 0
+            flightHandoffProgress = 0
+            flightState = SendFlightState(
+                id: flightID,
+                startedAt: Date(),
+                baselineUserMessageID: baseline,
+                targetMessageID: nil,
+                text: trimmed,
+                startColor: style.startColor,
+                endColor: style.endColor,
+                inputTextColor: style.inputTextColor,
+                bubbleTextColor: style.bubbleTextColor,
+                bubbleOpacity: style.bubbleOpacity,
+                cornerRadius: ChatFlightBubbleStyle.cornerRadius,
+                startRect: inputBarRect,
+                landingRect: nil
+            )
+        }
+        scheduleSendFlightFallback(flightID: flightID)
 
-        flightState = SendFlightState(
-            id: flightID,
-            startedAt: startedAt,
-            baselineUserMessageID: baseline,
-            targetMessageID: nil,
-            text: trimmed,
-            startColor: colors.start,
-            endColor: colors.end,
-            cornerRadius: ChatFlightBubbleStyle.cornerRadius,
-            startRect: inputBarRect,
-            landingRect: nil
-        )
-        scheduleFlightCleanup(flightID: flightID, delay: flightCleanupFallbackDuration)
-
-        // 让本次插入走「瞬间吸底」，新真实气泡尽快定位到落点，缩短飞行气泡的等待时间。
         needsImmediateBottomSnap = true
-
-        // 异步插入消息；用户气泡此刻起隐身（见 isHiddenForFlight），由飞行层接管视觉。
         withAnimation(sendSpring) {
             viewModel.sendMessage()
         }
     }
 
-    /// 消息插入后调用：找到新出现的用户消息并锁定（驱动隐身与落点上报）。
     func lockFlightTargetIfNeeded() {
         guard var state = flightState, state.targetMessageID == nil else { return }
         guard let newUserMessage = flightTargetCandidate(for: state) else { return }
 
-        state.targetMessageID = newUserMessage.id
-        flightState = state
-    }
-
-    /// 输入框持续上报的 frame（飞行起点来源）。
-    func handleInputBarRect(_ rect: CGRect?) {
-        guard let rect, rect.width > 1, rect.height > 1 else { return }
-        inputBarRect = rect
-    }
-
-    /// 目标整行上报 frame：推算真实落点，用「分轴弹簧」触发起飞 / 校正。
-    /// x 快（先靠右）、y 慢（后靠上+Q弹回弹）、尺寸高阻尼（防压扁），形成曲线弧轨迹。
-    func handleFlightTargetRect(_ rowFrame: CGRect?) {
-        guard let rowFrame, rowFrame.width > 1, rowFrame.height > 1 else { return }
-        guard var state = flightState, state.targetMessageID != nil else { return }
-
-        let size = estimatedFlyingBubbleSize(text: state.text, maxWidth: max(80, rowFrame.width * 0.92))
-        let landing = CGRect(
-            x: rowFrame.maxX - size.width,
-            y: rowFrame.minY,
-            width: size.width,
-            height: size.height
-        )
-        guard state.landingRect != landing else { return }
-
-        let isFirstLanding = (state.landingRect == nil)
-        state.landingRect = landing
-        flightState = state
-
-        // 分轴起/校正飞行 — x 先到、y 后到 ≈ 弧线轨迹
-        withAnimation(flightSpringX) { flightAnimPosX = landing.midX }
-        withAnimation(flightSpringY) { flightAnimPosY = landing.midY }
-        withAnimation(flightSpringSize) {
-            flightAnimWidth = landing.width
-            flightAnimHeight = landing.height
-        }
-
-        if isFirstLanding {
-            scheduleFlightCleanup(flightID: state.id, delay: flightVisibleDuration)
-        }
-    }
-
-    private func scheduleFlightCleanup(flightID: UUID, delay: Double) {
-        pendingFlightCleanupTask?.cancel()
-        pendingFlightCleanupTask = Task { @MainActor in
-            let nanoseconds = UInt64(max(0, delay) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
-            guard !Task.isCancelled else { return }
-            clearFlightWithoutAnimation(flightID: flightID)
-        }
-    }
-
-    private func clearFlightWithoutAnimation(flightID: UUID) {
-        guard flightState?.id == flightID else { return }
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            flightState = nil
-            pendingFlightCleanupTask?.cancel()
-            pendingFlightCleanupTask = nil
+            state.targetMessageID = newUserMessage.id
+            flightState = state
         }
     }
 
-    /// 指定消息当前是否因飞行而需要隐身（真实气泡让位给飞行气泡）。
-    func isHiddenForFlight(_ message: ChatMessage) -> Bool {
-        guard let state = flightState else { return false }
-        return state.targetMessageID == message.id && state.landingRect != nil
+    func handleInputBarRect(_ rect: CGRect?) {
+        guard let rect, isUsableSendFlightRect(rect) else { return }
+        inputBarRect = rect
     }
 
-    /// 飞行覆盖层：置于聊天根 ZStack 顶层。位置与尺寸由分轴弹簧独立驱动，
-    /// x 快（先靠右）、y 慢（后靠上+回弹）、尺寸高阻尼（不压扁），形成灵动弧线。
+    func handleFlightTargetRect(_ rect: CGRect?) {
+        guard let rect, isUsableSendFlightRect(rect) else { return }
+        guard var state = flightState, state.targetMessageID != nil else { return }
+        guard sendFlightRectsDiffer(state.landingRect, rect) else { return }
+
+        let isFirstLanding = state.landingRect == nil
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            state.landingRect = rect
+            flightState = state
+        }
+
+        if isFirstLanding {
+            withAnimation(sendFlightSpring) {
+                flightPresentationRect = rect
+                flightVisualProgress = 1
+            }
+            scheduleSendFlightHandoff(flightID: state.id)
+        } else {
+            withAnimation(sendFlightRetargetSpring) {
+                flightPresentationRect = rect
+            }
+        }
+    }
+
+    func isSendFlightTarget(_ messageID: UUID) -> Bool {
+        flightState?.targetMessageID == messageID
+    }
+
+    func sendFlightTargetOpacity(for messageID: UUID) -> Double {
+        guard flightState?.targetMessageID == messageID else { return 1 }
+        return Double(flightHandoffProgress)
+    }
+
     @ViewBuilder
     var flightOverlayLayer: some View {
         if let state = flightState {
-            let isReadyToFly = state.landingRect != nil
             FlyingBubbleView(
                 text: state.text,
                 startColor: state.startColor,
                 endColor: state.endColor,
-                cornerRadius: state.cornerRadius
+                inputTextColor: state.inputTextColor,
+                bubbleTextColor: state.bubbleTextColor,
+                bubbleOpacity: state.bubbleOpacity,
+                sourceCornerRadius: min(state.startRect.height / 2, 22),
+                targetCornerRadius: state.cornerRadius,
+                sourceUsesBottomAlignment: state.startRect.height > 72,
+                progress: flightVisualProgress
             )
             .id(state.id)
-            .frame(width: max(flightAnimWidth, 1), height: max(flightAnimHeight, 1))
-            .position(x: flightAnimPosX, y: flightAnimPosY)
-            .opacity(isReadyToFly ? 1 : 0)
+            .frame(
+                width: max(flightPresentationRect.width, 1),
+                height: max(flightPresentationRect.height, 1)
+            )
+            .position(
+                x: flightPresentationRect.midX,
+                y: flightPresentationRect.midY
+            )
+            .opacity(Double(max(0, 1 - flightHandoffProgress)))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .zIndex(40)
         }
     }
 
-    /// 落点上报器：仅挂在飞行目标消息上（单条测量），上报其整行 frame。
-    @ViewBuilder
-    func flightTargetReporter(for messageID: UUID) -> some View {
-        if let state = flightState, state.targetMessageID == messageID {
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: FlightTargetRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
+    private func scheduleSendFlightFallback(flightID: UUID) {
+        pendingFlightCleanupTask = Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: UInt64(sendFlightFallbackDuration * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+            clearSendFlightWithoutAnimation(flightID: flightID)
+        }
+    }
+
+    private func scheduleSendFlightHandoff(flightID: UUID) {
+        pendingFlightCleanupTask?.cancel()
+        pendingFlightCleanupTask = Task { @MainActor in
+            let handoffDelay = max(0, sendFlightVisibleDuration - sendFlightHandoffDuration)
+            try? await Task.sleep(nanoseconds: UInt64(handoffDelay * 1_000_000_000))
+            guard !Task.isCancelled, flightState?.id == flightID else { return }
+
+            withAnimation(.easeOut(duration: sendFlightHandoffDuration)) {
+                flightHandoffProgress = 1
             }
+
+            try? await Task.sleep(
+                nanoseconds: UInt64(sendFlightHandoffDuration * 1_000_000_000)
+            )
+            guard !Task.isCancelled else { return }
+            clearSendFlightWithoutAnimation(flightID: flightID)
+        }
+    }
+
+    private func clearSendFlightWithoutAnimation(flightID: UUID) {
+        guard flightState?.id == flightID else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            flightState = nil
+            flightPresentationRect = .zero
+            flightVisualProgress = 0
+            flightHandoffProgress = 0
+            pendingFlightCleanupTask?.cancel()
+            pendingFlightCleanupTask = nil
         }
     }
 
@@ -303,30 +413,30 @@ extension ChatView {
 
     private func isFlightTargetCandidate(_ message: ChatMessage, for state: SendFlightState) -> Bool {
         guard message.role == .user, message.id != state.baselineUserMessageID else { return false }
-        guard message.content.trimmingCharacters(in: .whitespacesAndNewlines) == state.text else { return false }
+        guard message.content.trimmingCharacters(in: .whitespacesAndNewlines) == state.text else {
+            return false
+        }
         guard let requestedAt = message.requestedAt else { return true }
         return requestedAt >= state.startedAt.addingTimeInterval(-0.2)
     }
 
-    /// 同步估算飞行气泡（≈ 真实用户气泡）的自然尺寸，用于推算落点的气泡大小。
-    /// 文本短、测量极快，仅在落点上报时执行，不在渲染链路。
-    private func estimatedFlyingBubbleSize(text: String, maxWidth: CGFloat) -> CGSize {
-        let font = UIFont.preferredFont(forTextStyle: .body)
-        let horizontalPadding: CGFloat = 12 * 2
-        let verticalPadding: CGFloat = 8 * 2
-        let textMaxWidth = max(1, maxWidth - horizontalPadding)
-        let bounding = (text as NSString).boundingRect(
-            with: CGSize(width: textMaxWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font],
-            context: nil
-        )
-        return CGSize(
-            width: ceil(bounding.width) + horizontalPadding,
-            height: ceil(bounding.height) + verticalPadding
-        )
+    private func isUsableSendFlightRect(_ rect: CGRect) -> Bool {
+        rect.width > 1
+            && rect.height > 1
+            && rect.minX.isFinite
+            && rect.minY.isFinite
+            && rect.maxX.isFinite
+            && rect.maxY.isFinite
     }
 
-    /// 飞行坐标空间名称（起点与终点 frame 统一到此空间）。
+    private func sendFlightRectsDiffer(_ current: CGRect?, _ next: CGRect) -> Bool {
+        guard let current else { return true }
+        let tolerance: CGFloat = 0.5
+        return abs(current.minX - next.minX) > tolerance
+            || abs(current.minY - next.minY) > tolerance
+            || abs(current.width - next.width) > tolerance
+            || abs(current.height - next.height) > tolerance
+    }
+
     static var flightCoordinateSpace: String { "chatFlight" }
 }

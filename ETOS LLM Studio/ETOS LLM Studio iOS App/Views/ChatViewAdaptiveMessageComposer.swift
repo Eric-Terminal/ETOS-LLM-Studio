@@ -303,14 +303,6 @@ extension TelegramMessageComposer {
             .frame(height: adaptiveControlSize, alignment: .top)
         }
         .frame(minHeight: targetHeight, maxHeight: targetHeight)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: InputBarRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
-            }
-        )
         .animation(adaptiveComposerAnimation, value: adaptiveShowsRequestControlsButton)
         .animation(adaptiveComposerAnimation, value: viewModel.enableSpeechInput)
     }
@@ -322,6 +314,15 @@ extension TelegramMessageComposer {
                 .focused(focus)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(adaptivePresentation != .expandedText)
+                // 让飞行文字从按钮之间的真实编辑视口出发，而不是整个玻璃胶囊。
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: InputBarRectKey.self,
+                            value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                        )
+                    }
+                )
                 .padding(.vertical, adaptivePresentation == .expandedText ? 8 : 2)
                 .padding(.leading, adaptiveTextLeadingInset)
                 .padding(.trailing, adaptiveTextTrailingInset)

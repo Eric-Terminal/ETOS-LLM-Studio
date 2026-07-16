@@ -303,15 +303,6 @@ struct TelegramMessageComposer: View {
             }
         }
         .onPreferenceChange(InputWidthKey.self, perform: updateInputWidth)
-        // 上报输入框 shell 在聊天坐标空间内的 frame，作为发送飞行动画的起点锚定
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: InputBarRectKey.self,
-                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
-                )
-            }
-        )
     }
 
     func attachmentMenuButton(
@@ -418,6 +409,15 @@ struct TelegramMessageComposer: View {
                 .focused(focus)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(!isExpandedComposer)
+                // 测量实际文字视口，避免发送动画从整个输入胶囊起飞。
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: InputBarRectKey.self,
+                            value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                        )
+                    }
+                )
                 .padding(.vertical, verticalPadding)
                 .padding(.leading, textHorizontalPadding)
                 .padding(.trailing, expandedActionTrailingInset)

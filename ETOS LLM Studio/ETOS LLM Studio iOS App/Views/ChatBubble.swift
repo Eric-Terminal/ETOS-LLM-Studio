@@ -52,6 +52,7 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
+    let reportsSendFlightTarget: Bool
     let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
@@ -100,6 +101,7 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
+        reportsSendFlightTarget: Bool = false,
         providers: [Provider] = []
     ) {
         self.messageState = messageState
@@ -137,6 +139,7 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.reportsSendFlightTarget = reportsSendFlightTarget
         self.providers = providers
     }
     
@@ -179,6 +182,7 @@ struct ChatBubble: View {
                         bubbleContainer {
                             textContentStack(includeToolCalls: true)
                         }
+                        .background(sendFlightTargetReporter)
                     }
                 }
 
@@ -262,6 +266,19 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
+        }
+    }
+
+    /// 只在本次发送目标的正文气泡上测量真实落点，避免用整行宽度反推尺寸。
+    @ViewBuilder
+    private var sendFlightTargetReporter: some View {
+        if reportsSendFlightTarget {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: FlightTargetRectKey.self,
+                    value: proxy.frame(in: .named(ChatView.flightCoordinateSpace))
+                )
+            }
         }
     }
 }
