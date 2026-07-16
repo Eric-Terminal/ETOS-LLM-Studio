@@ -355,6 +355,12 @@ public enum ProviderAPIFormatFamily {
 }
 
 public enum ModelRequestBodyControlDefaults {
+    public static func isThinkingControl(_ control: ModelRequestBodyControl) -> Bool {
+        guard control.kind == .optionGroup else { return false }
+        let payloads = [control.payload] + control.options.map(\.payload)
+        return payloads.contains(where: containsThinkingParameter)
+    }
+
     public static func temperatureControl() -> ModelRequestBodyControl {
         ModelRequestBodyControl(
             title: NSLocalizedString("温度", comment: ""),
@@ -431,6 +437,23 @@ public enum ModelRequestBodyControlDefaults {
             return ModelRequestBodyControl(title: "", kind: .optionGroup)
         }
         return thinkingOptionGroup(for: apiFormat)
+    }
+
+    private static func containsThinkingParameter(_ payload: [String: JSONValue]) -> Bool {
+        for (key, value) in payload {
+            let normalizedKey = key
+                .lowercased()
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: "-", with: "")
+            if ["reasoningeffort", "thinkingbudget", "thinking", "effort"].contains(normalizedKey) {
+                return true
+            }
+            if case let .dictionary(nestedPayload) = value,
+               containsThinkingParameter(nestedPayload) {
+                return true
+            }
+        }
+        return false
     }
 }
 

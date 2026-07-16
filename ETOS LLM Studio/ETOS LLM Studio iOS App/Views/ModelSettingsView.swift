@@ -55,21 +55,21 @@ struct ModelSettingsView: View {
             }
 
             Section(
-                header: Text(NSLocalizedString("用途", comment: "模型用途区块标题")),
+                header: Text(NSLocalizedString("模型类型", comment: "模型类型区块标题")),
                 footer: Text(kindFooterText)
             ) {
-                Picker(NSLocalizedString("用途", comment: "模型用途选择器标题"), selection: kindBinding) {
-                    ForEach(ModelKind.allCases, id: \.self) { kind in
-                        Text(kind.localizedName).tag(kind)
-                    }
-                }
+                modelKindSelector
             }
 
-            Section(
-                header: Text(NSLocalizedString("模型能力", comment: "模型能力区块标题")),
-                footer: Text(capabilityFooterText)
-            ) {
-                modelCapabilityRows
+            if model.kind == .chat {
+                chatModelCapabilitySections
+            } else {
+                Section(
+                    header: Text(NSLocalizedString("能力", comment: "模型能力区块标题")),
+                    footer: Text(capabilityFooterText)
+                ) {
+                    specializedModelCapabilityRows
+                }
             }
 
             Section(
@@ -231,15 +231,12 @@ extension ModelSettingsView {
 
     private var capabilityFooterText: String {
         switch model.kind {
-        case .chat:
-            if model.outputModalities.contains(.image) {
-                return NSLocalizedString("开启“可生成图片”后，选中该模型的主聊天会直接按生图请求处理。", comment: "聊天模型生图能力说明")
-            }
-            return NSLocalizedString("这些开关描述模型能做什么；服务商原生工具等请求参数由适配器处理。", comment: "聊天模型能力说明")
         case .image:
             return NSLocalizedString("图片生成由用途决定；如果模型支持图生图，可以开启参考图片。", comment: "图片模型能力说明")
         case .embedding, .rerank, .speechToText, .textToSpeech:
             return NSLocalizedString("专用模型的输入和输出由用途决定，通常不需要额外配置。", comment: "专用模型能力说明")
+        case .chat:
+            return ""
         }
     }
 
@@ -282,16 +279,73 @@ extension ModelSettingsView {
             : parts.joined(separator: NSLocalizedString("，", comment: "List separator"))
     }
 
+    private var modelKindSelector: some View {
+        VStack {
+            ModelSelectionSegmentedRow(
+                options: [.chat, .image, .embedding],
+                isSelected: { model.kind == $0 },
+                title: modelKindSelectionTitle,
+                onSelect: { kindBinding.wrappedValue = $0 }
+            )
+            ModelSelectionSegmentedRow(
+                options: [.rerank, .speechToText, .textToSpeech],
+                isSelected: { model.kind == $0 },
+                title: modelKindSelectionTitle,
+                onSelect: { kindBinding.wrappedValue = $0 }
+            )
+        }
+    }
+
+    private func modelKindSelectionTitle(_ kind: ModelKind) -> String {
+        kind == .image ? ModelModality.image.localizedName : kind.localizedName
+    }
+
     @ViewBuilder
-    private var modelCapabilityRows: some View {
+    private var chatModelCapabilitySections: some View {
+        Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
+            ModelSelectionSegmentedRow(
+                options: ModelModality.allCases,
+                isSelected: { model.inputModalities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { modality in
+                    let binding = modalityBinding(modality, keyPath: \.inputModalities)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        }
+
+        Section(NSLocalizedString("输出模态", comment: "聊天模型输出模态区块标题")) {
+            ModelSelectionSegmentedRow(
+                options: [.text, .image],
+                isSelected: { model.outputModalities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { modality in
+                    let binding = modalityBinding(modality, keyPath: \.outputModalities)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        }
+
+        Section {
+            ModelSelectionSegmentedRow(
+                options: [.toolCalling, .reasoning],
+                isSelected: { model.capabilities.contains($0) },
+                title: { $0.localizedName },
+                onSelect: { capability in
+                    let binding = capabilityBinding(capability)
+                    binding.wrappedValue.toggle()
+                }
+            )
+        } header: {
+            Text(NSLocalizedString("能力", comment: "聊天模型能力区块标题"))
+        } footer: {
+            Text(NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明"))
+        }
+    }
+
+    @ViewBuilder
+    private var specializedModelCapabilityRows: some View {
         switch model.kind {
-        case .chat:
-            Toggle(NSLocalizedString("可处理图片", comment: "聊天模型能力：图片输入"), isOn: modalityBinding(.image, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可处理音频", comment: "聊天模型能力：音频输入"), isOn: modalityBinding(.audio, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可处理文件", comment: "聊天模型能力：文件输入"), isOn: modalityBinding(.file, keyPath: \.inputModalities))
-            Toggle(NSLocalizedString("可生成图片", comment: "聊天模型能力：图片输出"), isOn: modalityBinding(.image, keyPath: \.outputModalities))
-            Toggle(NSLocalizedString("可调用工具", comment: "聊天模型能力：工具调用"), isOn: capabilityBinding(.toolCalling))
-            Toggle(NSLocalizedString("可用于嵌入", comment: "聊天模型能力：嵌入"), isOn: capabilityBinding(.embedding))
         case .image:
             Toggle(NSLocalizedString("支持参考图片", comment: "图片生成模型能力：参考图片输入"), isOn: modalityBinding(.image, keyPath: \.inputModalities))
         case .embedding:
@@ -306,6 +360,8 @@ extension ModelSettingsView {
         case .textToSpeech:
             Text(NSLocalizedString("此模型接收文字并输出语音。", comment: "文字转语音模型能力说明"))
                 .foregroundStyle(.secondary)
+        case .chat:
+            EmptyView()
         }
     }
 
@@ -342,11 +398,61 @@ extension ModelSettingsView {
                 var capabilitySet = Set(model.capabilities)
                 if isEnabled {
                     capabilitySet.insert(capability)
+                    if capability == .reasoning {
+                        model.ensureThinkingRequestBodyControl(apiFormat: provider.apiFormat)
+                    }
                 } else {
                     capabilitySet.remove(capability)
                 }
                 model.capabilities = Model.orderedCapabilities(Array(capabilitySet))
             }
         )
+    }
+}
+
+private struct ModelSelectionSegmentedRow<Option: Hashable>: View {
+    let options: [Option]
+    let isSelected: (Option) -> Bool
+    let title: (Option) -> String
+    let onSelect: (Option) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                Button {
+                    onSelect(option)
+                } label: {
+                    HStack {
+                        if isSelected(option) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        Text(title(option))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .background {
+                        if isSelected(option) {
+                            Rectangle()
+                                .fill(Color.accentColor.opacity(0.16))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
+
+                if index < options.index(before: options.endIndex) {
+                    Divider()
+                }
+            }
+        }
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.secondary.opacity(0.55), lineWidth: 1)
+        }
     }
 }

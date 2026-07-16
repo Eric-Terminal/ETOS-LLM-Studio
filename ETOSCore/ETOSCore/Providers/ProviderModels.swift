@@ -264,7 +264,7 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
 
     public static let editableCases: [ModelCapability] = [
         .toolCalling,
-        .embedding
+        .reasoning
     ]
 
     public var localizedName: String {

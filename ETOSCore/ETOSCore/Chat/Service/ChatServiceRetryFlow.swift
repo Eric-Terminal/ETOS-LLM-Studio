@@ -67,11 +67,7 @@ extension ChatService {
         }
         registerRetryAchievementAttempt(sessionID: currentSession.id, content: messageToSend.content)
         let shouldContinueFromTail = isTailContinuationRetryTarget(message, in: messages)
-        let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration(
-            message,
-            anchorUserIndex: anchorUserIndex,
-            in: messages
-        )
+        let shouldRetryAsImageGeneration = shouldRetryMessageAsImageGeneration()
 
         // 【重要】必须先取消旧请求，再创建新的会话级请求上下文
         // 否则取消流程会把刚创建的请求上下文提前清理
@@ -277,26 +273,9 @@ extension ChatService {
         }
     }
 
-    private func shouldRetryMessageAsImageGeneration(
-        _ message: ChatMessage,
-        anchorUserIndex: Int,
-        in messages: [ChatMessage]
-    ) -> Bool {
-        if let runnableModel = selectedModelSubject.value,
-           shouldRouteMessageToImageGeneration(using: runnableModel) {
-            return true
-        }
-
-        if message.role != .user,
-           message.imageFileNames?.isEmpty == false {
-            return true
-        }
-
-        let roundEndIndex = responseRoundEndIndex(in: messages, anchorUserIndex: anchorUserIndex)
-        guard anchorUserIndex < roundEndIndex else { return false }
-        return messages[(anchorUserIndex + 1)..<roundEndIndex].contains { candidate in
-            candidate.role != .user && candidate.imageFileNames?.isEmpty == false
-        }
+    private func shouldRetryMessageAsImageGeneration() -> Bool {
+        guard let runnableModel = selectedModelSubject.value else { return false }
+        return shouldRouteMessageToImageGeneration(using: runnableModel)
     }
 
     private func retryImageGenerationMessage(
@@ -314,7 +293,7 @@ extension ChatService {
         }
 
         guard shouldRouteMessageToImageGeneration(using: runnableModel) else {
-            let reason = NSLocalizedString("当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。", comment: "模型没有生图能力提示")
+            let reason = NSLocalizedString("当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。", comment: "模型不是图像类型提示")
             addErrorMessage(reason, sessionID: currentSession.id)
             emitSessionRequestStatus(.error, sessionID: currentSession.id)
             return

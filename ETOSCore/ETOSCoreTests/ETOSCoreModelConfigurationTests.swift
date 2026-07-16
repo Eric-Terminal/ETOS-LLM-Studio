@@ -504,4 +504,18 @@ struct RequestBodyOverrideModeTests {
         #expect(legacyVision.kind == .chat)
         #expect(legacyVision.inputModalities.contains(.image))
     }
+
+    @Test("聊天图片输出与独立生图接口保持分离")
+    func testChatImageOutputDoesNotUseDedicatedImageGenerationEndpoint() throws {
+        let chatModel = Model(
+            modelName: "chat-with-image-output",
+            kind: .chat,
+            outputModalities: [.text, .image]
+        )
+        let imageModel = Model(modelName: "image-model", kind: .image)
+
+        #expect(chatModel.supportsImageGeneration)
+        #expect(chatModel.usesDedicatedImageGenerationEndpoint == false)
+        #expect(imageModel.usesDedicatedImageGenerationEndpoint)
+    }
 }

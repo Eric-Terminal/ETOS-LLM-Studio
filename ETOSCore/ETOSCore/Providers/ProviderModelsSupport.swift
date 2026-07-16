@@ -74,6 +74,16 @@ public extension Model {
     mutating func appendCopiesOfRequestBodyControls(_ controls: [ModelRequestBodyControl]) {
         requestBodyControls.append(contentsOf: controls.map { $0.duplicatedWithNewIdentifiers() })
     }
+
+    /// 为声明了推理能力的模型补充可直接调节的思考预算，保留用户已有控制。
+    mutating func ensureThinkingRequestBodyControl(apiFormat: String) {
+        guard !requestBodyControls.contains(where: ModelRequestBodyControlDefaults.isThinkingControl) else {
+            return
+        }
+        requestBodyControls.append(
+            ModelRequestBodyControlDefaults.thinkingOptionGroup(for: apiFormat)
+        )
+    }
 }
 
 public extension Model {
@@ -422,6 +432,11 @@ public extension Model {
 
     var supportsImageGeneration: Bool {
         kind == .image || outputModalities.contains(.image)
+    }
+
+    /// 仅图像类型模型使用独立生图接口；聊天模型的图片输出仍属于对话响应。
+    var usesDedicatedImageGenerationEndpoint: Bool {
+        kind == .image
     }
 
     var isChatModel: Bool {

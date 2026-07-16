@@ -89,8 +89,8 @@ extension ChatService {
             return
         }
 
-        guard runnableModel.model.supportsImageGeneration else {
-            let reason = NSLocalizedString("当前模型不可用于生图，请在模型设置中将用途设为图片生成，或在模型能力中开启可生成图片。", comment: "模型没有生图能力提示")
+        guard runnableModel.model.usesDedicatedImageGenerationEndpoint else {
+            let reason = NSLocalizedString("当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。", comment: "模型不是图像类型提示")
             addErrorMessage(reason, sessionID: currentSession.id)
             requestStatusSubject.send(.error)
             imageGenerationStatusSubject.send(
@@ -257,7 +257,7 @@ extension ChatService {
     }
 
     func shouldRouteMessageToImageGeneration(using runnableModel: RunnableModel) -> Bool {
-        runnableModel.model.supportsImageGeneration
+        runnableModel.model.usesDedicatedImageGenerationEndpoint
     }
 
     func executeImageGenerationRequest(

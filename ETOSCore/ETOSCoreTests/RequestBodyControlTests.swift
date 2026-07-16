@@ -797,6 +797,50 @@ struct RequestBodyControlTests {
         #expect(control.options.isEmpty)
     }
 
+    @Test("推理能力会按提供商格式补充一次思考预算控制")
+    func testEnsureThinkingControlUsesProviderFormatWithoutDuplicates() {
+        var model = Model(modelName: "reasoning-model", requestBodyControls: [])
+
+        model.ensureThinkingRequestBodyControl(apiFormat: "gemini")
+        model.ensureThinkingRequestBodyControl(apiFormat: "gemini")
+
+        #expect(model.requestBodyControls.count == 1)
+        let control = model.requestBodyControls[0]
+        #expect(ModelRequestBodyControlDefaults.isThinkingControl(control))
+        let highPayload = control.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
+        if case let .dictionary(generationConfig)? = highPayload,
+           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+            #expect(thinkingConfig["thinkingLevel"] == .string("HIGH"))
+        } else {
+            Issue.record("自动添加的 Gemini 思考预算没有使用原生参数结构。")
+        }
+    }
+
+    @Test("已有自定义推理控制时不会重复添加思考预算")
+    func testEnsureThinkingControlPreservesExistingControl() {
+        let existingControl = ModelRequestBodyControl(
+            id: "custom-reasoning",
+            title: "自定义推理",
+            kind: .optionGroup,
+            defaultOptionID: "high",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "high",
+                    payload: ["reasoning_effort": .string("high")]
+                )
+            ]
+        )
+        var model = Model(
+            modelName: "reasoning-model",
+            requestBodyControls: [existingControl]
+        )
+
+        model.ensureThinkingRequestBodyControl(apiFormat: "openai-compatible")
+
+        #expect(model.requestBodyControls == [existingControl])
+    }
+
     @Test("新增开关默认是温度控制")
     func testDefaultToggleIsTemperatureControl() {
         let control = ModelRequestBodyControlDefaults.temperatureControl()

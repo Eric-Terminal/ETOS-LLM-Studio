@@ -44,7 +44,7 @@ extension ChatService {
             resetConsecutiveRetryTracking()
         }
 
-        // 若当前模型具备图像输出能力，则主聊天输入直接切到生图请求通道。
+        // 只有图像类型模型进入独立生图通道，聊天模型的图片输出由对话响应处理。
         if let selectedModel = selectedModelSubject.value,
            shouldRouteMessageToImageGeneration(using: selectedModel) {
             if audioAttachment != nil {

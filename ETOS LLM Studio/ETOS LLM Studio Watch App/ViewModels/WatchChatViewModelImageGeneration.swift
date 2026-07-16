@@ -20,7 +20,7 @@ extension ChatViewModel {
 
     func supportsImageGeneration(for runnableModel: RunnableModel?) -> Bool {
         guard let runnableModel else { return false }
-        return runnableModel.model.supportsImageGeneration
+        return runnableModel.model.usesDedicatedImageGenerationEndpoint
     }
 
     func imageGenerationModel(with identifier: String) -> RunnableModel? {
