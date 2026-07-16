@@ -118,8 +118,16 @@ extension ChatService {
         return ChatMessage(role: .system, content: content)
     }
 
-    func makeSystemTimeSystemMessage() -> ChatMessage {
-        ChatMessage(role: .system, content: makeSystemTimePromptBlock())
+    func makeTailSystemTimeMessage(apiFormat: String) -> ChatMessage {
+        let role: MessageRole
+        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
+        case .anthropic, .gemini:
+            // 这两类协议会把所有 system 消息提升到请求前缀，动态时间必须留在对话末尾以保护缓存。
+            role = .user
+        case .openAICompatible, .openAIResponses:
+            role = .system
+        }
+        return ChatMessage(role: role, content: makeSystemTimePromptBlock())
     }
 
     func makeSystemTimePromptBlock() -> String {

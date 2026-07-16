@@ -181,7 +181,7 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("系统时间可作为末尾 system 消息注入")
+    @Test("OpenAI 系统时间可作为末尾 system 消息注入")
     func testSystemTimeTailPromptInjection() async throws {
         await cleanup()
         mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "ok")
@@ -215,6 +215,21 @@ extension ChatServiceTests {
         #expect(lastMessage?.content.contains("ISO8601") == false)
 
         await cleanup()
+    }
+
+    @Test("末尾系统时间为 Anthropic 和 Gemini 使用 user 角色")
+    func testTailSystemTimeMessageUsesCacheFriendlyRoleByAPIFormat() {
+        for apiFormat in ["anthropic", "claude", "gemini", "google", "vertex"] {
+            let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
+            #expect(message.role == .user)
+            #expect(message.content.contains("<time>"))
+        }
+
+        for apiFormat in ["openai-compatible", "openai-responses", LocalModelProviderBridge.apiFormat] {
+            let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
+            #expect(message.role == .system)
+            #expect(message.content.contains("<time>"))
+        }
     }
 
     @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")

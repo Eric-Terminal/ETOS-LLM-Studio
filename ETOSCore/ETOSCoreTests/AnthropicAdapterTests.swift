@@ -150,6 +150,32 @@ struct AnthropicAdapterTests {
         #expect(toolResultContent.compactMap { $0["tool_use_id"] as? String } == ["call_00_weather", "call_01_time"])
     }
 
+    @Test("Anthropic 末尾时间以 user 消息保留在 system 之外")
+    func testAnthropicTailTimeRemainsUserMessage() throws {
+        let messages = [
+            ChatMessage(role: .system, content: "稳定系统提示"),
+            ChatMessage(role: .user, content: "现在几点？"),
+            ChatMessage(role: .user, content: "<time>当前系统时间</time>")
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: makeAnthropicModel(),
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let payloadMessages = try #require(payload["messages"] as? [[String: Any]])
+
+        #expect(payload["system"] as? String == "稳定系统提示")
+        #expect(payloadMessages.compactMap { $0["role"] as? String } == ["user", "user"])
+        #expect(payloadMessages.last?["content"] as? String == "<time>当前系统时间</time>")
+    }
+
     @Test("Anthropic 流式增量保留 thinking signature")
     func testAnthropicStreamingDeltaPreservesThinkingSignature() throws {
         let line = """

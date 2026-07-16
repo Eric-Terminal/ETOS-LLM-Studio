@@ -300,7 +300,7 @@ extension ChatService {
         }
 
         if includeSystemTime && systemTimeInjectionPosition == .tail {
-            messagesToSend.append(makeSystemTimeSystemMessage())
+            messagesToSend.append(makeTailSystemTimeMessage(apiFormat: runnableModel.provider.apiFormat))
         }
 
         messagesToSend = await RoleplayPromptTemplateRenderer.renderMessages(

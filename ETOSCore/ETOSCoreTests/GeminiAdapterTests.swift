@@ -496,6 +496,35 @@ struct GeminiAdapterTests {
         #expect(functionResponseID == "function-call-456")
     }
 
+    @Test("Gemini 末尾时间以 user 消息保留在 system_instruction 之外")
+    func testGeminiTailTimeRemainsUserContent() throws {
+        let messages = [
+            ChatMessage(role: .system, content: "稳定系统提示"),
+            ChatMessage(role: .user, content: "现在几点？"),
+            ChatMessage(role: .user, content: "<time>当前系统时间</time>")
+        ]
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [:],
+            messages: messages,
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let httpBody = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
+        let systemInstruction = try #require(payload["system_instruction"] as? [String: Any])
+        let systemParts = try #require(systemInstruction["parts"] as? [[String: Any]])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let tailParts = try #require(contents.last?["parts"] as? [[String: Any]])
+
+        #expect(systemParts.compactMap { $0["text"] as? String } == ["稳定系统提示"])
+        #expect(contents.compactMap { $0["role"] as? String } == ["user", "user"])
+        #expect(tailParts.first?["text"] as? String == "<time>当前系统时间</time>")
+    }
+
     @Test("Gemini 请求体在不回传模式下移除 thoughtSignature")
     func testGeminiBuildRequestOmitsThoughtSignatureWhenDisabled() throws {
         let assistantCall = InternalToolCall(
