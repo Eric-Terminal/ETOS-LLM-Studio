@@ -94,11 +94,14 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
-    // 发送飞行动画：状态、输入文字区域与当前呈现几何。
+    // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
     @State var pendingFlightCleanupTask: Task<Void, Never>?
-    @State var flightPresentationRect: CGRect = .zero
+    @State var flightPresentationX: CGFloat = 0
+    @State var flightPresentationY: CGFloat = 0
+    @State var flightPresentationWidth: CGFloat = 0
+    @State var flightPresentationHeight: CGFloat = 0
     @State var flightVisualProgress: CGFloat = 0
     @State var flightHandoffProgress: CGFloat = 0
     @FocusState var composerFocused: Bool
@@ -1089,7 +1092,10 @@ extension ChatView {
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
                 flightState = nil
-                flightPresentationRect = .zero
+                flightPresentationX = 0
+                flightPresentationY = 0
+                flightPresentationWidth = 0
+                flightPresentationHeight = 0
                 flightVisualProgress = 0
                 flightHandoffProgress = 0
             }

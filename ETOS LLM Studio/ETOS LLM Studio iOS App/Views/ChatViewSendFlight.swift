@@ -3,9 +3,9 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 发送时由一份临时文字快照接管输入内容，先在输入栏内显色并向右收拢，
-// 再从当前呈现位置飞向新消息的真实正文气泡。落点在布局变化时可继续重定向，
-// 最后通过短交叉渐变交还给真实气泡，避免等待后瞬移和落点闪接。
+// 发送时由一份临时文字快照接管输入内容，在输入栏内立即显色，
+// 再以快速横向收拢和缓慢纵向上升两条可打断弹簧飞向真实气泡。
+// 落点在布局变化时继续从当前呈现值重定向，最后通过短交叉渐变完成交接。
 // ============================================================================
 
 import Foundation
@@ -13,11 +13,6 @@ import SwiftUI
 import ETOSCore
 
 // MARK: - 飞行状态
-
-enum SendFlightPhase: Equatable {
-    case launching
-    case landing
-}
 
 struct SendFlightState: Equatable {
     let id: UUID
@@ -33,7 +28,6 @@ struct SendFlightState: Equatable {
     let cornerRadius: CGFloat
     let startRect: CGRect
     var landingRect: CGRect?
-    var phase: SendFlightPhase
 }
 
 // MARK: - 坐标上报
@@ -197,65 +191,78 @@ extension ChatView {
         min(max(appConfig.chatSendAnimationSpringResponse, 0.2), 0.8)
     }
 
-    /// 参考录屏的前约 100ms：先给按下发送即时的材质和收拢反馈。
-    private var sendFlightCompressionDuration: Double {
-        min(0.14, max(0.06, sendFlightResponse * 0.22))
-    }
-
-    private var sendFlightLandingResponse: Double {
-        max(0.18, sendFlightResponse - sendFlightCompressionDuration)
-    }
-
-    /// 设置中的回弹仍然有效，但限制在不会出现橡皮抖动的惯性区间。
-    private var sendFlightLandingDamping: Double {
+    private var sendFlightConfiguredDamping: Double {
         let configured = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
-        let normalized = (configured - 0.4) / 0.6
-        return 0.82 + normalized * 0.14
+        return (configured - 0.4) / 0.6
+    }
+
+    private var sendFlightVerticalDamping: Double {
+        0.76 + sendFlightConfiguredDamping * 0.18
+    }
+
+    private var sendFlightHorizontalResponse: Double {
+        min(0.34, max(0.14, sendFlightResponse * 0.42))
+    }
+
+    /// 参考录屏中横向收拢约为纵向响应的 42%，并保留轻微越界惯性。
+    private var sendFlightHorizontalSpring: Animation {
+        .spring(
+            response: sendFlightHorizontalResponse,
+            dampingFraction: 0.60 + sendFlightConfiguredDamping * 0.30
+        )
+    }
+
+    /// 宽度保留轻微收缩惯性，但比横向位置更高阻尼，防止短气泡过度压缩。
+    private var sendFlightWidthSpring: Animation {
+        .spring(
+            response: sendFlightHorizontalResponse,
+            dampingFraction: 0.68 + sendFlightConfiguredDamping * 0.22
+        )
+    }
+
+    /// 纵向保持完整响应时间，避免短距离内瞬间弹到落点。
+    private var sendFlightVerticalSpring: Animation {
+        .spring(
+            response: sendFlightResponse,
+            dampingFraction: sendFlightVerticalDamping
+        )
     }
 
     private var sendFlightPreludeSpring: Animation {
         .spring(
-            response: min(0.22, max(0.14, sendFlightCompressionDuration * 1.8)),
+            response: min(0.16, max(0.10, sendFlightResponse * 0.27)),
+            dampingFraction: 1
+        )
+    }
+
+    private var sendFlightMaterialSpring: Animation {
+        .spring(
+            response: min(0.28, max(0.16, sendFlightResponse * 0.48)),
             dampingFraction: 0.96
         )
     }
 
-    private var sendFlightCompressionSpring: Animation {
+    /// 展开编辑器与短气泡的高度差很大，高度使用独立高阻尼避免过度压扁。
+    private var sendFlightHeightSpring: Animation {
         .spring(
-            response: min(0.28, max(0.16, sendFlightCompressionDuration * 1.8)),
-            dampingFraction: 0.94
-        )
-    }
-
-    /// 收拢动画被落位弹簧打断时，SwiftUI 会从当前呈现值接续运动。
-    private var sendFlightLandingSpring: Animation {
-        .spring(
-            response: sendFlightLandingResponse,
-            dampingFraction: sendFlightLandingDamping
-        )
-    }
-
-    /// 列表在飞行中继续校正布局时，从当前呈现位置平顺追随新落点。
-    private var sendFlightRetargetSpring: Animation {
-        .spring(
-            response: max(0.16, sendFlightLandingResponse * 0.46),
-            dampingFraction: 0.94
+            response: min(0.30, max(0.16, sendFlightResponse * 0.44)),
+            dampingFraction: 0.96
         )
     }
 
     private var sendFlightFallbackDuration: Double { 1.6 }
     private var sendFlightHandoffDuration: Double {
-        min(0.11, max(0.08, sendFlightLandingResponse * 0.28))
+        min(0.11, max(0.08, sendFlightResponse * 0.22))
     }
     private var sendFlightVisibleDuration: Double {
-        sendFlightLandingResponse
+        min(0.75, max(0.28, sendFlightResponse * 0.9))
     }
 
     func beginSendFlight(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let sendSpring = Animation.spring(
             response: sendFlightResponse,
-            dampingFraction: sendFlightLandingDamping
+            dampingFraction: sendFlightVerticalDamping
         )
         let hasAttachments = viewModel.pendingAudioAttachment != nil
             || !viewModel.pendingImageAttachments.isEmpty
@@ -282,7 +289,10 @@ extension ChatView {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            flightPresentationRect = inputBarRect
+            flightPresentationX = inputBarRect.midX
+            flightPresentationY = inputBarRect.midY
+            flightPresentationWidth = inputBarRect.width
+            flightPresentationHeight = inputBarRect.height
             flightVisualProgress = 0
             flightHandoffProgress = 0
             flightState = SendFlightState(
@@ -298,8 +308,7 @@ extension ChatView {
                 bubbleOpacity: style.bubbleOpacity,
                 cornerRadius: ChatFlightBubbleStyle.cornerRadius,
                 startRect: inputBarRect,
-                landingRect: nil,
-                phase: .launching
+                landingRect: nil
             )
         }
         scheduleSendFlightFallback(flightID: flightID)
@@ -341,21 +350,23 @@ extension ChatView {
             flightState = state
         }
 
-        if state.phase == .launching {
-            withAnimation(sendFlightCompressionSpring) {
-                flightPresentationRect = sendFlightCompressionRect(
-                    from: state.startRect,
-                    to: rect
-                )
-                flightVisualProgress = 0.86
-            }
-            if isFirstLanding {
-                scheduleSendFlightLanding(flightID: state.id)
-            }
-        } else {
-            withAnimation(sendFlightRetargetSpring) {
-                flightPresentationRect = rect
-            }
+        withAnimation(sendFlightHorizontalSpring) {
+            flightPresentationX = rect.midX
+        }
+        withAnimation(sendFlightVerticalSpring) {
+            flightPresentationY = rect.midY
+        }
+        withAnimation(sendFlightWidthSpring) {
+            flightPresentationWidth = rect.width
+        }
+        withAnimation(sendFlightHeightSpring) {
+            flightPresentationHeight = rect.height
+        }
+        withAnimation(sendFlightMaterialSpring) {
+            flightVisualProgress = 1
+        }
+        if isFirstLanding {
+            scheduleSendFlightHandoff(flightID: state.id)
         }
     }
 
@@ -385,12 +396,12 @@ extension ChatView {
             )
             .id(state.id)
             .frame(
-                width: max(flightPresentationRect.width, 1),
-                height: max(flightPresentationRect.height, 1)
+                width: max(flightPresentationWidth, 1),
+                height: max(flightPresentationHeight, 1)
             )
             .position(
-                x: flightPresentationRect.midX,
-                y: flightPresentationRect.midY
+                x: flightPresentationX,
+                y: flightPresentationY
             )
             .opacity(Double(max(0, 1 - flightHandoffProgress)))
             .allowsHitTesting(false)
@@ -415,45 +426,13 @@ extension ChatView {
             await Task.yield()
             guard let state = flightState,
                   state.id == flightID,
-                  state.phase == .launching,
                   state.landingRect == nil else { return }
 
             withAnimation(sendFlightPreludeSpring) {
-                flightPresentationRect = sendFlightPreludeRect(from: state.startRect)
+                flightPresentationY = state.startRect.midY
+                    - min(3, state.startRect.height * 0.07)
                 flightVisualProgress = 0.36
             }
-        }
-    }
-
-    private func scheduleSendFlightLanding(flightID: UUID) {
-        guard let state = flightState, state.id == flightID else { return }
-        let elapsed = Date().timeIntervalSince(state.startedAt)
-        let remainingCompression = max(0, sendFlightCompressionDuration - elapsed)
-
-        Task { @MainActor in
-            if remainingCompression > 0 {
-                try? await Task.sleep(
-                    nanoseconds: UInt64(remainingCompression * 1_000_000_000)
-                )
-            } else {
-                await Task.yield()
-            }
-            guard var currentState = flightState,
-                  currentState.id == flightID,
-                  currentState.phase == .launching,
-                  let landingRect = currentState.landingRect else { return }
-
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                currentState.phase = .landing
-                flightState = currentState
-            }
-            withAnimation(sendFlightLandingSpring) {
-                flightPresentationRect = landingRect
-                flightVisualProgress = 1
-            }
-            scheduleSendFlightHandoff(flightID: flightID)
         }
     }
 
@@ -482,7 +461,10 @@ extension ChatView {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             flightState = nil
-            flightPresentationRect = .zero
+            flightPresentationX = 0
+            flightPresentationY = 0
+            flightPresentationWidth = 0
+            flightPresentationHeight = 0
             flightVisualProgress = 0
             flightHandoffProgress = 0
             pendingFlightCleanupTask?.cancel()
@@ -518,30 +500,6 @@ extension ChatView {
             && rect.minY.isFinite
             && rect.maxX.isFinite
             && rect.maxY.isFinite
-    }
-
-    private func sendFlightPreludeRect(from source: CGRect) -> CGRect {
-        guard source.height <= 72 else { return source }
-        let width = max(source.height, source.width * 0.9)
-        let trailingShift = min(10, source.height * 0.2)
-        return CGRect(
-            x: source.maxX + trailingShift - width,
-            y: source.minY,
-            width: width,
-            height: source.height
-        )
-    }
-
-    private func sendFlightCompressionRect(from source: CGRect, to target: CGRect) -> CGRect {
-        let y = source.height > 72
-            ? source.minY
-            : source.midY - target.height / 2
-        return CGRect(
-            x: target.minX,
-            y: y,
-            width: target.width,
-            height: target.height
-        )
     }
 
     private func sendFlightRectsDiffer(_ current: CGRect?, _ next: CGRect) -> Bool {
