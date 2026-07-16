@@ -303,7 +303,7 @@ extension ChatViewModel {
             .sink { [weak self] providers in
                 guard let self else { return }
                 self.providers = providers
-                self.configuredModels = chatService.configuredRunnableModels
+                self.applyConfiguredModels(chatService.configuredRunnableModels)
                 self.applyActivatedModels(chatService.activatedRunnableModels)
                 self.applyActivatedConversationModels(chatService.activatedConversationModels)
                 self.applyActivatedChatModels(chatService.activatedChatModels)
@@ -521,8 +521,17 @@ extension ChatViewModel {
         }
     }
 
+    func applyConfiguredModels(_ models: [RunnableModel]) {
+        configuredModels = models
+        let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
+        configuredModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
+    }
+
     func applyActivatedConversationModels(_ models: [RunnableModel]) {
         activatedConversationModels = models
+        let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
+        activatedConversationModelGroups = groups
+        activatedConversationModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
     }
 
     func applyActivatedChatModels(_ models: [RunnableModel]) {

@@ -44,6 +44,12 @@ extension PersistenceTests {
         #expect(AppConfigKey.enableReasoningSummary.defaultValue == .bool(false))
     }
 
+    @Test("iOS 与 watchOS 默认使用按提供商选择模型")
+    func modelPickerDefaultsToProviderGrouping() {
+        #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))
+        #expect(AppConfigKey.watchModelPickerGroupsByProvider.defaultValue == .bool(true))
+    }
+
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {

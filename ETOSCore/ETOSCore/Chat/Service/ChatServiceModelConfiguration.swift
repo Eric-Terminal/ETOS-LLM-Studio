@@ -86,19 +86,17 @@ extension ChatService {
             legacyUserDefaultsKey: Self.modelOrderStorageKey,
             defaultValue: []
         ) ?? []
-        let mergedIDs = ModelOrderIndex.merge(storedIDs: storedIDs, currentIDs: currentIDs)
-        let rankByID = Dictionary(uniqueKeysWithValues: mergedIDs.enumerated().map { ($1, $0) })
-
-        return models.enumerated()
-            .sorted { lhs, rhs in
-                let leftRank = rankByID[lhs.element.id] ?? Int.max
-                let rightRank = rankByID[rhs.element.id] ?? Int.max
-                if leftRank != rightRank {
-                    return leftRank < rightRank
-                }
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
+        let providerIDByModelID = Dictionary(uniqueKeysWithValues: models.map {
+            ($0.id, $0.provider.id.uuidString)
+        })
+        let orderedIDs = ModelOrderIndex.hierarchicalOrder(
+            storedModelIDs: storedIDs,
+            currentModelIDs: currentIDs,
+            providerIDByModelID: providerIDByModelID,
+            orderedProviderIDs: providers.map { $0.id.uuidString }
+        )
+        let modelByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+        return orderedIDs.compactMap { modelByID[$0] }
     }
 
     func reconcileStoredModelOrder() {
@@ -143,6 +141,31 @@ extension ChatService {
         if notifyChange {
             providersSubject.send(providers)
         }
+    }
+
+    /// 只更新指定提供商内部的模型顺序，不扰动其他提供商的相对位置。
+    public func setConfiguredModelOrder(
+        _ orderedModelIDs: [String],
+        for providerID: UUID,
+        notifyChange: Bool = true
+    ) {
+        let currentModels = configuredRunnableModels
+        let currentProviderModelIDs = currentModels
+            .filter { $0.provider.id == providerID }
+            .map(\.id)
+        guard !currentProviderModelIDs.isEmpty else { return }
+
+        let mergedProviderModelIDs = ModelOrderIndex.merge(
+            storedIDs: orderedModelIDs,
+            currentIDs: currentProviderModelIDs
+        )
+        var replacementIndex = 0
+        let mergedAllModelIDs = currentModels.map { runnable in
+            guard runnable.provider.id == providerID else { return runnable.id }
+            defer { replacementIndex += 1 }
+            return mergedProviderModelIDs[replacementIndex]
+        }
+        setConfiguredModelOrder(mergedAllModelIDs, notifyChange: notifyChange)
     }
 
     public func setProviderOrder(_ orderedProviderIDs: [UUID], notifyChange: Bool = true) {

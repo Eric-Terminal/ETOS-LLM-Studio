@@ -52,6 +52,53 @@ public struct RunnableModel: Identifiable, Hashable {
     }
 }
 
+/// 按提供商预分组的模型集合，供选择器和排序界面直接渲染。
+public struct RunnableModelProviderGroup: Identifiable, Hashable {
+    public var id: UUID { provider.id }
+    public let provider: Provider
+    public let providerInitial: String
+    public let models: [RunnableModel]
+
+    public init(provider: Provider, models: [RunnableModel]) {
+        self.provider = provider
+        let trimmedName = provider.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.providerInitial = trimmedName.first.map { String($0).uppercased() } ?? "?"
+        self.models = models
+    }
+}
+
+public enum RunnableModelGrouping {
+    /// 保留模型在输入数组中的相对顺序，并按用户设置的提供商顺序生成分组。
+    public static func groups(
+        models: [RunnableModel],
+        providerOrder: [Provider]
+    ) -> [RunnableModelProviderGroup] {
+        guard !models.isEmpty else { return [] }
+
+        var modelsByProviderID: [UUID: [RunnableModel]] = [:]
+        var providerByID = Dictionary(uniqueKeysWithValues: providerOrder.map { ($0.id, $0) })
+        var orderedProviderIDs = providerOrder.map(\.id)
+        var seenProviderIDs = Set(orderedProviderIDs)
+
+        for model in models {
+            modelsByProviderID[model.provider.id, default: []].append(model)
+            providerByID[model.provider.id] = model.provider
+            if seenProviderIDs.insert(model.provider.id).inserted {
+                orderedProviderIDs.append(model.provider.id)
+            }
+        }
+
+        return orderedProviderIDs.compactMap { providerID in
+            guard let provider = providerByID[providerID],
+                  let providerModels = modelsByProviderID[providerID],
+                  !providerModels.isEmpty else {
+                return nil
+            }
+            return RunnableModelProviderGroup(provider: provider, models: providerModels)
+        }
+    }
+}
+
 /// 根据最终请求覆盖参数决定响应模式，确保接收方式与实际发送的 `stream` 一致。
 func resolvedRequestStreamingEnabled(
     preference: Bool,

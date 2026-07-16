@@ -91,6 +91,8 @@ struct SettingsView: View {
                         NavigationLink {
                             ModelSelectionView(
                                 models: options,
+                                providerGroups: viewModel.activatedConversationModelGroups,
+                                modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
                                 selectedModel: selectedModelBinding
                             )
                         } label: {
@@ -544,42 +546,117 @@ struct SettingsListIconView: View {
 
 private struct ModelSelectionView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     let models: [RunnableModel]
+    let providerGroups: [RunnableModelProviderGroup]
+    let modelsByProviderID: [UUID: [RunnableModel]]
     @Binding var selectedModel: RunnableModel?
     @State private var quickSettingsTarget: RunnableModel?
+    @State private var selectedProviderID: UUID?
+
+    init(
+        models: [RunnableModel],
+        providerGroups: [RunnableModelProviderGroup],
+        modelsByProviderID: [UUID: [RunnableModel]],
+        selectedModel: Binding<RunnableModel?>
+    ) {
+        self.models = models
+        self.providerGroups = providerGroups
+        self.modelsByProviderID = modelsByProviderID
+        _selectedModel = selectedModel
+        let currentProviderID = selectedModel.wrappedValue?.provider.id
+        _selectedProviderID = State(
+            initialValue: currentProviderID.flatMap {
+                modelsByProviderID[$0] == nil ? nil : $0
+            } ?? providerGroups.first?.id
+        )
+    }
 
     var body: some View {
+        modelSelectionContent
+            .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
+            .navigationDestination(item: $quickSettingsTarget) { model in
+                WatchQuickModelSettingsView(runnableModel: model)
+            }
+    }
+
+    @ViewBuilder
+    private var modelSelectionContent: some View {
+        if appConfig.watchModelPickerGroupsByProvider {
+            providerGroupedModelList
+        } else {
+            classicModelList
+        }
+    }
+
+    private var classicModelList: some View {
         List {
             Section {
                 ForEach(models) { model in
-                    Button {
-                        select(model)
-                    } label: {
-                        selectionRow(
-                            title: model.model.displayName,
-                            subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                            isSelected: selectedModel?.id == model.id
-                        )
-                    }
-                    .highPriorityGesture(
-                        LongPressGesture(minimumDuration: 0.45)
-                            .onEnded { _ in
-                                presentSettings(for: model)
-                            }
-                    )
-                    .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
-                    .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
-                        presentSettings(for: model)
-                    }
+                    modelButton(model, showsProviderName: true)
                 }
             } footer: {
                 Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
             }
         }
-        .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
-        .navigationDestination(item: $quickSettingsTarget) { model in
-            WatchQuickModelSettingsView(runnableModel: model)
+    }
+
+    private var providerGroupedModelList: some View {
+        List {
+            Section(NSLocalizedString("提供商", comment: "")) {
+                Picker(
+                    NSLocalizedString("提供商", comment: ""),
+                    selection: $selectedProviderID
+                ) {
+                    ForEach(providerGroups) { group in
+                        Text(group.provider.name)
+                            .tag(Optional(group.id))
+                    }
+                }
+            }
+
+            Section {
+                ForEach(selectedProviderModels) { model in
+                    modelButton(model, showsProviderName: false)
+                }
+            } header: {
+                Text(NSLocalizedString("模型", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+            }
+        }
+    }
+
+    private var selectedProviderModels: [RunnableModel] {
+        guard let selectedProviderID else { return [] }
+        return modelsByProviderID[selectedProviderID] ?? []
+    }
+
+    private func modelButton(
+        _ model: RunnableModel,
+        showsProviderName: Bool
+    ) -> some View {
+        Button {
+            select(model)
+        } label: {
+            selectionRow(
+                title: model.model.displayName,
+                subtitle: showsProviderName
+                    ? "\(model.provider.name) · \(model.model.modelName)"
+                    : model.model.modelName,
+                isSelected: selectedModel?.id == model.id
+            )
+        }
+        .highPriorityGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in
+                    presentSettings(for: model)
+                }
+        )
+        .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
+        .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
+            presentSettings(for: model)
         }
     }
 

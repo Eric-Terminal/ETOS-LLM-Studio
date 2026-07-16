@@ -196,6 +196,68 @@ struct ModelOrderIndexTests {
 
         #expect(moved == ["a", "d", "b", "c"])
     }
+
+    @Test("分层排序先遵循提供商顺序并保留内部模型顺序")
+    func hierarchicalOrderUsesProviderThenModelOrder() {
+        let current = ["p1-m1", "p1-m2", "p2-m1", "p2-m2"]
+        let providerByModel = [
+            "p1-m1": "p1",
+            "p1-m2": "p1",
+            "p2-m1": "p2",
+            "p2-m2": "p2"
+        ]
+
+        let ordered = ModelOrderIndex.hierarchicalOrder(
+            storedModelIDs: ["p1-m2", "p2-m2", "p1-m1", "p2-m1"],
+            currentModelIDs: current,
+            providerIDByModelID: providerByModel,
+            orderedProviderIDs: ["p2", "p1"]
+        )
+
+        #expect(ordered == ["p2-m2", "p2-m1", "p1-m2", "p1-m1"])
+    }
+}
+
+@Suite("RunnableModelGrouping Tests")
+struct RunnableModelGroupingTests {
+    @Test("按提供商顺序分组并保留组内模型顺序")
+    func groupsModelsByConfiguredProviderOrder() {
+        let providerAID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+        let providerBID = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+        let modelA1 = Model(modelName: "a-1", displayName: "A 1", isActivated: true)
+        let modelA2 = Model(modelName: "a-2", displayName: "A 2", isActivated: true)
+        let modelB1 = Model(modelName: "b-1", displayName: "B 1", isActivated: true)
+        let providerA = Provider(
+            id: providerAID,
+            name: "Alpha",
+            baseURL: "https://alpha.example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [modelA1, modelA2]
+        )
+        let providerB = Provider(
+            id: providerBID,
+            name: "Beta",
+            baseURL: "https://beta.example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [modelB1]
+        )
+        let models = [
+            RunnableModel(provider: providerA, model: modelA2),
+            RunnableModel(provider: providerB, model: modelB1),
+            RunnableModel(provider: providerA, model: modelA1)
+        ]
+
+        let groups = RunnableModelGrouping.groups(
+            models: models,
+            providerOrder: [providerB, providerA]
+        )
+
+        #expect(groups.map(\.id) == [providerBID, providerAID])
+        #expect(groups[0].models.map(\.model.modelName) == ["b-1"])
+        #expect(groups[1].models.map(\.model.modelName) == ["a-2", "a-1"])
+    }
 }
 
 @Suite("Provider Order Tests")

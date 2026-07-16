@@ -30,66 +30,149 @@ extension ChatView {
         }
     }
 
+    @ViewBuilder
     var nativeModelPickerContent: some View {
-        List {
-            if viewModel.activatedConversationModels.isEmpty {
-                VStack(spacing: 6) {
-                    Text(NSLocalizedString("暂无可用模型", comment: ""))
-                        .etFont(.headline)
-                    Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 28)
-            } else {
-                Section {
-                    ForEach(topModelChoices, id: \.id) { runnable in
-                        nativeModelPickerModelRow(runnable)
-                    }
-                } header: {
-                    Text(NSLocalizedString("置顶模型", comment: ""))
-                } footer: {
-                    Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
-                }
+        if viewModel.activatedConversationModels.isEmpty {
+            nativeModelPickerEmptyList
+        } else if appConfig.iOSModelPickerGroupsByProvider {
+            providerGroupedModelPickerContent
+        } else {
+            classicModelPickerList
+        }
+    }
 
-                if hasMoreModelChoices {
-                    Section {
-                        NavigationLink {
-                            nativeModelPickerAllModelsList
-                        } label: {
-                            Label(NSLocalizedString("更多模型", comment: ""), systemImage: "ellipsis")
-                        }
+    var nativeModelPickerEmptyList: some View {
+        List {
+            VStack {
+                Text(NSLocalizedString("暂无可用模型", comment: ""))
+                    .etFont(.headline)
+                Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical)
+        }
+    }
+
+    var classicModelPickerList: some View {
+        List {
+            modelPickerSection(
+                models: viewModel.activatedConversationModels,
+                showsProviderName: true
+            )
+        }
+    }
+
+    var providerGroupedModelPickerContent: some View {
+        VStack(spacing: 0) {
+            modelPickerProviderStrip
+
+            List {
+                modelPickerSection(
+                    models: selectedProviderModelChoices,
+                    showsProviderName: false
+                )
+            }
+        }
+        .onAppear(perform: prepareSelectedModelPickerProvider)
+        .onReceive(viewModel.$activatedConversationModelGroups) { groups in
+            normalizeSelectedModelPickerProvider(using: groups)
+        }
+    }
+
+    var modelPickerProviderStrip: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack {
+                    ForEach(viewModel.activatedConversationModelGroups) { group in
+                        modelPickerProviderButton(group)
+                            .id(group.id)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            .scrollIndicators(.hidden)
+            .onAppear {
+                guard let selectedModelPickerProviderID else { return }
+                proxy.scrollTo(selectedModelPickerProviderID, anchor: .center)
+            }
+            .onChange(of: selectedModelPickerProviderID) { _, providerID in
+                guard let providerID else { return }
+                if accessibilityReduceMotion {
+                    proxy.scrollTo(providerID, anchor: .center)
+                } else {
+                    withAnimation(chatPickerAnimation) {
+                        proxy.scrollTo(providerID, anchor: .center)
                     }
                 }
             }
         }
+        .background(.bar)
     }
 
-    var nativeModelPickerAllModelsList: some View {
-        List {
-            Section {
-                ForEach(viewModel.activatedConversationModels, id: \.id) { runnable in
-                    nativeModelPickerModelRow(runnable)
-                }
-            } header: {
-                Text(NSLocalizedString("模型", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+    func modelPickerProviderButton(_ group: RunnableModelProviderGroup) -> some View {
+        let isSelected = group.id == selectedModelPickerProviderID
+        return Button {
+            selectedModelPickerProviderID = group.id
+        } label: {
+            VStack {
+                Text(group.providerInitial)
+                    .etFont(.headline)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    .frame(width: 48, height: 48)
+                    .background(
+                        Circle()
+                            .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12))
+                    )
+                    .overlay {
+                        Circle()
+                            .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    }
+
+                Text(group.provider.name)
+                    .etFont(.caption2)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .frame(width: 68)
             }
+            .contentShape(Rectangle())
+            .animation(accessibilityReduceMotion ? nil : chatPickerAnimation, value: isSelected)
         }
-        .navigationTitle(NSLocalizedString("更多模型", comment: ""))
-        .navigationBarTitleDisplayMode(.inline)
+        .buttonStyle(.plain)
+        .accessibilityLabel(group.provider.name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    func nativeModelPickerModelRow(_ runnable: RunnableModel) -> some View {
+    func modelPickerSection(
+        models: [RunnableModel],
+        showsProviderName: Bool
+    ) -> some View {
+        Section {
+            ForEach(models, id: \.id) { runnable in
+                nativeModelPickerModelRow(runnable, showsProviderName: showsProviderName)
+            }
+        } header: {
+            Text(NSLocalizedString("模型", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+        }
+    }
+
+    func nativeModelPickerModelRow(
+        _ runnable: RunnableModel,
+        showsProviderName: Bool
+    ) -> some View {
         Button {
             viewModel.setSelectedModel(runnable)
             dismissModelPickerSheet()
         } label: {
             MarqueeTitleSubtitleSelectionRow(
                 title: runnable.model.displayName,
-                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                subtitle: showsProviderName
+                    ? "\(runnable.provider.name) · \(runnable.model.modelName)"
+                    : runnable.model.modelName,
                 isSelected: runnable.id == viewModel.selectedModel?.id,
                 subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
             )
@@ -112,13 +195,30 @@ extension ChatView {
         quickModelSettingsTarget = runnable
     }
 
-    var topModelChoices: [RunnableModel] {
-        Array(viewModel.activatedConversationModels.prefix(3))
+    var selectedProviderModelChoices: [RunnableModel] {
+        guard let selectedModelPickerProviderID else { return [] }
+        return viewModel.activatedConversationModelsByProviderID[selectedModelPickerProviderID] ?? []
     }
 
-    var hasMoreModelChoices: Bool {
-        viewModel.activatedConversationModels.count > topModelChoices.count
+    func prepareSelectedModelPickerProvider() {
+        normalizeSelectedModelPickerProvider(using: viewModel.activatedConversationModelGroups)
     }
+
+    func normalizeSelectedModelPickerProvider(using groups: [RunnableModelProviderGroup]) {
+        guard !groups.isEmpty else {
+            selectedModelPickerProviderID = nil
+            return
+        }
+        if let selectedModelPickerProviderID,
+           viewModel.activatedConversationModelsByProviderID[selectedModelPickerProviderID] != nil {
+            return
+        }
+        let currentProviderID = viewModel.selectedModel?.provider.id
+        selectedModelPickerProviderID = currentProviderID.flatMap {
+            viewModel.activatedConversationModelsByProviderID[$0] == nil ? nil : $0
+        } ?? groups.first?.id
+    }
+
 }
 
 private struct ChatQuickModelSettingsView: View {

@@ -382,6 +382,27 @@ public enum ModelOrderIndex {
         orderedIDs.insert(moved, at: destination)
         return orderedIDs
     }
+
+    /// 先按提供商排序，再保留每个提供商内部已有的模型相对顺序。
+    public static func hierarchicalOrder(
+        storedModelIDs: [String],
+        currentModelIDs: [String],
+        providerIDByModelID: [String: String],
+        orderedProviderIDs: [String]
+    ) -> [String] {
+        let mergedModelIDs = merge(storedIDs: storedModelIDs, currentIDs: currentModelIDs)
+        let providerRank = Dictionary(uniqueKeysWithValues: orderedProviderIDs.enumerated().map { ($1, $0) })
+        let modelRank = Dictionary(uniqueKeysWithValues: mergedModelIDs.enumerated().map { ($1, $0) })
+
+        return mergedModelIDs.sorted { leftID, rightID in
+            let leftProviderRank = providerIDByModelID[leftID].flatMap { providerRank[$0] } ?? Int.max
+            let rightProviderRank = providerIDByModelID[rightID].flatMap { providerRank[$0] } ?? Int.max
+            if leftProviderRank != rightProviderRank {
+                return leftProviderRank < rightProviderRank
+            }
+            return (modelRank[leftID] ?? Int.max) < (modelRank[rightID] ?? Int.max)
+        }
+    }
 }
 
 public extension Model {

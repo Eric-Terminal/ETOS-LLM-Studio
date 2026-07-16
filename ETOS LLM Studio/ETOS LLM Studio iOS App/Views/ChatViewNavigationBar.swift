@@ -242,6 +242,7 @@ extension ChatView {
     }
 
     func presentModelPickerSheet() {
+        prepareSelectedModelPickerProvider()
         activeChatPickerDetent = .medium
         activeChatPickerSheet = .model
     }

@@ -109,20 +109,47 @@ private struct WatchProviderManagementContentView: View {
 
 private struct WatchProviderModelOrderContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     var body: some View {
         List {
             Section(
-                header: Text(NSLocalizedString("模型顺序", comment: "")),
-                footer: Text(NSLocalizedString("拖拽右侧把手可调整全局模型顺序。模型选择列表会按这里的顺序展示。", comment: ""))
+                header: Text(NSLocalizedString("模型选择方式", comment: "")),
+                footer: Text(NSLocalizedString("经典列表会直接显示全部模型；按提供商会先选择提供商，再显示对应模型。", comment: ""))
             ) {
-                if viewModel.configuredModels.isEmpty {
-                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
+                Picker(
+                    NSLocalizedString("模型选择方式", comment: ""),
+                    selection: modelPickerGroupingBinding
+                ) {
+                    Text(NSLocalizedString("经典列表", comment: ""))
+                        .tag(false)
+                    Text(NSLocalizedString("按提供商", comment: ""))
+                        .tag(true)
+                }
+            }
+
+            Section(
+                header: Text(NSLocalizedString("提供商顺序", comment: "")),
+                footer: Text(NSLocalizedString("拖拽右侧把手调整提供商顺序；轻点提供商可调整其模型顺序。", comment: ""))
+            ) {
+                if viewModel.providers.isEmpty {
+                    Text(NSLocalizedString("暂无提供商。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(configuredModelsBinding, id: \.id, editActions: .move) { $runnable in
-                        modelOrderRow(runnable: runnable)
+                    ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
+                        NavigationLink {
+                            WatchProviderModelOrderDetailView(provider: provider)
+                                .environmentObject(viewModel)
+                        } label: {
+                            MarqueeTitleSubtitleLabel(
+                                title: provider.name,
+                                subtitle: provider.baseURL,
+                                titleUIFont: .preferredFont(forTextStyle: .body),
+                                subtitleUIFont: .preferredFont(forTextStyle: .caption2),
+                                spacing: 2
+                            )
+                        }
                     }
                 }
             }
@@ -130,12 +157,45 @@ private struct WatchProviderModelOrderContentView: View {
         .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
     }
 
-    private var configuredModelsBinding: Binding<[RunnableModel]> {
+    private var modelPickerGroupingBinding: Binding<Bool> {
         Binding {
-            viewModel.configuredModels
-        } set: { orderedModels in
-            ChatService.shared.setConfiguredModelOrder(orderedModels.map(\.id))
+            appConfig.watchModelPickerGroupsByProvider
+        } set: { groupsByProvider in
+            appConfig.watchModelPickerGroupsByProvider = groupsByProvider
         }
+    }
+
+    private var providersBinding: Binding<[Provider]> {
+        Binding {
+            viewModel.providers
+        } set: { orderedProviders in
+            ChatService.shared.setProviderOrder(orderedProviders.map(\.id))
+        }
+    }
+}
+
+private struct WatchProviderModelOrderDetailView: View {
+    @EnvironmentObject private var viewModel: ChatViewModel
+    let provider: Provider
+
+    var body: some View {
+        List {
+            Section(
+                header: Text(NSLocalizedString("模型顺序", comment: "")),
+                footer: Text(NSLocalizedString("拖拽右侧把手调整此提供商内的模型顺序。", comment: ""))
+            ) {
+                if modelsBinding.wrappedValue.isEmpty {
+                    Text(NSLocalizedString("暂无可排序模型。", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(modelsBinding, id: \.id, editActions: .move) { $runnable in
+                        modelOrderRow(runnable: runnable)
+                    }
+                }
+            }
+        }
+        .navigationTitle(provider.name)
     }
 
     @ViewBuilder
@@ -143,7 +203,7 @@ private struct WatchProviderModelOrderContentView: View {
         HStack(alignment: .top, spacing: 6) {
             MarqueeTitleSubtitleLabel(
                 title: runnable.model.displayName,
-                subtitle: "\(runnable.provider.name) · \(runnable.model.modelName)",
+                subtitle: runnable.model.modelName,
                 titleUIFont: .preferredFont(forTextStyle: .body),
                 subtitleUIFont: .monospacedSystemFont(
                     ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
@@ -158,6 +218,17 @@ private struct WatchProviderModelOrderContentView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var modelsBinding: Binding<[RunnableModel]> {
+        Binding {
+            viewModel.configuredModelsByProviderID[provider.id] ?? []
+        } set: { orderedModels in
+            ChatService.shared.setConfiguredModelOrder(
+                orderedModels.map(\.id),
+                for: provider.id
+            )
         }
     }
 }

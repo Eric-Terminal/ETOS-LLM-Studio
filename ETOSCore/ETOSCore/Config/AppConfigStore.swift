@@ -293,6 +293,8 @@ public final class AppConfigStore: ObservableObject {
     @Published public var watchBackgroundSourceHistory: String { didSet { write(.watchBackgroundSourceHistory, watchBackgroundSourceHistory) } }
     @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
+    @Published public var iOSModelPickerGroupsByProvider: Bool { didSet { write(.iOSModelPickerGroupsByProvider, iOSModelPickerGroupsByProvider) } }
+    @Published public var watchModelPickerGroupsByProvider: Bool { didSet { write(.watchModelPickerGroupsByProvider, watchModelPickerGroupsByProvider) } }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
@@ -480,6 +482,8 @@ public final class AppConfigStore: ObservableObject {
         watchBackgroundSourceHistory = Self.textValue(.watchBackgroundSourceHistory, userDefaults: userDefaults)
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
+        iOSModelPickerGroupsByProvider = Self.boolValue(.iOSModelPickerGroupsByProvider, userDefaults: userDefaults)
+        watchModelPickerGroupsByProvider = Self.boolValue(.watchModelPickerGroupsByProvider, userDefaults: userDefaults)
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
@@ -935,6 +939,8 @@ public final class AppConfigStore: ObservableObject {
         case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
         case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
+        case .iOSModelPickerGroupsByProvider: return .bool(iOSModelPickerGroupsByProvider)
+        case .watchModelPickerGroupsByProvider: return .bool(watchModelPickerGroupsByProvider)
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
@@ -1046,6 +1052,8 @@ public final class AppConfigStore: ObservableObject {
         case .fontUseCustomFonts: fontUseCustomFonts = value
         case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
+        case .iOSModelPickerGroupsByProvider: iOSModelPickerGroupsByProvider = value
+        case .watchModelPickerGroupsByProvider: watchModelPickerGroupsByProvider = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
         case .restoreLastSessionOnlyIfRecent: restoreLastSessionOnlyIfRecent = value
         case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value
