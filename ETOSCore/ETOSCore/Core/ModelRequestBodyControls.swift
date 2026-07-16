@@ -377,10 +377,7 @@ public enum ModelRequestBodyControlDefaults {
         return temperatureControl()
     }
 
-    public static func thinkingOptionGroup(
-        for apiFormat: String,
-        modelName: String? = nil
-    ) -> ModelRequestBodyControl {
+    public static func thinkingOptionGroup(for apiFormat: String) -> ModelRequestBodyControl {
         switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
         case .anthropic:
             return ModelRequestBodyControl(
@@ -405,36 +402,11 @@ public enum ModelRequestBodyControlDefaults {
                 ]
             )
         case .gemini:
-            let usesThinkingLevel = modelName?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .contains("gemini-3") == true
-            let isGemini25Pro = modelName?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .contains("gemini-2.5-pro") == true
-
-            // Gemini 3 使用枚举档位；Gemini 2.5 仍使用 token 预算。
-            let offConfig: [String: JSONValue]
-            let lowConfig: [String: JSONValue]
-            let mediumConfig: [String: JSONValue]
-            let highConfig: [String: JSONValue]
-            let xhighConfig: [String: JSONValue]
-            if usesThinkingLevel {
-                offConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("minimal")]
-                lowConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("low")]
-                mediumConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("medium")]
-                highConfig = ["includeThoughts": .bool(true), "thinkingLevel": .string("high")]
-                xhighConfig = highConfig
-            } else {
-                offConfig = isGemini25Pro
-                    ? ["includeThoughts": .bool(true)]
-                    : ["includeThoughts": .bool(false), "thinkingBudget": .int(0)]
-                lowConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(1_000)]
-                mediumConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(2_000)]
-                highConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(8_000)]
-                xhighConfig = ["includeThoughts": .bool(true), "thinkingBudget": .int(16_000)]
-            }
+            // Gemini 适配器统一使用当前的 thinkingLevel，不根据模型名称猜测协议能力。
+            let offConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("minimal")]
+            let lowConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("low")]
+            let mediumConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("medium")]
+            let highConfig: [String: JSONValue] = ["includeThoughts": .bool(true), "thinkingLevel": .string("high")]
             return ModelRequestBodyControl(
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
@@ -445,7 +417,7 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: geminiThinkingPayload(lowConfig)),
                     ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: geminiThinkingPayload(mediumConfig)),
                     ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: geminiThinkingPayload(highConfig)),
-                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: geminiThinkingPayload(xhighConfig))
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: geminiThinkingPayload(highConfig))
                 ]
             )
         case .openAICompatible:
@@ -483,13 +455,12 @@ public enum ModelRequestBodyControlDefaults {
 
     public static func initialOptionGroupControl(
         existingControls: [ModelRequestBodyControl],
-        apiFormat: String,
-        modelName: String? = nil
+        apiFormat: String
     ) -> ModelRequestBodyControl {
         if existingControls.contains(where: { $0.kind == .optionGroup }) {
             return ModelRequestBodyControl(title: "", kind: .optionGroup)
         }
-        return thinkingOptionGroup(for: apiFormat, modelName: modelName)
+        return thinkingOptionGroup(for: apiFormat)
     }
 
     private static func openAIResponsesThinkingPayload(effort: String) -> [String: JSONValue] {

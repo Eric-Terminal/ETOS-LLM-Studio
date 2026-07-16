@@ -81,10 +81,7 @@ public extension Model {
             return
         }
         requestBodyControls.append(
-            ModelRequestBodyControlDefaults.thinkingOptionGroup(
-                for: apiFormat,
-                modelName: modelName
-            )
+            ModelRequestBodyControlDefaults.thinkingOptionGroup(for: apiFormat)
         )
     }
 }

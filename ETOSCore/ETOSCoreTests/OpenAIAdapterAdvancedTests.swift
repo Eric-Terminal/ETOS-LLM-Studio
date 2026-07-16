@@ -296,7 +296,7 @@ struct OpenAIAdapterAdvancedTests {
         let model = RunnableModel(
             provider: responsesDummyModel.provider,
             model: Model(
-                modelName: "gpt-5.4",
+                modelName: "adapter-only-model",
                 overrideParameters: [
                     "max_tokens": .int(512),
                     "messages": .array([.dictionary(["role": .string("user")])])

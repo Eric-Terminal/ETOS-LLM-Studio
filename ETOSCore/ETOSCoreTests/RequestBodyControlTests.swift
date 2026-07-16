@@ -741,14 +741,7 @@ struct RequestBodyControlTests {
     func testDefaultThinkingOptionGroupUsesProviderAPIFormat() {
         let openAI = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")
         let openAIResponses = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")
-        let gemini3 = ModelRequestBodyControlDefaults.thinkingOptionGroup(
-            for: "gemini",
-            modelName: "gemini-3-flash-preview"
-        )
-        let gemini25 = ModelRequestBodyControlDefaults.thinkingOptionGroup(
-            for: "gemini",
-            modelName: "gemini-2.5-flash"
-        )
+        let gemini = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
         let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
 
         #expect(openAI.defaultOptionID == "medium")
@@ -759,23 +752,23 @@ struct RequestBodyControlTests {
         ]))
         #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == nil)
 
-        #expect(gemini3.defaultOptionID == "medium")
-        let geminiHighPayload = gemini3.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
+        #expect(gemini.defaultOptionID == "medium")
+        let geminiHighPayload = gemini.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
         if case let .dictionary(generationConfig)? = geminiHighPayload,
            case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
             #expect(thinkingConfig["thinkingLevel"] == .string("high"))
             #expect(thinkingConfig["includeThoughts"] == .bool(true))
+            #expect(thinkingConfig["thinkingBudget"] == nil)
         } else {
             Issue.record("Gemini 高思考档位没有使用原生 generationConfig.thinkingConfig。")
         }
-
-        let gemini25MediumPayload = gemini25.options.first(where: { $0.id == "medium" })?.payload["generationConfig"]
-        if case let .dictionary(generationConfig)? = gemini25MediumPayload,
-           case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
-            #expect(thinkingConfig["thinkingBudget"] == .int(2_000))
-            #expect(thinkingConfig["includeThoughts"] == .bool(true))
-        } else {
-            Issue.record("Gemini 2.5 中等思考档位没有使用原生 token 预算。")
+        for option in gemini.options {
+            if case let .dictionary(generationConfig)? = option.payload["generationConfig"],
+               case let .dictionary(thinkingConfig)? = generationConfig["thinkingConfig"] {
+                #expect(thinkingConfig["thinkingBudget"] == nil)
+            } else {
+                Issue.record("Gemini 档位 \(option.id) 缺少原生 thinkingConfig。")
+            }
         }
 
         #expect(anthropic.defaultOptionID == "medium")
@@ -813,7 +806,7 @@ struct RequestBodyControlTests {
 
     @Test("推理能力会按提供商格式补充一次思考预算控制")
     func testEnsureThinkingControlUsesProviderFormatWithoutDuplicates() {
-        var model = Model(modelName: "gemini-3-flash-preview", requestBodyControls: [])
+        var model = Model(modelName: "reasoning-model", requestBodyControls: [])
 
         model.ensureThinkingRequestBodyControl(apiFormat: "gemini")
         model.ensureThinkingRequestBodyControl(apiFormat: "gemini")

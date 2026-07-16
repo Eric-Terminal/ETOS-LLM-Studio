@@ -49,7 +49,7 @@ struct OpenAIAdapterCoreTests {
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
-                modelName: "gpt-5.4",
+                modelName: "adapter-only-model",
                 requestBodyControls: [thinkingControl]
             )
         )

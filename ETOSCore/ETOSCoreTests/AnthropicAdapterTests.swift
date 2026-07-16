@@ -174,7 +174,7 @@ struct AnthropicAdapterTests {
         let model = RunnableModel(
             provider: provider,
             model: Model(
-                modelName: "claude-sonnet-4-6",
+                modelName: "adapter-only-model",
                 requestBodyControls: [thinkingControl]
             )
         )

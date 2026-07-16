@@ -380,8 +380,7 @@ extension ModelSettingsView {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
                 existingControls: model.requestBodyControls,
-                apiFormat: provider.apiFormat,
-                modelName: model.modelName
+                apiFormat: provider.apiFormat
             )
         )
     }
