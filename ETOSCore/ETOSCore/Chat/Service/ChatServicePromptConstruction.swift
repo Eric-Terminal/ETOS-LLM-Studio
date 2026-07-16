@@ -107,7 +107,11 @@ extension ChatService {
         return parts.joined(separator: "\n\n")
     }
 
-    func makeEnhancedPromptSystemMessage(_ enhancedPrompt: String?) -> ChatMessage? {
+    func makeEnhancedPromptMessage(
+        _ enhancedPrompt: String?,
+        apiFormat: String,
+        openAIUsesSystemRole: Bool
+    ) -> ChatMessage? {
         guard let enhancedPrompt else { return nil }
         let trimmed = enhancedPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -115,44 +119,77 @@ extension ChatService {
             .enhancedPrompt,
             variables: ["instruction": trimmed]
         )
-        return ChatMessage(role: .system, content: content)
+        return ChatMessage(
+            role: tailContextRole(apiFormat: apiFormat, openAIUsesSystemRole: openAIUsesSystemRole),
+            content: content
+        )
     }
 
-    func makeTailSystemTimeMessage(apiFormat: String) -> ChatMessage {
-        let role: MessageRole
+    func tailContextRole(apiFormat: String, openAIUsesSystemRole: Bool) -> MessageRole {
         let normalizedAPIFormat = apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalizedAPIFormat == LocalModelProviderBridge.apiFormat {
-            // 本地 GGUF 模板按自身规则生成角色 token，使用 user 才能让动态时间稳定留在末尾。
-            role = .user
-        } else {
-            switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
-            case .anthropic, .gemini:
-                // 这两类协议会把所有 system 消息提升到请求前缀，动态时间必须留在对话末尾以保护缓存。
-                role = .user
-            case .openAICompatible, .openAIResponses:
-                role = .system
-            }
+            // 本地 GGUF chat template 直接接收角色序列，可以在尾部生成模型对应的 system token。
+            return .system
         }
-        return ChatMessage(role: role, content: makeSystemTimePromptBlock())
+        switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
+        case .anthropic, .gemini:
+            // 这两类协议会把所有 system 消息提升到请求前缀，尾部上下文统一使用 user。
+            return .user
+        case .openAICompatible, .openAIResponses:
+            return openAIUsesSystemRole ? .system : .user
+        }
     }
 
-    func appendTailSystemTime(to messages: inout [ChatMessage], apiFormat: String) {
-        let timeMessage = makeTailSystemTimeMessage(apiFormat: apiFormat)
+    func makeTailSystemTimeMessage(apiFormat: String, openAIUsesSystemRole: Bool) -> ChatMessage {
+        ChatMessage(
+            role: tailContextRole(apiFormat: apiFormat, openAIUsesSystemRole: openAIUsesSystemRole),
+            content: makeSystemTimePromptBlock()
+        )
+    }
+
+    func appendTailContextMessage(
+        _ message: ChatMessage,
+        to messages: inout [ChatMessage],
+        apiFormat: String
+    ) {
+        guard message.role == .user else {
+            messages.append(message)
+            return
+        }
+
         let normalizedAPIFormat = apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard normalizedAPIFormat == LocalModelProviderBridge.apiFormat,
-              let userIndex = messages.lastIndex(where: { $0.role == .user }) else {
-            messages.append(timeMessage)
+        let movesSystemMessagesToPrefix: Bool
+        switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
+        case .anthropic, .gemini:
+            movesSystemMessagesToPrefix = true
+        case .openAICompatible, .openAIResponses:
+            movesSystemMessagesToPrefix = false
+        }
+
+        if !movesSystemMessagesToPrefix {
+            guard messages.last?.role == .user else {
+                messages.append(message)
+                return
+            }
+            let lastIndex = messages.index(before: messages.endIndex)
+            let separator = messages[lastIndex].content.isEmpty ? "" : "\n\n"
+            messages[lastIndex].content += separator + message.content
+            return
+        }
+
+        guard let userIndex = messages.lastIndex(where: { $0.role == .user }) else {
+            messages.append(message)
             return
         }
 
         let messagesAfterUser = messages[messages.index(after: userIndex)...]
         guard messagesAfterUser.allSatisfy({ $0.role == .system }) else {
-            messages.append(timeMessage)
+            messages.append(message)
             return
         }
 
         let separator = messages[userIndex].content.isEmpty ? "" : "\n\n"
-        messages[userIndex].content += separator + timeMessage.content
+        messages[userIndex].content += separator + message.content
     }
 
     func makeSystemTimePromptBlock() -> String {

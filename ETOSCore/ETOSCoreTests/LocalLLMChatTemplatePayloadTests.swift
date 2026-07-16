@@ -92,8 +92,8 @@ struct LocalLLMChatTemplatePayloadTests {
         }
     }
 
-    @Test("本地模板消息会合并系统消息并从用户轮次开始")
-    func templateCompatibleMessagesStartFromUserTurn() throws {
+    @Test("本地模板消息从用户轮次开始并保留后置系统角色")
+    func templateCompatibleMessagesStartFromUserTurn() {
         let messages = LocalLLMChatMessageBuilder.templateCompatibleMessages([
             LocalLLMChatMessage(role: "assistant", content: "被截断后悬空的旧回复"),
             LocalLLMChatMessage(role: "system", content: "前置系统提示"),
@@ -101,19 +101,21 @@ struct LocalLLMChatTemplatePayloadTests {
             LocalLLMChatMessage(role: "system", content: "末尾注入提示")
         ])
 
-        #expect(messages.map(\.role) == ["system", "user"])
-        #expect(messages.first?.content == "前置系统提示\n\n末尾注入提示")
-        #expect(messages.last?.content == "继续聊")
+        #expect(messages.map(\.role) == ["system", "user", "system"])
+        #expect(messages.first?.content == "前置系统提示")
+        #expect(messages[1].content == "继续聊")
+        #expect(messages.last?.content == "末尾注入提示")
     }
 
-    @Test("本地模板保留 user 轮次末尾的时间内容")
-    func templateCompatibleMessagesKeepTimeAtEndOfUserTurn() {
+    @Test("本地模板保留对话尾部的 system 角色")
+    func templateCompatibleMessagesKeepSystemRoleAtConversationTail() {
         let messages = LocalLLMChatMessageBuilder.templateCompatibleMessages([
             LocalLLMChatMessage(role: "system", content: "稳定系统提示"),
-            LocalLLMChatMessage(role: "user", content: "现在几点？\n\n<time>当前系统时间</time>")
+            LocalLLMChatMessage(role: "user", content: "现在几点？"),
+            LocalLLMChatMessage(role: "system", content: "<time>当前系统时间</time>")
         ])
 
-        #expect(messages.map(\.role) == ["system", "user"])
+        #expect(messages.map(\.role) == ["system", "user", "system"])
         #expect(messages.first?.content == "稳定系统提示")
         #expect(messages.last?.content.hasSuffix("<time>当前系统时间</time>") == true)
     }

@@ -217,18 +217,60 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("末尾系统时间为 Anthropic、Gemini 和本地模型使用 user 角色")
-    func testTailSystemTimeMessageUsesCacheFriendlyRoleByAPIFormat() {
-        for apiFormat in ["anthropic", "claude", "gemini", "google", "vertex", LocalModelProviderBridge.apiFormat] {
-            let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
-            #expect(message.role == .user)
-            #expect(message.content.contains("<time>"))
+    @Test("增强提示词和末尾时间共用协议角色设置")
+    func testTailContextMessagesUseRoleByAPIFormatAndPreference() throws {
+        for apiFormat in ["anthropic", "claude", "gemini", "google", "vertex"] {
+            let timeMessage = chatService.makeTailSystemTimeMessage(
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: true
+            )
+            let enhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+                "保持简洁",
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: true
+            ))
+
+            #expect(timeMessage.role == .user)
+            #expect(timeMessage.content.contains("<time>"))
+            #expect(enhancedMessage.role == .user)
         }
 
+        let localTimeMessage = chatService.makeTailSystemTimeMessage(
+            apiFormat: LocalModelProviderBridge.apiFormat,
+            openAIUsesSystemRole: false
+        )
+        let localEnhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+            "保持简洁",
+            apiFormat: LocalModelProviderBridge.apiFormat,
+            openAIUsesSystemRole: false
+        ))
+        #expect(localTimeMessage.role == .system)
+        #expect(localEnhancedMessage.role == .system)
+
         for apiFormat in ["openai-compatible", "openai-responses"] {
-            let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
-            #expect(message.role == .system)
-            #expect(message.content.contains("<time>"))
+            let systemTimeMessage = chatService.makeTailSystemTimeMessage(
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: true
+            )
+            let userTimeMessage = chatService.makeTailSystemTimeMessage(
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: false
+            )
+            let systemEnhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+                "保持简洁",
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: true
+            ))
+            let userEnhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+                "保持简洁",
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: false
+            ))
+
+            #expect(systemTimeMessage.role == .system)
+            #expect(userTimeMessage.role == .user)
+            #expect(systemEnhancedMessage.role == .system)
+            #expect(userEnhancedMessage.role == .user)
         }
 
         var localMessages = [
@@ -236,12 +278,65 @@ extension ChatServiceTests {
             ChatMessage(role: .user, content: "现在几点？"),
             ChatMessage(role: .system, content: "增强提示")
         ]
-        chatService.appendTailSystemTime(to: &localMessages, apiFormat: LocalModelProviderBridge.apiFormat)
-        let localUserMessages = localMessages.filter { $0.role == .user }
+        let appendedLocalTimeMessage = chatService.makeTailSystemTimeMessage(
+            apiFormat: LocalModelProviderBridge.apiFormat,
+            openAIUsesSystemRole: true
+        )
+        chatService.appendTailContextMessage(
+            appendedLocalTimeMessage,
+            to: &localMessages,
+            apiFormat: LocalModelProviderBridge.apiFormat
+        )
 
-        #expect(localMessages.count == 3)
-        #expect(localUserMessages.count == 1)
-        #expect(localUserMessages.first?.content.hasPrefix("现在几点？\n\n<time>") == true)
+        #expect(localMessages.count == 4)
+        #expect(localMessages.last?.role == .system)
+        #expect(localMessages.last?.content.hasPrefix("<time>") == true)
+    }
+
+    @Test("尾部 user 上下文按适配器顺序安全合并")
+    func testTailUserContextMergesWithoutBreakingMessageOrder() throws {
+        let enhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+            "保持简洁",
+            apiFormat: "anthropic",
+            openAIUsesSystemRole: true
+        ))
+        let timeMessage = chatService.makeTailSystemTimeMessage(
+            apiFormat: "anthropic",
+            openAIUsesSystemRole: true
+        )
+        var anthropicMessages = [
+            ChatMessage(role: .user, content: "原始问题"),
+            ChatMessage(role: .system, content: "后置说明")
+        ]
+
+        chatService.appendTailContextMessage(enhancedMessage, to: &anthropicMessages, apiFormat: "anthropic")
+        chatService.appendTailContextMessage(timeMessage, to: &anthropicMessages, apiFormat: "anthropic")
+
+        #expect(anthropicMessages.count == 2)
+        #expect(anthropicMessages.first?.content.contains("<enhanced_prompt>") == true)
+        #expect(anthropicMessages.first?.content.contains("<time>") == true)
+
+        var openAIMessages = [
+            ChatMessage(role: .user, content: "原始问题"),
+            ChatMessage(role: .system, content: "后置说明")
+        ]
+        let openAIEnhancedMessage = try #require(chatService.makeEnhancedPromptMessage(
+            "保持简洁",
+            apiFormat: "openai-compatible",
+            openAIUsesSystemRole: false
+        ))
+        let openAITimeMessage = chatService.makeTailSystemTimeMessage(
+            apiFormat: "openai-compatible",
+            openAIUsesSystemRole: false
+        )
+
+        chatService.appendTailContextMessage(openAIEnhancedMessage, to: &openAIMessages, apiFormat: "openai-compatible")
+        chatService.appendTailContextMessage(openAITimeMessage, to: &openAIMessages, apiFormat: "openai-compatible")
+
+        #expect(openAIMessages.count == 3)
+        #expect(openAIMessages.last?.role == .user)
+        #expect(openAIMessages.last?.content.contains("<enhanced_prompt>") == true)
+        #expect(openAIMessages.last?.content.contains("<time>") == true)
     }
 
     @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")

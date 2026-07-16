@@ -142,7 +142,7 @@ struct ModelAdvancedSettingsView: View {
                 .lineLimit(3...8)
             }
 
-            Section(header: Text(NSLocalizedString("增强提示词", comment: "")), footer: Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))) {
+            Section {
                 TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
                     get: { currentSession?.enhancedPrompt ?? "" },
                     set: { newValue in
@@ -154,6 +154,19 @@ struct ModelAdvancedSettingsView: View {
                     }
                 ).watchKeyboardNewlineBinding(), axis: .vertical)
                 .lineLimit(3...8)
+                Toggle(
+                    NSLocalizedString("使用 System 角色发送", comment: "OpenAI enhanced prompt role toggle"),
+                    isOn: $appConfig.openAITailContextUsesSystemRole
+                )
+            } header: {
+                Text(NSLocalizedString("增强提示词", comment: ""))
+            } footer: {
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
+                    Text(NSLocalizedString("角色设置仅对 OpenAI 适配器生效。", comment: "OpenAI enhanced prompt role footer"))
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
 
             Section(header: Text(NSLocalizedString("系统时间注入", comment: ""))) {

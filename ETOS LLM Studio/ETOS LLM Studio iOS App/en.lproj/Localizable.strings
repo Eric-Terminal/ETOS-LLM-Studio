@@ -96,6 +96,8 @@
 "填充 (居中裁剪)" = "Fill (center crop)";
 "填充模式" = "Fill mode";
 "增强提示词" = "Enhanced prompt";
+"使用 System 角色发送" = "Send with the System role";
+"角色设置仅对 OpenAI 适配器生效。" = "The role setting only applies to the OpenAI adapter.";
 "复制内容" = "Copy content";
 "复制历史创建分支" = "Branch from history copy";
 "复制消息历史和提示词" = "Copy message history & prompts";

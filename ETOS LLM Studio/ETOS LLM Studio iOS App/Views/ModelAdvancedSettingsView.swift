@@ -181,12 +181,19 @@ struct ModelAdvancedSettingsView: View {
                             ChatService.shared.updateSession(session)
                         }
                     )
+                    Toggle(
+                        NSLocalizedString("使用 System 角色发送", comment: "OpenAI enhanced prompt role toggle"),
+                        isOn: $appConfig.openAITailContextUsesSystemRole
+                    )
                 } header: {
                     Text(NSLocalizedString("增强提示词", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
+                        Text(NSLocalizedString("角色设置仅对 OpenAI 适配器生效。", comment: "OpenAI enhanced prompt role footer"))
+                    }
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
                 }
 
                 Section {

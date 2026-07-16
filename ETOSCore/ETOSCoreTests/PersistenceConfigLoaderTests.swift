@@ -108,6 +108,24 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Double == 0)
     }
 
+    @Test("OpenAI 尾部上下文默认使用 system 角色并支持配置快照")
+    @MainActor
+    func testOpenAITailContextSystemRoleDefaultAndPersistence() {
+        let key = AppConfigKey.openAITailContextUsesSystemRole
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(true))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: false])
+
+        #expect(AppConfigStore.shared.openAITailContextUsesSystemRole == false)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == false)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:

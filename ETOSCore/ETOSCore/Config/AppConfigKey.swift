@@ -212,6 +212,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case backgroundCropTarget = "backgroundCropTarget"
     case shortcutBridgeShortcutName = "shortcut.bridgeShortcutName"
 
+    case openAITailContextUsesSystemRole = "openAI.tailContextUsesSystemRole"
     case includeSystemTimeInPrompt = "includeSystemTimeInPrompt"
     case systemTimeInjectionPosition = "systemTimeInjectionPosition"
     case enablePeriodicTimeLandmark = "enablePeriodicTimeLandmark"
@@ -481,6 +482,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .shortcutBridgeShortcutName:
             return .text("ETOS Shortcut Bridge")
 
+        case .openAITailContextUsesSystemRole:
+            return .bool(true)
         case .includeSystemTimeInPrompt:
             return .bool(false)
         case .systemTimeInjectionPosition:

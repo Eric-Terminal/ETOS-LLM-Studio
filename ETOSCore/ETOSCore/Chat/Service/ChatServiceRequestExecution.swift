@@ -295,12 +295,25 @@ extension ChatService {
             messagesToSend.append(ChatMessage(role: .system, content: postHistoryPrompt))
         }
 
-        if let enhancedPromptMessage = makeEnhancedPromptSystemMessage(enhancedPrompt) {
-            messagesToSend.append(enhancedPromptMessage)
+        let openAIUsesSystemRole = await MainActor.run {
+            AppConfigStore.shared.openAITailContextUsesSystemRole
+        }
+        let apiFormat = runnableModel.provider.apiFormat
+
+        if let enhancedPromptMessage = makeEnhancedPromptMessage(
+            enhancedPrompt,
+            apiFormat: apiFormat,
+            openAIUsesSystemRole: openAIUsesSystemRole
+        ) {
+            appendTailContextMessage(enhancedPromptMessage, to: &messagesToSend, apiFormat: apiFormat)
         }
 
         if includeSystemTime && systemTimeInjectionPosition == .tail {
-            appendTailSystemTime(to: &messagesToSend, apiFormat: runnableModel.provider.apiFormat)
+            let timeMessage = makeTailSystemTimeMessage(
+                apiFormat: apiFormat,
+                openAIUsesSystemRole: openAIUsesSystemRole
+            )
+            appendTailContextMessage(timeMessage, to: &messagesToSend, apiFormat: apiFormat)
         }
 
         messagesToSend = await RoleplayPromptTemplateRenderer.renderMessages(

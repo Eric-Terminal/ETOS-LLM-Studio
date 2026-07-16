@@ -71,6 +71,8 @@
 "填充 (居中裁剪)" = "Rellenar (recorte centrado)";
 "填充模式" = "Modo de relleno";
 "增强提示词" = "Prompt mejorado";
+"使用 System 角色发送" = "Enviar con el rol System";
+"角色设置仅对 OpenAI 适配器生效。" = "El ajuste del rol solo se aplica al adaptador de OpenAI.";
 "复制内容" = "Copiar Contenido";
 "复制历史创建分支" = "Rama desde Historial Copiar";
 "复制消息历史和提示词" = "Copiar Mensaje Historial & Prompts";
