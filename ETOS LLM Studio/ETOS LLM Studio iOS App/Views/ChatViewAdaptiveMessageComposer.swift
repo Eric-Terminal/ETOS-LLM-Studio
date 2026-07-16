@@ -70,7 +70,10 @@ extension TelegramMessageComposer {
                 adaptiveComposerRow
             }
         }
-        .onAppear(perform: adaptiveRefreshRequestControls)
+        .onAppear {
+            adaptiveRefreshRequestControls()
+            adaptiveRefreshSendableText()
+        }
         .onChange(of: viewModel.selectedModel?.id) { _, _ in
             adaptiveRefreshRequestControls()
         }
@@ -102,7 +105,7 @@ extension TelegramMessageComposer {
         .overlay(alignment: .bottomTrailing) {
             if adaptiveShowsFloatingActionButton {
                 adaptiveActionButton(
-                    size: expandedControlSize,
+                    size: adaptiveControlSize,
                     participatesInGlassContainer: false
                 )
                     .padding(.trailing, 8)
@@ -145,7 +148,7 @@ extension TelegramMessageComposer {
         .overlay(alignment: .bottomTrailing) {
             if adaptiveShowsFloatingActionButton {
                 adaptiveActionButton(
-                    size: expandedControlSize,
+                    size: adaptiveControlSize,
                     participatesInGlassContainer: true
                 )
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
@@ -555,7 +558,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveHasContent: Bool {
-        !text.isEmpty
+        adaptiveHasSendableText
             || viewModel.pendingAudioAttachment != nil
             || !viewModel.pendingImageAttachments.isEmpty
             || !viewModel.pendingFileAttachments.isEmpty
@@ -691,5 +694,11 @@ extension TelegramMessageComposer {
                 isRequestControlsExpanded = false
             }
         }
+    }
+
+    private func adaptiveRefreshSendableText() {
+        adaptiveHasSendableText = !text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 }

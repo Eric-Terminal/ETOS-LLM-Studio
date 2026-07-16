@@ -36,6 +36,7 @@ struct TelegramMessageComposer: View {
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
+    @State var adaptiveHasSendableText = false
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
     @StateObject var inlineSpeechRecorder = InlineSpeechRecorderController()
@@ -46,7 +47,7 @@ struct TelegramMessageComposer: View {
     @State private var inlineSpeechErrorMessage: String?
 
     private let controlSize: CGFloat = 40
-    let expandedControlSize: CGFloat = 34
+    private let expandedControlSize: CGFloat = 34
     private var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
     }
@@ -633,6 +634,8 @@ struct TelegramMessageComposer: View {
 
     private func handleAutoExpand(for newValue: String) {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 复用自动展开时的文本规整结果，避免视图渲染时重复扫描草稿。
+        adaptiveHasSendableText = !trimmed.isEmpty
         if trimmed.isEmpty {
             if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
