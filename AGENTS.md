@@ -1,0 +1,42 @@
+- 除非用户特地要求指定平台，默认情况下改动要iOS/watchOS一起
+- 默认使用中文回答和进行commit messages和注释编写
+- 用户可能给你提供GitHub链接并让你参考GitHub仓库时，请使用GitHub的tool去获取代码内容
+- 默认只参考核心逻辑内容、文案和按键的布局，但是UI风格应该学习用户原有风格和Apple的原生开发风格
+- commit messages默认都由你编写，尽量详细一点，使用用户语言
+- 如果设计到了修改或者添加UI文本或者发送给模型的文本，主要做本地化
+- 所有显式 UI 文案必须走 `NSLocalizedString`，包括 `Text`、`Button`、`Toggle`、`Picker`、`navigationTitle`、`alert`、`Section`、页脚说明、状态标签等用户可见字符串；动态拼接文案使用 `String(format: NSLocalizedString(...))` 或等价的本地化格式化方式，避免 App 内置语言切换后残留原语言文本，回退默认都使用英文，所以本地化补齐很必须
+- 一些功能在进行提示描述的时候可以简短的表述在footer里面，然后把比较长的类似App内置文档的提示内容放到对应页面的settingsIntroCard里面，写详细的教程
+- 默认不主动运行 `xcodebuild` 进行编译或测试。只有用户明确要求“编译/构建”时才编译；只有用户明确要求“测试/运行测试”时才测试，编译授权与测试授权互不包含
+- 当用户明确要求编译时，统一使用以下命令（避免本机环境变量污染导致 watchOS 链接失败，确保消除所有警告和错误保持代码干净）：
+  - `env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build`
+  - 如需单独补充验证 watchOS 构建，使用：`env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build`
+  - 一般情况下，执行 iOS App 的构建命令时会连带构建嵌入的 watch App；只有在需要单独确认 watchOS 状态时，才额外执行上面的 watchOS 命令。
+  - 如果在指定某个具体手表模拟器时看到 `Could not get trait set for device Watch7,18 with version 26.4`，这是 Xcode 在资源裁剪阶段给出的已知工具链警告，不代表 watchOS 代码编译失败；默认忽略即可，必要时优先改用 `generic/platform=watchOS Simulator` 避开它。
+- 当用户明确要求测试时，根据用户指定或改动涉及的目标选择以下命令；不要因为用户只要求其中一个目标，就自行扩大到其他测试目标：
+  - ETOSCore 测试：`env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test`
+  - iOS App 测试：`env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test`
+  - watchOS App 测试（包含该 Scheme 下的单元测试与 UI 测试）：`env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test`
+  - 测试默认复用上面指定的现有模拟器并关闭 Xcode 并行测试，避免克隆多个 XCTest 模拟器以及共享持久化状态互相干扰。
+- 不要直接修改.xcodeproj等极其复杂的文件，建议让用户在GUI界面处理
+- 【性能与架构铁律：严禁阻塞主线程】
+  - 所有 SwiftUI 的 `body` 和 UI 组件内部，必须是纯粹的状态驱动，严禁包含任何 O(N) 级别的耗时计算。
+  - 绝对禁止在 UI 渲染链路中同步执行：磁盘 I/O（文件/数据库读取）、Codable 序列化解包、网络请求、正则表达式匹配、Markdown/Math 语法树解析。
+  - 数据必须在 ViewModel 或底层 Manager 中通过 `Task.detached` 或非主线程（Background Queue）进行“预计算”。只有当数据完全处理为立即可用的极简结构或 `AttributedString` 后，才允许通过 `@MainActor` 派发回主线程更新给 UI。
+  - 闭包中必须严格防范循环引用，网络与定时器回调默认使用 `[weak self]`。对后台轮询保持极度克制，优先使用响应式监听（如 GRDB ValueObservation 或通知），以保护 watchOS 极其脆弱的电量和续航。
+- 写代码过程中，可能有其他Agent和你一起协作，如果你写代码过程中发现有别的代码被动了，不要停下来，不用管他，只提交你需要写的对应部分就好。
+- 项目是 Xcode 工程，没有 `Package.swift`；不要创建 `Package.swift`，也不要使用 `swift test`。只有用户明确要求测试时，才使用上面的 `xcodebuild` 测试命令
+- 所有代码文件都在本地，不要用联网搜索去网上查找**本项目**的代码
+- SwiftUI UI/UX 设计与排版规范，用户没有额外要求的时候参考下面的写法：
+  - **平台差异化架构**：
+    - **iOS**：设置页与配置类页面优先使用 `Form` 或 `List` 配合 `Section` 进行视觉分组；面对庞杂的根页面，必须使用 `TabView` 划分纵深，严禁把所有入口堆在单一长列表里。
+    - **watchOS**：屏幕极小，坚决避免深层嵌套与多余的导航。设置根节点直接铺开为扁平化的 `List`，善用 `Section` 聚拢同类项，保持一滑到底的流畅感，严禁在 watchOS 使用 `TabView` 作为配置页的主架构。
+  - **交互防粘连（极其重要）**：在 `List` 或 `Form` 的行（Row）中，**严禁将多个可交互控件（如 `Toggle`、`Button`、`TextField`）无脑塞进同一个容器（如 `VStack/HStack`）**。在 watchOS 上，系统会将整个行视为一个大按钮从而触发误触。**解决强制标准**：要么将每个控件拆分到独立的 Row 中；如果业务极度需要它们同处一行/一框，必须在对应控件或容器上显式添加 `.buttonStyle(.plain)` 或 `.buttonStyle(.borderless)` 以剥夺父视图的全局点击判定。
+  - **层级与呼吸感**：
+    - 拒绝将所有 UI 元素挤成一坨。必须善用 `Section(header: Text(...), footer: Text(...))` 来切分功能模块，并用页脚文本提供操作提示。
+    - 保持原生的留白美学。严禁滥用硬编码的像素间距（如 `padding(10)`、`spacing: 15`），优先使用不带参数的默认 `.padding()` 和原生默认的容器 `spacing`。
+  - **原生视觉标准**：
+    - 所有的辅助说明文字、弱化提示，必须降级视觉权重，强制使用 `.font(.caption)`、`.font(.footnote)` 并配合 `.foregroundColor(.secondary)`。
+    - 所有的图标必须优先使用 Apple 原生标准 `SF Symbols` (`Image(systemName:)`)，并根据上下文合理使用 `.foregroundStyle()` 进行色彩分层。
+    - 不要画蛇添足地给控件加奇奇怪怪的背景色、边框或圆角，除非用户特意要求，否则永远保持 Apple Human Interface Guidelines (HIG) 的干净、半透明、高斯模糊的系统原生质感。
+- UserDefaults已经完全弃用，仅在部分特殊声明的地方有保留，所有设置都使用数据库保存，写代码的时候不要用UserDefaults保存
+- If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.
