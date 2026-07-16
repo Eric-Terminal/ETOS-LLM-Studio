@@ -384,6 +384,7 @@ public enum ModelRequestBodyControlDefaults {
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
                     ModelRequestBodyControlOption(
                         id: "off",
@@ -411,6 +412,7 @@ public enum ModelRequestBodyControlDefaults {
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
                     ModelRequestBodyControlOption(id: "off", title: NSLocalizedString("关闭", comment: ""), payload: geminiThinkingPayload(offConfig)),
                     ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: ""), payload: geminiThinkingPayload(["includeThoughts": .bool(true)])),
@@ -425,6 +427,7 @@ public enum ModelRequestBodyControlDefaults {
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: ["reasoning_effort": .string("none")]),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["reasoning_effort": .string("minimal")]),
@@ -439,6 +442,7 @@ public enum ModelRequestBodyControlDefaults {
                 title: NSLocalizedString("思考预算", comment: ""),
                 kind: .optionGroup,
                 defaultOptionID: "medium",
+                isSliderEnabled: true,
                 options: [
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: openAIResponsesThinkingPayload(effort: "none")),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: openAIResponsesThinkingPayload(effort: "minimal")),

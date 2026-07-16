@@ -744,10 +744,12 @@ struct RequestBodyControlTests {
         let gemini = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "gemini")
         let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
 
+        #expect(openAI.isSliderEnabled)
         #expect(openAI.defaultOptionID == "medium")
         #expect(!openAI.options.contains(where: { $0.id == "auto" }))
         #expect(openAI.options.allSatisfy { !$0.payload.isEmpty })
         #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+        #expect(openAIResponses.isSliderEnabled)
         #expect(openAIResponses.defaultOptionID == "medium")
         #expect(!openAIResponses.options.contains(where: { $0.id == "auto" }))
         #expect(openAIResponses.options.allSatisfy { !$0.payload.isEmpty })
@@ -756,6 +758,7 @@ struct RequestBodyControlTests {
         ]))
         #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == nil)
 
+        #expect(gemini.isSliderEnabled)
         #expect(gemini.defaultOptionID == "medium")
         let geminiHighPayload = gemini.options.first(where: { $0.id == "high" })?.payload["generationConfig"]
         if case let .dictionary(generationConfig)? = geminiHighPayload,
@@ -775,6 +778,7 @@ struct RequestBodyControlTests {
             }
         }
 
+        #expect(anthropic.isSliderEnabled)
         #expect(anthropic.defaultOptionID == "medium")
         #expect(anthropic.options.first(where: { $0.id == "auto" })?.payload["thinking"] == .dictionary([
             "type": .string("adaptive")
