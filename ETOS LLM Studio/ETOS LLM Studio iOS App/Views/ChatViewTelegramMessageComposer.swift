@@ -20,6 +20,7 @@ struct TelegramMessageComposer: View {
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @ObservedObject var appConfig = AppConfigStore.shared
     @Binding var text: String
+    @Binding var isRequestControlsExpanded: Bool
     let isSending: Bool
     let sendAction: () -> Void
     let stopAction: () -> Void
@@ -34,7 +35,6 @@ struct TelegramMessageComposer: View {
     @State private var showFileImporter = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State var isExpandedComposer = false
-    @State var isRequestControlsExpanded = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State private var inputAvailableWidth: CGFloat = 0
     @State private var compactInputWidth: CGFloat = 0
@@ -170,6 +170,7 @@ struct TelegramMessageComposer: View {
             Text(inlineSpeechErrorMessage ?? NSLocalizedString("发生未知错误，请稍后重试。", comment: ""))
         }
         .onDisappear {
+            isRequestControlsExpanded = false
             inlineSpeechFinalizeTask?.cancel()
             inlineSpeechFinalizeTask = nil
             inlineSpeechPreparedTranscript = nil

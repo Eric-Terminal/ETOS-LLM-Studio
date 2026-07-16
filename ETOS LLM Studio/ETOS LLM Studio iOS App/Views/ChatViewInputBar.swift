@@ -38,6 +38,7 @@ extension ChatView {
                         viewModel.userInput = newValue
                     }
                 ),
+                isRequestControlsExpanded: $isComposerRequestControlsExpanded,
                 isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
@@ -70,6 +71,18 @@ extension ChatView {
                 }
             }
             .padding(.bottom, -tabBarCompensation)
+        }
+    }
+
+    /// 收起键盘和输入栏临时面板；外部点击只改变输入状态，不触发消息内容。
+    func dismissComposerInput() {
+        composerFocused = false
+        guard isComposerRequestControlsExpanded else { return }
+        let animation: Animation = accessibilityReduceMotion
+            ? .easeOut(duration: 0.16)
+            : .spring(response: 0.34, dampingFraction: 0.94)
+        withAnimation(animation) {
+            isComposerRequestControlsExpanded = false
         }
     }
 }

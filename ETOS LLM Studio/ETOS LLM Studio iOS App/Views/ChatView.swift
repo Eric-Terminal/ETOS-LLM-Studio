@@ -22,6 +22,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var ttsManager = TTSManager.shared
@@ -89,6 +90,7 @@ struct ChatView: View {
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
     @State var isChatLayoutSettling: Bool = false
+    @State var isComposerRequestControlsExpanded = false
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
@@ -891,7 +893,7 @@ extension ChatView {
                 .scrollIndicators(.hidden)
                 .simultaneousGesture(
                     TapGesture().onEnded {
-                        composerFocused = false
+                        dismissComposerInput()
                     }
                 )
                 .onChange(of: viewModel.messages.count) { _, _ in
@@ -956,6 +958,14 @@ extension ChatView {
                     if needsImmediateBottomSnap {
                         shouldKeepBottomPinned = true
                         scheduleImmediateBottomSnap()
+                    }
+                }
+                .overlay {
+                    if isComposerRequestControlsExpanded {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: dismissComposerInput)
+                            .accessibilityHidden(true)
                     }
                 }
                 .overlay(alignment: .top) {

@@ -298,6 +298,13 @@ extension TelegramMessageComposer {
                     .allowsHitTesting(false)
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                if isRequestControlsExpanded {
+                    adaptiveBeginEditing()
+                }
+            }
+        )
     }
 
     private var adaptiveShowsRequestControlsButton: Bool {
