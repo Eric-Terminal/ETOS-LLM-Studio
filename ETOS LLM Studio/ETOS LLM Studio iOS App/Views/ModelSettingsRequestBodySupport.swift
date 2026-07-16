@@ -310,7 +310,10 @@ extension ModelSettingsView {
                     NavigationLink {
                         RequestBodyControlDetailView(
                             control: $control,
-                            payloadDisplayMode: requestBodyMode
+                            payloadDisplayMode: requestBodyMode,
+                            onSplit: { splitControls in
+                                replaceRequestBodyControl(withID: controlID, with: splitControls)
+                            }
                         )
                     } label: {
                         RequestBodyControlRow(control: control)
@@ -388,6 +391,14 @@ extension ModelSettingsView {
     private func deleteRequestBodyControl(withID controlID: String) {
         guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
         model.requestBodyControls.remove(at: index)
+    }
+
+    private func replaceRequestBodyControl(
+        withID controlID: String,
+        with splitControls: [ModelRequestBodyControl]
+    ) {
+        guard let index = model.requestBodyControls.firstIndex(where: { $0.id == controlID }) else { return }
+        model.requestBodyControls.replaceSubrange(index...index, with: splitControls)
     }
 
     private func buildRequestPreviewPayload(

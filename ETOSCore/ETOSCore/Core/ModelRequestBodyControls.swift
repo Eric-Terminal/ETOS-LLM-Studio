@@ -186,6 +186,128 @@ public extension ModelRequestBodyControl {
     }
 }
 
+public enum ModelRequestBodyControlSplitter {
+    public static func canSplit(_ control: ModelRequestBodyControl) -> Bool {
+        leafPaths(for: control).count > 1
+    }
+
+    /// 按最终字典叶子拆成并列控制；数组保持整体，确保拆分结果仍可由现有合并器还原。
+    public static func split(_ control: ModelRequestBodyControl) -> [ModelRequestBodyControl]? {
+        switch control.kind {
+        case .toggle:
+            let leaves = leafValues(in: control.payload)
+            let paths = sortedPaths(in: [leaves])
+            guard paths.count > 1 else { return nil }
+            return paths.map { path in
+                copiedControl(
+                    from: control,
+                    payload: nestedPayload(path: path, value: leaves[path]),
+                    options: [],
+                    defaultOptionID: nil
+                )
+            }
+
+        case .optionGroup:
+            let leavesByOption = control.options.map { leafValues(in: $0.payload) }
+            let paths = sortedPaths(in: leavesByOption)
+            guard paths.count > 1 else { return nil }
+
+            return paths.map { path in
+                var mappedDefaultOptionID: String?
+                let options = zip(control.options, leavesByOption).map { option, leaves in
+                    let optionID = UUID().uuidString
+                    if option.id == control.defaultOptionID {
+                        mappedDefaultOptionID = optionID
+                    }
+                    return ModelRequestBodyControlOption(
+                        id: optionID,
+                        title: option.title,
+                        payload: nestedPayload(path: path, value: leaves[path])
+                    )
+                }
+                return copiedControl(
+                    from: control,
+                    payload: [:],
+                    options: options,
+                    defaultOptionID: mappedDefaultOptionID
+                )
+            }
+        }
+    }
+}
+
+private extension ModelRequestBodyControlSplitter {
+    struct LeafPath: Hashable {
+        let components: [String]
+    }
+
+    static func leafPaths(for control: ModelRequestBodyControl) -> [LeafPath] {
+        switch control.kind {
+        case .toggle:
+            return sortedPaths(in: [leafValues(in: control.payload)])
+        case .optionGroup:
+            return sortedPaths(in: control.options.map { leafValues(in: $0.payload) })
+        }
+    }
+
+    static func leafValues(
+        in payload: [String: JSONValue],
+        parentPath: [String] = []
+    ) -> [LeafPath: JSONValue] {
+        var leaves: [LeafPath: JSONValue] = [:]
+        for key in payload.keys.sorted() {
+            guard let value = payload[key] else { continue }
+            let path = parentPath + [key]
+            if case let .dictionary(dictionary) = value, !dictionary.isEmpty {
+                leaves.merge(leafValues(in: dictionary, parentPath: path)) { _, nested in nested }
+            } else {
+                // 数组和空字典作为一个叶子保留，避免现有整体覆盖语义丢失数据。
+                leaves[LeafPath(components: path)] = value
+            }
+        }
+        return leaves
+    }
+
+    static func sortedPaths(in leafMaps: [[LeafPath: JSONValue]]) -> [LeafPath] {
+        Set(leafMaps.flatMap { $0.keys }).sorted { lhs, rhs in
+            lhs.components.lexicographicallyPrecedes(rhs.components)
+        }
+    }
+
+    static func nestedPayload(path: LeafPath, value: JSONValue?) -> [String: JSONValue] {
+        guard let value, let leafKey = path.components.last else { return [:] }
+        var nestedValue = JSONValue.dictionary([leafKey: value])
+        for key in path.components.dropLast().reversed() {
+            nestedValue = .dictionary([key: nestedValue])
+        }
+        guard case let .dictionary(payload) = nestedValue else { return [:] }
+        return payload
+    }
+
+    static func copiedControl(
+        from control: ModelRequestBodyControl,
+        payload: [String: JSONValue],
+        options: [ModelRequestBodyControlOption],
+        defaultOptionID: String?
+    ) -> ModelRequestBodyControl {
+        ModelRequestBodyControl(
+            id: UUID().uuidString,
+            title: control.title,
+            kind: control.kind,
+            isEnabled: control.isEnabled,
+            defaultIsActive: control.defaultIsActive,
+            defaultOptionID: defaultOptionID,
+            isSliderEnabled: control.isSliderEnabled,
+            sliderGranularity: control.sliderGranularity,
+            sliderStartColorHex: control.sliderStartColorHex,
+            sliderEndColorHex: control.sliderEndColorHex,
+            usesRainbowAtMaximum: control.usesRainbowAtMaximum,
+            payload: payload,
+            options: options
+        )
+    }
+}
+
 public struct ModelRequestBodyControlState: Codable, Hashable, Sendable {
     public var toggleValuesByControlID: [String: Bool]
     public var selectedOptionIDsByControlID: [String: String]

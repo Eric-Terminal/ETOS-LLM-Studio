@@ -129,12 +129,15 @@ private struct RequestBodyControlImportRow: View {
 }
 
 struct RequestBodyControlDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @Binding var control: ModelRequestBodyControl
     let payloadDisplayMode: Model.RequestBodyOverrideMode
+    let onSplit: ([ModelRequestBodyControl]) -> Void
     @State private var payloadSuggestionsByOptionID: [String: [String: JSONValue]] = [:]
     @State private var hasInitializedPayloadSuggestions = false
     @State private var automaticSliderGranularity: Double?
     @State private var showsNumericSortAction = false
+    @State private var canAutomaticallySplit = false
 
     var body: some View {
         Form {
@@ -204,6 +207,19 @@ struct RequestBodyControlDetailView: View {
                 }
             }
 
+            if canAutomaticallySplit {
+                Section(
+                    footer: Text(NSLocalizedString("Split nested control footer", comment: "结构化控制自动拆分说明"))
+                ) {
+                    Button(action: splitNestedPayload) {
+                        Label(
+                            NSLocalizedString("Split by nested paths", comment: "结构化控制自动拆分按钮"),
+                            systemImage: "square.split.2x1"
+                        )
+                    }
+                }
+            }
+
             if control.kind == .optionGroup {
                 Section(
                     header: Text(NSLocalizedString("滑块", comment: "")),
@@ -244,12 +260,17 @@ struct RequestBodyControlDetailView: View {
         .onAppear {
             initializePayloadSuggestionsIfNeeded()
             refreshSliderConfiguration()
+            refreshSplitAvailability()
+        }
+        .onChange(of: control.payload) { _, _ in
+            refreshSplitAvailability()
         }
         .onChange(of: control.options) { _, options in
             if options.count < 2 {
                 control.isSliderEnabled = false
             }
             refreshSliderConfiguration()
+            refreshSplitAvailability()
         }
     }
 
@@ -279,6 +300,16 @@ struct RequestBodyControlDetailView: View {
         automaticSliderGranularity = descriptor?.automaticNumericGranularity
         showsNumericSortAction = descriptor?.mode == .continuousNumeric
             && descriptor?.isNumericOrderAscending == false
+    }
+
+    private func refreshSplitAvailability() {
+        canAutomaticallySplit = ModelRequestBodyControlSplitter.canSplit(control)
+    }
+
+    private func splitNestedPayload() {
+        guard let splitControls = ModelRequestBodyControlSplitter.split(control) else { return }
+        onSplit(splitControls)
+        dismiss()
     }
 
     private func sortOptionsByNumericValue() {

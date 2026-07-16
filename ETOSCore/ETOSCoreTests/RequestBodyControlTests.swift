@@ -509,6 +509,122 @@ struct RequestBodyControlTests {
         #expect(compiled["output_config"] == .dictionary(["mode": .string("adaptive")]))
     }
 
+    @Test("多层嵌套控制可按所有叶子路径线性拆分并重新合并")
+    func testNestedControlSplitsEveryLeafPathAndReconstructsPayload() throws {
+        let lowPayload: [String: JSONValue] = [
+            "metadata": .dictionary([
+                "trace": .dictionary(["enabled": .bool(false)])
+            ]),
+            "reasoning": .dictionary([
+                "effort": .string("low"),
+                "summary": .dictionary([
+                    "details": .dictionary(["verbosity": .string("low")]),
+                    "style": .string("brief")
+                ])
+            ]),
+            "temperature": .double(0.2)
+        ]
+        let highPayload: [String: JSONValue] = [
+            "metadata": .dictionary([
+                "trace": .dictionary(["enabled": .bool(true)])
+            ]),
+            "reasoning": .dictionary([
+                "effort": .string("high"),
+                "summary": .dictionary([
+                    "details": .dictionary(["verbosity": .string("high")]),
+                    "style": .string("detailed")
+                ])
+            ]),
+            "temperature": .double(0.8)
+        ]
+        let control = ModelRequestBodyControl(
+            id: "combined-control",
+            title: "组合控制",
+            kind: .optionGroup,
+            defaultOptionID: "high",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(id: "low", title: "低", payload: lowPayload),
+                ModelRequestBodyControlOption(id: "high", title: "高", payload: highPayload)
+            ]
+        )
+
+        #expect(ModelRequestBodyControlSplitter.canSplit(control))
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 5)
+        #expect(Set(splitControls.map(\.id)).count == 5)
+        #expect(splitControls.allSatisfy { $0.title == control.title })
+        #expect(splitControls.allSatisfy { $0.options.map(\.title) == ["低", "高"] })
+        #expect(splitControls.allSatisfy { !ModelRequestBodyControlSplitter.canSplit($0) })
+        #expect(compiled == highPayload)
+    }
+
+    @Test("拆分会保留缺少部分路径的档位")
+    func testNestedControlSplitPreservesOptionsWithoutEveryPath() throws {
+        let control = ModelRequestBodyControl(
+            title: "思考预算",
+            kind: .optionGroup,
+            defaultOptionID: "off",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "off",
+                    title: "关闭",
+                    payload: ["thinking": .dictionary(["type": .string("disabled")])]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "高",
+                    payload: [
+                        "thinking": .dictionary(["type": .string("adaptive")]),
+                        "output_config": .dictionary(["effort": .string("high")])
+                    ]
+                )
+            ]
+        )
+
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.options.count == 2 })
+        #expect(compiled == ["thinking": .dictionary(["type": .string("disabled")])])
+    }
+
+    @Test("多字段开关也可拆分并保持默认状态")
+    func testToggleControlSplitsAndPreservesDefaultState() throws {
+        let payload: [String: JSONValue] = [
+            "reasoning": .dictionary(["summary": .string("auto")]),
+            "text": .dictionary(["verbosity": .string("high")])
+        ]
+        let control = ModelRequestBodyControl(
+            title: "回复增强",
+            kind: .toggle,
+            defaultIsActive: true,
+            payload: payload
+        )
+
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: .init()
+        )
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.kind == .toggle && $0.defaultIsActive })
+        #expect(compiled == payload)
+    }
+
     @Test("滑块文字差异会保留未变化字符的位置身份")
     func testSliderTextDiffKeepsMatchingCharacters() {
         #expect(
