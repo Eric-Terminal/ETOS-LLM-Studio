@@ -217,19 +217,31 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("末尾系统时间为 Anthropic 和 Gemini 使用 user 角色")
+    @Test("末尾系统时间为 Anthropic、Gemini 和本地模型使用 user 角色")
     func testTailSystemTimeMessageUsesCacheFriendlyRoleByAPIFormat() {
-        for apiFormat in ["anthropic", "claude", "gemini", "google", "vertex"] {
+        for apiFormat in ["anthropic", "claude", "gemini", "google", "vertex", LocalModelProviderBridge.apiFormat] {
             let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
             #expect(message.role == .user)
             #expect(message.content.contains("<time>"))
         }
 
-        for apiFormat in ["openai-compatible", "openai-responses", LocalModelProviderBridge.apiFormat] {
+        for apiFormat in ["openai-compatible", "openai-responses"] {
             let message = chatService.makeTailSystemTimeMessage(apiFormat: apiFormat)
             #expect(message.role == .system)
             #expect(message.content.contains("<time>"))
         }
+
+        var localMessages = [
+            ChatMessage(role: .system, content: "稳定系统提示"),
+            ChatMessage(role: .user, content: "现在几点？"),
+            ChatMessage(role: .system, content: "增强提示")
+        ]
+        chatService.appendTailSystemTime(to: &localMessages, apiFormat: LocalModelProviderBridge.apiFormat)
+        let localUserMessages = localMessages.filter { $0.role == .user }
+
+        #expect(localMessages.count == 3)
+        #expect(localUserMessages.count == 1)
+        #expect(localUserMessages.first?.content.hasPrefix("现在几点？\n\n<time>") == true)
     }
 
     @Test("周期性时间路标支持自定义分钟并插入在锚点消息前")

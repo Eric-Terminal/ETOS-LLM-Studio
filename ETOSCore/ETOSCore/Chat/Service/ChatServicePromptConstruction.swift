@@ -120,14 +120,39 @@ extension ChatService {
 
     func makeTailSystemTimeMessage(apiFormat: String) -> ChatMessage {
         let role: MessageRole
-        switch ProviderAPIFormatFamily(apiFormat: apiFormat) {
-        case .anthropic, .gemini:
-            // 这两类协议会把所有 system 消息提升到请求前缀，动态时间必须留在对话末尾以保护缓存。
+        let normalizedAPIFormat = apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedAPIFormat == LocalModelProviderBridge.apiFormat {
+            // 本地 GGUF 模板按自身规则生成角色 token，使用 user 才能让动态时间稳定留在末尾。
             role = .user
-        case .openAICompatible, .openAIResponses:
-            role = .system
+        } else {
+            switch ProviderAPIFormatFamily(apiFormat: normalizedAPIFormat) {
+            case .anthropic, .gemini:
+                // 这两类协议会把所有 system 消息提升到请求前缀，动态时间必须留在对话末尾以保护缓存。
+                role = .user
+            case .openAICompatible, .openAIResponses:
+                role = .system
+            }
         }
         return ChatMessage(role: role, content: makeSystemTimePromptBlock())
+    }
+
+    func appendTailSystemTime(to messages: inout [ChatMessage], apiFormat: String) {
+        let timeMessage = makeTailSystemTimeMessage(apiFormat: apiFormat)
+        let normalizedAPIFormat = apiFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard normalizedAPIFormat == LocalModelProviderBridge.apiFormat,
+              let userIndex = messages.lastIndex(where: { $0.role == .user }) else {
+            messages.append(timeMessage)
+            return
+        }
+
+        let messagesAfterUser = messages[messages.index(after: userIndex)...]
+        guard messagesAfterUser.allSatisfy({ $0.role == .system }) else {
+            messages.append(timeMessage)
+            return
+        }
+
+        let separator = messages[userIndex].content.isEmpty ? "" : "\n\n"
+        messages[userIndex].content += separator + timeMessage.content
     }
 
     func makeSystemTimePromptBlock() -> String {

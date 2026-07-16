@@ -105,6 +105,18 @@ struct LocalLLMChatTemplatePayloadTests {
         #expect(messages.first?.content == "前置系统提示\n\n末尾注入提示")
         #expect(messages.last?.content == "继续聊")
     }
+
+    @Test("本地模板保留 user 轮次末尾的时间内容")
+    func templateCompatibleMessagesKeepTimeAtEndOfUserTurn() {
+        let messages = LocalLLMChatMessageBuilder.templateCompatibleMessages([
+            LocalLLMChatMessage(role: "system", content: "稳定系统提示"),
+            LocalLLMChatMessage(role: "user", content: "现在几点？\n\n<time>当前系统时间</time>")
+        ])
+
+        #expect(messages.map(\.role) == ["system", "user"])
+        #expect(messages.first?.content == "稳定系统提示")
+        #expect(messages.last?.content.hasSuffix("<time>当前系统时间</time>") == true)
+    }
 }
 
 private func decodedJSONArray(_ json: String) throws -> [[String: Any]] {
