@@ -468,6 +468,47 @@ struct RequestBodyControlTests {
         #expect(compiled["effort"] == .string("medium"))
     }
 
+    @Test("多结构滑块会原子切换完整预设")
+    func testMultiStructureSliderUsesAtomicDiscreteOptions() throws {
+        let control = ModelRequestBodyControl(
+            id: "thinking-preset",
+            title: "思考预设",
+            kind: .optionGroup,
+            defaultOptionID: "low",
+            isSliderEnabled: true,
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "low",
+                    title: "低",
+                    payload: [
+                        "thinking": .dictionary(["budget_tokens": .int(1_000)]),
+                        "output_config": .dictionary(["mode": .string("adaptive")])
+                    ]
+                ),
+                ModelRequestBodyControlOption(
+                    id: "high",
+                    title: "高",
+                    payload: [
+                        "thinking": .dictionary(["budget_tokens": .int(9_000)]),
+                        "output_config": .dictionary(["mode": .string("adaptive")])
+                    ]
+                )
+            ]
+        )
+        let descriptor = try #require(ModelRequestBodyControlSliderDescriptor(control: control))
+        let state = ModelRequestBodyControlState(sliderPositionsByControlID: [control.id: 0.75])
+        let compiled = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: state
+        )
+
+        #expect(descriptor.mode == .discrete)
+        #expect(descriptor.displayValue(at: 0.75) == "高")
+        #expect(compiled["thinking"] == .dictionary(["budget_tokens": .int(9_000)]))
+        #expect(compiled["output_config"] == .dictionary(["mode": .string("adaptive")]))
+    }
+
     @Test("滑块文字差异会保留未变化字符的位置身份")
     func testSliderTextDiffKeepsMatchingCharacters() {
         #expect(
