@@ -233,11 +233,17 @@ struct ChatView: View {
     var navBarGlassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
-    var scrollToBottomButtonFillColor: Color {
-        colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
-    }
     var scrollToBottomButtonIconColor: Color {
-        colorScheme == .dark ? .white : TelegramColors.sendButtonColor
+        TelegramColors.attachButtonColor
+    }
+    var scrollToBottomButtonMaterialOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+    var scrollToBottomButtonMaterialStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+    var scrollToBottomButtonMaterialShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
     var scrollToBottomButtonBorderColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)

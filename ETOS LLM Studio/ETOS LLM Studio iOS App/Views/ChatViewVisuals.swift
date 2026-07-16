@@ -132,12 +132,16 @@ extension ChatView {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {
                     scrollToBottomButtonIcon
-                        .glassEffect(.regular.tint(scrollToBottomButtonGlassTintColor).interactive(), in: Circle())
+                        .background(
+                            Circle()
+                                .fill(scrollToBottomButtonMaterialOverlayColor)
+                        )
+                        .glassEffect(.clear.interactive(), in: Circle())
                         .overlay(
                             Circle()
-                                .stroke(scrollToBottomButtonGlassStrokeColor, lineWidth: 0.8)
+                                .stroke(scrollToBottomButtonMaterialStrokeColor, lineWidth: 0.5)
                         )
-                        .shadow(color: scrollToBottomButtonShadowColor, radius: 8, x: 0, y: 3)
+                        .shadow(color: scrollToBottomButtonMaterialShadowColor, radius: 6, x: 0, y: 2)
                 } else {
                     scrollToBottomButtonIcon
                         .background(scrollToBottomButtonBackground)
@@ -161,12 +165,16 @@ extension ChatView {
 
     var scrollToBottomButtonBackground: some View {
         Circle()
-            .fill(scrollToBottomButtonFillColor)
+            .fill(.ultraThinMaterial)
             .overlay(
                 Circle()
-                    .stroke(scrollToBottomButtonBorderColor, lineWidth: 0.8)
+                    .fill(scrollToBottomButtonMaterialOverlayColor)
             )
-            .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
+            .overlay(
+                Circle()
+                    .stroke(scrollToBottomButtonMaterialStrokeColor, lineWidth: 0.5)
+            )
+            .shadow(color: scrollToBottomButtonMaterialShadowColor, radius: 6, x: 0, y: 2)
     }
 
     /// Telegram 风格历史加载提示
