@@ -745,8 +745,12 @@ struct RequestBodyControlTests {
         let anthropic = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "anthropic")
 
         #expect(openAI.defaultOptionID == "medium")
+        #expect(!openAI.options.contains(where: { $0.id == "auto" }))
+        #expect(openAI.options.allSatisfy { !$0.payload.isEmpty })
         #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
         #expect(openAIResponses.defaultOptionID == "medium")
+        #expect(!openAIResponses.options.contains(where: { $0.id == "auto" }))
+        #expect(openAIResponses.options.allSatisfy { !$0.payload.isEmpty })
         #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning"] == .dictionary([
             "effort": .string("high")
         ]))
@@ -772,6 +776,9 @@ struct RequestBodyControlTests {
         }
 
         #expect(anthropic.defaultOptionID == "medium")
+        #expect(anthropic.options.first(where: { $0.id == "auto" })?.payload["thinking"] == .dictionary([
+            "type": .string("adaptive")
+        ]))
         #expect(anthropic.options.first(where: { $0.id == "high" })?.payload["thinking"] == .dictionary([
             "type": .string("adaptive")
         ]))

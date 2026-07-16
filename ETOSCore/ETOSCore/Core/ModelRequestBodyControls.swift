@@ -426,7 +426,6 @@ public enum ModelRequestBodyControlDefaults {
                 kind: .optionGroup,
                 defaultOptionID: "medium",
                 options: [
-                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: "")),
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: ["reasoning_effort": .string("none")]),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: ["reasoning_effort": .string("minimal")]),
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["reasoning_effort": .string("low")]),
@@ -441,7 +440,6 @@ public enum ModelRequestBodyControlDefaults {
                 kind: .optionGroup,
                 defaultOptionID: "medium",
                 options: [
-                    ModelRequestBodyControlOption(id: "auto", title: NSLocalizedString("自动", comment: "")),
                     ModelRequestBodyControlOption(id: "none", title: NSLocalizedString("none", comment: ""), payload: openAIResponsesThinkingPayload(effort: "none")),
                     ModelRequestBodyControlOption(id: "minimal", title: NSLocalizedString("minimal", comment: ""), payload: openAIResponsesThinkingPayload(effort: "minimal")),
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: openAIResponsesThinkingPayload(effort: "low")),
