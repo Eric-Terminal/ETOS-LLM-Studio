@@ -285,19 +285,19 @@ extension ModelSettingsView {
 
     private var modelKindSelector: some View {
         VStack {
-            ModelSelectionSegmentedRow(
-                options: [.chat, .image, .embedding],
-                isSelected: { model.kind == $0 },
-                title: modelKindSelectionTitle,
-                onSelect: { kindBinding.wrappedValue = $0 }
-            )
-            ModelSelectionSegmentedRow(
-                options: [.rerank, .speechToText, .textToSpeech],
-                isSelected: { model.kind == $0 },
-                title: modelKindSelectionTitle,
-                onSelect: { kindBinding.wrappedValue = $0 }
-            )
+            modelKindPicker(options: [.chat, .image, .embedding])
+            modelKindPicker(options: [.rerank, .speechToText, .textToSpeech])
         }
+    }
+
+    private func modelKindPicker(options: [ModelKind]) -> some View {
+        Picker(NSLocalizedString("模型类型", comment: "模型类型选择器标题"), selection: kindBinding) {
+            ForEach(options, id: \.self) { kind in
+                Text(modelKindSelectionTitle(kind)).tag(kind)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     private func modelKindSelectionTitle(_ kind: ModelKind) -> String {
@@ -307,7 +307,7 @@ extension ModelSettingsView {
     @ViewBuilder
     private var chatModelCapabilitySections: some View {
         Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
-            ModelSelectionSegmentedRow(
+            ModelMultiSelectionControlGroup(
                 options: ModelModality.allCases,
                 isSelected: { model.inputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -319,7 +319,7 @@ extension ModelSettingsView {
         }
 
         Section(NSLocalizedString("输出模态", comment: "聊天模型输出模态区块标题")) {
-            ModelSelectionSegmentedRow(
+            ModelMultiSelectionControlGroup(
                 options: [.text, .image],
                 isSelected: { model.outputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -331,7 +331,7 @@ extension ModelSettingsView {
         }
 
         Section {
-            ModelSelectionSegmentedRow(
+            ModelMultiSelectionControlGroup(
                 options: [.toolCalling, .reasoning],
                 isSelected: { model.capabilities.contains($0) },
                 title: { $0.localizedName },
@@ -414,14 +414,14 @@ extension ModelSettingsView {
     }
 }
 
-private struct ModelSelectionSegmentedRow<Option: Hashable>: View {
+private struct ModelMultiSelectionControlGroup<Option: Hashable>: View {
     let options: [Option]
     let isSelected: (Option) -> Bool
     let title: (Option) -> String
     let onSelect: (Option) -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
+        ControlGroup {
             ForEach(options.indices, id: \.self) { index in
                 let option = options[index]
                 Button {
@@ -430,33 +430,16 @@ private struct ModelSelectionSegmentedRow<Option: Hashable>: View {
                     HStack {
                         if isSelected(option) {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(Color.accentColor)
                         }
                         Text(title(option))
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .background {
-                        if isSelected(option) {
-                            Rectangle()
-                                .fill(Color.accentColor.opacity(0.16))
-                        }
-                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
-
-                if index < options.index(before: options.endIndex) {
-                    Divider()
-                }
             }
         }
-        .clipShape(Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.secondary.opacity(0.55), lineWidth: 1)
-        }
+        .frame(maxWidth: .infinity)
     }
 }
