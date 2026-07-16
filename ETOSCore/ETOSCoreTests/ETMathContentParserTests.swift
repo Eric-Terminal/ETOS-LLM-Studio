@@ -51,4 +51,32 @@ struct ETMathContentParserTests {
         #expect(second == first)
         #expect(!ETMathContentParser.containsMath(in: source))
     }
+
+    @Test("识别没有定界符的常见 TeX 命令")
+    func testRecognizesBareTeXCommands() {
+        let source = #"结果是 \frac{1}{2}，向量记作 \vec{x}。"#
+
+        let segments = ETMathContentParser.parseSegments(in: source)
+
+        #expect(segments == [
+            .text("结果是 "),
+            .inlineMath(#"\frac{1}{2}"#),
+            .text("，向量记作 "),
+            .inlineMath(#"\vec{x}"#),
+            .text("。")
+        ])
+        #expect(ETMathContentParser.containsMath(in: source))
+        #expect(
+            ETMathContentParser.normalizedMathDelimiters(in: source)
+                == #"结果是 \(\frac{1}{2}\)，向量记作 \(\vec{x}\)。"#
+        )
+    }
+
+    @Test("普通反斜杠文本不会被猜测成公式")
+    func testOrdinaryBackslashTextRemainsPlainText() {
+        let source = #"路径 C:\Users\Eric 与转义文本 \n 保持不变"#
+
+        #expect(ETMathContentParser.parseSegments(in: source) == [.text(source)])
+        #expect(!ETMathContentParser.containsMath(in: source))
+    }
 }

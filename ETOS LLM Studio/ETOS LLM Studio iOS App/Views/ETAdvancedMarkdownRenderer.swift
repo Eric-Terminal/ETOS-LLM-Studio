@@ -53,7 +53,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 } else if let prepared = effectivePreparedContent {
                     if shouldUseWebRenderer(prepared) {
                         ETMathWebMarkdownView(
-                            content: prepared.normalizedText,
+                            content: prepared.mathRenderText,
                             enableMarkdown: enableMarkdown,
                             isOutgoing: isOutgoing,
                             customTextHex: customTextColor.flatMap { ChatAppearanceColorCodec.hexRGBA(from: $0) },

@@ -19,6 +19,7 @@ import Testing
 import ETOSCore
 @testable import ETOS_LLM_Studio_Watch_App
 
+@MainActor
 struct ETOS_LLM_Studio_Watch_AppTests {
 
     @Test("自动朗读触发条件判断")
@@ -510,6 +511,16 @@ let value = 42
 """
 
         #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
+    }
+
+    @Test("watchOS 会为裸 TeX 提供二级公式预览内容")
+    func testBareTeXPreparesWatchMathPreview() async {
+        let source = #"答案是 \frac{1}{2}。"#
+
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+
+        #expect(prepared.containsMathContent)
+        #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
     }
 
 }

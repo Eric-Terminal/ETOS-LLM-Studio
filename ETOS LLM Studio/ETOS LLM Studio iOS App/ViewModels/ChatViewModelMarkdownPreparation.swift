@@ -14,6 +14,7 @@ import ETOSCore
 struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
     let normalizedText: String
+    let mathRenderText: String
     let markdownContent: MarkdownContent
     let nativeMathMarkdownContent: MarkdownContent?
     let mathSegments: [ETMathContentSegment]
@@ -36,6 +37,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
             normalizedText: normalizedText,
+            mathRenderText: ETMathContentParser.normalizedMathDelimiters(in: normalizedText),
             markdownContent: MarkdownContent(normalizedText),
             nativeMathMarkdownContent: buildNativeMathMarkdownContent(
                 mathSegments: mathSegments,

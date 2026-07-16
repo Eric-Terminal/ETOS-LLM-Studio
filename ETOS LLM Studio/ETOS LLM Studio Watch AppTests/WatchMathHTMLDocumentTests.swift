@@ -4,6 +4,7 @@
 // 确保 watchOS 公式预览在 Markdown 解析前保护常见 LaTeX 定界符。
 // ============================================================================
 
+import Foundation
 import Testing
 @testable import ETOS_LLM_Studio_Watch_App
 

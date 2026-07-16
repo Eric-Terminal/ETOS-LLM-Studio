@@ -345,4 +345,19 @@ let value = 42
         #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
     }
 
+    @Test("iOS 会为裸 TeX 准备原生内联公式")
+    func testBareTeXPreparesNativeInlineMath() async {
+        let source = #"答案是 \frac{1}{2}。"#
+
+        let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
+
+        #expect(prepared.containsMathContent)
+        #expect(prepared.mathSegments == [
+            .text("答案是 "),
+            .inlineMath(#"\frac{1}{2}"#),
+            .text("。")
+        ])
+        #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
+    }
+
 }

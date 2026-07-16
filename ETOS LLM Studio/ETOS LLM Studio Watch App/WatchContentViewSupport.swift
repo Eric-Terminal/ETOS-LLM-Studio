@@ -614,7 +614,7 @@ extension ContentView {
                 onToggleMathRendering: {
                     viewModel.toggleMathRendering(for: message.id)
                 },
-                mathRenderContent: viewModel.preparedMarkdownByMessageID[message.id]?.normalizedText ?? message.content,
+                mathRenderContent: viewModel.preparedMarkdownByMessageID[message.id]?.mathRenderText ?? message.content,
                 onJumpToMessageIndex: { displayIndex in
                     jumpToMessage(displayIndex: displayIndex)
                 },
