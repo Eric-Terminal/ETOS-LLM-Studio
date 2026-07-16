@@ -375,10 +375,67 @@ enum WatchWebHTMLDocumentFactory {
         content.innerHTML = '<div class="math-fallback">' + escapeHTML(raw).replaceAll("\\n", "<br/>") + '</div>';
       }
 
+      // marked 会把 \\[ 与 \\] 当作 Markdown 转义；先用节点保护块级公式，避免定界符丢失。
+      function tokenizeDisplayMath(source) {
+        const blocks = [];
+        let rewritten = source.replace(/\\$\\$([\\s\\S]+?)\\$\\$/g, (_, latex) => {
+          const index = blocks.length;
+          blocks.push(latex.trim());
+          return `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+        });
+
+        let cursor = 0;
+        let bracketRewritten = "";
+        while (cursor < rewritten.length) {
+          const start = rewritten.indexOf("\\\\[", cursor);
+          if (start < 0) {
+            bracketRewritten += rewritten.slice(cursor);
+            break;
+          }
+          const end = rewritten.indexOf("\\\\]", start + 2);
+          if (end < 0) {
+            bracketRewritten += rewritten.slice(cursor);
+            break;
+          }
+
+          const index = blocks.length;
+          blocks.push(rewritten.slice(start + 2, end).trim());
+          bracketRewritten += rewritten.slice(cursor, start);
+          bracketRewritten += `\n\n<div class="et-math-block" data-et-math-index="${index}"></div>\n\n`;
+          cursor = end + 2;
+        }
+
+        return { markdown: bracketRewritten, blocks };
+      }
+
+      function renderDisplayMath(blocks) {
+        if (!window.katex || !Array.isArray(blocks)) {
+          return;
+        }
+        content.querySelectorAll(".et-math-block[data-et-math-index]").forEach((node) => {
+          const index = Number(node.getAttribute("data-et-math-index"));
+          const latex = blocks[index];
+          if (!Number.isInteger(index) || typeof latex !== "string" || !latex) {
+            return;
+          }
+          try {
+            window.katex.render(latex, node, {
+              displayMode: true,
+              throwOnError: false,
+              strict: "ignore"
+            });
+          } catch (_) {
+            node.textContent = `$$\n${latex}\n$$`;
+          }
+        });
+      }
+
       function render() {
         if (window.marked) {
           try {
-            content.innerHTML = window.marked.parse(raw, { gfm: true, breaks: false });
+            const tokenized = tokenizeDisplayMath(raw);
+            content.innerHTML = window.marked.parse(tokenized.markdown, { gfm: true, breaks: false });
+            renderDisplayMath(tokenized.blocks);
           } catch (_) {
             renderFallback();
           }
