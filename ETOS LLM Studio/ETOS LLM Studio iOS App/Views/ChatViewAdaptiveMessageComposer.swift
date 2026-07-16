@@ -323,7 +323,8 @@ extension TelegramMessageComposer {
                         )
                     }
                 )
-                .padding(.vertical, adaptivePresentation == .expandedText ? 8 : 2)
+                // 折叠态补足垂直留白，让单行文字在 44pt 胶囊内保持视觉居中。
+                .padding(.vertical, adaptivePresentation == .expandedText ? 8 : 4)
                 .padding(.leading, adaptiveTextLeadingInset)
                 .padding(.trailing, adaptiveTextTrailingInset)
 
@@ -332,7 +333,7 @@ extension TelegramMessageComposer {
                     .etFont(.system(size: 16))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .padding(.top, adaptivePresentation == .expandedText ? 16 : 10)
+                    .padding(.top, adaptivePresentation == .expandedText ? 16 : 12)
                     .padding(.leading, adaptiveTextLeadingInset + 5)
                     .allowsHitTesting(false)
             }
