@@ -33,6 +33,10 @@ struct ModelSettingsView: View {
         let preview = requestBodyPreview
 
         Form {
+            Section {
+                ModelConfigurationIntroCard()
+            }
+
             Section(
                 header: Text(NSLocalizedString("基础信息", comment: "")),
                 footer: Text(NSLocalizedString("模型ID是 API 调用时使用的真实标识，模型名称是 App 内展示给用户的别名。", comment: ""))
