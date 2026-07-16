@@ -307,7 +307,7 @@ extension ModelSettingsView {
     @ViewBuilder
     private var chatModelCapabilitySections: some View {
         Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
-            ModelMultiSelectionControlGroup(
+            ModelMultiSelectionSegmentedRow(
                 options: ModelModality.allCases,
                 isSelected: { model.inputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -319,7 +319,7 @@ extension ModelSettingsView {
         }
 
         Section(NSLocalizedString("输出模态", comment: "聊天模型输出模态区块标题")) {
-            ModelMultiSelectionControlGroup(
+            ModelMultiSelectionSegmentedRow(
                 options: [.text, .image],
                 isSelected: { model.outputModalities.contains($0) },
                 title: { $0.localizedName },
@@ -331,7 +331,7 @@ extension ModelSettingsView {
         }
 
         Section {
-            ModelMultiSelectionControlGroup(
+            ModelMultiSelectionSegmentedRow(
                 options: [.toolCalling, .reasoning],
                 isSelected: { model.capabilities.contains($0) },
                 title: { $0.localizedName },
@@ -414,14 +414,14 @@ extension ModelSettingsView {
     }
 }
 
-private struct ModelMultiSelectionControlGroup<Option: Hashable>: View {
+private struct ModelMultiSelectionSegmentedRow<Option: Hashable>: View {
     let options: [Option]
     let isSelected: (Option) -> Bool
     let title: (Option) -> String
     let onSelect: (Option) -> Void
 
     var body: some View {
-        ControlGroup {
+        HStack(spacing: 0) {
             ForEach(options.indices, id: \.self) { index in
                 let option = options[index]
                 Button {
@@ -435,11 +435,28 @@ private struct ModelMultiSelectionControlGroup<Option: Hashable>: View {
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                     }
-                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .background {
+                        if isSelected(option) {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.08))
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected(option) ? .isSelected : [])
+
+                if index < options.index(before: options.endIndex) {
+                    Divider()
+                }
             }
         }
-        .frame(maxWidth: .infinity)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(Color.secondary.opacity(0.55), lineWidth: 1)
+        }
     }
 }
