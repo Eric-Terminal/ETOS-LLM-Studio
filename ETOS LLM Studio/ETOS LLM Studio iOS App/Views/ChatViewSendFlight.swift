@@ -3,9 +3,9 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 发送时由一份临时文字快照接管输入内容，再飞向新消息的真实正文气泡。
-// 起点、终点都来自实际布局测量；位置、尺寸与材质使用同一条可打断弹簧，
-// 最后通过短交叉渐变交还给真实气泡，避免错位、橡皮形变和落点闪接。
+// 发送时由一份临时文字快照接管输入内容，先在输入栏内显色并向右收拢，
+// 再从当前呈现位置飞向新消息的真实正文气泡。落点在布局变化时可继续重定向，
+// 最后通过短交叉渐变交还给真实气泡，避免等待后瞬移和落点闪接。
 // ============================================================================
 
 import Foundation
@@ -13,6 +13,11 @@ import SwiftUI
 import ETOSCore
 
 // MARK: - 飞行状态
+
+enum SendFlightPhase: Equatable {
+    case launching
+    case landing
+}
 
 struct SendFlightState: Equatable {
     let id: UUID
@@ -28,6 +33,7 @@ struct SendFlightState: Equatable {
     let cornerRadius: CGFloat
     let startRect: CGRect
     var landingRect: CGRect?
+    var phase: SendFlightPhase
 }
 
 // MARK: - 坐标上报
@@ -106,7 +112,7 @@ struct FlyingBubbleView: View, Animatable {
     let bubbleOpacity: Double
     let sourceCornerRadius: CGFloat
     let targetCornerRadius: CGFloat
-    let sourceUsesBottomAlignment: Bool
+    let sourceIsExpanded: Bool
     var progress: CGFloat
 
     var animatableData: CGFloat {
@@ -116,12 +122,13 @@ struct FlyingBubbleView: View, Animatable {
 
     var body: some View {
         let clampedProgress = min(max(progress, 0), 1)
-        let materialProgress = Self.smoothStep(
-            min(max((clampedProgress - 0.08) / 0.62, 0), 1)
-        )
-        let targetTextProgress = Self.smoothStep(
-            min(max((clampedProgress - 0.18) / 0.64, 0), 1)
-        )
+        // 展开编辑器先收缩几何再显色，避免整块大面积视口短暂变成用户气泡。
+        let materialProgress = sourceIsExpanded
+            ? Self.smoothStep(min(max((clampedProgress - 0.62) / 0.28, 0), 1))
+            : Self.smoothStep(min(max(clampedProgress / 0.44, 0), 1))
+        let targetTextProgress = sourceIsExpanded
+            ? Self.smoothStep(min(max((clampedProgress - 0.68) / 0.26, 0), 1))
+            : Self.smoothStep(min(max((clampedProgress - 0.08) / 0.48, 0), 1))
         let horizontalInset = Self.interpolate(from: 5, to: 12, progress: materialProgress)
         let cornerRadius = Self.interpolate(
             from: sourceCornerRadius,
@@ -129,7 +136,6 @@ struct FlyingBubbleView: View, Animatable {
             progress: materialProgress
         )
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        let sourceAlignment: Alignment = sourceUsesBottomAlignment ? .bottomLeading : .topLeading
 
         ZStack(alignment: .topLeading) {
             shape
@@ -150,7 +156,7 @@ struct FlyingBubbleView: View, Animatable {
                 .foregroundStyle(inputTextColor)
                 .padding(.horizontal, horizontalInset)
                 .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: sourceAlignment)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .opacity(Double(1 - targetTextProgress))
                 .clipped()
 
@@ -187,40 +193,70 @@ struct FlyingBubbleView: View, Animatable {
 // MARK: - ChatView 飞行编排
 
 extension ChatView {
-    /// 将现有“响应/阻尼”设置映射为带初速度的物理弹簧，让起飞拥有连续惯性。
-    private var sendFlightSpring: Animation {
-        let response = max(0.2, appConfig.chatSendAnimationSpringResponse)
-        let dampingRatio = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
-        let angularFrequency = 2 * Double.pi / response
-        let stiffness = angularFrequency * angularFrequency
-        let damping = 2 * dampingRatio * angularFrequency
-        return .interpolatingSpring(
-            mass: 1,
-            stiffness: stiffness,
-            damping: damping,
-            initialVelocity: 0.72
+    private var sendFlightResponse: Double {
+        min(max(appConfig.chatSendAnimationSpringResponse, 0.2), 0.8)
+    }
+
+    /// 参考录屏的前约 100ms：先给按下发送即时的材质和收拢反馈。
+    private var sendFlightCompressionDuration: Double {
+        min(0.14, max(0.06, sendFlightResponse * 0.22))
+    }
+
+    private var sendFlightLandingResponse: Double {
+        max(0.18, sendFlightResponse - sendFlightCompressionDuration)
+    }
+
+    /// 设置中的回弹仍然有效，但限制在不会出现橡皮抖动的惯性区间。
+    private var sendFlightLandingDamping: Double {
+        let configured = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
+        let normalized = (configured - 0.4) / 0.6
+        return 0.82 + normalized * 0.14
+    }
+
+    private var sendFlightPreludeSpring: Animation {
+        .spring(
+            response: min(0.22, max(0.14, sendFlightCompressionDuration * 1.8)),
+            dampingFraction: 0.96
+        )
+    }
+
+    private var sendFlightCompressionSpring: Animation {
+        .spring(
+            response: min(0.28, max(0.16, sendFlightCompressionDuration * 1.8)),
+            dampingFraction: 0.94
+        )
+    }
+
+    /// 收拢动画被落位弹簧打断时，SwiftUI 会从当前呈现值接续运动。
+    private var sendFlightLandingSpring: Animation {
+        .spring(
+            response: sendFlightLandingResponse,
+            dampingFraction: sendFlightLandingDamping
         )
     }
 
     /// 列表在飞行中继续校正布局时，从当前呈现位置平顺追随新落点。
     private var sendFlightRetargetSpring: Animation {
         .spring(
-            response: max(0.18, appConfig.chatSendAnimationSpringResponse * 0.48),
-            dampingFraction: 0.92
+            response: max(0.16, sendFlightLandingResponse * 0.46),
+            dampingFraction: 0.94
         )
     }
 
     private var sendFlightFallbackDuration: Double { 1.6 }
-    private var sendFlightHandoffDuration: Double { 0.14 }
+    private var sendFlightHandoffDuration: Double {
+        min(0.11, max(0.08, sendFlightLandingResponse * 0.28))
+    }
     private var sendFlightVisibleDuration: Double {
-        let response = max(0.2, appConfig.chatSendAnimationSpringResponse)
-        let damping = min(max(appConfig.chatSendAnimationSpringDamping, 0.4), 1)
-        return min(1.3, max(0.42, response * (1.35 + (1 - damping) * 0.65)))
+        sendFlightLandingResponse
     }
 
     func beginSendFlight(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sendSpring = Animation.spring(response: 0.38, dampingFraction: 0.72)
+        let sendSpring = Animation.spring(
+            response: sendFlightResponse,
+            dampingFraction: sendFlightLandingDamping
+        )
         let hasAttachments = viewModel.pendingAudioAttachment != nil
             || !viewModel.pendingImageAttachments.isEmpty
             || !viewModel.pendingFileAttachments.isEmpty
@@ -262,12 +298,14 @@ extension ChatView {
                 bubbleOpacity: style.bubbleOpacity,
                 cornerRadius: ChatFlightBubbleStyle.cornerRadius,
                 startRect: inputBarRect,
-                landingRect: nil
+                landingRect: nil,
+                phase: .launching
             )
         }
         scheduleSendFlightFallback(flightID: flightID)
+        scheduleSendFlightPrelude(flightID: flightID)
 
-        needsImmediateBottomSnap = true
+        // 保留列表自身的平滑吸底，让已有消息与飞行气泡同时为新消息让出空间。
         withAnimation(sendSpring) {
             viewModel.sendMessage()
         }
@@ -303,12 +341,17 @@ extension ChatView {
             flightState = state
         }
 
-        if isFirstLanding {
-            withAnimation(sendFlightSpring) {
-                flightPresentationRect = rect
-                flightVisualProgress = 1
+        if state.phase == .launching {
+            withAnimation(sendFlightCompressionSpring) {
+                flightPresentationRect = sendFlightCompressionRect(
+                    from: state.startRect,
+                    to: rect
+                )
+                flightVisualProgress = 0.86
             }
-            scheduleSendFlightHandoff(flightID: state.id)
+            if isFirstLanding {
+                scheduleSendFlightLanding(flightID: state.id)
+            }
         } else {
             withAnimation(sendFlightRetargetSpring) {
                 flightPresentationRect = rect
@@ -337,7 +380,7 @@ extension ChatView {
                 bubbleOpacity: state.bubbleOpacity,
                 sourceCornerRadius: min(state.startRect.height / 2, 22),
                 targetCornerRadius: state.cornerRadius,
-                sourceUsesBottomAlignment: state.startRect.height > 72,
+                sourceIsExpanded: state.startRect.height > 72,
                 progress: flightVisualProgress
             )
             .id(state.id)
@@ -363,6 +406,54 @@ extension ChatView {
             )
             guard !Task.isCancelled else { return }
             clearSendFlightWithoutAnimation(flightID: flightID)
+        }
+    }
+
+    private func scheduleSendFlightPrelude(flightID: UUID) {
+        Task { @MainActor in
+            // 先让 Overlay 以起点几何呈现一帧，避免初始值与动画终值被合并。
+            await Task.yield()
+            guard let state = flightState,
+                  state.id == flightID,
+                  state.phase == .launching,
+                  state.landingRect == nil else { return }
+
+            withAnimation(sendFlightPreludeSpring) {
+                flightPresentationRect = sendFlightPreludeRect(from: state.startRect)
+                flightVisualProgress = 0.36
+            }
+        }
+    }
+
+    private func scheduleSendFlightLanding(flightID: UUID) {
+        guard let state = flightState, state.id == flightID else { return }
+        let elapsed = Date().timeIntervalSince(state.startedAt)
+        let remainingCompression = max(0, sendFlightCompressionDuration - elapsed)
+
+        Task { @MainActor in
+            if remainingCompression > 0 {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(remainingCompression * 1_000_000_000)
+                )
+            } else {
+                await Task.yield()
+            }
+            guard var currentState = flightState,
+                  currentState.id == flightID,
+                  currentState.phase == .launching,
+                  let landingRect = currentState.landingRect else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                currentState.phase = .landing
+                flightState = currentState
+            }
+            withAnimation(sendFlightLandingSpring) {
+                flightPresentationRect = landingRect
+                flightVisualProgress = 1
+            }
+            scheduleSendFlightHandoff(flightID: flightID)
         }
     }
 
@@ -427,6 +518,30 @@ extension ChatView {
             && rect.minY.isFinite
             && rect.maxX.isFinite
             && rect.maxY.isFinite
+    }
+
+    private func sendFlightPreludeRect(from source: CGRect) -> CGRect {
+        guard source.height <= 72 else { return source }
+        let width = max(source.height, source.width * 0.9)
+        let trailingShift = min(10, source.height * 0.2)
+        return CGRect(
+            x: source.maxX + trailingShift - width,
+            y: source.minY,
+            width: width,
+            height: source.height
+        )
+    }
+
+    private func sendFlightCompressionRect(from source: CGRect, to target: CGRect) -> CGRect {
+        let y = source.height > 72
+            ? source.minY
+            : source.midY - target.height / 2
+        return CGRect(
+            x: target.minX,
+            y: y,
+            width: target.width,
+            height: target.height
+        )
     }
 
     private func sendFlightRectsDiffer(_ current: CGRect?, _ next: CGRect) -> Bool {
