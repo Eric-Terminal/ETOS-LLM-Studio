@@ -86,9 +86,9 @@ extension TelegramMessageComposer {
                     )
             }
 
-            adaptiveCenterContainer
+            adaptiveCenterContainer(participatesInGlassContainer: false)
 
-            adaptiveActionButton
+            adaptiveActionButton(participatesInGlassContainer: false)
         }
     }
 
@@ -96,7 +96,10 @@ extension TelegramMessageComposer {
     private var adaptiveGlassComposerRow: some View {
         HStack(alignment: .bottom, spacing: 10) {
             if adaptiveShowsAttachmentButton {
-                attachmentMenuButton(size: adaptiveControlSize)
+                attachmentMenuButton(
+                    size: adaptiveControlSize,
+                    participatesInGlassContainer: true
+                )
                     .glassEffectID("adaptive-attachment", in: adaptiveGlassNamespace)
                     .transition(
                         .scale(scale: 0.82, anchor: .trailing)
@@ -104,10 +107,10 @@ extension TelegramMessageComposer {
                     )
             }
 
-            adaptiveCenterContainer
+            adaptiveCenterContainer(participatesInGlassContainer: true)
                 .glassEffectID("adaptive-center", in: adaptiveGlassNamespace)
 
-            adaptiveActionButton
+            adaptiveActionButton(participatesInGlassContainer: true)
                 .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
         }
     }
@@ -116,13 +119,35 @@ extension TelegramMessageComposer {
         adaptivePresentation != .requestControls && adaptivePresentation != .speech
     }
 
-    private var adaptiveCenterContainer: some View {
+    @ViewBuilder
+    private func adaptiveCenterContainer(
+        participatesInGlassContainer: Bool
+    ) -> some View {
         let cornerRadius = adaptivePresentation == .requestControls
             ? CGFloat(24)
             : adaptiveControlSize / 2
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
-        return VStack(spacing: 0) {
+        if #available(iOS 26.0, *),
+           viewModel.enableLiquidGlass,
+           participatesInGlassContainer {
+            adaptiveCenterForeground(shape: shape)
+                .background(shape.fill(glassOverlayColor))
+                .glassEffect(.clear, in: shape)
+                .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                .animation(adaptiveComposerAnimation, value: adaptivePresentation)
+        } else {
+            adaptiveCenterForeground(shape: shape)
+                .background(glassRoundedBackground(cornerRadius: cornerRadius))
+                .animation(adaptiveComposerAnimation, value: adaptivePresentation)
+        }
+    }
+
+    private func adaptiveCenterForeground(
+        shape: RoundedRectangle
+    ) -> some View {
+        VStack(spacing: 0) {
             if adaptivePresentation == .requestControls {
                 adaptiveRequestControlsPanel
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -142,9 +167,7 @@ extension TelegramMessageComposer {
         }
         .frame(maxWidth: .infinity, alignment: .bottom)
         .clipShape(shape)
-        .background(glassRoundedBackground(cornerRadius: cornerRadius))
         .contentShape(shape)
-        .animation(adaptiveComposerAnimation, value: adaptivePresentation)
     }
 
     private var adaptiveRequestControlsPanel: some View {
@@ -417,17 +440,57 @@ extension TelegramMessageComposer {
         }
     }
 
-    private var adaptiveActionButton: some View {
+    private func adaptiveActionButton(
+        participatesInGlassContainer: Bool
+    ) -> some View {
         Button(action: adaptiveHandleAction) {
-            Image(systemName: adaptiveActionIconName)
-                .etFont(.system(size: 17, weight: .semibold))
-                .foregroundStyle(adaptiveActionForegroundColor)
-                .frame(width: adaptiveControlSize, height: adaptiveControlSize)
-                .background(adaptiveActionBackground)
+            adaptiveActionLabel(
+                participatesInGlassContainer: participatesInGlassContainer
+            )
         }
         .buttonStyle(ComposerPressButtonStyle())
         .disabled(adaptiveActionIsDisabled)
         .accessibilityLabel(adaptiveActionAccessibilityLabel)
+    }
+
+    @ViewBuilder
+    private func adaptiveActionLabel(
+        participatesInGlassContainer: Bool
+    ) -> some View {
+        let label = Image(systemName: adaptiveActionIconName)
+            .etFont(.system(size: 17, weight: .semibold))
+            .foregroundStyle(adaptiveActionForegroundColor)
+            .frame(width: adaptiveControlSize, height: adaptiveControlSize)
+
+        if #available(iOS 26.0, *),
+           viewModel.enableLiquidGlass,
+           participatesInGlassContainer {
+            label
+                .background(Circle().fill(adaptiveGlassActionFill))
+                .glassEffect(.clear.interactive(), in: Circle())
+                .overlay(Circle().stroke(glassStrokeColor, lineWidth: 0.5))
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else {
+            label
+                .background(adaptiveActionBackground)
+        }
+    }
+
+    private var adaptiveGlassActionFill: Color {
+        if isSending {
+            return Color.red.opacity(0.85 * 0.82)
+        }
+        if adaptiveHasContent {
+            let fill = viewModel.canSendMessage
+                ? TelegramColors.sendButtonColor
+                : Color.primary.opacity(0.12)
+            return fill.opacity(0.82)
+        }
+        if viewModel.canQuickRetryLatestMessage,
+           !inlineSpeechRecorder.phase.isActive {
+            return TelegramColors.sendButtonColor.opacity(0.82)
+        }
+        return glassOverlayColor
     }
 
     private var adaptiveHasContent: Bool {

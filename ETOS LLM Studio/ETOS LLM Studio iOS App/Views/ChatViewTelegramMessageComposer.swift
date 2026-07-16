@@ -305,7 +305,10 @@ struct TelegramMessageComposer: View {
         )
     }
 
-    func attachmentMenuButton(size: CGFloat) -> some View {
+    func attachmentMenuButton(
+        size: CGFloat,
+        participatesInGlassContainer: Bool = false
+    ) -> some View {
         Menu {
             Button {
                 showImagePicker = true
@@ -339,13 +342,36 @@ struct TelegramMessageComposer: View {
                 Label(NSLocalizedString("选择文件", comment: ""), systemImage: "doc")
             }
         } label: {
-            Image(systemName: "paperclip")
-                .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
-                .foregroundColor(TelegramColors.attachButtonColor)
-                .frame(width: size, height: size)
-                .background(glassCircleBackground)
+            attachmentMenuLabel(
+                size: size,
+                participatesInGlassContainer: participatesInGlassContainer
+            )
         }
         .buttonStyle(ComposerPressButtonStyle())
+    }
+
+    @ViewBuilder
+    private func attachmentMenuLabel(
+        size: CGFloat,
+        participatesInGlassContainer: Bool
+    ) -> some View {
+        let label = Image(systemName: "paperclip")
+            .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
+            .foregroundColor(TelegramColors.attachButtonColor)
+            .frame(width: size, height: size)
+
+        if #available(iOS 26.0, *),
+           isLiquidGlassEnabled,
+           participatesInGlassContainer {
+            label
+                .background(Circle().fill(glassOverlayColor))
+                .glassEffect(.clear.interactive(), in: Circle())
+                .overlay(Circle().stroke(glassStrokeColor, lineWidth: 0.5))
+                .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+        } else {
+            label
+                .background(glassCircleBackground)
+        }
     }
 
     private func actionControlButton(size: CGFloat) -> some View {
@@ -839,15 +865,15 @@ struct TelegramMessageComposer: View {
         }
     }
 
-    private var glassOverlayColor: Color {
+    var glassOverlayColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
 
-    private var glassStrokeColor: Color {
+    var glassStrokeColor: Color {
         Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
     }
 
-    private var glassShadowColor: Color {
+    var glassShadowColor: Color {
         Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 }
