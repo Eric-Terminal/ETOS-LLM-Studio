@@ -88,12 +88,26 @@ extension TelegramMessageComposer {
 
             adaptiveCenterContainer(participatesInGlassContainer: false)
 
-            if adaptiveShowsActionButton {
-                adaptiveActionButton(participatesInGlassContainer: false)
+            if adaptiveShowsInlineActionButton {
+                adaptiveActionButton(
+                    size: adaptiveControlSize,
+                    participatesInGlassContainer: false
+                )
                     .transition(
                         .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if adaptiveShowsFloatingActionButton {
+                adaptiveActionButton(
+                    size: expandedControlSize,
+                    participatesInGlassContainer: false
+                )
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 8)
+                    .transition(.scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -116,13 +130,28 @@ extension TelegramMessageComposer {
             adaptiveCenterContainer(participatesInGlassContainer: true)
                 .glassEffectID("adaptive-center", in: adaptiveGlassNamespace)
 
-            if adaptiveShowsActionButton {
-                adaptiveActionButton(participatesInGlassContainer: true)
+            if adaptiveShowsInlineActionButton {
+                adaptiveActionButton(
+                    size: adaptiveControlSize,
+                    participatesInGlassContainer: true
+                )
                     .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
                     .transition(
                         .scale(scale: 0.82, anchor: .leading)
                             .combined(with: .opacity)
                     )
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if adaptiveShowsFloatingActionButton {
+                adaptiveActionButton(
+                    size: expandedControlSize,
+                    participatesInGlassContainer: true
+                )
+                    .glassEffectID("adaptive-action", in: adaptiveGlassNamespace)
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 8)
+                    .transition(.scale(scale: 0.82).combined(with: .opacity))
             }
         }
     }
@@ -133,8 +162,14 @@ extension TelegramMessageComposer {
             && adaptivePresentation != .speech
     }
 
-    private var adaptiveShowsActionButton: Bool {
-        adaptivePresentation != .requestControls
+    private var adaptiveShowsInlineActionButton: Bool {
+        adaptivePresentation != .expandedText
+            && adaptivePresentation != .requestControls
+    }
+
+    // 多行态改由 overlay 承载发送按钮，避免它参与横向测量并挤窄输入框。
+    private var adaptiveShowsFloatingActionButton: Bool {
+        adaptivePresentation == .expandedText
     }
 
     @ViewBuilder
@@ -312,7 +347,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveShowsSpeechButton: Bool {
-        viewModel.enableSpeechInput
+        viewModel.enableSpeechInput && adaptivePresentation != .expandedText
     }
 
     // 只为实际显示的内置按钮预留边距，多行态把横向空间完整还给正文。
@@ -464,10 +499,12 @@ extension TelegramMessageComposer {
     }
 
     private func adaptiveActionButton(
+        size: CGFloat,
         participatesInGlassContainer: Bool
     ) -> some View {
         Button(action: adaptiveHandleAction) {
             adaptiveActionLabel(
+                size: size,
                 participatesInGlassContainer: participatesInGlassContainer
             )
         }
@@ -478,12 +515,13 @@ extension TelegramMessageComposer {
 
     @ViewBuilder
     private func adaptiveActionLabel(
+        size: CGFloat,
         participatesInGlassContainer: Bool
     ) -> some View {
         let label = Image(systemName: adaptiveActionIconName)
-            .etFont(.system(size: 17, weight: .semibold))
+            .etFont(.system(size: min(17, max(14, size * 0.45)), weight: .semibold))
             .foregroundStyle(adaptiveActionForegroundColor)
-            .frame(width: adaptiveControlSize, height: adaptiveControlSize)
+            .frame(width: size, height: size)
 
         if #available(iOS 26.0, *),
            viewModel.enableLiquidGlass,

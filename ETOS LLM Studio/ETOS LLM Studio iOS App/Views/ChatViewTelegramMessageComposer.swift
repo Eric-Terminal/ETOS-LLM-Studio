@@ -46,7 +46,7 @@ struct TelegramMessageComposer: View {
     @State private var inlineSpeechErrorMessage: String?
 
     private let controlSize: CGFloat = 40
-    private let expandedControlSize: CGFloat = 34
+    let expandedControlSize: CGFloat = 34
     private var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
     }
