@@ -61,9 +61,76 @@ public struct RunnableModelProviderGroup: Identifiable, Hashable {
 
     public init(provider: Provider, models: [RunnableModel]) {
         self.provider = provider
-        let trimmedName = provider.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.providerInitial = trimmedName.first.map { String($0).uppercased() } ?? "?"
+        self.providerInitial = ProviderMonogram.abbreviation(for: provider.name)
         self.models = models
+    }
+}
+
+public enum ProviderMonogram {
+    /// 优先提取分词或驼峰单词的首字母；单个单词取前两个字符，中文先转换为拼音。
+    public static func abbreviation(for providerName: String) -> String {
+        let trimmedName = providerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return "?" }
+
+        let source = containsHanCharacters(trimmedName)
+            ? transliteratedChinese(trimmedName)
+            : trimmedName
+        let words = wordComponents(in: source)
+        guard let firstWord = words.first else { return "?" }
+
+        if words.count > 1 {
+            let initials = words.prefix(2).compactMap { $0.first }
+            return String(initials).uppercased()
+        }
+        return String(firstWord.prefix(2)).uppercased()
+    }
+
+    private static func containsHanCharacters(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3400...0x4DBF,
+                 0x4E00...0x9FFF,
+                 0xF900...0xFAFF,
+                 0x20000...0x2FA1F:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    private static func transliteratedChinese(_ text: String) -> String {
+        text.applyingTransform(.toLatin, reverse: false)?
+            .applyingTransform(.stripCombiningMarks, reverse: false)
+            ?? text
+    }
+
+    private static func wordComponents(in text: String) -> [String] {
+        text.split { !$0.isLetter && !$0.isNumber }
+            .flatMap(camelCaseComponents)
+    }
+
+    private static func camelCaseComponents(_ component: Substring) -> [String] {
+        let characters = Array(component)
+        guard characters.count > 1 else { return characters.isEmpty ? [] : [String(component)] }
+
+        var result: [String] = []
+        var wordStart = 0
+        for index in 1..<characters.count {
+            let previous = characters[index - 1]
+            let current = characters[index]
+            let next = index + 1 < characters.count ? characters[index + 1] : nil
+            let startsAfterLowercase = previous.isLowercase && current.isUppercase
+            let startsAfterAcronym = previous.isUppercase
+                && current.isUppercase
+                && next?.isLowercase == true
+            guard startsAfterLowercase || startsAfterAcronym else { continue }
+
+            result.append(String(characters[wordStart..<index]))
+            wordStart = index
+        }
+        result.append(String(characters[wordStart...]))
+        return result
     }
 }
 

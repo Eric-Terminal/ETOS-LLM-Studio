@@ -108,6 +108,8 @@ struct ChatView: View {
     @State var flightReplyRevealProgress: CGFloat = 0
     @FocusState var composerFocused: Bool
     @FocusState var sessionPickerSearchFocused: Bool
+    @ScaledMetric(relativeTo: .body) var modelPickerProviderIconSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .caption2) var modelPickerProviderStripHeight: CGFloat = 68
 
     var draftText: String {
         get { appConfig.chatComposerDraft }

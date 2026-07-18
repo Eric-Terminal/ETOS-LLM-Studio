@@ -84,14 +84,13 @@ extension ChatView {
     var modelPickerProviderStrip: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                LazyHStack {
+                LazyHStack(spacing: 12) {
                     ForEach(viewModel.activatedConversationModelGroups) { group in
                         modelPickerProviderButton(group)
                             .id(group.id)
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 8)
             }
             .scrollIndicators(.hidden)
             .onAppear {
@@ -109,7 +108,8 @@ extension ChatView {
                 }
             }
         }
-        .background(.bar)
+        .frame(height: modelPickerProviderStripHeight)
+        .background(.ultraThinMaterial)
     }
 
     func modelPickerProviderButton(_ group: RunnableModelProviderGroup) -> some View {
@@ -117,11 +117,11 @@ extension ChatView {
         return Button {
             selectedModelPickerProviderID = group.id
         } label: {
-            VStack {
+            VStack(spacing: 4) {
                 Text(group.providerInitial)
-                    .etFont(.headline)
+                    .etFont(.subheadline)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
-                    .frame(width: 48, height: 48)
+                    .frame(width: modelPickerProviderIconSize, height: modelPickerProviderIconSize)
                     .background(
                         Circle()
                             .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12))

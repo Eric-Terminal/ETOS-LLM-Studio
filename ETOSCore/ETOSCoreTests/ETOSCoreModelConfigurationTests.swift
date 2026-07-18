@@ -220,6 +220,14 @@ struct ModelOrderIndexTests {
 
 @Suite("RunnableModelGrouping Tests")
 struct RunnableModelGroupingTests {
+    @Test("提供商缩写识别分词、驼峰、全大写与中文拼音")
+    func providerMonogramRecognizesNamingStyles() {
+        #expect(ProviderMonogram.abbreviation(for: "FoxCode") == "FC")
+        #expect(ProviderMonogram.abbreviation(for: "NVIDIA") == "NV")
+        #expect(ProviderMonogram.abbreviation(for: "ETOS API") == "EA")
+        #expect(ProviderMonogram.abbreviation(for: "硅基流动") == "GJ")
+    }
+
     @Test("按提供商顺序分组并保留组内模型顺序")
     func groupsModelsByConfiguredProviderOrder() {
         let providerAID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
