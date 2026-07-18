@@ -28,7 +28,6 @@ extension ChatView {
                 }
             }
         }
-        .presentationBackground(.ultraThinMaterial)
     }
 
     @ViewBuilder
@@ -54,7 +53,6 @@ extension ChatView {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical)
         }
-        .scrollContentBackground(.hidden)
     }
 
     var classicModelPickerList: some View {
@@ -64,20 +62,18 @@ extension ChatView {
                 showsProviderName: true
             )
         }
-        .scrollContentBackground(.hidden)
     }
 
     var providerGroupedModelPickerContent: some View {
-        VStack(spacing: 0) {
+        List {
+            modelPickerSection(
+                models: selectedProviderModelChoices,
+                showsProviderName: false
+            )
+        }
+        // 固定栏与列表共享系统表面，避免额外材质叠层产生色差。
+        .safeAreaInset(edge: .top, spacing: 0) {
             modelPickerProviderStrip
-
-            List {
-                modelPickerSection(
-                    models: selectedProviderModelChoices,
-                    showsProviderName: false
-                )
-            }
-            .scrollContentBackground(.hidden)
         }
         .onAppear(perform: prepareSelectedModelPickerProvider)
         .onReceive(viewModel.$activatedConversationModelGroups) { groups in
