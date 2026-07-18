@@ -28,6 +28,7 @@ extension ChatView {
                 }
             }
         }
+        .presentationBackground(.ultraThinMaterial)
     }
 
     @ViewBuilder
@@ -53,6 +54,7 @@ extension ChatView {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical)
         }
+        .scrollContentBackground(.hidden)
     }
 
     var classicModelPickerList: some View {
@@ -62,6 +64,7 @@ extension ChatView {
                 showsProviderName: true
             )
         }
+        .scrollContentBackground(.hidden)
     }
 
     var providerGroupedModelPickerContent: some View {
@@ -74,6 +77,7 @@ extension ChatView {
                     showsProviderName: false
                 )
             }
+            .scrollContentBackground(.hidden)
         }
         .onAppear(perform: prepareSelectedModelPickerProvider)
         .onReceive(viewModel.$activatedConversationModelGroups) { groups in
@@ -109,7 +113,6 @@ extension ChatView {
             }
         }
         .frame(height: modelPickerProviderStripHeight)
-        .background(.ultraThinMaterial)
     }
 
     func modelPickerProviderButton(_ group: RunnableModelProviderGroup) -> some View {
@@ -164,25 +167,34 @@ extension ChatView {
         _ runnable: RunnableModel,
         showsProviderName: Bool
     ) -> some View {
-        Button {
-            viewModel.setSelectedModel(runnable)
-            dismissModelPickerSheet()
-        } label: {
-            MarqueeTitleSubtitleSelectionRow(
-                title: runnable.model.displayName,
-                subtitle: showsProviderName
-                    ? "\(runnable.provider.name) · \(runnable.model.modelName)"
-                    : runnable.model.modelName,
-                isSelected: runnable.id == viewModel.selectedModel?.id,
-                subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
-            )
-        }
-        .highPriorityGesture(
+        MarqueeTitleSubtitleSelectionRow(
+            title: runnable.model.displayName,
+            subtitle: showsProviderName
+                ? "\(runnable.provider.name) · \(runnable.model.modelName)"
+                : runnable.model.modelName,
+            isSelected: runnable.id == viewModel.selectedModel?.id,
+            subtitleUIFont: .monospacedSystemFont(ofSize: 12, weight: .regular)
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .gesture(
             LongPressGesture(minimumDuration: 0.45)
-                .onEnded { _ in
-                    presentQuickModelSettings(for: runnable)
+                .exclusively(before: TapGesture())
+                .onEnded { gesture in
+                    switch gesture {
+                    case .first(_):
+                        presentQuickModelSettings(for: runnable)
+                    case .second(_):
+                        viewModel.setSelectedModel(runnable)
+                        dismissModelPickerSheet()
+                    }
                 }
         )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            viewModel.setSelectedModel(runnable)
+            dismissModelPickerSheet()
+        }
         .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
         .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
             presentQuickModelSettings(for: runnable)

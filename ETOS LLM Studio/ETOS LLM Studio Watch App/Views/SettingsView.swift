@@ -637,23 +637,31 @@ private struct ModelSelectionView: View {
         _ model: RunnableModel,
         showsProviderName: Bool
     ) -> some View {
-        Button {
-            select(model)
-        } label: {
-            selectionRow(
-                title: model.model.displayName,
-                subtitle: showsProviderName
-                    ? "\(model.provider.name) · \(model.model.modelName)"
-                    : model.model.modelName,
-                isSelected: selectedModel?.id == model.id
-            )
-        }
-        .highPriorityGesture(
+        selectionRow(
+            title: model.model.displayName,
+            subtitle: showsProviderName
+                ? "\(model.provider.name) · \(model.model.modelName)"
+                : model.model.modelName,
+            isSelected: selectedModel?.id == model.id
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .gesture(
             LongPressGesture(minimumDuration: 0.45)
-                .onEnded { _ in
-                    presentSettings(for: model)
+                .exclusively(before: TapGesture())
+                .onEnded { gesture in
+                    switch gesture {
+                    case .first(_):
+                        presentSettings(for: model)
+                    case .second(_):
+                        select(model)
+                    }
                 }
         )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            select(model)
+        }
         .accessibilityHint(NSLocalizedString("长按可打开模型设置", comment: "模型选择行的无障碍提示"))
         .accessibilityAction(named: Text(NSLocalizedString("打开模型设置", comment: "模型选择行的无障碍操作"))) {
             presentSettings(for: model)
