@@ -1607,6 +1607,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "全局代理设置" = "Global Proxy Settings";
 "全局提示词" = "Global Prompt";
 "全部" = "All";
+"全部模型" = "Todos los modelos";
 "公告/趋势" = "Announcements/Trends";
 "共清理 %d 条摘要。" = "%d summaries cleared.";
 "关键词（逗号分隔）" = "Keywords (comma-separated)";

@@ -243,6 +243,7 @@ extension ChatView {
 
     func presentModelPickerSheet() {
         prepareSelectedModelPickerProvider()
+        modelPickerShowsAllModels = false
         activeChatPickerDetent = .medium
         activeChatPickerSheet = .model
     }
@@ -294,6 +295,7 @@ extension ChatView {
     func handleChatPickerSheetDismissed() {
         activeChatPickerDetent = .medium
         quickModelSettingsTarget = nil
+        modelPickerShowsAllModels = false
         resetSessionPickerSearchState()
         if let pendingSession = pendingContextCompressionSourceSession {
             pendingContextCompressionSourceSession = nil

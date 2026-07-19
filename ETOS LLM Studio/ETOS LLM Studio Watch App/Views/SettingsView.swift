@@ -554,6 +554,7 @@ private struct ModelSelectionView: View {
     @Binding var selectedModel: RunnableModel?
     @State private var quickSettingsTarget: RunnableModel?
     @State private var selectedProviderID: UUID?
+    @State private var showsAllModels = false
 
     init(
         models: [RunnableModel],
@@ -609,6 +610,10 @@ private struct ModelSelectionView: View {
                     NSLocalizedString("提供商", comment: ""),
                     selection: $selectedProviderID
                 ) {
+                    if showsAllModels {
+                        Text(NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"))
+                            .tag(nil as UUID?)
+                    }
                     ForEach(providerGroups) { group in
                         Text(group.provider.name)
                             .tag(Optional(group.id))
@@ -617,13 +622,30 @@ private struct ModelSelectionView: View {
             }
 
             Section {
-                ForEach(selectedProviderModels) { model in
-                    modelButton(model, showsProviderName: false)
+                ForEach(providerGroupedModels) { model in
+                    modelButton(model, showsProviderName: showsAllModels)
                 }
             } header: {
                 Text(NSLocalizedString("模型", comment: ""))
             } footer: {
                 Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+            }
+
+            if !showsAllModels {
+                Section {
+                    Button(action: showAllModelsTemporarily) {
+                        Label(
+                            NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
+                            systemImage: "square.grid.2x2"
+                        )
+                    }
+                }
+            }
+        }
+        .id(showsAllModels)
+        .onChange(of: selectedProviderID) { _, providerID in
+            if providerID != nil {
+                showsAllModels = false
             }
         }
     }
@@ -631,6 +653,16 @@ private struct ModelSelectionView: View {
     private var selectedProviderModels: [RunnableModel] {
         guard let selectedProviderID else { return [] }
         return modelsByProviderID[selectedProviderID] ?? []
+    }
+
+    private var providerGroupedModels: [RunnableModel] {
+        showsAllModels ? models : selectedProviderModels
+    }
+
+    private func showAllModelsTemporarily() {
+        WKInterfaceDevice.current().play(.click)
+        selectedProviderID = nil
+        showsAllModels = true
     }
 
     private func modelButton(

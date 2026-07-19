@@ -77,6 +77,7 @@ struct ChatView: View {
     @State var activeChatPickerDetent: PresentationDetent = .medium
     @State var quickModelSettingsTarget: RunnableModel?
     @State var selectedModelPickerProviderID: UUID?
+    @State var modelPickerShowsAllModels = false
     @State var isChatLayoutLandscape = false
     @State var isLandscapeSessionSidebarPresented = true
     @State var bottomSafeAreaInset: CGFloat = 0

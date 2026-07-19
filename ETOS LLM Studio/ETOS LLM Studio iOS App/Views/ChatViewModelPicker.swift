@@ -67,10 +67,22 @@ extension ChatView {
     var providerGroupedModelPickerContent: some View {
         List {
             modelPickerSection(
-                models: selectedProviderModelChoices,
-                showsProviderName: false
+                models: providerGroupedModelPickerChoices,
+                showsProviderName: modelPickerShowsAllModels
             )
+
+            if !modelPickerShowsAllModels {
+                Section {
+                    Button(action: showAllModelsTemporarily) {
+                        Label(
+                            NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
+                            systemImage: "square.grid.2x2"
+                        )
+                    }
+                }
+            }
         }
+        .id(modelPickerShowsAllModels)
         // 固定栏与列表共享系统表面，避免额外材质叠层产生色差。
         .safeAreaInset(edge: .top, spacing: 0) {
             modelPickerProviderStrip
@@ -112,8 +124,9 @@ extension ChatView {
     }
 
     func modelPickerProviderButton(_ group: RunnableModelProviderGroup) -> some View {
-        let isSelected = group.id == selectedModelPickerProviderID
+        let isSelected = !modelPickerShowsAllModels && group.id == selectedModelPickerProviderID
         return Button {
+            modelPickerShowsAllModels = false
             selectedModelPickerProviderID = group.id
         } label: {
             VStack(spacing: 4) {
@@ -206,6 +219,17 @@ extension ChatView {
     var selectedProviderModelChoices: [RunnableModel] {
         guard let selectedModelPickerProviderID else { return [] }
         return viewModel.activatedConversationModelsByProviderID[selectedModelPickerProviderID] ?? []
+    }
+
+    var providerGroupedModelPickerChoices: [RunnableModel] {
+        modelPickerShowsAllModels
+            ? viewModel.activatedConversationModels
+            : selectedProviderModelChoices
+    }
+
+    func showAllModelsTemporarily() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        modelPickerShowsAllModels = true
     }
 
     func prepareSelectedModelPickerProvider() {
