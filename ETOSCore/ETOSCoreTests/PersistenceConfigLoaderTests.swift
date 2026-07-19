@@ -50,6 +50,14 @@ extension PersistenceTests {
         #expect(AppConfigKey.watchModelPickerGroupsByProvider.defaultValue == .bool(true))
     }
 
+    @Test("模型分组文件夹首次默认收起且展开状态仅保存在本机")
+    func modelPickerFolderExpansionDefaultsToLocalEmptyState() {
+        #expect(AppConfigKey.iOSModelPickerExpandedGroupIDs.defaultValue == .text("[]"))
+        #expect(AppConfigKey.watchModelPickerExpandedGroupIDs.defaultValue == .text("[]"))
+        #expect(AppConfigKey.iOSModelPickerExpandedGroupIDs.participatesInSync == false)
+        #expect(AppConfigKey.watchModelPickerExpandedGroupIDs.participatesInSync == false)
+    }
+
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {

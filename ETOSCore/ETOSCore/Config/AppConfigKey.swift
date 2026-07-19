@@ -205,6 +205,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case iOSModelPickerGroupsByProvider = "ui.modelPicker.groupByProvider.iOS"
     case watchModelPickerGroupsByProvider = "ui.modelPicker.groupByProvider.watchOS"
+    case iOSModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.iOS"
+    case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
@@ -473,6 +475,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .iOSModelPickerGroupsByProvider,
              .watchModelPickerGroupsByProvider:
             return .bool(true)
+        case .iOSModelPickerExpandedGroupIDs,
+             .watchModelPickerExpandedGroupIDs:
+            return .text("[]")
         case .chatQuickActionIDs:
             return .text("temporaryChat")
         case .restoreLastSessionOnLaunch,
@@ -544,6 +549,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .requestLogPlainMessageEnabled,
              .watchUseThirdPartyKeyboard,
              .localDebugLastServerAddress,
+             .iOSModelPickerExpandedGroupIDs,
+             .watchModelPickerExpandedGroupIDs,
              .memoryAutoConsolidationState,
              .appLockEnabled,
              .appLockTimeoutSeconds,

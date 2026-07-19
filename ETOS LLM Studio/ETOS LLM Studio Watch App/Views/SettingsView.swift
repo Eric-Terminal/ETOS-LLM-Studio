@@ -547,6 +547,7 @@ struct SettingsListIconView: View {
 
 private struct ModelSelectionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject private var appConfig = AppConfigStore.shared
 
     let models: [RunnableModel]
@@ -557,7 +558,6 @@ private struct ModelSelectionView: View {
     @State private var quickSettingsTarget: RunnableModel?
     @State private var selectedProviderID: UUID?
     @State private var showsAllModels = false
-    @State private var collapsedModelGroupIDs: Set<String> = []
 
     init(
         models: [RunnableModel],
@@ -658,14 +658,12 @@ private struct ModelSelectionView: View {
 
             Section(NSLocalizedString("已分类模型", comment: "模型选择器已加入分组的模型区块")) {
                 ForEach(layout.groups) { group in
-                    DisclosureGroup(
-                        isExpanded: groupExpansionBinding(for: group.id)
-                    ) {
+                    modelGroupFolderButton(group)
+
+                    if appConfig.watchModelPickerExpandedGroupIDs.contains(group.id) {
                         ForEach(group.models) { model in
                             modelButton(model, showsProviderName: false)
                         }
-                    } label: {
-                        Label(group.name, systemImage: "folder")
                     }
                 }
             }
@@ -711,15 +709,47 @@ private struct ModelSelectionView: View {
 
     private func groupExpansionBinding(for groupID: String) -> Binding<Bool> {
         Binding(
-            get: { !collapsedModelGroupIDs.contains(groupID) },
+            get: { appConfig.watchModelPickerExpandedGroupIDs.contains(groupID) },
             set: { isExpanded in
+                var expandedGroupIDs = appConfig.watchModelPickerExpandedGroupIDs
                 if isExpanded {
-                    collapsedModelGroupIDs.remove(groupID)
+                    expandedGroupIDs.insert(groupID)
                 } else {
-                    collapsedModelGroupIDs.insert(groupID)
+                    expandedGroupIDs.remove(groupID)
                 }
+                appConfig.watchModelPickerExpandedGroupIDs = expandedGroupIDs
             }
         )
+    }
+
+    private func modelGroupFolderButton(_ group: RunnableModelPickerGroup) -> some View {
+        let isExpanded = appConfig.watchModelPickerExpandedGroupIDs.contains(group.id)
+        return Button {
+            let binding = groupExpansionBinding(for: group.id)
+            if accessibilityReduceMotion {
+                binding.wrappedValue.toggle()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    binding.wrappedValue.toggle()
+                }
+            }
+            WKInterfaceDevice.current().play(.click)
+        } label: {
+            HStack {
+                Label(
+                    group.name,
+                    systemImage: isExpanded ? "folder.fill" : "folder"
+                )
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func showAllModelsTemporarily() {

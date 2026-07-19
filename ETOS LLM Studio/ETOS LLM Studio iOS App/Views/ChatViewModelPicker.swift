@@ -274,13 +274,15 @@ extension ChatView {
 
     func modelPickerGroupExpansionBinding(for groupID: String) -> Binding<Bool> {
         Binding(
-            get: { !collapsedModelPickerGroupIDs.contains(groupID) },
+            get: { appConfig.iOSModelPickerExpandedGroupIDs.contains(groupID) },
             set: { isExpanded in
+                var expandedGroupIDs = appConfig.iOSModelPickerExpandedGroupIDs
                 if isExpanded {
-                    collapsedModelPickerGroupIDs.remove(groupID)
+                    expandedGroupIDs.insert(groupID)
                 } else {
-                    collapsedModelPickerGroupIDs.insert(groupID)
+                    expandedGroupIDs.remove(groupID)
                 }
+                appConfig.iOSModelPickerExpandedGroupIDs = expandedGroupIDs
             }
         )
     }

@@ -295,6 +295,23 @@ public final class AppConfigStore: ObservableObject {
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
     @Published public var iOSModelPickerGroupsByProvider: Bool { didSet { write(.iOSModelPickerGroupsByProvider, iOSModelPickerGroupsByProvider) } }
     @Published public var watchModelPickerGroupsByProvider: Bool { didSet { write(.watchModelPickerGroupsByProvider, watchModelPickerGroupsByProvider) } }
+    // 展开记录按设备独立保存；未记录的新分组自然保持收起。
+    @Published public var iOSModelPickerExpandedGroupIDs: Set<String> {
+        didSet {
+            write(
+                .iOSModelPickerExpandedGroupIDs,
+                Self.encodeStringArray(iOSModelPickerExpandedGroupIDs.sorted())
+            )
+        }
+    }
+    @Published public var watchModelPickerExpandedGroupIDs: Set<String> {
+        didSet {
+            write(
+                .watchModelPickerExpandedGroupIDs,
+                Self.encodeStringArray(watchModelPickerExpandedGroupIDs.sorted())
+            )
+        }
+    }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
@@ -484,6 +501,16 @@ public final class AppConfigStore: ObservableObject {
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
         iOSModelPickerGroupsByProvider = Self.boolValue(.iOSModelPickerGroupsByProvider, userDefaults: userDefaults)
         watchModelPickerGroupsByProvider = Self.boolValue(.watchModelPickerGroupsByProvider, userDefaults: userDefaults)
+        iOSModelPickerExpandedGroupIDs = Set(
+            Self.decodeStringArray(
+                from: Self.textValue(.iOSModelPickerExpandedGroupIDs, userDefaults: userDefaults)
+            ) ?? []
+        )
+        watchModelPickerExpandedGroupIDs = Set(
+            Self.decodeStringArray(
+                from: Self.textValue(.watchModelPickerExpandedGroupIDs, userDefaults: userDefaults)
+            ) ?? []
+        )
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
@@ -941,6 +968,10 @@ public final class AppConfigStore: ObservableObject {
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
         case .iOSModelPickerGroupsByProvider: return .bool(iOSModelPickerGroupsByProvider)
         case .watchModelPickerGroupsByProvider: return .bool(watchModelPickerGroupsByProvider)
+        case .iOSModelPickerExpandedGroupIDs:
+            return .text(Self.encodeStringArray(iOSModelPickerExpandedGroupIDs.sorted()))
+        case .watchModelPickerExpandedGroupIDs:
+            return .text(Self.encodeStringArray(watchModelPickerExpandedGroupIDs.sorted()))
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
@@ -1156,6 +1187,10 @@ public final class AppConfigStore: ObservableObject {
         case .watchAttachmentSourceHistory: watchAttachmentSourceHistory = value
         case .watchBackgroundLastSource: watchBackgroundLastSource = value
         case .watchBackgroundSourceHistory: watchBackgroundSourceHistory = value
+        case .iOSModelPickerExpandedGroupIDs:
+            iOSModelPickerExpandedGroupIDs = Set(Self.decodeStringArray(from: value) ?? [])
+        case .watchModelPickerExpandedGroupIDs:
+            watchModelPickerExpandedGroupIDs = Set(Self.decodeStringArray(from: value) ?? [])
         case .chatQuickActionIDs: chatQuickActionIDs = value
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
