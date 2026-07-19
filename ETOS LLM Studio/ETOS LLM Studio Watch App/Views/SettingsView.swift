@@ -605,18 +605,16 @@ private struct ModelSelectionView: View {
 
     private var providerGroupedModelList: some View {
         List {
-            Section(NSLocalizedString("提供商", comment: "")) {
-                Picker(
-                    NSLocalizedString("提供商", comment: ""),
-                    selection: $selectedProviderID
-                ) {
-                    if showsAllModels {
-                        Text(NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"))
-                            .tag(nil as UUID?)
-                    }
-                    ForEach(providerGroups) { group in
-                        Text(group.provider.name)
-                            .tag(Optional(group.id))
+            if !showsAllModels {
+                Section(NSLocalizedString("提供商", comment: "")) {
+                    Picker(
+                        NSLocalizedString("提供商", comment: ""),
+                        selection: $selectedProviderID
+                    ) {
+                        ForEach(providerGroups) { group in
+                            Text(group.provider.name)
+                                .tag(Optional(group.id))
+                        }
                     }
                 }
             }
@@ -643,11 +641,6 @@ private struct ModelSelectionView: View {
             }
         }
         .id(showsAllModels)
-        .onChange(of: selectedProviderID) { _, providerID in
-            if providerID != nil {
-                showsAllModels = false
-            }
-        }
     }
 
     private var selectedProviderModels: [RunnableModel] {
@@ -661,7 +654,6 @@ private struct ModelSelectionView: View {
 
     private func showAllModelsTemporarily() {
         WKInterfaceDevice.current().play(.click)
-        selectedProviderID = nil
         showsAllModels = true
     }
 

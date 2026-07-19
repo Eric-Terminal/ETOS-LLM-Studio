@@ -85,7 +85,9 @@ extension ChatView {
         .id(modelPickerShowsAllModels)
         // 固定栏与列表共享系统表面，避免额外材质叠层产生色差。
         .safeAreaInset(edge: .top, spacing: 0) {
-            modelPickerProviderStrip
+            if !modelPickerShowsAllModels {
+                modelPickerProviderStrip
+            }
         }
         .onAppear(perform: prepareSelectedModelPickerProvider)
         .onReceive(viewModel.$activatedConversationModelGroups) { groups in
