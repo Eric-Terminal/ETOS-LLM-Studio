@@ -5100,6 +5100,11 @@
 "能力" = "Capabilities";
 "推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。" = "Enabling reasoning automatically adds a Thinking Budget control. Disabling the capability keeps configured controls.";
 "当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。" = "The current model cannot use standalone image generation. Set Model Type to Image in model settings.";
+"模型分组" = "Model Groups";
+"分组名称（可选）" = "Group Name (Optional)";
+"同一提供商内使用相同分组名称的模型会折叠在一起；留空则归入未分类模型。" = "Models with the same group name under one provider are shown in a collapsible group. Leave it blank to keep the model ungrouped.";
+"未分类模型" = "Ungrouped Models";
+"已分类模型" = "Grouped Models";
 "如何配置模型" = "How to Configure a Model";
 "先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "Start with the model ID and purpose. Configure Custom Body and structured controls only when you need advanced parameters.";
 "Split by nested paths" = "Split by Nested Paths";

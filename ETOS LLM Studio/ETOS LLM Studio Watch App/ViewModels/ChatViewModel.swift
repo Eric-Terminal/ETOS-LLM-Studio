@@ -107,6 +107,7 @@ class ChatViewModel: ObservableObject {
     @Published var activatedConversationModels: [RunnableModel] = []
     @Published var activatedConversationModelGroups: [RunnableModelProviderGroup] = []
     @Published var activatedConversationModelsByProviderID: [UUID: [RunnableModel]] = [:]
+    @Published var activatedConversationModelLayoutsByProviderID: [UUID: RunnableModelPickerLayout] = [:]
     @Published var activatedChatModels: [RunnableModel] = []
     
     @Published var memories: [MemoryItem] = []

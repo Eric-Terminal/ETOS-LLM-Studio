@@ -78,6 +78,7 @@ struct ChatView: View {
     @State var quickModelSettingsTarget: RunnableModel?
     @State var selectedModelPickerProviderID: UUID?
     @State var modelPickerShowsAllModels = false
+    @State var collapsedModelPickerGroupIDs: Set<String> = []
     @State var isChatLayoutLandscape = false
     @State var isLandscapeSessionSidebarPresented = true
     @State var bottomSafeAreaInset: CGFloat = 0

@@ -80,6 +80,7 @@ public enum LocalModelProviderBridge {
             displayName: preferRecordBasics
                 ? record.sanitizedDisplayName
                 : (sanitized(existingModel?.displayName).nilIfEmpty ?? record.sanitizedDisplayName),
+            pickerGroupName: existingModel?.pickerGroupName,
             isActivated: preferRecordBasics ? record.isActivated : (existingModel?.isActivated ?? record.isActivated),
             overrideParameters: overrideParameters,
             kind: existingModel?.kind ?? .chat,

@@ -317,6 +317,7 @@ public struct Model: Codable, Identifiable, Hashable {
     public var id: UUID
     public var modelName: String // 模型ID，例如: "deepseek-chat"
     public var displayName: String
+    public var pickerGroupName: String?
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
     public var kind: ModelKind
@@ -332,6 +333,7 @@ public struct Model: Codable, Identifiable, Hashable {
         id: UUID = UUID(),
         modelName: String,
         displayName: String? = nil,
+        pickerGroupName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         kind: ModelKind? = .chat,
@@ -354,6 +356,7 @@ public struct Model: Codable, Identifiable, Hashable {
         self.id = id
         self.modelName = modelName
         self.displayName = displayName ?? modelName
+        self.pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName)
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
         self.kind = normalized.kind
@@ -371,6 +374,7 @@ public struct Model: Codable, Identifiable, Hashable {
         id: UUID = UUID(),
         modelName: String,
         displayName: String? = nil,
+        pickerGroupName: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         capabilities legacyCapabilities: [Capability],
@@ -383,6 +387,7 @@ public struct Model: Codable, Identifiable, Hashable {
             id: id,
             modelName: modelName,
             displayName: displayName,
+            pickerGroupName: pickerGroupName,
             isActivated: isActivated,
             overrideParameters: overrideParameters,
             kind: nil,
@@ -395,7 +400,7 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, modelName, displayName, isActivated, overrideParameters
+        case id, modelName, displayName, pickerGroupName, isActivated, overrideParameters
         case kind, inputModalities, outputModalities, capabilities
         case requestBodyOverrideMode
         case rawRequestBodyJSON
@@ -408,6 +413,9 @@ public struct Model: Codable, Identifiable, Hashable {
         self.id = try container.decode(UUID.self, forKey: .id)
         self.modelName = try container.decode(String.self, forKey: .modelName)
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
+        self.pickerGroupName = Self.normalizedPickerGroupName(
+            try container.decodeIfPresent(String.self, forKey: .pickerGroupName)
+        )
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
         let decodedKind = try container.decodeIfPresent(ModelKind.self, forKey: .kind)
@@ -443,6 +451,9 @@ public struct Model: Codable, Identifiable, Hashable {
         if displayName != modelName {
             try container.encode(displayName, forKey: .displayName)
         }
+        if let pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName) {
+            try container.encode(pickerGroupName, forKey: .pickerGroupName)
+        }
         try container.encode(isActivated, forKey: .isActivated)
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
@@ -471,5 +482,13 @@ public struct Model: Codable, Identifiable, Hashable {
         if let pricing = pricing?.normalized, !pricing.isEffectivelyEmpty {
             try container.encode(pricing, forKey: .pricing)
         }
+    }
+
+    public static func normalizedPickerGroupName(_ groupName: String?) -> String? {
+        guard let trimmed = groupName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

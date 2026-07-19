@@ -95,6 +95,7 @@ extension ModelSettingsView {
     }
 
     func saveEditorState() {
+        model.pickerGroupName = Model.normalizedPickerGroupName(model.pickerGroupName)
         model.requestBodyOverrideMode = requestBodyMode
         model.rawRequestBodyJSON = rawJSONInput
 

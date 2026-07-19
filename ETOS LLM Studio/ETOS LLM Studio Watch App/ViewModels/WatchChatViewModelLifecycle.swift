@@ -450,6 +450,9 @@ extension ChatViewModel {
         let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
         activatedConversationModelGroups = groups
         activatedConversationModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
+        activatedConversationModelLayoutsByProviderID = Dictionary(
+            uniqueKeysWithValues: groups.map { ($0.id, $0.pickerLayout) }
+        )
     }
 
     func applyActivatedChatModels(_ models: [RunnableModel]) {

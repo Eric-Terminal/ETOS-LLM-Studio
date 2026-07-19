@@ -93,6 +93,7 @@ struct SettingsView: View {
                                 models: options,
                                 providerGroups: viewModel.activatedConversationModelGroups,
                                 modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
+                                layoutsByProviderID: viewModel.activatedConversationModelLayoutsByProviderID,
                                 selectedModel: selectedModelBinding
                             )
                         } label: {
@@ -551,20 +552,24 @@ private struct ModelSelectionView: View {
     let models: [RunnableModel]
     let providerGroups: [RunnableModelProviderGroup]
     let modelsByProviderID: [UUID: [RunnableModel]]
+    let layoutsByProviderID: [UUID: RunnableModelPickerLayout]
     @Binding var selectedModel: RunnableModel?
     @State private var quickSettingsTarget: RunnableModel?
     @State private var selectedProviderID: UUID?
     @State private var showsAllModels = false
+    @State private var collapsedModelGroupIDs: Set<String> = []
 
     init(
         models: [RunnableModel],
         providerGroups: [RunnableModelProviderGroup],
         modelsByProviderID: [UUID: [RunnableModel]],
+        layoutsByProviderID: [UUID: RunnableModelPickerLayout],
         selectedModel: Binding<RunnableModel?>
     ) {
         self.models = models
         self.providerGroups = providerGroups
         self.modelsByProviderID = modelsByProviderID
+        self.layoutsByProviderID = layoutsByProviderID
         _selectedModel = selectedModel
         let currentProviderID = selectedModel.wrappedValue?.provider.id
         _selectedProviderID = State(
@@ -619,25 +624,11 @@ private struct ModelSelectionView: View {
                 }
             }
 
-            Section {
-                ForEach(providerGroupedModels) { model in
-                    modelButton(model, showsProviderName: showsAllModels)
-                }
-            } header: {
-                Text(NSLocalizedString("模型", comment: ""))
-            } footer: {
-                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
-            }
-
-            if !showsAllModels {
-                Section {
-                    Button(action: showAllModelsTemporarily) {
-                        Label(
-                            NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
-                            systemImage: "square.grid.2x2"
-                        )
-                    }
-                }
+            if showsAllModels {
+                modelSection(models: models, showsProviderName: true)
+            } else {
+                selectedProviderModelSections
+                showAllModelsSection
             }
         }
         .id(showsAllModels)
@@ -648,8 +639,87 @@ private struct ModelSelectionView: View {
         return modelsByProviderID[selectedProviderID] ?? []
     }
 
-    private var providerGroupedModels: [RunnableModel] {
-        showsAllModels ? models : selectedProviderModels
+    private var selectedProviderLayout: RunnableModelPickerLayout? {
+        guard let selectedProviderID else { return nil }
+        return layoutsByProviderID[selectedProviderID]
+    }
+
+    @ViewBuilder
+    private var selectedProviderModelSections: some View {
+        if let layout = selectedProviderLayout,
+           !layout.groups.isEmpty {
+            if !layout.ungroupedModels.isEmpty {
+                Section(NSLocalizedString("未分类模型", comment: "模型选择器未加入分组的模型区块")) {
+                    ForEach(layout.ungroupedModels) { model in
+                        modelButton(model, showsProviderName: false)
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("已分类模型", comment: "模型选择器已加入分组的模型区块")) {
+                ForEach(layout.groups) { group in
+                    DisclosureGroup(
+                        isExpanded: groupExpansionBinding(for: group.id)
+                    ) {
+                        ForEach(group.models) { model in
+                            modelButton(model, showsProviderName: false)
+                        }
+                    } label: {
+                        Label(group.name, systemImage: "folder")
+                    }
+                }
+            }
+        } else {
+            modelSection(
+                models: selectedProviderModels,
+                showsProviderName: false,
+                showsInteractionHint: false
+            )
+        }
+    }
+
+    private func modelSection(
+        models: [RunnableModel],
+        showsProviderName: Bool,
+        showsInteractionHint: Bool = true
+    ) -> some View {
+        Section {
+            ForEach(models) { model in
+                modelButton(model, showsProviderName: showsProviderName)
+            }
+        } header: {
+            Text(NSLocalizedString("模型", comment: ""))
+        } footer: {
+            if showsInteractionHint {
+                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+            }
+        }
+    }
+
+    private var showAllModelsSection: some View {
+        Section {
+            Button(action: showAllModelsTemporarily) {
+                Label(
+                    NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
+                    systemImage: "square.grid.2x2"
+                )
+            }
+        } footer: {
+            Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+        }
+    }
+
+    private func groupExpansionBinding(for groupID: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedModelGroupIDs.contains(groupID) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedModelGroupIDs.remove(groupID)
+                } else {
+                    collapsedModelGroupIDs.insert(groupID)
+                }
+            }
+        )
     }
 
     private func showAllModelsTemporarily() {

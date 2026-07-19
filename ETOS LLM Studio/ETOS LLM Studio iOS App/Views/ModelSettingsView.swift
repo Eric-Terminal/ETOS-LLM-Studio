@@ -46,6 +46,16 @@ struct ModelSettingsView: View {
                     .autocorrectionDisabled()
             }
 
+            Section(
+                header: Text(NSLocalizedString("模型分组", comment: "模型选择器分组设置区块")),
+                footer: Text(NSLocalizedString("同一提供商内使用相同分组名称的模型会折叠在一起；留空则归入未分类模型。", comment: "模型选择器分组设置说明"))
+            ) {
+                TextField(
+                    NSLocalizedString("分组名称（可选）", comment: "模型选择器分组名称输入框"),
+                    text: pickerGroupNameBinding
+                )
+            }
+
             if model.isChatModel && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
@@ -174,6 +184,13 @@ struct ModelSettingsView: View {
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
+    }
+
+    private var pickerGroupNameBinding: Binding<String> {
+        Binding(
+            get: { model.pickerGroupName ?? "" },
+            set: { model.pickerGroupName = $0 }
+        )
     }
 }
 

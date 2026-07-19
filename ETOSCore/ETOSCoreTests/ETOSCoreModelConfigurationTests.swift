@@ -266,6 +266,33 @@ struct RunnableModelGroupingTests {
         #expect(groups[0].models.map(\.model.modelName) == ["b-1"])
         #expect(groups[1].models.map(\.model.modelName) == ["a-2", "a-1"])
     }
+
+    @Test("模型选择分组保留未分类、分组与组内模型顺序")
+    func pickerLayoutPreservesConfiguredOrder() {
+        let models = [
+            Model(modelName: "ungrouped-1", isActivated: true),
+            Model(modelName: "claude-1", pickerGroupName: " Claude ", isActivated: true),
+            Model(modelName: "openai-1", pickerGroupName: "OpenAI", isActivated: true),
+            Model(modelName: "ungrouped-2", pickerGroupName: "  ", isActivated: true),
+            Model(modelName: "claude-2", pickerGroupName: "Claude", isActivated: true)
+        ]
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: models
+        )
+
+        let layout = RunnableModelPickerGrouping.layout(
+            models: models.map { RunnableModel(provider: provider, model: $0) }
+        )
+
+        #expect(layout.ungroupedModels.map(\.model.modelName) == ["ungrouped-1", "ungrouped-2"])
+        #expect(layout.groups.map(\.name) == ["Claude", "OpenAI"])
+        #expect(layout.groups[0].models.map(\.model.modelName) == ["claude-1", "claude-2"])
+        #expect(layout.groups[1].models.map(\.model.modelName) == ["openai-1"])
+    }
 }
 
 @Suite("Provider Order Tests")
@@ -428,6 +455,7 @@ struct RequestBodyOverrideModeTests {
     func testModelCodingPreservesRequestBodyMode() throws {
         let source = Model(
             modelName: "test-model",
+            pickerGroupName: " Reasoning ",
             overrideParameters: ["temperature": .double(0.8)],
             requestBodyOverrideMode: .rawJSON,
             rawRequestBodyJSON: "{\"temperature\":0.8}"
@@ -437,6 +465,7 @@ struct RequestBodyOverrideModeTests {
 
         #expect(decoded.requestBodyOverrideMode == .rawJSON)
         #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
+        #expect(decoded.pickerGroupName == "Reasoning")
     }
 
     @Test("键值对编辑模式是默认请求体编辑模式")
@@ -460,6 +489,7 @@ struct RequestBodyOverrideModeTests {
 
         #expect(decoded.requestBodyOverrideMode == .keyValue)
         #expect(decoded.rawRequestBodyJSON == nil)
+        #expect(decoded.pickerGroupName == nil)
     }
 
     @Test("聊天模型默认开启工具调用")

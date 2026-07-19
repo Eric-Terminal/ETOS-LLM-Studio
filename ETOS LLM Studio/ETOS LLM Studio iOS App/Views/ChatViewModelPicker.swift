@@ -66,20 +66,14 @@ extension ChatView {
 
     var providerGroupedModelPickerContent: some View {
         List {
-            modelPickerSection(
-                models: providerGroupedModelPickerChoices,
-                showsProviderName: modelPickerShowsAllModels
-            )
-
-            if !modelPickerShowsAllModels {
-                Section {
-                    Button(action: showAllModelsTemporarily) {
-                        Label(
-                            NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
-                            systemImage: "square.grid.2x2"
-                        )
-                    }
-                }
+            if modelPickerShowsAllModels {
+                modelPickerSection(
+                    models: viewModel.activatedConversationModels,
+                    showsProviderName: true
+                )
+            } else {
+                selectedProviderModelPickerSections
+                modelPickerShowAllModelsSection
             }
         }
         .id(modelPickerShowsAllModels)
@@ -161,7 +155,8 @@ extension ChatView {
 
     func modelPickerSection(
         models: [RunnableModel],
-        showsProviderName: Bool
+        showsProviderName: Bool,
+        showsInteractionHint: Bool = true
     ) -> some View {
         Section {
             ForEach(models, id: \.id) { runnable in
@@ -169,6 +164,55 @@ extension ChatView {
             }
         } header: {
             Text(NSLocalizedString("模型", comment: ""))
+        } footer: {
+            if showsInteractionHint {
+                Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    var selectedProviderModelPickerSections: some View {
+        if let layout = selectedProviderModelPickerLayout,
+           !layout.groups.isEmpty {
+            if !layout.ungroupedModels.isEmpty {
+                Section(NSLocalizedString("未分类模型", comment: "模型选择器未加入分组的模型区块")) {
+                    ForEach(layout.ungroupedModels, id: \.id) { runnable in
+                        nativeModelPickerModelRow(runnable, showsProviderName: false)
+                    }
+                }
+            }
+
+            Section(NSLocalizedString("已分类模型", comment: "模型选择器已加入分组的模型区块")) {
+                ForEach(layout.groups) { group in
+                    DisclosureGroup(
+                        isExpanded: modelPickerGroupExpansionBinding(for: group.id)
+                    ) {
+                        ForEach(group.models, id: \.id) { runnable in
+                            nativeModelPickerModelRow(runnable, showsProviderName: false)
+                        }
+                    } label: {
+                        Label(group.name, systemImage: "folder")
+                    }
+                }
+            }
+        } else {
+            modelPickerSection(
+                models: selectedProviderModelChoices,
+                showsProviderName: false,
+                showsInteractionHint: false
+            )
+        }
+    }
+
+    var modelPickerShowAllModelsSection: some View {
+        Section {
+            Button(action: showAllModelsTemporarily) {
+                Label(
+                    NSLocalizedString("全部模型", comment: "模型选择器临时显示全部模型按钮"),
+                    systemImage: "square.grid.2x2"
+                )
+            }
         } footer: {
             Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
         }
@@ -223,10 +267,22 @@ extension ChatView {
         return viewModel.activatedConversationModelsByProviderID[selectedModelPickerProviderID] ?? []
     }
 
-    var providerGroupedModelPickerChoices: [RunnableModel] {
-        modelPickerShowsAllModels
-            ? viewModel.activatedConversationModels
-            : selectedProviderModelChoices
+    var selectedProviderModelPickerLayout: RunnableModelPickerLayout? {
+        guard let selectedModelPickerProviderID else { return nil }
+        return viewModel.activatedConversationModelLayoutsByProviderID[selectedModelPickerProviderID]
+    }
+
+    func modelPickerGroupExpansionBinding(for groupID: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedModelPickerGroupIDs.contains(groupID) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedModelPickerGroupIDs.remove(groupID)
+                } else {
+                    collapsedModelPickerGroupIDs.insert(groupID)
+                }
+            }
+        )
     }
 
     func showAllModelsTemporarily() {

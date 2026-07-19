@@ -121,6 +121,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
                         model_name TEXT NOT NULL,
                         display_name TEXT NOT NULL,
+                        picker_group_name TEXT,
                         is_activated INTEGER NOT NULL,
                         kind TEXT,
                         input_modalities_json TEXT,
@@ -860,6 +861,17 @@ extension PersistenceAuxiliaryGRDBStore {
                 guard try tableExists("providers") else { return }
                 if !(try tableHasColumn("providers", columnName: "chat_endpoint_path")) {
                     try db.execute(sql: "ALTER TABLE providers ADD COLUMN chat_endpoint_path TEXT NOT NULL DEFAULT '/chat/completions'")
+                }
+            }
+
+            migrator.registerMigration("v14_add_provider_model_picker_group") { db in
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(provider_models)")
+                let hasPickerGroupName = columns.contains { row in
+                    let name: String = row["name"]
+                    return name == "picker_group_name"
+                }
+                if !hasPickerGroupName {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN picker_group_name TEXT")
                 }
             }
         }

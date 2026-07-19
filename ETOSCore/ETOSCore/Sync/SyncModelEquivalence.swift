@@ -49,6 +49,7 @@ extension Model {
     func isEquivalent(to other: Model) -> Bool {
         modelName == other.modelName &&
         displayName == other.displayName &&
+        Model.normalizedPickerGroupName(pickerGroupName) == Model.normalizedPickerGroupName(other.pickerGroupName) &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
         kind == other.kind &&

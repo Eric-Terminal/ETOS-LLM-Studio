@@ -58,11 +58,66 @@ public struct RunnableModelProviderGroup: Identifiable, Hashable {
     public let provider: Provider
     public let providerInitial: String
     public let models: [RunnableModel]
+    public let pickerLayout: RunnableModelPickerLayout
 
     public init(provider: Provider, models: [RunnableModel]) {
         self.provider = provider
         self.providerInitial = ProviderMonogram.abbreviation(for: provider.name)
         self.models = models
+        self.pickerLayout = RunnableModelPickerGrouping.layout(models: models)
+    }
+}
+
+public struct RunnableModelPickerGroup: Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let models: [RunnableModel]
+}
+
+public struct RunnableModelPickerLayout: Hashable {
+    public let ungroupedModels: [RunnableModel]
+    public let groups: [RunnableModelPickerGroup]
+
+    public init(
+        ungroupedModels: [RunnableModel],
+        groups: [RunnableModelPickerGroup]
+    ) {
+        self.ungroupedModels = ungroupedModels
+        self.groups = groups
+    }
+}
+
+public enum RunnableModelPickerGrouping {
+    /// 分组顺序采用模型列表中首次出现的位置，组内模型继续沿用用户配置的模型顺序。
+    public static func layout(models: [RunnableModel]) -> RunnableModelPickerLayout {
+        var ungroupedModels: [RunnableModel] = []
+        var orderedGroupNames: [String] = []
+        var modelsByGroupName: [String: [RunnableModel]] = [:]
+
+        for runnable in models {
+            guard let groupName = Model.normalizedPickerGroupName(runnable.model.pickerGroupName) else {
+                ungroupedModels.append(runnable)
+                continue
+            }
+            if modelsByGroupName[groupName] == nil {
+                orderedGroupNames.append(groupName)
+            }
+            modelsByGroupName[groupName, default: []].append(runnable)
+        }
+
+        let providerID = models.first?.provider.id.uuidString ?? "unknown-provider"
+        let groups = orderedGroupNames.compactMap { groupName -> RunnableModelPickerGroup? in
+            guard let groupedModels = modelsByGroupName[groupName] else { return nil }
+            return RunnableModelPickerGroup(
+                id: "\(providerID):\(groupName)",
+                name: groupName,
+                models: groupedModels
+            )
+        }
+        return RunnableModelPickerLayout(
+            ungroupedModels: ungroupedModels,
+            groups: groups
+        )
     }
 }
 

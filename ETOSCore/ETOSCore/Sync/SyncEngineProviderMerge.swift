@@ -164,6 +164,12 @@ extension SyncEngine {
             changed = true
         }
 
+        if merged.pickerGroupName == nil,
+           let incomingGroupName = Model.normalizedPickerGroupName(incoming.pickerGroupName) {
+            merged.pickerGroupName = incomingGroupName
+            changed = true
+        }
+
         let mergedIsActivated = merged.isActivated || incoming.isActivated
         if mergedIsActivated != merged.isActivated {
             merged.isActivated = mergedIsActivated
@@ -453,6 +459,18 @@ extension SyncEngine {
         }
         if displayName != local.displayName {
             merged.displayName = displayName
+            changed = true
+        }
+
+        guard let pickerGroupName = mergeOptionalStringField(
+            Model.normalizedPickerGroupName(local.pickerGroupName),
+            Model.normalizedPickerGroupName(incoming.pickerGroupName),
+            allowPrefixExtension: false
+        ) else {
+            return .conflict
+        }
+        if pickerGroupName.value != Model.normalizedPickerGroupName(local.pickerGroupName) {
+            merged.pickerGroupName = pickerGroupName.value
             changed = true
         }
 
