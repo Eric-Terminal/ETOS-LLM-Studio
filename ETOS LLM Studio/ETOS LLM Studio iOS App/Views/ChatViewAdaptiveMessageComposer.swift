@@ -351,11 +351,11 @@ extension TelegramMessageComposer {
 
     // 只为实际显示的内置按钮预留边距，多行态把横向空间完整还给正文。
     private var adaptiveTextLeadingInset: CGFloat {
-        adaptiveShowsRequestControlsButton ? adaptiveControlSize : 6
+        adaptiveShowsRequestControlsButton ? adaptiveControlSize : compactTextEdgeInset
     }
 
     private var adaptiveTextTrailingInset: CGFloat {
-        adaptiveShowsSpeechButton ? adaptiveControlSize : 6
+        adaptiveShowsSpeechButton ? adaptiveControlSize : compactTextEdgeInset
     }
 
     private var adaptiveExpandedInputHeight: CGFloat {

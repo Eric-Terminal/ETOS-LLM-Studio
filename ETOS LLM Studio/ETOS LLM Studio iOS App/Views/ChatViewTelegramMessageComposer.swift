@@ -59,6 +59,7 @@ struct TelegramMessageComposer: View {
     }
     private let textContainerInset: CGFloat = 8
     private let textHorizontalPadding: CGFloat = 10
+    var compactTextEdgeInset: CGFloat { 6 }
     private var isLiquidGlassEnabled: Bool {
         if #available(iOS 26.0, *) {
             return viewModel.enableLiquidGlass
@@ -444,9 +445,15 @@ struct TelegramMessageComposer: View {
             return
         }
 
-        let availableWidth = estimatedCompactInputWidth
+        let baseAvailableWidth = estimatedCompactInputWidth
             - textHorizontalPadding * 2
             - textContainerInset * 2
+        let availableWidth = baseAvailableWidth - Self.compactInlineControlsReservedWidth(
+            controlSize: adaptiveControlSize,
+            textEdgeInset: compactTextEdgeInset,
+            showsRequestControls: !adaptiveRequestControls.isEmpty,
+            showsSpeechButton: viewModel.enableSpeechInput
+        )
         let hasExplicitNewline = newValue.contains("\n")
         var shouldExpand = hasExplicitNewline
 
@@ -491,6 +498,17 @@ struct TelegramMessageComposer: View {
             lineCount += 1
         }
         return max(lineCount, 1)
+    }
+
+    /// 返回紧凑态内置按钮相对普通文本边距额外占用的宽度。
+    static func compactInlineControlsReservedWidth(
+        controlSize: CGFloat,
+        textEdgeInset: CGFloat,
+        showsRequestControls: Bool,
+        showsSpeechButton: Bool
+    ) -> CGFloat {
+        let controlCount = (showsRequestControls ? 1 : 0) + (showsSpeechButton ? 1 : 0)
+        return CGFloat(controlCount) * max(0, controlSize - textEdgeInset)
     }
 
     @ViewBuilder
