@@ -69,8 +69,70 @@ struct MCPBuiltInSearchServerTests {
                   case let .string(url)? = fields["url"] else { return false }
             return url == "https://modelcontextprotocol.io/"
         })
+        #expect(items.allSatisfy { item in
+            guard case let .dictionary(fields) = item,
+                  case let .string(source)? = fields["source"] else { return false }
+            return source == "bing_html"
+        })
 
         await client.disconnect()
+    }
+
+    @Test("Bing 不可用时回退到 DuckDuckGo")
+    func testBuiltInSearchFallsBackToDuckDuckGo() async throws {
+        let recorder = SearchRequestRecorder()
+        let engine = MCPBuiltInSearchServerEngine { request in
+            guard let url = request.url else {
+                throw URLError(.badURL)
+            }
+
+            switch url.host {
+            case "www.bing.com":
+                recorder.sawBingRequest = true
+                throw URLError(.cannotConnectToHost)
+            case "html.duckduckgo.com":
+                recorder.sawDuckDuckGoRequest = true
+                let html = """
+                <html><body>
+                  <a class="result__a" href="https://swift.org/">Swift.org</a>
+                  <div class="result__snippet">The Swift programming language.</div>
+                </body></html>
+                """
+                let response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Type": "text/html; charset=utf-8"]
+                )!
+                return (Data(html.utf8), response)
+            default:
+                throw URLError(.cannotFindHost)
+            }
+        }
+
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": [
+                "name": MCPBuiltInSearchServer.toolID,
+                "arguments": ["query": "Swift", "max_results": 1]
+            ]
+        ]
+        let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
+        guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+              let result = object["result"] as? [String: Any],
+              let structuredContent = result["structuredContent"] as? [String: Any],
+              let items = structuredContent["items"] as? [[String: Any]],
+              let firstItem = items.first else {
+            Issue.record("备用搜索源应返回网页结果。")
+            return
+        }
+
+        #expect(recorder.sawBingRequest)
+        #expect(recorder.sawDuckDuckGoRequest)
+        #expect(firstItem["source"] as? String == "duckduckgo_html")
+        #expect(firstItem["url"] as? String == "https://swift.org/")
     }
 
     @Test("query 包含 URL 时优先抓取网页标题和摘要")
@@ -272,15 +334,21 @@ struct MCPBuiltInSearchServerTests {
 
             let html: String
             switch url.host {
-            case "html.duckduckgo.com":
+            case "www.bing.com":
                 #expect(request.value(forHTTPHeaderField: "Range") == nil)
                 html = """
                 <html>
                 <body>
-                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fswift.org%2F&amp;rut=abc">Swift.org - Swift</a>
-                  <div class="result__snippet">Swift is a powerful and intuitive programming language.</div>
-                  <a class="result__a" href="/l/?uddg=https%3A%2F%2Fmodelcontextprotocol.io%2F&amp;rut=def">Model Context Protocol</a>
-                  <div class="result__snippet">MCP is an open protocol for connecting AI applications.</div>
+                  <li class="b_algo">
+                    <div class="b_algoheader">
+                      <a href="https://swift.org/"><h2>Swift.org - Swift</h2></a>
+                    </div>
+                    <div class="b_caption"><p>Swift is a powerful and intuitive programming language.</p></div>
+                  </li>
+                  <li class="b_algo">
+                    <h2><a href="https://modelcontextprotocol.io/">Model Context Protocol</a></h2>
+                    <div class="b_caption"><p>MCP is an open protocol for connecting AI applications.</p></div>
+                  </li>
                 </body>
                 </html>
                 """
@@ -312,5 +380,7 @@ struct MCPBuiltInSearchServerTests {
     private final class SearchRequestRecorder: @unchecked Sendable {
         var sawRangeRequest = false
         var sawPlainRequest = false
+        var sawBingRequest = false
+        var sawDuckDuckGoRequest = false
     }
 }

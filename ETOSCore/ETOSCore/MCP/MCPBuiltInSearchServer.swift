@@ -436,7 +436,8 @@ private final class MCPBuiltInWebSearchClient {
     static let providerID = "etos_builtin_web_search"
     static let defaultTotalTimeout: TimeInterval = 12
 
-    private static let searchEndpoint = URL(string: "https://html.duckduckgo.com/html/")!
+    private static let bingSearchEndpoint = URL(string: "https://www.bing.com/search")!
+    private static let duckDuckGoSearchEndpoint = URL(string: "https://html.duckduckgo.com/html/")!
     private static let maximumHTMLBytes = 512 * 1024
     private static let defaultRequestTimeout: TimeInterval = 8
     private static let minimumRequestTimeout: TimeInterval = 0.5
@@ -482,7 +483,7 @@ private final class MCPBuiltInWebSearchClient {
         }
 
         if items.count < maxResults {
-            let searchItems = try await searchDuckDuckGo(
+            let searchItems = try await searchWeb(
                 query: query,
                 remainingCount: maxResults - items.count,
                 deadline: deadline,
@@ -519,6 +520,70 @@ private final class MCPBuiltInWebSearchClient {
         ]
     }
 
+    private func searchWeb(
+        query: String,
+        remainingCount: Int,
+        deadline: Date,
+        totalTimeout: TimeInterval
+    ) async throws -> [SearchItem] {
+        do {
+            let items = try await searchBing(
+                query: query,
+                remainingCount: remainingCount,
+                deadline: deadline,
+                totalTimeout: totalTimeout
+            )
+            if !items.isEmpty {
+                return items
+            }
+        } catch {
+            // Bing 在部分网络环境不可用时，继续尝试备用搜索源。
+            try Task.checkCancellation()
+        }
+
+        return try await searchDuckDuckGo(
+            query: query,
+            remainingCount: remainingCount,
+            deadline: deadline,
+            totalTimeout: totalTimeout
+        )
+    }
+
+    private func searchBing(
+        query: String,
+        remainingCount: Int,
+        deadline: Date,
+        totalTimeout: TimeInterval
+    ) async throws -> [SearchItem] {
+        guard remainingCount > 0 else { return [] }
+
+        var components = URLComponents(url: Self.bingSearchEndpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "count", value: String(remainingCount))
+        ]
+        guard let url = components.url else {
+            throw SearchError.invalidURL
+        }
+
+        let html = try await fetchHTML(
+            url: url,
+            deadline: deadline,
+            totalTimeout: totalTimeout,
+            usesRangeRequest: false
+        )
+        let parsedItems = Self.parseBingResults(from: html)
+        return Array(parsedItems.prefix(remainingCount).enumerated().map { offset, item in
+            SearchItem(
+                id: String(format: "web%02d", offset + 1),
+                title: item.title,
+                url: item.url,
+                text: item.text,
+                source: "bing_html"
+            )
+        })
+    }
+
     private func searchDuckDuckGo(
         query: String,
         remainingCount: Int,
@@ -527,7 +592,7 @@ private final class MCPBuiltInWebSearchClient {
     ) async throws -> [SearchItem] {
         guard remainingCount > 0 else { return [] }
 
-        var components = URLComponents(url: Self.searchEndpoint, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: Self.duckDuckGoSearchEndpoint, resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "q", value: query)
         ]
@@ -693,6 +758,34 @@ private final class MCPBuiltInWebSearchClient {
         }
     }
 
+    private static func parseBingResults(from html: String) -> [ParsedSearchResult] {
+        let resultPattern = #"(?is)<li\b(?=[^>]*class=["'][^"']*\bb_algo\b[^"']*["'])[^>]*>(.*?)</li>"#
+        return regexMatches(pattern: resultPattern, in: html).compactMap { match in
+            guard let resultHTML = match.groups.first else { return nil }
+            let anchor = regexMatches(
+                pattern: #"(?is)<h2\b[^>]*>\s*<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>"#,
+                in: resultHTML
+            ).first ?? regexMatches(
+                pattern: #"(?is)<a\b[^>]*href=["']([^"']+)["'][^>]*>\s*<h2\b[^>]*>(.*?)</h2>"#,
+                in: resultHTML
+            ).first
+            guard let anchor,
+                  anchor.groups.count >= 2,
+                  let url = normalizedBingResultURL(anchor.groups[0]) else {
+                return nil
+            }
+
+            let title = cleanedHTMLText(anchor.groups[1])
+            guard !title.isEmpty else { return nil }
+            let snippet = firstRegexGroup(pattern: #"(?is)<p\b[^>]*>(.*?)</p>"#, in: resultHTML)
+                .map(cleanedHTMLText)
+                .flatMap { $0.isEmpty ? nil : $0 }
+                ?? hostSummary(from: url)
+                ?? url
+            return ParsedSearchResult(title: title, url: url, text: snippet)
+        }
+    }
+
     private static func firstSnippet(in html: String) -> String? {
         let snippetPattern = #"(?is)<(?:a|div|td|span)\b(?=[^>]*class=["'][^"']*(?:result__snippet|result-snippet)[^"']*["'])[^>]*>(.*?)</(?:a|div|td|span)>"#
         guard let rawSnippet = firstRegexGroup(pattern: snippetPattern, in: html) else { return nil }
@@ -715,6 +808,20 @@ private final class MCPBuiltInWebSearchClient {
             return decodedURL.absoluteString
         }
         guard url.scheme == "http" || url.scheme == "https" else { return nil }
+        return url.absoluteString
+    }
+
+    private static func normalizedBingResultURL(_ rawHref: String) -> String? {
+        var href = decodeHTMLEntities(rawHref).trimmingCharacters(in: .whitespacesAndNewlines)
+        if href.hasPrefix("//") {
+            href = "https:\(href)"
+        } else if href.hasPrefix("/") {
+            href = "https://www.bing.com\(href)"
+        }
+        guard let url = URL(string: href),
+              url.scheme == "http" || url.scheme == "https" else {
+            return nil
+        }
         return url.absoluteString
     }
 
