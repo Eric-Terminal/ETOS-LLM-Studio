@@ -5184,7 +5184,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "未分类模型" = "Modèles non classés";
 "已分类模型" = "Modèles classés";
 "根目录" = "Racine";
-"长按并拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Touchez longuement puis faites glisser un modèle ou une limite de dossier pour le déplacer. Les modèles situés entre les deux limites appartiennent à ce dossier. Les limites peuvent être imbriquées, mais pas se croiser.";
+"点击编辑后拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Touchez Modifier, puis faites glisser un modèle ou une limite de dossier pour le déplacer. Les modèles situés entre les deux limites appartiennent à ce dossier. Les limites peuvent être imbriquées, mais pas se croiser.";
 "开始" = "Début";
 "结束" = "Fin";
 "文件夹“%@”开始" = "Début du dossier « %@ »";

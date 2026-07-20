@@ -8,7 +8,6 @@
 
 import SwiftUI
 import Foundation
-import UniformTypeIdentifiers
 import ETOSCore
 
 private enum ProviderManagementTab: String, CaseIterable, Identifiable {
@@ -437,38 +436,11 @@ private struct ModelOrganizationBoundaryRow: Identifiable, Hashable {
     var id: String { item.id }
 }
 
-private struct ModelOrganizationBoundaryDropDelegate: DropDelegate {
-    let targetID: String
-    @Binding var draggingItemID: String?
-    let moveItem: (String, String) -> Void
-    let finishMove: () -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        draggingItemID != nil
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let draggingItemID, draggingItemID != targetID else { return }
-        moveItem(draggingItemID, targetID)
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard draggingItemID != nil else { return false }
-        finishMove()
-        draggingItemID = nil
-        return true
-    }
-}
-
 private struct ProviderModelOrderDetailView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var editingOrganization: RunnableModelPickerOrganization?
     @State private var boundaryRows: [ModelOrganizationBoundaryRow] = []
-    @State private var draggingItemID: String?
+    @State private var editMode: EditMode = .inactive
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     let provider: Provider
@@ -478,7 +450,7 @@ private struct ProviderModelOrderDetailView: View {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
                 footer: Text(NSLocalizedString(
-                    "长按并拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
+                    "点击编辑后拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
                     comment: "模型目录边界排序提示"
                 ))
             ) {
@@ -488,15 +460,20 @@ private struct ProviderModelOrderDetailView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(boundaryRows) { row in
-                        draggableBoundaryRow(row)
+                        movableBoundaryRow(row)
                     }
+                    .onMove(perform: moveBoundaryRows)
                 }
             }
         }
+        .environment(\.editMode, $editMode)
         .navigationTitle(provider.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                EditButton()
+                    .environment(\.editMode, $editMode)
+
                 Button {
                     let current = editingOrganization ?? organization
                     newFolderName = suggestedFolderName(organization: current)
@@ -518,7 +495,6 @@ private struct ProviderModelOrderDetailView: View {
             synchronize(with: organization)
         }
         .onChange(of: organization) { _, updated in
-            guard draggingItemID == nil else { return }
             synchronize(with: updated)
         }
     }
@@ -528,24 +504,11 @@ private struct ProviderModelOrderDetailView: View {
             ?? RunnableModelPickerOrganization(models: [])
     }
 
-    private func draggableBoundaryRow(
+    private func movableBoundaryRow(
         _ row: ModelOrganizationBoundaryRow
     ) -> some View {
         boundaryRowContent(row)
             .contentShape(Rectangle())
-            .onDrag {
-                draggingItemID = row.id
-                return NSItemProvider(object: row.id as NSString)
-            }
-            .onDrop(
-                of: [.plainText],
-                delegate: ModelOrganizationBoundaryDropDelegate(
-                    targetID: row.id,
-                    draggingItemID: $draggingItemID,
-                    moveItem: moveBoundaryItem,
-                    finishMove: commitBoundaryOrder
-                )
-            )
             .accessibilityAction(named: Text(NSLocalizedString("上移", comment: ""))) {
                 moveBoundaryItem(row.id, by: -1)
             }
@@ -646,53 +609,10 @@ private struct ProviderModelOrderDetailView: View {
         ))
     }
 
-    private func moveBoundaryItem(_ itemID: String, over targetID: String) {
-        guard itemID != targetID,
-              let editingOrganization,
-              let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }),
-              let targetIndex = boundaryRows.firstIndex(where: { $0.id == targetID }) else {
-            return
-        }
-
+    private func moveBoundaryRows(from source: IndexSet, to destination: Int) {
+        guard let editingOrganization else { return }
         var candidateItems = boundaryRows.map(\.item)
-        let movedItem = candidateItems.remove(at: sourceIndex)
-        guard let adjustedTargetIndex = candidateItems.firstIndex(where: {
-            $0.id == targetID
-        }) else {
-            return
-        }
-        let insertionIndex: Int
-        switch (movedItem, candidateItems[adjustedTargetIndex]) {
-        case (.model, .groupStart):
-            insertionIndex = adjustedTargetIndex + 1
-        case (.model, .groupEnd):
-            insertionIndex = adjustedTargetIndex
-        default:
-            insertionIndex = sourceIndex < targetIndex
-                ? adjustedTargetIndex + 1
-                : adjustedTargetIndex
-        }
-        candidateItems.insert(movedItem, at: insertionIndex)
-        guard editingOrganization.applyingBoundaryItems(candidateItems) != nil else {
-            return
-        }
-
-        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
-            boundaryRows = Self.makeBoundaryRows(candidateItems)
-        }
-    }
-
-    private func moveBoundaryItem(_ itemID: String, by offset: Int) {
-        guard let editingOrganization,
-              let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }) else {
-            return
-        }
-        let targetIndex = sourceIndex + offset
-        guard boundaryRows.indices.contains(targetIndex) else { return }
-
-        var candidateItems = boundaryRows.map(\.item)
-        let movedItem = candidateItems.remove(at: sourceIndex)
-        candidateItems.insert(movedItem, at: targetIndex)
+        candidateItems.move(fromOffsets: source, toOffset: destination)
         guard let updated = editingOrganization.applyingBoundaryItems(candidateItems) else {
             return
         }
@@ -704,18 +624,14 @@ private struct ProviderModelOrderDetailView: View {
         persist(updated)
     }
 
-    private func commitBoundaryOrder() {
-        guard let editingOrganization,
-              let updated = editingOrganization.applyingBoundaryItems(
-                boundaryRows.map(\.item)
-              ) else {
-            synchronize(with: editingOrganization ?? organization)
+    private func moveBoundaryItem(_ itemID: String, by offset: Int) {
+        guard let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }) else {
             return
         }
-
-        self.editingOrganization = updated
-        boundaryRows = Self.makeBoundaryRows(updated.boundaryItems)
-        persist(updated)
+        let targetIndex = sourceIndex + offset
+        guard boundaryRows.indices.contains(targetIndex) else { return }
+        let destination = offset > 0 ? targetIndex + 1 : targetIndex
+        moveBoundaryRows(from: IndexSet(integer: sourceIndex), to: destination)
     }
 
     private func synchronize(with organization: RunnableModelPickerOrganization) {

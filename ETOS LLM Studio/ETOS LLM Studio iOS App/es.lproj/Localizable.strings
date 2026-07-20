@@ -5184,7 +5184,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "未分类模型" = "Modelos sin clasificar";
 "已分类模型" = "Modelos clasificados";
 "根目录" = "Raíz";
-"长按并拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Mantén pulsado y arrastra un modelo o un límite de carpeta para cambiarlo de posición. Los modelos entre ambos límites pertenecen a esa carpeta. Los límites pueden anidarse, pero no cruzarse.";
+"点击编辑后拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Toca Editar y arrastra un modelo o un límite de carpeta para cambiarlo de posición. Los modelos entre ambos límites pertenecen a esa carpeta. Los límites pueden anidarse, pero no cruzarse.";
 "开始" = "Inicio";
 "结束" = "Fin";
 "文件夹“%@”开始" = "Inicio de la carpeta «%@»";
