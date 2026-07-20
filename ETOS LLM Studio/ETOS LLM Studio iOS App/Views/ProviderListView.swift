@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Foundation
+import UniformTypeIdentifiers
 import ETOSCore
 
 private enum ProviderManagementTab: String, CaseIterable, Identifiable {
@@ -429,35 +430,45 @@ private struct ProviderModelOrderContentView: View {
     }
 }
 
-private enum ModelOrganizationActionItem {
-    case model(String)
-    case group(String)
+private struct ModelOrganizationBoundaryRow: Identifiable, Hashable {
+    let item: RunnableModelPickerOrganization.BoundaryItem
+    let depth: Int
 
-    var organizationID: String {
-        switch self {
-        case .model(let modelID):
-            return RunnableModelPickerOrganization.RootItem.modelID(modelID)
-        case .group(let groupPath):
-            return RunnableModelPickerOrganization.RootItem.groupID(groupPath)
-        }
-    }
+    var id: String { item.id }
 }
 
-private struct ModelOrganizationActionContext: Identifiable {
-    let item: ModelOrganizationActionItem
-    let parentGroupPath: String?
-    let title: String
-    let canMoveUp: Bool
-    let canMoveDown: Bool
-    let destinationGroupPaths: [String]
+private struct ModelOrganizationBoundaryDropDelegate: DropDelegate {
+    let targetID: String
+    @Binding var draggingItemID: String?
+    let moveItem: (String, String) -> Void
+    let finishMove: () -> Void
 
-    var id: String { item.organizationID }
+    func validateDrop(info: DropInfo) -> Bool {
+        draggingItemID != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingItemID, draggingItemID != targetID else { return }
+        moveItem(draggingItemID, targetID)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggingItemID != nil else { return false }
+        finishMove()
+        draggingItemID = nil
+        return true
+    }
 }
 
 private struct ProviderModelOrderDetailView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var activeActionContext: ModelOrganizationActionContext?
+    @State private var editingOrganization: RunnableModelPickerOrganization?
+    @State private var boundaryRows: [ModelOrganizationBoundaryRow] = []
+    @State private var draggingItemID: String?
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     let provider: Provider
@@ -467,20 +478,18 @@ private struct ProviderModelOrderDetailView: View {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
                 footer: Text(NSLocalizedString(
-                    "点击更多按钮调整顺序或移动到文件夹；使用右上角按钮新建文件夹。",
-                    comment: "模型目录手动整理提示"
+                    "长按并拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
+                    comment: "模型目录边界排序提示"
                 ))
             ) {
-                if organization.rootItems.isEmpty {
+                if boundaryRows.isEmpty {
                     Text(NSLocalizedString("暂无可排序模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    organizationRows(
-                        organization.rootItems,
-                        parentGroupPath: nil,
-                        depth: 0
-                    )
+                    ForEach(boundaryRows) { row in
+                        draggableBoundaryRow(row)
+                    }
                 }
             }
         }
@@ -489,7 +498,8 @@ private struct ProviderModelOrderDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    newFolderName = suggestedFolderName(in: nil, organization: organization)
+                    let current = editingOrganization ?? organization
+                    newFolderName = suggestedFolderName(organization: current)
                     isCreatingFolder = true
                 } label: {
                     Label(NSLocalizedString("新建文件夹", comment: ""), systemImage: "folder.badge.plus")
@@ -504,8 +514,12 @@ private struct ProviderModelOrderDetailView: View {
             }
             .disabled(normalizedGroupPath(newFolderName) == nil)
         }
-        .sheet(item: $activeActionContext) { context in
-            actionSheet(for: context)
+        .onAppear {
+            synchronize(with: organization)
+        }
+        .onChange(of: organization) { _, updated in
+            guard draggingItemID == nil else { return }
+            synchronize(with: updated)
         }
     }
 
@@ -514,379 +528,238 @@ private struct ProviderModelOrderDetailView: View {
             ?? RunnableModelPickerOrganization(models: [])
     }
 
-    private func organizationRows(
-        _ items: [RunnableModelPickerOrganization.RootItem],
-        parentGroupPath: String?,
-        depth: Int
-    ) -> AnyView {
-        AnyView(
-            ForEach(items) { item in
-                switch item {
-                case .model(let modelID):
-                    if let model = viewModel.configuredModelsByID[modelID] {
-                        modelOrderRow(
-                            model,
-                            depth: depth,
-                            actionItem: .model(modelID),
-                            parentGroupPath: parentGroupPath
-                        )
-                    }
-                case .group(let groupPath, let children):
-                    folderRow(
-                        groupPath: groupPath,
-                        depth: depth,
-                        parentGroupPath: parentGroupPath
-                    )
-
-                    if isFolderExpanded(groupPath) {
-                        organizationRows(
-                            children,
-                            parentGroupPath: groupPath,
-                            depth: depth + 1
-                        )
-                    }
-                }
+    private func draggableBoundaryRow(
+        _ row: ModelOrganizationBoundaryRow
+    ) -> some View {
+        boundaryRowContent(row)
+            .contentShape(Rectangle())
+            .onDrag {
+                draggingItemID = row.id
+                return NSItemProvider(object: row.id as NSString)
             }
-        )
+            .onDrop(
+                of: [.plainText],
+                delegate: ModelOrganizationBoundaryDropDelegate(
+                    targetID: row.id,
+                    draggingItemID: $draggingItemID,
+                    moveItem: moveBoundaryItem,
+                    finishMove: commitBoundaryOrder
+                )
+            )
+            .accessibilityAction(named: Text(NSLocalizedString("上移", comment: ""))) {
+                moveBoundaryItem(row.id, by: -1)
+            }
+            .accessibilityAction(named: Text(NSLocalizedString("下移", comment: ""))) {
+                moveBoundaryItem(row.id, by: 1)
+            }
     }
 
-    private func folderRow(
-        groupPath: String,
-        depth: Int,
-        parentGroupPath: String?
-    ) -> some View {
-        HStack {
-            Button {
-                toggleFolder(groupPath)
-            } label: {
-                HStack {
-                    Label(
-                        groupPath.split(separator: "/").last.map(String.init) ?? groupPath,
-                        systemImage: isFolderExpanded(groupPath) ? "folder.fill" : "folder"
+    @ViewBuilder
+    private func boundaryRowContent(_ row: ModelOrganizationBoundaryRow) -> some View {
+        switch row.item {
+        case .model(let modelID):
+            if let runnable = viewModel.configuredModelsByID[modelID] {
+                HStack(alignment: .center) {
+                    if row.depth > 0 {
+                        Image(systemName: "arrow.turn.down.right")
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
+
+                    MarqueeTitleSubtitleLabel(
+                        title: runnable.model.displayName,
+                        subtitle: runnable.model.modelName,
+                        titleUIFont: .preferredFont(forTextStyle: .body),
+                        subtitleUIFont: .monospacedSystemFont(
+                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                            weight: .regular
+                        )
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Image(systemName: isFolderExpanded(groupPath) ? "chevron.down" : "chevron.right")
-                        .etFont(.caption)
-                        .foregroundStyle(.secondary)
+                    if !runnable.model.isActivated {
+                        Text(NSLocalizedString("未启用", comment: ""))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .contentShape(Rectangle())
+                .padding(.leading, CGFloat(row.depth) * 14)
             }
-            .buttonStyle(.plain)
 
-            Button {
-                presentActions(
-                    for: .group(groupPath),
-                    parentGroupPath: parentGroupPath
-                )
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(NSLocalizedString("更多", comment: ""))
+        case .groupStart(let groupPath):
+            folderBoundaryRow(
+                groupPath: groupPath,
+                depth: row.depth,
+                isStart: true
+            )
+
+        case .groupEnd(let groupPath):
+            folderBoundaryRow(
+                groupPath: groupPath,
+                depth: row.depth,
+                isStart: false
+            )
         }
-        .padding(.leading, CGFloat(depth) * 14)
     }
 
-    private func modelOrderRow(
-        _ runnable: RunnableModel,
+    private func folderBoundaryRow(
+        groupPath: String,
         depth: Int,
-        actionItem: ModelOrganizationActionItem,
-        parentGroupPath: String?
+        isStart: Bool
     ) -> some View {
-        HStack(alignment: .center) {
-            if depth > 0 {
-                Image(systemName: "arrow.turn.down.right")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 6) {
+            if !isStart {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(height: 2)
             }
 
-            MarqueeTitleSubtitleLabel(
-                title: runnable.model.displayName,
-                subtitle: runnable.model.modelName,
-                titleUIFont: .preferredFont(forTextStyle: .body),
-                subtitleUIFont: .monospacedSystemFont(
-                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                    weight: .regular
-                )
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Image(systemName: isStart ? "folder.fill" : "folder")
+                    .foregroundStyle(Color.accentColor)
 
-            if !runnable.model.isActivated {
-                Text(NSLocalizedString("未启用", comment: ""))
-                    .etFont(.caption2)
+                Text(groupPath.split(separator: "/").last.map(String.init) ?? groupPath)
+                    .etFont(.headline)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(NSLocalizedString(isStart ? "开始" : "结束", comment: "文件夹边界"))
+                    .etFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Button {
-                presentActions(
-                    for: actionItem,
-                    parentGroupPath: parentGroupPath
-                )
-            } label: {
-                Image(systemName: "ellipsis.circle")
+            if isStart {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(height: 2)
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(NSLocalizedString("更多", comment: ""))
         }
-        .contentShape(Rectangle())
         .padding(.leading, CGFloat(depth) * 14)
+        .listRowSeparator(.hidden)
+        .accessibilityLabel(String(
+            format: NSLocalizedString(
+                isStart ? "文件夹“%@”开始" : "文件夹“%@”结束",
+                comment: "模型目录边界辅助功能标签"
+            ),
+            groupPath.split(separator: "/").last.map(String.init) ?? groupPath
+        ))
     }
 
-    private func actionSheet(for context: ModelOrganizationActionContext) -> some View {
-        NavigationStack {
-            List {
-                Section(NSLocalizedString("模型顺序", comment: "")) {
-                    Button {
-                        move(context, by: -1)
-                    } label: {
-                        Label(NSLocalizedString("上移", comment: ""), systemImage: "arrow.up")
-                    }
-                    .disabled(!context.canMoveUp)
-
-                    Button {
-                        move(context, by: 1)
-                    } label: {
-                        Label(NSLocalizedString("下移", comment: ""), systemImage: "arrow.down")
-                    }
-                    .disabled(!context.canMoveDown)
-                }
-
-                Section(NSLocalizedString("移动到文件夹", comment: "")) {
-                    Button {
-                        move(context, toGroup: nil)
-                    } label: {
-                        Label(
-                            NSLocalizedString("根目录", comment: "模型目录顶层"),
-                            systemImage: context.parentGroupPath == nil ? "checkmark" : "tray"
-                        )
-                    }
-                    .disabled(context.parentGroupPath == nil)
-
-                    ForEach(context.destinationGroupPaths, id: \.self) { groupPath in
-                        Button {
-                            move(context, toGroup: groupPath)
-                        } label: {
-                            Label(
-                                groupPath,
-                                systemImage: context.parentGroupPath == groupPath ? "checkmark" : "folder"
-                            )
-                        }
-                        .disabled(context.parentGroupPath == groupPath)
-                    }
-                }
-            }
-            .navigationTitle(context.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("完成", comment: "")) {
-                        activeActionContext = nil
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private func presentActions(
-        for item: ModelOrganizationActionItem,
-        parentGroupPath: String?
-    ) {
-        activeActionContext = makeActionContext(
-            for: item,
-            parentGroupPath: parentGroupPath,
-            organization: organization
-        )
-    }
-
-    private func makeActionContext(
-        for item: ModelOrganizationActionItem,
-        parentGroupPath: String?,
-        organization: RunnableModelPickerOrganization
-    ) -> ModelOrganizationActionContext {
-        let siblings = organizationItems(
-            in: parentGroupPath,
-            organization: organization
-        )
-        let index = siblings.firstIndex { $0.id == item.organizationID }
-        let title: String
-        let destinations: [String]
-
-        switch item {
-        case .model(let modelID):
-            title = viewModel.configuredModelsByID[modelID]?.model.displayName ?? modelID
-            destinations = organization.orderedGroupPaths
-        case .group(let groupPath):
-            title = groupPath.split(separator: "/").last.map(String.init) ?? groupPath
-            destinations = organization.orderedGroupPaths.filter {
-                $0 != groupPath && !$0.hasPrefix(groupPath + "/")
-            }
+    private func moveBoundaryItem(_ itemID: String, over targetID: String) {
+        guard itemID != targetID,
+              let editingOrganization,
+              let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }),
+              let targetIndex = boundaryRows.firstIndex(where: { $0.id == targetID }) else {
+            return
         }
 
-        return ModelOrganizationActionContext(
-            item: item,
-            parentGroupPath: parentGroupPath,
-            title: title,
-            canMoveUp: (index ?? 0) > 0,
-            canMoveDown: index.map { $0 < siblings.count - 1 } ?? false,
-            destinationGroupPaths: destinations
-        )
-    }
-
-    private func organizationItems(
-        in groupPath: String?,
-        organization: RunnableModelPickerOrganization
-    ) -> [RunnableModelPickerOrganization.RootItem] {
-        guard let groupPath else { return organization.rootItems }
-
-        func children(
-            of targetPath: String,
-            in items: [RunnableModelPickerOrganization.RootItem]
-        ) -> [RunnableModelPickerOrganization.RootItem]? {
-            for item in items {
-                guard case .group(let path, let nestedItems) = item else { continue }
-                if path == targetPath {
-                    return nestedItems
-                }
-                if let result = children(of: targetPath, in: nestedItems) {
-                    return result
-                }
-            }
-            return nil
-        }
-
-        return children(of: groupPath, in: organization.rootItems) ?? []
-    }
-
-    private func move(
-        _ context: ModelOrganizationActionContext,
-        by offset: Int
-    ) {
-        let siblings = organizationItems(
-            in: context.parentGroupPath,
-            organization: organization
-        )
-        guard let currentIndex = siblings.firstIndex(where: {
-            $0.id == context.item.organizationID
+        var candidateItems = boundaryRows.map(\.item)
+        let movedItem = candidateItems.remove(at: sourceIndex)
+        guard let adjustedTargetIndex = candidateItems.firstIndex(where: {
+            $0.id == targetID
         }) else {
-            activeActionContext = nil
+            return
+        }
+        let insertionIndex: Int
+        switch (movedItem, candidateItems[adjustedTargetIndex]) {
+        case (.model, .groupStart):
+            insertionIndex = adjustedTargetIndex + 1
+        case (.model, .groupEnd):
+            insertionIndex = adjustedTargetIndex
+        default:
+            insertionIndex = sourceIndex < targetIndex
+                ? adjustedTargetIndex + 1
+                : adjustedTargetIndex
+        }
+        candidateItems.insert(movedItem, at: insertionIndex)
+        guard editingOrganization.applyingBoundaryItems(candidateItems) != nil else {
             return
         }
 
-        let targetIndex = currentIndex + offset
-        guard siblings.indices.contains(targetIndex) else {
-            activeActionContext = nil
-            return
+        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+            boundaryRows = Self.makeBoundaryRows(candidateItems)
         }
-
-        let beforeItemID: String?
-        if offset < 0 {
-            beforeItemID = siblings[targetIndex].id
-        } else {
-            let followingIndex = currentIndex + 2
-            beforeItemID = siblings.indices.contains(followingIndex)
-                ? siblings[followingIndex].id
-                : nil
-        }
-
-        var updated = organization
-        switch context.item {
-        case .model(let modelID):
-            updated.moveModel(
-                modelID,
-                toGroup: context.parentGroupPath,
-                beforeItemID: beforeItemID
-            )
-        case .group(let groupPath):
-            updated.moveGroup(
-                groupPath,
-                intoGroup: context.parentGroupPath,
-                beforeItemID: beforeItemID
-            )
-        }
-        persist(updated)
-        activeActionContext = nil
     }
 
-    private func move(
-        _ context: ModelOrganizationActionContext,
-        toGroup destinationGroupPath: String?
-    ) {
-        guard destinationGroupPath != context.parentGroupPath else {
-            activeActionContext = nil
+    private func moveBoundaryItem(_ itemID: String, by offset: Int) {
+        guard let editingOrganization,
+              let sourceIndex = boundaryRows.firstIndex(where: { $0.id == itemID }) else {
+            return
+        }
+        let targetIndex = sourceIndex + offset
+        guard boundaryRows.indices.contains(targetIndex) else { return }
+
+        var candidateItems = boundaryRows.map(\.item)
+        let movedItem = candidateItems.remove(at: sourceIndex)
+        candidateItems.insert(movedItem, at: targetIndex)
+        guard let updated = editingOrganization.applyingBoundaryItems(candidateItems) else {
             return
         }
 
-        var updated = organization
-        switch context.item {
-        case .model(let modelID):
-            updated.moveModel(
-                modelID,
-                toGroup: destinationGroupPath
-            )
-            if let destinationGroupPath {
-                setFolderExpanded(destinationGroupPath)
+        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+            self.editingOrganization = updated
+            boundaryRows = Self.makeBoundaryRows(candidateItems)
+        }
+        persist(updated)
+    }
+
+    private func commitBoundaryOrder() {
+        guard let editingOrganization,
+              let updated = editingOrganization.applyingBoundaryItems(
+                boundaryRows.map(\.item)
+              ) else {
+            synchronize(with: editingOrganization ?? organization)
+            return
+        }
+
+        self.editingOrganization = updated
+        boundaryRows = Self.makeBoundaryRows(updated.boundaryItems)
+        persist(updated)
+    }
+
+    private func synchronize(with organization: RunnableModelPickerOrganization) {
+        editingOrganization = organization
+        boundaryRows = Self.makeBoundaryRows(organization.boundaryItems)
+    }
+
+    private static func makeBoundaryRows(
+        _ items: [RunnableModelPickerOrganization.BoundaryItem]
+    ) -> [ModelOrganizationBoundaryRow] {
+        var depth = 0
+        return items.map { item in
+            switch item {
+            case .model:
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
+            case .groupStart:
+                defer { depth += 1 }
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
+            case .groupEnd:
+                depth = max(0, depth - 1)
+                return ModelOrganizationBoundaryRow(item: item, depth: depth)
             }
-        case .group(let groupPath):
-            updated.moveGroup(
-                groupPath,
-                intoGroup: destinationGroupPath
-            )
-            let folderName = groupPath.split(separator: "/").last.map(String.init) ?? groupPath
-            let movedPath = [destinationGroupPath, folderName]
-                .compactMap { $0 }
-                .joined(separator: "/")
-            setFolderExpanded(movedPath)
         }
-        persist(updated)
-        activeActionContext = nil
-    }
-
-    private func folderExpansionID(_ groupPath: String) -> String {
-        "\(provider.id.uuidString):\(groupPath)"
-    }
-
-    private func isFolderExpanded(_ groupPath: String) -> Bool {
-        appConfig.iOSModelPickerExpandedGroupIDs.contains(folderExpansionID(groupPath))
-    }
-
-    private func toggleFolder(_ groupPath: String) {
-        let expansionID = folderExpansionID(groupPath)
-        if appConfig.iOSModelPickerExpandedGroupIDs.contains(expansionID) {
-            appConfig.iOSModelPickerExpandedGroupIDs.remove(expansionID)
-        } else {
-            appConfig.iOSModelPickerExpandedGroupIDs.insert(expansionID)
-        }
-    }
-
-    private func setFolderExpanded(_ groupPath: String) {
-        appConfig.iOSModelPickerExpandedGroupIDs.insert(folderExpansionID(groupPath))
     }
 
     private func createFolder(named name: String) {
         guard let groupPath = normalizedGroupPath(name) else { return }
-        if organization.allGroupPaths.contains(groupPath) {
-            setFolderExpanded(groupPath)
-            return
-        }
-        var updated = organization
+        var updated = editingOrganization ?? organization
+        guard !updated.allGroupPaths.contains(groupPath) else { return }
+
         updated.createGroup(groupPath)
-        setFolderExpanded(groupPath)
+        synchronize(with: updated)
         persist(updated)
     }
 
     private func suggestedFolderName(
-        in parentGroupPath: String?,
         organization: RunnableModelPickerOrganization
     ) -> String {
         let baseName = NSLocalizedString("新建文件夹", comment: "")
         var suffix = 1
         while true {
             let folderName = suffix == 1 ? baseName : "\(baseName) \(suffix)"
-            let path = [parentGroupPath, folderName].compactMap { $0 }.joined(separator: "/")
-            if !organization.allGroupPaths.contains(path) {
-                return path
+            if !organization.allGroupPaths.contains(folderName) {
+                return folderName
             }
             suffix += 1
         }

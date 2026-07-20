@@ -865,6 +865,12 @@ extension PersistenceAuxiliaryGRDBStore {
             }
 
             migrator.registerMigration("v14_add_provider_model_picker_group") { db in
+                let tableExists = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                guard tableExists else { return }
+
                 let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(provider_models)")
                 let hasPickerGroupName = columns.contains { row in
                     let name: String = row["name"]

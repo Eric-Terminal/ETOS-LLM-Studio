@@ -5092,7 +5092,11 @@
 "未分类模型" = "Ungrouped Models";
 "已分类模型" = "Grouped Models";
 "根目录" = "Root";
-"点击更多按钮调整顺序或移动到文件夹；使用右上角按钮新建文件夹。" = "Use a row’s More button to reorder it or move it to a folder. Use the top-right button to create a folder.";
+"拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Drag a model or folder boundary to reposition it. Models between the two boundaries belong to that folder. Boundaries may nest but cannot cross.";
+"开始" = "Start";
+"结束" = "End";
+"文件夹“%@”开始" = "Folder “%@” starts";
+"文件夹“%@”结束" = "Folder “%@” ends";
 "如何配置模型" = "How to Configure a Model";
 "先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "Start with the model ID and purpose. Configure Custom Body and structured controls only when you need advanced parameters.";
 "Split by nested paths" = "Split by Nested Paths";

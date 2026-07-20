@@ -519,6 +519,64 @@ struct RunnableModelGroupingTests {
         #expect(restored.rootItems.map(\.id) == organization.rootItems.map(\.id))
         #expect(restored.orderedItemIDs == organization.orderedItemIDs)
     }
+
+    @Test("文件夹边界决定模型归属并允许嵌套")
+    func pickerOrganizationAppliesFolderBoundaries() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "root-b", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+        organization.createGroup("A")
+        organization.createGroup("B")
+
+        let reordered: [RunnableModelPickerOrganization.BoundaryItem] = [
+            .groupStart("A"),
+            .model(models[0].id),
+            .groupStart("B"),
+            .model(models[1].id),
+            .groupEnd("B"),
+            .model(models[2].id),
+            .groupEnd("A")
+        ]
+        let updated = organization.applyingBoundaryItems(reordered)
+
+        #expect(updated?.orderedGroupPaths == ["A", "A/B"])
+        #expect(updated?.placements.map(\.pickerGroupName) == ["A", "A/B", "A"])
+    }
+
+    @Test("文件夹边界不能交叉")
+    func pickerOrganizationRejectsCrossedFolderBoundaries() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [Model(modelName: "root", isActivated: true)]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+        organization.createGroup("A")
+        organization.createGroup("B")
+
+        let crossed: [RunnableModelPickerOrganization.BoundaryItem] = [
+            .groupStart("A"),
+            .groupStart("B"),
+            .model(models[0].id),
+            .groupEnd("A"),
+            .groupEnd("B")
+        ]
+
+        #expect(organization.applyingBoundaryItems(crossed) == nil)
+    }
 }
 
 @Suite("Provider Order Tests")

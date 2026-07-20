@@ -188,6 +188,24 @@ public struct RunnableModelPickerOrganization: Hashable {
         }
     }
 
+    /// 模型目录编辑器中的扁平条目；文件夹由严格配对的起止边界表示。
+    public enum BoundaryItem: Identifiable, Hashable, Sendable {
+        case model(String)
+        case groupStart(String)
+        case groupEnd(String)
+
+        public var id: String {
+            switch self {
+            case .model(let modelID):
+                return RootItem.modelID(modelID)
+            case .groupStart(let groupPath):
+                return "group-start:\(groupPath)"
+            case .groupEnd(let groupPath):
+                return "group-end:\(groupPath)"
+            }
+        }
+    }
+
     public private(set) var rootItems: [RootItem]
 
     public init(
@@ -233,6 +251,33 @@ public struct RunnableModelPickerOrganization: Hashable {
 
     public var orderedItemIDs: [String] {
         Self.itemIDs(in: rootItems)
+    }
+
+    public var boundaryItems: [BoundaryItem] {
+        Self.boundaryItems(in: rootItems)
+    }
+
+    /// 应用扁平边界顺序；不成对或发生交叉时拒绝该次修改。
+    public func applyingBoundaryItems(_ items: [BoundaryItem]) -> Self? {
+        let currentItems = boundaryItems
+        guard items.count == currentItems.count,
+              Set(items.map(\.id)) == Set(currentItems.map(\.id)) else {
+            return nil
+        }
+
+        var index = 0
+        guard let parsedItems = Self.parseBoundaryItems(
+            items,
+            index: &index,
+            expectedEndPath: nil,
+            parentPath: nil
+        ), index == items.count else {
+            return nil
+        }
+
+        var updated = self
+        updated.rootItems = parsedItems
+        return updated
     }
 
     public mutating func createGroup(_ groupPath: String) {
@@ -460,6 +505,63 @@ public struct RunnableModelPickerOrganization: Hashable {
         items.flatMap { item in
             [item.id] + itemIDs(in: item.children)
         }
+    }
+
+    private static func boundaryItems(in items: [RootItem]) -> [BoundaryItem] {
+        items.flatMap { item -> [BoundaryItem] in
+            switch item {
+            case .model(let modelID):
+                return [.model(modelID)]
+            case .group(let path, let children):
+                return [.groupStart(path)]
+                    + boundaryItems(in: children)
+                    + [.groupEnd(path)]
+            }
+        }
+    }
+
+    private static func parseBoundaryItems(
+        _ items: [BoundaryItem],
+        index: inout Int,
+        expectedEndPath: String?,
+        parentPath: String?
+    ) -> [RootItem]? {
+        var result: [RootItem] = []
+        var siblingFolderNames = Set<String>()
+
+        while index < items.count {
+            switch items[index] {
+            case .model(let modelID):
+                result.append(.model(modelID))
+                index += 1
+
+            case .groupStart(let sourcePath):
+                guard let folderName = sourcePath.split(separator: "/").last.map(String.init),
+                      siblingFolderNames.insert(folderName).inserted else {
+                    return nil
+                }
+                let destinationPath = [parentPath, folderName]
+                    .compactMap { $0 }
+                    .joined(separator: "/")
+                index += 1
+                guard let children = parseBoundaryItems(
+                    items,
+                    index: &index,
+                    expectedEndPath: sourcePath,
+                    parentPath: destinationPath
+                ) else {
+                    return nil
+                }
+                result.append(.group(path: destinationPath, children: children))
+
+            case .groupEnd(let sourcePath):
+                guard sourcePath == expectedEndPath else { return nil }
+                index += 1
+                return result
+            }
+        }
+
+        return expectedEndPath == nil ? result : nil
     }
 
     private static func applyingItemOrder(
