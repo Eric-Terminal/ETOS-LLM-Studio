@@ -452,18 +452,36 @@ private enum ModelOrganizationDragPayload {
     }
 }
 
+private struct ModelOrganizationDestinationFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
+    }
+}
+
 private struct ProviderModelOrderDetailView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var targetedDestinationID: String?
+    @State private var draggedPayload: String?
+    @State private var dragTranslation: CGSize = .zero
+    @State private var destinationFrames: [String: CGRect] = [:]
+    @State private var folderHoverTask: Task<Void, Never>?
+    @State private var isFolderCreationReady = false
+    @State private var isCreatingFolder = false
+    @State private var newFolderName = ""
     let provider: Provider
+
+    private let dragCoordinateSpace = "ios-model-organization"
 
     var body: some View {
         List {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
                 footer: Text(NSLocalizedString(
-                    "长按条目，再拖到文件夹或根目录。拖动模型时会展开全部文件夹。",
+                    "长按条目直接拖动；拖到文件夹或根目录，两个模型重叠停留可组成文件夹。",
                     comment: "模型目录拖放操作提示"
                 ))
             ) {
@@ -482,8 +500,30 @@ private struct ProviderModelOrderDetailView: View {
                 }
             }
         }
+        .coordinateSpace(name: dragCoordinateSpace)
+        .onPreferenceChange(ModelOrganizationDestinationFramesKey.self) { frames in
+            destinationFrames = frames
+        }
         .navigationTitle(provider.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    newFolderName = suggestedFolderName(in: nil, organization: organization)
+                    isCreatingFolder = true
+                } label: {
+                    Label(NSLocalizedString("新建文件夹", comment: ""), systemImage: "folder.badge.plus")
+                }
+            }
+        }
+        .alert(NSLocalizedString("新建文件夹", comment: ""), isPresented: $isCreatingFolder) {
+            TextField(NSLocalizedString("文件夹名称", comment: ""), text: $newFolderName)
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+            Button(NSLocalizedString("创建", comment: "")) {
+                createFolder(named: newFolderName)
+            }
+            .disabled(normalizedGroupPath(newFolderName) == nil)
+        }
     }
 
     private var organization: RunnableModelPickerOrganization {
@@ -501,41 +541,24 @@ private struct ProviderModelOrderDetailView: View {
                 switch item {
                 case .model(let modelID):
                     if let model = viewModel.configuredModelsByID[modelID] {
-                        modelOrderRow(model, depth: depth)
-                            .draggable(ModelOrganizationDragPayload.model(modelID))
-                            .simultaneousGesture(
-                                LongPressGesture(minimumDuration: 0.2)
-                                    .onEnded { _ in
-                                        expandAllFolders()
-                                    }
-                            )
-                            .dropDestination(for: String.self) { payloads, _ in
-                                dropBeforeItem(
-                                    payloads,
-                                    parentGroupPath: parentGroupPath,
-                                    itemID: item.id
-                                )
-                            } isTargeted: { isTargeted in
-                                updateTarget(item.id, isTargeted: isTargeted)
-                            }
-                            .background(dropHighlight(for: item.id))
+                        draggableOrganizationRow(
+                            modelOrderRow(model, depth: depth),
+                            payload: ModelOrganizationDragPayload.model(modelID),
+                            destinationID: item.id,
+                            expandsFolders: true
+                        )
                     }
                 case .group(let groupPath, let children):
-                    folderRow(
-                        groupPath: groupPath,
-                        modelCount: item.modelIDs.count,
-                        depth: depth
+                    draggableOrganizationRow(
+                        folderRow(
+                            groupPath: groupPath,
+                            modelCount: item.modelIDs.count,
+                            depth: depth
+                        ),
+                        payload: ModelOrganizationDragPayload.group(groupPath),
+                        destinationID: item.id,
+                        expandsFolders: false
                     )
-                    .draggable(ModelOrganizationDragPayload.group(groupPath))
-                    .dropDestination(for: String.self) { payloads, _ in
-                        dropOnFolder(payloads, groupPath: groupPath)
-                    } isTargeted: { isTargeted in
-                        updateTarget(item.id, isTargeted: isTargeted)
-                        if isTargeted {
-                            setFolderExpanded(groupPath)
-                        }
-                    }
-                    .background(dropHighlight(for: item.id))
 
                     if isFolderExpanded(groupPath) {
                         organizationRows(
@@ -572,8 +595,6 @@ private struct ProviderModelOrderDetailView: View {
                 Image(systemName: isFolderExpanded(groupPath) ? "chevron.down" : "chevron.right")
                     .etFont(.caption)
                     .foregroundStyle(.secondary)
-
-                dragHandle
             }
             .contentShape(Rectangle())
             .padding(.leading, CGFloat(depth) * 14)
@@ -605,18 +626,45 @@ private struct ProviderModelOrderDetailView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
-
-            dragHandle
         }
         .contentShape(Rectangle())
         .padding(.leading, CGFloat(depth) * 14)
     }
 
-    private var dragHandle: some View {
-        Image(systemName: "line.3.horizontal")
-            .etFont(.caption)
-            .foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
+    private func draggableOrganizationRow<Content: View>(
+        _ content: Content,
+        payload: String,
+        destinationID: String,
+        expandsFolders: Bool
+    ) -> some View {
+        let isDragging = draggedPayload == payload
+        let isFormingFolder = targetedDestinationID == destinationID && isFolderCreationReady
+        return content
+            .opacity(isDragging ? 0.82 : 1)
+            .scaleEffect(isDragging ? 1.03 : (isFormingFolder ? 1.02 : 1))
+            .background(dropHighlight(for: destinationID))
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ModelOrganizationDestinationFramesKey.self,
+                        value: [destinationID: proxy.frame(in: .named(dragCoordinateSpace))]
+                    )
+                }
+            }
+            .offset(isDragging ? dragTranslation : .zero)
+            .zIndex(isDragging ? 1 : 0)
+            .shadow(
+                color: .black.opacity(isDragging ? 0.16 : 0),
+                radius: isDragging ? 8 : 0,
+                y: isDragging ? 4 : 0
+            )
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 1),
+                value: isFolderCreationReady
+            )
+            .highPriorityGesture(
+                dragGesture(payload: payload, expandsFolders: expandsFolders)
+            )
     }
 
     private var rootDropTarget: some View {
@@ -629,12 +677,171 @@ private struct ProviderModelOrderDetailView: View {
         .etFont(.footnote)
         .foregroundStyle(.secondary)
         .contentShape(Rectangle())
-        .dropDestination(for: String.self) { payloads, _ in
-            dropAtRootEnd(payloads)
-        } isTargeted: { isTargeted in
-            updateTarget("root", isTargeted: isTargeted)
-        }
         .background(dropHighlight(for: "root"))
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: ModelOrganizationDestinationFramesKey.self,
+                    value: ["root": proxy.frame(in: .named(dragCoordinateSpace))]
+                )
+            }
+        }
+    }
+
+    private func dragGesture(payload: String, expandsFolders: Bool) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.15)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(dragCoordinateSpace)))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    beginDragging(payload: payload, expandsFolders: expandsFolders)
+                case .second(true, let dragValue):
+                    beginDragging(payload: payload, expandsFolders: expandsFolders)
+                    dragTranslation = dragValue?.translation ?? .zero
+                    updateTarget(at: dragValue?.location, payload: payload)
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                defer { finishDragging() }
+                guard case .second(true, let dragValue) = value,
+                      let location = dragValue?.location,
+                      let targetID = destinationID(at: location, excluding: payload) else {
+                    return
+                }
+                drop(payload: payload, on: targetID)
+            }
+    }
+
+    private func beginDragging(payload: String, expandsFolders: Bool) {
+        guard draggedPayload == nil else { return }
+        draggedPayload = payload
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if expandsFolders {
+            expandAllFolders()
+        }
+    }
+
+    private func updateTarget(at location: CGPoint?, payload: String) {
+        let nextTargetID = location.flatMap { destinationID(at: $0, excluding: payload) }
+        guard targetedDestinationID != nextTargetID else { return }
+
+        folderHoverTask?.cancel()
+        targetedDestinationID = nextTargetID
+        isFolderCreationReady = false
+
+        guard let nextTargetID else { return }
+        if let groupPath = ModelOrganizationDragPayload.groupName(from: nextTargetID) {
+            setFolderExpanded(groupPath)
+        }
+        guard let draggedModelID = ModelOrganizationDragPayload.modelID(from: payload),
+              let targetModelID = ModelOrganizationDragPayload.modelID(from: nextTargetID),
+              draggedModelID != targetModelID else {
+            return
+        }
+
+        folderHoverTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            guard !Task.isCancelled,
+                  draggedPayload == payload,
+                  targetedDestinationID == nextTargetID else {
+                return
+            }
+            isFolderCreationReady = true
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+    }
+
+    private func destinationID(at location: CGPoint, excluding payload: String) -> String? {
+        destinationFrames
+            .filter { $0.key != payload && $0.value.contains(location) }
+            .min { lhs, rhs in
+                lhs.value.width * lhs.value.height < rhs.value.width * rhs.value.height
+            }?
+            .key
+    }
+
+    private func drop(payload: String, on targetID: String) {
+        if targetID == "root" {
+            _ = dropAtRootEnd([payload])
+            return
+        }
+        _ = drop(
+            payload: payload,
+            on: targetID,
+            among: organization.rootItems,
+            parentGroupPath: nil
+        )
+    }
+
+    private func drop(
+        payload: String,
+        on targetID: String,
+        among items: [RunnableModelPickerOrganization.RootItem],
+        parentGroupPath: String?
+    ) -> Bool {
+        for item in items {
+            guard item.id != targetID else {
+                switch item {
+                case .model(let targetModelID):
+                    return dropOnModel(
+                        payload,
+                        targetModelID: targetModelID,
+                        parentGroupPath: parentGroupPath,
+                        itemID: item.id
+                    )
+                case .group(let groupPath, _):
+                    return dropOnFolder([payload], groupPath: groupPath)
+                }
+            }
+            if case .group(let groupPath, let children) = item,
+               drop(
+                   payload: payload,
+                   on: targetID,
+                   among: children,
+                   parentGroupPath: groupPath
+               ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func dropOnModel(
+        _ payload: String,
+        targetModelID: String,
+        parentGroupPath: String?,
+        itemID: String
+    ) -> Bool {
+        guard isFolderCreationReady,
+              let draggedModelID = ModelOrganizationDragPayload.modelID(from: payload),
+              draggedModelID != targetModelID else {
+            return dropBeforeItem(
+                [payload],
+                parentGroupPath: parentGroupPath,
+                itemID: itemID
+            )
+        }
+
+        var updated = organization
+        let groupPath = suggestedFolderName(in: parentGroupPath, organization: updated)
+        updated.createGroup(groupPath)
+        updated.moveModel(targetModelID, toGroup: groupPath)
+        updated.moveModel(draggedModelID, toGroup: groupPath)
+        setFolderExpanded(groupPath)
+        persist(updated)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        return true
+    }
+
+    private func finishDragging() {
+        folderHoverTask?.cancel()
+        folderHoverTask = nil
+        draggedPayload = nil
+        dragTranslation = .zero
+        targetedDestinationID = nil
+        isFolderCreationReady = false
     }
 
     private func dropBeforeItem(
@@ -688,14 +895,6 @@ private struct ProviderModelOrderDetailView: View {
         return true
     }
 
-    private func updateTarget(_ id: String, isTargeted: Bool) {
-        if isTargeted {
-            targetedDestinationID = id
-        } else if targetedDestinationID == id {
-            targetedDestinationID = nil
-        }
-    }
-
     private func folderExpansionID(_ groupPath: String) -> String {
         "\(provider.id.uuidString):\(groupPath)"
     }
@@ -713,6 +912,42 @@ private struct ProviderModelOrderDetailView: View {
         appConfig.iOSModelPickerExpandedGroupIDs.formUnion(expansionIDs)
     }
 
+    private func createFolder(named name: String) {
+        guard let groupPath = normalizedGroupPath(name) else { return }
+        if organization.allGroupPaths.contains(groupPath) {
+            setFolderExpanded(groupPath)
+            return
+        }
+        var updated = organization
+        updated.createGroup(groupPath)
+        setFolderExpanded(groupPath)
+        persist(updated)
+    }
+
+    private func suggestedFolderName(
+        in parentGroupPath: String?,
+        organization: RunnableModelPickerOrganization
+    ) -> String {
+        let baseName = NSLocalizedString("新建文件夹", comment: "")
+        var suffix = 1
+        while true {
+            let folderName = suffix == 1 ? baseName : "\(baseName) \(suffix)"
+            let path = [parentGroupPath, folderName].compactMap { $0 }.joined(separator: "/")
+            if !organization.allGroupPaths.contains(path) {
+                return path
+            }
+            suffix += 1
+        }
+    }
+
+    private func normalizedGroupPath(_ path: String) -> String? {
+        let components = path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return components.isEmpty ? nil : components.joined(separator: "/")
+    }
+
     @ViewBuilder
     private func dropHighlight(for id: String) -> some View {
         if targetedDestinationID == id {
@@ -722,7 +957,7 @@ private struct ProviderModelOrderDetailView: View {
 
     private func persist(_ updated: RunnableModelPickerOrganization) {
         ChatService.shared.setModelPickerOrganization(
-            updated.placements,
+            updated,
             for: provider.id
         )
     }

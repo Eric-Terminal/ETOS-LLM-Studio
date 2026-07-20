@@ -452,6 +452,37 @@ struct RunnableModelGroupingTests {
         #expect(childFolder.path == "Tools/Coding")
         #expect(childFolder.models.map(\.model.modelName) == ["child"])
     }
+
+    @Test("空文件夹可以创建、嵌套并在模型移出后保留")
+    func pickerOrganizationKeepsEmptyFolders() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "nested", pickerGroupName: "Tools/Coding", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: ["Empty", "Tools/Coding"]
+        )
+
+        organization.createGroup("Empty/Child")
+        organization.moveModelToRoot(models[0].id)
+
+        #expect(organization.orderedGroupPaths == [
+            "Tools",
+            "Tools/Coding",
+            "Empty",
+            "Empty/Child"
+        ])
+        #expect(organization.placements == [
+            RunnableModelPickerPlacement(modelID: models[0].id, pickerGroupName: nil)
+        ])
+    }
 }
 
 @Suite("Provider Order Tests")

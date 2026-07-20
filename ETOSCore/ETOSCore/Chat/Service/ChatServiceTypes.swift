@@ -190,12 +190,19 @@ public struct RunnableModelPickerOrganization: Hashable {
 
     public private(set) var rootItems: [RootItem]
 
-    public init(models: [RunnableModel]) {
+    public init(models: [RunnableModel], groupPaths: [String] = []) {
         var items: [RootItem] = []
         for runnable in models {
             Self.insertNewModel(
                 runnable.id,
                 pathComponents: Self.pathComponents(runnable.model.pickerGroupName),
+                parentComponents: [],
+                into: &items
+            )
+        }
+        for groupPath in groupPaths {
+            Self.insertGroup(
+                pathComponents: Self.pathComponents(groupPath),
                 parentComponents: [],
                 into: &items
             )
@@ -209,6 +216,20 @@ public struct RunnableModelPickerOrganization: Hashable {
 
     public var allGroupPaths: Set<String> {
         Set(Self.groupPaths(in: rootItems))
+    }
+
+    public var orderedGroupPaths: [String] {
+        Self.groupPaths(in: rootItems)
+    }
+
+    public mutating func createGroup(_ groupPath: String) {
+        let components = Self.pathComponents(groupPath)
+        guard !components.isEmpty else { return }
+        Self.insertGroup(
+            pathComponents: components,
+            parentComponents: [],
+            into: &rootItems
+        )
     }
 
     public mutating func moveModelToRoot(
@@ -249,7 +270,6 @@ public struct RunnableModelPickerOrganization: Hashable {
             beforeItemID: beforeItemID,
             in: &rootItems
         )
-        rootItems = Self.removingEmptyGroups(from: rootItems)
     }
 
     public mutating func moveGroup(
@@ -290,7 +310,6 @@ public struct RunnableModelPickerOrganization: Hashable {
             beforeItemID: beforeItemID,
             in: &rootItems
         )
-        rootItems = Self.removingEmptyGroups(from: rootItems)
     }
 
     public mutating func reorderRootItems(_ orderedRootItemIDs: [String]) {
@@ -365,6 +384,34 @@ public struct RunnableModelPickerOrganization: Hashable {
         var children: [RootItem] = []
         insertNewModel(
             modelID,
+            pathComponents: Array(pathComponents.dropFirst()),
+            parentComponents: folderComponents,
+            into: &children
+        )
+        items.append(.group(path: folderPath, children: children))
+    }
+
+    private static func insertGroup(
+        pathComponents: [String],
+        parentComponents: [String],
+        into items: inout [RootItem]
+    ) {
+        guard let folderName = pathComponents.first else { return }
+        let folderComponents = parentComponents + [folderName]
+        let folderPath = folderComponents.joined(separator: "/")
+        if let folderIndex = items.firstIndex(where: { $0.groupPath == folderPath }),
+           case .group(_, var children) = items[folderIndex] {
+            insertGroup(
+                pathComponents: Array(pathComponents.dropFirst()),
+                parentComponents: folderComponents,
+                into: &children
+            )
+            items[folderIndex] = .group(path: folderPath, children: children)
+            return
+        }
+
+        var children: [RootItem] = []
+        insertGroup(
             pathComponents: Array(pathComponents.dropFirst()),
             parentComponents: folderComponents,
             into: &children
@@ -496,15 +543,6 @@ public struct RunnableModelPickerOrganization: Hashable {
                 rebaseGroup($0, from: sourcePath, to: destinationPath)
             }
         )
-    }
-
-    private static func removingEmptyGroups(from items: [RootItem]) -> [RootItem] {
-        items.compactMap { item in
-            guard case .group(let path, let children) = item else { return item }
-            let remainingChildren = removingEmptyGroups(from: children)
-            guard !remainingChildren.isEmpty else { return nil }
-            return .group(path: path, children: remainingChildren)
-        }
     }
 
     @discardableResult

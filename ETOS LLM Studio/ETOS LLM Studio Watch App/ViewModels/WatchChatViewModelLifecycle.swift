@@ -238,6 +238,15 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        AppConfigStore.shared.$modelPickerFolderPathsByProvider
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.applyConfiguredModels(self.configuredModels)
+            }
+            .store(in: &cancellables)
+
         chatService.selectedModelSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] model in
@@ -446,7 +455,13 @@ extension ChatViewModel {
         configuredModelsByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
         configuredModelOrganizationsByProviderID = Dictionary(
             uniqueKeysWithValues: groups.map {
-                ($0.id, RunnableModelPickerOrganization(models: $0.models))
+                (
+                    $0.id,
+                    RunnableModelPickerOrganization(
+                        models: $0.models,
+                        groupPaths: AppConfigStore.shared.modelPickerFolderPaths(for: $0.id)
+                    )
+                )
             }
         )
     }

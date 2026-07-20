@@ -169,14 +169,16 @@ extension ChatService {
     }
 
     /// 同时保存指定提供商的根目录顺序、文件夹顺序和模型分组归属。
+    @MainActor
     public func setModelPickerOrganization(
-        _ placements: [RunnableModelPickerPlacement],
+        _ organization: RunnableModelPickerOrganization,
         for providerID: UUID
     ) {
         guard let providerIndex = providers.firstIndex(where: { $0.id == providerID }) else {
             return
         }
 
+        let placements = organization.placements
         let placementByModelID = Dictionary(
             uniqueKeysWithValues: placements.map { ($0.modelID, $0) }
         )
@@ -194,6 +196,10 @@ extension ChatService {
             placements.map(\.modelID),
             for: providerID,
             notifyChange: false
+        )
+        AppConfigStore.shared.setModelPickerFolderPaths(
+            organization.orderedGroupPaths,
+            for: providerID
         )
         if LocalModelProviderBridge.isLocalProvider(updatedProvider) {
             persistLocalProviderModelChanges(updatedProvider)

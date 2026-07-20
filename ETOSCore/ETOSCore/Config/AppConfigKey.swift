@@ -207,6 +207,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchModelPickerGroupsByProvider = "ui.modelPicker.groupByProvider.watchOS"
     case iOSModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.iOS"
     case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
+    case modelPickerFolderPathsByProvider = "ui.modelPicker.folderPathsByProvider"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
@@ -478,6 +479,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .iOSModelPickerExpandedGroupIDs,
              .watchModelPickerExpandedGroupIDs:
             return .text("[]")
+        case .modelPickerFolderPathsByProvider:
+            return .text("{}")
         case .chatQuickActionIDs:
             return .text("temporaryChat")
         case .restoreLastSessionOnLaunch,

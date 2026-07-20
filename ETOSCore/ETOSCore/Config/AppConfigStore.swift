@@ -312,6 +312,36 @@ public final class AppConfigStore: ObservableObject {
             )
         }
     }
+    /// 提供商 UUID 对应有序目录路径 JSON；目录独立保存后可以暂时为空。
+    @Published public var modelPickerFolderPathsByProvider: [String: String] {
+        didSet {
+            write(
+                .modelPickerFolderPathsByProvider,
+                Self.encodeStringDictionary(modelPickerFolderPathsByProvider)
+            )
+        }
+    }
+
+    public func modelPickerFolderPaths(for providerID: UUID) -> [String] {
+        guard let encoded = modelPickerFolderPathsByProvider[providerID.uuidString] else {
+            return []
+        }
+        return Self.decodeStringArray(from: encoded) ?? []
+    }
+
+    public func setModelPickerFolderPaths(_ paths: [String], for providerID: UUID) {
+        var seenPaths = Set<String>()
+        let normalizedPaths = paths.compactMap(Model.normalizedPickerGroupName).filter {
+            seenPaths.insert($0).inserted
+        }
+        var updated = modelPickerFolderPathsByProvider
+        if normalizedPaths.isEmpty {
+            updated.removeValue(forKey: providerID.uuidString)
+        } else {
+            updated[providerID.uuidString] = Self.encodeStringArray(normalizedPaths)
+        }
+        modelPickerFolderPathsByProvider = updated
+    }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
@@ -511,6 +541,9 @@ public final class AppConfigStore: ObservableObject {
                 from: Self.textValue(.watchModelPickerExpandedGroupIDs, userDefaults: userDefaults)
             ) ?? []
         )
+        modelPickerFolderPathsByProvider = Self.decodeStringDictionary(
+            from: Self.textValue(.modelPickerFolderPathsByProvider, userDefaults: userDefaults)
+        ) ?? [:]
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
@@ -972,6 +1005,8 @@ public final class AppConfigStore: ObservableObject {
             return .text(Self.encodeStringArray(iOSModelPickerExpandedGroupIDs.sorted()))
         case .watchModelPickerExpandedGroupIDs:
             return .text(Self.encodeStringArray(watchModelPickerExpandedGroupIDs.sorted()))
+        case .modelPickerFolderPathsByProvider:
+            return .text(Self.encodeStringDictionary(modelPickerFolderPathsByProvider))
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
@@ -1191,6 +1226,8 @@ public final class AppConfigStore: ObservableObject {
             iOSModelPickerExpandedGroupIDs = Set(Self.decodeStringArray(from: value) ?? [])
         case .watchModelPickerExpandedGroupIDs:
             watchModelPickerExpandedGroupIDs = Set(Self.decodeStringArray(from: value) ?? [])
+        case .modelPickerFolderPathsByProvider:
+            modelPickerFolderPathsByProvider = Self.decodeStringDictionary(from: value) ?? [:]
         case .chatQuickActionIDs: chatQuickActionIDs = value
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
