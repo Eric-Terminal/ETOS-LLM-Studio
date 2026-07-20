@@ -617,7 +617,14 @@ public enum ModelRequestBodyControlDefaults {
                 .lowercased()
                 .replacingOccurrences(of: "_", with: "")
                 .replacingOccurrences(of: "-", with: "")
-            if ["reasoningeffort", "thinkingbudget", "thinking", "effort"].contains(normalizedKey) {
+            if [
+                "reasoningeffort",
+                "thinkingbudget",
+                "thinking",
+                "thinkingconfig",
+                "thinkinglevel",
+                "effort"
+            ].contains(normalizedKey) {
                 return true
             }
             if case let .dictionary(nestedPayload) = value,
