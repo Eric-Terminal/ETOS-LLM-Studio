@@ -483,6 +483,42 @@ struct RunnableModelGroupingTests {
             RunnableModelPickerPlacement(modelID: models[0].id, pickerGroupName: nil)
         ])
     }
+
+    @Test("空文件夹与模型的混合顺序可以恢复")
+    func pickerOrganizationRestoresMixedItemOrder() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: ["Empty", "Folder"]
+        )
+
+        organization.moveGroup(
+            "Empty",
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-a"]!
+            )
+        )
+        let restored = RunnableModelPickerOrganization(
+            models: models,
+            groupPaths: organization.orderedGroupPaths,
+            itemOrderIDs: organization.orderedItemIDs
+        )
+
+        #expect(restored.rootItems.map(\.id) == organization.rootItems.map(\.id))
+        #expect(restored.orderedItemIDs == organization.orderedItemIDs)
+    }
 }
 
 @Suite("Provider Order Tests")

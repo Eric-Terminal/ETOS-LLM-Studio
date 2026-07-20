@@ -459,7 +459,8 @@ extension ChatViewModel {
                     $0.id,
                     RunnableModelPickerOrganization(
                         models: $0.models,
-                        groupPaths: AppConfigStore.shared.modelPickerFolderPaths(for: $0.id)
+                        groupPaths: AppConfigStore.shared.modelPickerFolderPaths(for: $0.id),
+                        itemOrderIDs: AppConfigStore.shared.modelPickerItemOrderIDs(for: $0.id)
                     )
                 )
             }

@@ -312,7 +312,7 @@ public final class AppConfigStore: ObservableObject {
             )
         }
     }
-    /// 提供商 UUID 对应有序目录路径 JSON；目录独立保存后可以暂时为空。
+    /// 提供商 UUID 对应模型目录元数据 JSON；同时保留空目录和混合条目顺序。
     @Published public var modelPickerFolderPathsByProvider: [String: String] {
         didSet {
             write(
@@ -326,19 +326,37 @@ public final class AppConfigStore: ObservableObject {
         guard let encoded = modelPickerFolderPathsByProvider[providerID.uuidString] else {
             return []
         }
-        return Self.decodeStringArray(from: encoded) ?? []
+        return Self.decodeModelPickerOrganizationMetadata(from: encoded).folderPaths
     }
 
-    public func setModelPickerFolderPaths(_ paths: [String], for providerID: UUID) {
+    public func modelPickerItemOrderIDs(for providerID: UUID) -> [String] {
+        guard let encoded = modelPickerFolderPathsByProvider[providerID.uuidString] else {
+            return []
+        }
+        return Self.decodeModelPickerOrganizationMetadata(from: encoded).itemOrderIDs
+    }
+
+    public func setModelPickerOrganization(
+        folderPaths paths: [String],
+        itemOrderIDs: [String],
+        for providerID: UUID
+    ) {
         var seenPaths = Set<String>()
         let normalizedPaths = paths.compactMap(Model.normalizedPickerGroupName).filter {
             seenPaths.insert($0).inserted
         }
+        var seenItemIDs = Set<String>()
+        let normalizedItemOrderIDs = itemOrderIDs.filter {
+            !$0.isEmpty && seenItemIDs.insert($0).inserted
+        }
         var updated = modelPickerFolderPathsByProvider
-        if normalizedPaths.isEmpty {
+        if normalizedPaths.isEmpty && normalizedItemOrderIDs.isEmpty {
             updated.removeValue(forKey: providerID.uuidString)
         } else {
-            updated[providerID.uuidString] = Self.encodeStringArray(normalizedPaths)
+            updated[providerID.uuidString] = Self.encodeModelPickerOrganizationMetadata(
+                folderPaths: normalizedPaths,
+                itemOrderIDs: normalizedItemOrderIDs
+            )
         }
         modelPickerFolderPathsByProvider = updated
     }
@@ -1497,6 +1515,40 @@ public final class AppConfigStore: ObservableObject {
             return "[]"
         }
         return encoded
+    }
+
+    private nonisolated static func encodeModelPickerOrganizationMetadata(
+        folderPaths: [String],
+        itemOrderIDs: [String]
+    ) -> String {
+        let object: [String: Any] = [
+            "folderPaths": folderPaths,
+            "itemOrderIDs": itemOrderIDs
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return encoded
+    }
+
+    private nonisolated static func decodeModelPickerOrganizationMetadata(
+        from raw: String
+    ) -> (folderPaths: [String], itemOrderIDs: [String]) {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return ([], [])
+        }
+        if let legacyPaths = object as? [String] {
+            return (legacyPaths, [])
+        }
+        guard let dictionary = object as? [String: Any] else {
+            return ([], [])
+        }
+        return (
+            dictionary["folderPaths"] as? [String] ?? [],
+            dictionary["itemOrderIDs"] as? [String] ?? []
+        )
     }
 
     private nonisolated static func normalizedAppConfigValue(_ value: AppConfigValue, for key: AppConfigKey) -> AppConfigValue {

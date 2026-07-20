@@ -5170,7 +5170,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "未分类模型" = "Modelos sin clasificar";
 "已分类模型" = "Modelos clasificados";
 "根目录" = "Raíz";
-"长按条目直接拖动；拖到文件夹或根目录，两个模型重叠停留可组成文件夹。" = "Mantén pulsado un elemento para arrastrarlo. Suéltalo en una carpeta o en Raíz, o mantén un modelo sobre otro para crear una carpeta.";
+"点击更多按钮调整顺序或移动到文件夹；使用右上角按钮新建文件夹。" = "Usa el botón Más de una fila para cambiar su orden o moverla a una carpeta. Usa el botón superior derecho para crear una carpeta.";
 "如何配置模型" = "Cómo configurar un modelo";
 "先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "Empieza por el ID y la finalidad del modelo. Configura el Body personalizado y los controles estructurados solo si necesitas parámetros avanzados.";
 "Split by nested paths" = "Dividir por rutas anidadas";

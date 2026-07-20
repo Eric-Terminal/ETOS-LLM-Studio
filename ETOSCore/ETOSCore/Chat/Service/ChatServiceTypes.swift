@@ -190,7 +190,11 @@ public struct RunnableModelPickerOrganization: Hashable {
 
     public private(set) var rootItems: [RootItem]
 
-    public init(models: [RunnableModel], groupPaths: [String] = []) {
+    public init(
+        models: [RunnableModel],
+        groupPaths: [String] = [],
+        itemOrderIDs: [String] = []
+    ) {
         var items: [RootItem] = []
         for runnable in models {
             Self.insertNewModel(
@@ -207,7 +211,12 @@ public struct RunnableModelPickerOrganization: Hashable {
                 into: &items
             )
         }
-        self.rootItems = items
+        // 用整棵树的先序 ID 恢复每一层的同级顺序，同时让新模型自然追加到末尾。
+        var itemRankByID: [String: Int] = [:]
+        for (index, itemID) in itemOrderIDs.enumerated() where itemRankByID[itemID] == nil {
+            itemRankByID[itemID] = index
+        }
+        self.rootItems = Self.applyingItemOrder(itemRankByID, to: items)
     }
 
     public var placements: [RunnableModelPickerPlacement] {
@@ -220,6 +229,10 @@ public struct RunnableModelPickerOrganization: Hashable {
 
     public var orderedGroupPaths: [String] {
         Self.groupPaths(in: rootItems)
+    }
+
+    public var orderedItemIDs: [String] {
+        Self.itemIDs(in: rootItems)
     }
 
     public mutating func createGroup(_ groupPath: String) {
@@ -441,6 +454,32 @@ public struct RunnableModelPickerOrganization: Hashable {
             guard case .group(let path, let children) = item else { return [] }
             return [path] + groupPaths(in: children)
         }
+    }
+
+    private static func itemIDs(in items: [RootItem]) -> [String] {
+        items.flatMap { item in
+            [item.id] + itemIDs(in: item.children)
+        }
+    }
+
+    private static func applyingItemOrder(
+        _ rankByID: [String: Int],
+        to items: [RootItem]
+    ) -> [RootItem] {
+        let nestedItems = items.map { item -> RootItem in
+            guard case .group(let path, let children) = item else { return item }
+            return .group(
+                path: path,
+                children: applyingItemOrder(rankByID, to: children)
+            )
+        }
+        return nestedItems.enumerated()
+            .sorted { lhs, rhs in
+                let lhsRank = rankByID[lhs.element.id] ?? Int.max
+                let rhsRank = rankByID[rhs.element.id] ?? Int.max
+                return lhsRank == rhsRank ? lhs.offset < rhs.offset : lhsRank < rhsRank
+            }
+            .map(\.element)
     }
 
     @discardableResult

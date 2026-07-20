@@ -197,8 +197,9 @@ extension ChatService {
             for: providerID,
             notifyChange: false
         )
-        AppConfigStore.shared.setModelPickerFolderPaths(
-            organization.orderedGroupPaths,
+        AppConfigStore.shared.setModelPickerOrganization(
+            folderPaths: organization.orderedGroupPaths,
+            itemOrderIDs: organization.orderedItemIDs,
             for: providerID
         )
         if LocalModelProviderBridge.isLocalProvider(updatedProvider) {
