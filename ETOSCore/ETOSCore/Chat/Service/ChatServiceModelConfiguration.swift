@@ -168,6 +168,45 @@ extension ChatService {
         setConfiguredModelOrder(mergedAllModelIDs, notifyChange: notifyChange)
     }
 
+    /// 同时保存指定提供商的根目录顺序、文件夹顺序和模型分组归属。
+    public func setModelPickerOrganization(
+        _ placements: [RunnableModelPickerPlacement],
+        for providerID: UUID
+    ) {
+        guard let providerIndex = providers.firstIndex(where: { $0.id == providerID }) else {
+            return
+        }
+
+        let placementByModelID = Dictionary(
+            uniqueKeysWithValues: placements.map { ($0.modelID, $0) }
+        )
+        var updatedProvider = providers[providerIndex]
+        updatedProvider.models = updatedProvider.models.map { model in
+            var updatedModel = model
+            let runnableID = RunnableModel(provider: updatedProvider, model: model).id
+            if let placement = placementByModelID[runnableID] {
+                updatedModel.pickerGroupName = placement.pickerGroupName
+            }
+            return updatedModel
+        }
+
+        setConfiguredModelOrder(
+            placements.map(\.modelID),
+            for: providerID,
+            notifyChange: false
+        )
+        if LocalModelProviderBridge.isLocalProvider(updatedProvider) {
+            persistLocalProviderModelChanges(updatedProvider)
+            updatedProvider = LocalModelProviderBridge.provider(
+                records: localModelStore.models,
+                preserving: updatedProvider,
+                preferRecordBasics: false
+            )
+        }
+        ConfigLoader.saveProvider(updatedProvider)
+        reloadProviders()
+    }
+
     public func setProviderOrder(_ orderedProviderIDs: [UUID], notifyChange: Bool = true) {
         let currentIDs = providers.map { $0.id.uuidString }
         let requestedIDs = orderedProviderIDs.map(\.uuidString)

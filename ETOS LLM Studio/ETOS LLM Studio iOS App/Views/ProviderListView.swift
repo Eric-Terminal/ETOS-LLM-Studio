@@ -74,6 +74,7 @@ struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var selectedTab: ProviderManagementTab = .provider
     @State private var isAddingProvider = false
+    @State private var modelOrderEditMode: EditMode = .inactive
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -84,7 +85,7 @@ struct ProviderListView: View {
                 }
                 .tag(ProviderManagementTab.provider)
 
-            ProviderModelOrderContentView()
+            ProviderModelOrderContentView(editMode: $modelOrderEditMode)
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.modelOrder.title, systemImage: ProviderManagementTab.modelOrder.iconName)
@@ -113,6 +114,9 @@ struct ProviderListView: View {
                     } label: {
                         Label(NSLocalizedString("添加提供商", comment: ""), systemImage: "plus")
                     }
+                } else if selectedTab == .modelOrder {
+                    EditButton()
+                        .environment(\.editMode, $modelOrderEditMode)
                 }
             }
         }
@@ -359,6 +363,7 @@ private struct ProviderConfigurationTabsView: View {
 private struct ProviderModelOrderContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @Binding var editMode: EditMode
 
     var body: some View {
         List {
@@ -404,7 +409,7 @@ private struct ProviderModelOrderContentView: View {
                 }
             }
         }
-        .environment(\.editMode, .constant(.active))
+        .environment(\.editMode, $editMode)
     }
 
     private var modelPickerGroupingBinding: Binding<Bool> {
@@ -424,57 +429,290 @@ private struct ProviderModelOrderContentView: View {
     }
 }
 
+private enum ModelOrganizationDragPayload {
+    private static let modelPrefix = "model:"
+    private static let groupPrefix = "group:"
+
+    static func model(_ modelID: String) -> String {
+        modelPrefix + modelID
+    }
+
+    static func group(_ groupName: String) -> String {
+        groupPrefix + groupName
+    }
+
+    static func modelID(from payload: String) -> String? {
+        guard payload.hasPrefix(modelPrefix) else { return nil }
+        return String(payload.dropFirst(modelPrefix.count))
+    }
+
+    static func groupName(from payload: String) -> String? {
+        guard payload.hasPrefix(groupPrefix) else { return nil }
+        return String(payload.dropFirst(groupPrefix.count))
+    }
+}
+
 private struct ProviderModelOrderDetailView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var targetedDestinationID: String?
     let provider: Provider
 
     var body: some View {
         List {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
-                footer: Text(NSLocalizedString("拖拽右侧把手调整此提供商内的模型顺序。", comment: ""))
+                footer: Text(NSLocalizedString(
+                    "直接拖动模型或文件夹调整顺序；拖到文件夹可归类，拖到根目录可移出。",
+                    comment: "模型目录拖放操作提示"
+                ))
             ) {
-                if modelsBinding.wrappedValue.isEmpty {
+                if organization.rootItems.isEmpty {
                     Text(NSLocalizedString("暂无可排序模型。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(modelsBinding, id: \.id, editActions: .move) { $runnable in
-                        HStack(alignment: .top) {
-                            MarqueeTitleSubtitleLabel(
-                                title: runnable.model.displayName,
-                                subtitle: runnable.model.modelName,
-                                titleUIFont: .preferredFont(forTextStyle: .body),
-                                subtitleUIFont: .monospacedSystemFont(
-                                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                                    weight: .regular
-                                )
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    organizationRows(
+                        organization.rootItems,
+                        parentGroupPath: nil,
+                        depth: 0
+                    )
 
-                            if !runnable.model.isActivated {
-                                Text(NSLocalizedString("未启用", comment: ""))
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    rootDropTarget
                 }
             }
         }
         .navigationTitle(provider.name)
         .navigationBarTitleDisplayMode(.inline)
-        .environment(\.editMode, .constant(.active))
     }
 
-    private var modelsBinding: Binding<[RunnableModel]> {
-        Binding {
-            viewModel.configuredModelsByProviderID[provider.id] ?? []
-        } set: { orderedModels in
-            ChatService.shared.setConfiguredModelOrder(
-                orderedModels.map(\.id),
-                for: provider.id
-            )
+    private var organization: RunnableModelPickerOrganization {
+        viewModel.configuredModelOrganizationsByProviderID[provider.id]
+            ?? RunnableModelPickerOrganization(models: [])
+    }
+
+    private func organizationRows(
+        _ items: [RunnableModelPickerOrganization.RootItem],
+        parentGroupPath: String?,
+        depth: Int
+    ) -> AnyView {
+        AnyView(
+            ForEach(items) { item in
+                switch item {
+                case .model(let modelID):
+                    if let model = viewModel.configuredModelsByID[modelID] {
+                        modelOrderRow(model, depth: depth)
+                            .draggable(ModelOrganizationDragPayload.model(modelID))
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.2)
+                                    .onEnded { _ in
+                                        expandAllFolders()
+                                    }
+                            )
+                            .dropDestination(for: String.self) { payloads, _ in
+                                dropBeforeItem(
+                                    payloads,
+                                    parentGroupPath: parentGroupPath,
+                                    itemID: item.id
+                                )
+                            } isTargeted: { isTargeted in
+                                updateTarget(item.id, isTargeted: isTargeted)
+                            }
+                            .background(dropHighlight(for: item.id))
+                    }
+                case .group(let groupPath, let children):
+                    folderRow(
+                        groupPath: groupPath,
+                        modelCount: item.modelIDs.count,
+                        depth: depth
+                    )
+                    .draggable(ModelOrganizationDragPayload.group(groupPath))
+                    .dropDestination(for: String.self) { payloads, _ in
+                        dropOnFolder(payloads, groupPath: groupPath)
+                    } isTargeted: { isTargeted in
+                        updateTarget(item.id, isTargeted: isTargeted)
+                        if isTargeted {
+                            setFolderExpanded(groupPath)
+                        }
+                    }
+                    .background(dropHighlight(for: item.id))
+
+                    if isFolderExpanded(groupPath) {
+                        organizationRows(
+                            children,
+                            parentGroupPath: groupPath,
+                            depth: depth + 1
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    private func folderRow(groupPath: String, modelCount: Int, depth: Int) -> some View {
+        Button {
+            let expansionID = folderExpansionID(groupPath)
+            if appConfig.iOSModelPickerExpandedGroupIDs.contains(expansionID) {
+                appConfig.iOSModelPickerExpandedGroupIDs.remove(expansionID)
+            } else {
+                appConfig.iOSModelPickerExpandedGroupIDs.insert(expansionID)
+            }
+        } label: {
+            HStack {
+                Label(
+                    groupPath.split(separator: "/").last.map(String.init) ?? groupPath,
+                    systemImage: isFolderExpanded(groupPath) ? "folder.fill" : "folder"
+                )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text("\(modelCount)")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+
+                Image(systemName: isFolderExpanded(groupPath) ? "chevron.down" : "chevron.right")
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+            .padding(.leading, CGFloat(depth) * 14)
         }
+        .buttonStyle(.plain)
+    }
+
+    private func modelOrderRow(_ runnable: RunnableModel, depth: Int) -> some View {
+        HStack(alignment: .top) {
+            if depth > 0 {
+                Image(systemName: "arrow.turn.down.right")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+
+            MarqueeTitleSubtitleLabel(
+                title: runnable.model.displayName,
+                subtitle: runnable.model.modelName,
+                titleUIFont: .preferredFont(forTextStyle: .body),
+                subtitleUIFont: .monospacedSystemFont(
+                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                    weight: .regular
+                )
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !runnable.model.isActivated {
+                Text(NSLocalizedString("未启用", comment: ""))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .contentShape(Rectangle())
+        .padding(.leading, CGFloat(depth) * 14)
+    }
+
+    private var rootDropTarget: some View {
+        HStack {
+            Label(NSLocalizedString("根目录", comment: "模型目录顶层"), systemImage: "tray")
+            Spacer()
+            Image(systemName: "arrow.down.to.line")
+                .foregroundStyle(.secondary)
+        }
+        .etFont(.footnote)
+        .foregroundStyle(.secondary)
+        .contentShape(Rectangle())
+        .dropDestination(for: String.self) { payloads, _ in
+            dropAtRootEnd(payloads)
+        } isTargeted: { isTargeted in
+            updateTarget("root", isTargeted: isTargeted)
+        }
+        .background(dropHighlight(for: "root"))
+    }
+
+    private func dropBeforeItem(
+        _ payloads: [String],
+        parentGroupPath: String?,
+        itemID: String
+    ) -> Bool {
+        guard let payload = payloads.first else { return false }
+        var updated = organization
+        if let modelID = ModelOrganizationDragPayload.modelID(from: payload) {
+            updated.moveModel(modelID, toGroup: parentGroupPath, beforeItemID: itemID)
+        } else if let groupPath = ModelOrganizationDragPayload.groupName(from: payload) {
+            updated.moveGroup(groupPath, intoGroup: parentGroupPath, beforeItemID: itemID)
+        } else {
+            return false
+        }
+        persist(updated)
+        return true
+    }
+
+    private func dropOnFolder(
+        _ payloads: [String],
+        groupPath: String
+    ) -> Bool {
+        guard let payload = payloads.first else { return false }
+        var updated = organization
+        if let modelID = ModelOrganizationDragPayload.modelID(from: payload) {
+            updated.moveModel(modelID, toGroup: groupPath)
+            setFolderExpanded(groupPath)
+        } else if let draggedGroupPath = ModelOrganizationDragPayload.groupName(from: payload) {
+            updated.moveGroup(draggedGroupPath, intoGroup: groupPath)
+            setFolderExpanded(groupPath)
+        } else {
+            return false
+        }
+        persist(updated)
+        return true
+    }
+
+    private func dropAtRootEnd(_ payloads: [String]) -> Bool {
+        guard let payload = payloads.first else { return false }
+        var updated = organization
+        if let modelID = ModelOrganizationDragPayload.modelID(from: payload) {
+            updated.moveModelToRoot(modelID)
+        } else if let groupPath = ModelOrganizationDragPayload.groupName(from: payload) {
+            updated.moveGroup(groupPath, intoGroup: nil)
+        } else {
+            return false
+        }
+        persist(updated)
+        return true
+    }
+
+    private func updateTarget(_ id: String, isTargeted: Bool) {
+        if isTargeted {
+            targetedDestinationID = id
+        } else if targetedDestinationID == id {
+            targetedDestinationID = nil
+        }
+    }
+
+    private func folderExpansionID(_ groupPath: String) -> String {
+        "\(provider.id.uuidString):\(groupPath)"
+    }
+
+    private func isFolderExpanded(_ groupPath: String) -> Bool {
+        appConfig.iOSModelPickerExpandedGroupIDs.contains(folderExpansionID(groupPath))
+    }
+
+    private func setFolderExpanded(_ groupPath: String) {
+        appConfig.iOSModelPickerExpandedGroupIDs.insert(folderExpansionID(groupPath))
+    }
+
+    private func expandAllFolders() {
+        let expansionIDs = organization.allGroupPaths.map(folderExpansionID)
+        appConfig.iOSModelPickerExpandedGroupIDs.formUnion(expansionIDs)
+    }
+
+    @ViewBuilder
+    private func dropHighlight(for id: String) -> some View {
+        if targetedDestinationID == id {
+            Color.accentColor.opacity(0.14)
+        }
+    }
+
+    private func persist(_ updated: RunnableModelPickerOrganization) {
+        ChatService.shared.setModelPickerOrganization(
+            updated.placements,
+            for: provider.id
+        )
     }
 }

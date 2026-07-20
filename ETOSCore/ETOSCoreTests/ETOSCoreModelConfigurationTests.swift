@@ -293,6 +293,165 @@ struct RunnableModelGroupingTests {
         #expect(layout.groups[0].models.map(\.model.modelName) == ["claude-1", "claude-2"])
         #expect(layout.groups[1].models.map(\.model.modelName) == ["openai-1"])
     }
+
+    @Test("模型可以拖入文件夹并拖回根目录")
+    func pickerOrganizationMovesModelsAcrossFolderBoundary() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b1", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "folder-b2", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "root-c", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        organization.moveModel(
+            idByName["root-a"]!,
+            intoGroup: "Folder",
+            beforeModelID: idByName["folder-b2"]!
+        )
+
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["folder-b1"]!,
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["root-c"]!
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Folder", "Folder", "Folder", nil
+        ])
+
+        organization.moveModelToRoot(
+            idByName["folder-b1"]!,
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-c"]!
+            )
+        )
+
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["folder-b1"]!,
+            idByName["root-c"]!
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Folder", "Folder", nil, nil
+        ])
+    }
+
+    @Test("文件夹和文件夹内模型可以独立排序")
+    func pickerOrganizationReordersFoldersAndChildren() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "root-a", isActivated: true),
+                Model(modelName: "folder-b1", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "folder-b2", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "other-d", pickerGroupName: "Other", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let idByName = Dictionary(uniqueKeysWithValues: models.map { ($0.model.modelName, $0.id) })
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        organization.moveGroup(
+            "Other",
+            beforeRootItemID: RunnableModelPickerOrganization.RootItem.modelID(
+                idByName["root-a"]!
+            )
+        )
+        organization.reorderModels(
+            inGroup: "Folder",
+            orderedModelIDs: [idByName["folder-b2"]!, idByName["folder-b1"]!]
+        )
+
+        #expect(organization.rootItems.map(\.id) == [
+            RunnableModelPickerOrganization.RootItem.groupID("Other"),
+            RunnableModelPickerOrganization.RootItem.modelID(idByName["root-a"]!),
+            RunnableModelPickerOrganization.RootItem.groupID("Folder")
+        ])
+        #expect(organization.placements.map(\.modelID) == [
+            idByName["other-d"]!,
+            idByName["root-a"]!,
+            idByName["folder-b2"]!,
+            idByName["folder-b1"]!
+        ])
+    }
+
+    @Test("文件夹可以嵌套并保持完整目录路径")
+    func pickerOrganizationNestsFolders() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "folder-a", pickerGroupName: "Folder", isActivated: true),
+                Model(modelName: "child-b", pickerGroupName: "Folder/Child", isActivated: true),
+                Model(modelName: "other-c", pickerGroupName: "Other", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        var organization = RunnableModelPickerOrganization(models: models)
+
+        #expect(organization.allGroupPaths == ["Folder", "Folder/Child", "Other"])
+
+        organization.moveGroup("Folder", intoGroup: "Other")
+
+        #expect(organization.allGroupPaths == [
+            "Other",
+            "Other/Folder",
+            "Other/Folder/Child"
+        ])
+        #expect(organization.placements.map(\.pickerGroupName) == [
+            "Other",
+            "Other/Folder",
+            "Other/Folder/Child"
+        ])
+
+        let unchangedPlacements = organization.placements
+        organization.moveGroup("Other", intoGroup: "Other/Folder")
+        #expect(organization.placements == unchangedPlacements)
+    }
+
+    @Test("嵌套目录会映射为递归模型选择布局")
+    func pickerLayoutBuildsNestedFolders() {
+        let models = [
+            Model(modelName: "parent", pickerGroupName: "Tools", isActivated: true),
+            Model(modelName: "child", pickerGroupName: "Tools/Coding", isActivated: true)
+        ]
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: models
+        )
+
+        let layout = RunnableModelPickerGrouping.layout(
+            models: models.map { RunnableModel(provider: provider, model: $0) }
+        )
+
+        #expect(layout.groups.map(\.path) == ["Tools"])
+        #expect(layout.groups.first?.models.map(\.model.modelName) == ["parent", "child"])
+        guard let parent = layout.groups.first,
+              case .group(let childFolder) = parent.items.last else {
+            Issue.record("缺少嵌套文件夹")
+            return
+        }
+        #expect(childFolder.path == "Tools/Coding")
+        #expect(childFolder.models.map(\.model.modelName) == ["child"])
+    }
 }
 
 @Suite("Provider Order Tests")

@@ -176,23 +176,7 @@ extension ChatView {
         if let layout = selectedProviderModelPickerLayout,
            !layout.groups.isEmpty {
             Section {
-                if !layout.ungroupedModels.isEmpty {
-                    ForEach(layout.ungroupedModels, id: \.id) { runnable in
-                        nativeModelPickerModelRow(runnable, showsProviderName: false)
-                    }
-                }
-
-                ForEach(layout.groups) { group in
-                    DisclosureGroup(
-                        isExpanded: modelPickerGroupExpansionBinding(for: group.id)
-                    ) {
-                        ForEach(group.models, id: \.id) { runnable in
-                            nativeModelPickerModelRow(runnable, showsProviderName: false)
-                        }
-                    } label: {
-                        Label(group.name, systemImage: "folder")
-                    }
-                }
+                nativeModelPickerTreeRows(layout.rootItems)
             }
         } else {
             modelPickerSection(
@@ -201,6 +185,25 @@ extension ChatView {
                 showsInteractionHint: false
             )
         }
+    }
+
+    func nativeModelPickerTreeRows(_ items: [RunnableModelPickerRootItem]) -> AnyView {
+        AnyView(
+            ForEach(items) { item in
+                switch item {
+                case .model(let runnable):
+                    nativeModelPickerModelRow(runnable, showsProviderName: false)
+                case .group(let group):
+                    DisclosureGroup(
+                        isExpanded: modelPickerGroupExpansionBinding(for: group.id)
+                    ) {
+                        nativeModelPickerTreeRows(group.items)
+                    } label: {
+                        Label(group.name, systemImage: "folder")
+                    }
+                }
+            }
+        )
     }
 
     var modelPickerShowAllModelsSection: some View {

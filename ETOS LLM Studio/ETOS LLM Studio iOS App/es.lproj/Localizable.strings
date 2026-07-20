@@ -5183,6 +5183,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "同一提供商内使用相同分组名称的模型会折叠在一起；留空则归入未分类模型。" = "Los modelos del mismo proveedor con el mismo nombre de grupo se muestran en un grupo plegable. Déjalo vacío para mantenerlos sin grupo.";
 "未分类模型" = "Modelos sin clasificar";
 "已分类模型" = "Modelos clasificados";
+"根目录" = "Raíz";
+"直接拖动模型或文件夹调整顺序；拖到文件夹可归类，拖到根目录可移出。" = "Arrastra directamente modelos o carpetas para reordenarlos. Suelta sobre una carpeta para agrupar o sobre Raíz para sacarlos.";
 "如何配置模型" = "Cómo configurar un modelo";
 "先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "Empieza por el ID y la finalidad del modelo. Configura el Body personalizado y los controles estructurados solo si necesitas parámetros avanzados.";
 "Split by nested paths" = "Dividir por rutas anidadas";

@@ -443,6 +443,12 @@ extension ChatViewModel {
         configuredModels = models
         let groups = RunnableModelGrouping.groups(models: models, providerOrder: providers)
         configuredModelsByProviderID = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.models) })
+        configuredModelsByID = Dictionary(uniqueKeysWithValues: models.map { ($0.id, $0) })
+        configuredModelOrganizationsByProviderID = Dictionary(
+            uniqueKeysWithValues: groups.map {
+                ($0.id, RunnableModelPickerOrganization(models: $0.models))
+            }
+        )
     }
 
     func applyActivatedConversationModels(_ models: [RunnableModel]) {

@@ -82,6 +82,8 @@ final class ChatViewModel: ObservableObject {
     @Published var providers: [Provider] = []
     @Published var configuredModels: [RunnableModel] = []
     @Published var configuredModelsByProviderID: [UUID: [RunnableModel]] = [:]
+    @Published var configuredModelsByID: [String: RunnableModel] = [:]
+    @Published var configuredModelOrganizationsByProviderID: [UUID: RunnableModelPickerOrganization] = [:]
     @Published var selectedModel: RunnableModel?
     @Published var activatedModels: [RunnableModel] = []
     @Published var activatedConversationModels: [RunnableModel] = []

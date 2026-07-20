@@ -649,21 +649,7 @@ private struct ModelSelectionView: View {
         if let layout = selectedProviderLayout,
            !layout.groups.isEmpty {
             Section {
-                if !layout.ungroupedModels.isEmpty {
-                    ForEach(layout.ungroupedModels) { model in
-                        modelButton(model, showsProviderName: false)
-                    }
-                }
-
-                ForEach(layout.groups) { group in
-                    modelGroupFolderButton(group)
-
-                    if appConfig.watchModelPickerExpandedGroupIDs.contains(group.id) {
-                        ForEach(group.models) { model in
-                            modelButton(model, showsProviderName: false)
-                        }
-                    }
-                }
+                modelPickerTreeRows(layout.rootItems)
             }
         } else {
             modelSection(
@@ -672,6 +658,23 @@ private struct ModelSelectionView: View {
                 showsInteractionHint: false
             )
         }
+    }
+
+    private func modelPickerTreeRows(_ items: [RunnableModelPickerRootItem]) -> AnyView {
+        AnyView(
+            ForEach(items) { item in
+                switch item {
+                case .model(let model):
+                    modelButton(model, showsProviderName: false)
+                case .group(let group):
+                    modelGroupFolderButton(group)
+
+                    if appConfig.watchModelPickerExpandedGroupIDs.contains(group.id) {
+                        modelPickerTreeRows(group.items)
+                    }
+                }
+            }
+        )
     }
 
     private func modelSection(
