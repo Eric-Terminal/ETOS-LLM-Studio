@@ -220,7 +220,7 @@ private struct WatchProviderModelOrderDetailView: View {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
                 footer: Text(NSLocalizedString(
-                    "直接拖动模型或文件夹调整顺序；拖到文件夹可归类，拖到根目录可移出。",
+                    "长按条目，再拖到文件夹或根目录。拖动模型时会展开全部文件夹。",
                     comment: "模型目录拖放操作提示"
                 ))
             ) {
@@ -329,6 +329,8 @@ private struct WatchProviderModelOrderDetailView: View {
                 Image(systemName: isFolderExpanded(groupPath) ? "chevron.down" : "chevron.right")
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
+
+                dragHandle
             }
             .contentShape(Rectangle())
             .padding(.leading, CGFloat(depth) * 8)
@@ -361,9 +363,18 @@ private struct WatchProviderModelOrderDetailView: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            dragHandle
         }
         .contentShape(Rectangle())
         .padding(.leading, CGFloat(depth) * 8)
+    }
+
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .etFont(.caption2)
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 
     private var rootDropTarget: some View {
