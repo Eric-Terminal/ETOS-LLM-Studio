@@ -175,15 +175,13 @@ extension ChatView {
     var selectedProviderModelPickerSections: some View {
         if let layout = selectedProviderModelPickerLayout,
            !layout.groups.isEmpty {
-            if !layout.ungroupedModels.isEmpty {
-                Section(NSLocalizedString("未分类模型", comment: "模型选择器未加入分组的模型区块")) {
+            Section {
+                if !layout.ungroupedModels.isEmpty {
                     ForEach(layout.ungroupedModels, id: \.id) { runnable in
                         nativeModelPickerModelRow(runnable, showsProviderName: false)
                     }
                 }
-            }
 
-            Section(NSLocalizedString("已分类模型", comment: "模型选择器已加入分组的模型区块")) {
                 ForEach(layout.groups) { group in
                     DisclosureGroup(
                         isExpanded: modelPickerGroupExpansionBinding(for: group.id)

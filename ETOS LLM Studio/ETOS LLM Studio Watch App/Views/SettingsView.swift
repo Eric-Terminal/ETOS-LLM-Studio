@@ -648,15 +648,13 @@ private struct ModelSelectionView: View {
     private var selectedProviderModelSections: some View {
         if let layout = selectedProviderLayout,
            !layout.groups.isEmpty {
-            if !layout.ungroupedModels.isEmpty {
-                Section(NSLocalizedString("未分类模型", comment: "模型选择器未加入分组的模型区块")) {
+            Section {
+                if !layout.ungroupedModels.isEmpty {
                     ForEach(layout.ungroupedModels) { model in
                         modelButton(model, showsProviderName: false)
                     }
                 }
-            }
 
-            Section(NSLocalizedString("已分类模型", comment: "模型选择器已加入分组的模型区块")) {
                 ForEach(layout.groups) { group in
                     modelGroupFolderButton(group)
 
