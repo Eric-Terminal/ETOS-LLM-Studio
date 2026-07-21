@@ -93,12 +93,6 @@ enum ChatQuickActionSelection {
 }
 
 enum ChatQuickActionFolderLayout {
-    static let maximumPreviewActionCount = 4
-
-    static func previewActions(from actions: [ChatQuickAction]) -> [ChatQuickAction] {
-        Array(actions.prefix(maximumPreviewActionCount))
-    }
-
     static func estimatedColumnCount(actionCount: Int, usesAccessibilitySize: Bool) -> Int {
         if usesAccessibilitySize {
             return 2
@@ -169,24 +163,10 @@ extension ChatView {
             Button {
                 isChatQuickActionFolderPresented.toggle()
             } label: {
-                ChatQuickActionFolderPreview(
-                    actions: ChatQuickActionFolderLayout.previewActions(from: selectedChatQuickActions),
-                    isTemporaryChatEnabled: isTemporaryChatEnabled
+                navBarIconLabel(
+                    systemName: "ellipsis",
+                    accessibilityLabel: NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
                 )
-                .frame(width: navBarIconSize, height: navBarIconSize)
-                .background(navBarIconBackground)
-                .overlay {
-                    Circle()
-                        .stroke(
-                            isChatQuickActionFolderPresented
-                                ? Color.white.opacity(0.35)
-                                : Color.white.opacity(0.2),
-                            lineWidth: 0.6
-                        )
-                }
-                .contentShape(Circle())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签"))
             }
             .buttonStyle(.plain)
             .popover(
@@ -294,47 +274,6 @@ extension ChatView {
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
         }
-    }
-}
-
-private struct ChatQuickActionFolderPreview: View {
-    let actions: [ChatQuickAction]
-    let isTemporaryChatEnabled: Bool
-
-    private var iconSize: CGFloat {
-        actions.count == 2 ? 12 : 9
-    }
-
-    var body: some View {
-        VStack(spacing: 2) {
-            previewRow(firstIndex: 0, secondIndex: 1)
-            if actions.count > 2 {
-                previewRow(firstIndex: 2, secondIndex: 3)
-            }
-        }
-        .foregroundStyle(TelegramColors.navBarText)
-    }
-
-    private func previewRow(firstIndex: Int, secondIndex: Int) -> some View {
-        HStack(spacing: 2) {
-            previewIcon(at: firstIndex)
-            if actions.indices.contains(secondIndex) {
-                previewIcon(at: secondIndex)
-            }
-        }
-    }
-
-    private func previewIcon(at index: Int) -> some View {
-        Image(systemName: systemImage(for: actions[index]))
-            .etFont(.system(size: iconSize, weight: .semibold))
-            .frame(width: 12, height: 12)
-    }
-
-    private func systemImage(for action: ChatQuickAction) -> String {
-        if action == .temporaryChat, isTemporaryChatEnabled {
-            return "eye.slash.fill"
-        }
-        return action.systemImage
     }
 }
 

@@ -30,11 +30,8 @@ struct ChatQuickActionSelectionTests {
         #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills])
     }
 
-    @Test("快捷文件夹预览截取前四项并按数量估算网格")
+    @Test("快捷文件夹按数量估算自适应网格")
     func quickActionFolderLayoutAdaptsToContent() {
-        let actions = ChatQuickAction.allCases
-
-        #expect(ChatQuickActionFolderLayout.previewActions(from: actions) == Array(actions.prefix(4)))
         #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 4, usesAccessibilitySize: false) == 2)
         #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 5, usesAccessibilitySize: false) == 3)
         #expect(ChatQuickActionFolderLayout.estimatedColumnCount(actionCount: 5, usesAccessibilitySize: true) == 2)
