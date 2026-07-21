@@ -5010,7 +5010,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "快捷功能" = "Actions rapides";
 "聊天界面" = "Interface de discussion";
 "聊天快捷功能" = "Actions rapides de discussion";
-"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。" = "Avec une seule action, le bouton l’exécute directement. Avec plusieurs, il ouvre un menu rapide. Conservez au moins une action.";
+"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开自适应快捷文件夹。至少保留一个功能。" = "Avec une seule action, le bouton l’exécute directement. Avec plusieurs, il ouvre un dossier adaptatif d’actions rapides. Conservez au moins une action.";
 "%@ 的世界书" = "%@’s Lorebook";
 "创建内嵌世界书" = "Create Embedded Lorebook";
 "可选开场白" = "Available Greetings";

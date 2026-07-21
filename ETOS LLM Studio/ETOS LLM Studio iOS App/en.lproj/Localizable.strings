@@ -4932,7 +4932,7 @@
 "快捷功能" = "Quick Actions";
 "聊天界面" = "Chat Interface";
 "聊天快捷功能" = "Chat Quick Actions";
-"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。" = "With one action selected, the button runs it directly. With multiple actions, it opens a quick menu. Keep at least one action selected.";
+"选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开自适应快捷文件夹。至少保留一个功能。" = "With one action selected, the button runs it directly. With multiple actions, it opens an adaptive quick-action folder. Keep at least one action selected.";
 "%@ 的世界书" = "%@’s Lorebook";
 "创建内嵌世界书" = "Create Embedded Lorebook";
 "可选开场白" = "Available Greetings";

@@ -92,6 +92,26 @@ enum ChatQuickActionSelection {
     }
 }
 
+enum ChatQuickActionFolderLayout {
+    static let maximumPreviewActionCount = 4
+
+    static func previewActions(from actions: [ChatQuickAction]) -> [ChatQuickAction] {
+        Array(actions.prefix(maximumPreviewActionCount))
+    }
+
+    static func estimatedColumnCount(actionCount: Int, usesAccessibilitySize: Bool) -> Int {
+        if usesAccessibilitySize {
+            return 2
+        }
+        return actionCount <= 4 ? 2 : 3
+    }
+
+    static func estimatedRowCount(actionCount: Int, columnCount: Int) -> Int {
+        guard actionCount > 0, columnCount > 0 else { return 0 }
+        return (actionCount + columnCount - 1) / columnCount
+    }
+}
+
 struct ChatQuickActionSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var selectedActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
@@ -117,7 +137,7 @@ struct ChatQuickActionSettingsView: View {
                     .disabled(selectedActions.count == 1 && selectedActions.contains(action))
                 }
             } footer: {
-                Text(NSLocalizedString("选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开快捷菜单。至少保留一个功能。", comment: "聊天快捷功能设置说明"))
+                Text(NSLocalizedString("选择一个功能时会直接执行；选择多个功能时，聊天页按钮会展开自适应快捷文件夹。至少保留一个功能。", comment: "聊天快捷功能设置说明"))
             }
         }
         .navigationTitle(NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能设置页标题"))
@@ -146,27 +166,41 @@ extension ChatView {
     @ViewBuilder
     var navBarQuickActionButton: some View {
         if selectedChatQuickActions.count > 1 {
-            Menu {
-                ForEach(selectedChatQuickActions) { action in
-                    if action == .temporaryChat {
-                        Toggle(isOn: temporaryChatBinding) {
-                            Label(action.title, systemImage: singleQuickActionSystemImage(for: action))
-                        }
-                    } else {
-                        Button {
-                            performQuickAction(action)
-                        } label: {
-                            Label(action.title, systemImage: action.systemImage)
-                        }
-                    }
-                }
+            Button {
+                isChatQuickActionFolderPresented.toggle()
             } label: {
-                navBarIconLabel(
-                    systemName: "ellipsis",
-                    accessibilityLabel: NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
+                ChatQuickActionFolderPreview(
+                    actions: ChatQuickActionFolderLayout.previewActions(from: selectedChatQuickActions),
+                    isTemporaryChatEnabled: isTemporaryChatEnabled
                 )
+                .frame(width: navBarIconSize, height: navBarIconSize)
+                .background(navBarIconBackground)
+                .overlay {
+                    Circle()
+                        .stroke(
+                            isChatQuickActionFolderPresented
+                                ? Color.white.opacity(0.35)
+                                : Color.white.opacity(0.2),
+                            lineWidth: 0.6
+                        )
+                }
+                .contentShape(Circle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签"))
             }
             .buttonStyle(.plain)
+            .popover(
+                isPresented: $isChatQuickActionFolderPresented,
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                ChatQuickActionFolderPanel(
+                    actions: selectedChatQuickActions,
+                    isTemporaryChatEnabled: isTemporaryChatEnabled,
+                    onPerform: performFolderQuickAction
+                )
+                .presentationCompactAdaptation(.popover)
+            }
         } else if let action = selectedChatQuickActions.first {
             Button {
                 performQuickAction(action)
@@ -178,13 +212,6 @@ extension ChatView {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    var temporaryChatBinding: Binding<Bool> {
-        Binding(
-            get: { isTemporaryChatEnabled },
-            set: { setTemporaryChatEnabled($0) }
-        )
     }
 
     func singleQuickActionSystemImage(for action: ChatQuickAction) -> String {
@@ -207,6 +234,18 @@ extension ChatView {
         }
     }
 
+    func performFolderQuickAction(_ action: ChatQuickAction) {
+        if action == .temporaryChat {
+            performQuickAction(action)
+            return
+        }
+
+        isChatQuickActionFolderPresented = false
+        DispatchQueue.main.async {
+            performQuickAction(action)
+        }
+    }
+
     func setTemporaryChatEnabled(_ isEnabled: Bool) {
         if isEnabled {
             viewModel.enableTemporaryChat()
@@ -222,6 +261,9 @@ extension ChatView {
 
     func reloadChatQuickActions() {
         selectedChatQuickActions = ChatQuickActionSelection.decode(appConfig.chatQuickActionIDs)
+        if selectedChatQuickActions.count <= 1 {
+            isChatQuickActionFolderPresented = false
+        }
     }
 
     @ViewBuilder
@@ -252,5 +294,148 @@ extension ChatView {
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
         }
+    }
+}
+
+private struct ChatQuickActionFolderPreview: View {
+    let actions: [ChatQuickAction]
+    let isTemporaryChatEnabled: Bool
+
+    private var iconSize: CGFloat {
+        actions.count == 2 ? 12 : 9
+    }
+
+    var body: some View {
+        VStack(spacing: 2) {
+            previewRow(firstIndex: 0, secondIndex: 1)
+            if actions.count > 2 {
+                previewRow(firstIndex: 2, secondIndex: 3)
+            }
+        }
+        .foregroundStyle(TelegramColors.navBarText)
+    }
+
+    private func previewRow(firstIndex: Int, secondIndex: Int) -> some View {
+        HStack(spacing: 2) {
+            previewIcon(at: firstIndex)
+            if actions.indices.contains(secondIndex) {
+                previewIcon(at: secondIndex)
+            }
+        }
+    }
+
+    private func previewIcon(at index: Int) -> some View {
+        Image(systemName: systemImage(for: actions[index]))
+            .etFont(.system(size: iconSize, weight: .semibold))
+            .frame(width: 12, height: 12)
+    }
+
+    private func systemImage(for action: ChatQuickAction) -> String {
+        if action == .temporaryChat, isTemporaryChatEnabled {
+            return "eye.slash.fill"
+        }
+        return action.systemImage
+    }
+}
+
+private struct ChatQuickActionFolderPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var minimumItemWidth: CGFloat = 78
+    @ScaledMetric(relativeTo: .body) private var itemHeight: CGFloat = 86
+    @ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 46
+
+    let actions: [ChatQuickAction]
+    let isTemporaryChatEnabled: Bool
+    let onPerform: (ChatQuickAction) -> Void
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: minimumItemWidth, maximum: 104), spacing: 8)]
+    }
+
+    private var preferredWidth: CGFloat {
+        actions.count <= 4 ? 240 : 340
+    }
+
+    private var preferredHeight: CGFloat {
+        let columnCount = ChatQuickActionFolderLayout.estimatedColumnCount(
+            actionCount: actions.count,
+            usesAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        let rowCount = ChatQuickActionFolderLayout.estimatedRowCount(
+            actionCount: actions.count,
+            columnCount: columnCount
+        )
+        let gridHeight = CGFloat(rowCount) * itemHeight + CGFloat(max(0, rowCount - 1)) * 8
+        return min(max(gridHeight + 64, 150), 440)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(NSLocalizedString("快捷功能", comment: "聊天快捷文件夹标题"))
+                .font(.headline)
+
+            ScrollView {
+                LazyVGrid(columns: columns) {
+                    ForEach(actions) { action in
+                        actionButton(for: action)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding()
+        .frame(minWidth: 220, idealWidth: preferredWidth, maxWidth: preferredWidth)
+        .frame(height: preferredHeight)
+    }
+
+    private func actionButton(for action: ChatQuickAction) -> some View {
+        Button {
+            onPerform(action)
+        } label: {
+            VStack {
+                Image(systemName: systemImage(for: action))
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: iconSize, height: iconSize)
+                    .background(
+                        Color.accentColor.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+
+                Text(action.title)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: itemHeight, alignment: .top)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ChatQuickActionFolderButtonStyle())
+        .accessibilityLabel(action.title)
+    }
+
+    private func systemImage(for action: ChatQuickAction) -> String {
+        if action == .temporaryChat, isTemporaryChatEnabled {
+            return "eye.slash.fill"
+        }
+        return action.systemImage
+    }
+}
+
+private struct ChatQuickActionFolderButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed && !accessibilityReduceMotion ? 0.96 : 1)
+            .animation(
+                accessibilityReduceMotion
+                    ? .easeOut(duration: 0.12)
+                    : .spring(response: 0.28, dampingFraction: 1),
+                value: configuration.isPressed
+            )
     }
 }

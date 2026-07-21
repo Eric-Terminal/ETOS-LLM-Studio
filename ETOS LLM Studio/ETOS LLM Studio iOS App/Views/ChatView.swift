@@ -32,6 +32,7 @@ struct ChatView: View {
     @State var suppressAutoScrollOnce = false
     @State var navigationDestination: ChatQuickAction?
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
+    @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
     @State var editingMessage: ChatMessage?
     @State var showBranchOptions = false
@@ -337,6 +338,7 @@ struct ChatView: View {
 
     var chatToolPermissionAutoPresentationBlocked: Bool {
         navigationDestination != nil
+            || isChatQuickActionFolderPresented
             || editingMessage != nil
             || viewModel.messageRewritePayload != nil
             || messageActionSheetPayload != nil
