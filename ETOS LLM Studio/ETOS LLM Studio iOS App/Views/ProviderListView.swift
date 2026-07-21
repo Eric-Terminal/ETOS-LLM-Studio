@@ -74,7 +74,6 @@ struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var selectedTab: ProviderManagementTab = .provider
     @State private var isAddingProvider = false
-    @State private var modelOrderEditMode: EditMode = .inactive
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -85,7 +84,7 @@ struct ProviderListView: View {
                 }
                 .tag(ProviderManagementTab.provider)
 
-            ProviderModelOrderContentView(editMode: $modelOrderEditMode)
+            ProviderModelOrderContentView()
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.modelOrder.title, systemImage: ProviderManagementTab.modelOrder.iconName)
@@ -114,9 +113,6 @@ struct ProviderListView: View {
                     } label: {
                         Label(NSLocalizedString("添加提供商", comment: ""), systemImage: "plus")
                     }
-                } else if selectedTab == .modelOrder {
-                    EditButton()
-                        .environment(\.editMode, $modelOrderEditMode)
                 }
             }
         }
@@ -363,7 +359,6 @@ private struct ProviderConfigurationTabsView: View {
 private struct ProviderModelOrderContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @Binding var editMode: EditMode
 
     var body: some View {
         List {
@@ -386,7 +381,7 @@ private struct ProviderModelOrderContentView: View {
 
             Section(
                 header: Text(NSLocalizedString("提供商顺序", comment: "")),
-                footer: Text(NSLocalizedString("拖拽右侧把手调整提供商顺序；轻点提供商可调整其模型顺序。", comment: ""))
+                footer: Text(NSLocalizedString("直接拖动提供商调整顺序；轻点提供商可调整其模型顺序。", comment: ""))
             ) {
                 if viewModel.providers.isEmpty {
                     Text(NSLocalizedString("暂无提供商。", comment: ""))
@@ -409,7 +404,6 @@ private struct ProviderModelOrderContentView: View {
                 }
             }
         }
-        .environment(\.editMode, $editMode)
     }
 
     private var modelPickerGroupingBinding: Binding<Bool> {
@@ -440,7 +434,6 @@ private struct ProviderModelOrderDetailView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var editingOrganization: RunnableModelPickerOrganization?
     @State private var boundaryRows: [ModelOrganizationBoundaryRow] = []
-    @State private var editMode: EditMode = .inactive
     @State private var isCreatingFolder = false
     @State private var newFolderName = ""
     let provider: Provider
@@ -450,7 +443,7 @@ private struct ProviderModelOrderDetailView: View {
             Section(
                 header: Text(NSLocalizedString("模型顺序", comment: "")),
                 footer: Text(NSLocalizedString(
-                    "点击编辑后拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
+                    "直接拖动模型或文件夹边界调整位置；滑动文件夹边界可删除文件夹。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。",
                     comment: "模型目录边界排序提示"
                 ))
             ) {
@@ -459,21 +452,16 @@ private struct ProviderModelOrderDetailView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(boundaryRows) { row in
+                    ForEach(boundaryRowsBinding, id: \.id, editActions: .move) { $row in
                         movableBoundaryRow(row)
                     }
-                    .onMove(perform: moveBoundaryRows)
                 }
             }
         }
-        .environment(\.editMode, $editMode)
         .navigationTitle(provider.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                EditButton()
-                    .environment(\.editMode, $editMode)
-
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     let current = editingOrganization ?? organization
                     newFolderName = suggestedFolderName(organization: current)
@@ -504,6 +492,14 @@ private struct ProviderModelOrderDetailView: View {
             ?? RunnableModelPickerOrganization(models: [])
     }
 
+    private var boundaryRowsBinding: Binding<[ModelOrganizationBoundaryRow]> {
+        Binding {
+            boundaryRows
+        } set: { candidateRows in
+            applyBoundaryRows(candidateRows)
+        }
+    }
+
     private func movableBoundaryRow(
         _ row: ModelOrganizationBoundaryRow
     ) -> some View {
@@ -514,6 +510,18 @@ private struct ProviderModelOrderDetailView: View {
             }
             .accessibilityAction(named: Text(NSLocalizedString("下移", comment: ""))) {
                 moveBoundaryItem(row.id, by: 1)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                switch row.item {
+                case .groupStart(let groupPath), .groupEnd(let groupPath):
+                    Button(role: .destructive) {
+                        deleteFolder(groupPath)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                    }
+                case .model:
+                    EmptyView()
+                }
             }
     }
 
@@ -610,16 +618,41 @@ private struct ProviderModelOrderDetailView: View {
     }
 
     private func moveBoundaryRows(from source: IndexSet, to destination: Int) {
+        var candidateRows = boundaryRows
+        candidateRows.move(fromOffsets: source, toOffset: destination)
+        applyBoundaryRows(candidateRows)
+    }
+
+    private func applyBoundaryRows(_ candidateRows: [ModelOrganizationBoundaryRow]) {
         guard let editingOrganization else { return }
-        var candidateItems = boundaryRows.map(\.item)
-        candidateItems.move(fromOffsets: source, toOffset: destination)
+        let candidateItems = candidateRows.map(\.item)
         guard let updated = editingOrganization.applyingBoundaryItems(candidateItems) else {
+            let validRows = Self.makeBoundaryRows(editingOrganization.boundaryItems)
+            boundaryRows = candidateRows
+            Task { @MainActor in
+                await Task.yield()
+                withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+                    boundaryRows = validRows
+                }
+            }
             return
         }
 
         withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
             self.editingOrganization = updated
             boundaryRows = Self.makeBoundaryRows(candidateItems)
+        }
+        persist(updated)
+    }
+
+    private func deleteFolder(_ groupPath: String) {
+        let current = editingOrganization ?? organization
+        guard let updated = current.removingGroup(groupPath) else {
+            return
+        }
+        withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+            editingOrganization = updated
+            boundaryRows = Self.makeBoundaryRows(updated.boundaryItems)
         }
         persist(updated)
     }

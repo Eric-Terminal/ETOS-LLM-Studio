@@ -2090,7 +2090,7 @@
 "按提供商" = "By Provider";
 "经典列表会直接显示全部模型；按提供商会先选择提供商，再显示对应模型。" = "Classic List shows every model directly. By Provider lets you choose a provider before showing its models.";
 "提供商顺序" = "Provider Order";
-"拖拽右侧把手调整提供商顺序；轻点提供商可调整其模型顺序。" = "Drag the handles to reorder providers. Tap a provider to arrange its models.";
+"直接拖动提供商调整顺序；轻点提供商可调整其模型顺序。" = "Drag a provider directly to reorder it. Tap a provider to arrange its models.";
 "暂无提供商。" = "No providers available.";
 "拖拽右侧把手调整此提供商内的模型顺序。" = "Drag the handles to reorder models within this provider.";
 "次" = "Times";
@@ -5106,7 +5106,7 @@
 "未分类模型" = "Ungrouped Models";
 "已分类模型" = "Grouped Models";
 "根目录" = "Root";
-"点击编辑后拖动模型或文件夹边界调整位置。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Tap Edit, then drag a model or folder boundary to reposition it. Models between the two boundaries belong to that folder. Boundaries may nest but cannot cross.";
+"直接拖动模型或文件夹边界调整位置；滑动文件夹边界可删除文件夹。两个边界之间的模型属于该文件夹，边界可以嵌套但不能交叉。" = "Drag a model or folder boundary directly to reposition it; swipe a folder boundary to delete the folder. Models between the two boundaries belong to that folder. Boundaries may nest but cannot cross.";
 "开始" = "Start";
 "结束" = "End";
 "文件夹“%@”开始" = "Folder “%@” starts";

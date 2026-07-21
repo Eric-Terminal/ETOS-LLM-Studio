@@ -577,6 +577,31 @@ struct RunnableModelGroupingTests {
 
         #expect(organization.applyingBoundaryItems(crossed) == nil)
     }
+
+    @Test("删除文件夹会成对移除边界并保留内部条目")
+    func pickerOrganizationRemovesFolderBoundariesAndKeepsContents() {
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://example.com",
+            apiKeys: [],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(modelName: "direct", pickerGroupName: "A", isActivated: true),
+                Model(modelName: "nested", pickerGroupName: "A/Child", isActivated: true),
+                Model(modelName: "root", isActivated: true)
+            ]
+        )
+        let models = provider.models.map { RunnableModel(provider: provider, model: $0) }
+        let organization = RunnableModelPickerOrganization(models: models)
+
+        let updated = organization.removingGroup("A")
+
+        #expect(updated?.orderedGroupPaths == ["Child"])
+        #expect(updated?.placements.map(\.modelID) == models.map(\.id))
+        #expect(updated?.placements.map(\.pickerGroupName) == [nil, "Child", nil])
+        #expect(updated?.boundaryItems.contains(.groupStart("A")) == false)
+        #expect(updated?.boundaryItems.contains(.groupEnd("A")) == false)
+    }
 }
 
 @Suite("Provider Order Tests")

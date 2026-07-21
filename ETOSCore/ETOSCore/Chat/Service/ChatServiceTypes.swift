@@ -290,6 +290,34 @@ public struct RunnableModelPickerOrganization: Hashable {
         )
     }
 
+    /// 删除文件夹边界，并把其中的模型与子文件夹保留在原父级位置。
+    public func removingGroup(_ groupPath: String) -> Self? {
+        guard let normalizedGroupPath = Self.normalizedPath(groupPath) else { return nil }
+        var items = boundaryItems
+        guard let startIndex = items.firstIndex(of: .groupStart(normalizedGroupPath)),
+              let endIndex = items.firstIndex(of: .groupEnd(normalizedGroupPath)),
+              startIndex < endIndex else {
+            return nil
+        }
+
+        items.remove(at: endIndex)
+        items.remove(at: startIndex)
+
+        var index = 0
+        guard let parsedItems = Self.parseBoundaryItems(
+            items,
+            index: &index,
+            expectedEndPath: nil,
+            parentPath: nil
+        ), index == items.count else {
+            return nil
+        }
+
+        var updated = self
+        updated.rootItems = parsedItems
+        return updated
+    }
+
     public mutating func moveModelToRoot(
         _ modelID: String,
         beforeRootItemID: String? = nil
