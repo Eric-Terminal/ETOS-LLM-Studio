@@ -22,7 +22,9 @@ struct WatchInputBubbleView: View {
     let inputPlaceholderText: String
     let inputBubbleVerticalPadding: CGFloat
     let isContextCompressionAvailable: Bool
+    let isTemporaryChatActivationAvailable: Bool
     let onPerformQuickAction: (WatchInputQuickAction) -> Void
+    let onShowTransientNotice: (WatchChatTransientNotice) -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
     let onSpeechInputLayoutWillChange: () -> Void
     let onRememberAttachmentSource: (String) -> Void
@@ -38,6 +40,11 @@ struct WatchInputBubbleView: View {
     @State private var roleplayScriptActions: [WatchRoleplayScriptButtonAction] = []
     @State private var roleplayScriptRevision = 0
     @State private var isRoleplayScriptActionMenuPresented = false
+    @State private var presentedQuickActionEdge: WatchInputQuickActionEdge?
+    @State private var pendingQuickAction: WatchInputQuickAction?
+    @State private var isTemporaryChatEnabled = false
+    @State private var visibleLeadingQuickActions: [WatchInputQuickAction] = []
+    @State private var visibleTrailingQuickActions: [WatchInputQuickAction] = []
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -50,6 +57,7 @@ struct WatchInputBubbleView: View {
             || isAttachmentImportPresented
             || isDraftEditorPresented
             || isRoleplayScriptActionMenuPresented
+            || presentedQuickActionEdge != nil
             || viewModel.showSpeechErrorAlert
             || viewModel.showAttachmentImportErrorAlert
             || viewModel.showDimensionMismatchAlert
@@ -239,13 +247,14 @@ struct WatchInputBubbleView: View {
                 }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                ForEach(appConfig.watchInputQuickActionSettings.trailingActions) { action in
-                    quickActionButton(action)
-                }
+                quickActionButtons(for: .trailing)
             }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                ForEach(appConfig.watchInputQuickActionSettings.leadingActions) { action in
-                    quickActionButton(action)
+                quickActionButtons(for: .leading)
+            }
+            .sheet(item: $presentedQuickActionEdge, onDismiss: performPendingQuickAction) { edge in
+                NavigationStack {
+                    quickActionFolder(for: edge)
                 }
             }
             .sheet(isPresented: $isRequestControlsPresented) {
@@ -325,6 +334,8 @@ struct WatchInputBubbleView: View {
                 Text(viewModel.memoryEmbeddingErrorMessage)
             }
             .onAppear {
+                refreshTemporaryChatState()
+                refreshVisibleQuickActions()
                 updateResourceUsageSampling()
                 refreshInputLocalPresentationBlocker()
             }
@@ -336,8 +347,21 @@ struct WatchInputBubbleView: View {
                     roleplayScriptRevision &+= 1
                 }
             }
+            .onReceive(appConfig.$watchInputQuickActionSettings) { configuration in
+                refreshVisibleQuickActions(using: configuration)
+            }
             .onChange(of: viewModel.selectedModel?.id) { _, _ in
                 updateResourceUsageSampling()
+                refreshVisibleQuickActions()
+            }
+            .onChange(of: viewModel.currentSession?.id) { _, _ in
+                refreshTemporaryChatState()
+            }
+            .onChange(of: viewModel.userInput.isEmpty) { _, _ in
+                refreshVisibleQuickActions()
+            }
+            .onChange(of: hasPendingAttachments) { _, _ in
+                refreshVisibleQuickActions()
             }
             .onChange(of: inputLocalPresentationBlocked) { _, _ in
                 refreshInputLocalPresentationBlocker()
@@ -351,35 +375,103 @@ struct WatchInputBubbleView: View {
     }
 
     @ViewBuilder
-    private func quickActionButton(_ action: WatchInputQuickAction) -> some View {
-        if shouldShowQuickAction(action) {
-            if action == .clearInput {
-                Button(role: .destructive) {
-                    performQuickAction(action)
-                } label: {
-                    quickActionIcon(action)
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(action.title)
-            } else {
-                Button {
-                    performQuickAction(action)
-                } label: {
-                    quickActionIcon(action)
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityLabel(action.title)
-                .tint(action.tint)
-                .disabled(isQuickActionDisabled(action))
+    private func quickActionButtons(for edge: WatchInputQuickActionEdge) -> some View {
+        let actions = visibleQuickActions(for: edge)
+        if actions.count > 3 {
+            Button {
+                presentedQuickActionEdge = edge
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .tint(.gray)
+            .accessibilityLabel(NSLocalizedString("更多快捷功能", comment: "Watch collapsed quick actions"))
+        } else {
+            ForEach(actions) { action in
+                quickActionButton(action)
             }
         }
     }
 
+    private func quickActionFolder(for edge: WatchInputQuickActionEdge) -> some View {
+        List {
+            ForEach(visibleQuickActions(for: edge)) { action in
+                Button {
+                    pendingQuickAction = action
+                    presentedQuickActionEdge = nil
+                } label: {
+                    HStack {
+                        Image(systemName: systemImage(for: action))
+                            .foregroundStyle(action.tint)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading) {
+                            Text(action.title)
+                            if action == .temporaryChat && isQuickActionDisabled(action) {
+                                Text(NSLocalizedString("仅可在对话开始前开启", comment: "Watch temporary chat availability"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isQuickActionDisabled(action))
+            }
+        }
+        .navigationTitle(NSLocalizedString("快捷功能", comment: "Watch collapsed quick actions title"))
+    }
+
+    @ViewBuilder
+    private func quickActionButton(_ action: WatchInputQuickAction) -> some View {
+        if action == .clearInput {
+            Button(role: .destructive) {
+                performQuickAction(action)
+            } label: {
+                quickActionIcon(action)
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityLabel(action.title)
+        } else {
+            Button {
+                performQuickAction(action)
+            } label: {
+                quickActionIcon(action)
+            }
+            .labelStyle(.iconOnly)
+            .accessibilityLabel(action.title)
+            .tint(action.tint)
+            .disabled(isQuickActionDisabled(action))
+        }
+    }
+
     private func quickActionIcon(_ action: WatchInputQuickAction) -> some View {
-        Image(systemName: action.systemImage)
+        Image(systemName: systemImage(for: action))
             .etFont(.system(size: 16, weight: .semibold))
             .frame(width: inputControlHeight, height: inputControlHeight)
             .contentShape(Circle())
+    }
+
+    private func visibleQuickActions(for edge: WatchInputQuickActionEdge) -> [WatchInputQuickAction] {
+        switch edge {
+        case .leading:
+            return visibleLeadingQuickActions
+        case .trailing:
+            return visibleTrailingQuickActions
+        }
+    }
+
+    private func refreshVisibleQuickActions(
+        using configuration: WatchInputQuickActionConfiguration? = nil
+    ) {
+        let configuration = configuration ?? appConfig.watchInputQuickActionSettings
+        visibleLeadingQuickActions = configuration.leadingActions.filter(shouldShowQuickAction)
+        visibleTrailingQuickActions = configuration.trailingActions.filter(shouldShowQuickAction)
+    }
+
+    private func systemImage(for action: WatchInputQuickAction) -> String {
+        guard action == .temporaryChat else { return action.systemImage }
+        return isTemporaryChatEnabled ? "eye.slash" : "eye"
     }
 
     private func shouldShowQuickAction(_ action: WatchInputQuickAction) -> Bool {
@@ -401,6 +493,11 @@ struct WatchInputBubbleView: View {
             return !isContextCompressionAvailable
         case .addAttachment:
             return viewModel.attachmentImportInProgress
+        case .temporaryChat:
+            return !TemporaryChatToggleAvailability.isAvailable(
+                isTemporaryChatEnabled: isTemporaryChatEnabled,
+                hasConversationStarted: !isTemporaryChatActivationAvailable
+            )
         default:
             return false
         }
@@ -412,6 +509,8 @@ struct WatchInputBubbleView: View {
             isRequestControlsPresented = true
         case .roleplayScripts:
             isRoleplayScriptActionMenuPresented = true
+        case .temporaryChat:
+            setTemporaryChatEnabled(!isTemporaryChatEnabled)
         case .addAttachment:
             attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
             isAttachmentImportPresented = true
@@ -434,6 +533,39 @@ struct WatchInputBubbleView: View {
              .extendedFeatures:
             onPerformQuickAction(action)
         }
+    }
+
+    private func performPendingQuickAction() {
+        guard let action = pendingQuickAction else { return }
+        pendingQuickAction = nil
+        performQuickAction(action)
+    }
+
+    private func setTemporaryChatEnabled(_ isEnabled: Bool) {
+        guard TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            hasConversationStarted: !isTemporaryChatActivationAvailable
+        ) else { return }
+
+        if isEnabled {
+            viewModel.enableTemporaryChat()
+        } else {
+            viewModel.saveCurrentTemporarySession()
+        }
+        isTemporaryChatEnabled = isEnabled
+        onShowTransientNotice(
+            WatchChatTransientNotice(
+                message: isEnabled
+                    ? NSLocalizedString("临时对话已开启", comment: "Watch temporary chat status")
+                    : NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status"),
+                systemImage: isEnabled ? "eye.slash" : "eye",
+                tint: isEnabled ? .accentColor : .secondary
+            )
+        )
+    }
+
+    private func refreshTemporaryChatState() {
+        isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
     }
 
     private var isInlineSpeechComposerPresented: Bool {
@@ -484,6 +616,7 @@ struct WatchInputBubbleView: View {
     private func loadRoleplayScriptActions() async {
         guard let sessionID = viewModel.currentSession?.id else {
             roleplayScriptActions = []
+            refreshVisibleQuickActions()
             return
         }
         roleplayScriptActions = await Task.detached(priority: .utility) { () -> [WatchRoleplayScriptButtonAction] in
@@ -502,6 +635,7 @@ struct WatchInputBubbleView: View {
                 }
             }
         }.value
+        refreshVisibleQuickActions()
     }
 
     private func performRoleplayScriptAction(_ action: WatchRoleplayScriptButtonAction) {

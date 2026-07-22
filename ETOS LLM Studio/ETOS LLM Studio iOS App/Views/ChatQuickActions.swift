@@ -178,6 +178,7 @@ extension ChatView {
                 )
             }
             .buttonStyle(.plain)
+            .disabled(!isQuickActionAvailable(action))
         }
     }
 
@@ -195,6 +196,7 @@ extension ChatView {
             ChatQuickActionFolderPanel(
                 actions: selectedChatQuickActions,
                 isTemporaryChatEnabled: isTemporaryChatEnabled,
+                isTemporaryChatToggleAvailable: isQuickActionAvailable(.temporaryChat),
                 isPresented: isChatQuickActionFolderPresented,
                 collapsedSize: navBarIconSize,
                 expandedWidth: min(max(220, viewportWidth - 32), 420),
@@ -226,6 +228,7 @@ extension ChatView {
 
     func performQuickAction(_ action: ChatQuickAction) {
         if action == .temporaryChat {
+            guard isQuickActionAvailable(action) else { return }
             setTemporaryChatEnabled(!isTemporaryChatEnabled)
         } else if action == .contextCompression {
             guard let session = viewModel.currentSession,
@@ -271,6 +274,14 @@ extension ChatView {
 
     func refreshTemporaryChatState() {
         isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
+    }
+
+    func isQuickActionAvailable(_ action: ChatQuickAction) -> Bool {
+        guard action == .temporaryChat else { return true }
+        return TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            hasConversationStarted: !viewModel.allMessagesForSession.isEmpty || continuationContext != nil
+        )
     }
 
     func reloadChatQuickActions() {
@@ -321,6 +332,7 @@ private struct ChatQuickActionFolderPanel: View {
 
     let actions: [ChatQuickAction]
     let isTemporaryChatEnabled: Bool
+    let isTemporaryChatToggleAvailable: Bool
     let isPresented: Bool
     let collapsedSize: CGFloat
     let expandedWidth: CGFloat
@@ -470,6 +482,7 @@ private struct ChatQuickActionFolderPanel: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(ChatQuickActionFolderButtonStyle())
+        .disabled(action == .temporaryChat && !isTemporaryChatToggleAvailable)
         .accessibilityLabel(action.title)
     }
 
@@ -480,10 +493,11 @@ private struct ChatQuickActionFolderPanel: View {
 
 private struct ChatQuickActionFolderButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.72 : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.72 : 1) : 0.42)
             .scaleEffect(configuration.isPressed && !accessibilityReduceMotion ? 0.96 : 1)
             .animation(
                 accessibilityReduceMotion

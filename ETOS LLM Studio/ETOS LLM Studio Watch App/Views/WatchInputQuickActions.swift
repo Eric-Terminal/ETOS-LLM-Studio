@@ -26,6 +26,7 @@ extension WatchInputQuickAction {
         .sessionHistory,
         .contextCompression,
         .roleplayScripts,
+        .temporaryChat,
         .addAttachment,
         .clearInput
     ]
@@ -55,6 +56,8 @@ extension WatchInputQuickAction {
             return NSLocalizedString("压缩为续聊", comment: "Watch input quick action")
         case .roleplayScripts:
             return NSLocalizedString("助手脚本", comment: "Watch input quick action")
+        case .temporaryChat:
+            return NSLocalizedString("临时对话", comment: "Watch input quick action")
         case .addAttachment:
             return NSLocalizedString("添加附件", comment: "Watch input quick action")
         case .clearInput:
@@ -92,6 +95,7 @@ extension WatchInputQuickAction {
         case .sessionHistory: return "list.bullet.rectangle"
         case .contextCompression: return "rectangle.compress.vertical"
         case .roleplayScripts: return "curlybraces.square"
+        case .temporaryChat: return "eye.slash"
         case .addAttachment: return "plus"
         case .clearInput: return "trash"
         case .settings: return "gearshape"
@@ -110,8 +114,14 @@ extension WatchInputQuickAction {
     }
 
     var settingsDescription: String? {
-        guard self == .roleplayScripts else { return nil }
-        return NSLocalizedString("仅绑定角色卡时可见", comment: "Watch roleplay script quick action visibility")
+        switch self {
+        case .roleplayScripts:
+            return NSLocalizedString("仅绑定角色卡时可见", comment: "Watch roleplay script quick action visibility")
+        case .temporaryChat:
+            return NSLocalizedString("仅可在对话开始前开启", comment: "Watch temporary chat availability")
+        default:
+            return nil
+        }
     }
 
     var tint: Color {
@@ -120,7 +130,7 @@ extension WatchInputQuickAction {
             return .purple
         case .sessionHistory, .addAttachment, .mcp:
             return .blue
-        case .contextCompression, .roleplayScripts, .extendedFeatures:
+        case .contextCompression, .roleplayScripts, .temporaryChat, .extendedFeatures:
             return .indigo
         case .clearInput:
             return .red
@@ -333,6 +343,7 @@ extension ContentView {
             watchInputQuickActionDestination = action
         case .requestControls,
              .roleplayScripts,
+             .temporaryChat,
              .addAttachment,
              .clearInput:
             break
@@ -368,6 +379,7 @@ extension ContentView {
              .sessionHistory,
              .contextCompression,
              .roleplayScripts,
+             .temporaryChat,
              .addAttachment,
              .clearInput,
              .settings:

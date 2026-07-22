@@ -21,10 +21,20 @@ struct WatchInputQuickActionConfigurationTests {
             .contextCompression
         ])
         #expect(configuration.trailingActions == [
+            .temporaryChat,
             .roleplayScripts,
             .addAttachment,
             .clearInput
         ])
+    }
+
+    @Test("旧版默认配置自动加入临时对话")
+    func previousDefaultConfigurationAddsTemporaryChat() {
+        let rawValue = #"{"leadingActions":["requestControls","sessionHistory","contextCompression"],"trailingActions":["roleplayScripts","addAttachment","clearInput"]}"#
+
+        let configuration = WatchInputQuickActionConfiguration.decoded(from: rawValue)
+
+        #expect(configuration == .defaultConfiguration)
     }
 
     @Test("配置编解码保留左右分组与用户顺序")

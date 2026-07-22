@@ -10,6 +10,16 @@ import Foundation
 import Combine
 import os.log
 
+public enum TemporaryChatToggleAvailability {
+    /// 已开启的临时对话始终允许关闭；新的临时对话只能在对话开始前开启。
+    public static func isAvailable(
+        isTemporaryChatEnabled: Bool,
+        hasConversationStarted: Bool
+    ) -> Bool {
+        isTemporaryChatEnabled || !hasConversationStarted
+    }
+}
+
 extension ChatService {
     // MARK: - 公开方法 (会话管理)
 

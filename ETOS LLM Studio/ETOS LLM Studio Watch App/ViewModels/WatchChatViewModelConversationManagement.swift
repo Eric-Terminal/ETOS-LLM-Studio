@@ -179,6 +179,19 @@ extension ChatViewModel {
         chatService.createNewSession()
     }
 
+    func isTemporaryChatEnabled(for sessionID: UUID?) -> Bool {
+        chatService.isTemporaryChatEnabled(for: sessionID)
+    }
+
+    func enableTemporaryChat() {
+        chatService.enableTemporaryChat()
+    }
+
+    @discardableResult
+    func saveCurrentTemporarySession() -> Bool {
+        chatService.saveCurrentTemporaryChat()
+    }
+
     func reloadPersistedDataAfterLegacyJSONMigration() {
         chatService.reloadSessionStateFromPersistenceAfterMigration()
     }

@@ -20,6 +20,7 @@ public enum WatchInputQuickAction: String, CaseIterable, Identifiable, Codable, 
     case sessionHistory
     case contextCompression
     case roleplayScripts
+    case temporaryChat
     case addAttachment
     case clearInput
     case settings
@@ -72,6 +73,11 @@ public struct WatchInputQuickActionConfiguration: Codable, Equatable, Sendable {
 
     public static let defaultConfiguration = WatchInputQuickActionConfiguration(
         leadingActions: [.requestControls, .sessionHistory, .contextCompression],
+        trailingActions: [.temporaryChat, .roleplayScripts, .addAttachment, .clearInput]
+    )
+
+    private static let previousDefaultConfiguration = WatchInputQuickActionConfiguration(
+        leadingActions: [.requestControls, .sessionHistory, .contextCompression],
         trailingActions: [.roleplayScripts, .addAttachment, .clearInput]
     )
 
@@ -87,13 +93,17 @@ public struct WatchInputQuickActionConfiguration: Codable, Equatable, Sendable {
               ) else {
             return .defaultConfiguration
         }
-        return decoded.normalized()
+        let normalized = decoded.normalized()
+        if normalized == previousDefaultConfiguration {
+            return .defaultConfiguration
+        }
+        return normalized
     }
 
     public func encodedString() -> String {
         guard let data = try? JSONEncoder().encode(normalized()),
               let string = String(data: data, encoding: .utf8) else {
-            return #"{"leadingActions":["requestControls","sessionHistory","contextCompression"],"trailingActions":["roleplayScripts","addAttachment","clearInput"]}"#
+            return #"{"leadingActions":["requestControls","sessionHistory","contextCompression"],"trailingActions":["temporaryChat","roleplayScripts","addAttachment","clearInput"]}"#
         }
         return string
     }

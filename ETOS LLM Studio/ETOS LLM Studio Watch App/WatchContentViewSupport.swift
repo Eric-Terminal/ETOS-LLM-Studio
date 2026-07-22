@@ -12,6 +12,12 @@ import ETOSCore
 import AVKit
 import AVFoundation
 
+struct WatchChatTransientNotice {
+    let message: String
+    let systemImage: String
+    let tint: Color
+}
+
 extension ContentView {
     var legacyChatRootView: some View {
         ScrollViewReader { proxy in
@@ -417,6 +423,62 @@ extension ContentView {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.orange.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    func showChatTransientNotice(
+        _ notice: WatchChatTransientNotice,
+        duration: Duration = .seconds(2)
+    ) {
+        chatTransientNoticeDismissTask?.cancel()
+
+        if accessibilityReduceMotion {
+            chatTransientNotice = notice
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                chatTransientNotice = notice
+            }
+        }
+
+        chatTransientNoticeDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+
+            if accessibilityReduceMotion {
+                chatTransientNotice = nil
+            } else {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    chatTransientNotice = nil
+                }
+            }
+            chatTransientNoticeDismissTask = nil
+        }
+    }
+
+    func chatTransientNoticeBanner(_ notice: WatchChatTransientNotice) -> some View {
+        let shape = Capsule()
+
+        return HStack(spacing: 6) {
+            Image(systemName: notice.systemImage)
+                .foregroundStyle(notice.tint)
+                .symbolRenderingMode(.hierarchical)
+
+            Text(notice.message)
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+        }
+        .etFont(.footnote.weight(.semibold))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background {
+            if #available(watchOS 26.0, *), isLiquidGlassEnabled {
+                shape
+                    .fill(Color.primary.opacity(0.04))
+                    .glassEffect(.clear, in: shape)
+            } else {
+                shape.fill(.ultraThinMaterial)
+            }
+        }
+        .overlay(shape.stroke(notice.tint.opacity(0.25), lineWidth: 0.5))
     }
 
     @ViewBuilder

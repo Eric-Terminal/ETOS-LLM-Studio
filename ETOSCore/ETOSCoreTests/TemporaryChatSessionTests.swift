@@ -8,6 +8,22 @@ import Combine
 
 @Suite("临时对话会话测试", .serialized)
 struct TemporaryChatSessionTests {
+    @Test("对话开始后只能关闭已开启的临时对话")
+    func toggleAvailabilityRespectsConversationState() {
+        #expect(TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: false,
+            hasConversationStarted: false
+        ))
+        #expect(!TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: false,
+            hasConversationStarted: true
+        ))
+        #expect(TemporaryChatToggleAvailability.isAvailable(
+            isTemporaryChatEnabled: true,
+            hasConversationStarted: true
+        ))
+    }
+
     @Test("临时对话关闭前只保留内存快照，关闭后完整落盘")
     func temporaryMessagesPersistOnlyAfterSavingSession() throws {
         let service = ChatService()

@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) var scenePhase
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
     @StateObject var announcementManager = AnnouncementManager.shared
@@ -63,6 +64,8 @@ struct ContentView: View {
     @State var watchInputQuickActionDestination: WatchInputQuickAction?
     @State var contextCompressionReminderSourceSession: ChatSession?
     @State var contextCompressionReminderNotificationKeys: Set<WatchContextCompressionReminderNotificationKey> = []
+    @State var chatTransientNotice: WatchChatTransientNotice?
+    @State var chatTransientNoticeDismissTask: Task<Void, Never>?
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -132,6 +135,18 @@ struct ContentView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(20)
+            }
+
+            if let notice = chatTransientNotice {
+                VStack {
+                    Spacer()
+                    chatTransientNoticeBanner(notice)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, inputControlHeight + 16)
+                }
+                .allowsHitTesting(false)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(24)
             }
 
             VStack {
@@ -210,6 +225,8 @@ struct ContentView: View {
             watchInputLayoutSettleTask = nil
             bottomAnchorVisibilityWorkItem?.cancel()
             bottomAnchorVisibilityWorkItem = nil
+            chatTransientNoticeDismissTask?.cancel()
+            chatTransientNoticeDismissTask = nil
         }
         .sheet(isPresented: $legacyJSONMigrationManager.isMigrationPromptPresented) {
             NavigationStack {
@@ -282,6 +299,7 @@ struct ContentView: View {
             appLockManager.refreshState()
         }
         .animation(.easeInOut(duration: 0.2), value: viewModel.memoryRetryStoppedNoticeMessage)
+        .animation(.easeInOut(duration: 0.18), value: chatTransientNotice?.message)
     }
 
     private func handleDatabaseUnlocked() {

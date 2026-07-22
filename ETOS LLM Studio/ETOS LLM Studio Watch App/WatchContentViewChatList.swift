@@ -196,8 +196,13 @@ extension ContentView {
                     inputBubbleVerticalPadding: inputBubbleVerticalPadding,
                     isContextCompressionAvailable: viewModel.currentSession?.isTemporary == false
                         && (!viewModel.allMessagesForSession.isEmpty || continuationContext != nil),
+                    isTemporaryChatActivationAvailable: viewModel.allMessagesForSession.isEmpty
+                        && continuationContext == nil,
                     onPerformQuickAction: { action in
                         performWatchInputQuickAction(action)
+                    },
+                    onShowTransientNotice: { notice in
+                        showChatTransientNotice(notice)
                     },
                     onHandleInputAction: { state in
                         switch state {
