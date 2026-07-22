@@ -31,6 +31,9 @@ extension ChatView {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, navBarVerticalPadding)
+        .opacity(isChatQuickActionFolderPresented ? 0 : 1)
+        .allowsHitTesting(!isChatQuickActionFolderPresented)
+        .accessibilityHidden(isChatQuickActionFolderPresented)
     }
 
     @ViewBuilder

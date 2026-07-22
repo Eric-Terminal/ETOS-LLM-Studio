@@ -160,32 +160,9 @@ extension ChatView {
     @ViewBuilder
     var navBarQuickActionButton: some View {
         if selectedChatQuickActions.count > 1 {
-            Button {
-                isChatQuickActionFolderPresented.toggle()
-            } label: {
-                navBarIconLabel(
-                    systemName: "ellipsis",
-                    accessibilityLabel: NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
-                )
-            }
-            .buttonStyle(.plain)
-            .popover(
-                isPresented: $isChatQuickActionFolderPresented,
-                attachmentAnchor: .rect(.bounds),
-                arrowEdge: .top
-            ) {
-                ChatQuickActionFolderPanel(
-                    actions: selectedChatQuickActions,
-                    isTemporaryChatEnabled: isTemporaryChatEnabled,
-                    onPerform: performFolderQuickAction
-                )
-                .presentationBackground {
-                    ChatQuickActionFolderPresentationBackground(
-                        usesLiquidGlass: isLiquidGlassEnabled
-                    )
-                }
-                .presentationCompactAdaptation(.popover)
-            }
+            Color.clear
+                .frame(width: navBarIconSize, height: navBarIconSize)
+                .accessibilityHidden(true)
         } else if let action = selectedChatQuickActions.first {
             Button {
                 performQuickAction(action)
@@ -196,6 +173,45 @@ extension ChatView {
                 )
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    func chatQuickActionFolderOverlay(viewportWidth: CGFloat) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if isChatQuickActionFolderPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        setChatQuickActionFolderPresented(false)
+                    }
+                    .accessibilityHidden(true)
+            }
+
+            ChatQuickActionFolderPanel(
+                actions: selectedChatQuickActions,
+                isTemporaryChatEnabled: isTemporaryChatEnabled,
+                isPresented: isChatQuickActionFolderPresented,
+                collapsedSize: navBarIconSize,
+                expandedWidth: min(max(220, viewportWidth - 32), 420),
+                usesLiquidGlass: isLiquidGlassEnabled,
+                onTogglePresentation: {
+                    setChatQuickActionFolderPresented(!isChatQuickActionFolderPresented)
+                },
+                onPerform: performFolderQuickAction
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, navBarVerticalPadding)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
+    func setChatQuickActionFolderPresented(_ isPresented: Bool) {
+        if accessibilityReduceMotion {
+            isChatQuickActionFolderPresented = isPresented
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+                isChatQuickActionFolderPresented = isPresented
+            }
         }
     }
 
@@ -225,7 +241,7 @@ extension ChatView {
             return
         }
 
-        isChatQuickActionFolderPresented = false
+        setChatQuickActionFolderPresented(false)
         DispatchQueue.main.async {
             performQuickAction(action)
         }
@@ -247,7 +263,7 @@ extension ChatView {
     func reloadChatQuickActions() {
         selectedChatQuickActions = ChatQuickActionSelection.decode(appConfig.chatQuickActionIDs)
         if selectedChatQuickActions.count <= 1 {
-            isChatQuickActionFolderPresented = false
+            setChatQuickActionFolderPresented(false)
         }
     }
 
@@ -282,46 +298,29 @@ extension ChatView {
     }
 }
 
-private struct ChatQuickActionFolderPresentationBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    let usesLiquidGlass: Bool
-
-    var body: some View {
-        Group {
-            if #available(iOS 26.0, *), usesLiquidGlass {
-                Rectangle()
-                    .fill(glassOverlayColor)
-                    .glassEffect(.clear, in: Rectangle())
-            } else {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(Rectangle().fill(glassOverlayColor))
-            }
-        }
-    }
-
-    private var glassOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
-    }
-}
-
 private struct ChatQuickActionFolderPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var minimumItemWidth: CGFloat = 78
     @ScaledMetric(relativeTo: .body) private var itemHeight: CGFloat = 86
     @ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 46
+    @ScaledMetric(relativeTo: .body) private var dismissButtonSize: CGFloat = 44
 
     let actions: [ChatQuickAction]
     let isTemporaryChatEnabled: Bool
+    let isPresented: Bool
+    let collapsedSize: CGFloat
+    let expandedWidth: CGFloat
+    let usesLiquidGlass: Bool
+    let onTogglePresentation: () -> Void
     let onPerform: (ChatQuickAction) -> Void
 
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: minimumItemWidth, maximum: 104), spacing: 8)]
-    }
-
-    private var preferredWidth: CGFloat {
-        actions.count <= 4 ? 240 : 340
+        let count = ChatQuickActionFolderLayout.estimatedColumnCount(
+            actionCount: actions.count,
+            usesAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
+        return Array(repeating: GridItem(.flexible(minimum: minimumItemWidth), spacing: 8), count: count)
     }
 
     private var preferredHeight: CGFloat {
@@ -338,22 +337,99 @@ private struct ChatQuickActionFolderPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Text(NSLocalizedString("快捷功能", comment: "聊天快捷文件夹标题"))
-                .font(.headline)
+        let cornerRadius = isPresented ? CGFloat(24) : collapsedSize / 2
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
-            ScrollView {
-                LazyVGrid(columns: columns) {
-                    ForEach(actions) { action in
-                        actionButton(for: action)
+        Group {
+            if #available(iOS 26.0, *), usesLiquidGlass {
+                morphingContent
+                    .background(shape.fill(glassOverlayColor))
+                    .glassEffect(.clear.interactive(), in: shape)
+                    .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            } else {
+                morphingContent
+                    .background(
+                        shape
+                            .fill(.ultraThinMaterial)
+                            .overlay(shape.fill(glassOverlayColor))
+                            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                    )
+            }
+        }
+        .frame(
+            width: isPresented ? expandedWidth : collapsedSize,
+            height: isPresented ? preferredHeight : collapsedSize,
+            alignment: .topTrailing
+        )
+        .clipShape(shape)
+    }
+
+    private var morphingContent: some View {
+        // 入口与面板保持为同一视图，让玻璃只改变尺寸与圆角而不重新入场。
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(NSLocalizedString("快捷功能", comment: "聊天快捷文件夹标题"))
+                        .font(.headline)
+
+                    Spacer()
+
+                    Color.clear
+                        .frame(width: dismissButtonSize, height: dismissButtonSize)
+                }
+
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(actions) { action in
+                            actionButton(for: action)
+                        }
                     }
                 }
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
+            .padding()
+            .frame(width: expandedWidth, height: preferredHeight)
+            .opacity(isPresented ? 1 : 0)
+            .scaleEffect(isPresented ? 1 : 0.96, anchor: .topTrailing)
+            .allowsHitTesting(isPresented)
+            .accessibilityHidden(!isPresented)
+
+            Button(action: onTogglePresentation) {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: isPresented ? dismissButtonSize : collapsedSize,
+                           height: isPresented ? dismissButtonSize : collapsedSize)
+                    .background(Color.primary.opacity(isPresented ? 0.08 : 0), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(isPresented ? 16 : 0)
+            .accessibilityLabel(
+                isPresented
+                    ? NSLocalizedString("收起快捷功能", comment: "收起聊天快捷文件夹按钮")
+                    : NSLocalizedString("快捷功能", comment: "聊天快捷菜单无障碍标签")
+            )
         }
-        .padding()
-        .frame(minWidth: 220, idealWidth: preferredWidth, maxWidth: preferredWidth)
-        .frame(height: preferredHeight)
+        .frame(
+            width: isPresented ? expandedWidth : collapsedSize,
+            height: isPresented ? preferredHeight : collapsedSize,
+            alignment: .topTrailing
+        )
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 
     private func actionButton(for action: ChatQuickAction) -> some View {

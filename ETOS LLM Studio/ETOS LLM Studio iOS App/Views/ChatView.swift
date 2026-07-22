@@ -1024,6 +1024,11 @@ extension ChatView {
                     handleChatInputBarHeightChange(newHeight)
                 }
 
+                if selectedChatQuickActions.count > 1 {
+                    chatQuickActionFolderOverlay(viewportWidth: chatViewportWidth)
+                        .zIndex(40)
+                }
+
                 if shouldShowLocalResourceUsageFloatingPanel {
                     LocalResourceUsageFloatingPanel(
                         containerSize: chatViewportSize,
