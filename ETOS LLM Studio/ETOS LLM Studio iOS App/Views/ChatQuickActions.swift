@@ -179,6 +179,11 @@ extension ChatView {
                     isTemporaryChatEnabled: isTemporaryChatEnabled,
                     onPerform: performFolderQuickAction
                 )
+                .presentationBackground {
+                    ChatQuickActionFolderPresentationBackground(
+                        usesLiquidGlass: isLiquidGlassEnabled
+                    )
+                }
                 .presentationCompactAdaptation(.popover)
             }
         } else if let action = selectedChatQuickActions.first {
@@ -274,6 +279,30 @@ extension ChatView {
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
         }
+    }
+}
+
+private struct ChatQuickActionFolderPresentationBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let usesLiquidGlass: Bool
+
+    var body: some View {
+        Group {
+            if #available(iOS 26.0, *), usesLiquidGlass {
+                Rectangle()
+                    .fill(glassOverlayColor)
+                    .glassEffect(.clear, in: Rectangle())
+            } else {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Rectangle().fill(glassOverlayColor))
+            }
+        }
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
     }
 }
 
