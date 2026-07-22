@@ -263,6 +263,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -281,9 +282,11 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.saveRouteConfiguration(.init(body: [assetID], emphasis: [], strong: [], code: [])))
 
             Persistence.writeAppConfig(key: key.rawValue, integer: 1, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.fallbackPostScriptNames(for: .body) == ["GlobalSwitchPS"])
 
             Persistence.writeAppConfig(key: key.rawValue, integer: 0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.fallbackPostScriptNames(for: .body).isEmpty)
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: "The quick brown fox") == nil)
         }
@@ -299,16 +302,17 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
-            FontLibrary.preloadRuntimeCache(forceReload: true)
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
             Persistence.deleteAppConfig(key: key.rawValue)
-            FontLibrary.preloadRuntimeCache(forceReload: true)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.defaultFontScale)
             let defaultToken = FontLibrary.adapterCacheToken()
 
             Persistence.writeAppConfig(key: key.rawValue, real: 1.75, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == 1.75)
             #expect(FontLibrary.scaledPointSize(16) == 28)
             #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: true) == 1.75)
@@ -322,12 +326,44 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.adapterCacheToken() != defaultToken)
 
             Persistence.writeAppConfig(key: key.rawValue, real: 9.0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.maximumFontScale)
             #expect(FontLibrary.scaledPointSize(17) == 34)
 
             Persistence.writeAppConfig(key: key.rawValue, real: 0.1, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.customFontScale == FontLibrary.minimumFontScale)
             #expect(FontLibrary.scaledPointSize(20) == 10)
+        }
+    }
+
+    @Test("字体渲染读取只使用内存快照")
+    func testFontRenderingReadsOnlyRuntimeSnapshot() async throws {
+        let key = AppConfigKey.fontCustomScale
+        let previousValue = Persistence.readAppConfigReal(key: key.rawValue)
+        defer {
+            if let previousValue {
+                Persistence.writeAppConfig(key: key.rawValue, real: previousValue, typeHint: key.typeHint)
+            } else {
+                Persistence.deleteAppConfig(key: key.rawValue)
+            }
+            reloadFontRuntimeCacheFromPersistence()
+        }
+
+        try await withIsolatedFontStore {
+            Persistence.writeAppConfig(key: key.rawValue, real: 1.0, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
+            let initialToken = FontLibrary.adapterCacheToken()
+
+            Persistence.writeAppConfig(key: key.rawValue, real: 1.75, typeHint: key.typeHint)
+
+            #expect(FontLibrary.adapterCacheToken() == initialToken)
+            #expect(FontLibrary.customFontScale == 1.0)
+            #expect(FontLibrary.scaledPointSize(16) == 16)
+
+            reloadFontRuntimeCacheFromPersistence()
+            #expect(FontLibrary.adapterCacheToken() != initialToken)
+            #expect(FontLibrary.customFontScale == 1.75)
         }
     }
 
@@ -341,6 +377,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -354,9 +391,11 @@ struct FontRouteSyncTests {
             let mixedSample = "A\u{0378}"
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == nil)
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.character.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(
                 FontLibrary.resolvePostScriptName(for: .body, sampleText: mixedSample) == imported.postScriptName
             )
@@ -373,6 +412,7 @@ struct FontRouteSyncTests {
             } else {
                 Persistence.deleteAppConfig(key: key.rawValue)
             }
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await withIsolatedFontStore {
@@ -399,6 +439,7 @@ struct FontRouteSyncTests {
             FontLibrary.updateChain([invalidID, valid.id], for: .body)
 
             Persistence.writeAppConfig(key: key.rawValue, text: FontFallbackScope.segment.rawValue, typeHint: key.typeHint)
+            reloadFontRuntimeCacheFromPersistence()
             #expect(
                 FontLibrary.resolvePostScriptName(for: .body, sampleText: "∞∑") == valid.postScriptName
             )
@@ -437,7 +478,7 @@ struct FontRouteSyncTests {
 
         try? fileManager.removeItem(at: fontDirectory)
         try fileManager.createDirectory(at: fontDirectory, withIntermediateDirectories: true)
-        FontLibrary.preloadRuntimeCache(forceReload: true)
+        reloadFontRuntimeCacheFromPersistence()
 
         defer {
             try? fileManager.removeItem(at: fontDirectory)
@@ -445,10 +486,29 @@ struct FontRouteSyncTests {
                 try? fileManager.copyItem(at: backupDirectory, to: fontDirectory)
             }
             try? fileManager.removeItem(at: backupRoot)
-            FontLibrary.preloadRuntimeCache(forceReload: true)
+            reloadFontRuntimeCacheFromPersistence()
         }
 
         try await body()
+    }
+
+    private func reloadFontRuntimeCacheFromPersistence() {
+        let isCustomFontEnabled = Persistence.readAppConfigInteger(
+            key: AppConfigKey.fontUseCustomFonts.rawValue
+        ).map { $0 != 0 } ?? true
+        let fallbackScope = Persistence.readAppConfigText(
+            key: AppConfigKey.fontFallbackScope.rawValue
+        ).flatMap(FontFallbackScope.init(rawValue:)) ?? .segment
+        let customFontScale = Persistence.readAppConfigReal(
+            key: AppConfigKey.fontCustomScale.rawValue
+        ) ?? FontLibrary.defaultFontScale
+
+        FontLibrary.updateRuntimeSettings(
+            isCustomFontEnabled: isCustomFontEnabled,
+            fallbackScope: fallbackScope,
+            customFontScale: customFontScale
+        )
+        FontLibrary.preloadRuntimeCache(forceReload: true)
     }
 
     private func loadSystemFontFixture() throws -> (data: Data, fileName: String) {

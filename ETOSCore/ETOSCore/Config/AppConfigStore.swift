@@ -264,9 +264,24 @@ public final class AppConfigStore: ObservableObject {
         }
     }
 
-    @Published public var fontUseCustomFonts: Bool { didSet { write(.fontUseCustomFonts, fontUseCustomFonts) } }
-    @Published public var fontFallbackScope: String { didSet { write(.fontFallbackScope, fontFallbackScope) } }
-    @Published public var fontCustomScale: Double { didSet { write(.fontCustomScale, fontCustomScale) } }
+    @Published public var fontUseCustomFonts: Bool {
+        didSet {
+            write(.fontUseCustomFonts, fontUseCustomFonts)
+            updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontFallbackScope: String {
+        didSet {
+            write(.fontFallbackScope, fontFallbackScope)
+            updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontCustomScale: Double {
+        didSet {
+            write(.fontCustomScale, fontCustomScale)
+            updateFontRuntimeSettings()
+        }
+    }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
     @Published public var watchInputQuickActionConfiguration: String {
         didSet {
@@ -590,6 +605,7 @@ public final class AppConfigStore: ObservableObject {
         hideAnnouncementSection = Self.boolValue(.hideAnnouncementSection, userDefaults: userDefaults)
         hiddenAnnouncementKeys = Self.textValue(.hiddenAnnouncementKeys, userDefaults: userDefaults)
 
+        updateFontRuntimeSettings()
         loadPersistentStoreInBackground(initialValues: initialValues, userDefaults: userDefaults)
     }
 
@@ -1352,6 +1368,14 @@ public final class AppConfigStore: ObservableObject {
            key.participatesInSync {
             CloudSyncManager.shared.scheduleRealtimeSyncIfEnabled(reason: "appConfig.\(rawKey)")
         }
+    }
+
+    private func updateFontRuntimeSettings() {
+        FontLibrary.updateRuntimeSettings(
+            isCustomFontEnabled: fontUseCustomFonts,
+            fallbackScope: FontFallbackScope(rawValue: fontFallbackScope) ?? .segment,
+            customFontScale: fontCustomScale
+        )
     }
 
     @discardableResult

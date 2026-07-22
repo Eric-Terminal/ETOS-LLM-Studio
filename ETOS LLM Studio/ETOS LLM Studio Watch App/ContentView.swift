@@ -184,6 +184,9 @@ struct ContentView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
+        .onChange(of: appConfig.fontFallbackScope) { _, _ in
+            refreshRootBodyFont()
+        }
         .onChange(of: appConfig.fontCustomScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {

@@ -174,7 +174,7 @@ struct WatchFontSettingsView: View {
         }
         .navigationTitle(NSLocalizedString("字体设置", comment: ""))
         .onAppear {
-            FontLibrary.registerAllFontsIfNeeded()
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             reloadData()
         }
         .onReceive(
@@ -185,7 +185,7 @@ struct WatchFontSettingsView: View {
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
             if isEnabled {
-                FontLibrary.registerAllFontsIfNeeded()
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }

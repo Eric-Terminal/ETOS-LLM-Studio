@@ -32,6 +32,7 @@ public enum FontLibrary {
 
     private struct RuntimeSnapshot {
         var isPrepared = false
+        var adapterCacheRevision: UInt64 = 0
         var assets: [FontAssetRecord] = []
         var routeConfiguration = FontRouteConfiguration()
         var fallbackPostScriptNamesByRole: [FontSemanticRole: [String]] = [:]
@@ -53,21 +54,48 @@ public enum FontLibrary {
     }
 
     public static var isCustomFontEnabled: Bool {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { $0.isCustomFontEnabled }
     }
 
     public static var fallbackScope: FontFallbackScope {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { $0.fallbackScope }
     }
 
     public static var customFontScale: Double {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { $0.customFontScale }
+    }
+
+    /// 将设置对象中的最新值同步到内存快照，供 SwiftUI 渲染链路直接读取。
+    public static func updateRuntimeSettings(
+        isCustomFontEnabled: Bool,
+        fallbackScope: FontFallbackScope,
+        customFontScale: Double
+    ) {
+        let normalizedScale = normalizedFontScale(customFontScale)
+        updateRuntimeSnapshot { snapshot in
+            let didChangeCustomFontState = snapshot.isCustomFontEnabled != isCustomFontEnabled
+            guard didChangeCustomFontState
+                    || snapshot.fallbackScope != fallbackScope
+                    || snapshot.customFontScale != normalizedScale else {
+                return
+            }
+
+            snapshot.isCustomFontEnabled = isCustomFontEnabled
+            snapshot.fallbackScope = fallbackScope
+            snapshot.customFontScale = normalizedScale
+            snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
+
+            if didChangeCustomFontState {
+                let roleMappings = buildRoleMappings(
+                    assets: snapshot.assets,
+                    routeConfiguration: snapshot.routeConfiguration,
+                    isCustomFontEnabled: isCustomFontEnabled
+                )
+                snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
+                snapshot.preferredPostScriptNameByRole = roleMappings.preferred
+            }
+            snapshot.adapterCacheRevision &+= 1
+        }
     }
 
     public static func normalizedFontScale(_ value: Double) -> Double {
@@ -111,30 +139,27 @@ public enum FontLibrary {
 
         let assets = loadAssetsFromDisk()
         let routeConfiguration = loadRouteConfigurationFromDisk()
-        let settings = loadFontSettingsFromAppConfig()
+        let shouldRegisterFonts = withRuntimeSnapshot { $0.isCustomFontEnabled }
 
-        if settings.isCustomFontEnabled {
+        if shouldRegisterFonts {
             for asset in assets where asset.isEnabled {
                 registerFontFileIfNeeded(fileName: asset.fileName)
             }
         }
 
-        let roleMappings = buildRoleMappings(
-            assets: assets,
-            routeConfiguration: routeConfiguration,
-            isCustomFontEnabled: settings.isCustomFontEnabled
-        )
-
         updateRuntimeSnapshot { snapshot in
+            let roleMappings = buildRoleMappings(
+                assets: assets,
+                routeConfiguration: routeConfiguration,
+                isCustomFontEnabled: snapshot.isCustomFontEnabled
+            )
             snapshot.isPrepared = true
+            snapshot.adapterCacheRevision &+= 1
             snapshot.assets = assets
             snapshot.routeConfiguration = routeConfiguration
             snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
             snapshot.preferredPostScriptNameByRole = roleMappings.preferred
             snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
-            snapshot.isCustomFontEnabled = settings.isCustomFontEnabled
-            snapshot.fallbackScope = settings.fallbackScope
-            snapshot.customFontScale = settings.customFontScale
         }
     }
 
@@ -304,8 +329,6 @@ public enum FontLibrary {
     }
 
     public static func fallbackPostScriptNames(for role: FontSemanticRole) -> [String] {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return [] }
             return snapshot.fallbackPostScriptNamesByRole[role] ?? []
@@ -313,8 +336,6 @@ public enum FontLibrary {
     }
 
     public static func resolvedPostScriptName(for role: FontSemanticRole) -> String? {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
         return withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return nil }
             return snapshot.preferredPostScriptNameByRole[role]
@@ -322,26 +343,13 @@ public enum FontLibrary {
     }
 
     public static func adapterCacheToken() -> String {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-        return withRuntimeSnapshot { snapshot in
-            let roleSignature = FontSemanticRole.allCases
-                .map { role -> String in
-                    let names = snapshot.fallbackPostScriptNamesByRole[role] ?? []
-                    return "\(role.rawValue)=\(names.joined(separator: ","))"
-                }
-                .joined(separator: "|")
-            return "\(snapshot.isPrepared ? 1 : 0)|\(snapshot.isCustomFontEnabled ? 1 : 0)|\(snapshot.fallbackScope.rawValue)|\(snapshot.customFontScale)|\(roleSignature)"
-        }
+        withRuntimeSnapshot { String($0.adapterCacheRevision) }
     }
 
     public static func resolvePostScriptName(
         for role: FontSemanticRole,
         sampleText: String
     ) -> String? {
-        ensureRuntimeCachePrepared()
-        ensureRuntimeSettingsSynchronized()
-
         let context = withRuntimeSnapshot { snapshot in
             (
                 isPrepared: snapshot.isPrepared,
@@ -506,19 +514,6 @@ public enum FontLibrary {
         }
     }
 
-    private static func ensureRuntimeSettingsSynchronized() {
-        let settings = loadFontSettingsFromAppConfig()
-        let needReload = withRuntimeSnapshot { snapshot in
-            guard snapshot.isPrepared else { return false }
-            return snapshot.isCustomFontEnabled != settings.isCustomFontEnabled
-                || snapshot.fallbackScope != settings.fallbackScope
-                || snapshot.customFontScale != settings.customFontScale
-        }
-        if needReload {
-            preloadRuntimeCache(forceReload: true)
-        }
-    }
-
     private static func sampledResolution(forKey key: String) -> (hit: Bool, value: String?) {
         withRuntimeSnapshot { snapshot in
             guard let cached = snapshot.sampledResolutionCache[key] else {
@@ -572,19 +567,6 @@ public enum FontLibrary {
             return FontRouteConfiguration()
         }
         return configuration
-    }
-
-    private static func loadFontSettingsFromAppConfig() -> (isCustomFontEnabled: Bool, fallbackScope: FontFallbackScope, customFontScale: Double) {
-        let customEnabled = Persistence.readAppConfigInteger(key: AppConfigKey.fontUseCustomFonts.rawValue).map { $0 != 0 } ?? true
-        let scope: FontFallbackScope
-        if let rawValue = Persistence.readAppConfigText(key: AppConfigKey.fontFallbackScope.rawValue),
-           let parsedScope = FontFallbackScope(rawValue: rawValue) {
-            scope = parsedScope
-        } else {
-            scope = .segment
-        }
-        let scale = normalizedFontScale(Persistence.readAppConfigReal(key: AppConfigKey.fontCustomScale.rawValue) ?? defaultFontScale)
-        return (customEnabled, scope, scale)
     }
 
     private static func buildRoleMappings(

@@ -69,7 +69,7 @@ struct FontSettingsView: View {
         }
         .onAppear {
             reloadData()
-            FontLibrary.registerAllFontsIfNeeded()
+            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .syncFontsUpdated)
@@ -79,7 +79,7 @@ struct FontSettingsView: View {
         }
         .onChange(of: isCustomFontEnabled) { _, isEnabled in
             if isEnabled {
-                FontLibrary.registerAllFontsIfNeeded()
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
