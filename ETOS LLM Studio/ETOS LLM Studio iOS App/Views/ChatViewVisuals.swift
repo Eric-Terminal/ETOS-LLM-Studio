@@ -11,6 +11,38 @@ import UIKit
 import AVFoundation
 
 extension ChatView {
+    func temporaryChatStatusNoticeBanner(isEnabled: Bool) -> some View {
+        let shape = Capsule()
+        let accentColor = isEnabled ? Color.accentColor : Color.secondary
+
+        return HStack(spacing: 8) {
+            Image(systemName: ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: isEnabled))
+                .foregroundStyle(accentColor)
+                .symbolRenderingMode(.hierarchical)
+
+            Text(
+                isEnabled
+                    ? NSLocalizedString("临时对话已开启", comment: "临时对话状态提示")
+                    : NSLocalizedString("临时对话已关闭", comment: "临时对话状态提示")
+            )
+                .foregroundStyle(.primary)
+        }
+        .etFont(.footnote.weight(.semibold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background {
+            if #available(iOS 26.0, *), isLiquidGlassEnabled {
+                shape
+                    .fill(Color.primary.opacity(0.04))
+                    .glassEffect(.clear, in: shape)
+            } else {
+                shape.fill(.ultraThinMaterial)
+            }
+        }
+        .overlay(shape.stroke(accentColor.opacity(0.25), lineWidth: 0.5))
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 3)
+    }
+
     func memoryRetryStoppedNoticeBanner(text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")

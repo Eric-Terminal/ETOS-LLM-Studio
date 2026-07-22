@@ -256,6 +256,33 @@ extension ChatView {
             viewModel.saveCurrentTemporarySession()
         }
         isTemporaryChatEnabled = isEnabled
+        showTemporaryChatStatusNotice(isEnabled: isEnabled)
+    }
+
+    func showTemporaryChatStatusNotice(isEnabled: Bool) {
+        temporaryChatStatusNoticeDismissTask?.cancel()
+
+        if accessibilityReduceMotion {
+            temporaryChatStatusNoticeIsEnabled = isEnabled
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                temporaryChatStatusNoticeIsEnabled = isEnabled
+            }
+        }
+
+        temporaryChatStatusNoticeDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+
+            if accessibilityReduceMotion {
+                temporaryChatStatusNoticeIsEnabled = nil
+            } else {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    temporaryChatStatusNoticeIsEnabled = nil
+                }
+            }
+            temporaryChatStatusNoticeDismissTask = nil
+        }
     }
 
     func refreshTemporaryChatState() {

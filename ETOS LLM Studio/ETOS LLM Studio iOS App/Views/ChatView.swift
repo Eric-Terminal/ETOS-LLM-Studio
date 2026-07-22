@@ -34,6 +34,8 @@ struct ChatView: View {
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
     @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
+    @State var temporaryChatStatusNoticeIsEnabled: Bool?
+    @State var temporaryChatStatusNoticeDismissTask: Task<Void, Never>?
     @State var editingMessage: ChatMessage?
     @State var showBranchOptions = false
     @State var messageToBranch: ChatMessage?
@@ -1058,6 +1060,18 @@ extension ChatView {
                     .zIndex(30)
                 }
 
+                if let isEnabled = temporaryChatStatusNoticeIsEnabled {
+                    VStack {
+                        Spacer()
+                        temporaryChatStatusNoticeBanner(isEnabled: isEnabled)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, chatInputBarHeight + 12)
+                    }
+                    .allowsHitTesting(false)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(35)
+                }
+
                 // 发送飞行气泡覆盖层：从输入框变形飞入落点气泡（置于最顶层）
                 flightOverlayLayer
 
@@ -1112,6 +1126,9 @@ extension ChatView {
                 chatLayoutSettleTask = nil
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
+                temporaryChatStatusNoticeDismissTask?.cancel()
+                temporaryChatStatusNoticeDismissTask = nil
+                temporaryChatStatusNoticeIsEnabled = nil
                 flightState = nil
                 flightPresentationX = 0
                 flightPresentationY = 0
