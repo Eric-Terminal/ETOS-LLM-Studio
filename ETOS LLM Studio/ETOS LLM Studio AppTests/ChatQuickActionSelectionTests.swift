@@ -12,6 +12,12 @@ struct ChatQuickActionSelectionTests {
         #expect(ChatQuickAction.temporaryChat.systemImage == "eye.slash")
     }
 
+    @Test("临时对话开关使用有无斜线区分状态")
+    func temporaryChatStateUsesSlash() {
+        #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: false) == "eye")
+        #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: true) == "eye.slash")
+    }
+
     @Test("空配置和未知配置回退到临时对话")
     func invalidSelectionUsesTemporaryChatFallback() {
         #expect(ChatQuickActionSelection.decode("") == [.temporaryChat])

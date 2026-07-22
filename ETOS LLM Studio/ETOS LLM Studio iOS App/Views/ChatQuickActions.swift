@@ -74,6 +74,11 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         case .extendedFeatures: return "ellipsis.circle"
         }
     }
+
+    func systemImage(isTemporaryChatEnabled: Bool) -> String {
+        guard self == .temporaryChat else { return systemImage }
+        return isTemporaryChatEnabled ? "eye.slash" : "eye"
+    }
 }
 
 enum ChatQuickActionSelection {
@@ -216,10 +221,7 @@ extension ChatView {
     }
 
     func singleQuickActionSystemImage(for action: ChatQuickAction) -> String {
-        guard action == .temporaryChat, isTemporaryChatEnabled else {
-            return action.systemImage
-        }
-        return "eye.slash.fill"
+        action.systemImage(isTemporaryChatEnabled: isTemporaryChatEnabled)
     }
 
     func performQuickAction(_ action: ChatQuickAction) {
@@ -461,10 +463,7 @@ private struct ChatQuickActionFolderPanel: View {
     }
 
     private func systemImage(for action: ChatQuickAction) -> String {
-        if action == .temporaryChat, isTemporaryChatEnabled {
-            return "eye.slash.fill"
-        }
-        return action.systemImage
+        action.systemImage(isTemporaryChatEnabled: isTemporaryChatEnabled)
     }
 }
 
