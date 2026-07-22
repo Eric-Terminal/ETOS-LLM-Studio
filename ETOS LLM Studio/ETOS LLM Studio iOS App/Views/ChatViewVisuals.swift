@@ -10,21 +10,52 @@ import SwiftUI
 import UIKit
 import AVFoundation
 
+/// 聊天页短暂显示的轻量状态通知，由调用方决定内容与强调色。
+struct ChatTransientNotice {
+    let message: String
+    let systemImage: String
+    let tint: Color
+}
+
 extension ChatView {
-    func temporaryChatStatusNoticeBanner(isEnabled: Bool) -> some View {
+    func showChatTransientNotice(
+        _ notice: ChatTransientNotice,
+        duration: Duration = .seconds(2)
+    ) {
+        chatTransientNoticeDismissTask?.cancel()
+
+        if accessibilityReduceMotion {
+            chatTransientNotice = notice
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                chatTransientNotice = notice
+            }
+        }
+
+        chatTransientNoticeDismissTask = Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+
+            if accessibilityReduceMotion {
+                chatTransientNotice = nil
+            } else {
+                withAnimation(.easeIn(duration: 0.18)) {
+                    chatTransientNotice = nil
+                }
+            }
+            chatTransientNoticeDismissTask = nil
+        }
+    }
+
+    func chatTransientNoticeBanner(_ notice: ChatTransientNotice) -> some View {
         let shape = Capsule()
-        let accentColor = isEnabled ? Color.accentColor : Color.secondary
 
         return HStack(spacing: 8) {
-            Image(systemName: ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: isEnabled))
-                .foregroundStyle(accentColor)
+            Image(systemName: notice.systemImage)
+                .foregroundStyle(notice.tint)
                 .symbolRenderingMode(.hierarchical)
 
-            Text(
-                isEnabled
-                    ? NSLocalizedString("临时对话已开启", comment: "临时对话状态提示")
-                    : NSLocalizedString("临时对话已关闭", comment: "临时对话状态提示")
-            )
+            Text(notice.message)
                 .foregroundStyle(.primary)
         }
         .etFont(.footnote.weight(.semibold))
@@ -39,7 +70,7 @@ extension ChatView {
                 shape.fill(.ultraThinMaterial)
             }
         }
-        .overlay(shape.stroke(accentColor.opacity(0.25), lineWidth: 0.5))
+        .overlay(shape.stroke(notice.tint.opacity(0.25), lineWidth: 0.5))
         .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 3)
     }
 

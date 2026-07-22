@@ -34,8 +34,8 @@ struct ChatView: View {
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
     @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
-    @State var temporaryChatStatusNoticeIsEnabled: Bool?
-    @State var temporaryChatStatusNoticeDismissTask: Task<Void, Never>?
+    @State var chatTransientNotice: ChatTransientNotice?
+    @State var chatTransientNoticeDismissTask: Task<Void, Never>?
     @State var editingMessage: ChatMessage?
     @State var showBranchOptions = false
     @State var messageToBranch: ChatMessage?
@@ -1060,10 +1060,10 @@ extension ChatView {
                     .zIndex(30)
                 }
 
-                if let isEnabled = temporaryChatStatusNoticeIsEnabled {
+                if let notice = chatTransientNotice {
                     VStack {
                         Spacer()
-                        temporaryChatStatusNoticeBanner(isEnabled: isEnabled)
+                        chatTransientNoticeBanner(notice)
                             .padding(.horizontal, 16)
                             .padding(.bottom, chatInputBarHeight + 12)
                     }
@@ -1126,9 +1126,9 @@ extension ChatView {
                 chatLayoutSettleTask = nil
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
-                temporaryChatStatusNoticeDismissTask?.cancel()
-                temporaryChatStatusNoticeDismissTask = nil
-                temporaryChatStatusNoticeIsEnabled = nil
+                chatTransientNoticeDismissTask?.cancel()
+                chatTransientNoticeDismissTask = nil
+                chatTransientNotice = nil
                 flightState = nil
                 flightPresentationX = 0
                 flightPresentationY = 0
