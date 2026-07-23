@@ -579,6 +579,12 @@ public class ChatService {
                 self?.reloadProviders()
             }
             .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .officialDataDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadProviders()
+            }
+            .store(in: &cancellables)
 
         let savedModelID = AppConfigStore.textValue(
             for: .selectedRunnableModelID,
@@ -591,9 +597,7 @@ public class ChatService {
         }
         self.selectedModelSubject.send(initialModel)
 
-        ConfigLoader.fetchDownloadOnceConfigsIfNeeded { [weak self] in
-            self?.reloadProviders()
-        }
+        ConfigLoader.fetchDownloadOnceConfigsIfNeeded()
 
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         if !Self.isRunningUnitTests {

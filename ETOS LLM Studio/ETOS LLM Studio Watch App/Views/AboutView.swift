@@ -104,6 +104,10 @@ struct AboutView: View {
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
+    @State private var isSynchronizingOfficialData = false
+    @State private var officialDataAlertTitle = ""
+    @State private var officialDataAlertMessage = ""
+    @State private var showOfficialDataAlert = false
     private let officialCommunities: [WatchOfficialCommunity]
 
     init(distributionChannel: UpdateTimelineChannel = UpdateTimelineManager.currentDistributionChannel()) {
@@ -225,6 +229,44 @@ struct AboutView: View {
                 }
 
                 Divider()
+
+                // MARK: - 软件服务
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("软件服务", comment: "关于页软件服务分组"))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        synchronizeOfficialData()
+                    } label: {
+                        if isSynchronizingOfficialData {
+                            HStack {
+                                ProgressView()
+                                Text(NSLocalizedString("正在同步官方数据…", comment: "官方数据同步进度"))
+                                    .etFont(.caption)
+                            }
+                        } else {
+                            Label(
+                                NSLocalizedString("同步官方数据", comment: "官方数据同步按钮"),
+                                systemImage: "arrow.down.doc"
+                            )
+                            .etFont(.caption)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSynchronizingOfficialData)
+
+                    Text(
+                        NSLocalizedString(
+                            "从官方服务重新下载配置与资源。已有同名文件会安全更新。",
+                            comment: "官方数据同步说明"
+                        )
+                    )
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                Divider()
                 
                 // MARK: - Links
                 Button {
@@ -310,6 +352,52 @@ struct AboutView: View {
             NavigationStack {
                 WatchAppLogsView()
             }
+        }
+        .alert(officialDataAlertTitle, isPresented: $showOfficialDataAlert) {
+            Button(NSLocalizedString("好", comment: "关闭提示按钮"), role: .cancel) {}
+        } message: {
+            Text(officialDataAlertMessage)
+        }
+    }
+
+    private func synchronizeOfficialData() {
+        guard !isSynchronizingOfficialData else { return }
+        isSynchronizingOfficialData = true
+
+        Task {
+            let result = await ConfigLoader.synchronizeOfficialData(overwriteExisting: true)
+            isSynchronizingOfficialData = false
+
+            if result.isAlreadyRunning {
+                officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
+                officialDataAlertMessage = NSLocalizedString(
+                    "官方数据正在同步，请稍后再试。",
+                    comment: "官方数据同步任务冲突提示"
+                )
+                WKInterfaceDevice.current().play(.failure)
+            } else if !result.isComplete {
+                officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
+                officialDataAlertMessage = NSLocalizedString(
+                    "部分官方文件下载失败，请检查网络后重试。",
+                    comment: "官方数据同步失败说明"
+                )
+                WKInterfaceDevice.current().play(.failure)
+            } else if result.didWriteFiles {
+                officialDataAlertTitle = NSLocalizedString("官方数据已更新", comment: "官方数据同步成功标题")
+                officialDataAlertMessage = String(
+                    format: NSLocalizedString("已同步 %d 个官方文件。", comment: "官方数据同步成功数量"),
+                    result.downloadedCount
+                )
+                WKInterfaceDevice.current().play(.success)
+            } else {
+                officialDataAlertTitle = NSLocalizedString("官方数据已是最新", comment: "官方数据无需更新标题")
+                officialDataAlertMessage = NSLocalizedString(
+                    "没有需要更新的官方文件。",
+                    comment: "官方数据无需更新说明"
+                )
+                WKInterfaceDevice.current().play(.success)
+            }
+            showOfficialDataAlert = true
         }
     }
 

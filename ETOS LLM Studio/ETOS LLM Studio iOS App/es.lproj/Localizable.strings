@@ -1,5 +1,16 @@
 "清除" = "Borrar";
 "官方社群" = "Comunidades oficiales";
+"软件服务" = "Servicios de la app";
+"同步官方数据" = "Sincronizar datos oficiales";
+"从官方服务重新下载配置与资源。已有同名文件会安全更新。" = "Vuelve a descargar configuraciones y recursos del servicio oficial. Los archivos existentes con el mismo nombre se actualizarán de forma segura.";
+"正在同步官方数据…" = "Sincronizando datos oficiales…";
+"同步未完成" = "Sincronización incompleta";
+"官方数据正在同步，请稍后再试。" = "Los datos oficiales ya se están sincronizando. Inténtalo de nuevo en breve.";
+"部分官方文件下载失败，请检查网络后重试。" = "No se pudieron descargar algunos archivos oficiales. Comprueba la conexión e inténtalo de nuevo.";
+"官方数据已更新" = "Datos oficiales actualizados";
+"已同步 %d 个官方文件。" = "Se sincronizaron %d archivos oficiales.";
+"官方数据已是最新" = "Los datos oficiales están actualizados";
+"没有需要更新的官方文件。" = "No hay archivos oficiales que deban actualizarse.";
 "QQ 群" = "Grupo de QQ";
 "Telegram 社群" = "Comunidad de Telegram";
 "轻点即可在对应 App 中打开。" = "Toca para abrir en la app correspondiente.";

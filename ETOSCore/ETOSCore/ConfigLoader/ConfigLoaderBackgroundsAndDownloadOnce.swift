@@ -3,10 +3,11 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件负责背景图片目录管理与 download_once 远程配置支持。
+// 本文件负责背景图片目录管理与官方数据同步支持。
 // ============================================================================
 
 import Foundation
+import CryptoKit
 import GRDB
 import os.log
 
@@ -113,66 +114,98 @@ extension ConfigLoader {
         )
     }
 
-    static func isDownloadOnceFileReady(at fileURL: URL, fileManager: FileManager = .default) -> Bool {
-        guard fileManager.fileExists(atPath: fileURL.path) else { return false }
-        guard let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
-              let size = attributes[.size] as? NSNumber else {
-            return false
-        }
-        return size.int64Value > 0
-    }
-
-    public static func fetchDownloadOnceConfigsIfNeeded(onDownload: (() -> Void)? = nil) {
+    public static func fetchDownloadOnceConfigsIfNeeded() {
         guard !isDownloadOnceCompleted() else { return }
-        guard beginDownloadOnce() else { return }
-        guard let url = URL(string: downloadOnceURLString) else {
-            logger.error("download_once.json URL 无效: \(downloadOnceURLString)")
-            endDownloadOnce()
-            return
-        }
 
         Task {
-            let result = await fetchAndStoreDownloadOnceConfigs(from: url)
-            if result.isComplete {
-                setDownloadOnceCompleted(true)
-            }
-            endDownloadOnce()
-
-            if result.didWriteFiles {
-                await MainActor.run {
-                    onDownload?()
-                }
-            }
+            _ = await synchronizeOfficialData(overwriteExisting: false)
         }
     }
 
-    private static func fetchAndStoreDownloadOnceConfigs(from url: URL) async -> DownloadOnceFetchResult {
-        logger.info("正在获取 download_once.json...")
+    /// 从官方服务同步下发数据。手动触发时覆盖同名文件，自动初始化时保留已就绪文件。
+    public static func synchronizeOfficialData(
+        overwriteExisting: Bool = true
+    ) async -> OfficialDataSyncResult {
+        guard beginDownloadOnce() else {
+            return OfficialDataSyncResult(
+                downloadedCount: 0,
+                totalCount: 0,
+                isComplete: false,
+                isAlreadyRunning: true
+            )
+        }
+        defer { endDownloadOnce() }
+
+        guard let url = URL(string: officialDataManifestURLString) else {
+            logger.error("官方数据清单 URL 无效: \(officialDataManifestURLString)")
+            return OfficialDataSyncResult(
+                downloadedCount: 0,
+                totalCount: 0,
+                isComplete: false,
+                isAlreadyRunning: false
+            )
+        }
+
+        let result = await fetchAndStoreOfficialData(
+            from: url,
+            overwriteExisting: overwriteExisting
+        )
+        if result.isComplete {
+            setDownloadOnceCompleted(true)
+        }
+        if result.didWriteFiles {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .officialDataDidUpdate, object: nil)
+            }
+        }
+        return result
+    }
+
+    private static func fetchAndStoreOfficialData(
+        from manifestURL: URL,
+        overwriteExisting: Bool
+    ) async -> OfficialDataSyncResult {
+        logger.info("正在获取官方数据清单...")
 
         do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = downloadOnceTimeout
+            var request = URLRequest(url: manifestURL)
+            request.timeoutInterval = officialDataTimeout
             request.cachePolicy = .reloadIgnoringLocalCacheData
 
             let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
-                logger.error("download_once.json 响应无效")
-                return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
+                logger.error("官方数据清单响应无效")
+                return OfficialDataSyncResult(
+                    downloadedCount: 0,
+                    totalCount: 0,
+                    isComplete: false,
+                    isAlreadyRunning: false
+                )
             }
 
-            let entries = parseDownloadOncePayload(data)
-            guard !entries.isEmpty else {
-                logger.warning("download_once.json 内容为空或格式不受支持")
-                return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
+            let decodedManifest = await Task.detached(priority: .utility) {
+                try? JSONDecoder().decode(OfficialDataManifest.self, from: data)
+            }.value
+            guard let manifest = decodedManifest,
+                  manifest.version == 1 else {
+                logger.error("官方数据清单格式或版本不受支持")
+                return OfficialDataSyncResult(
+                    downloadedCount: 0,
+                    totalCount: 0,
+                    isComplete: false,
+                    isAlreadyRunning: false
+                )
             }
 
-            var didWriteFiles = false
+            var downloadedCount = 0
             var allEntriesReady = true
 
-            for entry in entries {
-                guard let remoteURL = URL(string: entry.url) else {
+            for entry in manifest.downloads {
+                guard let remoteURL = URL(string: entry.url, relativeTo: manifestURL)?.absoluteURL,
+                      remoteURL.scheme == manifestURL.scheme,
+                      remoteURL.host == manifestURL.host else {
                     logger.error("下载地址无效: \(entry.url)")
                     allEntriesReady = false
                     continue
@@ -184,9 +217,14 @@ extension ConfigLoader {
                     continue
                 }
 
-                switch await downloadFile(from: remoteURL, to: destinationDir) {
+                switch await downloadOfficialDataFile(
+                    entry,
+                    from: remoteURL,
+                    to: destinationDir,
+                    overwriteExisting: overwriteExisting
+                ) {
                 case .downloaded:
-                    didWriteFiles = true
+                    downloadedCount += 1
                 case .alreadyPresent:
                     break
                 case .failed:
@@ -194,98 +232,110 @@ extension ConfigLoader {
                 }
             }
 
-            return DownloadOnceFetchResult(
-                didWriteFiles: didWriteFiles,
-                isComplete: allEntriesReady
+            return OfficialDataSyncResult(
+                downloadedCount: downloadedCount,
+                totalCount: manifest.downloads.count,
+                isComplete: allEntriesReady,
+                isAlreadyRunning: false
             )
         } catch {
-            logger.error("下载 download_once.json 失败: \(error.localizedDescription)")
-            return DownloadOnceFetchResult(didWriteFiles: false, isComplete: false)
+            logger.error("下载官方数据清单失败: \(error.localizedDescription)")
+            return OfficialDataSyncResult(
+                downloadedCount: 0,
+                totalCount: 0,
+                isComplete: false,
+                isAlreadyRunning: false
+            )
         }
     }
 
-    private static func parseDownloadOncePayload(_ data: Data) -> [DownloadOnceEntry] {
-        let decoder = JSONDecoder()
-
-        if let envelope = try? decoder.decode(DownloadOnceEnvelope.self, from: data) {
-            return envelope.downloads
-        }
-
-        if let entries = try? decoder.decode([DownloadOnceEntry].self, from: data) {
-            return entries
-        }
-
-        if let mapping = try? decoder.decode([String: String].self, from: data) {
-            return mapping.map { DownloadOnceEntry(path: $0.key, url: $0.value) }
-        }
-
-        return []
-    }
-
-    private static func resolveDownloadDestination(for rawPath: String) -> URL? {
+    static func resolveDownloadDestination(for rawPath: String) -> URL? {
         let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
-
-        if normalized.hasPrefix("/Documents/") {
-            let relativePath = String(normalized.dropFirst("/Documents/".count))
-            return documentsDirectory.appendingPathComponent(relativePath)
+        let relativePath: String
+        switch normalized {
+        case "/Documents", "Documents":
+            relativePath = ""
+        default:
+            if normalized.hasPrefix("/Documents/") {
+                relativePath = String(normalized.dropFirst("/Documents/".count))
+            } else if normalized.hasPrefix("Documents/") {
+                relativePath = String(normalized.dropFirst("Documents/".count))
+            } else if normalized.hasPrefix("/") {
+                return nil
+            } else {
+                relativePath = normalized
+            }
         }
 
-        if normalized == "/Documents" {
-            return documentsDirectory
-        }
-
-        if normalized.hasPrefix("Documents/") {
-            let relativePath = String(normalized.dropFirst("Documents/".count))
-            return documentsDirectory.appendingPathComponent(relativePath)
-        }
-
-        if normalized == "Documents" {
-            return documentsDirectory
-        }
-
-        if normalized.hasPrefix("/") {
+        let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) || relativePath.isEmpty else {
             return nil
         }
 
-        return documentsDirectory.appendingPathComponent(normalized)
+        let destination = relativePath.isEmpty
+            ? documentsDirectory
+            : documentsDirectory.appendingPathComponent(relativePath)
+        let documentsPath = documentsDirectory.standardizedFileURL.path
+        let destinationPath = destination.standardizedFileURL.path
+        guard destinationPath == documentsPath ||
+              destinationPath.hasPrefix(documentsPath + "/") else {
+            return nil
+        }
+        return destination
     }
 
-    private static func downloadFile(from remoteURL: URL, to directory: URL) async -> DownloadFileResult {
-        let fileName = remoteURL.lastPathComponent
-        guard !fileName.isEmpty else {
-            logger.error("下载地址缺少文件名: \(remoteURL.absoluteString)")
-            return .failed
-        }
+    static func officialDataMatches(
+        _ data: Data,
+        expectedSize: Int64,
+        expectedSHA256: String
+    ) -> Bool {
+        guard expectedSize > 0, Int64(data.count) == expectedSize else { return false }
+        let checksum = SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return checksum.caseInsensitiveCompare(expectedSHA256) == .orderedSame
+    }
 
-        let fileManager = FileManager.default
-        do {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            logger.error("创建下载目录失败: \(directory.path) - \(error.localizedDescription)")
+    private static func downloadOfficialDataFile(
+        _ entry: OfficialDataEntry,
+        from remoteURL: URL,
+        to directory: URL,
+        overwriteExisting: Bool
+    ) async -> DownloadFileResult {
+        let fileName = entry.fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fileName.isEmpty,
+              !fileName.contains("/"),
+              !fileName.contains("\\"),
+              fileName != ".",
+              fileName != "..",
+              entry.size > 0,
+              entry.sha256.count == 64 else {
+            logger.error("官方数据文件信息无效: \(entry.name ?? entry.url)")
             return .failed
         }
 
         let destinationURL = directory.appendingPathComponent(fileName)
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            if isDownloadOnceFileReady(at: destinationURL, fileManager: fileManager) {
-                logger.info("下载文件已存在且有效，跳过: \(destinationURL.lastPathComponent)")
-                return .alreadyPresent
+        let existingFileIsReady = await Task.detached(priority: .utility) {
+            guard let existingData = try? Data(contentsOf: destinationURL) else {
+                return false
             }
-            do {
-                try fileManager.removeItem(at: destinationURL)
-                logger.warning("检测到无效下载文件，已删除并准备重下: \(destinationURL.lastPathComponent)")
-            } catch {
-                logger.error("清理无效下载文件失败: \(destinationURL.path) - \(error.localizedDescription)")
-                return .failed
-            }
+            return officialDataMatches(
+                existingData,
+                expectedSize: entry.size,
+                expectedSHA256: entry.sha256
+            )
+        }.value
+        if !overwriteExisting, existingFileIsReady {
+            logger.info("官方数据文件已存在且校验通过，跳过: \(destinationURL.lastPathComponent)")
+            return .alreadyPresent
         }
 
         do {
             var request = URLRequest(url: remoteURL)
-            request.timeoutInterval = downloadOnceTimeout
+            request.timeoutInterval = officialDataTimeout
             request.cachePolicy = .reloadIgnoringLocalCacheData
 
             let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
@@ -296,16 +346,30 @@ extension ConfigLoader {
                 return .failed
             }
 
-            guard !data.isEmpty else {
-                logger.error("下载文件返回空数据: \(remoteURL.absoluteString)")
+            let downloadedFileIsValid = await Task.detached(priority: .utility) {
+                officialDataMatches(
+                    data,
+                    expectedSize: entry.size,
+                    expectedSHA256: entry.sha256
+                )
+            }.value
+            guard downloadedFileIsValid else {
+                logger.error("官方数据文件大小或 SHA-256 校验失败: \(remoteURL.absoluteString)")
                 return .failed
             }
 
-            try data.write(to: destinationURL, options: [.atomicWrite, .completeFileProtection])
-            logger.info("下载完成: \(destinationURL.lastPathComponent)")
+            try await Task.detached(priority: .utility) {
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+                try data.write(to: destinationURL, options: [.atomicWrite, .completeFileProtection])
+            }.value
+            logger.info("官方数据下载完成: \(destinationURL.lastPathComponent)")
             return .downloaded
         } catch {
-            logger.error("下载文件失败: \(remoteURL.absoluteString) - \(error.localizedDescription)")
+            logger.error("下载官方数据失败: \(remoteURL.absoluteString) - \(error.localizedDescription)")
             return .failed
         }
     }

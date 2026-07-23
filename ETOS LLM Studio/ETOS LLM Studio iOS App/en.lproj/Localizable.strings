@@ -1,5 +1,16 @@
 "清除" = "Clear";
 "官方社群" = "Official Communities";
+"软件服务" = "App Services";
+"同步官方数据" = "Sync Official Data";
+"从官方服务重新下载配置与资源。已有同名文件会安全更新。" = "Download configurations and resources from the official service again. Existing files with the same name will be updated safely.";
+"正在同步官方数据…" = "Syncing official data…";
+"同步未完成" = "Sync Incomplete";
+"官方数据正在同步，请稍后再试。" = "Official data is already syncing. Try again shortly.";
+"部分官方文件下载失败，请检查网络后重试。" = "Some official files could not be downloaded. Check your connection and try again.";
+"官方数据已更新" = "Official Data Updated";
+"已同步 %d 个官方文件。" = "Synced %d official files.";
+"官方数据已是最新" = "Official Data Is Current";
+"没有需要更新的官方文件。" = "No official files need to be updated.";
 "QQ 群" = "QQ Group";
 "Telegram 社群" = "Telegram Community";
 "轻点即可在对应 App 中打开。" = "Tap to open in the corresponding app.";
