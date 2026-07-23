@@ -13,6 +13,58 @@ import ETOSCore
 import UIKit
 #endif
 
+enum OfficialCommunity: String, CaseIterable, Identifiable {
+    case qq
+    case telegram
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .qq:
+            return NSLocalizedString("QQ 群", comment: "官方 QQ 社群")
+        case .telegram:
+            return NSLocalizedString("Telegram 社群", comment: "官方 Telegram 社群")
+        }
+    }
+
+    var account: String {
+        switch self {
+        case .qq:
+            return "974605250"
+        case .telegram:
+            return "@ETOSLLMStudio"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .qq:
+            return "person.3.fill"
+        case .telegram:
+            return "paperplane.fill"
+        }
+    }
+
+    var appURL: URL {
+        switch self {
+        case .qq:
+            return URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode")!
+        case .telegram:
+            return URL(string: "tg://resolve?domain=ETOSLLMStudio")!
+        }
+    }
+
+    var fallbackURL: URL? {
+        switch self {
+        case .qq:
+            return nil
+        case .telegram:
+            return URL(string: "https://t.me/ETOSLLMStudio")!
+        }
+    }
+}
+
 struct AboutView: View {
     @Environment(\.openURL) private var openURL
     @State private var versionTapCount = 0
@@ -101,6 +153,26 @@ struct AboutView: View {
                     Label(NSLocalizedString("检查更新", comment: "About page update check entry"), systemImage: "arrow.clockwise")
                 }
             }
+
+            // MARK: - 官方社群
+            Section(
+                header: Text(NSLocalizedString("官方社群", comment: "关于页官方社群分组")),
+                footer: Text(NSLocalizedString("轻点即可在对应 App 中打开。", comment: "iOS 官方社群操作提示"))
+            ) {
+                ForEach(OfficialCommunity.allCases) { community in
+                    Button {
+                        openCommunity(community)
+                    } label: {
+                        LabeledContent {
+                            Text(community.account)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label(community.title, systemImage: community.systemImage)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             
             // MARK: - Links
             Section(header: Text(NSLocalizedString("链接", comment: ""))) {
@@ -174,6 +246,13 @@ struct AboutView: View {
             NavigationStack {
                 AppLogsView()
             }
+        }
+    }
+
+    private func openCommunity(_ community: OfficialCommunity) {
+        openURL(community.appURL) { accepted in
+            guard !accepted, let fallbackURL = community.fallbackURL else { return }
+            openURL(fallbackURL)
         }
     }
 

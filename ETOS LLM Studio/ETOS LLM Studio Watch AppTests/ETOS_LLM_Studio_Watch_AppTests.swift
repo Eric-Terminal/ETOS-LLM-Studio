@@ -523,4 +523,21 @@ let value = 42
         #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
     }
 
+    @Test("watchOS 官方社群二维码使用指定链接")
+    func testOfficialCommunityQRCodePayloads() {
+        #expect(WatchOfficialCommunity.qq.account == "974605250")
+        #expect(
+            WatchOfficialCommunity.qq.qrPayload
+                == "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
+        )
+        #expect(WatchOfficialCommunity.qq.qrAssetName == "OfficialCommunityQQQRCode")
+
+        #expect(WatchOfficialCommunity.telegram.account == "@ETOSLLMStudio")
+        #expect(
+            WatchOfficialCommunity.telegram.qrPayload
+                == "https://t.me/ETOSLLMStudio"
+        )
+        #expect(WatchOfficialCommunity.telegram.qrAssetName == "OfficialCommunityTelegramQRCode")
+    }
+
 }

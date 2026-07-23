@@ -13,6 +13,67 @@ import ETOSCore
 import WatchKit
 import AuthenticationServices
 
+enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
+    case qq
+    case telegram
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .qq:
+            return NSLocalizedString("QQ 群", comment: "官方 QQ 社群")
+        case .telegram:
+            return NSLocalizedString("Telegram 社群", comment: "官方 Telegram 社群")
+        }
+    }
+
+    var account: String {
+        switch self {
+        case .qq:
+            return "974605250"
+        case .telegram:
+            return "@ETOSLLMStudio"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .qq:
+            return "person.3.fill"
+        case .telegram:
+            return "paperplane.fill"
+        }
+    }
+
+    var qrPayload: String {
+        switch self {
+        case .qq:
+            return "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
+        case .telegram:
+            return "https://t.me/ETOSLLMStudio"
+        }
+    }
+
+    var qrAssetName: String {
+        switch self {
+        case .qq:
+            return "OfficialCommunityQQQRCode"
+        case .telegram:
+            return "OfficialCommunityTelegramQRCode"
+        }
+    }
+
+    var qrInstruction: String {
+        switch self {
+        case .qq:
+            return NSLocalizedString("使用手机 QQ 扫描二维码，打开群资料并申请加入。", comment: "watchOS QQ 群二维码提示")
+        case .telegram:
+            return NSLocalizedString("使用手机扫描二维码，在 Telegram 中打开社群。", comment: "watchOS Telegram 社群二维码提示")
+        }
+    }
+}
+
 struct AboutView: View {
     private let githubURL = URL(string: "https://github.com/Eric-Terminal/ETOS-LLM-Studio")!
     private let documentationURL = URL(string: "https://docs.els.ericterminal.com/")!
@@ -101,6 +162,31 @@ struct AboutView: View {
                     .buttonStyle(.plain)
                 }
                 
+                Divider()
+
+                // MARK: - 官方社群
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(NSLocalizedString("官方社群", comment: "关于页官方社群分组"))
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+
+                    ForEach(WatchOfficialCommunity.allCases) { community in
+                        NavigationLink {
+                            WatchCommunityQRCodeView(community: community)
+                        } label: {
+                            HStack {
+                                Label(community.title, systemImage: community.systemImage)
+                                    .etFont(.caption)
+                                Spacer()
+                                Text(community.account)
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
                 Divider()
                 
                 // MARK: - Links
@@ -207,6 +293,37 @@ struct AboutView: View {
             await AchievementCenter.shared.unlock(id: .forbiddenPlace)
         }
         WKInterfaceDevice.current().play(.success)
+    }
+}
+
+private struct WatchCommunityQRCodeView: View {
+    let community: WatchOfficialCommunity
+
+    var body: some View {
+        ScrollView {
+            VStack {
+                Image(community.qrAssetName)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(maxWidth: 160)
+                    .accessibilityHidden(true)
+
+                Text(community.title)
+                    .etFont(.headline)
+
+                Text(community.account)
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(community.qrInstruction)
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal)
+        }
+        .navigationTitle(NSLocalizedString("扫码加入", comment: "watchOS 社群二维码页面标题"))
     }
 }
 

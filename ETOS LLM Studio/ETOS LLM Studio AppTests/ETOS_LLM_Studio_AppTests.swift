@@ -360,4 +360,23 @@ let value = 42
         #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
     }
 
+    @Test("iOS 官方社群入口使用指定账号与 App 深链")
+    func testOfficialCommunityLinks() {
+        #expect(OfficialCommunity.qq.account == "974605250")
+        #expect(
+            OfficialCommunity.qq.appURL.absoluteString
+                == "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
+        )
+
+        #expect(OfficialCommunity.telegram.account == "@ETOSLLMStudio")
+        #expect(
+            OfficialCommunity.telegram.appURL.absoluteString
+                == "tg://resolve?domain=ETOSLLMStudio"
+        )
+        #expect(
+            OfficialCommunity.telegram.fallbackURL?.absoluteString
+                == "https://t.me/ETOSLLMStudio"
+        )
+    }
+
 }
