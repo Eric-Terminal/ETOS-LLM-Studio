@@ -538,6 +538,24 @@ let value = 42
                 == "https://t.me/ETOSLLMStudio"
         )
         #expect(WatchOfficialCommunity.telegram.qrAssetName == "OfficialCommunityTelegramQRCode")
+
+        #expect(WatchOfficialCommunity.testFlight.account == nil)
+        #expect(
+            WatchOfficialCommunity.testFlight.qrPayload
+                == "https://testflight.apple.com/join/d4PgF4CK"
+        )
+        #expect(
+            WatchOfficialCommunity.testFlight.qrAssetName
+                == "OfficialCommunityTestFlightQRCode"
+        )
+        #expect(
+            WatchOfficialCommunity.visibleCommunities(for: .appStore)
+                == [.qq, .telegram, .testFlight]
+        )
+        #expect(
+            WatchOfficialCommunity.visibleCommunities(for: .testFlight)
+                == [.qq, .telegram]
+        )
     }
 
 }

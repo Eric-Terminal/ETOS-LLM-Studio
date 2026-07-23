@@ -5,6 +5,8 @@
 "扫码加入" = "Scanner pour rejoindre";
 "使用手机 QQ 扫描二维码，打开群资料并申请加入。" = "Scannez ce code QR avec QQ sur votre téléphone pour afficher le groupe et demander à le rejoindre.";
 "使用手机扫描二维码，在 Telegram 中打开社群。" = "Scannez ce code QR avec votre téléphone pour ouvrir la communauté dans Telegram.";
+"加入 TestFlight" = "Rejoindre TestFlight";
+"使用手机扫描二维码，在 TestFlight 中打开测试邀请。" = "Scannez ce code QR avec votre téléphone pour ouvrir l’invitation au test dans TestFlight.";
 "Token 用量" = "Utilisation des jetons";
 "%d 条" = "%d Éléments";
 "两端数据一致" = "Les données correspondent sur les deux appareils";

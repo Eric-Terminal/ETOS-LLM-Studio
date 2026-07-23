@@ -13,9 +13,10 @@ import ETOSCore
 import WatchKit
 import AuthenticationServices
 
-enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
+enum WatchOfficialCommunity: String, Identifiable, Equatable {
     case qq
     case telegram
+    case testFlight
 
     var id: String { rawValue }
 
@@ -25,15 +26,19 @@ enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
             return NSLocalizedString("QQ 群", comment: "官方 QQ 社群")
         case .telegram:
             return NSLocalizedString("Telegram 社群", comment: "官方 Telegram 社群")
+        case .testFlight:
+            return NSLocalizedString("加入 TestFlight", comment: "关于页 TestFlight 邀请入口")
         }
     }
 
-    var account: String {
+    var account: String? {
         switch self {
         case .qq:
             return "974605250"
         case .telegram:
             return "@ETOSLLMStudio"
+        case .testFlight:
+            return nil
         }
     }
 
@@ -43,6 +48,8 @@ enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
             return "person.3.fill"
         case .telegram:
             return "paperplane.fill"
+        case .testFlight:
+            return "airplane"
         }
     }
 
@@ -52,6 +59,8 @@ enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
             return "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode"
         case .telegram:
             return "https://t.me/ETOSLLMStudio"
+        case .testFlight:
+            return "https://testflight.apple.com/join/d4PgF4CK"
         }
     }
 
@@ -61,6 +70,8 @@ enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
             return "OfficialCommunityQQQRCode"
         case .telegram:
             return "OfficialCommunityTelegramQRCode"
+        case .testFlight:
+            return "OfficialCommunityTestFlightQRCode"
         }
     }
 
@@ -70,6 +81,17 @@ enum WatchOfficialCommunity: String, CaseIterable, Identifiable {
             return NSLocalizedString("使用手机 QQ 扫描二维码，打开群资料并申请加入。", comment: "watchOS QQ 群二维码提示")
         case .telegram:
             return NSLocalizedString("使用手机扫描二维码，在 Telegram 中打开社群。", comment: "watchOS Telegram 社群二维码提示")
+        case .testFlight:
+            return NSLocalizedString("使用手机扫描二维码，在 TestFlight 中打开测试邀请。", comment: "watchOS TestFlight 二维码提示")
+        }
+    }
+
+    static func visibleCommunities(for channel: UpdateTimelineChannel) -> [WatchOfficialCommunity] {
+        switch channel {
+        case .appStore:
+            return [.qq, .telegram, .testFlight]
+        case .testFlight:
+            return [.qq, .telegram]
         }
     }
 }
@@ -82,6 +104,11 @@ struct AboutView: View {
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
+    private let officialCommunities: [WatchOfficialCommunity]
+
+    init(distributionChannel: UpdateTimelineChannel = UpdateTimelineManager.currentDistributionChannel()) {
+        officialCommunities = WatchOfficialCommunity.visibleCommunities(for: distributionChannel)
+    }
     
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? NSLocalizedString("N/A", comment: "Unavailable app info")
@@ -170,7 +197,7 @@ struct AboutView: View {
                         .etFont(.caption)
                         .foregroundStyle(.secondary)
 
-                    ForEach(WatchOfficialCommunity.allCases) { community in
+                    ForEach(officialCommunities) { community in
                         NavigationLink {
                             WatchCommunityQRCodeView(community: community)
                         } label: {
@@ -178,9 +205,15 @@ struct AboutView: View {
                                 Label(community.title, systemImage: community.systemImage)
                                     .etFont(.caption)
                                 Spacer()
-                                Text(community.account)
-                                    .etFont(.caption2)
-                                    .foregroundStyle(.secondary)
+                                if let account = community.account {
+                                    Text(account)
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Image(systemName: "qrcode")
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                         .buttonStyle(.plain)
@@ -312,9 +345,11 @@ private struct WatchCommunityQRCodeView: View {
                 Text(community.title)
                     .etFont(.headline)
 
-                Text(community.account)
-                    .etFont(.caption)
-                    .foregroundStyle(.secondary)
+                if let account = community.account {
+                    Text(account)
+                        .etFont(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Text(community.qrInstruction)
                     .etFont(.footnote)

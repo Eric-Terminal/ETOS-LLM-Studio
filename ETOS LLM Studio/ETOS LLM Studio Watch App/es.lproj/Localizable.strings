@@ -5,6 +5,8 @@
 "扫码加入" = "Escanear para unirse";
 "使用手机 QQ 扫描二维码，打开群资料并申请加入。" = "Escanea el código QR con QQ en tu teléfono para ver el grupo y solicitar unirte.";
 "使用手机扫描二维码，在 Telegram 中打开社群。" = "Escanea el código QR con tu teléfono para abrir la comunidad en Telegram.";
+"加入 TestFlight" = "Unirse a TestFlight";
+"使用手机扫描二维码，在 TestFlight 中打开测试邀请。" = "Escanea el código QR con tu teléfono para abrir la invitación de prueba en TestFlight.";
 "Token 用量" = "Uso de tokens";
 "%d 条" = "%d Elementos";
 "两端数据一致" = "Los datos coinciden en ambos dispositivos";

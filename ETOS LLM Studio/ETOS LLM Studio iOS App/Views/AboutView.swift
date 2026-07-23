@@ -13,9 +13,10 @@ import ETOSCore
 import UIKit
 #endif
 
-enum OfficialCommunity: String, CaseIterable, Identifiable {
+enum OfficialCommunity: String, Identifiable, Equatable {
     case qq
     case telegram
+    case testFlight
 
     var id: String { rawValue }
 
@@ -25,15 +26,19 @@ enum OfficialCommunity: String, CaseIterable, Identifiable {
             return NSLocalizedString("QQ 群", comment: "官方 QQ 社群")
         case .telegram:
             return NSLocalizedString("Telegram 社群", comment: "官方 Telegram 社群")
+        case .testFlight:
+            return NSLocalizedString("加入 TestFlight", comment: "关于页 TestFlight 邀请入口")
         }
     }
 
-    var account: String {
+    var account: String? {
         switch self {
         case .qq:
             return "974605250"
         case .telegram:
             return "@ETOSLLMStudio"
+        case .testFlight:
+            return nil
         }
     }
 
@@ -43,6 +48,8 @@ enum OfficialCommunity: String, CaseIterable, Identifiable {
             return "person.3.fill"
         case .telegram:
             return "paperplane.fill"
+        case .testFlight:
+            return "airplane"
         }
     }
 
@@ -52,6 +59,8 @@ enum OfficialCommunity: String, CaseIterable, Identifiable {
             return URL(string: "mqqapi://card/show_pslcard?src_type=internal&version=1&uin=974605250&card_type=group&source=qrcode")!
         case .telegram:
             return URL(string: "tg://resolve?domain=ETOSLLMStudio")!
+        case .testFlight:
+            return URL(string: "https://testflight.apple.com/join/d4PgF4CK")!
         }
     }
 
@@ -61,6 +70,17 @@ enum OfficialCommunity: String, CaseIterable, Identifiable {
             return nil
         case .telegram:
             return URL(string: "https://t.me/ETOSLLMStudio")!
+        case .testFlight:
+            return nil
+        }
+    }
+
+    static func visibleCommunities(for channel: UpdateTimelineChannel) -> [OfficialCommunity] {
+        switch channel {
+        case .appStore:
+            return [.qq, .telegram, .testFlight]
+        case .testFlight:
+            return [.qq, .telegram]
         }
     }
 }
@@ -70,6 +90,11 @@ struct AboutView: View {
     @State private var versionTapCount = 0
     @State private var lastVersionTapAt: Date = .distantPast
     @State private var showAppLogs = false
+    private let officialCommunities: [OfficialCommunity]
+
+    init(distributionChannel: UpdateTimelineChannel = UpdateTimelineManager.currentDistributionChannel()) {
+        officialCommunities = OfficialCommunity.visibleCommunities(for: distributionChannel)
+    }
     
     private var appVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? NSLocalizedString("N/A", comment: "Unavailable app info")
@@ -159,13 +184,19 @@ struct AboutView: View {
                 header: Text(NSLocalizedString("官方社群", comment: "关于页官方社群分组")),
                 footer: Text(NSLocalizedString("轻点即可在对应 App 中打开。", comment: "iOS 官方社群操作提示"))
             ) {
-                ForEach(OfficialCommunity.allCases) { community in
+                ForEach(officialCommunities) { community in
                     Button {
                         openCommunity(community)
                     } label: {
                         LabeledContent {
-                            Text(community.account)
-                                .foregroundStyle(.secondary)
+                            if let account = community.account {
+                                Text(account)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         } label: {
                             Label(community.title, systemImage: community.systemImage)
                         }

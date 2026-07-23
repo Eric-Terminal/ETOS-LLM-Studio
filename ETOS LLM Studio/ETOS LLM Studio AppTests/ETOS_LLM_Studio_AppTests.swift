@@ -360,6 +360,7 @@ let value = 42
         #expect(prepared.mathRenderText == #"答案是 \(\frac{1}{2}\)。"#)
     }
 
+    @MainActor
     @Test("iOS 官方社群入口使用指定账号与 App 深链")
     func testOfficialCommunityLinks() {
         #expect(OfficialCommunity.qq.account == "974605250")
@@ -376,6 +377,20 @@ let value = 42
         #expect(
             OfficialCommunity.telegram.fallbackURL?.absoluteString
                 == "https://t.me/ETOSLLMStudio"
+        )
+
+        #expect(OfficialCommunity.testFlight.account == nil)
+        #expect(
+            OfficialCommunity.testFlight.appURL.absoluteString
+                == "https://testflight.apple.com/join/d4PgF4CK"
+        )
+        #expect(
+            OfficialCommunity.visibleCommunities(for: .appStore)
+                == [.qq, .telegram, .testFlight]
+        )
+        #expect(
+            OfficialCommunity.visibleCommunities(for: .testFlight)
+                == [.qq, .telegram]
         )
     }
 
