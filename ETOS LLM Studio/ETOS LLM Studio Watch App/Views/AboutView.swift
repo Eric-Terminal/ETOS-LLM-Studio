@@ -198,6 +198,10 @@ struct AboutView: View {
                         .foregroundStyle(.secondary)
 
                     ForEach(officialCommunities) { community in
+                        if community == .testFlight {
+                            Divider()
+                        }
+
                         NavigationLink {
                             WatchCommunityQRCodeView(community: community)
                         } label: {
