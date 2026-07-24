@@ -12,6 +12,8 @@ import SwiftUI
 struct WatchSurveyResponseView: View {
     let survey: SurveyDefinition
     @ObservedObject var manager: SurveyManager
+    @State private var isCancellationConfirmationPresented = false
+    @State private var hasConfirmedCancellation = false
 
     var body: some View {
         WatchAskUserInputView(
@@ -22,16 +24,19 @@ struct WatchSurveyResponseView: View {
             ),
             navigationTitle: NSLocalizedString("意见征集", comment: "Survey navigation title"),
             dismissesAfterSubmit: false,
+            dismissesAfterCancel: false,
             onSubmit: { answers in
                 Task {
                     await manager.submit(answers)
                 }
             },
             onCancel: {
-                manager.dismissCurrentSurvey()
+                guard !hasConfirmedCancellation else { return }
+                isCancellationConfirmationPresented = true
             }
         )
         .allowsHitTesting(!manager.isSubmitting)
+        .interactiveDismissDisabled(true)
         .overlay {
             if manager.isSubmitting {
                 ProgressView()
@@ -55,6 +60,29 @@ struct WatchSurveyResponseView: View {
             }
         } message: {
             Text(manager.submissionErrorMessage ?? "")
+        }
+        .alert(
+            NSLocalizedString("放弃此次作答？", comment: "Survey cancellation confirmation title"),
+            isPresented: $isCancellationConfirmationPresented
+        ) {
+            Button(
+                NSLocalizedString("继续作答", comment: "Continue answering survey"),
+                role: .cancel
+            ) {}
+            Button(
+                NSLocalizedString("放弃并不再显示", comment: "Permanently dismiss survey"),
+                role: .destructive
+            ) {
+                hasConfirmedCancellation = true
+                manager.dismissCurrentSurvey()
+            }
+        } message: {
+            Text(
+                NSLocalizedString(
+                    "关闭后，这份意见征集不会再次自动显示。",
+                    comment: "Survey cancellation consequence"
+                )
+            )
         }
     }
 }

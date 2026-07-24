@@ -1200,6 +1200,10 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "匿名提交" = "Envío anónimo";
 "意见征集" = "Encuesta";
 "正在提交…" = "Enviando…";
+"放弃此次作答？" = "¿Dejar de responder?";
+"关闭后，这份意见征集不会再次自动显示。" = "Al cerrarla, esta encuesta no volverá a aparecer automáticamente.";
+"继续作答" = "Seguir respondiendo";
+"放弃并不再显示" = "Dejar y no volver a mostrar";
 "意见征集服务地址无效。" = "La dirección del servicio de encuestas no es válida.";
 "意见征集服务返回了无效响应。" = "El servicio de encuestas devolvió una respuesta no válida.";
 "意见征集数据解析失败。" = "No se pudieron analizar los datos de la encuesta.";

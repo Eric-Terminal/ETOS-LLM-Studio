@@ -71,4 +71,34 @@ struct SurveyManagerTests {
         #expect(survey.questions[0].allowOther == false)
         #expect(survey.questions[0].required == false)
     }
+
+    @Test("服务端新增未知字段时保持兼容")
+    func testSurveyDefinitionIgnoresUnknownFields() throws {
+        let data = Data(
+            """
+            {
+              "key": "forward-compatible-survey",
+              "id": 2,
+              "title": "兼容性测试",
+              "future_metadata": {"campaign": "preview"},
+              "questions": [{
+                "id": "choice",
+                "question": "请选择",
+                "type": "single_select",
+                "future_behavior": "reserved",
+                "options": [{
+                  "id": "one",
+                  "label": "一",
+                  "future_icon": "circle"
+                }]
+              }]
+            }
+            """.utf8
+        )
+
+        let survey = try JSONDecoder().decode(SurveyDefinition.self, from: data)
+
+        #expect(survey.key == "forward-compatible-survey")
+        #expect(survey.questions.first?.options.first?.label == "一")
+    }
 }

@@ -1200,6 +1200,10 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "匿名提交" = "Envoi anonyme";
 "意见征集" = "Sondage";
 "正在提交…" = "Envoi…";
+"放弃此次作答？" = "Abandonner la réponse ?";
+"关闭后，这份意见征集不会再次自动显示。" = "Une fois fermé, ce sondage ne s’affichera plus automatiquement.";
+"继续作答" = "Continuer à répondre";
+"放弃并不再显示" = "Abandonner et ne plus afficher";
 "意见征集服务地址无效。" = "L’adresse du service de sondage est invalide.";
 "意见征集服务返回了无效响应。" = "Le service de sondage a renvoyé une réponse invalide.";
 "意见征集数据解析失败。" = "Impossible d’analyser les données du sondage.";

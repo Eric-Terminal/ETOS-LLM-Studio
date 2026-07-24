@@ -12,6 +12,7 @@ import SwiftUI
 struct SurveyResponseSheet: View {
     let survey: SurveyDefinition
     @ObservedObject var manager: SurveyManager
+    @State private var isCancellationConfirmationPresented = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -30,7 +31,7 @@ struct SurveyResponseSheet: View {
                     }
                 },
                 cancelAction: {
-                    manager.dismissCurrentSurvey()
+                    isCancellationConfirmationPresented = true
                 }
             )
             .allowsHitTesting(!manager.isSubmitting)
@@ -46,8 +47,30 @@ struct SurveyResponseSheet: View {
             }
         }
         .padding()
-        .interactiveDismissDisabled(manager.isSubmitting)
+        .interactiveDismissDisabled(true)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .alert(
+            NSLocalizedString("放弃此次作答？", comment: "Survey cancellation confirmation title"),
+            isPresented: $isCancellationConfirmationPresented
+        ) {
+            Button(
+                NSLocalizedString("继续作答", comment: "Continue answering survey"),
+                role: .cancel
+            ) {}
+            Button(
+                NSLocalizedString("放弃并不再显示", comment: "Permanently dismiss survey"),
+                role: .destructive
+            ) {
+                manager.dismissCurrentSurvey()
+            }
+        } message: {
+            Text(
+                NSLocalizedString(
+                    "关闭后，这份意见征集不会再次自动显示。",
+                    comment: "Survey cancellation consequence"
+                )
+            )
+        }
     }
 }

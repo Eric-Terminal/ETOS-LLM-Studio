@@ -1079,6 +1079,10 @@
 "匿名提交" = "Anonymous submission";
 "意见征集" = "Survey";
 "正在提交…" = "Submitting…";
+"放弃此次作答？" = "Stop answering?";
+"关闭后，这份意见征集不会再次自动显示。" = "Once closed, this survey won’t appear automatically again.";
+"继续作答" = "Continue Answering";
+"放弃并不再显示" = "Stop and Don’t Show Again";
 "意见征集服务地址无效。" = "The survey service address is invalid.";
 "意见征集服务返回了无效响应。" = "The survey service returned an invalid response.";
 "意见征集数据解析失败。" = "Failed to parse survey data.";

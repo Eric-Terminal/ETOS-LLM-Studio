@@ -380,6 +380,7 @@ struct WatchAskUserInputView: View {
     let privacyNotice: String?
     let navigationTitle: String
     let dismissesAfterSubmit: Bool
+    let dismissesAfterCancel: Bool
     let onSubmit: ([AppToolAskUserInputQuestionAnswer]) -> Void
     let onCancel: () -> Void
 
@@ -394,6 +395,7 @@ struct WatchAskUserInputView: View {
         privacyNotice: String? = nil,
         navigationTitle: String = NSLocalizedString("结构化问答", comment: ""),
         dismissesAfterSubmit: Bool = true,
+        dismissesAfterCancel: Bool = true,
         onSubmit: @escaping ([AppToolAskUserInputQuestionAnswer]) -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -401,6 +403,7 @@ struct WatchAskUserInputView: View {
         self.privacyNotice = privacyNotice
         self.navigationTitle = navigationTitle
         self.dismissesAfterSubmit = dismissesAfterSubmit
+        self.dismissesAfterCancel = dismissesAfterCancel
         self.onSubmit = onSubmit
         self.onCancel = onCancel
     }
@@ -669,9 +672,13 @@ struct WatchAskUserInputView: View {
     }
 
     private func handleCancelAndDismiss() {
-        hasHandledAction = true
+        if dismissesAfterCancel {
+            hasHandledAction = true
+        }
         onCancel()
-        dismiss()
+        if dismissesAfterCancel {
+            dismiss()
+        }
     }
 
     private func resetSelectionState() {
