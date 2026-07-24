@@ -206,10 +206,17 @@ extension ContentView {
                 .appLockOverlayLayer()
             }
         }
+        .sheet(isPresented: watchSurveyPresentationBinding) {
+            if let survey = surveyManager.currentSurvey {
+                WatchSurveyResponseView(survey: survey, manager: surveyManager)
+                    .appLockOverlayLayer()
+            }
+        }
         .task {
             launchRecoveryRequest = Persistence.currentLaunchRecoveryRequest()
             launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
             await announcementManager.checkAnnouncement()
+            await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
             scheduleDailyPulsePreparation(after: 1_500_000_000)
             if applyDailyPulseContinuationIfNeeded() {
                 return
@@ -243,6 +250,14 @@ extension ContentView {
         .onChange(of: watchModalBlocksAskUserInputPresentation) { _, _ in
             presentPendingAskUserInputIfPossible()
         }
+        .onChange(of: announcementManager.shouldShowAlert) { _, isPresented in
+            guard !isPresented else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard !announcementManager.shouldShowAlert else { return }
+                surveyManager.presentPendingSurveyIfPossible()
+            }
+        }
         .onChange(of: viewModel.activeAskUserInputRequest?.requestID) { _, _ in
             syncPresentedAskUserInputRequest()
             refreshWatchPresentationPriorities()
@@ -274,6 +289,7 @@ extension ContentView {
             || selectedMessagesExportTarget != nil
             || isMessageSelectionMode
             || announcementManager.shouldShowAlert
+            || surveyManager.shouldShowSurvey
             || launchRecoveryNoticeMessage != nil
             || launchRecoveryRequest != nil
             || launchRecoveryErrorMessage != nil
@@ -295,6 +311,17 @@ extension ContentView {
     var watchToolPermissionAutoPresentationBlocked: Bool {
         watchModalBlocksAskUserInputPresentation
             || presentedAskUserInputRequest != nil
+    }
+
+    var watchSurveyPresentationBinding: Binding<Bool> {
+        Binding(
+            get: { surveyManager.shouldShowSurvey },
+            set: { isPresented in
+                if !isPresented {
+                    surveyManager.dismissCurrentSurvey()
+                }
+            }
+        )
     }
 
     var watchGlobalToolPermissionRequestBinding: Binding<ToolPermissionRequest?> {

@@ -1197,6 +1197,14 @@ Veuillez Générer a short, concise Titre for ce conversation based activé le u
 "将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Les informations d’environnement seront jointes automatiquement : %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Veuillez fournir at least a Titre et Détails.";
 "提交失败" = "Submit Échec";
+"匿名提交" = "Envoi anonyme";
+"意见征集" = "Sondage";
+"正在提交…" = "Envoi…";
+"意见征集服务地址无效。" = "L’adresse du service de sondage est invalide.";
+"意见征集服务返回了无效响应。" = "Le service de sondage a renvoyé une réponse invalide.";
+"意见征集数据解析失败。" = "Impossible d’analyser les données du sondage.";
+"提交验证计算失败，请稍后重试。" = "La vérification de l’envoi a échoué. Réessayez plus tard.";
+"提交验证已失效，请重试。" = "La vérification de l’envoi a expiré. Réessayez.";
 "状态" = "État";
 "最后更新" = "Last Mis à jour";
 "刷新中..." = "Actualisation…";

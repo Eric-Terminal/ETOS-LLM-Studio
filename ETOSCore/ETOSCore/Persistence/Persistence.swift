@@ -39,6 +39,7 @@ public enum Persistence {
         "shortcut_tools_v1",
         "feedback_tickets",
         "feedback_tickets_v1",
+        "survey_client_state_v1",
         "mcp_servers_records",
         "mcp_servers_records_v1",
         "roleplay_library_v1",

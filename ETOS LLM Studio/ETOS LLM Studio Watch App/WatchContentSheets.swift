@@ -377,6 +377,9 @@ private struct WatchRequestBodyControlDetailView: View {
 
 struct WatchAskUserInputView: View {
     let request: AppToolAskUserInputRequest
+    let privacyNotice: String?
+    let navigationTitle: String
+    let dismissesAfterSubmit: Bool
     let onSubmit: ([AppToolAskUserInputQuestionAnswer]) -> Void
     let onCancel: () -> Void
 
@@ -385,6 +388,22 @@ struct WatchAskUserInputView: View {
     @State private var otherTextByQuestion: [String: String] = [:]
     @State private var currentQuestionIndex = 0
     @State private var hasHandledAction = false
+
+    init(
+        request: AppToolAskUserInputRequest,
+        privacyNotice: String? = nil,
+        navigationTitle: String = NSLocalizedString("结构化问答", comment: ""),
+        dismissesAfterSubmit: Bool = true,
+        onSubmit: @escaping ([AppToolAskUserInputQuestionAnswer]) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.request = request
+        self.privacyNotice = privacyNotice
+        self.navigationTitle = navigationTitle
+        self.dismissesAfterSubmit = dismissesAfterSubmit
+        self.onSubmit = onSubmit
+        self.onCancel = onCancel
+    }
 
     private var canSubmit: Bool {
         request.questions.allSatisfy { question in
@@ -416,6 +435,11 @@ struct WatchAskUserInputView: View {
                     }
                     if let description = request.description, !description.isEmpty {
                         Text(description)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let privacyNotice, !privacyNotice.isEmpty {
+                        Text(privacyNotice)
                             .etFont(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -463,21 +487,23 @@ struct WatchAskUserInputView: View {
                     }
 
                     Section {
-                        TextField(
-                            NSLocalizedString("请输入自定义偏好", comment: ""),
-                            text: Binding(
-                                get: { otherTextByQuestion[question.id, default: ""] },
-                                set: { newValue in
-                                    otherTextByQuestion[question.id] = newValue
-                                    if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
-                                        type: question.type,
-                                        customText: newValue
-                                    ) {
-                                        selectedOptionIDsByQuestion[question.id] = []
+                        if question.allowOther {
+                            TextField(
+                                NSLocalizedString("请输入自定义偏好", comment: ""),
+                                text: Binding(
+                                    get: { otherTextByQuestion[question.id, default: ""] },
+                                    set: { newValue in
+                                        otherTextByQuestion[question.id] = newValue
+                                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                                            type: question.type,
+                                            customText: newValue
+                                        ) {
+                                            selectedOptionIDsByQuestion[question.id] = []
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
+                        }
                         Button(skipButtonTitle(for: question)) {
                             handleSkipOrSubmit(for: question)
                         }
@@ -490,7 +516,7 @@ struct WatchAskUserInputView: View {
                     }
                 }
             }
-            .navigationTitle(NSLocalizedString("结构化问答", comment: ""))
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -595,6 +621,9 @@ struct WatchAskUserInputView: View {
     }
 
     private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if question.required && !isQuestionAnswered(question) {
+            return false
+        }
         if isLastQuestion(question) {
             return canSubmit
         }
@@ -634,7 +663,9 @@ struct WatchAskUserInputView: View {
         }
         hasHandledAction = true
         onSubmit(answers)
-        dismiss()
+        if dismissesAfterSubmit {
+            dismiss()
+        }
     }
 
     private func handleCancelAndDismiss() {

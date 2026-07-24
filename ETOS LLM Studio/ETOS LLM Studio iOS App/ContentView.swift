@@ -21,6 +21,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var announcementManager = AnnouncementManager.shared
+    @StateObject private var surveyManager = SurveyManager.shared
     @StateObject private var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject private var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -54,6 +55,14 @@ struct ContentView: View {
             }
             .onChange(of: rootToolPermissionAutoPresentationBlocked) { _, _ in
                 refreshRootToolPermissionAutoPresentationBlocker()
+            }
+            .onChange(of: announcementManager.shouldShowAlert) { _, isPresented in
+                guard !isPresented else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    guard !announcementManager.shouldShowAlert else { return }
+                    surveyManager.presentPendingSurveyIfPossible()
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
@@ -125,6 +134,11 @@ struct ContentView: View {
                         announcementManager.dismissAlert()
                     }
                 )
+            }
+        }
+        .sheet(isPresented: surveyPresentationBinding) {
+            if let survey = surveyManager.currentSurvey {
+                SurveyResponseSheet(survey: survey, manager: surveyManager)
             }
         }
         .sheet(item: $incomingSnapshotRestorePayload) { payload in
@@ -309,6 +323,7 @@ struct ContentView: View {
     private var rootToolPermissionAutoPresentationBlocked: Bool {
         isNativeSettingsPresented
             || announcementManager.shouldShowAlert
+            || surveyManager.shouldShowSurvey
             || incomingSnapshotRestorePayload != nil
             || viewModel.showDimensionMismatchAlert
             || viewModel.externalDocumentImportErrorMessage != nil
@@ -330,6 +345,17 @@ struct ContentView: View {
 
     private func refreshRootToolPermissionAutoPresentationBlocker() {
         setRootToolPermissionAutoPresentationBlocked(rootToolPermissionAutoPresentationBlocked)
+    }
+
+    private var surveyPresentationBinding: Binding<Bool> {
+        Binding(
+            get: { surveyManager.shouldShowSurvey },
+            set: { isPresented in
+                if !isPresented {
+                    surveyManager.dismissCurrentSurvey()
+                }
+            }
+        )
     }
 
     private func openDailyPulse() {
@@ -465,6 +491,7 @@ struct ContentView: View {
         launchRecoveryNoticeMessage = Persistence.consumeLaunchRecoveryNotice()
         legacyJSONMigrationManager.refreshStatus()
         await announcementManager.checkAnnouncement()
+        await surveyManager.checkSurveys(canPresent: !announcementManager.shouldShowAlert)
         scheduleDailyPulsePreparation(after: 1_500_000_000)
         if openDailyPulseContinuationIfNeeded() {
             return

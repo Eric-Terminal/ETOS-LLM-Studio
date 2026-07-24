@@ -191,26 +191,30 @@ struct AskUserInputComposerPanel: View {
 
     private func navigationInputBar(for question: AppToolAskUserInputQuestion) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.and.pencil")
-                .foregroundStyle(.secondary)
+            if question.allowOther {
+                Image(systemName: "square.and.pencil")
+                    .foregroundStyle(.secondary)
 
-            TextField(NSLocalizedString("请输入自定义偏好", comment: ""),
-                text: Binding(
-                    get: { otherTextByQuestion[question.id, default: ""] },
-                    set: { newValue in
-                        otherTextByQuestion[question.id] = newValue
-                        if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
-                            type: question.type,
-                            customText: newValue
-                        ) {
-                            selectedOptionIDsByQuestion[question.id] = []
+                TextField(NSLocalizedString("请输入自定义偏好", comment: ""),
+                    text: Binding(
+                        get: { otherTextByQuestion[question.id, default: ""] },
+                        set: { newValue in
+                            otherTextByQuestion[question.id] = newValue
+                            if AppToolAskUserInputAnswerPolicy.shouldClearSelectedOptionsAfterTypingCustomText(
+                                type: question.type,
+                                customText: newValue
+                            ) {
+                                selectedOptionIDsByQuestion[question.id] = []
+                            }
                         }
-                    }
-                ),
-                axis: .vertical
-            )
-            .lineLimit(1...3)
-            .textFieldStyle(.plain)
+                    ),
+                    axis: .vertical
+                )
+                .lineLimit(1...3)
+                .textFieldStyle(.plain)
+            } else {
+                Spacer(minLength: 0)
+            }
 
             Button(skipButtonTitle(for: question)) {
                 handleSkipOrSubmit(for: question)
@@ -304,6 +308,9 @@ struct AskUserInputComposerPanel: View {
     }
 
     private func canContinue(from question: AppToolAskUserInputQuestion) -> Bool {
+        if question.required && !isQuestionAnswered(question) {
+            return false
+        }
         if isLastQuestion(question) {
             return canSubmit
         }

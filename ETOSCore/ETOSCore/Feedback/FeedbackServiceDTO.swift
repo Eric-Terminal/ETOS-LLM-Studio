@@ -12,7 +12,7 @@ struct APIErrorEnvelope: Decodable {
     let error: String
 }
 
-struct ChallengeResponse: Decodable {
+struct ChallengeResponse: Decodable, Sendable {
     let challengeID: String
     let clientSecret: String
     let nonce: String

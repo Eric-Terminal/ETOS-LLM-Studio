@@ -1122,6 +1122,14 @@ Por favor Generar a short, concise Título for este conversation based encendido
 "将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Se adjuntará automáticamente la información de entorno: %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Por favor proporcionar at least a Título y Detalles.";
 "提交失败" = "Submit Falló";
+"匿名提交" = "Envío anónimo";
+"意见征集" = "Encuesta";
+"正在提交…" = "Enviando…";
+"意见征集服务地址无效。" = "La dirección del servicio de encuestas no es válida.";
+"意见征集服务返回了无效响应。" = "El servicio de encuestas devolvió una respuesta no válida.";
+"意见征集数据解析失败。" = "No se pudieron analizar los datos de la encuesta.";
+"提交验证计算失败，请稍后重试。" = "Falló la verificación del envío. Inténtalo más tarde.";
+"提交验证已失效，请重试。" = "La verificación del envío caducó. Inténtalo de nuevo.";
 "状态" = "Estado";
 "最后更新" = "Last Actualizado";
 "刷新中..." = "Actualizando…";

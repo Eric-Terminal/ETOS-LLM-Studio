@@ -1150,6 +1150,14 @@
 "将自动附带环境信息：%@ %@ (Build %@) · %@ · %@" = "Environment info will be attached automatically: %@ %@ (Build %@) · %@ · %@";
 "请至少填写标题和详细描述。" = "Please provide at least a title and details.";
 "提交失败" = "Submit Failed";
+"匿名提交" = "Anonymous submission";
+"意见征集" = "Survey";
+"正在提交…" = "Submitting…";
+"意见征集服务地址无效。" = "The survey service address is invalid.";
+"意见征集服务返回了无效响应。" = "The survey service returned an invalid response.";
+"意见征集数据解析失败。" = "Failed to parse survey data.";
+"提交验证计算失败，请稍后重试。" = "Submission verification failed. Please try again later.";
+"提交验证已失效，请重试。" = "Submission verification expired. Please try again.";
 "状态" = "Status";
 "最后更新" = "Last Updated";
 "刷新中..." = "Refreshing...";

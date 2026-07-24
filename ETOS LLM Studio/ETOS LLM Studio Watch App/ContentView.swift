@@ -17,6 +17,7 @@ struct ContentView: View {
     @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
     @StateObject var announcementManager = AnnouncementManager.shared
+    @StateObject var surveyManager = SurveyManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
     @ObservedObject var notificationCenter = AppLocalNotificationCenter.shared
     @ObservedObject var appConfig = AppConfigStore.shared
