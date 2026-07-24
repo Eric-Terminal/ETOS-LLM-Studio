@@ -467,7 +467,17 @@ public class ChatService {
         }
 
         let fileExtension = (fileName as NSString).pathExtension.lowercased()
-        let mimeType = fileExtension == "png" ? "image/png" : "image/jpeg"
+        let mimeType: String
+        switch fileExtension {
+        case "png":
+            mimeType = "image/png"
+        case "webp":
+            mimeType = "image/webp"
+        case "gif":
+            mimeType = "image/gif"
+        default:
+            mimeType = "image/jpeg"
+        }
         return ImageAttachment(data: imageData, mimeType: mimeType, fileName: fileName)
     }
 

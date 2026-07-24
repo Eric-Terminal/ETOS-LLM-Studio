@@ -182,15 +182,18 @@ extension ChatService {
 
             do {
                 var parsedMessage = try adapter.parseResponse(data: data)
+                let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
+                if !embeddedImageFileNames.isEmpty {
+                    parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames
+                }
+                parsedMessage.providerResponseMetadata = compactResponsesImageGenerationMetadata(
+                    parsedMessage.providerResponseMetadata
+                )
                 attachOpenAIResponsesRequestMetadata(
                     to: &parsedMessage,
                     request: request,
                     messagesBeforeResponse: messagesBeforeResponse
                 )
-                let embeddedImageFileNames = extractGeneratedImagesFromAPIResponseBody(data)
-                if !embeddedImageFileNames.isEmpty {
-                    parsedMessage.imageFileNames = (parsedMessage.imageFileNames ?? []) + embeddedImageFileNames
-                }
                 let responseCompletedAt = Date()
                 let totalDuration = max(0, responseCompletedAt.timeIntervalSince(requestStartedAt))
                 if enableResponseSpeedMetrics {

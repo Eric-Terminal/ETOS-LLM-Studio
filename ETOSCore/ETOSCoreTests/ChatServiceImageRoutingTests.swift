@@ -70,6 +70,70 @@ struct ChatServiceImageRoutingTests {
     }
 
     @MainActor
+    @Test("连续生图会自动把最近助手图片作为下一轮编辑输入")
+    func testFollowUpImageGenerationReusesLatestAssistantImage() async {
+        let originalProviders = ConfigLoader.loadProviders()
+        defer {
+            replaceProviders(with: originalProviders)
+        }
+
+        let imageModelProvider = Provider(
+            name: "Image Follow-up Test Provider",
+            baseURL: "https://example.com",
+            apiKeys: ["test-key"],
+            apiFormat: "openai-compatible",
+            models: [
+                Model(
+                    modelName: "test-image-model",
+                    displayName: "Test Image Model",
+                    isActivated: true,
+                    kind: .image
+                )
+            ]
+        )
+        replaceProviders(with: [imageModelProvider])
+
+        let adapter = ImageRoutingMockAdapter()
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [ImageRoutingURLProtocol.self]
+        let service = ChatService(
+            adapters: ["openai-compatible": adapter],
+            memoryManager: MemoryManager(),
+            urlSession: URLSession(configuration: sessionConfig)
+        )
+        service.createNewSession()
+        service.setSelectedModel(service.activatedRunnableModels.first)
+
+        await service.sendAndProcessMessage(
+            content: "画一只戴围巾的猫",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+        await service.sendAndProcessMessage(
+            content: "把围巾改成蓝色",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        #expect(adapter.referenceImageCounts == [0, 1])
+        #expect(adapter.lastReferenceImageFileNames.count == 1)
+    }
+
+    @MainActor
     @Test("生图模式下发送语音附件会被直接拦截")
     func testSendAndProcessMessageRejectsAudioAttachmentInImageMode() async {
         let originalProviders = ConfigLoader.loadProviders()
@@ -147,6 +211,8 @@ private final class ImageRoutingMockAdapter: APIAdapter {
     var chatRequestCount = 0
     var imageRequestCount = 0
     var lastPrompt: String?
+    var referenceImageCounts: [Int] = []
+    var lastReferenceImageFileNames: [String] = []
 
     func buildChatRequest(
         for model: RunnableModel,
@@ -164,6 +230,8 @@ private final class ImageRoutingMockAdapter: APIAdapter {
     func buildImageGenerationRequest(for model: RunnableModel, prompt: String, referenceImages: [ImageAttachment]) -> URLRequest? {
         imageRequestCount += 1
         lastPrompt = prompt
+        referenceImageCounts.append(referenceImages.count)
+        lastReferenceImageFileNames = referenceImages.map(\.fileName)
         return URLRequest(url: URL(string: "https://example.com/images")!)
     }
 

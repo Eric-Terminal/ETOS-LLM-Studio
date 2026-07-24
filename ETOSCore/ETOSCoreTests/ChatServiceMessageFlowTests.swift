@@ -177,6 +177,43 @@ extension ChatServiceTests {
         #expect(Persistence.loadImage(fileName: fileName)?.isEmpty == false)
     }
 
+    @Test("Responses 生图结果落盘后只保留调用 ID")
+    func testResponsesImageGenerationMetadataIsCompactedAfterSaving() async throws {
+        await cleanup()
+
+        let pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+        var message = ChatMessage(
+            role: .assistant,
+            content: "",
+            providerResponseMetadata: [
+                OpenAIAdapter.responsesOutputItemsKey: .array([
+                    .dictionary([
+                        "type": .string("image_generation_call"),
+                        "id": .string("ig_compact_1"),
+                        "status": .string("completed"),
+                        "result": .string(pngBase64)
+                    ])
+                ])
+            ]
+        )
+
+        chatService.finalizeResponsesGeneratedImages(in: &message)
+
+        let fileName = try #require(message.imageFileNames?.first)
+        #expect(Persistence.loadImage(fileName: fileName)?.isEmpty == false)
+        let rawItems = try #require(
+            message.providerResponseMetadata?[OpenAIAdapter.responsesOutputItemsKey]
+        )
+        guard case let .array(items) = rawItems,
+              case let .dictionary(item)? = items.first else {
+            Issue.record("Responses 图片调用元数据格式不正确。")
+            return
+        }
+        #expect(item["type"] == .string("image_generation_call"))
+        #expect(item["id"] == .string("ig_compact_1"))
+        #expect(item["result"] == nil)
+    }
+
     @Test("发送消息后会在会话 JSON 中保存请求时间")
     func testSendMessagePersistsRequestedAtInSessionJSON() async {
         await cleanup()

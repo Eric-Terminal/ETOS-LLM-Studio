@@ -172,6 +172,56 @@ extension ChatService {
         return saveEmbeddedImages(from: rawItems, source: "provider_metadata")
     }
 
+    /// 图片结果落盘后只保留 Responses 多轮续接所需的调用 ID，
+    /// 避免把大段 base64 永久写入会话历史。
+    func compactResponsesImageGenerationMetadata(
+        _ metadata: [String: JSONValue]?
+    ) -> [String: JSONValue]? {
+        guard var metadata,
+              case let .array(outputItems)? = metadata[OpenAIAdapter.responsesOutputItemsKey] else {
+            return metadata
+        }
+
+        let compactedItems = outputItems.map { item -> JSONValue in
+            guard case let .dictionary(dictionary) = item,
+                  dictionary["type"] == .string("image_generation_call") else {
+                return item
+            }
+
+            var compacted = dictionary
+            for key in [
+                "result",
+                "b64_json",
+                "image",
+                "image_base64",
+                "base64",
+                "partial_image_b64",
+                "data"
+            ] {
+                compacted.removeValue(forKey: key)
+            }
+            return .dictionary(compacted)
+        }
+        metadata[OpenAIAdapter.responsesOutputItemsKey] = .array(compactedItems)
+        return metadata.isEmpty ? nil : metadata
+    }
+
+    func finalizeResponsesGeneratedImages(in message: inout ChatMessage) {
+        let generatedImageFileNames = extractGeneratedImagesFromProviderResponseMetadata(
+            message.providerResponseMetadata
+        )
+        if !generatedImageFileNames.isEmpty {
+            var imageFileNames = message.imageFileNames ?? []
+            for fileName in generatedImageFileNames where !imageFileNames.contains(fileName) {
+                imageFileNames.append(fileName)
+            }
+            message.imageFileNames = imageFileNames
+        }
+        message.providerResponseMetadata = compactResponsesImageGenerationMetadata(
+            message.providerResponseMetadata
+        )
+    }
+
     private func saveEmbeddedImages(from object: Any, source: String) -> [String] {
         var payloads: [EmbeddedImagePayload] = []
         var seenImages = Set<String>()

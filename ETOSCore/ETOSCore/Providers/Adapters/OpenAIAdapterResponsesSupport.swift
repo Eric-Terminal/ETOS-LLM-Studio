@@ -168,6 +168,18 @@ extension OpenAIAdapter {
             if type == "reasoning", !Self.shouldEchoReasoningContent(for: message, mode: mode) {
                 continue
             }
+            if type == "image_generation_call" {
+                guard let itemID = dictionary["id"] as? String, !itemID.isEmpty else {
+                    continue
+                }
+                // 官方多轮示例只回传图片调用的类型与 ID；图片字节已经落盘，
+                // 不应再次塞进请求或会话 JSON。
+                result.append([
+                    "type": "image_generation_call",
+                    "id": itemID
+                ])
+                continue
+            }
             result.append(dictionary)
         }
         return deduplicatedResponsesOutputItems(result)

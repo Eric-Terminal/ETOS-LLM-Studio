@@ -400,6 +400,7 @@ extension ChatService {
                         speedSamples: enableResponseSpeedMetrics && !speedSamples.isEmpty ? speedSamples : nil
                     )
                 }
+                finalizeResponsesGeneratedImages(in: &messages[index])
                 attachOpenAIResponsesRequestMetadata(
                     to: &messages[index],
                     request: request,
@@ -645,10 +646,7 @@ extension ChatService {
         ensureReasoningTimingIfNeeded(for: &responseMessage)
 
         if enableStreaming {
-            let generatedImageFileNames = extractGeneratedImagesFromProviderResponseMetadata(responseMessage.providerResponseMetadata)
-            if !generatedImageFileNames.isEmpty {
-                responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + generatedImageFileNames
-            }
+            finalizeResponsesGeneratedImages(in: &responseMessage)
         }
 
         let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)

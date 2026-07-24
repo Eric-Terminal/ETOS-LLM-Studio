@@ -341,12 +341,20 @@ extension ChatService {
         persistAndPublishMessages(updatedMessages, for: currentSession.id)
 
         let prompt = messageToSend.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let referenceImages = (messageToSend.imageFileNames ?? []).compactMap { fileName in
+        let explicitReferenceImages = (messageToSend.imageFileNames ?? []).compactMap { fileName in
             let attachment = loadImageAttachmentFromStorage(fileName: fileName)
             if attachment != nil {
                 logger.info("重试生图时恢复参考图: \(fileName)")
             }
             return attachment
+        }
+        let referenceImages: [ImageAttachment]
+        if explicitReferenceImages.isEmpty, runnableModel.model.supportsVisionInput {
+            referenceImages = latestAssistantImageReference(
+                in: Array(messages[..<anchorUserIndex])
+            ).map { [$0] } ?? []
+        } else {
+            referenceImages = explicitReferenceImages
         }
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)

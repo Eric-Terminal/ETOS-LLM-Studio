@@ -66,10 +66,6 @@ extension ChatService {
             return
         }
 
-        logger.info(
-            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), referenceCount=\(imageAttachments.count), runtimeOverrideCount=\(runtimeOverrideParameters.count)"
-        )
-
         guard let adapter = adapters[runnableModel.provider.apiFormat] else {
             let reason = String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
@@ -105,6 +101,19 @@ extension ChatService {
             return
         }
 
+        let existingMessages = messagesSnapshot(for: currentSession.id)
+        let effectiveReferenceImages: [ImageAttachment]
+        if imageAttachments.isEmpty, runnableModel.model.supportsVisionInput {
+            effectiveReferenceImages = latestAssistantImageReference(in: existingMessages).map { [$0] } ?? []
+        } else {
+            effectiveReferenceImages = imageAttachments
+        }
+        let reusedAssistantImage = imageAttachments.isEmpty && !effectiveReferenceImages.isEmpty
+
+        logger.info(
+            "开始生图流程: session=\(currentSession.id.uuidString), provider=\(runnableModel.provider.name), model=\(runnableModel.model.displayName), promptLength=\(trimmedPrompt.count), explicitReferenceCount=\(imageAttachments.count), effectiveReferenceCount=\(effectiveReferenceImages.count), reusedAssistantImage=\(reusedAssistantImage), runtimeOverrideCount=\(runtimeOverrideParameters.count)"
+        )
+
         var savedImageFileNames: [String] = []
         for imageAttachment in imageAttachments {
             var targetName = imageAttachment.fileName
@@ -137,7 +146,7 @@ extension ChatService {
             requestedAt: Date()
         )
 
-        var messages = messagesSnapshot(for: currentSession.id)
+        var messages = existingMessages
         messages.append(userMessage)
         messages.append(loadingMessage)
         persistAndPublishMessages(messages, for: currentSession.id)
@@ -179,7 +188,7 @@ extension ChatService {
                 loadingMessageID: loadingMessage.id,
                 prompt: trimmedPrompt,
                 startedAt: Date(),
-                referenceCount: imageAttachments.count
+                referenceCount: effectiveReferenceImages.count
             )
         )
         logger.info("生图请求即将发送: session=\(currentSession.id.uuidString)")
@@ -231,7 +240,7 @@ extension ChatService {
                 adapter: adapter,
                 runnableModel: effectiveRunnableModel,
                 prompt: trimmedPrompt,
-                referenceImages: imageAttachments,
+                referenceImages: effectiveReferenceImages,
                 loadingMessageID: loadingMessage.id,
                 currentSessionID: currentSession.id,
                 requestLogContext: requestLogContext
@@ -258,6 +267,21 @@ extension ChatService {
 
     func shouldRouteMessageToImageGeneration(using runnableModel: RunnableModel) -> Bool {
         runnableModel.model.usesDedicatedImageGenerationEndpoint
+    }
+
+    /// 传统 Images API 没有会话字段；未显式附图时复用当前可见分支最近一张助手图片，
+    /// 让下一条用户指令自然切换为 edits 请求。
+    func latestAssistantImageReference(in messages: [ChatMessage]) -> ImageAttachment? {
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        for message in visibleMessages.reversed() where message.role == .assistant {
+            for fileName in (message.imageFileNames ?? []).reversed() {
+                if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
+                    logger.info("连续改图复用最近助手图片: \(fileName)")
+                    return attachment
+                }
+            }
+        }
+        return nil
     }
 
     func executeImageGenerationRequest(

@@ -307,8 +307,14 @@ extension OpenAIAdapter {
             }
         }
 
+        var responsesTools = (finalPayload["tools"] as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+        if model.model.outputModalities.contains(.image),
+           !responsesTools.contains(where: { ($0["type"] as? String) == "image_generation" }) {
+            responsesTools.append(["type": "image_generation"])
+        }
+
         if let tools, !tools.isEmpty {
-            let apiTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
+            let functionTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
                 let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
                 return [
@@ -319,7 +325,20 @@ extension OpenAIAdapter {
                     "strict": false
                 ]
             }
-            finalPayload = mergedRequestPayload(finalPayload, with: ["tools": apiTools])
+            for functionTool in functionTools {
+                let name = functionTool["name"] as? String
+                let alreadyIncluded = responsesTools.contains {
+                    ($0["type"] as? String) == "function"
+                        && ($0["name"] as? String) == name
+                }
+                if !alreadyIncluded {
+                    responsesTools.append(functionTool)
+                }
+            }
+        }
+
+        if !responsesTools.isEmpty {
+            finalPayload["tools"] = responsesTools
             if finalPayload["tool_choice"] == nil {
                 finalPayload["tool_choice"] = "auto"
             } else if let normalizedChoice = makeResponsesToolChoicePayload(finalPayload["tool_choice"]) {

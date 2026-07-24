@@ -1342,4 +1342,82 @@ struct OpenAIAdapterAdvancedTests {
         #expect(bodyData.range(of: Data(#"name="image""#.utf8)) != nil)
         #expect(bodyData.range(of: Data(#"filename="ref.png""#.utf8)) != nil)
     }
+
+    @Test("OpenAI Responses 图片输出模型自动启用内置生图工具")
+    func testResponsesImageOutputModelAddsImageGenerationTool() throws {
+        var imageOutputModel = responsesDummyModel.model
+        imageOutputModel.outputModalities = [.text, .image]
+        let runnableModel = RunnableModel(
+            provider: responsesDummyModel.provider,
+            model: imageOutputModel
+        )
+
+        let request = try #require(
+            responsesAdapter.buildChatRequest(
+                for: runnableModel,
+                commonPayload: ["stream": false],
+                messages: [ChatMessage(role: .user, content: "画一只猫")],
+                tools: [saveMemoryToolDefinition()],
+                audioAttachments: [:],
+                imageAttachments: [:],
+                fileAttachments: [:]
+            )
+        )
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(payload["tools"] as? [[String: Any]])
+
+        #expect(tools.contains { ($0["type"] as? String) == "image_generation" })
+        #expect(tools.contains {
+            ($0["type"] as? String) == "function"
+                && ($0["name"] as? String) == "save_memory"
+        })
+        #expect(payload["tool_choice"] as? String == "auto")
+    }
+
+    @Test("OpenAI Responses 完整历史仅回传图片生成调用 ID")
+    func testResponsesImageGenerationHistoryReplaysCallIDOnly() throws {
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            providerResponseMetadata: [
+                OpenAIAdapter.responsesOutputItemsKey: .array([
+                    .dictionary([
+                        "type": .string("image_generation_call"),
+                        "id": .string("ig_history_1"),
+                        "status": .string("completed"),
+                        "result": .string("large-base64-payload")
+                    ])
+                ])
+            ]
+        )
+        let request = try #require(
+            responsesAdapter.buildChatRequest(
+                for: responsesDummyModel,
+                commonPayload: [
+                    "stream": false,
+                    OpenAIAdapter.responsesForceFullInputControlKey: true
+                ],
+                messages: [
+                    assistantMessage,
+                    ChatMessage(role: .user, content: "把它改成写实风格")
+                ],
+                tools: nil,
+                audioAttachments: [:],
+                imageAttachments: [:],
+                fileAttachments: [:]
+            )
+        )
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let input = try #require(payload["input"] as? [[String: Any]])
+        let imageCall = try #require(
+            input.first(where: { ($0["type"] as? String) == "image_generation_call" })
+        )
+
+        #expect(imageCall["id"] as? String == "ig_history_1")
+        #expect(imageCall["result"] == nil)
+        #expect(imageCall["status"] == nil)
+        #expect(Set(imageCall.keys) == Set(["type", "id"]))
+    }
 }
