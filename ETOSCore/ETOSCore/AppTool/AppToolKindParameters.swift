@@ -18,7 +18,7 @@ extension AppToolKind {
                 comment: "Show widget tool html parameter description on watchOS"
             )
             let inlineAspectRatioDescription = NSLocalizedString(
-                "同步到支持内联展示的客户端时使用的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。watchOS 本地全屏渲染会保留但忽略此值。",
+                "同步到支持内联展示的客户端时使用的首选画幅，格式为“宽:高”。宽和高必须是大于零的有限数值，不限制比例范围，例如 16:9、3:1 或 1:4。watchOS 本地全屏渲染会保留但忽略此值。",
                 comment: "Show widget inline aspect ratio parameter description on watchOS"
             )
             #else
@@ -27,7 +27,7 @@ extension AppToolKind {
                 comment: "Show widget tool html parameter description on iOS"
             )
             let inlineAspectRatioDescription = NSLocalizedString(
-                "iOS 内联卡片的首选画幅，格式为“宽:高”，范围为 1:2 到 2:1，例如 16:9、4:3、1:1、3:4 或 9:16。宿主会填满气泡可用宽度，并根据此画幅计算固定高度。",
+                "iOS 内联卡片的首选画幅，格式为“宽:高”。宽和高必须是大于零的有限数值，不限制比例范围，例如 16:9、3:1 或 1:4。宿主会填满气泡可用宽度，并根据此画幅计算固定高度。",
                 comment: "Show widget inline aspect ratio parameter description on iOS"
             )
             #endif

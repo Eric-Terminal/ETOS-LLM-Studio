@@ -54,8 +54,12 @@ public struct ToolWidgetAspectRatio: Equatable, Sendable {
               width.isFinite,
               height.isFinite,
               width > 0,
-              height > 0,
-              (0.5...2).contains(width / height) else {
+              height > 0 else {
+            return nil
+        }
+
+        let value = width / height
+        guard value.isFinite, value > 0 else {
             return nil
         }
 

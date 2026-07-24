@@ -96,20 +96,25 @@ struct MCPToolResultFormatterTests {
         #expect(payload?.inlineAspectRatio == .standard)
     }
 
-    @Test("Widget 画幅接受常用比例并拒绝极端比例")
+    @Test("Widget 画幅接受任意可表示的正数比例")
     func testWidgetAspectRatioValidation() {
         let portrait = ToolWidgetAspectRatio(rawValue: " 9 : 16 ")
+        let wide = ToolWidgetAspectRatio(rawValue: "3:1")
+        let tall = ToolWidgetAspectRatio(rawValue: "1:4")
 
         #expect(portrait?.rawValue == "9:16")
         #expect(portrait?.value == 0.5625)
-        #expect(ToolWidgetAspectRatio(rawValue: "3:1") == nil)
+        #expect(wide?.value == 3)
+        #expect(tall?.value == 0.25)
         #expect(ToolWidgetAspectRatio(rawValue: "0:1") == nil)
+        #expect(ToolWidgetAspectRatio(rawValue: "1:0") == nil)
+        #expect(ToolWidgetAspectRatio(rawValue: "1e308:1e-308") == nil)
         #expect(ToolWidgetAspectRatio(rawValue: "invalid") == nil)
     }
 
     @Test("Widget 载荷中的非法画幅会回退为标准比例")
     func testWidgetPayloadInvalidAspectRatioUsesDefault() {
-        let raw = #"{"widget_code":"<div>fallback</div>","inline_aspect_ratio":"3:1"}"#
+        let raw = #"{"widget_code":"<div>fallback</div>","inline_aspect_ratio":"0:1"}"#
 
         let payload = ToolWidgetPayloadParser.parse(from: raw)
 
