@@ -115,12 +115,14 @@ private struct SurveySubmissionAnswer: Encodable, Sendable {
 private struct SurveySubmissionPayload: Encodable, Sendable {
     let answers: [SurveySubmissionAnswer]
     let platform: String
+    let appVersion: String
     let appBuild: String
     let language: String
 
     enum CodingKeys: String, CodingKey {
         case answers
         case platform
+        case appVersion = "app_version"
         case appBuild = "app_build"
         case language
     }
@@ -247,6 +249,7 @@ public final class SurveyManager: ObservableObject {
                     )
                 },
                 platform: snapshot.platform,
+                appVersion: snapshot.appVersion,
                 appBuild: snapshot.appBuild,
                 language: AppLanguagePreference.storedPreference.localizationIdentifier
                     ?? Locale.current.identifier
