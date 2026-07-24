@@ -23,7 +23,7 @@
 
 В школе часто скучно, а вопросов к AI всегда слишком много. Когда я смотрела на приложения в App Store, почти все были либо слишком дорогими, либо слишком урезанными — особенно на Apple Watch. Поэтому я просто решила сделать своё.
 
-Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **641 Swift‑файла и 226 381 строки Swift‑кода** (только Swift внутри проекта; сабмодуль llama.cpp и зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
+Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **758 Swift‑файлов и 284 139 строк Swift‑кода** (только Swift внутри проекта; сабмодуль llama.cpp и зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
 
 Раньше это был почти чисто watch‑проект, а теперь iOS‑часть тоже стала полноценной: облачные модели, локальные GGUF‑веса, инструменты, память, worldbook, Daily Pulse и синхронизация между устройствами в одном приложении.
 
@@ -144,7 +144,7 @@
 Проект разделён на два уровня: платформенно‑независимый ETOSCore и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage`, а новые `LocalLLM` / `LocalLLMBridge` подключили локальный GGUF inference к существующему жизненному циклу чата. MCP, sync/import, LAN‑отладка и теги сессий также вынесены в отдельные модули. Самый большой Swift‑файл сейчас занимает около 1 540 строк (`Sync/WatchSyncManager.swift`); управление локальными моделями, sync engine и Tool Center остаются тяжёлыми модулями, которые стоит дальше постепенно разгружать.
 
 ```
-ETOSCore/ETOSCore/                         ← Общая бизнес-логика (293 Swift-файла)
+ETOSCore/ETOSCore/                         ← Общая бизнес-логика (349 Swift-файлов)
 ├── AppTool/                            ← Локальные инструменты, custom JS tools, ask_user_input, утилиты для SQLite и sandbox-файлов
 ├── Attachments/                        ← Извлечение текста из файловых вложений
 ├── Chat/                               ← Модели чата, версии сообщений, экспорт, состояние рендера
@@ -164,6 +164,7 @@ ETOSCore/ETOSCore/                         ← Общая бизнес-логи�
 ├── Parsing/                            ← Парсеры заголовков и параметрических выражений
 ├── Persistence/                        ← Основная/вспомогательные БД GRDB, миграции, startup-бэкап, медиа и файлы
 ├── Providers/                          ← Модели провайдеров, настройка прокси и адаптеры OpenAI / Anthropic / Gemini
+├── Roleplay/                           ← Персоны для ролевых игр, шаблоны промптов чата и пресеты персонажей
 ├── Security/                           ← Стейт-машина блокировки приложения, master-пароль PBKDF2 и менеджер шифрования БД
 ├── Shortcuts/                          ← Siri Shortcuts, URL-роутер, импорт и реле выполнения
 ├── Skills/                             ← Импорт Agent Skills, парсинг, загрузка с GitHub, чтение ресурсов и политики
@@ -176,9 +177,9 @@ ETOSCore/ETOSCore/                         ← Общая бизнес-логи�
 ├── UsageAnalytics/                     ← События использования, дашборды, почасовые тренды и доли токенов по моделям
 └── Worldbook/                          ← Модели worldbook, импорт/экспорт, SQLite-хранилище и движок триггеров
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (133 Swift-файла)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (111 Swift-файлов)
-ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя (102 Swift-файла)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (155 Swift-файлов)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (131 Swift-файл)
+ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя (116 Swift-файлов)
 ```
 
 Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя ETOSCore и хранилищем GRDB / SQLite.
@@ -218,6 +219,33 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
 
 ---
 
+## 🧪 Автоматическое тестирование и сборка
+
+Для запуска сборки или модульного тестирования из командной строки используйте стандартные команды `xcodebuild` ниже (с изолированными переменными окружения для предотвращения сбоев):
+
+* **Сборка iOS App (включает встроенный watch App)**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+  ```
+* **Отдельная проверка сборки watchOS App**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
+  ```
+* **Запуск модульных тестов фреймворка ETOSCore** (116 файлов тестов, 41 055 строк тестового кода):
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **Запуск Unit & UI-тестов iOS App**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **Запуск Unit & UI-тестов watchOS App**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  ```
+
+---
+
 ## 📬 Контакты
 
 *   **Разработчик**: Eric Terminal
@@ -226,4 +254,4 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
 
 ---
 
-Этот README обновлён 9 июня 2026 года (на основе коммитов после `cb7bf431`). Если README не успел за кодом, смотрите историю коммитов.
+Этот README обновлён 25 июля 2026 года. Если README не успел за кодом, смотрите историю коммитов.

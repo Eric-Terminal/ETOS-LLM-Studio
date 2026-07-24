@@ -23,7 +23,7 @@
 
 在学校的日子挺无聊的，平时又总会冒出很多想问 AI 的问题。当时我嫌 App Store 上的 AI 应用要么贵得离谱，要么功能太残废（尤其是手表端），索性就自己动手搓了一个。
 
-从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 **641 个 Swift 源文件、226,381 行 Swift 代码**（仅计算项目内 Swift，不把 llama.cpp 子模块和 VitePress 文档站依赖算进来）的工程，它确实已经长大了不少。虽然名字叫 "ETOS LLM Studio" 听着有点唬人，但它本质上还是我拿来探索大模型应用边界的试验场。
+从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 **758 个 Swift 源文件、284,139 行 Swift 代码**（仅计算项目内 Swift，不把 llama.cpp 子模块和 VitePress 文档站依赖算进来）的工程，它确实已经长大了不少。虽然名字叫 "ETOS LLM Studio" 听着有点唬人，但它本质上还是我拿来探索大模型应用边界的试验场。
 
 现在它已经不只是一个手表端 App 了：我把 iOS 端也一点点补成了完整版本，方便在手机上管理云端模型、本地 GGUF 权重、工具、记忆、世界书和每日脉冲；两端数据还能通过内置同步引擎自动互通。
 
@@ -146,7 +146,7 @@
 项目采用双层结构：平台无关的 ETOSCore 框架 + 各平台独立的视图层。最近一轮重构引入了 `Config/AppConfigStore` 配置中心，全量替代 `@AppStorage`，并新增 `LocalLLM` / `LocalLLMBridge` 把本机 GGUF 推理接入现有聊天生命周期；同时把 MCP、同步导入、局域网调试和会话标签继续拆成独立模块。当前最大 Swift 文件约 1,540 行（`Sync/WatchSyncManager.swift`），本地模型管理页、同步引擎和工具中心仍是后续继续拆分的重型模块。
 
 ```
-ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（293 个 Swift 源文件）
+ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（349 个 Swift 源文件）
 ├── AppTool/                            ← 本地工具、自定义 JS 工具、ask_user_input、SQLite 与沙盒文件工具
 ├── Attachments/                        ← 文件附件文本抽取
 ├── Chat/                               ← 聊天模型、消息版本、导出、渲染状态
@@ -166,6 +166,7 @@ ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（293 �
 ├── Parsing/                            ← 请求头与参数表达式解析
 ├── Persistence/                        ← GRDB 主库/辅助库、迁移、启动备份、媒体与文件存储
 ├── Providers/                          ← Provider 模型、代理配置与 OpenAI / Anthropic / Gemini 适配器
+├── Roleplay/                           ← 角色扮演人设、聊天提示词模板与预置角色库
 ├── Security/                           ← 应用锁状态机、PBKDF2 主密码与数据库加密管理
 ├── Shortcuts/                          ← Siri Shortcuts、URL Router、导入与执行中继
 ├── Skills/                             ← Agent Skills 技能包导入、解析、GitHub 拉取、资源读取与策略
@@ -178,9 +179,9 @@ ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（293 �
 ├── UsageAnalytics/                     ← 用量事件、统计仪表盘、按小时趋势与模型 Token 占比
 └── Worldbook/                          ← 世界书模型、导入导出、SQLite 存储与触发引擎
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（133 个 Swift 源文件）
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（111 个 Swift 源文件）
-ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（155 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（131 个 Swift 源文件）
+ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个 Swift 源文件）
 ```
 
 云端模型数据流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型数据流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。会话、工具、记忆、世界书、用量统计与同步数据经由 ETOSCore 层服务和 GRDB/SQLite 存储统一治理。
@@ -223,6 +224,33 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个
 
 ---
 
+## 🧪 自动化测试与构建
+
+如需在命令行执行一键编译或单元测试，请统一使用以下标准 `xcodebuild` 命令（已配置隔离环境变量，避免本机环境污染导致的 watchOS 链接失败）：
+
+* **构建 iOS App（自动包含 watch App）**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+  ```
+* **单独验证 watchOS App 构建**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
+  ```
+* **运行 ETOSCore 核心框架单元测试**（116 个测试源文件，41,055 行测试代码）：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **运行 iOS App 单元与 UI 测试**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **运行 watchOS App 单元与 UI 测试**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  ```
+
+---
+
 ## 🤝 贡献与 CLA
 
 欢迎提 Issue、PR、文档修订和翻译补全。开始前请阅读 [贡献指南](CONTRIBUTING.md)。
@@ -241,4 +269,4 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（102 个
 
 ---
 
-本次 README 修订于 2026 年 6 月 27 日（基于 `cb7bf431` 之后的提交）。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
+本次 README 修订于 2026 年 7 月 25 日。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。

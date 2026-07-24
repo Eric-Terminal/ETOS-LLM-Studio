@@ -23,7 +23,7 @@
 
 学校生活はけっこう退屈で、普段から AI に聞きたいことが次々に出てきます。当時 App Store にある AI アプリは、値段が高すぎるか、機能が物足りなすぎるかのどちらかで、とくに Watch 側はなおさらでした。なので、いっそ自分で作ることにしました。
 
-最初は 1,800 行しかなく、API Key もハードコーディングしていた雑な試作でしたが、今では **641 個の Swift ソースファイルと 226,381 行の Swift コード**（プロジェクト内 Swift のみ。llama.cpp サブモジュールと VitePress ドキュメントサイトの依存は含みません）を持つプロジェクトにまで育ちました。「ETOS LLM Studio」という名前は少し大げさかもしれませんが、本質的には LLM アプリの境界を探るための私の実験場です。
+最初は 1,800 行しかなく、API Key もハードコーディングしていた雑な試作でしたが、今では **758 個の Swift ソースファイルと 284,139 行の Swift コード**（プロジェクト内 Swift のみ。llama.cpp サブモジュールと VitePress ドキュメントサイトの依存は含みません）を持つプロジェクトにまで育ちました。「ETOS LLM Studio」という名前は少し大げさかもしれませんが、本質的には LLM アプリの境界を探るための私の実験場です。
 
 いまでは単なる Watch アプリではなく、iOS 側もクラウドモデル、ローカル GGUF ウェイト、ツール、記憶、Worldbook、Daily Pulse を管理しやすい形へ少しずつ育てています。さらに、両プラットフォームは内蔵の同期エンジンでデータを共有できます。
 
@@ -146,7 +146,7 @@
 このプロジェクトは、プラットフォーム非依存の ETOSCore フレームワークと、各プラットフォーム専用のビュー層からなる二層構造です。最新のリファクタで `Config/AppConfigStore` 設定ハブを導入して `@AppStorage` を全面的に置き換え、さらに `LocalLLM` / `LocalLLMBridge` により端末上の GGUF 推論を既存のチャットライフサイクルへ接続しました。MCP、同期/インポート、LAN デバッグ、会話タグも独立モジュールとして整理しています。現在最大の Swift ファイルは約 1,540 行（`Sync/WatchSyncManager.swift`）で、ローカルモデル管理、同期エンジン、ツールセンターは今後も少しずつ軽くしていく重めのモジュールです。
 
 ```
-ETOSCore/ETOSCore/                         ← プラットフォーム非依存の業務ロジック（293 個の Swift ソースファイル）
+ETOSCore/ETOSCore/                         ← プラットフォーム非依存の業務ロジック（349 個の Swift ソースファイル）
 ├── AppTool/                            ← ローカルツール、カスタム JS ツール、ask_user_input、SQLite とサンドボックスファイル系ツール
 ├── Attachments/                        ← ファイル添付のテキスト抽出
 ├── Chat/                               ← チャットモデル、メッセージバージョン、エクスポート、描画状態
@@ -166,6 +166,7 @@ ETOSCore/ETOSCore/                         ← プラットフォーム非依存
 ├── Parsing/                            ← リクエストヘッダーとパラメータ式のパーサ
 ├── Persistence/                        ← GRDB のメイン／補助 DB、マイグレーション、起動時バックアップ、メディアとファイル保存
 ├── Providers/                          ← Provider モデル、プロキシ設定、OpenAI / Anthropic / Gemini アダプタ
+├── Roleplay/                           ← ロールプレイペルソナ、チャットプロンプトテンプレート、プリセットキャラクターライブラリ
 ├── Security/                           ← アプリロックの状態機械、PBKDF2 マスターパスワード、データベース暗号化管理
 ├── Shortcuts/                          ← Siri ショートカット、URL ルータ、インポートと実行中継
 ├── Skills/                             ← Agent Skills のインポート、解析、GitHub 取得、リソース読み込み、ポリシー
@@ -178,9 +179,9 @@ ETOSCore/ETOSCore/                         ← プラットフォーム非依存
 ├── UsageAnalytics/                     ← 使用量イベント、ダッシュボード、時間単位トレンド、モデル別 Token 占有率
 └── Worldbook/                          ← Worldbook モデル、インポート／エクスポート、SQLite ストレージ、トリガーエンジン
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS ビュー層（133 個の Swift ソースファイル）
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS ビュー層（111 個の Swift ソースファイル）
-ETOSCore/ETOSCoreTests/                         ← ETOSCore 層テスト（102 個の Swift ソースファイル）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS ビュー層（155 個の Swift ソースファイル）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS ビュー層（131 個の Swift ソースファイル）
+ETOSCore/ETOSCoreTests/                         ← ETOSCore 層テスト（116 個の Swift ソースファイル）
 ```
 
 クラウドモデルのデータフローは `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API` です。ローカルモデルのデータフローは `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp` です。セッション、ツール、記憶、Worldbook、使用量分析、同期データは ETOSCore 層サービスと GRDB / SQLite ストレージにより一元的に管理されます。
@@ -223,6 +224,33 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層テスト（102 
 
 ---
 
+## 🧪 自動テストとビルド
+
+コマンドラインで一括ビルドや単体テストを実行する場合は、以下の標準 `xcodebuild` コマンドを使用してください（環境変数の混入による watchOS リンク失敗を防ぐため環境変数をクリアしています）：
+
+* **iOS App のビルド（組み込み watch App を含む）**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+  ```
+* **watchOS App ビルドの個別検証**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
+  ```
+* **ETOSCore コアフレームワークの単体テスト実行**（テストファイル 116 個、テストコード 41,055 行）：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **iOS App 単体＆UI テストの実行**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **watchOS App 単体＆UI テストの実行**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  ```
+
+---
+
 ## 📬 連絡先
 
 *   **開発者**: Eric Terminal
@@ -231,4 +259,4 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層テスト（102 
 
 ---
 
-この README は 2026 年 6 月 9 日に更新されました（`cb7bf431` 以降のコミットを基準）。プロジェクトの更新速度はかなり速いので、README が追いついていない場合はコミット履歴のほうが正確です。
+この README は 2026 年 7 月 25 日に更新されました。プロジェクトの更新速度はかなり速いので、README が追いついていない場合はコミット履歴のほうが正確です。

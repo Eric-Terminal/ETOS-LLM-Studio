@@ -23,7 +23,7 @@
 
 School life can be pretty boring, and I always seem to have a lot of things I want to ask AI. At the time, most AI apps on the App Store were either absurdly expensive or too limited to be useful—especially on Apple Watch—so I ended up building one myself.
 
-What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **641 Swift source files and 226,381 lines of Swift code** (project Swift only; the llama.cpp submodule and VitePress doc-site dependencies are not included). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the boundaries of LLM applications.
+What started as a rough little app with only 1,800 lines of code and hardcoded API keys has grown into a project with **758 Swift source files and 284,139 lines of Swift code** (project Swift only; the llama.cpp submodule and VitePress doc-site dependencies are not included). “ETOS LLM Studio” may sound a bit over the top, but in reality it is still my playground for exploring the boundaries of LLM applications.
 
 It is no longer just a Watch app either. I have gradually expanded the iOS side into a complete experience for managing cloud models, local GGUF weights, tools, memory, worldbooks, and Daily Pulse, and the two platforms stay in sync through the built-in sync engine.
 
@@ -146,7 +146,7 @@ Technology should be shared. I do not want a small price barrier to block someon
 The project uses a two-layer structure: a platform-independent ETOSCore framework plus platform-specific view layers. The latest round of refactoring introduced the `Config/AppConfigStore` configuration hub, fully replaced `@AppStorage`, and added `LocalLLM` / `LocalLLMBridge` to route on-device GGUF inference into the existing chat lifecycle. MCP, sync/import, LAN debugging, and session tags have also been split into dedicated modules. The largest single Swift file is about 1,540 lines (`Sync/WatchSyncManager.swift`); local model management, the sync engine, and Tool Center remain heavier modules to keep trimming over time.
 
 ```
-ETOSCore/ETOSCore/                         ← Platform-agnostic business logic (293 Swift source files)
+ETOSCore/ETOSCore/                         ← Platform-agnostic business logic (349 Swift source files)
 ├── AppTool/                            ← Local tools, custom JS tools, ask_user_input, SQLite and sandbox file tools
 ├── Attachments/                        ← File attachment text extraction
 ├── Chat/                               ← Chat models, message versions, export, render state
@@ -166,6 +166,7 @@ ETOSCore/ETOSCore/                         ← Platform-agnostic business logic 
 ├── Parsing/                            ← Request-header and parameter-expression parsers
 ├── Persistence/                        ← GRDB main/auxiliary databases, migrations, startup backup, media and file storage
 ├── Providers/                          ← Provider models, proxy configuration, and OpenAI / Anthropic / Gemini adapters
+├── Roleplay/                           ← Roleplay personas, chat prompt templates, and preset character library
 ├── Security/                           ← App lock state machine, PBKDF2 master password, and database encryption manager
 ├── Shortcuts/                          ← Siri Shortcuts, URL router, import and execution relays
 ├── Skills/                             ← Agent Skills bundle import, parsing, GitHub fetch, resource reading, and policies
@@ -178,9 +179,9 @@ ETOSCore/ETOSCore/                         ← Platform-agnostic business logic 
 ├── UsageAnalytics/                     ← Usage events, dashboards, per-hour trends, and per-model token share
 └── Worldbook/                          ← Worldbook models, import/export, SQLite storage, and trigger engine
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (133 Swift source files)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (111 Swift source files)
-ETOSCore/ETOSCoreTests/                         ← ETOSCore-layer tests (102 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS view layer (155 Swift source files)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS view layer (131 Swift source files)
+ETOSCore/ETOSCoreTests/                         ← ETOSCore-layer tests (116 Swift source files)
 ```
 
 Cloud-model data flow: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Local-model data flow: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Sessions, tools, memory, worldbooks, usage analytics, and sync data are all governed through ETOSCore-layer services and GRDB / SQLite storage.
@@ -223,6 +224,33 @@ If you want to build it yourself:
 
 ---
 
+## 🧪 Automated Testing and Build
+
+To build or run tests from the command line, use the standard `xcodebuild` commands below (with environment variables cleared to prevent build failures):
+
+* **Build iOS App (includes embedded watch App)**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+  ```
+* **Verify watchOS App Build**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
+  ```
+* **Run ETOSCore Framework Tests** (116 test files, 41,055 lines of test code):
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **Run iOS App Unit & UI Tests**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **Run watchOS App Unit & UI Tests**:
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  ```
+
+---
+
 ## 📬 Contact
 
 *   **Developer**: Eric Terminal
@@ -231,4 +259,4 @@ If you want to build it yourself:
 
 ---
 
-This README was last revised on June 9, 2026 (based on commits after `cb7bf431`). The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.
+This README was last revised on July 25, 2026. The project moves quickly, so if the README falls behind the code, the commit history is the best source of truth.
