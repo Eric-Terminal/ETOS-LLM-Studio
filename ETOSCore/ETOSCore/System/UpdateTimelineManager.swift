@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责无后端检查更新、版本坐标推移、GitHub 缓存和 AI 摘要。
+// 负责检查更新时间线、版本坐标推移、本地缓存和 AI 摘要。
 // ============================================================================
 
 import Combine
@@ -187,7 +187,6 @@ public struct UpdateTimelineState: Codable, Hashable, Sendable {
 
 public enum UpdateTimelineError: LocalizedError {
     case missingGraphQLResponse
-    case graphQLError(String)
     case emptyTimeline
     case noModelSelected
     case httpStatus(code: Int, responseBody: Data?, rateLimitResetAt: Date?)
@@ -196,8 +195,6 @@ public enum UpdateTimelineError: LocalizedError {
         switch self {
         case .missingGraphQLResponse:
             return NSLocalizedString("GitHub 返回的数据无法解析。", comment: "Update timeline error")
-        case .graphQLError(let message):
-            return message
         case .emptyTimeline:
             return NSLocalizedString("还没有可展示的提交记录。", comment: "Update timeline error")
         case .noModelSelected:
@@ -243,12 +240,10 @@ public final class UpdateTimelineManager: ObservableObject {
     nonisolated private static let stateKey = "updateTimeline.state.v1"
     nonisolated private static let repositoryOwner = "Eric-Terminal"
     nonisolated private static let repositoryName = "ETOS-LLM-Studio"
-    nonisolated private static let branchName = "dev"
-    nonisolated private static let maxCommitCount = 1_000
-    nonisolated private static let graphQLPageSize = 100
     nonisolated private static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "UpdateTimeline")
 
     private let session: URLSession
+    private let timelineURL: URL
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private var startupProbeCompleted = false
@@ -279,8 +274,12 @@ public final class UpdateTimelineManager: ObservableObject {
         }
     }
 
-    public init(session: URLSession = NetworkSessionConfiguration.makeSession(minimumRequestTimeout: 45)) {
+    public init(
+        session: URLSession = NetworkSessionConfiguration.makeSession(minimumRequestTimeout: 45),
+        feedbackBaseURL: URL = FeedbackServiceConfig.default.baseURL
+    ) {
         self.session = session
+        timelineURL = feedbackBaseURL.appendingPathComponent("v1/updates/timeline")
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         encoder = JSONEncoder()
@@ -327,8 +326,12 @@ public final class UpdateTimelineManager: ObservableObject {
         do {
             let snapshot = state
             let session = session
+            let timelineURL = timelineURL
             let payload = try await Task.detached(priority: .utility) {
-                let response = try await Self.fetchGitHubTimeline(session: session)
+                let response = try await Self.fetchUpdateTimeline(
+                    session: session,
+                    timelineURL: timelineURL
+                )
                 guard !response.commits.isEmpty else { throw UpdateTimelineError.emptyTimeline }
                 let commits = Self.inferBuildNumbers(
                     for: response.commits,
@@ -491,165 +494,14 @@ public final class UpdateTimelineManager: ObservableObject {
         reindexCachedTimelineIfNeeded()
     }
 
-    nonisolated private static func fetchGitHubTimeline(session: URLSession) async throws -> GitHubTimelineFetchResult {
-        do {
-            return try await fetchGitHubTimelineWithGraphQL(session: session)
-        } catch {
-            Self.logger.warning("GraphQL 时间线拉取失败，降级到 REST: \(localizedDescription(for: error), privacy: .public)")
-            return try await fetchGitHubTimelineWithREST(session: session)
-        }
-    }
-
-    nonisolated private static func fetchGitHubTimelineWithGraphQL(session: URLSession) async throws -> GitHubTimelineFetchResult {
-        var allCommits: [UpdateTimelineCommit] = []
-        var cursor: String?
-        var latestResetAt: Date?
-        let decoder = timelineJSONDecoder()
-
-        while allCommits.count < Self.maxCommitCount {
-            var request = URLRequest(url: URL(string: "https://api.github.com/graphql")!)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("ETOS-LLM-Studio", forHTTPHeaderField: "User-Agent")
-            let afterValue: Any = cursor ?? NSNull()
-            request.httpBody = try JSONSerialization.data(withJSONObject: [
-                "query": Self.graphQLQuery,
-                "variables": [
-                    "pageSize": min(Self.graphQLPageSize, Self.maxCommitCount - allCommits.count),
-                    "after": afterValue
-                ]
-            ])
-
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw UpdateTimelineError.missingGraphQLResponse
-            }
-            guard (200...299).contains(httpResponse.statusCode) else {
-                throw httpStatusError(for: httpResponse, data: data)
-            }
-            latestResetAt = httpResponse.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap { raw -> Date? in
-                guard let timestamp = TimeInterval(raw) else { return nil }
-                return Date(timeIntervalSince1970: timestamp)
-            } ?? latestResetAt
-
-            let envelope = try decoder.decode(GitHubGraphQLResponse.self, from: data)
-            if let message = envelope.errors?.compactMap(\.message).joined(separator: "\n"), !message.isEmpty {
-                throw UpdateTimelineError.graphQLError(message)
-            }
-            guard let history = envelope.data?.repository.ref?.target.history else {
-                throw UpdateTimelineError.missingGraphQLResponse
-            }
-            allCommits.append(contentsOf: history.nodes.map { node in
-                UpdateTimelineCommit(
-                    oid: node.oid,
-                    messageHeadline: node.messageHeadline,
-                    message: node.message,
-                    committedDate: node.committedDate,
-                    url: URL(string: node.commitUrl),
-                    ciContexts: node.statusCheckRollup?.contexts.nodes.map(\.contextName) ?? []
-                )
-            })
-            guard history.pageInfo.hasNextPage,
-                  let endCursor = history.pageInfo.endCursor,
-                  !endCursor.isEmpty else {
-                break
-            }
-            cursor = endCursor
-        }
-        return GitHubTimelineFetchResult(commits: allCommits, rateLimitResetAt: latestResetAt)
-    }
-
-    nonisolated private static func fetchGitHubTimelineWithREST(session: URLSession) async throws -> GitHubTimelineFetchResult {
-        var allCommits: [UpdateTimelineCommit] = []
-        var latestResetAt: Date?
-        var page = 1
-        let decoder = timelineJSONDecoder()
-
-        while allCommits.count < Self.maxCommitCount {
-            var components = URLComponents(string: "https://api.github.com/repos/\(Self.repositoryOwner)/\(Self.repositoryName)/commits")!
-            components.queryItems = [
-                URLQueryItem(name: "sha", value: Self.branchName),
-                URLQueryItem(name: "per_page", value: "\(Self.graphQLPageSize)"),
-                URLQueryItem(name: "page", value: "\(page)")
-            ]
-            guard let url = components.url else { break }
-            var request = URLRequest(url: url)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            request.setValue("ETOS-LLM-Studio", forHTTPHeaderField: "User-Agent")
-
-            let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw UpdateTimelineError.missingGraphQLResponse
-            }
-            guard (200...299).contains(httpResponse.statusCode) else {
-                throw httpStatusError(for: httpResponse, data: data)
-            }
-            latestResetAt = httpResponse.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap { raw -> Date? in
-                guard let timestamp = TimeInterval(raw) else { return nil }
-                return Date(timeIntervalSince1970: timestamp)
-            } ?? latestResetAt
-
-            let nodes = try decoder.decode([GitHubRESTCommitNode].self, from: data)
-            guard !nodes.isEmpty else { break }
-            allCommits.append(contentsOf: nodes.map { node in
-                UpdateTimelineCommit(
-                    oid: node.sha,
-                    messageHeadline: node.commit.message.components(separatedBy: .newlines).first ?? node.sha,
-                    message: node.commit.message,
-                    committedDate: node.commit.committer?.date ?? node.commit.author?.date,
-                    url: URL(string: node.htmlUrl),
-                    ciContexts: []
-                )
-            })
-            guard nodes.count >= Self.graphQLPageSize else { break }
-            page += 1
-        }
-
-        let enrichedCommits = await enrichRESTCommitsWithCIContexts(allCommits, session: session)
-        return GitHubTimelineFetchResult(commits: enrichedCommits, rateLimitResetAt: latestResetAt)
-    }
-
-    nonisolated private static func enrichRESTCommitsWithCIContexts(_ commits: [UpdateTimelineCommit], session: URLSession) async -> [UpdateTimelineCommit] {
-        guard !commits.isEmpty else { return commits }
-        var result = commits
-
-        for index in result.indices {
-            guard !Task.isCancelled else { break }
-            let oid = result[index].oid
-            let contexts = await fetchRESTCIContexts(for: oid, session: session)
-            guard !contexts.isEmpty else { continue }
-            result[index] = UpdateTimelineCommit(
-                oid: result[index].oid,
-                messageHeadline: result[index].messageHeadline,
-                message: result[index].message,
-                committedDate: result[index].committedDate,
-                url: result[index].url,
-                ciContexts: contexts,
-                inferredBuildNumber: result[index].inferredBuildNumber
-            )
-        }
-
-        return result
-    }
-
-    nonisolated private static func fetchRESTCIContexts(for oid: String, session: URLSession) async -> [String] {
-        let statuses = (try? await fetchRESTStatusContexts(for: oid, session: session)) ?? []
-        let checkRuns = (try? await fetchRESTCheckRunContexts(for: oid, session: session)) ?? []
-        let contexts = statuses + checkRuns
-        var seen = Set<String>()
-        return contexts.filter { context in
-            let trimmed = context.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return false }
-            return seen.insert(trimmed).inserted
-        }
-    }
-
-    nonisolated private static func fetchRESTStatusContexts(for oid: String, session: URLSession) async throws -> [String] {
-        let url = URL(string: "https://api.github.com/repos/\(Self.repositoryOwner)/\(Self.repositoryName)/commits/\(oid)/status")!
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("ETOS-LLM-Studio", forHTTPHeaderField: "User-Agent")
-        let decoder = timelineJSONDecoder()
+    nonisolated private static func fetchUpdateTimeline(
+        session: URLSession,
+        timelineURL: URL
+    ) async throws -> UpdateTimelineFetchResult {
+        var request = URLRequest(url: timelineURL)
+        request.cachePolicy = .useProtocolCachePolicy
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("ETOS LLM Studio", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -658,24 +510,16 @@ public final class UpdateTimelineManager: ObservableObject {
         guard (200...299).contains(httpResponse.statusCode) else {
             throw httpStatusError(for: httpResponse, data: data)
         }
-        return try decoder.decode(GitHubRESTStatusEnvelope.self, from: data).statuses.map(\.context)
-    }
 
-    nonisolated private static func fetchRESTCheckRunContexts(for oid: String, session: URLSession) async throws -> [String] {
-        let url = URL(string: "https://api.github.com/repos/\(Self.repositoryOwner)/\(Self.repositoryName)/commits/\(oid)/check-runs")!
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("ETOS-LLM-Studio", forHTTPHeaderField: "User-Agent")
         let decoder = timelineJSONDecoder()
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
+        let envelope = try decoder.decode(UpdateTimelineProxyEnvelope.self, from: data)
+        guard envelope.version == 1 else {
             throw UpdateTimelineError.missingGraphQLResponse
         }
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw httpStatusError(for: httpResponse, data: data)
-        }
-        return try decoder.decode(GitHubRESTCheckRunsEnvelope.self, from: data).checkRuns.map(\.displayContext)
+        return UpdateTimelineFetchResult(
+            commits: envelope.commits.map(\.timelineCommit),
+            rateLimitResetAt: nil
+        )
     }
 
     nonisolated private static func fetchAppStoreLookup(session: URLSession) async throws -> AppStoreLookupResult? {
@@ -978,51 +822,4 @@ public final class UpdateTimelineManager: ObservableObject {
         NSLocalizedString("你是 ETOS LLM Studio 的更新日志助手。你要从 Git 提交记录中提炼用户能理解的更新摘要，先讲重要变化，再讲修复与细节。不要编造提交里没有的信息。", comment: "Update timeline summary system prompt")
     }
 
-    nonisolated private static let graphQLQuery = """
-    query UpdateTimeline($pageSize: Int!, $after: String) {
-      repository(owner: "\(repositoryOwner)", name: "\(repositoryName)") {
-        ref(qualifiedName: "\(branchName)") {
-          target {
-            ... on Commit {
-              history(first: $pageSize, after: $after) {
-                pageInfo {
-                  hasNextPage
-                  endCursor
-                }
-                nodes {
-                  oid
-                  messageHeadline
-                  message
-                  committedDate
-                  commitUrl
-                  statusCheckRollup {
-                    contexts(first: 30) {
-                      nodes {
-                        ... on CheckRun {
-                          name
-                          checkSuite {
-                            app {
-                              name
-                            }
-                            workflowRun {
-                              workflow {
-                                name
-                              }
-                            }
-                          }
-                        }
-                        ... on StatusContext {
-                          context
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
 }
