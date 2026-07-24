@@ -23,7 +23,7 @@
 
 在學校的日子其實挺無聊的，平時又總有很多問題想問 AI。當時我覺得 App Store 上的 AI 應用不是貴得離譜，就是功能殘缺到不太想用，尤其是手錶端，所以乾脆自己動手做了一個。
 
-從最初那個只有 1,800 行程式碼、API Key 還要硬編碼的粗糙版本，到現在擁有 **641 個 Swift 原始碼檔案、226,381 行 Swift 程式碼**（僅計算專案內 Swift，不含 llama.cpp 子模組與 VitePress 文件站依賴）的工程，它確實已經長大了不少。雖然「ETOS LLM Studio」這個名字聽起來有點唬人，但本質上它還是我拿來探索大模型應用邊界的試驗場。
+從最初那個只有 1,800 行程式碼、API Key 還要硬編碼的粗糙版本，到現在擁有 **758 個 Swift 原始碼檔案、284,139 行 Swift 程式碼**（僅計算專案內 Swift，不含 llama.cpp 子模組與 VitePress 文件站依賴）的工程，它確實已經長大了不少。雖然「ETOS LLM Studio」這個名字聽起來有點唬人，但本質上它還是我拿來探索大模型應用邊界的試驗場。
 
 現在它也早就不只是手錶 App 了：我把 iOS 端慢慢補成了更完整的版本，方便在手機上管理雲端模型、本機 GGUF 權重、工具、記憶、世界書與每日脈衝；兩端資料還能透過內建同步引擎自動互通。
 
@@ -146,7 +146,7 @@
 專案採用雙層結構：平台無關的 ETOSCore 框架 + 各平台獨立的視圖層。最近一輪重構引入了 `Config/AppConfigStore` 設定中心，全面取代 `@AppStorage`，並新增 `LocalLLM` / `LocalLLMBridge` 把本機 GGUF 推理接入既有聊天生命週期；同時也把 MCP、同步匯入、局域網除錯與會話標籤繼續拆成獨立模組。當前最大的 Swift 檔案約 1,540 行（`Sync/WatchSyncManager.swift`），本地模型管理頁、同步引擎和工具中心仍屬於後續繼續拆分的重型模組。
 
 ```
-ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（293 個 Swift 原始碼檔案）
+ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（349 個 Swift 原始碼檔案）
 ├── AppTool/                            ← 本地工具、自訂 JS 工具、ask_user_input、SQLite 與沙盒檔案工具
 ├── Attachments/                        ← 檔案附件文字抽取
 ├── Chat/                               ← 聊天模型、訊息版本、匯出、渲染狀態
@@ -166,6 +166,7 @@ ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（293 �
 ├── Parsing/                            ← 請求頭與參數表達式解析
 ├── Persistence/                        ← GRDB 主庫/輔助庫、遷移、啟動備份、媒體與檔案儲存
 ├── Providers/                          ← Provider 模型、代理設定與 OpenAI / Anthropic / Gemini 適配器
+├── Roleplay/                           ← 角色扮演人設、聊天提示詞範本與預設角色庫
 ├── Security/                           ← 應用鎖狀態機、PBKDF2 主密碼與資料庫加密管理
 ├── Shortcuts/                          ← Siri 捷徑、URL Router、匯入與執行中繼
 ├── Skills/                             ← Agent Skills 技能包匯入、解析、GitHub 拉取、資源讀取與策略
@@ -178,9 +179,9 @@ ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（293 �
 ├── UsageAnalytics/                     ← 用量事件、統計儀表板、按小時趨勢與模型 Token 占比
 └── Worldbook/                          ← 世界書模型、匯入匯出、SQLite 儲存與觸發引擎
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 視圖層（133 個 Swift 原始碼檔案）
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 視圖層（111 個 Swift 原始碼檔案）
-ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（102 個 Swift 原始碼檔案）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 視圖層（155 個 Swift 原始碼檔案）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 視圖層（131 個 Swift 原始碼檔案）
+ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（116 個 Swift 原始碼檔案）
 ```
 
 雲端模型資料流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型資料流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。會話、工具、記憶、世界書、用量統計與同步資料皆透過 ETOSCore 層服務和 GRDB / SQLite 儲存統一治理。
@@ -223,6 +224,33 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（102 個
 
 ---
 
+## 🧪 自動化測試與構建
+
+如需在命令列執行一鍵編譯或單元測試，請統一使用以下標準 `xcodebuild` 命令（已配置隔離環境變數，避免本機環境污染導致的 watchOS 連結失敗）：
+
+* **構建 iOS App（自動包含 watch App）**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' build
+  ```
+* **單獨驗證 watchOS App 構建**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
+  ```
+* **運行 ETOSCore 核心框架單元測試**（116 個測試原始碼檔案，41,055 行測試程式碼）：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **運行 iOS App 單元與 UI 測試**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio App' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
+  ```
+* **運行 watchOS App 單元與 UI 測試**：
+  ```bash
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  ```
+
+---
+
 ## 📬 聯絡方式
 
 *   **開發者**: Eric Terminal
@@ -231,4 +259,4 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（102 個
 
 ---
 
-本次 README 修訂於 2026 年 6 月 9 日（基於 `cb7bf431` 之後的提交）。專案更新速度很快，如果 README 一時跟不上程式碼，最準的還是提交記錄。
+本次 README 修訂於 2026 年 7 月 25 日。專案更新速度很快，如果 README 一時跟不上程式碼，最準的還是提交記錄。
