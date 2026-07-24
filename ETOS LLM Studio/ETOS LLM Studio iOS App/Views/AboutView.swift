@@ -192,23 +192,17 @@ struct AboutView: View {
                     Button {
                         openCommunity(community)
                     } label: {
-                        VStack {
-                            if community == .testFlight {
-                                Divider()
+                        LabeledContent {
+                            if let account = community.account {
+                                Text(account)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
-
-                            LabeledContent {
-                                if let account = community.account {
-                                    Text(account)
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } label: {
-                                Label(community.title, systemImage: community.systemImage)
-                            }
+                        } label: {
+                            Label(community.title, systemImage: community.systemImage)
                         }
                     }
                     .buttonStyle(.plain)
