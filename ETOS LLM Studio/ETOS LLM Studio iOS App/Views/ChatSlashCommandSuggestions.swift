@@ -10,15 +10,42 @@ import SwiftUI
 import ETOSCore
 
 struct ChatSlashCommandSuggestionPanel: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let commands: [ChatSlashCommand]
+    let usesLiquidGlass: Bool
     let onSelect: (ChatSlashCommand) -> Void
 
     private let rowHeight: CGFloat = 52
     private let maximumPanelHeight: CGFloat = 286
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 
+        Group {
+            if #available(iOS 26.0, *), usesLiquidGlass {
+                panelContent
+                    .background(shape.fill(glassOverlayColor))
+                    .glassEffect(.clear.interactive(), in: shape)
+                    .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                    .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+            } else {
+                panelContent
+                    .background(
+                        shape
+                            .fill(.ultraThinMaterial)
+                            .overlay(shape.fill(glassOverlayColor))
+                            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                            .shadow(color: glassShadowColor, radius: 6, x: 0, y: 2)
+                    )
+            }
+        }
+        .clipShape(shape)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("命令建议", comment: "Slash command suggestions accessibility label"))
+    }
+
+    private var panelContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(commands) { command in
@@ -58,12 +85,19 @@ struct ChatSlashCommandSuggestionPanel: View {
                 }
             }
         }
-        .scrollIndicators(.visible)
+        .scrollIndicators(.hidden)
         .frame(height: min(CGFloat(commands.count) * rowHeight, maximumPanelHeight))
-        .background(.ultraThinMaterial, in: shape)
-        .overlay(shape.stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
-        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(NSLocalizedString("命令建议", comment: "Slash command suggestions accessibility label"))
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 }

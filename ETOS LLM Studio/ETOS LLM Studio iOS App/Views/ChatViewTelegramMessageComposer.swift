@@ -79,13 +79,17 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
-            if !slashCommandSuggestions.isEmpty {
+            if !slashCommandSuggestions.isEmpty && !isRequestControlsExpanded {
                 ChatSlashCommandSuggestionPanel(
                     commands: slashCommandSuggestions,
+                    usesLiquidGlass: viewModel.enableLiquidGlass,
                     onSelect: performSuggestedSlashCommand
                 )
                 .padding(.horizontal, 16)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(
+                    .scale(scale: 0.98, anchor: .bottom)
+                        .combined(with: .opacity)
+                )
             }
 
             Color.clear

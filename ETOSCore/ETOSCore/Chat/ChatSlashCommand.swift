@@ -165,7 +165,7 @@ public enum ChatSlashCommandParser {
         }
     }
 
-    /// 建议仅响应输入框开头的单个斜杠令牌，保持路径和多行消息不受干扰。
+    /// 建议只按界面展示的规范命令名匹配；别名仅供完整输入识别，避免候选名称与输入前缀不一致。
     public static func suggestions(for text: String) -> [ChatSlashCommand] {
         guard text.first == "/" else { return [] }
         let query = String(text.dropFirst())
@@ -179,9 +179,8 @@ public enum ChatSlashCommandParser {
             return ChatSlashCommand.allCases
         }
 
-        return ChatSlashCommand.allCases.filter { command in
-            command.rawValue.hasPrefix(normalizedQuery)
-                || command.aliases.contains { $0.hasPrefix(normalizedQuery) }
+        return ChatSlashCommand.allCases.filter {
+            $0.rawValue.hasPrefix(normalizedQuery)
         }
     }
 }

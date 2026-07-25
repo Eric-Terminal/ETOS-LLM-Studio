@@ -21,9 +21,18 @@ final class ChatSlashCommandTests: XCTestCase {
         XCTAssertEqual(ChatSlashCommandParser.suggestions(for: "/us"), [.usage])
     }
 
-    func testAliasCanSuggestAndResolveCanonicalCommand() {
-        XCTAssertEqual(ChatSlashCommandParser.suggestions(for: "/hist"), [.sessions])
+    func testPrefixOnlyMatchesDisplayedCommandName() {
+        XCTAssertEqual(
+            ChatSlashCommandParser.suggestions(for: "/s"),
+            [.sessions, .settings, .skills, .shortcuts, .stop]
+        )
+        XCTAssertFalse(ChatSlashCommandParser.suggestions(for: "/s").contains(.usage))
+        XCTAssertTrue(ChatSlashCommandParser.suggestions(for: "/hist").isEmpty)
+    }
+
+    func testCompleteAliasStillResolvesCanonicalCommand() {
         XCTAssertEqual(ChatSlashCommandParser.recognizedCommand(in: "/history"), .sessions)
+        XCTAssertEqual(ChatSlashCommandParser.recognizedCommand(in: "/stats"), .usage)
     }
 
     func testCompleteCommandIsRecognizedCaseInsensitively() {
