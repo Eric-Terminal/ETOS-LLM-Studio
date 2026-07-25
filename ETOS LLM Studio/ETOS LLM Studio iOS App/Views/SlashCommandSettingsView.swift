@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 本文件提供 iOS 斜杠命令的总开关与命令速查。
+// 本文件提供 iOS 快速指令的总开关与命令速查。
 // ============================================================================
 
 import SwiftUI
@@ -16,7 +16,7 @@ struct SlashCommandSettingsView: View {
         Form {
             Section {
                 Toggle(
-                    NSLocalizedString("启用斜杠命令", comment: "Enable slash commands toggle"),
+                    NSLocalizedString("启用快速指令", comment: "Enable quick commands toggle"),
                     isOn: $appConfig.enableSlashCommands
                 )
             } footer: {
@@ -44,6 +44,6 @@ struct SlashCommandSettingsView: View {
                 Text(NSLocalizedString("可用命令", comment: "Available slash commands section"))
             }
         }
-        .navigationTitle(NSLocalizedString("斜杠命令", comment: "Slash command settings title"))
+        .navigationTitle(NSLocalizedString("快速指令", comment: "Quick command settings title"))
     }
 }

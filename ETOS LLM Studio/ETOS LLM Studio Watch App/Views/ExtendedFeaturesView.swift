@@ -46,7 +46,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     SlashCommandSettingsView()
                 } label: {
-                    settingsNavigationLabel("斜杠命令", icon: .slashCommands)
+                    settingsNavigationLabel("快速指令", icon: .slashCommands)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }

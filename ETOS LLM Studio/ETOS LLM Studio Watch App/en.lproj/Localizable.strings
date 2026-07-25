@@ -4967,6 +4967,7 @@
 "用户输入" = "User Input";
 "模型输出" = "Model Output";
 "斜杠命令" = "Slash Command";
+"快速指令" = "Quick Commands";
 "世界书内容" = "Lorebook Content";
 "推理内容" = "Reasoning";
 "预设" = "Preset";
@@ -5141,6 +5142,7 @@
 "临时对话已开启" = "Temporary chat enabled";
 "临时对话已关闭" = "Temporary chat disabled";
 "启用斜杠命令" = "Enable Slash Commands";
+"启用快速指令" = "Enable Quick Commands";
 "默认关闭。启用后，提交以 / 开头的输入即可显示命令；无法识别的内容仍会原样发送给 AI。" = "Disabled by default. Once enabled, submit input beginning with / to show commands. Unrecognized content is still sent to AI unchanged.";
 "可用命令" = "Available Commands";
 "用简短命令快速打开聊天操作和设置页面。" = "Use short commands to quickly open chat actions and settings.";

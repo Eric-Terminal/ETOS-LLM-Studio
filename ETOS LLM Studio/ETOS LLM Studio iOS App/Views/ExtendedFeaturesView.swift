@@ -40,7 +40,7 @@ struct ExtendedFeaturesView: View {
                 NavigationLink {
                     SlashCommandSettingsView()
                 } label: {
-                    SettingsListIconLabel("斜杠命令", icon: .slashCommands)
+                    SettingsListIconLabel("快速指令", icon: .slashCommands)
                 }
             } footer: {
                 Text(NSLocalizedString("用简短命令快速打开聊天操作和设置页面。", comment: "Slash commands entry footer"))
