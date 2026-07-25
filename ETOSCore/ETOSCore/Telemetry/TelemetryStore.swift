@@ -14,6 +14,7 @@ struct TelemetryStoredFile: Sendable {
     let relativePath: String
     let envelope: TelemetryEnvelope
     let data: Data
+    let rawJSON: String
     let fileSizeBytes: Int64
 
     func makeLogRecord(
@@ -24,7 +25,7 @@ struct TelemetryStoredFile: Sendable {
             fileSizeBytes > maxUploadFileBytes ? .tooLarge : state
         return TelemetryLogRecord(
             envelope: envelope,
-            rawJSON: String(decoding: data, as: UTF8.self),
+            rawJSON: rawJSON,
             fileSizeBytes: fileSizeBytes,
             deliveryState: resolvedState,
             relativePath: relativePath
@@ -294,6 +295,7 @@ actor TelemetryStore {
             relativePath: relativePath,
             envelope: envelope,
             data: data,
+            rawJSON: String(decoding: data, as: UTF8.self),
             fileSizeBytes: Int64(data.count)
         )
     }

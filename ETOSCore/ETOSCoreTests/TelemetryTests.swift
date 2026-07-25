@@ -253,6 +253,56 @@ struct TelemetryTests {
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Content-Encoding") == nil })
     }
 
+    @Test("上传器只进行一次受限重试并在恢复后确认")
+    func uploaderRetriesTransientFailureOnce() async throws {
+        TelemetryURLProtocol.reset()
+        TelemetryURLProtocol.failNextRequests(1)
+        defer { TelemetryURLProtocol.reset() }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TelemetryURLProtocol.self]
+        let uploader = TelemetryUploader(
+            session: URLSession(configuration: configuration),
+            endpoint: URL(string: "https://feedback.example/v1/telemetry")!,
+            maxAttempts: 2,
+            retryDelayNanoseconds: 0
+        )
+        let file = try makeStoredFile(marker: "retry", index: 0)
+
+        let outcome = await uploader.upload([file])
+
+        #expect(outcome.errorDescription == nil)
+        #expect(outcome.confirmedPayloadIDs == [file.envelope.payloadID])
+        #expect(TelemetryURLProtocol.capturedRequests().count == 2)
+    }
+
+    @Test("响应确认不完整时只确认明确成功项")
+    func uploaderKeepsUnconfirmedPayloads() async throws {
+        TelemetryURLProtocol.reset()
+        TelemetryURLProtocol.omitLastResultFromResponses()
+        defer { TelemetryURLProtocol.reset() }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TelemetryURLProtocol.self]
+        let uploader = TelemetryUploader(
+            session: URLSession(configuration: configuration),
+            endpoint: URL(string: "https://feedback.example/v1/telemetry")!,
+            maxAttempts: 2,
+            retryDelayNanoseconds: 0
+        )
+        let files = try [
+            makeStoredFile(marker: "confirmed", index: 0),
+            makeStoredFile(marker: "unconfirmed", index: 1)
+        ]
+
+        let outcome = await uploader.upload(files)
+
+        #expect(outcome.confirmedPayloadIDs == [files[0].envelope.payloadID])
+        #expect(outcome.attemptedPayloadIDs.count == 2)
+        #expect(outcome.errorDescription != nil)
+        #expect(TelemetryURLProtocol.capturedRequests().count == 2)
+    }
+
     @Test("Signpost 名称由固定枚举和 Markdown 大小分桶决定")
     func signpostBucketsAreStable() {
         #expect(TelemetrySignpost.markdownInterval(characterCount: 0) == .markdownPrepareEmpty)
@@ -291,6 +341,7 @@ struct TelemetryTests {
             relativePath: "2027-01-15/\(envelope.payloadID).json",
             envelope: envelope,
             data: data,
+            rawJSON: String(decoding: data, as: UTF8.self),
             fileSizeBytes: Int64(data.count)
         )
     }
@@ -315,10 +366,26 @@ struct TelemetryTests {
 private final class TelemetryURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var requests: [URLRequest] = []
+    private nonisolated(unsafe) static var remainingFailures = 0
+    private nonisolated(unsafe) static var omitLastResult = false
 
     static func reset() {
         lock.lock()
         requests = []
+        remainingFailures = 0
+        omitLastResult = false
+        lock.unlock()
+    }
+
+    static func failNextRequests(_ count: Int) {
+        lock.lock()
+        remainingFailures = max(0, count)
+        lock.unlock()
+    }
+
+    static func omitLastResultFromResponses() {
+        lock.lock()
+        omitLastResult = true
         lock.unlock()
     }
 
@@ -339,17 +406,38 @@ private final class TelemetryURLProtocol: URLProtocol {
     override func startLoading() {
         Self.lock.lock()
         Self.requests.append(request)
+        let shouldFail = Self.remainingFailures > 0
+        if shouldFail {
+            Self.remainingFailures -= 1
+        }
+        let shouldOmitLastResult = Self.omitLastResult
         Self.lock.unlock()
+
+        if shouldFail {
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 503,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(#"{"error":"temporary"}"#.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
 
         let body = request.httpBody ?? Self.readBodyStream(request.httpBodyStream)
         let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
         let envelopes = root?["envelopes"] as? [[String: Any]] ?? []
-        let results: [[String: Any]] = envelopes.enumerated().compactMap { index, envelope in
+        var results: [[String: Any]] = envelopes.enumerated().compactMap { index, envelope in
             guard let payloadID = envelope["payload_id"] as? String else { return nil }
             return [
                 "payload_id": payloadID,
                 "status": index.isMultiple(of: 2) ? "accepted" : "duplicate"
             ]
+        }
+        if shouldOmitLastResult, !results.isEmpty {
+            results.removeLast()
         }
         let responseBody = try! JSONSerialization.data(
             withJSONObject: [

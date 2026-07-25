@@ -51,17 +51,23 @@ private struct TelemetryUploadResponse: Decodable {
 final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
     static let defaultBatchLimit = 16
     static let defaultRequestBodyLimit = 4 * 1_024 * 1_024
+    static let defaultMaxAttempts = 2
+    static let defaultRetryDelayNanoseconds: UInt64 = 2_000_000_000
 
     private let session: URLSession
     private let endpoint: URL
     private let batchLimit: Int
     private let requestBodyLimit: Int
+    private let maxAttempts: Int
+    private let retryDelayNanoseconds: UInt64
 
     init(
         session: URLSession? = nil,
         endpoint: URL? = nil,
         batchLimit: Int = defaultBatchLimit,
-        requestBodyLimit: Int = defaultRequestBodyLimit
+        requestBodyLimit: Int = defaultRequestBodyLimit,
+        maxAttempts: Int = defaultMaxAttempts,
+        retryDelayNanoseconds: UInt64 = defaultRetryDelayNanoseconds
     ) {
         if let session {
             self.session = session
@@ -80,6 +86,8 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
                 .appendingPathComponent("telemetry", isDirectory: false)
         self.batchLimit = max(1, min(batchLimit, 16))
         self.requestBodyLimit = max(1_024, requestBodyLimit)
+        self.maxAttempts = max(1, min(maxAttempts, 3))
+        self.retryDelayNanoseconds = retryDelayNanoseconds
     }
 
     func upload(_ files: [TelemetryStoredFile]) async -> TelemetryUploadOutcome {
@@ -91,37 +99,40 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
         for batch in batches {
             let payloadIDs = Set(batch.map(\.envelope.payloadID))
             attempted.formUnion(payloadIDs)
+            var pending = batch
+            var lastError: String?
 
-            do {
-                let body = try encode(batch)
-                var request = URLRequest(url: endpoint)
-                request.httpMethod = "POST"
-                request.httpBody = body
-                request.timeoutInterval = 30
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.setValue("application/json", forHTTPHeaderField: "Accept")
-                request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-
-                let (data, response) = try await session.data(for: request)
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200..<300).contains(httpResponse.statusCode) else {
-                    errors.append(NSLocalizedString("性能数据服务暂时不可用，将在下次启动重试。", comment: "Telemetry HTTP failure"))
-                    continue
+            for attempt in 0..<maxAttempts {
+                guard !Task.isCancelled, !pending.isEmpty else { break }
+                let result = await uploadBatch(pending)
+                confirmed.formUnion(result.confirmedPayloadIDs)
+                pending.removeAll {
+                    result.confirmedPayloadIDs.contains($0.envelope.payloadID)
+                }
+                if pending.isEmpty {
+                    lastError = nil
+                    break
                 }
 
-                let decoded = try JSONDecoder().decode(TelemetryUploadResponse.self, from: data)
-                guard decoded.schemaVersion == TelemetryEnvelope.currentSchemaVersion else {
-                    errors.append(NSLocalizedString("性能数据服务返回了不兼容的响应。", comment: "Telemetry schema mismatch"))
-                    continue
+                lastError = result.errorDescription ?? NSLocalizedString(
+                    "性能数据服务返回了不兼容的响应。",
+                    comment: "Telemetry incomplete response"
+                )
+                guard attempt + 1 < maxAttempts else { break }
+                do {
+                    try await Task.sleep(nanoseconds: retryDelayNanoseconds)
+                } catch {
+                    break
                 }
+            }
 
-                for result in decoded.results where
-                    payloadIDs.contains(result.payloadID) &&
-                    (result.status == "accepted" || result.status == "duplicate") {
-                    confirmed.insert(result.payloadID)
-                }
-            } catch {
-                errors.append(NSLocalizedString("性能数据上传失败，将在下次启动重试。", comment: "Telemetry upload failure"))
+            if !pending.isEmpty {
+                errors.append(
+                    lastError ?? NSLocalizedString(
+                        "性能数据上传失败，将在下次启动重试。",
+                        comment: "Telemetry upload failure"
+                    )
+                )
             }
         }
 
@@ -130,6 +141,65 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
             attemptedPayloadIDs: attempted,
             errorDescription: errors.first
         )
+    }
+
+    private func uploadBatch(
+        _ files: [TelemetryStoredFile]
+    ) async -> (
+        confirmedPayloadIDs: Set<String>,
+        errorDescription: String?
+    ) {
+        let payloadIDs = Set(files.map(\.envelope.payloadID))
+        do {
+            let body = try encode(files)
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.httpBody = body
+            request.timeoutInterval = 30
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else {
+                return (
+                    [],
+                    NSLocalizedString(
+                        "性能数据服务暂时不可用，将在下次启动重试。",
+                        comment: "Telemetry HTTP failure"
+                    )
+                )
+            }
+
+            let decoded = try JSONDecoder().decode(TelemetryUploadResponse.self, from: data)
+            guard decoded.schemaVersion == TelemetryEnvelope.currentSchemaVersion else {
+                return (
+                    [],
+                    NSLocalizedString(
+                        "性能数据服务返回了不兼容的响应。",
+                        comment: "Telemetry schema mismatch"
+                    )
+                )
+            }
+
+            let confirmed = Set<String>(decoded.results.compactMap { result -> String? in
+                guard payloadIDs.contains(result.payloadID),
+                      result.status == "accepted" || result.status == "duplicate" else {
+                    return nil
+                }
+                return result.payloadID
+            })
+            return (confirmed, nil)
+        } catch {
+            return (
+                [],
+                NSLocalizedString(
+                    "性能数据上传失败，将在下次启动重试。",
+                    comment: "Telemetry upload failure"
+                )
+            )
+        }
     }
 
     private func makeBatches(_ files: [TelemetryStoredFile]) -> [[TelemetryStoredFile]] {
