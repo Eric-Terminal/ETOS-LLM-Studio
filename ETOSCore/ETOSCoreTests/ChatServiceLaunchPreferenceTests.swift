@@ -3,7 +3,7 @@ import Foundation
 import Combine
 @testable import ETOSCore
 
-@Suite("聊天服务启动会话偏好测试")
+@Suite("聊天服务启动会话偏好测试", .serialized)
 struct ChatServiceLaunchPreferenceTests {
     private let restoreKey = AppConfigKey.restoreLastSessionOnLaunch.rawValue
     private let recentOnlyKey = AppConfigKey.restoreLastSessionOnlyIfRecent.rawValue
@@ -155,7 +155,7 @@ struct ChatServiceLaunchPreferenceTests {
 
     @MainActor
     @Test("切换到历史会话时会记住最后活跃会话ID")
-    func switchingSessionPersistsLastActiveSessionID() {
+    func switchingSessionPersistsLastActiveSessionID() async {
         let (snapshot, restoreDefaults) = prepareIsolatedState()
         defer {
             restoreDefaults()
@@ -173,6 +173,13 @@ struct ChatServiceLaunchPreferenceTests {
         let service = ChatService()
         service.setCurrentSession(sessionB)
 
+        // 生产代码在 utility 任务中落盘，等待异步契约完成后再断言。
+        for _ in 0..<50 {
+            if Persistence.readAppConfigText(key: lastSessionKey) == sessionB.id.uuidString {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         #expect(Persistence.readAppConfigText(key: lastSessionKey) == sessionB.id.uuidString)
     }
 
