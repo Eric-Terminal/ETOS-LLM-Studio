@@ -62,7 +62,7 @@
     </div>
 
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Last updated: April 18, 2026</p>
+    <p class="last-updated">Last updated: July 26, 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -77,7 +77,7 @@
 <ul>
     <li><strong>Chats and session data:</strong> chat history, session settings, attachment references, worldbooks, memory data, Daily Pulse data, feedback history, and app settings are stored inside the app sandbox on your device.</li>
     <li><strong>API provider configuration and API keys:</strong> provider configuration (such as model lists, header overrides, and proxy settings) and API keys are stored in a local <strong>SQLite</strong> configuration database. If an older version wrote keys to Keychain, migration will merge and clean up the legacy credential storage.</li>
-    <li><strong>Local request logs:</strong> the app records metadata such as provider name, model identifier, start time, finish time, status, streaming flag, and token usage. <strong>These logs do not include message bodies</strong>. They are used for local traffic analysis, response speed metrics, Daily Pulse summaries, annual recap, and other on-device statistics.</li>
+    <li><strong>Local request and response logs:</strong> the app can locally save complete HTTP request and response bodies plus diagnostic fields such as duration, status, and token usage. This feature has its own master switch and hides chat text by default. Text is retained only if you explicitly enable plaintext message logging; Base64 data for images, audio, and files is always hidden. These logs are never uploaded automatically.</li>
     <li><strong>Feedback ticket cache:</strong> if you use the feedback assistant, the app stores ticket numbers, ticket tokens, status, update timestamps, and public URLs locally so you can track progress later.</li>
 </ul>
 
@@ -117,20 +117,34 @@
 
     </section>
     <section>
-        <h2>6. Third-Party Services, Analytics, and Server Boundaries</h2>
+        <h2>6. Performance Telemetry and Diagnostics</h2>
+
+<p>“Help Improve ETOS LLM Studio Performance” is <strong>enabled by default</strong> and can be turned off under Settings &gt; About. It is independent of local request logging. Turning it off stops collection and clears unsent telemetry.</p>
+<ul>
+    <li><strong>Data sent:</strong> aggregate CPU, memory, launch, hang, disk, and network metrics and anonymous diagnostic call stacks supplied by Apple MetricKit; fixed-stage timing for launch, database work, requests, streaming processing, and Markdown recorded with MXSignpost; and app version, build, distribution channel, iOS version, device model class, architecture, and report time.</li>
+    <li><strong>Data not sent:</strong> chat content, request or response bodies, API keys, credentials, configured server addresses, session IDs, persistent device IDs, advertising IDs, or other user identifiers.</li>
+    <li><strong>Timing and on-device retention:</strong> MetricKit delivers reports on the system’s schedule. The app only attempts to upload data written during a previous launch and deletes each local file immediately after explicit server confirmation. Pending files are retained for at most 14 days and 20 MiB total, with diagnostic call stacks prioritized.</li>
+    <li><strong>Server and archive retention:</strong> the receiving service temporarily stores data by UTC date, subject to 30-day and 2 GiB limits. The developer may transfer it to a controlled Mac for long-term performance analysis and manually delete it when no longer needed. A source IP may be used briefly for in-memory rate limiting, but is not written to telemetry files or used as a persistent identifier.</li>
+    <li><strong>Visibility and purpose:</strong> you can inspect the exact upload content under App Logs &gt; Performance Telemetry. Diagnostic addresses require the dSYM from the matching Xcode Cloud build. Data is used only to locate battery, heat, hang, launch, memory, disk, and network performance problems—not for advertising, user profiling, or training chat models.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. Third-Party Services, Analytics, and Server Boundaries</h2>
 
 <ul>
     <li><strong>Third-party AI providers:</strong> process the chat, image, and audio requests that you intentionally send.</li>
     <li><strong>Apple system services:</strong> such as WatchConnectivity and iCloud / CloudKit are governed by Apple’s own policies.</li>
     <li><strong>Developer-operated feedback service:</strong> used only when you intentionally submit or refresh feedback tickets.</li>
-    <li><strong>Not uploaded by default:</strong> chat content, local memory, local request logs, annual recap data, and API keys are not automatically uploaded to developer-controlled servers.</li>
-    <li><strong>Ads and general analytics SDKs:</strong> the current codebase does not include third-party ad SDKs, and we did not find a general-purpose developer-side behavioral analytics SDK. If that changes in the future, we will update this policy first.</li>
+    <li><strong>Developer-operated performance telemetry service:</strong> automatically receives the non-content data listed in Section 6 while performance telemetry is enabled.</li>
+    <li><strong>Not uploaded automatically:</strong> chat content, local memory, local request and response logs, annual recap data, and API keys are not automatically uploaded to developer-controlled servers.</li>
+    <li><strong>Ads and general analytics SDKs:</strong> apart from the MetricKit performance telemetry described in Section 6, the codebase does not include third-party ad SDKs or general-purpose behavioral analytics SDKs.</li>
     <li><strong>Apple analytics sharing:</strong> if you choose to share analytics with developers at the system level, Apple may collect anonymous crash logs or diagnostic information under Apple’s own rules.</li>
 </ul>
 
     </section>
     <section>
-        <h2>7. Disclaimer</h2>
+        <h2>8. Disclaimer</h2>
 
 <ul>
     <li><strong>Neutral tool:</strong> this app is a general LLM client. It may prefill some service endpoints or feedback service addresses, but it does not ship with ready-to-use commercial model credentials.</li>
@@ -142,7 +156,7 @@
 
     <section>
         <div class="contact-info">
-            <h2>8. Contact Us</h2>
+            <h2>9. Contact Us</h2>
             <p>If you have any questions about this Privacy Policy, please contact:</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:ericterminal@ericterminal.com">ericterminal@ericterminal.com</a><br>

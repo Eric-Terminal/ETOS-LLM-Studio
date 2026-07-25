@@ -62,7 +62,7 @@
     </div>
 
     <h1>隱私政策</h1>
-    <p class="last-updated">最近更新：2026年4月18日</p>
+    <p class="last-updated">最近更新：2026年7月26日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -77,7 +77,7 @@
 <ul>
     <li><strong>聊天與會話資料：</strong>聊天記錄、會話設定、附件引用、世界書、記憶資料、Daily Pulse 資料、反饋歷史與 App 設定會保存在應用沙盒中。</li>
     <li><strong>API 提供商配置與 API Key：</strong>提供商配置（例如模型清單、請求頭覆寫、代理設定等）與 API Key 會保存在本地 <strong>SQLite</strong> 配置資料庫。舊版本若曾寫入 Keychain，升級時會合併並清理舊憑據儲存。</li>
-    <li><strong>本地請求日誌：</strong>App 會在本地記錄提供商名稱、模型標識、請求時間、完成時間、狀態、是否流式、Token 用量等中繼資料。<strong>這些日誌不包含聊天正文</strong>，主要用於流量分析、回應測速、Daily Pulse 統計和年度彙總等本地功能。</li>
+    <li><strong>本地請求與回應日誌：</strong>App 可在本地保存完整 HTTP 請求內容、回應內容，以及耗時、狀態、Token 用量等診斷欄位。此功能有獨立總開關，預設隱藏聊天正文；只有你主動開啟明文記錄後才會保留文字，圖片、音訊與檔案的 Base64 一律隱藏。此類日誌不會自動上傳。</li>
     <li><strong>反饋工單快取：</strong>如果你使用反饋助手，App 會在本地保存工單編號、票據令牌、狀態、更新時間與公開連結，方便後續追蹤處理進度。</li>
 </ul>
 
@@ -117,20 +117,34 @@
 
     </section>
     <section>
-        <h2>6. 第三方服務、分析與開發者伺服器邊界</h2>
+        <h2>6. 效能遙測與診斷</h2>
+
+<p>「協助 ETOS LLM Studio 改善效能」<strong>預設開啟</strong>，可在「設定 &gt; 關於」中關閉。此開關獨立於本地請求日誌；關閉後會停止收集並清除尚未傳送的遙測。</p>
+<ul>
+    <li><strong>傳送內容：</strong>Apple MetricKit 提供的 CPU、記憶體、啟動、卡頓、磁碟、網絡等彙整指標及匿名診斷呼叫堆疊；透過 MXSignpost 記錄的啟動、資料庫、請求、串流處理及 Markdown 等固定階段耗時；以及 App 版本、Build、分發渠道、iOS 版本、裝置型號類別、架構及報告時間。</li>
+    <li><strong>不會傳送：</strong>聊天內容、請求內容、回應內容、API Key、憑證、你設定的伺服器位址、會話 ID、持久裝置 ID、廣告 ID 或其他使用者識別資料。</li>
+    <li><strong>時機與本地保留：</strong>MetricKit 按系統安排提供報告。App 只嘗試傳送上次啟動已寫入磁碟的資料；成功確認後立即刪除相應本地檔案。待傳送檔案最長保留 14 天、總量不超過 20 MiB，並優先保留診斷呼叫堆疊。</li>
+    <li><strong>伺服器與歸檔：</strong>接收服務按 UTC 日期暫存資料，受 30 天及 2 GiB 上限約束；開發者可將資料轉移至受控 Mac 作長期分析，並在不再需要時手動刪除。來源 IP 可能短暫用於記憶體限流，但不會寫入遙測檔案或作為持久識別資料。</li>
+    <li><strong>查看與用途：</strong>你可在「應用程式日誌 &gt; 效能遙測」查看實際傳送原文。診斷位址需配合相應 Xcode Cloud 版本的 dSYM 解析。資料只用於定位耗電、發熱、卡頓、啟動、記憶體、磁碟及網絡效能問題，不用於廣告、使用者側寫或訓練聊天模型。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. 第三方服務、分析與開發者伺服器邊界</h2>
 
 <ul>
     <li><strong>第三方 AI 提供商：</strong>處理由你主動發起的聊天、圖像與音訊模型請求。</li>
     <li><strong>Apple 系統服務：</strong>如 WatchConnectivity、iCloud / CloudKit 等，依 Apple 自身政策處理。</li>
     <li><strong>開發者運營的反饋服務：</strong>只在你主動提交或刷新反饋工單時使用。</li>
-    <li><strong>不會預設上傳的內容：</strong>聊天內容、本地記憶、本地請求日誌、年度彙總資料與 API Key 不會自動上傳到開發者控制的伺服器。</li>
-    <li><strong>廣告與通用埋點：</strong>目前程式碼中未整合第三方廣告 SDK，也未發現通用型開發者側行為分析 SDK。若未來加入此類能力，我們會先更新隱私政策。</li>
+    <li><strong>開發者運營的效能遙測服務：</strong>在效能遙測開啟時自動接收第 6 節列出的非內容型資料。</li>
+    <li><strong>不會自動上傳的內容：</strong>聊天內容、本地記憶、本地請求與回應日誌、年度彙總資料及 API Key 不會自動上傳到開發者控制的伺服器。</li>
+    <li><strong>廣告與通用埋點：</strong>除第 6 節所述 MetricKit 效能遙測外，目前程式碼未整合第三方廣告 SDK 或通用型行為分析 SDK。</li>
     <li><strong>Apple 分析共享：</strong>如果你在系統層面選擇與開發者共享分析，Apple 可能會依其規則收集匿名崩潰日誌或診斷資訊。</li>
 </ul>
 
     </section>
     <section>
-        <h2>7. 免責聲明</h2>
+        <h2>8. 免責聲明</h2>
 
 <ul>
     <li><strong>中立工具屬性：</strong>本 App 是通用 LLM 客戶端工具，可能預置部分服務端點或反饋服務地址，但預設不內建可直接使用的商業模型憑證。</li>
@@ -142,7 +156,7 @@
 
     <section>
         <div class="contact-info">
-            <h2>8. 聯絡我們</h2>
+            <h2>9. 聯絡我們</h2>
             <p>如果你對本隱私政策有任何疑問，請聯絡：</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:ericterminal@ericterminal.com">ericterminal@ericterminal.com</a><br>

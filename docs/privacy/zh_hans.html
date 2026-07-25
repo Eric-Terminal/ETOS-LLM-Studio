@@ -62,7 +62,7 @@
     </div>
 
     <h1>隐私政策</h1>
-    <p class="last-updated">最近更新：2026年4月18日</p>
+    <p class="last-updated">最近更新：2026年7月26日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -77,7 +77,7 @@
 <ul>
     <li><strong>聊天与会话数据：</strong>聊天记录、会话配置、附件引用、世界书、记忆、Daily Pulse 数据、反馈历史和应用设置会保存在应用沙盒内。</li>
     <li><strong>API 提供商配置与 API Key：</strong>提供商配置与 API Key 会保存在本地 <strong>SQLite</strong> 配置库。旧版本若写入过 Keychain，会在升级时迁移并清理旧凭据存储。</li>
-    <li><strong>本地请求日志：</strong>应用会在本地记录提供商名称、模型标识、请求时间、完成时间、状态、是否流式、Token 用量等元数据。<strong>这些日志不包含聊天正文</strong>，主要用于流量分析、响应测速、Daily Pulse 统计和年度汇总等本地功能。</li>
+    <li><strong>本地请求与响应日志：</strong>应用可在本地保存完整 HTTP 请求体、响应体及耗时、状态、Token 用量等诊断字段。该功能有独立总开关，默认隐藏聊天正文；只有您主动开启明文记录后才保留文本，图片、音频和文件的 Base64 始终隐藏。此类日志不会自动上传。</li>
     <li><strong>反馈工单缓存：</strong>如果您使用反馈助手，应用会在本地保存工单编号、票据令牌、状态、更新时间和公开链接，方便后续追踪处理进度。</li>
     <li><strong>启动保护备份（可选）：</strong>若您开启“启动时创建数据库备份点”，应用会在本地额外保存数据库备份副本，用于损坏恢复。</li>
 </ul>
@@ -120,21 +120,35 @@
 
     </section>
     <section>
-        <h2>6. 第三方服务、分析与开发者服务器边界</h2>
+        <h2>6. 性能遥测与诊断</h2>
+
+<p>“帮助 ETOS LLM Studio 改进性能”<strong>默认开启</strong>，可在“设置 &gt; 关于”中关闭。该开关独立于本地请求日志；关闭后会停止收集并清除尚未发送的遥测。</p>
+<ul>
+    <li><strong>发送内容：</strong>Apple MetricKit 提供的 CPU、内存、启动、卡顿、磁盘、网络等聚合指标和匿名诊断调用栈；通过 MXSignpost 记录的启动、数据库、请求、流式处理和 Markdown 等固定阶段耗时；以及 App 版本、Build、分发渠道、iOS 版本、设备型号类别、架构和报告时间。</li>
+    <li><strong>不会发送：</strong>聊天内容、请求体、响应体、API Key、凭据、您配置的服务器地址、会话 ID、持久设备 ID、广告 ID 或其他用户标识。</li>
+    <li><strong>时机与本地保留：</strong>MetricKit 按系统安排提供报告。应用仅尝试发送上一启动已落盘的数据；成功确认后立即删除对应本地文件。待发送文件最长保留 14 天、总量不超过 20 MiB，并优先保留诊断调用栈。</li>
+    <li><strong>服务器与归档：</strong>接收服务按 UTC 日期临时存放数据，受 30 天和 2 GiB 上限约束；开发者可将其转移到受控 Mac 长期分析并在不再需要时人工删除。来源 IP 可能被短暂用于内存限流，但不会写入遥测文件或作为持久标识。</li>
+    <li><strong>查看与用途：</strong>您可在“应用日志 &gt; 性能遥测”查看实际发送原文。诊断地址需配合对应 Xcode Cloud 构建的 dSYM 解析。数据仅用于定位耗电、发热、卡顿、启动、内存、磁盘和网络性能问题，不用于广告、用户画像或训练聊天模型。</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. 第三方服务、分析与开发者服务器边界</h2>
 
 <ul>
     <li><strong>第三方 AI 提供商：</strong>负责处理您主动发起的聊天、图像、音频等模型请求。</li>
     <li><strong>Apple 系统服务：</strong>如 WatchConnectivity、iCloud / CloudKit 等，由 Apple 依其自身政策处理。</li>
     <li><strong>您主动配置的 MCP 服务：</strong>仅在您连接并调用相关工具时参与数据处理。</li>
     <li><strong>开发者运营的反馈服务：</strong>仅在您主动提交或查询反馈工单时使用。</li>
-    <li><strong>不自动上传的内容：</strong>聊天内容、本地记忆、本地请求日志、年度汇总数据和 API Key 不会默认自动上传到开发者控制的服务器。</li>
-    <li><strong>广告与通用埋点：</strong>当前代码中未集成第三方广告 SDK，也未发现通用型开发者侧行为分析 SDK。若未来加入此类能力，我们会先更新隐私政策。</li>
+    <li><strong>开发者运营的性能遥测服务：</strong>在性能遥测开启时自动接收第 6 节列出的非内容型数据。</li>
+    <li><strong>不自动上传的内容：</strong>聊天内容、本地记忆、本地请求与响应日志、年度汇总数据和 API Key 不会自动上传到开发者控制的服务器。</li>
+    <li><strong>广告与通用埋点：</strong>除第 6 节所述 MetricKit 性能遥测外，当前代码中未集成第三方广告 SDK 或通用型行为分析 SDK。</li>
     <li><strong>Apple 分析共享：</strong>如果您在系统层面选择与开发者共享分析，Apple 可能会按照其规则收集匿名崩溃日志或诊断信息。</li>
 </ul>
 
     </section>
     <section>
-        <h2>7. 免责声明</h2>
+        <h2>8. 免责声明</h2>
 
 <ul>
     <li><strong>中立工具属性：</strong>本应用是通用 LLM 客户端工具，可能预置部分服务端点或反馈服务地址，但默认不内置可直接使用的商业模型凭据。</li>
@@ -146,7 +160,7 @@
 
     <section>
         <div class="contact-info">
-            <h2>8. 联系我们</h2>
+            <h2>9. 联系我们</h2>
             <p>如果您对本隐私政策有任何疑问，请联系：</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:ericterminal@ericterminal.com">ericterminal@ericterminal.com</a><br>

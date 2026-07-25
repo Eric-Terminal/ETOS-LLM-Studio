@@ -62,7 +62,7 @@
     </div>
 
     <h1>Politique de confidentialité</h1>
-    <p class="last-updated">Dernière mise à jour : 18 avril 2026</p>
+    <p class="last-updated">Dernière mise à jour : 26 juillet 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -77,7 +77,7 @@
 <ul>
     <li><strong>Données de chat et de session :</strong> historique des chats, paramètres de session, références de pièces jointes, worldbooks, données mémoire, données Daily Pulse, historique de feedback et paramètres de l’app sont stockés dans le sandbox de l’application.</li>
     <li><strong>Configuration fournisseur API et clés API :</strong> la configuration fournisseur (comme les listes de modèles, les en-têtes personnalisés et les réglages proxy) et les clés API sont stockées dans une base locale <strong>SQLite</strong>. Si une ancienne version a écrit des clés dans le Keychain, la migration fusionne puis nettoie ce stockage hérité.</li>
-    <li><strong>Journaux locaux de requêtes :</strong> l’app enregistre des métadonnées comme le fournisseur, l’identifiant du modèle, l’heure de début, l’heure de fin, l’état, le mode streaming et l’usage de tokens. <strong>Ces journaux n’incluent pas le contenu des messages</strong>. Ils servent à l’analyse locale du trafic, aux mesures de vitesse, aux statistiques Daily Pulse, au récapitulatif annuel et à d’autres fonctions locales.</li>
+    <li><strong>Journaux locaux de requêtes et de réponses :</strong> l’app peut enregistrer localement les corps HTTP complets des requêtes et des réponses, ainsi que la durée, l’état, l’usage de tokens et d’autres champs de diagnostic. Cette fonction possède son propre interrupteur général et masque le texte des discussions par défaut. Le texte n’est conservé que si vous activez explicitement la journalisation en clair ; les données Base64 des images, de l’audio et des fichiers restent toujours masquées. Ces journaux ne sont jamais téléversés automatiquement.</li>
     <li><strong>Cache des tickets de feedback :</strong> si vous utilisez l’assistant de feedback, l’app stocke localement les numéros de ticket, tokens de ticket, statut, date de mise à jour et URL publique pour suivre l’avancement.</li>
 </ul>
 
@@ -117,20 +117,34 @@
 
     </section>
     <section>
-        <h2>6. Services tiers, analytique et limites côté serveur</h2>
+        <h2>6. Télémétrie des performances et diagnostics</h2>
+
+<p>« Aider à améliorer les performances d’ETOS LLM Studio » est <strong>activé par défaut</strong> et peut être désactivé dans Réglages &gt; À propos. Ce réglage est indépendant des journaux locaux de requêtes. Sa désactivation arrête la collecte et efface la télémétrie non envoyée.</p>
+<ul>
+    <li><strong>Données envoyées :</strong> mesures agrégées de processeur, mémoire, lancement, blocage, disque et réseau, ainsi que les piles d’appels de diagnostic anonymes fournies par Apple MetricKit ; durée des étapes fixes de lancement, base de données, requêtes, traitement streaming et Markdown via MXSignpost ; version et Build de l’app, canal de distribution, version d’iOS, classe du modèle d’appareil, architecture et heure du rapport.</li>
+    <li><strong>Données non envoyées :</strong> contenu des discussions, corps de requête ou de réponse, clés API, identifiants, adresses de serveur configurées, ID de session, ID persistant d’appareil, ID publicitaire ou autre identifiant utilisateur.</li>
+    <li><strong>Moment et conservation locale :</strong> MetricKit fournit les rapports selon le calendrier du système. L’app tente uniquement d’envoyer les données écrites lors d’un lancement précédent et supprime immédiatement chaque fichier local après confirmation individuelle du serveur. Les fichiers en attente sont conservés au maximum 14 jours et 20 MiB au total, avec priorité aux piles de diagnostic.</li>
+    <li><strong>Serveur et archive :</strong> le service de réception conserve temporairement les données par date UTC, avec des limites de 30 jours et 2 GiB. Le développeur peut les transférer vers un Mac contrôlé pour une analyse à long terme et les supprimer manuellement lorsqu’elles ne sont plus nécessaires. L’adresse IP source peut servir brièvement à une limitation en mémoire, mais n’est pas écrite dans les fichiers de télémétrie ni utilisée comme identifiant persistant.</li>
+    <li><strong>Visibilité et finalité :</strong> vous pouvez consulter le contenu exact dans Journaux de l’app &gt; Télémétrie des performances. Les adresses de diagnostic nécessitent le dSYM de la build Xcode Cloud correspondante. Les données servent uniquement à identifier les problèmes de batterie, chauffe, blocage, lancement, mémoire, disque et réseau — jamais à la publicité, au profilage ou à l’entraînement de modèles de chat.</li>
+</ul>
+
+    </section>
+    <section>
+        <h2>7. Services tiers, analytique et limites côté serveur</h2>
 
 <ul>
     <li><strong>Fournisseurs d’IA tiers :</strong> traitent les requêtes de chat, image et audio que vous envoyez volontairement.</li>
     <li><strong>Services système Apple :</strong> comme WatchConnectivity et iCloud / CloudKit, sont régis par les politiques d’Apple.</li>
     <li><strong>Service de feedback opéré par le développeur :</strong> utilisé uniquement lorsque vous soumettez ou consultez des tickets de feedback.</li>
-    <li><strong>Non téléversé par défaut :</strong> contenu des chats, mémoire locale, journaux locaux, données du récapitulatif annuel et clés API ne sont pas téléversés automatiquement vers des serveurs contrôlés par le développeur.</li>
-    <li><strong>Publicité et SDK d’analytique générique :</strong> le code actuel n’inclut pas de SDK publicitaire tiers, et nous n’avons pas trouvé de SDK générique d’analyse comportementale côté développeur. Si cela change, nous mettrons à jour cette politique au préalable.</li>
+    <li><strong>Service de télémétrie opéré par le développeur :</strong> reçoit automatiquement les données sans contenu décrites à la section 6 lorsque la télémétrie est activée.</li>
+    <li><strong>Non téléversé automatiquement :</strong> contenu des chats, mémoire locale, journaux locaux de requêtes et de réponses, données du récapitulatif annuel et clés API ne sont pas téléversés automatiquement vers les serveurs du développeur.</li>
+    <li><strong>Publicité et SDK d’analytique générique :</strong> hormis la télémétrie MetricKit de la section 6, le code n’inclut aucun SDK publicitaire tiers ni SDK générique d’analyse comportementale.</li>
     <li><strong>Partage d’analyses Apple :</strong> si vous activez le partage d’analyses avec les développeurs au niveau système, Apple peut collecter des logs de crash anonymes ou des informations de diagnostic selon ses propres règles.</li>
 </ul>
 
     </section>
     <section>
-        <h2>7. Clause de non-responsabilité</h2>
+        <h2>8. Clause de non-responsabilité</h2>
 
 <ul>
     <li><strong>Outil neutre :</strong> cette app est un client LLM généraliste. Elle peut préremplir certains endpoints ou adresses de feedback, mais n’intègre pas d’identifiants commerciaux prêts à l’emploi.</li>
@@ -142,7 +156,7 @@
 
     <section>
         <div class="contact-info">
-            <h2>8. Contact</h2>
+            <h2>9. Contact</h2>
             <p>Si vous avez des questions sur cette politique de confidentialité, veuillez nous contacter :</p>
             <p><strong>Eric Terminal</strong><br>
             Email: <a href="mailto:ericterminal@ericterminal.com">ericterminal@ericterminal.com</a><br>
