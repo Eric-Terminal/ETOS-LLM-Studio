@@ -42,6 +42,13 @@ extension ChatService {
         var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
         let shouldCaptureResponseBody = AppConfigStore.boolValue(for: .requestLogEnabled)
         var rawStreamingResponseLines: [String] = []
+        let streamingSignpost = TelemetrySignpost.begin(
+            .streamingResponseProcessing,
+            correlatingWith: requestLogContext.requestID
+        )
+        defer {
+            TelemetrySignpost.end(streamingSignpost)
+        }
 
         func rawStreamingResponseBody() -> String {
             rawStreamingResponseLines.joined(separator: "\n")

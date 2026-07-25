@@ -171,32 +171,16 @@ func logChatRequestSnapshot(
 ) {
     guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
 
-    var detailPayload: [String: String] = [
-        NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
-        NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
-        NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
-        NSLocalizedString("请求体字节数", comment: "App log payload key"): "\(request.httpBody?.count ?? 0)"
-    ]
-
-    if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
-        detailPayload[NSLocalizedString("请求头", comment: "App log payload key")] = headers
-    }
     let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
-    if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
-        let bodyKey = exposesMessageFields
-            ? NSLocalizedString("请求体(含明文消息)", comment: "App log payload key")
-            : NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")
-        detailPayload[bodyKey] = body
-    } else {
-        detailPayload[NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")] = NSLocalizedString("[无法序列化]", comment: "App log payload value")
-    }
-
-    AppLog.developer(
-        level: .debug,
-        category: NSLocalizedString("请求", comment: "App log category"),
-        action: String(format: NSLocalizedString("构建%@请求", comment: "App log action"), adapterName),
-        message: String(format: NSLocalizedString("%@ 请求体已生成", comment: "App log message"), adapterName),
-        payload: detailPayload
+    let body = AppLogRedactor.sanitizeRequestBodyForLog(
+        payload,
+        exposesMessageFields: exposesMessageFields
+    ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
+    RequestTransactionLogRegistry.stageRequest(
+        adapter: adapterName,
+        request: request,
+        sanitizedBody: body,
+        sanitizedHeaders: AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields)
     )
 }
 
@@ -209,40 +193,33 @@ func logImageGenerationRequestSnapshot(
 ) {
     guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
 
-    var detailPayload: [String: String] = [
-        NSLocalizedString("适配器", comment: "App log payload key"): adapterName,
-        NSLocalizedString("方法", comment: "App log payload key"): request.httpMethod ?? "POST",
-        NSLocalizedString("地址", comment: "App log payload key"): AppLogRedactor.sanitizeURLForLog(request.url),
-        NSLocalizedString("请求体字节数", comment: "App log payload key"): "\(request.httpBody?.count ?? 0)",
-        NSLocalizedString("参考图数量", comment: "App log payload key"): "\(referenceImageCount)"
-    ]
-
-    if let headers = AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields) {
-        detailPayload[NSLocalizedString("请求头", comment: "App log payload key")] = headers
-    }
-
     let exposesMessageFields = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+    let body: String
     if let payload {
-        if let body = AppLogRedactor.sanitizeRequestBodyForLog(payload, exposesMessageFields: exposesMessageFields) {
-            let bodyKey = exposesMessageFields
-                ? NSLocalizedString("请求体(含明文消息)", comment: "App log payload key")
-                : NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")
-            detailPayload[bodyKey] = body
-        } else {
-            detailPayload[NSLocalizedString("请求体(不含消息字段)", comment: "App log payload key")] = NSLocalizedString("[无法序列化]", comment: "App log payload value")
-        }
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            payload,
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
     } else if let prompt {
-        detailPayload[NSLocalizedString("提示词", comment: "App log payload key")] = exposesMessageFields
-            ? prompt
-            : NSLocalizedString("[已隐藏]", comment: "App log payload value")
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            [
+                "prompt": prompt,
+                "reference_image_count": referenceImageCount
+            ],
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
+    } else {
+        body = AppLogRedactor.sanitizeRequestBodyForLog(
+            ["reference_image_count": referenceImageCount],
+            exposesMessageFields: exposesMessageFields
+        ) ?? NSLocalizedString("[无法序列化]", comment: "App log payload value")
     }
 
-    AppLog.developer(
-        level: .debug,
-        category: NSLocalizedString("请求", comment: "App log category"),
-        action: String(format: NSLocalizedString("构建%@请求", comment: "App log action"), adapterName),
-        message: String(format: NSLocalizedString("%@ 请求体已生成", comment: "App log message"), adapterName),
-        payload: detailPayload
+    RequestTransactionLogRegistry.stageRequest(
+        adapter: adapterName,
+        request: request,
+        sanitizedBody: body,
+        sanitizedHeaders: AppLogRedactor.sanitizeHeadersForLog(request.allHTTPHeaderFields)
     )
 }
 

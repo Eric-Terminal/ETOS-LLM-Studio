@@ -104,16 +104,6 @@ extension ChatService {
             self.currentSessionSubject.send(childSession)
             self.publishMessages([])
             self.logger.info("已创建上下文压缩续聊会话: \(childSession.id.uuidString)")
-            AppLog.userOperation(
-                category: NSLocalizedString("会话", comment: "App log category"),
-                action: NSLocalizedString("创建压缩续聊", comment: "App log action"),
-                payload: [
-                    "sourceSessionID": sourceSession.id.uuidString,
-                    "childSessionID": childSession.id.uuidString,
-                    "sourceMessageCount": "\(plan.sourceMessageCount)",
-                    "retainedRoundCount": "\(plan.retainedRoundCount)"
-                ]
-            )
         }
         return childSession
     }

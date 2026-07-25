@@ -187,6 +187,12 @@ actor ETMarkdownPrecomputeWorker {
             return cached
         }
 
+        let signpost = TelemetrySignpost.begin(
+            TelemetrySignpost.markdownInterval(characterCount: source.count)
+        )
+        defer {
+            TelemetrySignpost.end(signpost)
+        }
         let prepared = await ETPreparedMarkdownRenderPayload.build(from: source)
         cache[source] = prepared
         keyOrder.append(source)

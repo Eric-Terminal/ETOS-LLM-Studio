@@ -216,15 +216,7 @@ extension OpenAIAdapter {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
-            if let httpBody = request.httpBody {
-                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
-                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
-                    logger.debug("构建的聊天请求体:\n---\n\(sanitizedString)\n---")
-                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
-                    logger.debug("构建的聊天请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
-                }
-            }
+            logger.debug("已构建聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
             logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
@@ -364,15 +356,7 @@ extension OpenAIAdapter {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
-            if let httpBody = request.httpBody {
-                let sanitizedPayload = sanitizedPayloadForDebug(finalPayload)
-                if let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitizedPayload, options: [.sortedKeys]),
-                   let sanitizedString = String(data: sanitizedData, encoding: .utf8) {
-                    logger.debug("构建的 Responses 请求体:\n---\n\(sanitizedString)\n---")
-                } else if let jsonString = String(data: httpBody, encoding: .utf8) {
-                    logger.debug("构建的 Responses 请求体 (无法完全隐藏媒体，输出原始体的 hash): \(jsonString.hashValue)")
-                }
-            }
+            logger.debug("已构建 Responses 请求体，共 \(request.httpBody?.count ?? 0) 字节。")
             logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
         } catch {
             logger.error("构建 Responses 请求失败: JSON 序列化错误 - \(error.localizedDescription)")

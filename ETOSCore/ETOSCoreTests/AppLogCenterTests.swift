@@ -110,6 +110,78 @@ struct AppLogCenterTests {
         #expect(output?.contains("已截断") == false)
     }
 
+    @Test("响应体默认隐藏模型文本但保留结构和用量")
+    func testResponseBodySanitizationHidesTextByDefault() {
+        let source = """
+        {
+          "id": "response-1",
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "这是模型回复原文"
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 12,
+            "completion_tokens": 8
+          }
+        }
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: false
+        )
+
+        #expect(output.contains("这是模型回复原文") == false)
+        #expect(output.contains("[已隐藏") == true)
+        #expect(output.contains("\"prompt_tokens\" : 12") == true)
+        #expect(output.contains("\"id\" : \"response-1\"") == true)
+    }
+
+    @Test("响应体明文开关开启后保留文本并隐藏 Base64")
+    func testResponseBodySanitizationKeepsTextAndHidesBinary() {
+        let source = """
+        {
+          "output_text": "完整回复",
+          "data": "SGVsbG8=",
+          "image_url": "data:image/png;base64,abcdef"
+        }
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: true
+        )
+
+        #expect(output.contains("完整回复") == true)
+        #expect(output.contains("SGVsbG8=") == false)
+        #expect(output.contains("data:image/png;base64,abcdef") == false)
+        #expect(output.contains("[二进制内容已隐藏") == true)
+    }
+
+    @Test("流式响应逐行脱敏并保留协议边界")
+    func testStreamingResponseSanitization() {
+        let source = """
+        event: message
+        data: {"choices":[{"delta":{"content":"流式秘密"}}]}
+
+        data: [DONE]
+        """
+
+        let output = AppLogRedactor.sanitizeResponseBodyForLog(
+            source,
+            exposesMessageFields: false
+        )
+
+        #expect(output.contains("event: message"))
+        #expect(output.contains("data: [DONE]"))
+        #expect(output.contains("流式秘密") == false)
+        #expect(output.contains("[已隐藏") == true)
+    }
+
     @Test("日志长文本会按四千字符分页")
     func testAppLogTextPaginatorSplitsByFourThousandCharacters() {
         let text = String(repeating: "a", count: 8_001)

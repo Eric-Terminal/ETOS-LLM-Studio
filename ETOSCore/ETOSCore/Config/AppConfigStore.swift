@@ -192,6 +192,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableResponseSpeedMetrics: Bool { didSet { write(.enableResponseSpeedMetrics, enableResponseSpeedMetrics) } }
     @Published public var requestLogEnabled: Bool { didSet { write(.requestLogEnabled, requestLogEnabled) } }
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
+    @Published public var performanceTelemetryEnabled: Bool { didSet { write(.performanceTelemetryEnabled, performanceTelemetryEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
@@ -485,6 +486,7 @@ public final class AppConfigStore: ObservableObject {
         enableResponseSpeedMetrics = Self.boolValue(.enableResponseSpeedMetrics, userDefaults: userDefaults)
         requestLogEnabled = Self.boolValue(.requestLogEnabled, userDefaults: userDefaults)
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
+        performanceTelemetryEnabled = Self.boolValue(.performanceTelemetryEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
@@ -968,6 +970,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableResponseSpeedMetrics: return .bool(enableResponseSpeedMetrics)
         case .requestLogEnabled: return .bool(requestLogEnabled)
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
+        case .performanceTelemetryEnabled: return .bool(performanceTelemetryEnabled)
         case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
@@ -1130,6 +1133,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableResponseSpeedMetrics: enableResponseSpeedMetrics = value
         case .requestLogEnabled: requestLogEnabled = value
         case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value
+        case .performanceTelemetryEnabled: performanceTelemetryEnabled = value
         case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
         case .enableAutoSessionNaming: enableAutoSessionNaming = value
         case .enableMemory: enableMemory = value

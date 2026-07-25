@@ -614,20 +614,6 @@ public class ChatService {
             logger.info("  - 已切换为启动后异步加载持久化会话状态。")
         }
         logger.info("  - 初始化完成。")
-        AppLog.developer(
-            category: "chat_service",
-            action: "initialize",
-            message: NSLocalizedString("ChatService 初始化完成", comment: "App log message"),
-            payload: [
-                "providerCount": "\(self.providers.count)",
-                "selectedModel": initialModel?.model.displayName ?? NSLocalizedString("无", comment: "App log empty value")
-            ]
-        )
-        AppLog.userOperation(
-            category: NSLocalizedString("应用", comment: "App log category"),
-            action: NSLocalizedString("初始化聊天服务", comment: "App log action"),
-            payload: ["providerCount": "\(self.providers.count)"]
-        )
     }
 
     public func fetchModels(for provider: Provider) async throws -> [Model] {

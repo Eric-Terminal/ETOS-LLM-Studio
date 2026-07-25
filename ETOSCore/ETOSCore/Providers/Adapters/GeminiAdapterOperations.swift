@@ -247,9 +247,7 @@ extension GeminiAdapter {
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
-                logger.debug("构建的 Gemini 聊天请求体:\n---\n\(jsonString)\n---")
-            }
+            logger.debug("已构建 Gemini 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
             logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")

@@ -394,6 +394,30 @@ public final class AppLogCenter: ObservableObject {
         append(event, persist: true)
     }
 
+    func logRequestTransaction(_ snapshot: RequestTransactionLogSnapshot) {
+        guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
+
+        let userEvent = AppLogEvent(
+            channel: .user,
+            level: snapshot.level,
+            category: "HTTP",
+            action: snapshot.action,
+            message: snapshot.message,
+            payload: snapshot.userPayload
+        )
+        let developerEvent = AppLogEvent(
+            channel: .developer,
+            level: snapshot.level,
+            category: "HTTP",
+            action: snapshot.action,
+            message: snapshot.message,
+            payload: snapshot.developerPayload
+        )
+        append(userEvent, persist: true)
+        append(developerEvent, persist: true)
+        mirrorToConsole(developerEvent)
+    }
+
     public func clear(channel: AppLogChannel) {
         switch channel {
         case .developer:
@@ -593,14 +617,48 @@ enum AppLogRedactor {
         "input",
         "prompt",
         "system",
-        "system_instruction"
+        "system_instruction",
+        "text",
+        "arguments",
+        "tool_arguments",
+        "reasoning",
+        "reasoning_content",
+        "thinking"
     ]
     private static let requestBodyPlainMessageKeys: Set<String> = [
         "message",
         "messages",
         "content",
         "contents",
-        "input"
+        "input",
+        "prompt",
+        "system",
+        "system_instruction",
+        "text",
+        "arguments",
+        "tool_arguments",
+        "reasoning",
+        "reasoning_content",
+        "thinking"
+    ]
+    private static let responseBodySensitiveKeys: Set<String> = [
+        "message",
+        "messages",
+        "content",
+        "contents",
+        "text",
+        "output_text",
+        "input_text",
+        "reasoning",
+        "reasoning_content",
+        "thinking",
+        "thought",
+        "arguments",
+        "tool_arguments",
+        "prompt",
+        "delta",
+        "generated_text",
+        "revised_prompt"
     ]
     private static let sensitiveQueryFragments = [
         "key", "api_key", "token", "secret", "signature", "sig", "auth"
@@ -643,13 +701,45 @@ enum AppLogRedactor {
         exposesMessageFields: Bool? = nil
     ) -> String? {
         let shouldExposeMessages = exposesMessageFields ?? AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
-        let sanitized = sanitizeJSONValue(payload, exposesMessageFields: shouldExposeMessages)
+        let sanitized = sanitizeJSONValue(
+            payload,
+            exposesMessageFields: shouldExposeMessages,
+            sensitiveKeys: requestBodySensitiveKeys,
+            plainMessageKeys: requestBodyPlainMessageKeys
+        )
         guard JSONSerialization.isValidJSONObject(sanitized),
               let data = try? JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys]),
               let text = String(data: data, encoding: .utf8) else {
             return nil
         }
         return text
+    }
+
+    static func sanitizeResponseBodyForLog(
+        _ body: String,
+        exposesMessageFields: Bool? = nil
+    ) -> String {
+        let shouldExposeMessages = exposesMessageFields ??
+            AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        let lines = body.components(separatedBy: .newlines)
+        let containsServerSentEvents = lines.contains {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("data:")
+        }
+        if containsServerSentEvents {
+            return sanitizeServerSentEvents(
+                lines,
+                exposesMessageFields: shouldExposeMessages
+            )
+        }
+
+        if let sanitized = sanitizeResponseJSONText(
+            body,
+            exposesMessageFields: shouldExposeMessages,
+            prettyPrinted: true
+        ) {
+            return sanitized
+        }
+        return shouldExposeMessages ? body : redactionPlaceholder(for: body)
     }
 
     static func sanitizeURLForLog(_ url: URL?) -> String {
@@ -688,34 +778,125 @@ enum AppLogRedactor {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
-    private static func sanitizeJSONValue(_ value: Any, exposesMessageFields: Bool) -> Any {
+    private static func sanitizeJSONValue(
+        _ value: Any,
+        exposesMessageFields: Bool,
+        sensitiveKeys: Set<String>,
+        plainMessageKeys: Set<String>
+    ) -> Any {
         if let dictionary = value as? [String: Any] {
             var result: [String: Any] = [:]
             for (key, rawValue) in dictionary {
                 if let text = rawValue as? String, shouldHideBinaryPayload(key: key, text: text) {
                     result[key] = binaryPayloadPlaceholder(for: text)
-                } else if shouldHideRequestBodyField(key, exposesMessageFields: exposesMessageFields) {
+                } else if shouldHideContentField(
+                    key,
+                    exposesMessageFields: exposesMessageFields,
+                    sensitiveKeys: sensitiveKeys,
+                    plainMessageKeys: plainMessageKeys
+                ) {
                     result[key] = redactionPlaceholder(for: rawValue)
                 } else {
-                    result[key] = sanitizeJSONValue(rawValue, exposesMessageFields: exposesMessageFields)
+                    result[key] = sanitizeJSONValue(
+                        rawValue,
+                        exposesMessageFields: exposesMessageFields,
+                        sensitiveKeys: sensitiveKeys,
+                        plainMessageKeys: plainMessageKeys
+                    )
                 }
             }
             return result
         }
 
         if let array = value as? [Any] {
-            return array.map { sanitizeJSONValue($0, exposesMessageFields: exposesMessageFields) }
+            return array.map {
+                sanitizeJSONValue(
+                    $0,
+                    exposesMessageFields: exposesMessageFields,
+                    sensitiveKeys: sensitiveKeys,
+                    plainMessageKeys: plainMessageKeys
+                )
+            }
         }
 
         return value
     }
 
-    private static func shouldHideRequestBodyField(_ key: String, exposesMessageFields: Bool) -> Bool {
+    private static func shouldHideContentField(
+        _ key: String,
+        exposesMessageFields: Bool,
+        sensitiveKeys: Set<String>,
+        plainMessageKeys: Set<String>
+    ) -> Bool {
         let normalized = key.lowercased()
-        if exposesMessageFields, requestBodyPlainMessageKeys.contains(normalized) {
+        if exposesMessageFields, plainMessageKeys.contains(normalized) {
             return false
         }
-        return requestBodySensitiveKeys.contains(normalized)
+        return sensitiveKeys.contains(normalized)
+    }
+
+    private static func sanitizeServerSentEvents(
+        _ lines: [String],
+        exposesMessageFields: Bool
+    ) -> String {
+        lines.map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("data:") else {
+                if trimmed.isEmpty ||
+                    trimmed.hasPrefix("event:") ||
+                    trimmed.hasPrefix("id:") ||
+                    trimmed.hasPrefix("retry:") ||
+                    trimmed.hasPrefix(":") {
+                    return line
+                }
+                return exposesMessageFields ? line : redactionPlaceholder(for: line)
+            }
+
+            let rawData = String(trimmed.dropFirst("data:".count))
+                .trimmingCharacters(in: .whitespaces)
+            guard rawData != "[DONE]" else { return "data: [DONE]" }
+            if let sanitized = sanitizeResponseJSONText(
+                rawData,
+                exposesMessageFields: exposesMessageFields,
+                prettyPrinted: false
+            ) {
+                return "data: \(sanitized)"
+            }
+            return exposesMessageFields
+                ? line
+                : "data: \(redactionPlaceholder(for: rawData))"
+        }
+        .joined(separator: "\n")
+    }
+
+    private static func sanitizeResponseJSONText(
+        _ text: String,
+        exposesMessageFields: Bool,
+        prettyPrinted: Bool
+    ) -> String? {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+
+        if !exposesMessageFields, object is String {
+            return redactionPlaceholder(for: object)
+        }
+        let sanitized = sanitizeJSONValue(
+            object,
+            exposesMessageFields: exposesMessageFields,
+            sensitiveKeys: responseBodySensitiveKeys,
+            plainMessageKeys: responseBodySensitiveKeys
+        )
+        guard JSONSerialization.isValidJSONObject(sanitized) else { return nil }
+        var options: JSONSerialization.WritingOptions = [.sortedKeys, .withoutEscapingSlashes]
+        if prettyPrinted {
+            options.insert(.prettyPrinted)
+        }
+        guard let output = try? JSONSerialization.data(withJSONObject: sanitized, options: options) else {
+            return nil
+        }
+        return String(decoding: output, as: UTF8.self)
     }
 
     private static func shouldHideBinaryPayload(key: String, text: String) -> Bool {

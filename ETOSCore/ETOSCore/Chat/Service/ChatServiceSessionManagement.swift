@@ -126,11 +126,6 @@ extension ChatService {
                     setCurrentSession(target)
                 }
                 logger.info("复用了已有临时会话。")
-                AppLog.userOperation(
-                    category: NSLocalizedString("会话", comment: "App log category"),
-                    action: NSLocalizedString("复用临时会话", comment: "App log action"),
-                    payload: ["sessionID": target.id.uuidString]
-                )
             }
             return
         }
@@ -146,11 +141,6 @@ extension ChatService {
         storeRuntimeMessagesSnapshot([], for: newSession.id)
         publishMessages([])
         logger.info("创建了新的临时会话。")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("创建新会话", comment: "App log action"),
-            payload: ["sessionID": newSession.id.uuidString]
-        )
     }
 
     /// 创建一个带初始消息的正式会话，并切换到该会话。
@@ -188,14 +178,6 @@ extension ChatService {
         persistMessages(initialMessages, for: newSession.id)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("创建了正式会话并写入初始消息: \(newSession.name)")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("创建正式会话", comment: "App log action"),
-            payload: [
-                "sessionID": newSession.id.uuidString,
-                "messageCount": "\(initialMessages.count)"
-            ]
-        )
         return newSession
     }
 
@@ -243,11 +225,6 @@ extension ChatService {
         }
         Persistence.saveChatSessions(currentSessions)
         logger.info("删除后已保存会话列表。")
-        AppLog.userOperation(
-            category: NSLocalizedString("会话", comment: "App log category"),
-            action: NSLocalizedString("删除会话", comment: "App log action"),
-            payload: ["count": "\(sessionsToDelete.count)"]
-        )
         if isClearingAllConversationRecords {
             scheduleAchievementUnlockIfNeeded(.memoryPurge)
         }

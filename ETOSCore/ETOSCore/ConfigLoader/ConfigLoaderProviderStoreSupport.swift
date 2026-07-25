@@ -304,7 +304,6 @@ extension ConfigLoader {
         persistedProvider.chatEndpointPath = persistedProvider.normalizedChatEndpointPath
 
         var providers = loadProviders()
-        let previousProvider = providers.first(where: { $0.id == persistedProvider.id })
         if let index = providers.firstIndex(where: { $0.id == persistedProvider.id }) {
             providers[index] = persistedProvider
         } else {
@@ -318,38 +317,6 @@ extension ConfigLoader {
         cleanupLegacyProviderFiles()
         logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
         WatchDatabaseSyncService.markDatabaseChanged(.config)
-
-        let changedFields = changedFieldsForProviderUpdate(old: previousProvider, new: persistedProvider)
-        let action = previousProvider == nil
-            ? NSLocalizedString("新增提供商配置", comment: "App log action")
-            : NSLocalizedString("更新提供商配置", comment: "App log action")
-        var payload: [String: String] = [
-            "providerID": persistedProvider.id.uuidString,
-            "providerName": persistedProvider.name,
-            "apiFormat": persistedProvider.apiFormat,
-            "baseURL": persistedProvider.baseURL,
-            "chatEndpointPath": persistedProvider.normalizedChatEndpointPath,
-            "modelCount": "\(persistedProvider.models.count)",
-            "headerCount": "\(persistedProvider.headerOverrides.count)",
-            "apiKeyCount": "\(normalizedAPIKeys.count)",
-            "changedFields": changedFields.joined(separator: NSLocalizedString("、", comment: "App log list separator"))
-        ]
-        if !persistedProvider.headerOverrides.isEmpty {
-            let sortedHeaderKeys = persistedProvider.headerOverrides.keys.sorted().joined(separator: ", ")
-            payload["headerKeys"] = sortedHeaderKeys
-        }
-
-        AppLog.userOperation(
-            category: NSLocalizedString("配置", comment: "App log category"),
-            action: action,
-            payload: payload
-        )
-        AppLog.developer(
-            category: "config",
-            action: action,
-            message: String(format: NSLocalizedString("提供商配置已保存：%@", comment: "App log message"), persistedProvider.name),
-            payload: payload
-        )
         NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
     }
 
@@ -366,57 +333,7 @@ extension ConfigLoader {
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         _ = ProviderCredentialStore.shared.deleteAPIKeys(for: provider.id)
         logger.info("  - 删除成功。")
-        let payload: [String: String] = [
-            "providerID": provider.id.uuidString,
-            "providerName": provider.name,
-            "apiFormat": provider.apiFormat,
-            "baseURL": provider.baseURL,
-            "modelCount": "\(provider.models.count)"
-        ]
-        AppLog.userOperation(
-            category: NSLocalizedString("配置", comment: "App log category"),
-            action: NSLocalizedString("删除提供商配置", comment: "App log action"),
-            payload: payload
-        )
-        AppLog.developer(
-            category: "config",
-            action: NSLocalizedString("删除提供商配置", comment: "App log action"),
-            message: String(format: NSLocalizedString("提供商配置已删除：%@", comment: "App log message"), provider.name),
-            payload: payload
-        )
         NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
-    }
-
-    static func changedFieldsForProviderUpdate(old: Provider?, new: Provider) -> [String] {
-        guard let old else { return [NSLocalizedString("首次保存", comment: "App log changed field")] }
-
-        var fields: [String] = []
-        if old.name != new.name {
-            fields.append(NSLocalizedString("名称", comment: "App log changed field"))
-        }
-        if old.baseURL != new.baseURL {
-            fields.append("Base URL")
-        }
-        if old.normalizedChatEndpointPath != new.normalizedChatEndpointPath {
-            fields.append(NSLocalizedString("聊天端点后缀", comment: "App log changed field"))
-        }
-        if old.apiFormat != new.apiFormat {
-            fields.append(NSLocalizedString("API 格式", comment: "App log changed field"))
-        }
-        if old.models != new.models {
-            fields.append(NSLocalizedString("模型列表", comment: "App log changed field"))
-        }
-        if old.headerOverrides != new.headerOverrides {
-            fields.append(NSLocalizedString("请求头覆写", comment: "App log changed field"))
-        }
-        if old.proxyConfiguration != new.proxyConfiguration {
-            fields.append(NSLocalizedString("代理配置", comment: "App log changed field"))
-        }
-        if old.apiKeys != new.apiKeys {
-            fields.append(NSLocalizedString("API Key 列表", comment: "App log changed field"))
-        }
-
-        return fields.isEmpty ? [NSLocalizedString("无字段变化（覆盖保存）", comment: "App log changed field")] : fields
     }
 
     static func providersShareSamePersistentConfiguration(_ lhs: Provider, _ rhs: Provider) -> Bool {

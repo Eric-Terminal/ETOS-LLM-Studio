@@ -311,14 +311,6 @@ extension ChatService {
         selectedModelSubject.send(model)
         persistSelectedRunnableModelID(model?.id)
         logger.info("已将模型切换为: \(model?.model.displayName ?? "无")")
-        AppLog.userOperation(
-            category: NSLocalizedString("模型", comment: "App log category"),
-            action: NSLocalizedString("切换模型", comment: "App log action"),
-            payload: [
-                "provider": model?.provider.name ?? NSLocalizedString("无", comment: "App log empty value"),
-                "model": model?.model.displayName ?? NSLocalizedString("无", comment: "App log empty value")
-            ]
-        )
     }
 
     public func saveAndReloadProviders(from providers: [Provider]) {

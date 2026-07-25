@@ -142,15 +142,6 @@ extension ChatService {
             existingVariables: variableSnapshot.character,
             macroContext: resolved.macroContext
         )
-        if !initialization.failureReasons.isEmpty {
-            AppLog.developer(
-                level: .warning,
-                category: "roleplay_mvu",
-                action: "initialize",
-                message: initialization.failureReasons.joined(separator: "\n"),
-                payload: ["sessionID": sessionID.uuidString]
-            )
-        }
         variableSnapshot.replaceVariables(initialization.data.variables, scope: .chat)
         roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
         let initializedArguments: [Any] = [RoleplayMVUEventBridge.variables(initialization.data), 0]

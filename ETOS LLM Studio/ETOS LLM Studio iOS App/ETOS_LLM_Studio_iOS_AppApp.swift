@@ -67,8 +67,15 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+        let performanceTelemetryEnabled = AppConfigStore.boolValue(for: .performanceTelemetryEnabled)
+        PerformanceTelemetryCenter.shared.prepareLaunchMeasurement(
+            enabled: performanceTelemetryEnabled
+        )
         Task { @MainActor in
             ChatAppearanceProfileManager.shared.activate()
+            await PerformanceTelemetryCenter.shared.configure(
+                enabled: performanceTelemetryEnabled
+            )
         }
     }
 
@@ -104,6 +111,7 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     }
                 }
                 .onAppear {
+                    PerformanceTelemetryCenter.shared.markFirstInterfaceReady()
                     appLockWindowPresenter.install()
                     // 启动时自动重连已加入聊天路由的 MCP 服务器
                     mcpManager.connectSelectedServersIfNeeded()
@@ -111,6 +119,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     DailyPulseBackgroundDeliveryScheduler.shared.activate()
                     updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
+                }
+                .onChange(of: appConfig.performanceTelemetryEnabled) { _, enabled in
+                    Task {
+                        await PerformanceTelemetryCenter.shared.configure(enabled: enabled)
+                    }
                 }
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()

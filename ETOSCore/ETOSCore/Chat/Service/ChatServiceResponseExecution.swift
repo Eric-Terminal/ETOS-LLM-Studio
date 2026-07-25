@@ -173,7 +173,7 @@ extension ChatService {
         do {
             let data = try await fetchData(for: request, provider: provider)
             let rawResponse = String(data: data, encoding: .utf8) ?? NSLocalizedString("<二进制数据，无法以 UTF-8 解码>", comment: "Fallback for non-UTF8 response body")
-            logger.log("[Log] 收到 AI 原始响应体:\n---\n\(rawResponse)\n---")
+            logger.log("[Log] 收到 AI 响应体，共 \(data.count) 字节。")
             logResponseBodySnapshot(
                 context: requestLogContext,
                 request: request,

@@ -251,6 +251,11 @@ extension Persistence {
 
     /// 加载指定会话的聊天消息
     public static func loadMessages(for sessionID: UUID) -> [ChatMessage] {
+        let signpost = TelemetrySignpost.begin(.sessionMessageLoad)
+        defer {
+            TelemetrySignpost.end(signpost)
+        }
+
         if let store = activeGRDBStore() {
             return store.loadMessages(for: sessionID)
         }

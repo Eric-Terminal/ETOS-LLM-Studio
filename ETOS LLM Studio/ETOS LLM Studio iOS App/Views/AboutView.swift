@@ -94,6 +94,9 @@ struct AboutView: View {
     @State private var officialDataAlertTitle = ""
     @State private var officialDataAlertMessage = ""
     @State private var showOfficialDataAlert = false
+    @State private var showClearTelemetryConfirmation = false
+    @StateObject private var telemetryCenter = PerformanceTelemetryCenter.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     private let officialCommunities: [OfficialCommunity]
 
     init(distributionChannel: UpdateTimelineChannel = UpdateTimelineManager.currentDistributionChannel()) {
@@ -181,6 +184,36 @@ struct AboutView: View {
                 } label: {
                     Label(NSLocalizedString("检查更新", comment: "About page update check entry"), systemImage: "arrow.clockwise")
                 }
+            }
+
+            Section {
+                Toggle(
+                    NSLocalizedString("帮助 ETOS LLM Studio 改进性能", comment: "Performance telemetry toggle"),
+                    isOn: $appConfig.performanceTelemetryEnabled
+                )
+
+                LabeledContent(
+                    NSLocalizedString("待发送性能数据", comment: "Pending telemetry data"),
+                    value: String(
+                        format: NSLocalizedString("%d 项 · %@", comment: "Telemetry count and size"),
+                        telemetryCenter.pendingRecords.count,
+                        formatTelemetryByteCount(telemetryCenter.pendingBytes)
+                    )
+                )
+
+                Button(NSLocalizedString("清除待发送性能数据", comment: "Clear pending telemetry")) {
+                    showClearTelemetryConfirmation = true
+                }
+                .disabled(telemetryCenter.pendingRecords.isEmpty)
+            } header: {
+                Text(NSLocalizedString("性能与诊断", comment: "Performance and diagnostics section"))
+            } footer: {
+                Text(
+                    NSLocalizedString(
+                        "开启后，App 会发送 Apple MetricKit 提供的 CPU、内存、启动、卡顿、磁盘、网络和匿名诊断调用栈，以及关键功能阶段的耗时。不会发送聊天内容、请求体、响应体、API Key、服务器地址或用户标识。待发送原文可在应用日志中查看，关闭后会停止收集并清除待发送数据。",
+                        comment: "Performance telemetry disclosure"
+                    )
+                )
             }
 
             // MARK: - 官方社群
@@ -315,6 +348,28 @@ struct AboutView: View {
         } message: {
             Text(officialDataAlertMessage)
         }
+        .confirmationDialog(
+            NSLocalizedString("确认清除待发送性能数据？", comment: "Confirm clearing telemetry"),
+            isPresented: $showClearTelemetryConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("清除待发送性能数据", comment: "Clear pending telemetry"), role: .destructive) {
+                Task {
+                    await telemetryCenter.clearPendingData()
+                }
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(
+                NSLocalizedString(
+                    "只会清除尚未发送的性能遥测，不会删除请求与响应日志。",
+                    comment: "Telemetry clear scope"
+                )
+            )
+        }
+        .task {
+            await telemetryCenter.refreshVisibleRecords()
+        }
     }
 
     private func synchronizeOfficialData() {
@@ -382,6 +437,13 @@ struct AboutView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
     }
+}
+
+private func formatTelemetryByteCount(_ value: Int64) -> String {
+    let formatter = ByteCountFormatter()
+    formatter.countStyle = .file
+    formatter.allowedUnits = [.useBytes, .useKB, .useMB]
+    return formatter.string(fromByteCount: value)
 }
 
 // MARK: - Privacy Policy View

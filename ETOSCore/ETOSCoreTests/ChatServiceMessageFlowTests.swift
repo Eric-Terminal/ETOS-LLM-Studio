@@ -106,6 +106,10 @@ extension ChatServiceTests {
         let longBody = String(repeating: "完整响应", count: 2_000)
 
         AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)
+        AppConfigStore.persistSynchronously(.bool(true), for: .requestLogPlainMessageEnabled)
+        defer {
+            Persistence.deleteAppConfig(key: AppConfigKey.requestLogPlainMessageEnabled.rawValue)
+        }
         let payload = try #require(chatService.makeResponseBodySnapshotPayload(
             context: context,
             request: request,
@@ -137,6 +141,16 @@ extension ChatServiceTests {
             isPartial: true
         ))
         #expect(streamingPayload.values.contains("data: {}"))
+
+        AppConfigStore.persistSynchronously(.bool(false), for: .requestLogPlainMessageEnabled)
+        let redactedPayload = try #require(chatService.makeResponseBodySnapshotPayload(
+            context: context,
+            request: request,
+            body: #"{"choices":[{"message":{"content":"不应落盘"}}]}"#,
+            byteCount: 53,
+            httpStatusCode: 200
+        ))
+        #expect(redactedPayload.values.contains { $0.contains("不应落盘") } == false)
 
         AppConfigStore.persistSynchronously(.bool(false), for: .requestLogEnabled)
         defer {

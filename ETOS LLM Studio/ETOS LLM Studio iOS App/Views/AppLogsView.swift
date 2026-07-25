@@ -17,48 +17,38 @@ import UIKit
 
 struct AppLogsView: View {
     @StateObject private var logCenter = AppLogCenter.shared
+    @StateObject private var telemetryCenter = PerformanceTelemetryCenter.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @State private var selectedContent: AppLogContent = .requests
     @State private var showClearAllConfirm = false
+    @State private var showClearTelemetryConfirm = false
 
     var body: some View {
         List {
             Section {
-                Toggle(NSLocalizedString("启用 API 请求日志", comment: ""), isOn: $appConfig.requestLogEnabled)
-                Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
-                    .disabled(!appConfig.requestLogEnabled)
-            } footer: {
-                Text(NSLocalizedString("关闭后不会保存聊天请求日志或请求体快照；开启后可选择是否记录明文消息，图片、音频和文件的 Base64 仍会隐藏。", comment: ""))
-            }
-
-            if logCenter.logDayFolders.isEmpty {
-                ContentUnavailableView(NSLocalizedString("暂无日志目录", comment: ""),
-                    systemImage: "folder",
-                    description: Text(NSLocalizedString("应用运行并产生日志后，这里会按日期生成文件夹。", comment: ""))
-                )
-            } else {
-                Section(NSLocalizedString("按日期查看", comment: "")) {
-                    ForEach(logCenter.logDayFolders) { dayFolder in
-                        NavigationLink {
-                            AppLogDayRunsView(logCenter: logCenter, dayFolderID: dayFolder.id)
-                        } label: {
-                            AppLogDayFolderRow(dayFolder: dayFolder)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
-                                logCenter.deleteDayFolder(dayFolder)
-                            }
-                        }
+                Picker(NSLocalizedString("日志内容", comment: "Log content"), selection: $selectedContent) {
+                    ForEach(AppLogContent.allCases) { content in
+                        Text(content.title).tag(content)
                     }
                 }
+                .pickerStyle(.segmented)
+            }
+
+            if selectedContent == .requests {
+                requestLogSections
+            } else {
+                telemetrySections
             }
         }
         .navigationTitle(NSLocalizedString("应用日志", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await logCenter.refreshLogFolders()
+            await telemetryCenter.refreshVisibleRecords()
         }
         .refreshable {
             await logCenter.refreshLogFolders()
+            await telemetryCenter.refreshVisibleRecords()
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -69,10 +59,22 @@ struct AppLogsView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("清空全部", comment: "")) {
-                    showClearAllConfirm = true
+                Button(
+                    selectedContent == .requests
+                        ? NSLocalizedString("清空全部", comment: "")
+                        : NSLocalizedString("清除待发送", comment: "Clear pending telemetry")
+                ) {
+                    if selectedContent == .requests {
+                        showClearAllConfirm = true
+                    } else {
+                        showClearTelemetryConfirm = true
+                    }
                 }
-                .disabled(logCenter.logDayFolders.isEmpty)
+                .disabled(
+                    selectedContent == .requests
+                        ? logCenter.logDayFolders.isEmpty
+                        : telemetryCenter.pendingRecords.isEmpty
+                )
             }
         }
         .confirmationDialog(NSLocalizedString("确认清空所有日志？", comment: ""),
@@ -84,7 +86,301 @@ struct AppLogsView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         } message: {
-            Text(NSLocalizedString("该操作不可撤销，会删除全部日期文件夹和运行日志文件。", comment: ""))
+            Text(NSLocalizedString("该操作不可撤销，会删除全部请求与响应日志，但不会删除性能遥测。", comment: ""))
+        }
+        .confirmationDialog(
+            NSLocalizedString("确认清除待发送性能数据？", comment: "Confirm clearing telemetry"),
+            isPresented: $showClearTelemetryConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("清除待发送性能数据", comment: "Clear pending telemetry"), role: .destructive) {
+                Task {
+                    await telemetryCenter.clearPendingData()
+                }
+            }
+            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("只会清除尚未发送的性能遥测，不会删除请求与响应日志。", comment: "Telemetry clear scope"))
+        }
+    }
+
+    @ViewBuilder
+    private var requestLogSections: some View {
+        Section {
+            Toggle(NSLocalizedString("启用 API 请求日志", comment: ""), isOn: $appConfig.requestLogEnabled)
+            Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
+                .disabled(!appConfig.requestLogEnabled)
+        } footer: {
+            Text(NSLocalizedString("关闭后不会保存请求与响应事务；开启后可选择是否记录聊天原文，图片、音频和文件的 Base64 始终隐藏。请求日志只保存在本机，不会自动上传。", comment: ""))
+        }
+
+        if logCenter.logDayFolders.isEmpty {
+            ContentUnavailableView(NSLocalizedString("暂无请求日志", comment: ""),
+                systemImage: "network",
+                description: Text(NSLocalizedString("完成一次模型请求后，这里会按日期显示完整的请求与响应事务。", comment: ""))
+            )
+        } else {
+            Section(NSLocalizedString("按日期查看", comment: "")) {
+                ForEach(logCenter.logDayFolders) { dayFolder in
+                    NavigationLink {
+                        AppLogDayRunsView(logCenter: logCenter, dayFolderID: dayFolder.id)
+                    } label: {
+                        AppLogDayFolderRow(dayFolder: dayFolder)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
+                            logCenter.deleteDayFolder(dayFolder)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var telemetrySections: some View {
+        Section {
+            LabeledContent(
+                NSLocalizedString("性能改进", comment: "Performance improvement"),
+                value: appConfig.performanceTelemetryEnabled
+                    ? NSLocalizedString("已开启", comment: "")
+                    : NSLocalizedString("已关闭", comment: "")
+            )
+            LabeledContent(
+                NSLocalizedString("待发送", comment: "Pending telemetry"),
+                value: String(
+                    format: NSLocalizedString("%d 项 · %@", comment: "Telemetry count and size"),
+                    telemetryCenter.pendingRecords.count,
+                    formatByteCount(telemetryCenter.pendingBytes)
+                )
+            )
+            if telemetryCenter.isUploading {
+                Label(NSLocalizedString("正在发送上一启动的性能数据…", comment: "Uploading telemetry"), systemImage: "arrow.up.circle")
+            } else if let error = telemetryCenter.lastUploadError {
+                Label(error, systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text(NSLocalizedString("以下内容与自动发送的数据完全一致，不包含聊天内容、请求体、响应体、API Key、服务器地址或用户标识。原始调用栈需要对应构建的 dSYM 才能解析为代码位置。", comment: "Telemetry viewer disclosure"))
+        }
+
+        if telemetryCenter.pendingRecords.isEmpty {
+            Section(NSLocalizedString("待发送", comment: "Pending telemetry")) {
+                ContentUnavailableView(
+                    NSLocalizedString("暂无待发送性能数据", comment: "No pending telemetry"),
+                    systemImage: "waveform.path.ecg",
+                    description: Text(NSLocalizedString("MetricKit 通常按系统安排提供聚合报告，并不保证每次启动都有新数据。", comment: "MetricKit delivery timing"))
+                )
+            }
+        } else {
+            Section(NSLocalizedString("待发送", comment: "Pending telemetry")) {
+                ForEach(telemetryCenter.pendingRecords) { record in
+                    NavigationLink {
+                        TelemetryLogDetailView(record: record)
+                    } label: {
+                        TelemetryLogRow(record: record)
+                    }
+                }
+            }
+        }
+
+        if !telemetryCenter.sentThisLaunchRecords.isEmpty {
+            Section(NSLocalizedString("本次启动已发送", comment: "Telemetry sent this launch")) {
+                ForEach(telemetryCenter.sentThisLaunchRecords) { record in
+                    NavigationLink {
+                        TelemetryLogDetailView(record: record)
+                    } label: {
+                        TelemetryLogRow(record: record)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum AppLogContent: String, CaseIterable, Identifiable {
+    case requests
+    case telemetry
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .requests:
+            return NSLocalizedString("请求与响应", comment: "Request and response logs")
+        case .telemetry:
+            return NSLocalizedString("性能遥测", comment: "Performance telemetry")
+        }
+    }
+}
+
+private struct TelemetryLogRow: View {
+    let record: TelemetryLogRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(kindTitle, systemImage: kindIcon)
+                    .etFont(.subheadline)
+                Spacer()
+                Text(deliveryTitle)
+                    .etFont(.caption)
+                    .foregroundStyle(deliveryColor)
+            }
+            Text(
+                String(
+                    format: NSLocalizedString("版本 %@ (%@) · %@", comment: "Telemetry version and capture time"),
+                    record.envelope.app.version,
+                    record.envelope.app.build,
+                    formatTime(record.envelope.capturedAt)
+                )
+            )
+            .etFont(.caption)
+            .foregroundStyle(.secondary)
+            Text(
+                String(
+                    format: NSLocalizedString("%@ · %@", comment: "Telemetry device and file size"),
+                    record.envelope.platform.deviceClass,
+                    formatByteCount(record.fileSizeBytes)
+                )
+            )
+            .etFont(.caption2.monospaced())
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var kindTitle: String {
+        record.envelope.kind == .metric
+            ? NSLocalizedString("系统性能指标", comment: "Metric payload")
+            : NSLocalizedString("性能诊断调用栈", comment: "Diagnostic payload")
+    }
+
+    private var kindIcon: String {
+        record.envelope.kind == .metric ? "gauge.with.dots.needle.50percent" : "waveform.path.ecg.rectangle"
+    }
+
+    private var deliveryTitle: String {
+        switch record.deliveryState {
+        case .pending:
+            return NSLocalizedString("待发送", comment: "Pending telemetry")
+        case .sentThisLaunch:
+            return NSLocalizedString("已发送", comment: "Sent telemetry")
+        case .tooLarge:
+            return NSLocalizedString("文件过大", comment: "Telemetry file too large")
+        }
+    }
+
+    private var deliveryColor: Color {
+        switch record.deliveryState {
+        case .pending:
+            return .orange
+        case .sentThisLaunch:
+            return .green
+        case .tooLarge:
+            return .red
+        }
+    }
+}
+
+private struct TelemetryLogDetailView: View {
+    let record: TelemetryLogRecord
+    @State private var channel: AppLogChannel = .user
+
+    var body: some View {
+        List {
+            Section {
+                Picker(NSLocalizedString("信息格式", comment: "Log presentation format"), selection: $channel) {
+                    Text(NSLocalizedString("用户", comment: "")).tag(AppLogChannel.user)
+                    Text(NSLocalizedString("开发", comment: "")).tag(AppLogChannel.developer)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if channel == .user {
+                userSummary
+            } else {
+                developerDetails
+            }
+        }
+        .navigationTitle(
+            record.envelope.kind == .metric
+                ? NSLocalizedString("系统性能指标", comment: "Metric payload")
+                : NSLocalizedString("性能诊断", comment: "Diagnostic payload")
+        )
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private var userSummary: some View {
+        Section(NSLocalizedString("数据摘要", comment: "Telemetry summary")) {
+            LabeledContent(NSLocalizedString("类型", comment: ""), value: record.envelope.kind.rawValue)
+            LabeledContent(
+                NSLocalizedString("状态", comment: ""),
+                value: record.deliveryState == .sentThisLaunch
+                    ? NSLocalizedString("本次启动已发送", comment: "Telemetry sent this launch")
+                    : NSLocalizedString("待发送", comment: "Pending telemetry")
+            )
+            LabeledContent(
+                NSLocalizedString("版本", comment: ""),
+                value: "\(record.envelope.app.version) (\(record.envelope.app.build))"
+            )
+            LabeledContent(
+                NSLocalizedString("系统与设备", comment: "System and device"),
+                value: "\(record.envelope.platform.deviceClass) · iOS \(record.envelope.platform.osVersion)"
+            )
+            LabeledContent(NSLocalizedString("统计时间范围", comment: "Telemetry period"), value: record.periodDescription)
+            LabeledContent(NSLocalizedString("文件大小", comment: ""), value: formatByteCount(record.fileSizeBytes))
+        }
+
+        Section(NSLocalizedString("包含的数据类别", comment: "Telemetry categories")) {
+            if record.payloadCategories.isEmpty {
+                Text(NSLocalizedString("系统未列出指标类别", comment: "No MetricKit categories"))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(record.payloadCategories, id: \.self) { category in
+                    Text(category)
+                        .etFont(.footnote.monospaced())
+                }
+            }
+        }
+
+        Section(NSLocalizedString("隐私", comment: "")) {
+            Label(
+                NSLocalizedString("不包含聊天内容、请求体、响应体、凭据或用户标识", comment: "Telemetry privacy summary"),
+                systemImage: "checkmark.shield"
+            )
+            if record.envelope.kind == .diagnostic {
+                Text(NSLocalizedString("调用栈中的地址和二进制 UUID 需要对应构建的 dSYM 才能还原为函数、文件和可能的行号。", comment: "dSYM explanation"))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var developerDetails: some View {
+        Section(NSLocalizedString("Envelope", comment: "Telemetry envelope")) {
+            LabeledContent("schema_version", value: "\(record.envelope.schemaVersion)")
+            LabeledContent("payload_id", value: record.envelope.payloadID)
+                .textSelection(.enabled)
+            LabeledContent("kind", value: record.envelope.kind.rawValue)
+            LabeledContent("distribution", value: record.envelope.app.distribution.rawValue)
+            if let relativePath = record.relativePath {
+                LabeledContent("relative_path", value: relativePath)
+                    .textSelection(.enabled)
+            }
+        }
+
+        Section(NSLocalizedString("实际上传原文", comment: "Raw uploaded telemetry")) {
+            ExpandableLogTextView(
+                title: NSLocalizedString("实际上传原文", comment: "Raw uploaded telemetry"),
+                text: record.rawJSON
+            )
+        }
+
+        Section(NSLocalizedString("符号化说明", comment: "Symbolication explanation")) {
+            Text(NSLocalizedString("客户端不会嵌入或下载 dSYM。请在 Mac 上按 Binary UUID 匹配对应的 Xcode Cloud .xcarchive；Release 优化可能使行号近似，函数和调用链通常更可靠。", comment: "Telemetry symbolication details"))
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -148,9 +444,24 @@ private struct AppLogRunDetailView: View {
     @State private var categoryFilter = ""
     @State private var levelFilter: LevelFilter = .all
     @State private var configChangesOnly = false
+    @State private var channel: AppLogChannel = .user
 
     var body: some View {
         List {
+            Section {
+                Picker(NSLocalizedString("信息格式", comment: "Log presentation format"), selection: $channel) {
+                    Text(NSLocalizedString("用户", comment: "")).tag(AppLogChannel.user)
+                    Text(NSLocalizedString("开发", comment: "")).tag(AppLogChannel.developer)
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(
+                    channel == .user
+                        ? NSLocalizedString("用户格式只显示完整请求体与响应体；聊天原文是否保留由请求日志设置决定。", comment: "")
+                        : NSLocalizedString("开发格式额外显示耗时、状态码、用量与事务标识等诊断字段。", comment: "")
+                )
+            }
+
             Section(NSLocalizedString("日志文件信息", comment: "")) {
                 LabeledContent(NSLocalizedString("日期文件夹", comment: ""), value: runFile.day)
                 LabeledContent(NSLocalizedString("日志文件名", comment: ""), value: runFile.fileName)
@@ -232,7 +543,10 @@ private struct AppLogRunDetailView: View {
             categoryKeyword: categoryFilter,
             configChangesOnly: configChangesOnly
         )
-        return AppLogFilterEngine.filter(events, with: filter)
+        return AppLogFilterEngine.filter(
+            events.filter { $0.channel == channel },
+            with: filter
+        )
     }
 
     private var hasActiveFilters: Bool {
@@ -270,12 +584,6 @@ private struct AppLogRunDetailView: View {
         #endif
     }
 
-    private func formatByteCount(_ value: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useBytes]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: value)
-    }
 }
 
 private struct AppLogDayFolderRow: View {
@@ -690,6 +998,13 @@ private func formatTime(_ date: Date) -> String {
     formatter.locale = .autoupdatingCurrent
     formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
     return formatter.string(from: date)
+}
+
+private func formatByteCount(_ value: Int64) -> String {
+    let formatter = ByteCountFormatter()
+    formatter.allowedUnits = [.useKB, .useMB, .useBytes]
+    formatter.countStyle = .file
+    return formatter.string(fromByteCount: value)
 }
 
 private func formatLogPayload(_ payload: [String: String]) -> String {

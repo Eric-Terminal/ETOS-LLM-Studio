@@ -44,6 +44,13 @@ extension PersistenceTests {
         #expect(AppConfigKey.enableReasoningSummary.defaultValue == .bool(false))
     }
 
+    @Test("性能遥测默认开启且仅保存在本机")
+    func performanceTelemetryDefaultsToEnabledAndLocalOnly() {
+        #expect(AppConfigKey.performanceTelemetryEnabled.defaultValue == .bool(true))
+        #expect(AppConfigKey.performanceTelemetryEnabled.participatesInSync == false)
+        #expect(AppConfigKey.requestLogPlainMessageEnabled.defaultValue == .bool(false))
+    }
+
     @Test("iOS 与 watchOS 默认使用按提供商选择模型")
     func modelPickerDefaultsToProviderGrouping() {
         #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))

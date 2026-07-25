@@ -305,6 +305,14 @@ extension ChatService {
         errorKind: String? = nil
     ) {
         let normalizedUsage = tokenUsage?.hasAnyData == true ? tokenUsage : nil
+        RequestTransactionLogRegistry.finalize(
+            requestID: context.requestID,
+            status: status,
+            finishedAt: finishedAt,
+            httpStatusCode: httpStatusCode,
+            errorKind: errorKind,
+            tokenUsage: normalizedUsage
+        )
         if (context.requestSource == .chat || context.requestSource == .imageGeneration),
            AppConfigStore.boolValue(for: .requestLogEnabled) {
             let logEntry = RequestLogEntry(
@@ -378,7 +386,7 @@ extension ChatService {
                 ? NSLocalizedString("响应体(部分)", comment: "App log payload key")
                 : NSLocalizedString("响应体", comment: "App log payload key")
         }
-        payload[bodyKey] = body
+        payload[bodyKey] = AppLogRedactor.sanitizeResponseBodyForLog(body)
         return payload
     }
 
@@ -391,23 +399,19 @@ extension ChatService {
         isPartial: Bool = false
     ) {
         let resolvedByteCount = byteCount ?? body.data(using: .utf8)?.count ?? 0
-        guard let payload = makeResponseBodySnapshotPayload(
-            context: context,
+        guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
+        let sanitizedBody = AppLogRedactor.sanitizeResponseBodyForLog(body)
+        RequestTransactionLogRegistry.stageResponse(
+            requestID: context.requestID,
             request: request,
-            body: body,
-            byteCount: resolvedByteCount,
-            httpStatusCode: httpStatusCode,
+            requestedAt: context.requestedAt,
+            providerName: context.providerName,
+            modelID: context.modelID,
+            isStreaming: context.isStreaming,
+            sanitizedBody: sanitizedBody,
+            bodyBytes: resolvedByteCount,
+            statusCode: httpStatusCode,
             isPartial: isPartial
-        ) else {
-            return
-        }
-
-        AppLog.developer(
-            level: .debug,
-            category: NSLocalizedString("请求", comment: "App log category"),
-            action: String(format: NSLocalizedString("接收%@响应", comment: "App log action"), context.providerName),
-            message: String(format: NSLocalizedString("%@ 响应体已接收", comment: "App log message"), context.providerName),
-            payload: payload
         )
     }
 
@@ -478,13 +482,7 @@ extension ChatService {
         let (data, response) = try await requestData(for: request, provider: provider)
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-            if let prettyBody = String(data: data, encoding: .utf8) {
-                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体:\n---\n\(prettyBody)\n---")
-            } else if !data.isEmpty {
-                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体包含 \(data.count) 字节的二进制数据。")
-            } else {
-                logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体为空。")
-            }
+            logger.error("  - 网络请求失败，状态码: \(statusCode)，响应体大小: \(data.count) 字节。")
             throw NetworkError.badStatusCode(code: statusCode, responseBody: data.isEmpty ? nil : data)
         }
         return data
@@ -509,13 +507,7 @@ extension ChatService {
             } catch {
                 logger.error("  - 读取流式错误响应体失败: \(error.localizedDescription)")
             }
-            if let capturedBody, let prettyBody = String(data: capturedBody, encoding: .utf8) {
-                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体:\n---\n\(prettyBody)\n---")
-            } else if let capturedBody, !capturedBody.isEmpty {
-                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体包含 \(capturedBody.count) 字节的二进制数据。")
-            } else {
-                logger.error("  - 流式网络请求失败，状态码: \(statusCode)，响应体为空。")
-            }
+            logger.error("  - 流式网络请求失败，状态码: \(statusCode)，已捕获响应体大小: \(capturedBody?.count ?? 0) 字节。")
             throw NetworkError.badStatusCode(code: statusCode, responseBody: capturedBody)
         }
         return bytes

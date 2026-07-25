@@ -388,9 +388,7 @@ public class AnthropicAdapter: APIAdapter {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            if let httpBody = request.httpBody, let jsonString = String(data: httpBody, encoding: .utf8) {
-                logger.debug("构建的 Anthropic 聊天请求体:\n---\n\(jsonString)\n---")
-            }
+            logger.debug("已构建 Anthropic 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
             logChatRequestSnapshot(adapterName: "Anthropic", request: request, payload: payload)
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")

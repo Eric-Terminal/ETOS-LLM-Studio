@@ -350,6 +350,14 @@ extension ChatService {
         }
 
         logger.info("生图请求构建成功: method=\(request.httpMethod ?? "POST"), url=\(request.url?.absoluteString ?? "unknown")")
+        RequestTransactionLogRegistry.bindRequest(
+            request,
+            requestID: requestLogContext.requestID,
+            requestedAt: requestLogContext.requestedAt,
+            providerName: requestLogContext.providerName,
+            modelID: requestLogContext.modelID,
+            isStreaming: requestLogContext.isStreaming
+        )
 
         do {
             logger.info("生图请求发送中: session=\(currentSessionID.uuidString)")

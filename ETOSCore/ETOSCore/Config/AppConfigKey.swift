@@ -133,6 +133,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableResponseSpeedMetrics = "enableResponseSpeedMetrics"
     case requestLogEnabled = "logs.request.enabled"
     case requestLogPlainMessageEnabled = "logs.request.plainMessageEnabled"
+    case performanceTelemetryEnabled = "telemetry.performance.enabled"
     case modelConnectivityTestConcurrencyLimit = "modelConnectivityTest.concurrencyLimit"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
     case reasoningContentEchoMode = "chat.reasoningContentEchoMode"
@@ -351,6 +352,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(true)
         case .requestLogPlainMessageEnabled:
             return .bool(false)
+        case .performanceTelemetryEnabled:
+            return .bool(true)
         case .reasoningContentEchoMode:
             return .text(ReasoningContentEchoMode.defaultMode.rawValue)
         case .modelConnectivityTestConcurrencyLimit:
@@ -552,6 +555,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .hiddenAnnouncementKeys,
              .requestLogEnabled,
              .requestLogPlainMessageEnabled,
+             .performanceTelemetryEnabled,
              .watchUseThirdPartyKeyboard,
              .localDebugLastServerAddress,
              .iOSModelPickerExpandedGroupIDs,

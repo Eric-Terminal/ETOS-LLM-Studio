@@ -550,7 +550,21 @@ extension ChatService {
             logger.info("当前模型未启用工具能力，本次请求不会附带工具定义。")
         }
 
-        guard let request = adapter.buildChatRequest(for: runnableModel, commonPayload: commonPayload, messages: messagesToSend, tools: effectiveTools, audioAttachments: audioAttachments, imageAttachments: imageAttachments, fileAttachments: fileAttachments) else {
+        let preparationSignpost = TelemetrySignpost.begin(
+            .requestPreparation,
+            correlatingWith: requestLogContext.requestID
+        )
+        let builtRequest = adapter.buildChatRequest(
+            for: runnableModel,
+            commonPayload: commonPayload,
+            messages: messagesToSend,
+            tools: effectiveTools,
+            audioAttachments: audioAttachments,
+            imageAttachments: imageAttachments,
+            fileAttachments: fileAttachments
+        )
+        TelemetrySignpost.end(preparationSignpost)
+        guard let request = builtRequest else {
             let reason = providerConfigurationValidationErrorMessage(
                 for: runnableModel.provider,
                 action: NSLocalizedString("发送聊天请求", comment: "Send chat request action")
@@ -566,6 +580,14 @@ extension ChatService {
             )
             return
         }
+        RequestTransactionLogRegistry.bindRequest(
+            request,
+            requestID: requestLogContext.requestID,
+            requestedAt: requestLogContext.requestedAt,
+            providerName: requestLogContext.providerName,
+            modelID: requestLogContext.modelID,
+            isStreaming: requestLogContext.isStreaming
+        )
 
         persistSentSystemPromptSnapshot(
             from: messagesToSend,

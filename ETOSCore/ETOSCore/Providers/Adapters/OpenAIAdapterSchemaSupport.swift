@@ -421,33 +421,4 @@ extension OpenAIAdapter {
         return value
     }
 
-    func sanitizedPayloadForDebug(_ value: Any) -> Any {
-        if let dictionary = value as? [String: Any] {
-            var sanitized: [String: Any] = [:]
-            sanitized.reserveCapacity(dictionary.count)
-            for (key, rawValue) in dictionary {
-                let loweredKey = key.lowercased()
-                if loweredKey == "data" || loweredKey == "file_data" {
-                    if let text = rawValue as? String {
-                        sanitized[key] = "[base64 omitted: \(text.count) chars]"
-                    } else {
-                        sanitized[key] = "[binary omitted]"
-                    }
-                    continue
-                }
-                if (loweredKey == "url" || loweredKey == "image_url"),
-                   let text = rawValue as? String,
-                   text.hasPrefix("data:") {
-                    sanitized[key] = "[base64 image omitted: \(text.count) chars]"
-                    continue
-                }
-                sanitized[key] = sanitizedPayloadForDebug(rawValue)
-            }
-            return sanitized
-        }
-        if let array = value as? [Any] {
-            return array.map { sanitizedPayloadForDebug($0) }
-        }
-        return value
-    }
 }

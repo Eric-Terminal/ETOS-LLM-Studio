@@ -57,9 +57,11 @@ public final class AppLaunchStateMachine: ObservableObject {
         phase = .preparingPersistence
 
         bootstrapTask = Task { [weak self] in
+            let persistenceSignpost = TelemetrySignpost.begin(.databaseBootstrap)
             await Task.detached(priority: .userInitiated) {
                 Persistence.bootstrapGRDBStoreOnLaunch()
             }.value
+            TelemetrySignpost.end(persistenceSignpost)
 
             if Persistence.hasPendingLaunchRecoveryRequest() {
                 await MainActor.run {
@@ -80,10 +82,12 @@ public final class AppLaunchStateMachine: ObservableObject {
                 self?.phase = .warmingServices
             }
 
+            let warmupSignpost = TelemetrySignpost.begin(.serviceWarmup)
             await Task.detached(priority: .userInitiated) {
                 let chatService = ChatService.shared
                 await chatService.waitForInitialPersistenceStateIfNeeded()
             }.value
+            TelemetrySignpost.end(warmupSignpost)
 
             guard !Task.isCancelled else {
                 await MainActor.run {

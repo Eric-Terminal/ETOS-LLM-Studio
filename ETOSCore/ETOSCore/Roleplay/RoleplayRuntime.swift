@@ -289,19 +289,6 @@ enum RoleplayRuntime {
                 sessionID: sessionID
             )
         }
-        if !result.failureReasons.isEmpty {
-            AppLog.developer(
-                level: .warning,
-                category: "roleplay_mvu",
-                action: "apply_updates",
-                message: result.failureReasons.joined(separator: "\n"),
-                payload: [
-                    "sessionID": sessionID.uuidString,
-                    "messageID": messageID.uuidString,
-                    "versionIndex": String(versionIndex)
-                ]
-            )
-        }
         if result.didMutateVariables {
             let variablesAfterUpdate = RoleplayMVUData(
                 variables: result.updatedSnapshot.messageVariables(
