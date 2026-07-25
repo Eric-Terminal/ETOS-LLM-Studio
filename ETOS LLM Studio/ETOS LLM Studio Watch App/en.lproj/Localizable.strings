@@ -5140,3 +5140,12 @@
 "快捷功能" = "Quick Actions";
 "临时对话已开启" = "Temporary chat enabled";
 "临时对话已关闭" = "Temporary chat disabled";
+"启用斜杠命令" = "Enable Slash Commands";
+"默认关闭。启用后，提交以 / 开头的输入即可显示命令；无法识别的内容仍会原样发送给 AI。" = "Disabled by default. Once enabled, submit input beginning with / to show commands. Unrecognized content is still sent to AI unchanged.";
+"可用命令" = "Available Commands";
+"用简短命令快速打开聊天操作和设置页面。" = "Use short commands to quickly open chat actions and settings.";
+"命令建议" = "Command Suggestions";
+"当前没有可重试的回复。" = "No response is available to retry.";
+"当前没有正在生成的回复。" = "No response is currently being generated.";
+"临时对话仅可在对话开始前开启。" = "Temporary chat can only be enabled before the conversation starts.";
+"停止生成" = "Stop Generating";

@@ -1,0 +1,69 @@
+// ============================================================================
+// ChatSlashCommandSuggestions.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// 本文件呈现聊天输入框上方的 iOS 斜杠命令建议面板。
+// ============================================================================
+
+import SwiftUI
+import ETOSCore
+
+struct ChatSlashCommandSuggestionPanel: View {
+    let commands: [ChatSlashCommand]
+    let onSelect: (ChatSlashCommand) -> Void
+
+    private let rowHeight: CGFloat = 52
+    private let maximumPanelHeight: CGFloat = 286
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(commands) { command in
+                    Button {
+                        onSelect(command)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: command.systemImage)
+                                .etFont(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.tint)
+                                .frame(width: 24)
+
+                            Text(command.invocation)
+                                .etFont(.body.monospaced().weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description"))
+                                .etFont(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        "\(command.invocation), \(NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description"))"
+                    )
+
+                    if command.id != commands.last?.id {
+                        Divider()
+                            .padding(.leading, 52)
+                    }
+                }
+            }
+        }
+        .scrollIndicators(.visible)
+        .frame(height: min(CGFloat(commands.count) * rowHeight, maximumPanelHeight))
+        .background(.ultraThinMaterial, in: shape)
+        .overlay(shape.stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(NSLocalizedString("命令建议", comment: "Slash command suggestions accessibility label"))
+    }
+}

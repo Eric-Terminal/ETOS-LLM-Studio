@@ -14,6 +14,7 @@ import ETOSCore
 import WatchKit
 
 enum WatchSettingsNavigationDestination: Hashable, Identifiable {
+    case model
     case dailyPulse
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
@@ -22,6 +23,8 @@ enum WatchSettingsNavigationDestination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .model:
+            return "model"
         case .dailyPulse:
             return "dailyPulse"
         case .feedbackCenter:
@@ -304,6 +307,14 @@ struct SettingsView: View {
             }
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
+                case .model:
+                    ModelSelectionView(
+                        models: viewModel.activatedConversationModels,
+                        providerGroups: viewModel.activatedConversationModelGroups,
+                        modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
+                        layoutsByProviderID: viewModel.activatedConversationModelLayoutsByProviderID,
+                        selectedModel: selectedModelBinding
+                    )
                 case .dailyPulse:
                     DailyPulseView(viewModel: viewModel)
                 case .feedbackCenter:
@@ -468,6 +479,7 @@ struct SettingsListIcon {
 extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green, legacySystemName: "plus.message")
+    static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
     static let sessionHistory = SettingsListIcon(
         systemName: "clock",
         backgroundColor: .indigo,

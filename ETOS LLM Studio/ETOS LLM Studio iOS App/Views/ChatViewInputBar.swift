@@ -57,6 +57,7 @@ extension ChatView {
                 stopAction: {
                     viewModel.cancelSending()
                 },
+                slashCommandAction: performSlashCommand,
                 focus: $composerFocused
             )
             .onReceive(viewModel.$userInput) { newValue in

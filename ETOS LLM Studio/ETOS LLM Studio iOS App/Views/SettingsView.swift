@@ -429,6 +429,7 @@ extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green)
     static let chatQuickAction = SettingsListIcon(systemName: "ellipsis.circle", backgroundColor: .indigo)
+    static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
     static let sessionHistory = SettingsListIcon(systemName: "clock", backgroundColor: .indigo)
     static let providerManagement = SettingsListIcon(systemName: "cube", backgroundColor: .orange)
     static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple)

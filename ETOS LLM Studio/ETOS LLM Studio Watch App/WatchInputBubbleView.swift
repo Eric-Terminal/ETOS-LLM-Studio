@@ -24,6 +24,7 @@ struct WatchInputBubbleView: View {
     let isContextCompressionAvailable: Bool
     let isTemporaryChatActivationAvailable: Bool
     let onPerformQuickAction: (WatchInputQuickAction) -> Void
+    let onPerformSlashCommand: (ChatSlashCommand) -> Void
     let onShowTransientNotice: (WatchChatTransientNotice) -> Void
     let onHandleInputAction: (WatchChatInputActionState) -> Void
     let onSpeechInputLayoutWillChange: () -> Void
@@ -45,6 +46,7 @@ struct WatchInputBubbleView: View {
     @State private var isTemporaryChatEnabled = false
     @State private var visibleLeadingQuickActions: [WatchInputQuickAction] = []
     @State private var visibleTrailingQuickActions: [WatchInputQuickAction] = []
+    @State private var slashCommandSuggestions: [ChatSlashCommand] = []
 
     private var hasPendingAttachments: Bool {
         viewModel.pendingAudioAttachment != nil
@@ -84,6 +86,7 @@ struct WatchInputBubbleView: View {
                 inputLinkLabel
             } onSubmit: { submittedText in
                 viewModel.userInput = WatchChatInputSubmission.normalizedText(from: submittedText)
+                refreshSlashCommandSuggestions()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(NSLocalizedString("输入...", comment: ""))
@@ -154,6 +157,14 @@ struct WatchInputBubbleView: View {
 
         let coreBubble = Group {
             VStack(spacing: 6) {
+                if !slashCommandSuggestions.isEmpty {
+                    WatchSlashCommandSuggestionPanel(
+                        commands: slashCommandSuggestions,
+                        onSelect: performSuggestedSlashCommand
+                    )
+                    .transition(.opacity)
+                }
+
                 if isInlineSpeechComposerPresented {
                     inlineSpeechComposer
                 } else if isLiquidGlassEnabled {
@@ -163,7 +174,7 @@ struct WatchInputBubbleView: View {
                                 .glassEffect(.clear, in: Capsule())
 
                             Button {
-                                onHandleInputAction(inputActionState)
+                                handleInputAction(inputActionState)
                             } label: {
                                 Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
@@ -184,7 +195,7 @@ struct WatchInputBubbleView: View {
                             }
 
                             Button {
-                                onHandleInputAction(inputActionState)
+                                handleInputAction(inputActionState)
                             } label: {
                                 Image(systemName: inputActionState.systemImageName)
                                     .etFont(.system(size: 18, weight: .medium))
@@ -212,7 +223,7 @@ struct WatchInputBubbleView: View {
                         }
 
                         Button {
-                            onHandleInputAction(inputActionState)
+                            handleInputAction(inputActionState)
                         } label: {
                             Image(systemName: inputActionState.systemImageName)
                                 .etFont(.system(size: 18, weight: .medium))
@@ -238,6 +249,7 @@ struct WatchInputBubbleView: View {
         .padding(.horizontal)
         .padding(.vertical, inputBubbleVerticalPadding)
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isInlineSpeechComposerPresented)
+        .animation(.easeOut(duration: 0.16), value: slashCommandSuggestions)
 
         return coreBubble
             .onLongPressGesture(minimumDuration: 0.5) {
@@ -289,11 +301,18 @@ struct WatchInputBubbleView: View {
                     )
                 }
             }
-            .sheet(isPresented: $isDraftEditorPresented) {
+            .sheet(isPresented: $isDraftEditorPresented, onDismiss: refreshSlashCommandSuggestions) {
                 WatchChatDraftEditorView(
                     text: $viewModel.userInput,
                     placeholder: inputPlaceholderText
                 )
+            }
+            .onChange(of: appConfig.enableSlashCommands) { _, isEnabled in
+                if isEnabled {
+                    refreshSlashCommandSuggestions()
+                } else {
+                    slashCommandSuggestions = []
+                }
             }
             .confirmationDialog(
                 NSLocalizedString("助手脚本", comment: "Watch roleplay script action menu"),
@@ -336,6 +355,7 @@ struct WatchInputBubbleView: View {
             .onAppear {
                 refreshTemporaryChatState()
                 refreshVisibleQuickActions()
+                refreshSlashCommandSuggestions()
                 updateResourceUsageSampling()
                 refreshInputLocalPresentationBlocker()
             }
@@ -517,6 +537,7 @@ struct WatchInputBubbleView: View {
         case .clearInput:
             viewModel.clearUserInput()
             viewModel.clearAllAttachments()
+            slashCommandSuggestions = []
         case .sessionHistory,
              .contextCompression,
              .settings,
@@ -533,6 +554,36 @@ struct WatchInputBubbleView: View {
              .extendedFeatures:
             onPerformQuickAction(action)
         }
+    }
+
+    private func handleInputAction(_ state: WatchChatInputActionState) {
+        if case .send = state,
+           appConfig.enableSlashCommands,
+           let command = ChatSlashCommandParser.recognizedCommand(in: viewModel.userInput) {
+            viewModel.userInput = ""
+            slashCommandSuggestions = []
+            onPerformSlashCommand(command)
+            return
+        }
+
+        if case .send = state {
+            slashCommandSuggestions = []
+        }
+        onHandleInputAction(state)
+    }
+
+    private func refreshSlashCommandSuggestions() {
+        guard appConfig.enableSlashCommands else {
+            slashCommandSuggestions = []
+            return
+        }
+        slashCommandSuggestions = ChatSlashCommandParser.suggestions(for: viewModel.userInput)
+    }
+
+    private func performSuggestedSlashCommand(_ command: ChatSlashCommand) {
+        viewModel.userInput = ""
+        slashCommandSuggestions = []
+        onPerformSlashCommand(command)
     }
 
     private func performPendingQuickAction() {

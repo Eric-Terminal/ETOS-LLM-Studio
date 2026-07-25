@@ -541,7 +541,7 @@ extension TelegramMessageComposer {
             return Color.red.opacity(0.85 * 0.82)
         }
         if adaptiveHasContent {
-            let fill = viewModel.canSendMessage
+            let fill = adaptiveRecognizedSlashCommand != nil || viewModel.canSendMessage
                 ? TelegramColors.sendButtonColor
                 : Color.primary.opacity(0.12)
             return fill.opacity(0.82)
@@ -581,7 +581,9 @@ extension TelegramMessageComposer {
             return .white
         }
         if adaptiveHasContent {
-            return viewModel.canSendMessage ? .white : Color.primary.opacity(0.55)
+            return adaptiveRecognizedSlashCommand != nil || viewModel.canSendMessage
+                ? .white
+                : Color.primary.opacity(0.55)
         }
         return TelegramColors.attachButtonColor
     }
@@ -593,6 +595,7 @@ extension TelegramMessageComposer {
         } else if adaptiveHasContent {
             actionCircleBackground(
                 fill: viewModel.canSendMessage
+                    || adaptiveRecognizedSlashCommand != nil
                     ? TelegramColors.sendButtonColor
                     : Color.primary.opacity(0.12)
             )
@@ -607,7 +610,10 @@ extension TelegramMessageComposer {
         if inlineSpeechRecorder.phase.isActive, !isSending {
             return true
         }
-        return !isSending && adaptiveHasContent && !viewModel.canSendMessage
+        return !isSending
+            && adaptiveHasContent
+            && adaptiveRecognizedSlashCommand == nil
+            && !viewModel.canSendMessage
     }
 
     private var adaptiveActionAccessibilityLabel: String {
@@ -673,7 +679,14 @@ extension TelegramMessageComposer {
             stopAction()
         } else if adaptiveHasContent {
             adaptiveCloseRequestControls()
-            sendAction()
+            if let command = adaptiveRecognizedSlashCommand {
+                text = ""
+                slashCommandSuggestions = []
+                adaptiveRecognizedSlashCommand = nil
+                slashCommandAction(command)
+            } else {
+                sendAction()
+            }
         } else if viewModel.canQuickRetryLatestMessage {
             adaptiveCloseRequestControls()
             viewModel.quickRetryLatestMessage()

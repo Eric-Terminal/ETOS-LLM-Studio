@@ -24,6 +24,7 @@ struct TelegramMessageComposer: View {
     let isSending: Bool
     let sendAction: () -> Void
     let stopAction: () -> Void
+    let slashCommandAction: (ChatSlashCommand) -> Void
     let focus: FocusState<Bool>.Binding
 
     @State private var showImagePicker = false
@@ -37,6 +38,8 @@ struct TelegramMessageComposer: View {
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
+    @State var adaptiveRecognizedSlashCommand: ChatSlashCommand?
+    @State var slashCommandSuggestions: [ChatSlashCommand] = []
     @StateObject var inlineSpeechRecorder = InlineSpeechRecorderController()
     @Namespace var adaptiveGlassNamespace
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
@@ -76,6 +79,15 @@ struct TelegramMessageComposer: View {
                     .padding(.horizontal, 16)
             }
 
+            if !slashCommandSuggestions.isEmpty {
+                ChatSlashCommandSuggestionPanel(
+                    commands: slashCommandSuggestions,
+                    onSelect: performSuggestedSlashCommand
+                )
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             Color.clear
                 .frame(height: composerReservedHeight)
                 .overlay(alignment: .bottom) {
@@ -84,6 +96,12 @@ struct TelegramMessageComposer: View {
                 .zIndex(1)
         }
         .padding(.bottom, 6)
+        .animation(
+            accessibilityReduceMotion
+                ? .easeOut(duration: 0.16)
+                : .spring(response: 0.3, dampingFraction: 1),
+            value: slashCommandSuggestions
+        )
         .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
@@ -100,6 +118,9 @@ struct TelegramMessageComposer: View {
         }
         .onChange(of: text) { _, newValue in
             handleAutoExpand(for: newValue)
+        }
+        .onChange(of: appConfig.enableSlashCommands) { _, _ in
+            refreshSlashCommandState(for: text)
         }
         .onChange(of: showAudioRecorder) { _, presented in
             if presented {
@@ -131,6 +152,9 @@ struct TelegramMessageComposer: View {
             inlineSpeechFinalizeTask = nil
             inlineSpeechPreparedTranscript = nil
             inlineSpeechRecorder.cancel()
+        }
+        .onAppear {
+            refreshSlashCommandState(for: text)
         }
         .fullScreenCover(isPresented: $showCamera) {
             ZStack {
@@ -433,6 +457,7 @@ struct TelegramMessageComposer: View {
     }
 
     private func handleAutoExpand(for newValue: String) {
+        refreshSlashCommandState(for: newValue)
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         // 复用自动展开时的文本规整结果，避免视图渲染时重复扫描草稿。
         adaptiveHasSendableText = !trimmed.isEmpty
@@ -476,6 +501,23 @@ struct TelegramMessageComposer: View {
                 isExpandedComposer = false
             }
         }
+    }
+
+    private func refreshSlashCommandState(for value: String) {
+        guard appConfig.enableSlashCommands else {
+            adaptiveRecognizedSlashCommand = nil
+            slashCommandSuggestions = []
+            return
+        }
+        adaptiveRecognizedSlashCommand = ChatSlashCommandParser.recognizedCommand(in: value)
+        slashCommandSuggestions = ChatSlashCommandParser.suggestions(for: value)
+    }
+
+    private func performSuggestedSlashCommand(_ command: ChatSlashCommand) {
+        text = ""
+        adaptiveRecognizedSlashCommand = nil
+        slashCommandSuggestions = []
+        slashCommandAction(command)
     }
 
     private func measuredTextLineCount(for value: String, width: CGFloat) -> Int {

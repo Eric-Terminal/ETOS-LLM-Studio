@@ -376,6 +376,7 @@ public final class AppConfigStore: ObservableObject {
         modelPickerFolderPathsByProvider = updated
     }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
+    @Published public var enableSlashCommands: Bool { didSet { write(.enableSlashCommands, enableSlashCommands) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
@@ -578,6 +579,7 @@ public final class AppConfigStore: ObservableObject {
             from: Self.textValue(.modelPickerFolderPathsByProvider, userDefaults: userDefaults)
         ) ?? [:]
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
+        enableSlashCommands = Self.boolValue(.enableSlashCommands, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
@@ -1042,6 +1044,7 @@ public final class AppConfigStore: ObservableObject {
         case .modelPickerFolderPathsByProvider:
             return .text(Self.encodeStringDictionary(modelPickerFolderPathsByProvider))
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
+        case .enableSlashCommands: return .bool(enableSlashCommands)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .restoreLastSessionOnlyIfRecent: return .bool(restoreLastSessionOnlyIfRecent)
@@ -1154,6 +1157,7 @@ public final class AppConfigStore: ObservableObject {
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
         case .iOSModelPickerGroupsByProvider: iOSModelPickerGroupsByProvider = value
         case .watchModelPickerGroupsByProvider: watchModelPickerGroupsByProvider = value
+        case .enableSlashCommands: enableSlashCommands = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
         case .restoreLastSessionOnlyIfRecent: restoreLastSessionOnlyIfRecent = value
         case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value

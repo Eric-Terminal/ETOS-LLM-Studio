@@ -201,6 +201,7 @@ extension ContentView {
                     onPerformQuickAction: { action in
                         performWatchInputQuickAction(action)
                     },
+                    onPerformSlashCommand: performWatchSlashCommand,
                     onShowTransientNotice: { notice in
                         showChatTransientNotice(notice)
                     },

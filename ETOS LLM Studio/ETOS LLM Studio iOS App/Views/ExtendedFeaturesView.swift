@@ -38,6 +38,18 @@ struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    SlashCommandSettingsView()
+                } label: {
+                    SettingsListIconLabel("斜杠命令", icon: .slashCommands)
+                }
+            } footer: {
+                Text(NSLocalizedString("用简短命令快速打开聊天操作和设置页面。", comment: "Slash commands entry footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     AppLockSettingsView()
                 } label: {
                     SettingsListIconLabel("应用锁", icon: .security)

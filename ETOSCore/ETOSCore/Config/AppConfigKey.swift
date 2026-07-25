@@ -209,6 +209,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
     case modelPickerFolderPathsByProvider = "ui.modelPicker.folderPathsByProvider"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
+    case enableSlashCommands = "chat.slashCommands.enabled"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
@@ -414,7 +415,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .enableAutoRotateBackground,
              .enableReasoningSummary,
              .enableLiquidGlass,
-             .enableNoBubbleUI:
+             .enableNoBubbleUI,
+             .enableSlashCommands:
             return .bool(false)
         case .chatScrollAnimationEnabled,
              .chatSendAnimationEnabled:
