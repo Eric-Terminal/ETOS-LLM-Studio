@@ -28,8 +28,11 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     private let uploader: any TelemetryUploading
     private let appMetadata: TelemetryAppMetadata
     private let platformMetadata: TelemetryPlatformMetadata
+    private let uploadDelayNanoseconds: UInt64
+    private let subscribesToMetricKit: Bool
     private var isSubscribed = false
     private var uploadTask: Task<Void, Never>?
+    private var uploadGeneration: UInt64 = 0
     private var launchSignpost: TelemetrySignpostToken?
 
     public override init() {
@@ -37,6 +40,8 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         self.uploader = TelemetryUploader()
         self.appMetadata = .current
         self.platformMetadata = .currentIOS
+        self.uploadDelayNanoseconds = 2_000_000_000
+        self.subscribesToMetricKit = true
         super.init()
     }
 
@@ -44,12 +49,16 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         store: TelemetryStore,
         uploader: any TelemetryUploading,
         appMetadata: TelemetryAppMetadata,
-        platformMetadata: TelemetryPlatformMetadata
+        platformMetadata: TelemetryPlatformMetadata,
+        uploadDelayNanoseconds: UInt64 = 2_000_000_000,
+        subscribesToMetricKit: Bool = true
     ) {
         self.store = store
         self.uploader = uploader
         self.appMetadata = appMetadata
         self.platformMetadata = platformMetadata
+        self.uploadDelayNanoseconds = uploadDelayNanoseconds
+        self.subscribesToMetricKit = subscribesToMetricKit
         super.init()
     }
 
@@ -67,6 +76,8 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     }
 
     public func clearPendingData() async {
+        invalidateUpload()
+        isUploading = false
         await store.clearPending()
         await refreshVisibleRecords()
     }
@@ -93,23 +104,32 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
 
         isEnabled = true
         prepareLaunchMeasurement(enabled: true)
+        let generation = beginUpload()
 
         // 先冻结本次启动可上传的文件，再订阅新的回调，保证新 Payload 留到下次启动。
         let launchSnapshot = await store.prepareLaunchSnapshot()
-        applyPendingSnapshot(launchSnapshot)
+        guard isEnabled else { return }
 
-        MXMetricManager.shared.add(self)
+        if subscribesToMetricKit {
+            MXMetricManager.shared.add(self)
+        }
         isSubscribed = true
 
-        uploadTask?.cancel()
+        // 用户可能在快照读取期间主动清理；这种情况下只保留订阅，不再上传旧快照。
+        guard isCurrentUpload(generation) else { return }
+        applyPendingSnapshot(launchSnapshot)
         uploadTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
             do {
-                try await Task.sleep(nanoseconds: 2_000_000_000)
+                try await Task.sleep(nanoseconds: self.uploadDelayNanoseconds)
             } catch {
                 return
             }
-            guard let self, !Task.isCancelled else { return }
-            await self.uploadLaunchSnapshot(launchSnapshot.files)
+            guard !Task.isCancelled else { return }
+            await self.uploadLaunchSnapshot(
+                launchSnapshot.files,
+                generation: generation
+            )
         }
     }
 
@@ -121,10 +141,11 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
             self.launchSignpost = nil
         }
 
-        uploadTask?.cancel()
-        uploadTask = nil
+        invalidateUpload()
         if isSubscribed {
-            MXMetricManager.shared.remove(self)
+            if subscribesToMetricKit {
+                MXMetricManager.shared.remove(self)
+            }
             isSubscribed = false
         }
 
@@ -136,22 +157,31 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         isUploading = false
     }
 
-    private func uploadLaunchSnapshot(_ files: [TelemetryStoredFile]) async {
-        guard isEnabled, !files.isEmpty else { return }
+    private func uploadLaunchSnapshot(
+        _ files: [TelemetryStoredFile],
+        generation: UInt64
+    ) async {
+        guard isCurrentUpload(generation), !files.isEmpty else { return }
         let uploadableFiles = files.filter {
             $0.fileSizeBytes <= TelemetryStore.defaultMaxUploadFileBytes
         }
         guard !uploadableFiles.isEmpty else { return }
 
         isUploading = true
-        defer { isUploading = false }
+        defer {
+            if uploadGeneration == generation {
+                isUploading = false
+                uploadTask = nil
+            }
+        }
 
         let outcome = await uploader.upload(uploadableFiles)
-        guard isEnabled else { return }
+        guard isCurrentUpload(generation) else { return }
 
         let confirmed = outcome.confirmedPayloadIDs
         if !confirmed.isEmpty {
             await store.deleteConfirmed(payloadIDs: confirmed)
+            guard isCurrentUpload(generation) else { return }
             let sent = uploadableFiles
                 .filter { confirmed.contains($0.envelope.payloadID) }
                 .map {
@@ -168,7 +198,26 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
             error: outcome.errorDescription,
             succeeded: !confirmed.isEmpty
         )
-        await refreshVisibleRecords()
+        guard isCurrentUpload(generation) else { return }
+        let snapshot = await store.loadCurrentSnapshot()
+        guard isCurrentUpload(generation) else { return }
+        applyPendingSnapshot(snapshot)
+    }
+
+    private func beginUpload() -> UInt64 {
+        uploadTask?.cancel()
+        uploadGeneration &+= 1
+        return uploadGeneration
+    }
+
+    private func invalidateUpload() {
+        uploadGeneration &+= 1
+        uploadTask?.cancel()
+        uploadTask = nil
+    }
+
+    private func isCurrentUpload(_ generation: UInt64) -> Bool {
+        isEnabled && uploadGeneration == generation && !Task.isCancelled
     }
 
     private func receivePayload(

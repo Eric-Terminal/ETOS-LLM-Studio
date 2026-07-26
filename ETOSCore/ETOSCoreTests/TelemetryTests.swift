@@ -399,6 +399,102 @@ struct TelemetryTests {
         #expect(TelemetrySignpost.requestInterval(streaming: false) == .modelRequestStandard)
     }
 
+    #if os(iOS) && canImport(MetricKit)
+    @Test("清除待发送数据会取消尚未开始的启动上传")
+    @MainActor
+    func clearingPendingDataCancelsDelayedUpload() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-clear-delayed")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let uploader = RecordingTelemetryUploader()
+        let now = Date()
+        _ = await store.save(
+            kind: .metric,
+            rawPayloadData: payloadData(marker: "delayed"),
+            capturedAt: now,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let center = PerformanceTelemetryCenter(
+            store: store,
+            uploader: uploader,
+            appMetadata: app,
+            platformMetadata: platform,
+            uploadDelayNanoseconds: 60_000_000_000,
+            subscribesToMetricKit: false
+        )
+
+        await center.configure(enabled: true)
+        await center.clearPendingData()
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+
+        let uploadCount = await uploader.uploadCount()
+        let snapshot = await store.loadCurrentSnapshot()
+        #expect(uploadCount == 0)
+        #expect(snapshot.files.isEmpty)
+        #expect(center.pendingRecords.isEmpty)
+        #expect(center.pendingBytes == 0)
+
+        await center.configure(enabled: false)
+    }
+
+    @Test("清除期间迟到的上传结果不会恢复记录或已发送状态")
+    @MainActor
+    func clearingPendingDataRejectsLateUploadResult() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-clear-in-flight")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let uploader = SuspendedTelemetryUploader()
+        let now = Date()
+        _ = await store.save(
+            kind: .diagnostic,
+            rawPayloadData: payloadData(marker: "in-flight"),
+            capturedAt: now,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let center = PerformanceTelemetryCenter(
+            store: store,
+            uploader: uploader,
+            appMetadata: app,
+            platformMetadata: platform,
+            uploadDelayNanoseconds: 0,
+            subscribesToMetricKit: false
+        )
+
+        await center.configure(enabled: true)
+        var didStart = false
+        for _ in 0..<100 {
+            didStart = await uploader.hasStarted()
+            if didStart { break }
+            await Task.yield()
+        }
+        #expect(didStart)
+
+        await center.clearPendingData()
+        await uploader.finish()
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+
+        let snapshot = await store.loadCurrentSnapshot()
+        #expect(snapshot.files.isEmpty)
+        #expect(center.pendingRecords.isEmpty)
+        #expect(center.sentThisLaunchRecords.isEmpty)
+        #expect(center.pendingBytes == 0)
+        #expect(center.lastUploadError == nil)
+        #expect(center.isUploading == false)
+
+        await center.configure(enabled: false)
+    }
+    #endif
+
     private func makeEnvelope(
         kind: TelemetryPayloadKind,
         marker: String,
@@ -448,6 +544,54 @@ struct TelemetryTests {
         return url
     }
 }
+
+#if os(iOS) && canImport(MetricKit)
+private actor RecordingTelemetryUploader: TelemetryUploading {
+    private var count = 0
+
+    func upload(_ files: [TelemetryStoredFile]) async -> TelemetryUploadOutcome {
+        count += 1
+        let payloadIDs = Set(files.map(\.envelope.payloadID))
+        return TelemetryUploadOutcome(
+            confirmedPayloadIDs: payloadIDs,
+            attemptedPayloadIDs: payloadIDs,
+            errorDescription: nil
+        )
+    }
+
+    func uploadCount() -> Int {
+        count
+    }
+}
+
+private actor SuspendedTelemetryUploader: TelemetryUploading {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var payloadIDs: Set<String> = []
+    private var started = false
+
+    func upload(_ files: [TelemetryStoredFile]) async -> TelemetryUploadOutcome {
+        payloadIDs = Set(files.map(\.envelope.payloadID))
+        started = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return TelemetryUploadOutcome(
+            confirmedPayloadIDs: payloadIDs,
+            attemptedPayloadIDs: payloadIDs,
+            errorDescription: "迟到的上传结果不应写回界面"
+        )
+    }
+
+    func hasStarted() -> Bool {
+        started
+    }
+
+    func finish() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+#endif
 
 private final class TelemetryURLProtocol: URLProtocol {
     private static let lock = NSLock()
