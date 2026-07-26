@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import CryptoKit
 import Testing
 @testable import ETOSCore
 
@@ -63,6 +64,91 @@ struct TelemetryTests {
         #expect(text.contains(#""contains_chat_content":false"#))
         #expect(text.contains(#""marker":"hang""#))
         #expect(decoded == envelope)
+    }
+
+    @Test("崩溃异常自由文本在哈希与落盘前移除")
+    func crashExceptionReasonFreeTextIsRemoved() throws {
+        let rawPayload = Data(
+            #"""
+            {
+              "crashDiagnostics": [
+                {
+                  "callStackTree": {
+                    "callStacks": [
+                      {
+                        "callStackRootFrames": [
+                          {
+                            "binaryName": "ETOS LLM Studio",
+                            "binaryUUID": "70B89F27-1634-3580-A695-57CDB41D7743",
+                            "offsetIntoBinaryTextSegment": 4096
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "exceptionReason": {
+                    "arguments": ["用户聊天原文", "sk-secret"],
+                    "className": "NSException",
+                    "composedMessage": "请求 https://private.example 失败：用户聊天原文",
+                    "exceptionType": "NSInvalidArgumentException",
+                    "formatString": "请求 %@ 失败：%@",
+                    "futureFreeText": "未来系统新增的自由文本"
+                  },
+                  "unknownDiagnosticField": {
+                    "value": 7
+                  }
+                }
+              ]
+            }
+            """#.utf8
+        )
+
+        let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
+            kind: .diagnostic,
+            rawPayloadData: rawPayload,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let encoded = String(decoding: try TelemetryEnvelopeCodec.encode(envelope), as: UTF8.self)
+
+        #expect(encoded.contains("用户聊天原文") == false)
+        #expect(encoded.contains("sk-secret") == false)
+        #expect(encoded.contains("private.example") == false)
+        #expect(encoded.contains("composedMessage") == false)
+        #expect(encoded.contains("formatString") == false)
+        #expect(encoded.contains("arguments") == false)
+        #expect(encoded.contains("futureFreeText") == false)
+        #expect(encoded.contains(#""className":"NSException""#))
+        #expect(encoded.contains(#""exceptionType":"NSInvalidArgumentException""#))
+        #expect(encoded.contains(#""binaryUUID":"70B89F27-1634-3580-A695-57CDB41D7743""#))
+        #expect(encoded.contains(#""unknownDiagnosticField":{"value":7}"#))
+
+        let canonical = try TelemetryEnvelopeCodec.canonicalPayloadData(envelope.payload)
+        let expectedID = SHA256.hash(data: canonical)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        #expect(envelope.payloadID == expectedID)
+    }
+
+    @Test("无法识别的异常说明结构整块丢弃")
+    func malformedExceptionReasonIsRemoved() throws {
+        let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
+            kind: .diagnostic,
+            rawPayloadData: Data(
+                #"{"crashDiagnostics":[{"exceptionReason":"用户聊天原文","signal":6}]}"#.utf8
+            ),
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let encoded = String(decoding: try TelemetryEnvelopeCodec.encode(envelope), as: UTF8.self)
+
+        #expect(encoded.contains("exceptionReason") == false)
+        #expect(encoded.contains("用户聊天原文") == false)
+        #expect(encoded.contains(#""signal":6"#))
     }
 
     @Test("非对象 JSON 不会进入遥测队列")

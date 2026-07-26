@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 性能遥测的稳定传输模型。原始 MetricKit JSON 只做规范化封装，不裁剪未知字段。
+// 性能遥测的稳定传输模型。保留未知系统字段，但在落盘前移除可能承载用户内容的异常文本。
 // ============================================================================
 
 import Foundation
@@ -236,7 +236,9 @@ public enum TelemetryEnvelopeCodec {
         app: TelemetryAppMetadata = .current,
         platform: TelemetryPlatformMetadata = .currentIOS
     ) throws -> TelemetryEnvelope {
-        let payload = try decodePayload(rawPayloadData)
+        let payload = TelemetryPayloadSanitizer.sanitize(
+            try decodePayload(rawPayloadData)
+        )
         let payloadID = SHA256.hash(data: try canonicalPayloadData(payload))
             .map { String(format: "%02x", $0) }
             .joined()
@@ -289,6 +291,49 @@ public enum TelemetryEnvelopeCodec {
             throw TelemetryEnvelopeError.payloadIsNotJSONObject
         }
         return payload
+    }
+}
+
+enum TelemetryPayloadSanitizer {
+    private static let exceptionReasonKey = "exceptionReason"
+    private static let allowedExceptionReasonFields: Set<String> = [
+        "exceptionType",
+        "className"
+    ]
+
+    static func sanitize(_ value: JSONValue) -> JSONValue {
+        switch value {
+        case .dictionary(let values):
+            var sanitized: [String: JSONValue] = [:]
+            sanitized.reserveCapacity(values.count)
+
+            for (key, child) in values {
+                if key.caseInsensitiveCompare(exceptionReasonKey) == .orderedSame {
+                    if let safeReason = sanitizeExceptionReason(child) {
+                        sanitized[key] = safeReason
+                    }
+                    continue
+                }
+                sanitized[key] = sanitize(child)
+            }
+            return .dictionary(sanitized)
+        case .array(let values):
+            return .array(values.map(sanitize))
+        case .string, .int, .double, .bool, .null:
+            return value
+        }
+    }
+
+    private static func sanitizeExceptionReason(_ value: JSONValue) -> JSONValue? {
+        guard case .dictionary(let fields) = value else { return nil }
+
+        let retained = fields.filter { key, _ in
+            allowedExceptionReasonFields.contains { allowed in
+                key.caseInsensitiveCompare(allowed) == .orderedSame
+            }
+        }
+        guard !retained.isEmpty else { return nil }
+        return .dictionary(retained)
     }
 }
 
