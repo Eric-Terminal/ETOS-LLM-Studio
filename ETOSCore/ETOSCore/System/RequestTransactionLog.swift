@@ -13,8 +13,7 @@ struct RequestTransactionLogSnapshot: Sendable {
     let level: AppLogLevel
     let action: String
     let message: String
-    let userPayload: [String: String]
-    let developerPayload: [String: String]
+    let payload: [String: String]
 }
 
 private struct RequestLogAttemptDraft: Sendable {
@@ -44,6 +43,15 @@ private struct RequestLogTransactionDraft: Sendable {
     let isStreaming: Bool
     var attempts: [RequestLogAttemptDraft]
     var responses: [RequestLogResponseDraft]
+}
+
+enum RequestLogCapturePolicy {
+    static func shouldCaptureStreamingBody(
+        requestLogEnabled: Bool,
+        plainMessageEnabled: Bool
+    ) -> Bool {
+        requestLogEnabled && plainMessageEnabled
+    }
 }
 
 enum RequestTransactionLogRegistry {
@@ -155,6 +163,7 @@ enum RequestTransactionLogRegistry {
         lock.unlock()
     }
 
+    @discardableResult
     static func finalize(
         requestID: UUID,
         status: RequestLogStatus,
@@ -162,14 +171,15 @@ enum RequestTransactionLogRegistry {
         httpStatusCode: Int?,
         errorKind: String?,
         tokenUsage: MessageTokenUsage?
-    ) {
+    ) -> Task<Void, Never>? {
         lock.lock()
         let transaction = transactions.removeValue(forKey: requestID)
         lock.unlock()
 
         RequestPerformanceSignpostRegistry.end(requestID: requestID)
-        guard let transaction, !transaction.attempts.isEmpty else { return }
-        AppLog.requestTransaction(
+        guard let transaction, !transaction.attempts.isEmpty else { return nil }
+        guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return nil }
+        return AppLog.requestTransaction(
             makeSnapshot(
                 transaction: transaction,
                 status: status,
@@ -198,7 +208,7 @@ enum RequestTransactionLogRegistry {
             (status == .success ? 200 : nil)
         let firstAttempt = transaction.attempts[0]
 
-        var userPayload: [String: String] = [
+        var payload: [String: String] = [
             "method": firstAttempt.method,
             "url": firstAttempt.safeURL,
             "request_body": firstAttempt.sanitizedBody,
@@ -210,24 +220,23 @@ enum RequestTransactionLogRegistry {
             "streaming": transaction.isStreaming ? "true" : "false"
         ]
         if let resolvedStatusCode {
-            userPayload["http_status"] = "\(resolvedStatusCode)"
+            payload["http_status"] = "\(resolvedStatusCode)"
         }
         if let errorKind, !errorKind.isEmpty {
-            userPayload["error_kind"] = errorKind
+            payload["error_kind"] = errorKind
         }
 
-        var developerPayload = userPayload
-        developerPayload["request_id"] = transaction.requestID.uuidString
-        developerPayload["provider"] = transaction.providerName
-        developerPayload["model"] = transaction.modelID
-        developerPayload["requested_at"] = ISO8601DateFormatter().string(from: transaction.requestedAt)
-        developerPayload["finished_at"] = ISO8601DateFormatter().string(from: finishedAt)
-        developerPayload["attempt_count"] = "\(transaction.attempts.count)"
-        developerPayload["response_snapshot_count"] = "\(transaction.responses.count)"
-        developerPayload["attempts"] = encodeAttempts(transaction.attempts)
-        developerPayload["responses"] = encodeResponses(transaction.responses)
+        payload["request_id"] = transaction.requestID.uuidString
+        payload["provider"] = transaction.providerName
+        payload["model"] = transaction.modelID
+        payload["requested_at"] = ISO8601DateFormatter().string(from: transaction.requestedAt)
+        payload["finished_at"] = ISO8601DateFormatter().string(from: finishedAt)
+        payload["attempt_count"] = "\(transaction.attempts.count)"
+        payload["response_snapshot_count"] = "\(transaction.responses.count)"
+        payload["attempts"] = encodeAttempts(transaction.attempts)
+        payload["responses"] = encodeResponses(transaction.responses)
         if let tokenUsage {
-            developerPayload["token_usage"] = encodeTokenUsage(tokenUsage)
+            payload["token_usage"] = encodeTokenUsage(tokenUsage)
         }
 
         let statusText = resolvedStatusCode.map(String.init) ?? status.rawValue
@@ -236,8 +245,7 @@ enum RequestTransactionLogRegistry {
             level: status == .failed ? .error : (status == .cancelled ? .warning : .info),
             action: status.rawValue,
             message: message,
-            userPayload: userPayload,
-            developerPayload: developerPayload
+            payload: payload
         )
     }
 
@@ -248,7 +256,6 @@ enum RequestTransactionLogRegistry {
                 "adapter": attempt.adapter,
                 "method": attempt.method,
                 "url": attempt.safeURL,
-                "body": attempt.sanitizedBody,
                 "body_bytes": attempt.bodyBytes
             ]
             if let headers = attempt.sanitizedHeaders {
@@ -264,7 +271,6 @@ enum RequestTransactionLogRegistry {
         let values: [[String: Any]] = responses.enumerated().map { index, response in
             var value: [String: Any] = [
                 "index": index + 1,
-                "body": response.sanitizedBody,
                 "body_bytes": response.bodyBytes,
                 "partial": response.isPartial,
                 "received_at": formatter.string(from: response.receivedAt)
@@ -380,7 +386,10 @@ private enum RequestPerformanceSignpostRegistry {
 }
 
 extension AppLog {
-    static func requestTransaction(_ snapshot: RequestTransactionLogSnapshot) {
+    @discardableResult
+    static func requestTransaction(
+        _ snapshot: RequestTransactionLogSnapshot
+    ) -> Task<Void, Never> {
         Task { @MainActor in
             AppLogCenter.shared.logRequestTransaction(snapshot)
         }

@@ -40,8 +40,14 @@ extension ChatService {
         var trailingUnparsedHTTPStatusCode: Int?
         var messages = messagesSnapshot(for: currentSessionID)
         var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
-        let shouldCaptureResponseBody = AppConfigStore.boolValue(for: .requestLogEnabled)
-        var rawStreamingResponseLines: [String] = []
+        let shouldRecordRequestLog = AppConfigStore.boolValue(for: .requestLogEnabled)
+        let shouldCaptureRawStreamingResponse = RequestLogCapturePolicy.shouldCaptureStreamingBody(
+            requestLogEnabled: shouldRecordRequestLog,
+            plainMessageEnabled: AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        )
+        var rawStreamingResponseLines: [String]? = shouldCaptureRawStreamingResponse ? [] : nil
+        var streamingResponseByteCount = 0
+        var hasReceivedStreamingLine = false
         let streamingSignpost = TelemetrySignpost.begin(
             .streamingResponseProcessing,
             correlatingWith: requestLogContext.requestID
@@ -51,17 +57,19 @@ extension ChatService {
         }
 
         func rawStreamingResponseBody() -> String {
-            rawStreamingResponseLines.joined(separator: "\n")
+            rawStreamingResponseLines?.joined(separator: "\n") ?? ""
         }
 
         func logCapturedStreamingResponse(isPartial: Bool = false, httpStatusCode: Int? = nil) {
-            guard shouldCaptureResponseBody, !rawStreamingResponseLines.isEmpty else { return }
+            guard shouldRecordRequestLog, streamingResponseByteCount > 0 else { return }
             logResponseBodySnapshot(
                 context: requestLogContext,
                 request: request,
                 body: rawStreamingResponseBody(),
+                byteCount: streamingResponseByteCount,
                 httpStatusCode: httpStatusCode,
-                isPartial: isPartial
+                isPartial: isPartial,
+                hasCapturedStreamingBody: rawStreamingResponseLines != nil
             )
         }
 
@@ -87,8 +95,15 @@ extension ChatService {
             var finalResponseCompletedAtForLog: Date?
 
             for try await line in bytes.lines {
-                if shouldCaptureResponseBody {
-                    rawStreamingResponseLines.append(line)
+                if shouldRecordRequestLog {
+                    if hasReceivedStreamingLine {
+                        streamingResponseByteCount += 1
+                    }
+                    streamingResponseByteCount += line.lengthOfBytes(using: .utf8)
+                    hasReceivedStreamingLine = true
+                }
+                if shouldCaptureRawStreamingResponse {
+                    rawStreamingResponseLines?.append(line)
                 }
 
                 guard let part = adapter.parseStreamingResponse(line: line) else {

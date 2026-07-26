@@ -152,6 +152,19 @@ extension ChatServiceTests {
         ))
         #expect(redactedPayload.values.contains { $0.contains("不应落盘") } == false)
 
+        let uncapturedStreamingPayload = try #require(chatService.makeResponseBodySnapshotPayload(
+            context: streamingContext,
+            request: request,
+            body: #"data: {"choices":[{"delta":{"content":"不得缓存的流式原文"}}]}"#,
+            byteCount: 72
+        ))
+        #expect(uncapturedStreamingPayload.values.contains { $0.contains("不得缓存的流式原文") } == false)
+        #expect(
+            uncapturedStreamingPayload.values.contains(
+                AppLogRedactor.streamingResponseNotRecordedToken
+            )
+        )
+
         AppConfigStore.persistSynchronously(.bool(false), for: .requestLogEnabled)
         defer {
             AppConfigStore.persistSynchronously(.bool(true), for: .requestLogEnabled)

@@ -168,9 +168,13 @@ private struct WatchAppRunLogDetailView: View {
         .navigationTitle(NSLocalizedString("运行日志", comment: ""))
         .task(id: runFile.id) {
             let loaded = await logCenter.loadEvents(for: runFile)
-            events = loaded.sorted { lhs, rhs in
-                lhs.timestamp > rhs.timestamp
-            }
+            events = loaded
+                .flatMap { event in
+                    [event.presented(in: .user), event.presented(in: .developer)].compactMap { $0 }
+                }
+                .sorted { lhs, rhs in
+                    lhs.timestamp > rhs.timestamp
+                }
         }
     }
 

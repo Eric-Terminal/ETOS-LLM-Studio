@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 验证请求构建、响应快照与最终状态只生成成对的完整事务日志。
+// 验证请求构建、响应快照与最终状态只生成一份可投影的完整事务日志。
 // ============================================================================
 
 import Foundation
@@ -12,7 +12,7 @@ import Testing
 
 @Suite("请求事务日志", .serialized)
 struct RequestTransactionLogTests {
-    @Test("一次 HTTP 请求生成用户与开发两种事务格式")
+    @Test("一次 HTTP 请求只持久化一份并生成用户与开发两种格式")
     @MainActor
     func requestAndResponseAreAggregatedIntoTwoFormats() async throws {
         let previousEnabled = AppConfigStore.boolValue(for: .requestLogEnabled)
@@ -65,27 +65,21 @@ struct RequestTransactionLogTests {
             statusCode: 200,
             isPartial: false
         )
-        RequestTransactionLogRegistry.finalize(
-            requestID: requestID,
-            status: .success,
-            finishedAt: requestedAt.addingTimeInterval(1.25),
-            httpStatusCode: 200,
-            errorKind: nil,
-            tokenUsage: MessageTokenUsage(
-                promptTokens: 4,
-                completionTokens: 5,
-                totalTokens: 9
+        let loggingTask = try #require(
+            RequestTransactionLogRegistry.finalize(
+                requestID: requestID,
+                status: .success,
+                finishedAt: requestedAt.addingTimeInterval(1.25),
+                httpStatusCode: 200,
+                errorKind: nil,
+                tokenUsage: MessageTokenUsage(
+                    promptTokens: 4,
+                    completionTokens: 5,
+                    totalTokens: 9
+                )
             )
         )
-
-        for _ in 0..<20 {
-            if AppLogCenter.shared.developerLogs.contains(where: {
-                $0.payload?["request_id"] == requestID.uuidString
-            }) {
-                break
-            }
-            await Task.yield()
-        }
+        await loggingTask.value
 
         let developer = try #require(
             AppLogCenter.shared.developerLogs.last(where: {
@@ -112,5 +106,36 @@ struct RequestTransactionLogTests {
         #expect(user.payload?["request_body"]?.contains("[已隐藏数组") == true)
         #expect(user.payload?["response_body"]?.contains("[已隐藏") == true)
         #expect(user.payload?["http_status"] == "200")
+        #expect(user.id == developer.id)
+
+        let persistedTransactions = AppLogCenter.shared.mergedLogs.filter {
+            $0.presentation == .requestTransaction &&
+            $0.payload?["request_id"] == requestID.uuidString
+        }
+        #expect(persistedTransactions.count == 1)
+        #expect(developer.payload?["attempts"]?.contains(#""body":"#) == false)
+        #expect(developer.payload?["responses"]?.contains(#""body":"#) == false)
+    }
+
+    @Test("只有同时开启请求日志和原文时才缓存流式响应")
+    func streamingCaptureRequiresBothSwitches() {
+        #expect(
+            RequestLogCapturePolicy.shouldCaptureStreamingBody(
+                requestLogEnabled: true,
+                plainMessageEnabled: true
+            )
+        )
+        #expect(
+            RequestLogCapturePolicy.shouldCaptureStreamingBody(
+                requestLogEnabled: true,
+                plainMessageEnabled: false
+            ) == false
+        )
+        #expect(
+            RequestLogCapturePolicy.shouldCaptureStreamingBody(
+                requestLogEnabled: false,
+                plainMessageEnabled: true
+            ) == false
+        )
     }
 }

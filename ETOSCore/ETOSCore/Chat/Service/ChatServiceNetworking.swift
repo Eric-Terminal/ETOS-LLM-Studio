@@ -386,7 +386,12 @@ extension ChatService {
                 ? NSLocalizedString("响应体(部分)", comment: "App log payload key")
                 : NSLocalizedString("响应体", comment: "App log payload key")
         }
-        payload[bodyKey] = AppLogRedactor.sanitizeResponseBodyForLog(body)
+        if context.isStreaming &&
+            !AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled) {
+            payload[bodyKey] = AppLogRedactor.streamingResponseNotRecordedToken
+        } else {
+            payload[bodyKey] = AppLogRedactor.sanitizeResponseBodyForLog(body)
+        }
         return payload
     }
 
@@ -396,11 +401,18 @@ extension ChatService {
         body: String,
         byteCount: Int? = nil,
         httpStatusCode: Int? = nil,
-        isPartial: Bool = false
+        isPartial: Bool = false,
+        hasCapturedStreamingBody: Bool = true
     ) {
         let resolvedByteCount = byteCount ?? body.data(using: .utf8)?.count ?? 0
         guard AppConfigStore.boolValue(for: .requestLogEnabled) else { return }
-        let sanitizedBody = AppLogRedactor.sanitizeResponseBodyForLog(body)
+        let recordsPlainMessages = AppConfigStore.boolValue(for: .requestLogPlainMessageEnabled)
+        let sanitizedBody: String
+        if context.isStreaming && (!recordsPlainMessages || !hasCapturedStreamingBody) {
+            sanitizedBody = AppLogRedactor.streamingResponseNotRecordedToken
+        } else {
+            sanitizedBody = AppLogRedactor.sanitizeResponseBodyForLog(body)
+        }
         RequestTransactionLogRegistry.stageResponse(
             requestID: context.requestID,
             request: request,
@@ -440,7 +452,8 @@ extension ChatService {
             body: bodyText,
             byteCount: bodyData?.count ?? 0,
             httpStatusCode: httpStatusCode,
-            isPartial: isPartial
+            isPartial: isPartial,
+            hasCapturedStreamingBody: true
         )
     }
 

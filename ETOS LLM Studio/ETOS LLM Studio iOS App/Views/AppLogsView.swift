@@ -457,7 +457,7 @@ private struct AppLogRunDetailView: View {
             } footer: {
                 Text(
                     channel == .user
-                        ? NSLocalizedString("用户格式只显示完整请求体与响应体；聊天原文是否保留由请求日志设置决定。", comment: "")
+                        ? NSLocalizedString("用户格式显示请求体与最终响应信息；未开启明文记录时，流式响应只保留摘要。", comment: "")
                         : NSLocalizedString("开发格式额外显示耗时、状态码、用量与事务标识等诊断字段。", comment: "")
                 )
             }
@@ -466,7 +466,7 @@ private struct AppLogRunDetailView: View {
                 LabeledContent(NSLocalizedString("日期文件夹", comment: ""), value: runFile.day)
                 LabeledContent(NSLocalizedString("日志文件名", comment: ""), value: runFile.fileName)
                 LabeledContent(NSLocalizedString("记录数", comment: ""), value: "\(runFile.totalEventCount)")
-                LabeledContent(NSLocalizedString("来源分布", comment: ""), value: String(format: NSLocalizedString("开发 %d / 用户 %d", comment: ""), runFile.developerEventCount, runFile.userEventCount))
+                LabeledContent(NSLocalizedString("可用格式", comment: ""), value: String(format: NSLocalizedString("开发 %d / 用户 %d", comment: ""), runFile.developerEventCount, runFile.userEventCount))
                 LabeledContent(NSLocalizedString("文件大小", comment: ""), value: formatByteCount(runFile.fileSizeBytes))
                 LabeledContent(NSLocalizedString("创建时间", comment: ""), value: formatTime(runFile.createdAt))
                 LabeledContent(NSLocalizedString("最后更新", comment: ""), value: formatTime(runFile.updatedAt))
@@ -544,7 +544,7 @@ private struct AppLogRunDetailView: View {
             configChangesOnly: configChangesOnly
         )
         return AppLogFilterEngine.filter(
-            events.filter { $0.channel == channel },
+            events.compactMap { $0.presented(in: channel) },
             with: filter
         )
     }
@@ -622,7 +622,7 @@ private struct AppLogRunFileRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(String(format: NSLocalizedString("共 %d 条 · 开发 %d / 用户 %d", comment: ""), runFile.totalEventCount, runFile.developerEventCount, runFile.userEventCount))
+            Text(String(format: NSLocalizedString("共 %d 条 · 开发格式 %d / 用户格式 %d", comment: ""), runFile.totalEventCount, runFile.developerEventCount, runFile.userEventCount))
                 .etFont(.caption)
                 .foregroundStyle(.secondary)
         }
