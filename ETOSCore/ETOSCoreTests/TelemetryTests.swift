@@ -439,6 +439,19 @@ struct TelemetryTests {
         #expect(center.pendingRecords.isEmpty)
         #expect(center.pendingBytes == 0)
 
+        _ = await store.save(
+            kind: .metric,
+            rawPayloadData: payloadData(marker: "after-clear"),
+            capturedAt: now.addingTimeInterval(1),
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        await center.refreshVisibleRecords()
+        #expect(center.pendingRecords.count == 1)
+        #expect(center.pendingRecords.first?.rawJSON.contains("after-clear") == true)
+
         await center.configure(enabled: false)
     }
 
@@ -477,11 +490,22 @@ struct TelemetryTests {
         }
         #expect(didStart)
 
-        await center.clearPendingData()
-        await uploader.finish()
-        for _ in 0..<20 {
+        let clearTask = Task { @MainActor in
+            await center.clearPendingData()
+        }
+        var clearDidBegin = false
+        for _ in 0..<100 {
+            if center.isUploading == false {
+                clearDidBegin = true
+                break
+            }
             await Task.yield()
         }
+        #expect(clearDidBegin)
+        #expect(center.pendingRecords.isEmpty == false)
+
+        await uploader.finish()
+        await clearTask.value
 
         let snapshot = await store.loadCurrentSnapshot()
         #expect(snapshot.files.isEmpty)
@@ -492,6 +516,46 @@ struct TelemetryTests {
         #expect(center.isUploading == false)
 
         await center.configure(enabled: false)
+    }
+
+    @Test("关闭遥测会取消延迟上传并清空全部运行状态")
+    @MainActor
+    func disablingTelemetryCancelsDelayedUpload() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-disable-delayed")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let uploader = RecordingTelemetryUploader()
+        _ = await store.save(
+            kind: .metric,
+            rawPayloadData: payloadData(marker: "disable"),
+            capturedAt: Date(),
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let center = PerformanceTelemetryCenter(
+            store: store,
+            uploader: uploader,
+            appMetadata: app,
+            platformMetadata: platform,
+            uploadDelayNanoseconds: 60_000_000_000,
+            subscribesToMetricKit: false
+        )
+
+        await center.configure(enabled: true)
+        await center.configure(enabled: false)
+
+        let uploadCount = await uploader.uploadCount()
+        let snapshot = await store.loadCurrentSnapshot()
+        #expect(uploadCount == 0)
+        #expect(snapshot.files.isEmpty)
+        #expect(center.isEnabled == false)
+        #expect(center.pendingRecords.isEmpty)
+        #expect(center.sentThisLaunchRecords.isEmpty)
+        #expect(center.pendingBytes == 0)
+        #expect(center.isUploading == false)
+        #expect(center.lastUploadError == nil)
     }
     #endif
 

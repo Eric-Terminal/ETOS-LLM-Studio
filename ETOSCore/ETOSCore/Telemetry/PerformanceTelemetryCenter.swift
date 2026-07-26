@@ -76,8 +76,9 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     }
 
     public func clearPendingData() async {
-        invalidateUpload()
+        let invalidatedTask = invalidateUpload()
         isUploading = false
+        await invalidatedTask?.value
         await store.clearPending()
         await refreshVisibleRecords()
     }
@@ -141,7 +142,7 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
             self.launchSignpost = nil
         }
 
-        invalidateUpload()
+        let invalidatedTask = invalidateUpload()
         if isSubscribed {
             if subscribesToMetricKit {
                 MXMetricManager.shared.remove(self)
@@ -149,6 +150,7 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
             isSubscribed = false
         }
 
+        await invalidatedTask?.value
         await store.clearPending()
         pendingRecords = []
         sentThisLaunchRecords = []
@@ -210,10 +212,12 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         return uploadGeneration
     }
 
-    private func invalidateUpload() {
+    private func invalidateUpload() -> Task<Void, Never>? {
         uploadGeneration &+= 1
-        uploadTask?.cancel()
+        let invalidatedTask = uploadTask
+        invalidatedTask?.cancel()
         uploadTask = nil
+        return invalidatedTask
     }
 
     private func isCurrentUpload(_ generation: UInt64) -> Bool {
