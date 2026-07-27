@@ -142,10 +142,11 @@ extension ChatService {
 
                 retryTargetMessageID = nil
                 retryTargetOriginalAssistantMessage = nil
-                logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡: \(content)")
+                // 系统日志只记录状态，完整错误正文仅保留在应用内消息中。
+                logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡。")
             } else if shouldPreserveLoadingMessage {
                 messages.insert(makeErrorMessage(loadingMessage.requestedAt, metadata: loadingAttemptMetadata), at: loadingIndex + 1)
-                logger.error("流式内容已保留，并追加错误消息: \(content)")
+                logger.error("流式内容已保留，并追加错误消息。")
             } else {
                 // 正常场景：将 loading message 转为 error
                 messages[loadingIndex] = ChatMessage(
@@ -162,12 +163,12 @@ extension ChatService {
                     responseAttemptIndex: loadingMessage.responseAttemptIndex,
                     selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
                 )
-                logger.error("错误消息已添加: \(content)")
+                logger.error("错误消息已添加。")
             }
         } else {
             // 没有 loading message，直接添加错误
             messages.append(makeErrorMessage(nil))
-            logger.error("错误消息已添加: \(content)")
+            logger.error("错误消息已添加。")
         }
 
         persistAndPublishMessages(messages, for: resolvedSessionID)
