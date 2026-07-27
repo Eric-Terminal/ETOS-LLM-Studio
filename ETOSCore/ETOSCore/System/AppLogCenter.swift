@@ -346,8 +346,10 @@ public final class AppLogCenter: ObservableObject {
     private var didLoadPersistedLogs = false
     private var appendRevision: UInt64 = 0
     private var destructiveRevision: UInt64 = 0
+    // 所有落盘修改按用户操作顺序串行，避免清除后旧写入任务重新创建日志。
+    private var persistenceTask: Task<Void, Never>?
 
-    private init(fileStore: AppLogFileStore = AppLogFileStore(), shouldAutoLoad: Bool = true) {
+    init(fileStore: AppLogFileStore = AppLogFileStore(), shouldAutoLoad: Bool = true) {
         self.fileStore = fileStore
 
         if shouldAutoLoad {
@@ -414,9 +416,10 @@ public final class AppLogCenter: ObservableObject {
         let filteredMerged = mergedLogs.compactMap { $0.removingVisibility(in: channel) }
         applySnapshot(filteredMerged)
 
-        Task {
-            await fileStore.clear(channel: channel)
-            await refreshLogFolders()
+        enqueuePersistenceOperation { [weak self] in
+            guard let self else { return }
+            await self.fileStore.clear(channel: channel)
+            await self.refreshLogFolders()
         }
     }
 
@@ -430,9 +433,10 @@ public final class AppLogCenter: ObservableObject {
         userLogs = []
         logDayFolders = []
 
-        Task {
-            await fileStore.clearAll()
-            await refreshLogFolders()
+        enqueuePersistenceOperation { [weak self] in
+            guard let self else { return }
+            await self.fileStore.clearAll()
+            await self.refreshLogFolders()
         }
     }
 
@@ -458,7 +462,7 @@ public final class AppLogCenter: ObservableObject {
 
     public func deleteDayFolder(_ dayFolder: AppLogDayFolder) {
         destructiveRevision &+= 1
-        Task { [weak self] in
+        enqueuePersistenceOperation { [weak self] in
             guard let self else { return }
             await self.fileStore.deleteDayFolder(day: dayFolder.day)
             await self.reloadPersistedLogsSnapshot()
@@ -468,7 +472,7 @@ public final class AppLogCenter: ObservableObject {
 
     public func deleteRunFile(_ runFile: AppLogRunFile) {
         destructiveRevision &+= 1
-        Task { [weak self] in
+        enqueuePersistenceOperation { [weak self] in
             guard let self else { return }
             await self.fileStore.deleteRunFile(relativePath: runFile.relativePath)
             await self.reloadPersistedLogsSnapshot()
@@ -497,13 +501,27 @@ public final class AppLogCenter: ObservableObject {
         userLogs = userBuffer.values
 
         if persist {
-            Task { [weak self] in
+            enqueuePersistenceOperation { [weak self] in
                 guard let self else { return }
                 if let runSummary = await self.fileStore.append(event) {
                     self.applyIncrementalRunSummary(runSummary)
                 }
             }
         }
+    }
+
+    private func enqueuePersistenceOperation(
+        _ operation: @escaping @MainActor () async -> Void
+    ) {
+        let precedingTask = persistenceTask
+        persistenceTask = Task { @MainActor in
+            await precedingTask?.value
+            await operation()
+        }
+    }
+
+    func waitForPendingPersistence() async {
+        await persistenceTask?.value
     }
 
     private func reloadPersistedLogsSnapshot(

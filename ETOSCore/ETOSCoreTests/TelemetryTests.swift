@@ -311,6 +311,98 @@ struct TelemetryTests {
         #expect(snapshot.files.first?.envelope.kind == .diagnostic)
     }
 
+    @Test("损坏或不兼容的遥测文件会立即清理")
+    func storeRemovesInvalidFiles() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-invalid")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let pendingDirectory = fixture
+            .appendingPathComponent("Pending", isDirectory: true)
+            .appendingPathComponent("2026-07-27", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: pendingDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let corruptURL = pendingDirectory.appendingPathComponent(
+            "metric_corrupt.json",
+            isDirectory: false
+        )
+        try Data("{not-json".utf8).write(to: corruptURL)
+
+        let envelope = try makeEnvelope(
+            kind: .metric,
+            marker: "incompatible",
+            capturedAt: Date()
+        )
+        let encodedEnvelope = try TelemetryEnvelopeCodec.encode(envelope)
+        var incompatibleObject = try #require(
+            JSONSerialization.jsonObject(with: encodedEnvelope) as? [String: Any]
+        )
+        incompatibleObject["schema_version"] = 999
+        let incompatibleData = try JSONSerialization.data(
+            withJSONObject: incompatibleObject,
+            options: [.sortedKeys]
+        )
+        let incompatibleURL = pendingDirectory.appendingPathComponent(
+            "metric_\(envelope.payloadID).json",
+            isDirectory: false
+        )
+        try incompatibleData.write(to: incompatibleURL)
+
+        let snapshot = await store.loadCurrentSnapshot()
+
+        #expect(snapshot.files.isEmpty)
+        #expect(snapshot.totalBytes == 0)
+        #expect(FileManager.default.fileExists(atPath: corruptURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: incompatibleURL.path) == false)
+    }
+
+    @Test("同 ID 无效文件不会阻止新遥测落盘")
+    func invalidDuplicateFileDoesNotBlockSave() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-invalid-duplicate")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let capturedAt = Date()
+        let rawPayload = payloadData(marker: "replacement")
+        let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
+            kind: .metric,
+            rawPayloadData: rawPayload,
+            capturedAt: capturedAt,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let pendingDirectory = fixture
+            .appendingPathComponent("Pending", isDirectory: true)
+            .appendingPathComponent("2026-07-27", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: pendingDirectory,
+            withIntermediateDirectories: true
+        )
+        let invalidURL = pendingDirectory.appendingPathComponent(
+            "metric_\(envelope.payloadID).json",
+            isDirectory: false
+        )
+        try Data("{not-json".utf8).write(to: invalidURL)
+
+        let saved = await store.save(
+            kind: .metric,
+            rawPayloadData: rawPayload,
+            capturedAt: capturedAt,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let snapshot = await store.loadCurrentSnapshot()
+
+        #expect(saved?.envelope.payloadID == envelope.payloadID)
+        #expect(snapshot.files.count == 1)
+        #expect(snapshot.files.first?.rawJSON.contains("replacement") == true)
+    }
+
     @Test("上传器按 16 项分批并接受 accepted 与 duplicate")
     func uploaderBatchesAndConfirmsServerResults() async throws {
         TelemetryURLProtocol.reset()
@@ -557,6 +649,70 @@ struct TelemetryTests {
         #expect(center.isUploading == false)
         #expect(center.lastUploadError == nil)
     }
+
+    @Test("关闭尚未结束时重新开启会等待旧数据清理完成")
+    @MainActor
+    func reenablingTelemetryWaitsForDisableCleanup() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-disable-reenable")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let store = TelemetryStore(baseDirectory: fixture)
+        let uploader = SuspendedTelemetryUploader()
+        _ = await store.save(
+            kind: .diagnostic,
+            rawPayloadData: payloadData(marker: "before-disable"),
+            capturedAt: Date(),
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let center = PerformanceTelemetryCenter(
+            store: store,
+            uploader: uploader,
+            appMetadata: app,
+            platformMetadata: platform,
+            uploadDelayNanoseconds: 0,
+            subscribesToMetricKit: false
+        )
+
+        await center.configure(enabled: true)
+        for _ in 0..<100 {
+            if await uploader.hasStarted() { break }
+            await Task.yield()
+        }
+        let uploadStarted = await uploader.hasStarted()
+        #expect(uploadStarted)
+
+        let disableTask = Task { @MainActor in
+            await center.configure(enabled: false)
+        }
+        for _ in 0..<100 where center.isEnabled {
+            await Task.yield()
+        }
+        #expect(center.isEnabled == false)
+
+        let enableTask = Task { @MainActor in
+            await center.configure(enabled: true)
+        }
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+        #expect(center.isEnabled == false)
+
+        await uploader.finish()
+        await disableTask.value
+        await enableTask.value
+
+        let snapshot = await store.loadCurrentSnapshot()
+        #expect(center.isEnabled)
+        #expect(snapshot.files.isEmpty)
+        #expect(center.pendingRecords.isEmpty)
+        #expect(center.sentThisLaunchRecords.isEmpty)
+        let uploadCount = await uploader.uploadCount()
+        #expect(uploadCount == 1)
+
+        await center.configure(enabled: false)
+    }
     #endif
 
     private func makeEnvelope(
@@ -632,8 +788,10 @@ private actor SuspendedTelemetryUploader: TelemetryUploading {
     private var continuation: CheckedContinuation<Void, Never>?
     private var payloadIDs: Set<String> = []
     private var started = false
+    private var count = 0
 
     func upload(_ files: [TelemetryStoredFile]) async -> TelemetryUploadOutcome {
+        count += 1
         payloadIDs = Set(files.map(\.envelope.payloadID))
         started = true
         await withCheckedContinuation { continuation in
@@ -648,6 +806,10 @@ private actor SuspendedTelemetryUploader: TelemetryUploading {
 
     func hasStarted() -> Bool {
         started
+    }
+
+    func uploadCount() -> Int {
+        count
     }
 
     func finish() {

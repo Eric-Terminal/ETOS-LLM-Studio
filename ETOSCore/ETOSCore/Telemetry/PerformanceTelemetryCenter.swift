@@ -14,6 +14,11 @@ import os.log
 
 @MainActor
 public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
+    private enum StateTransition: Sendable {
+        case configure(Bool)
+        case clearPending
+    }
+
     public static let shared = PerformanceTelemetryCenter()
 
     @Published public private(set) var isEnabled = false
@@ -34,6 +39,8 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     private var uploadTask: Task<Void, Never>?
     private var uploadGeneration: UInt64 = 0
     private var launchSignpost: TelemetrySignpostToken?
+    // 串行化启停与清理，避免 MainActor 在 await 期间重入并交错执行。
+    private var stateTransitionTask: Task<Void, Never>?
 
     public override init() {
         self.store = TelemetryStore()
@@ -63,11 +70,7 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     }
 
     public func configure(enabled: Bool) async {
-        if enabled {
-            await startIfNeeded()
-        } else {
-            await stopAndClear()
-        }
+        await enqueueStateTransition(.configure(enabled))
     }
 
     public func refreshVisibleRecords() async {
@@ -76,6 +79,29 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
     }
 
     public func clearPendingData() async {
+        await enqueueStateTransition(.clearPending)
+    }
+
+    private func enqueueStateTransition(_ transition: StateTransition) async {
+        let precedingTask = stateTransitionTask
+        let transitionTask = Task { @MainActor [weak self] in
+            await precedingTask?.value
+            guard let self else { return }
+
+            switch transition {
+            case .configure(true):
+                await self.startIfNeeded()
+            case .configure(false):
+                await self.stopAndClear()
+            case .clearPending:
+                await self.performClearPendingData()
+            }
+        }
+        stateTransitionTask = transitionTask
+        await transitionTask.value
+    }
+
+    private func performClearPendingData() async {
         let invalidatedTask = invalidateUpload()
         isUploading = false
         await invalidatedTask?.value

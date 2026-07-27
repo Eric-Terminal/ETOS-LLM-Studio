@@ -250,18 +250,14 @@ actor TelemetryStore {
         var totalBytes: Int64 = 0
         for fileURL in try pendingFileURLs() {
             do {
-                let data = try Data(contentsOf: fileURL)
-                let envelope = try TelemetryEnvelopeCodec.decode(data)
-                guard envelope.schemaVersion == TelemetryEnvelope.currentSchemaVersion,
-                      envelope.privacy.isSafeForUpload,
-                      fileURL.lastPathComponent.contains(envelope.payloadID) else {
+                guard let file = try loadStoredFile(at: fileURL) else {
+                    removeInvalidFile(fileURL)
                     continue
                 }
-                let file = makeStoredFile(url: fileURL, envelope: envelope, data: data)
                 files.append(file)
                 totalBytes += file.fileSizeBytes
             } catch {
-                logger.warning("忽略无法解析的遥测文件: \(fileURL.lastPathComponent, privacy: .public)")
+                removeInvalidFile(fileURL)
             }
         }
 
@@ -276,12 +272,40 @@ actor TelemetryStore {
 
     private func findFile(payloadID: String) throws -> TelemetryStoredFile? {
         for fileURL in try pendingFileURLs() where fileURL.lastPathComponent.contains(payloadID) {
-            let data = try Data(contentsOf: fileURL)
-            let envelope = try TelemetryEnvelopeCodec.decode(data)
-            guard envelope.payloadID == payloadID else { continue }
-            return makeStoredFile(url: fileURL, envelope: envelope, data: data)
+            do {
+                guard let file = try loadStoredFile(at: fileURL) else {
+                    removeInvalidFile(fileURL)
+                    continue
+                }
+                guard file.envelope.payloadID == payloadID else { continue }
+                return file
+            } catch {
+                removeInvalidFile(fileURL)
+            }
         }
         return nil
+    }
+
+    private func loadStoredFile(at fileURL: URL) throws -> TelemetryStoredFile? {
+        let data = try Data(contentsOf: fileURL)
+        let envelope = try TelemetryEnvelopeCodec.decode(data)
+        guard envelope.schemaVersion == TelemetryEnvelope.currentSchemaVersion,
+              envelope.privacy.isSafeForUpload,
+              fileURL.lastPathComponent.contains(envelope.payloadID) else {
+            return nil
+        }
+        return makeStoredFile(url: fileURL, envelope: envelope, data: data)
+    }
+
+    private func removeInvalidFile(_ fileURL: URL) {
+        logger.warning("删除无效遥测文件: \(fileURL.lastPathComponent, privacy: .public)")
+        do {
+            try removeValidatedFile(fileURL)
+        } catch {
+            logger.error(
+                "删除无效遥测文件失败: \(fileURL.lastPathComponent, privacy: .public)"
+            )
+        }
     }
 
     private func makeStoredFile(

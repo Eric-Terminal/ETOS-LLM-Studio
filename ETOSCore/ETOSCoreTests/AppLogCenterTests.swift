@@ -509,6 +509,32 @@ struct AppLogCenterTests {
         #expect(dayFolders.first?.runs.first?.totalEventCount == 3)
     }
 
+    @Test("清除全部日志会等待先前写入且不会被旧任务恢复")
+    @MainActor
+    func testClearAllSerializesPendingPersistence() async throws {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("app-log-clear-order-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDirectory) }
+
+        let store = AppLogFileStore(baseDirectory: tempDirectory)
+        let center = AppLogCenter(fileStore: store, shouldAutoLoad: false)
+
+        center.logDeveloper(
+            category: "HTTP",
+            action: "旧请求",
+            message: "清除前等待落盘的请求日志"
+        )
+        center.clearAll()
+        await center.waitForPendingPersistence()
+
+        let persistedEvents = await store.loadRecentEvents()
+        #expect(persistedEvents.isEmpty)
+        #expect(center.mergedLogs.isEmpty)
+        #expect(center.logDayFolders.isEmpty)
+    }
+
     @Test("追加日志直接返回增量运行摘要")
     func testAppendReturnsIncrementalRunSummary() async throws {
         let fileManager = FileManager.default
