@@ -69,6 +69,15 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         super.init()
     }
 
+    public static func resolveLaunchEnabled(
+        requiresManualUnlock: Bool,
+        configuredValue: () -> Bool
+    ) -> Bool {
+        // 锁库期间不能用配置默认值代替用户选择，解锁并重载持久化配置后再恢复遥测。
+        guard !requiresManualUnlock else { return false }
+        return configuredValue()
+    }
+
     public func configure(enabled: Bool) async {
         await enqueueStateTransition(.configure(enabled))
     }

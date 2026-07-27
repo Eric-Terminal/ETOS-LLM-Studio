@@ -12,6 +12,7 @@
 
 import SwiftUI
 import BackgroundTasks
+import Combine
 import ETOSCore
 #if canImport(UIKit)
 import UIKit
@@ -67,7 +68,11 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
         SyncTemporaryFileCleaner.cleanupResidualTemporaryDirectoriesInBackground()
         DailyPulseDeliveryCoordinator.shared.activate()
         FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
-        let performanceTelemetryEnabled = AppConfigStore.boolValue(for: .performanceTelemetryEnabled)
+        let performanceTelemetryEnabled = PerformanceTelemetryCenter.resolveLaunchEnabled(
+            requiresManualUnlock: DatabaseEncryptionManager.shared.requiresManualUnlock
+        ) {
+            AppConfigStore.boolValue(for: .performanceTelemetryEnabled)
+        }
         PerformanceTelemetryCenter.shared.prepareLaunchMeasurement(
             enabled: performanceTelemetryEnabled
         )
@@ -123,6 +128,14 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .onChange(of: appConfig.performanceTelemetryEnabled) { _, enabled in
                     Task {
                         await PerformanceTelemetryCenter.shared.configure(enabled: enabled)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: AppConfigStore.persistentStoreDidLoadNotification)) { _ in
+                    guard !DatabaseEncryptionManager.shared.requiresManualUnlock else { return }
+                    Task {
+                        await PerformanceTelemetryCenter.shared.configure(
+                            enabled: appConfig.performanceTelemetryEnabled
+                        )
                     }
                 }
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in

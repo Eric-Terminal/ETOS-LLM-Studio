@@ -492,6 +492,31 @@ struct TelemetryTests {
     }
 
     #if os(iOS) && canImport(MetricKit)
+    @Test("数据库等待手动解锁时不会读取或启用遥测偏好")
+    @MainActor
+    func lockedDatabaseSuppressesLaunchTelemetryPreference() {
+        var didReadConfiguredValue = false
+        let enabledWhileLocked = PerformanceTelemetryCenter.resolveLaunchEnabled(
+            requiresManualUnlock: true
+        ) {
+            didReadConfiguredValue = true
+            return true
+        }
+
+        #expect(enabledWhileLocked == false)
+        #expect(didReadConfiguredValue == false)
+        #expect(PerformanceTelemetryCenter.resolveLaunchEnabled(
+            requiresManualUnlock: false
+        ) {
+            true
+        })
+        #expect(PerformanceTelemetryCenter.resolveLaunchEnabled(
+            requiresManualUnlock: false
+        ) {
+            false
+        } == false)
+    }
+
     @Test("首次界面就绪后配置遥测不会重新创建启动区间")
     @MainActor
     func configuringTelemetryAfterFirstInterfaceDoesNotRestartLaunchMeasurement() async throws {
