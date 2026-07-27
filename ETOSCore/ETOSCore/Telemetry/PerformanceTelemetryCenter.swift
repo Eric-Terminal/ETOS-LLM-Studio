@@ -123,6 +123,10 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         self.launchSignpost = nil
     }
 
+    var hasActiveLaunchMeasurement: Bool {
+        launchSignpost != nil
+    }
+
     private func startIfNeeded() async {
         guard !isSubscribed else {
             isEnabled = true
@@ -130,7 +134,8 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         }
 
         isEnabled = true
-        prepareLaunchMeasurement(enabled: true)
+        // 运行中重新开启遥测只恢复后续区间，不能把开关操作误记成 App 启动。
+        TelemetrySignpost.setEnabled(true)
         let generation = beginUpload()
 
         // 先冻结本次启动可上传的文件，再订阅新的回调，保证新 Payload 留到下次启动。

@@ -12,7 +12,17 @@ public enum AppLogPresentation: String, Codable, Hashable, Sendable {
     case requestTransaction
 }
 
+public struct AppLogPresentedEventID: Hashable, Sendable {
+    public let eventID: UUID
+    public let channel: AppLogChannel
+}
+
 extension AppLogEvent {
+    /// 同一事务的两种投影视图共享持久化 ID，但在列表中必须拥有不同标识。
+    public var presentedID: AppLogPresentedEventID {
+        AppLogPresentedEventID(eventID: id, channel: channel)
+    }
+
     public func presented(in channel: AppLogChannel) -> AppLogEvent? {
         guard presentation == .requestTransaction else {
             return self.channel == channel ? self : nil

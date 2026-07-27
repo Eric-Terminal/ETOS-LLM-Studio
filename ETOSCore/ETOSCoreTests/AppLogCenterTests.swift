@@ -317,6 +317,7 @@ struct AppLogCenterTests {
 
         #expect(user.id == event.id)
         #expect(developer.id == event.id)
+        #expect(user.presentedID != developer.presentedID)
         #expect(user.payload?["request_body"] == "安全请求体")
         #expect(user.payload?["response_body"] == "安全响应体")
         #expect(user.payload?["request_id"] == nil)

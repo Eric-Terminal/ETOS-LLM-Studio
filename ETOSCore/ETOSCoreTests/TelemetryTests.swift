@@ -492,6 +492,31 @@ struct TelemetryTests {
     }
 
     #if os(iOS) && canImport(MetricKit)
+    @Test("首次界面就绪后配置遥测不会重新创建启动区间")
+    @MainActor
+    func configuringTelemetryAfterFirstInterfaceDoesNotRestartLaunchMeasurement() async throws {
+        let fixture = try makeTemporaryDirectory(prefix: "telemetry-launch-signpost")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let center = PerformanceTelemetryCenter(
+            store: TelemetryStore(baseDirectory: fixture),
+            uploader: RecordingTelemetryUploader(),
+            appMetadata: app,
+            platformMetadata: platform,
+            uploadDelayNanoseconds: 60_000_000_000,
+            subscribesToMetricKit: false
+        )
+
+        center.prepareLaunchMeasurement(enabled: true)
+        #expect(center.hasActiveLaunchMeasurement)
+        center.markFirstInterfaceReady()
+        #expect(center.hasActiveLaunchMeasurement == false)
+
+        await center.configure(enabled: true)
+        #expect(center.hasActiveLaunchMeasurement == false)
+
+        await center.configure(enabled: false)
+    }
+
     @Test("清除待发送数据会取消尚未开始的启动上传")
     @MainActor
     func clearingPendingDataCancelsDelayedUpload() async throws {

@@ -155,7 +155,7 @@ private struct WatchAppRunLogDetailView: View {
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(displayedEvents) { entry in
+                    ForEach(displayedEvents, id: \.presentedID) { entry in
                         NavigationLink {
                             WatchAppLogEventDetailView(entry: entry)
                         } label: {
