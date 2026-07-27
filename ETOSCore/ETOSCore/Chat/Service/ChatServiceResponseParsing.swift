@@ -49,8 +49,7 @@ extension ChatService {
         var extractedCount = 0
 
         for match in matches.reversed() {
-            guard let fullRange = Range(match.range(at: 0), in: content),
-                  let sourceRange = Range(match.range(at: 1), in: content) else { continue }
+            guard let sourceRange = Range(match.range(at: 1), in: content) else { continue }
 
             let rawSource = String(content[sourceRange])
             guard let normalizedSource = normalizeMarkdownImageSource(rawSource) else { continue }
@@ -65,7 +64,7 @@ extension ChatService {
                 workingContent.replaceSubrange(replaceRange, with: "")
             } else {
                 // 退化处理：范围映射失败时保持原文，避免误删
-                logger.warning("图片标记替换失败，已跳过该标记: \(String(content[fullRange]))")
+                logger.warning("图片标记替换失败，已保留原文。")
             }
 
             savedFileNamesInReverse.append(savedFileName)
