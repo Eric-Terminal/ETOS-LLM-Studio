@@ -107,6 +107,21 @@ public struct VideoFrameExtractor: Sendable {
         from attachment: FileAttachment,
         configuration: VideoFrameExtractionConfiguration
     ) async throws -> VideoFrameExtractionResult {
+        try await VideoFrameDerivedCache.shared.result(
+            for: attachment,
+            configuration: configuration
+        ) {
+            try await extractFramesWithoutCache(
+                from: attachment,
+                configuration: configuration
+            )
+        }
+    }
+
+    private func extractFramesWithoutCache(
+        from attachment: FileAttachment,
+        configuration: VideoFrameExtractionConfiguration
+    ) async throws -> VideoFrameExtractionResult {
 #if os(watchOS)
         return try await VideoFrameExtractionRelay.shared.extractFrames(
             from: attachment,
