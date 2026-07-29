@@ -292,6 +292,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(subset.map(\.id) == [error.id])
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """
@@ -308,6 +309,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(prepared.normalizedText == expected)
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错会补齐未闭合代码块")
     func testMarkdownFenceNormalizationClosesOpenFence() async {
         let source = """
@@ -323,6 +325,7 @@ let value = 42
         #expect(prepared.normalizedText == expected)
     }
 
+    @MainActor
     @Test("Markdown 围栏闭合容错不影响标准写法")
     func testMarkdownFenceNormalizationKeepsValidFence() async {
         let source = """
@@ -345,6 +348,7 @@ let value = 42
         #expect(ETPreparedMarkdownRenderPayload.extractThinkingTitle(from: source) == "定位展开状态")
     }
 
+    @MainActor
     @Test("iOS 会为裸 TeX 准备原生内联公式")
     func testBareTeXPreparesNativeInlineMath() async {
         let source = #"答案是 \frac{1}{2}。"#

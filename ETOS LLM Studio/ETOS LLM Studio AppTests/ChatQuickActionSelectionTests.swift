@@ -3,6 +3,7 @@
 // ============================================================================
 
 import Testing
+import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
 @Suite("聊天快捷功能配置测试")

@@ -4,6 +4,7 @@
 
 import Testing
 import Combine
+import Foundation
 @testable import ETOSCore
 
 @Suite("临时对话会话测试", .serialized)
