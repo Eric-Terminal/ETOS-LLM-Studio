@@ -99,7 +99,7 @@ struct ETMathWebShellConfiguration: Equatable {
       --font-strong: \(strongFontFamily);
       --font-code: \(codeFontFamily);
       --font-scale: \(String(format: "%.3f", fontScale));
-      --line-spacing-em: \(String(format: "%.3f", FontLibrary.normalizedLineSpacingEm(lineSpacingEm)));
+      --line-spacing-em: \(String(format: "%.3f", FontLibrary.normalizedLineSpacingEm(lineSpacingEm, fallback: FontLibrary.defaultIOSLineSpacingEm)));
     }
 
     html, body {

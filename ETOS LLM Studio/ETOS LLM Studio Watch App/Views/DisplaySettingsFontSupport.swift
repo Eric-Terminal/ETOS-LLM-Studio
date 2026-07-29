@@ -37,8 +37,8 @@ struct WatchFontSettingsView: View {
     }
 
     private var lineSpacingEm: Double {
-        get { appConfig.fontLineSpacingEm }
-        nonmutating set { appConfig.fontLineSpacingEm = newValue }
+        get { appConfig.fontLineSpacingEmWatchOS }
+        nonmutating set { appConfig.fontLineSpacingEmWatchOS = newValue }
     }
 
     var body: some View {
@@ -317,8 +317,18 @@ struct WatchFontSettingsView: View {
 
     private var lineSpacingBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedLineSpacingEm(lineSpacingEm) },
-            set: { lineSpacingEm = FontLibrary.normalizedLineSpacingEm($0) }
+            get: {
+                FontLibrary.normalizedLineSpacingEm(
+                    lineSpacingEm,
+                    fallback: FontLibrary.defaultWatchLineSpacingEm
+                )
+            },
+            set: {
+                lineSpacingEm = FontLibrary.normalizedLineSpacingEm(
+                    $0,
+                    fallback: FontLibrary.defaultWatchLineSpacingEm
+                )
+            }
         )
     }
 
@@ -373,13 +383,13 @@ struct WatchFontSettingsView: View {
                 )
             }
             Button(NSLocalizedString("恢复默认行距", comment: "")) {
-                lineSpacingBinding.wrappedValue = FontLibrary.defaultLineSpacingEm
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultWatchLineSpacingEm
             }
-            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultLineSpacingEm) < 0.001)
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultWatchLineSpacingEm) < 0.001)
         } header: {
             Text(NSLocalizedString("行距", comment: ""))
         } footer: {
-            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.20 em。", comment: ""))
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.15 em。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -391,7 +401,8 @@ struct WatchFontSettingsView: View {
                 basePointSize: 14,
                 lineSpacingEm: lineSpacingBinding.wrappedValue,
                 fontScale: customFontScale,
-                isCustomFontEnabled: isCustomFontEnabled
+                isCustomFontEnabled: isCustomFontEnabled,
+                fallbackLineSpacingEm: FontLibrary.defaultWatchLineSpacingEm
             )
         )
     }

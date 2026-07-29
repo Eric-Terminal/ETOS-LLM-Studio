@@ -337,24 +337,53 @@ struct FontRouteSyncTests {
         }
     }
 
-    @Test("聊天正文行距默认值与范围保持稳定")
+    @Test("聊天正文行距按平台保留独立默认值与范围")
     func testChatLineSpacingDefaultsAndClamping() {
-        #expect(AppConfigKey.fontLineSpacingEm.defaultValue == .real(0.2))
-        #expect(FontLibrary.normalizedLineSpacingEm(.nan) == FontLibrary.defaultLineSpacingEm)
-        #expect(FontLibrary.normalizedLineSpacingEm(-1) == FontLibrary.minimumLineSpacingEm)
-        #expect(FontLibrary.normalizedLineSpacingEm(0.225) == 0.225)
-        #expect(FontLibrary.normalizedLineSpacingEm(1) == FontLibrary.maximumLineSpacingEm)
+        #expect(AppConfigKey.fontLineSpacingEmIOS.defaultValue == .real(0.2))
+        #expect(AppConfigKey.fontLineSpacingEmWatchOS.defaultValue == .real(0.15))
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                .nan,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.defaultIOSLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                .nan,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            ) == FontLibrary.defaultWatchLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                -1,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.minimumLineSpacingEm
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                0.225,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == 0.225
+        )
+        #expect(
+            FontLibrary.normalizedLineSpacingEm(
+                1,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            ) == FontLibrary.maximumLineSpacingEm
+        )
         let customFontSpacing = FontLibrary.lineSpacingPoints(
             basePointSize: 17,
             lineSpacingEm: 0.2,
             fontScale: 1.5,
-            isCustomFontEnabled: true
+            isCustomFontEnabled: true,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
         )
         let systemFontSpacing = FontLibrary.lineSpacingPoints(
             basePointSize: 17,
             lineSpacingEm: 0.2,
             fontScale: 1.5,
-            isCustomFontEnabled: false
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
         )
         #expect(abs(customFontSpacing - 5.1) < 0.000_1)
         #expect(abs(systemFontSpacing - 3.4) < 0.000_1)

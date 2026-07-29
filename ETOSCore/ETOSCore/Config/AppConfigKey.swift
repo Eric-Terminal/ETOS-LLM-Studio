@@ -233,7 +233,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case fontUseCustomFonts = "font.useCustomFonts"
     case fontFallbackScope = "font.fallbackScope"
     case fontCustomScale = "font.customScale"
-    case fontLineSpacingEm = "font.lineSpacingEm"
+    case fontLineSpacingEmIOS = "font.lineSpacingEm.iOS"
+    case fontLineSpacingEmWatchOS = "font.lineSpacingEm.watchOS"
     case appLanguage = "ui.appLanguage"
     case watchInputQuickActionConfiguration = "watch.input.quickActions.configuration"
     case watchAttachmentLastSource = "watch.attachment.lastSource"
@@ -506,8 +507,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("segment")
         case .fontCustomScale:
             return .real(1.0)
-        case .fontLineSpacingEm:
-            return .real(FontLibrary.defaultLineSpacingEm)
+        case .fontLineSpacingEmIOS:
+            return .real(FontLibrary.defaultIOSLineSpacingEm)
+        case .fontLineSpacingEmWatchOS:
+            return .real(FontLibrary.defaultWatchLineSpacingEm)
         case .appLanguage:
             return .text("system")
         case .watchInputQuickActionConfiguration:

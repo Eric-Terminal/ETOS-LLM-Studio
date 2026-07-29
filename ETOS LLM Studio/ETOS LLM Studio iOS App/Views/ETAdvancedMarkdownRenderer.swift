@@ -36,13 +36,17 @@ struct ETAdvancedMarkdownRenderer: View {
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         let fontScale = FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts)
-        let lineSpacingEm = FontLibrary.normalizedLineSpacingEm(appConfig.fontLineSpacingEm)
+        let lineSpacingEm = FontLibrary.normalizedLineSpacingEm(
+            appConfig.fontLineSpacingEmIOS,
+            fallback: FontLibrary.defaultIOSLineSpacingEm
+        )
         let lineSpacing = CGFloat(
             FontLibrary.lineSpacingPoints(
                 basePointSize: 17,
                 lineSpacingEm: lineSpacingEm,
                 fontScale: appConfig.fontCustomScale,
-                isCustomFontEnabled: appConfig.fontUseCustomFonts
+                isCustomFontEnabled: appConfig.fontUseCustomFonts,
+                fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
             )
         )
         Group {

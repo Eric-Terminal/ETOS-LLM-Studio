@@ -38,8 +38,8 @@ struct FontSettingsView: View {
     }
 
     private var lineSpacingEm: Double {
-        get { appConfig.fontLineSpacingEm }
-        nonmutating set { appConfig.fontLineSpacingEm = newValue }
+        get { appConfig.fontLineSpacingEmIOS }
+        nonmutating set { appConfig.fontLineSpacingEmIOS = newValue }
     }
 
     var body: some View {
@@ -206,8 +206,18 @@ struct FontSettingsView: View {
 
     private var lineSpacingBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedLineSpacingEm(lineSpacingEm) },
-            set: { lineSpacingEm = FontLibrary.normalizedLineSpacingEm($0) }
+            get: {
+                FontLibrary.normalizedLineSpacingEm(
+                    lineSpacingEm,
+                    fallback: FontLibrary.defaultIOSLineSpacingEm
+                )
+            },
+            set: {
+                lineSpacingEm = FontLibrary.normalizedLineSpacingEm(
+                    $0,
+                    fallback: FontLibrary.defaultIOSLineSpacingEm
+                )
+            }
         )
     }
 
@@ -266,9 +276,9 @@ struct FontSettingsView: View {
                 )
             }
             Button(NSLocalizedString("恢复默认行距", comment: "")) {
-                lineSpacingBinding.wrappedValue = FontLibrary.defaultLineSpacingEm
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultIOSLineSpacingEm
             }
-            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultLineSpacingEm) < 0.001)
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultIOSLineSpacingEm) < 0.001)
         } header: {
             Text(NSLocalizedString("行距", comment: ""))
         } footer: {
@@ -414,7 +424,8 @@ struct FontSettingsView: View {
                 basePointSize: 17,
                 lineSpacingEm: lineSpacingBinding.wrappedValue,
                 fontScale: customFontScale,
-                isCustomFontEnabled: isCustomFontEnabled
+                isCustomFontEnabled: isCustomFontEnabled,
+                fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
             )
         )
     }

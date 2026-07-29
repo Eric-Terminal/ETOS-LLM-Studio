@@ -296,14 +296,30 @@ public final class AppConfigStore: ObservableObject {
             updateFontRuntimeSettings()
         }
     }
-    @Published public var fontLineSpacingEm: Double {
+    @Published public var fontLineSpacingEmIOS: Double {
         didSet {
-            let normalizedValue = FontLibrary.normalizedLineSpacingEm(fontLineSpacingEm)
-            guard normalizedValue == fontLineSpacingEm else {
-                fontLineSpacingEm = normalizedValue
+            let normalizedValue = FontLibrary.normalizedLineSpacingEm(
+                fontLineSpacingEmIOS,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            )
+            guard normalizedValue == fontLineSpacingEmIOS else {
+                fontLineSpacingEmIOS = normalizedValue
                 return
             }
-            write(.fontLineSpacingEm, fontLineSpacingEm)
+            write(.fontLineSpacingEmIOS, fontLineSpacingEmIOS)
+        }
+    }
+    @Published public var fontLineSpacingEmWatchOS: Double {
+        didSet {
+            let normalizedValue = FontLibrary.normalizedLineSpacingEm(
+                fontLineSpacingEmWatchOS,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            )
+            guard normalizedValue == fontLineSpacingEmWatchOS else {
+                fontLineSpacingEmWatchOS = normalizedValue
+                return
+            }
+            write(.fontLineSpacingEmWatchOS, fontLineSpacingEmWatchOS)
         }
     }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
@@ -582,7 +598,8 @@ public final class AppConfigStore: ObservableObject {
         fontUseCustomFonts = Self.boolValue(.fontUseCustomFonts, userDefaults: userDefaults)
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
         fontCustomScale = Self.realValue(.fontCustomScale, userDefaults: userDefaults)
-        fontLineSpacingEm = Self.realValue(.fontLineSpacingEm, userDefaults: userDefaults)
+        fontLineSpacingEmIOS = Self.realValue(.fontLineSpacingEmIOS, userDefaults: userDefaults)
+        fontLineSpacingEmWatchOS = Self.realValue(.fontLineSpacingEmWatchOS, userDefaults: userDefaults)
         appLanguage = Self.textValue(.appLanguage, userDefaults: userDefaults)
         let initialWatchInputQuickActionConfiguration = Self.textValue(
             .watchInputQuickActionConfiguration,
@@ -1068,7 +1085,8 @@ public final class AppConfigStore: ObservableObject {
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
         case .fontFallbackScope: return .text(fontFallbackScope)
         case .fontCustomScale: return .real(fontCustomScale)
-        case .fontLineSpacingEm: return .real(fontLineSpacingEm)
+        case .fontLineSpacingEmIOS: return .real(fontLineSpacingEmIOS)
+        case .fontLineSpacingEmWatchOS: return .real(fontLineSpacingEmWatchOS)
         case .appLanguage: return .text(appLanguage)
         case .watchInputQuickActionConfiguration: return .text(watchInputQuickActionConfiguration)
         case .watchAttachmentLastSource: return .text(watchAttachmentLastSource)
@@ -1253,8 +1271,16 @@ public final class AppConfigStore: ObservableObject {
         case .liquidGlassTintOpacity:
             liquidGlassTintOpacity = LiquidGlassTintSetting.normalized(value)
         case .fontCustomScale: fontCustomScale = value
-        case .fontLineSpacingEm:
-            fontLineSpacingEm = FontLibrary.normalizedLineSpacingEm(value)
+        case .fontLineSpacingEmIOS:
+            fontLineSpacingEmIOS = FontLibrary.normalizedLineSpacingEm(
+                value,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            )
+        case .fontLineSpacingEmWatchOS:
+            fontLineSpacingEmWatchOS = FontLibrary.normalizedLineSpacingEm(
+                value,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            )
         case .reasoningPreviewHeightPercent: reasoningPreviewHeightPercent = value
         case .chatScrollAnimationSpringResponse: chatScrollAnimationSpringResponse = value
         case .chatScrollAnimationSpringDamping: chatScrollAnimationSpringDamping = value
@@ -1682,8 +1708,16 @@ public final class AppConfigStore: ObservableObject {
         case .videoFrameExtractionFPS:
             guard value.isFinite else { return 1 }
             return min(max(0.1, value), 5)
-        case .fontLineSpacingEm:
-            return FontLibrary.normalizedLineSpacingEm(value)
+        case .fontLineSpacingEmIOS:
+            return FontLibrary.normalizedLineSpacingEm(
+                value,
+                fallback: FontLibrary.defaultIOSLineSpacingEm
+            )
+        case .fontLineSpacingEmWatchOS:
+            return FontLibrary.normalizedLineSpacingEm(
+                value,
+                fallback: FontLibrary.defaultWatchLineSpacingEm
+            )
         case .liquidGlassTintOpacity:
             return LiquidGlassTintSetting.normalized(value)
         default:
