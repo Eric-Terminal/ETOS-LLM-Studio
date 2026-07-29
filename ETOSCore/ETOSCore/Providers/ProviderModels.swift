@@ -243,6 +243,7 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
     case text
     case image
     case audio
+    case video
     case file
 
     public static let outputCases: [ModelModality] = [.text, .image, .audio]
@@ -255,6 +256,8 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("图像", comment: "模型模态：图像")
         case .audio:
             return NSLocalizedString("音频", comment: "模型模态：音频")
+        case .video:
+            return NSLocalizedString("视频", comment: "模型模态：视频")
         case .file:
             return NSLocalizedString("文件", comment: "模型模态：文件")
         }

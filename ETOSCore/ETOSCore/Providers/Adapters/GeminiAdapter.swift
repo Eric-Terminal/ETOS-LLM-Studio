@@ -18,6 +18,7 @@ public class GeminiAdapter: APIAdapter {
     
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "GeminiAdapter")
     static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    static let apiKeyControlKey = "etos.gemini.selected_api_key"
 
     func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

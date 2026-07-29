@@ -442,6 +442,10 @@ public extension Model {
         inputModalities.contains(.image)
     }
 
+    var supportsNativeVideoInput: Bool {
+        inputModalities.contains(.video)
+    }
+
     var supportsImageGeneration: Bool {
         kind == .image || outputModalities.contains(.image)
     }

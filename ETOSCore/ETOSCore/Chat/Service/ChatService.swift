@@ -211,6 +211,7 @@ public class ChatService {
         cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
+    let geminiVideoUploadCache = GeminiVideoUploadCache()
 
     struct ImageGenerationContext {
         let sessionID: UUID
@@ -234,6 +235,14 @@ public class ChatService {
     struct FileAttachmentTextPreprocessingResult {
         let messages: [ChatMessage]
         let fileAttachments: [UUID: [FileAttachment]]
+        let errorMessage: String?
+    }
+
+    struct VideoAttachmentPreprocessingResult {
+        let messages: [ChatMessage]
+        let imageAttachments: [UUID: [ImageAttachment]]
+        let nativeVideoAttachments: [UUID: [FileAttachment]]
+        let documentAttachments: [UUID: [FileAttachment]]
         let errorMessage: String?
     }
 

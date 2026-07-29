@@ -199,6 +199,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
     @Published public var chatSendDelaySeconds: Double { didSet { write(.chatSendDelaySeconds, chatSendDelaySeconds) } }
+    @Published public var videoFrameExtractionMode: String { didSet { write(.videoFrameExtractionMode, videoFrameExtractionMode) } }
+    @Published public var videoFrameExtractionFPS: Double { didSet { write(.videoFrameExtractionFPS, videoFrameExtractionFPS) } }
+    @Published public var videoFrameMaximumCount: Int { didSet { write(.videoFrameMaximumCount, videoFrameMaximumCount) } }
 
     @Published public var enableMemory: Bool { didSet { write(.enableMemory, enableMemory) } }
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
@@ -495,6 +498,11 @@ public final class AppConfigStore: ObservableObject {
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
         chatSendDelaySeconds = Self.realValue(.chatSendDelaySeconds, userDefaults: userDefaults)
+        videoFrameExtractionMode = VideoFrameExtractionMode.normalized(
+            Self.textValue(.videoFrameExtractionMode, userDefaults: userDefaults)
+        ).rawValue
+        videoFrameExtractionFPS = Self.realValue(.videoFrameExtractionFPS, userDefaults: userDefaults)
+        videoFrameMaximumCount = Self.integerValue(.videoFrameMaximumCount, userDefaults: userDefaults)
 
         enableMemory = Self.boolValue(.enableMemory, userDefaults: userDefaults)
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
@@ -977,6 +985,9 @@ public final class AppConfigStore: ObservableObject {
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
         case .chatSendDelaySeconds: return .real(chatSendDelaySeconds)
+        case .videoFrameExtractionMode: return .text(videoFrameExtractionMode)
+        case .videoFrameExtractionFPS: return .real(videoFrameExtractionFPS)
+        case .videoFrameMaximumCount: return .integer(videoFrameMaximumCount)
 
         case .enableMemory: return .bool(enableMemory)
         case .enableMemoryWrite: return .bool(enableMemoryWrite)
@@ -1197,6 +1208,8 @@ public final class AppConfigStore: ObservableObject {
         case .periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes = value
         case .lastAnnouncementId: lastAnnouncementId = value
         case .appLockTimeoutSeconds: appLockTimeoutSeconds = value
+        case .videoFrameMaximumCount:
+            videoFrameMaximumCount = Self.normalizedIntegerValue(value, for: key)
         default: break
         }
     }
@@ -1215,6 +1228,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatSendAnimationSpringResponse: chatSendAnimationSpringResponse = value
         case .chatSendAnimationSpringDamping: chatSendAnimationSpringDamping = value
         case .chatSendDelaySeconds: chatSendDelaySeconds = Self.normalizedRealValue(value, for: key)
+        case .videoFrameExtractionFPS:
+            videoFrameExtractionFPS = Self.normalizedRealValue(value, for: key)
         default: break
         }
     }
@@ -1244,6 +1259,8 @@ public final class AppConfigStore: ObservableObject {
         case .systemPrompt: systemPrompt = value
         case .reasoningContentEchoMode:
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
+        case .videoFrameExtractionMode:
+            videoFrameExtractionMode = VideoFrameExtractionMode.normalized(value).rawValue
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
         case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value
@@ -1600,6 +1617,8 @@ public final class AppConfigStore: ObservableObject {
         switch key {
         case .reasoningContentEchoMode:
             return ReasoningContentEchoMode.normalized(value).rawValue
+        case .videoFrameExtractionMode:
+            return VideoFrameExtractionMode.normalized(value).rawValue
         default:
             return value
         }
@@ -1614,6 +1633,8 @@ public final class AppConfigStore: ObservableObject {
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit:
             return max(1, value)
+        case .videoFrameMaximumCount:
+            return min(max(4, value), 120)
         default:
             return value
         }
@@ -1624,6 +1645,9 @@ public final class AppConfigStore: ObservableObject {
         case .chatSendDelaySeconds:
             guard value.isFinite else { return 0 }
             return max(0, value)
+        case .videoFrameExtractionFPS:
+            guard value.isFinite else { return 1 }
+            return min(max(0.1, value), 5)
         default:
             return value
         }

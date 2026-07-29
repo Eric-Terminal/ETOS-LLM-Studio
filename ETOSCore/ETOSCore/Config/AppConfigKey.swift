@@ -66,6 +66,28 @@ public enum ReasoningContentEchoMode: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+public enum VideoFrameExtractionMode: String, CaseIterable, Identifiable, Sendable {
+    case smart
+    case fixedFPS = "fixed_fps"
+
+    public static let defaultMode: VideoFrameExtractionMode = .smart
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .smart:
+            return NSLocalizedString("智能抽帧", comment: "Video frame extraction mode smart")
+        case .fixedFPS:
+            return NSLocalizedString("固定 FPS", comment: "Video frame extraction mode fixed FPS")
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> VideoFrameExtractionMode {
+        VideoFrameExtractionMode(rawValue: rawValue) ?? defaultMode
+    }
+}
+
 public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncProviders = "sync.options.providers"
     case syncSessions = "sync.options.sessions"
@@ -141,6 +163,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableAutoSessionNaming = "enableAutoSessionNaming"
     case chatSendDelaySeconds = "chat.sendDelaySeconds"
     case messageRegexRules = "chat.messageRegexRules"
+    case videoFrameExtractionMode = "video.frameExtraction.mode"
+    case videoFrameExtractionFPS = "video.frameExtraction.fps"
+    case videoFrameMaximumCount = "video.frameExtraction.maximumCount"
 
     case enableMemory = "enableMemory"
     case enableMemoryWrite = "enableMemoryWrite"
@@ -360,6 +385,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .integer(1)
         case .chatSendDelaySeconds:
             return .real(0.0)
+        case .videoFrameExtractionMode:
+            return .text(VideoFrameExtractionMode.defaultMode.rawValue)
+        case .videoFrameExtractionFPS:
+            return .real(1.0)
+        case .videoFrameMaximumCount:
+            return .integer(60)
         case .lazyLoadMessageCount:
             #if os(watchOS)
             return .integer(3)

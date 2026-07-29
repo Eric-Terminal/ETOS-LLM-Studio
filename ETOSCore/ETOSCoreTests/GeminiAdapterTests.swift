@@ -25,6 +25,37 @@ struct GeminiAdapterTests {
         model: Model(modelName: "gemini-2.5-pro")
     )
 
+    @Test("Gemini 请求使用 Files API URI 并把原生视频放在用户问题之前")
+    func testGeminiNativeVideoPartPrecedesText() throws {
+        let message = ChatMessage(role: .user, content: "概括这段视频")
+        let video = FileAttachment(
+            data: Data([0x01, 0x02, 0x03]),
+            mimeType: "video/mp4",
+            fileName: "sample.mp4",
+            remoteFileURI: "https://generativelanguage.googleapis.com/v1beta/files/video-1"
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: dummyModel,
+            commonPayload: [GeminiAdapter.apiKeyControlKey: "selected-key"],
+            messages: [message],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [message.id: [video]]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let contents = try #require(payload["contents"] as? [[String: Any]])
+        let parts = try #require(contents.first?["parts"] as? [[String: Any]])
+        let fileData = try #require(parts.first?["file_data"] as? [String: Any])
+
+        #expect(fileData["mime_type"] as? String == "video/mp4")
+        #expect(fileData["file_uri"] as? String == "https://generativelanguage.googleapis.com/v1beta/files/video-1")
+        #expect(parts.dropFirst().first?["text"] as? String == "概括这段视频")
+        #expect(request.url?.query?.contains("key=selected-key") == true)
+    }
+
     @Test("Gemini 原生模型列表会保留嵌入模型")
     func testGeminiModelListKeepsEmbeddingOnlyModels() throws {
         let data = Data("""

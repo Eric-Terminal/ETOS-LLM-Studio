@@ -72,6 +72,7 @@ extension ChatService {
         let audioPlaceholder = NSLocalizedString("[语音消息]", comment: "Audio message placeholder")
         let imagePlaceholder = NSLocalizedString("[图片]", comment: "Image message placeholder")
         let filePlaceholder = NSLocalizedString("[文件]", comment: "File message placeholder")
+        let videoPlaceholder = NSLocalizedString("[视频]", comment: "Video message placeholder")
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageRegexRules = MessageRegexRuleStore.currentRules()
         let messageContent = messageRegexRules.isEmpty
@@ -84,7 +85,7 @@ extension ChatService {
             )
         var savedAudioFileName: String? = nil
         var savedImageFileNames: [String] = []
-        var savedFileNames: [String] = []
+        var savedFiles: [(fileName: String, isVideo: Bool)] = []
         let requestTimestamp = Date()
         var userMessages: [ChatMessage] = []
         var primaryUserMessage: ChatMessage?
@@ -122,19 +123,30 @@ extension ChatService {
                 preferredFileName: originalName
             )
             if let targetName {
-                savedFileNames.append(targetName)
+                savedFiles.append((
+                    fileName: targetName,
+                    isVideo: VideoAttachmentSupport.isVideo(fileAttachment)
+                ))
                 logger.info("文件附件已保存或复用: \(targetName)")
             }
         }
+
+        let savedVideoFileNames = savedFiles
+            .filter { $0.isVideo }
+            .map { $0.fileName }
 
         if !messageContent.isEmpty {
             let textMessage = ChatMessage(
                 role: .user,
                 content: messageContent,
                 requestedAt: requestTimestamp,
-                audioFileName: nil
+                audioFileName: nil,
+                fileFileNames: savedVideoFileNames.isEmpty
+                    ? nil
+                    : savedVideoFileNames
             )
             userMessages.append(textMessage)
+            primaryUserMessage = textMessage
         }
 
         if let savedAudioFileName {
@@ -155,12 +167,21 @@ extension ChatService {
             ))
         }
 
-        for fileName in savedFileNames {
+        if messageContent.isEmpty, !savedVideoFileNames.isEmpty {
+            userMessages.append(ChatMessage(
+                role: .user,
+                content: videoPlaceholder,
+                requestedAt: requestTimestamp,
+                fileFileNames: savedVideoFileNames
+            ))
+        }
+
+        for savedFile in savedFiles where !savedFile.isVideo {
             userMessages.append(ChatMessage(
                 role: .user,
                 content: filePlaceholder,
                 requestedAt: requestTimestamp,
-                fileFileNames: [fileName]
+                fileFileNames: [savedFile.fileName]
             ))
         }
 
@@ -175,14 +196,7 @@ extension ChatService {
         }
 
         // 用于命名会话/记忆检索的代表消息：优先用户正文，其次第一条附件消息。
-        if let textMessage = userMessages.first(where: {
-            $0.audioFileName == nil
-                && ($0.imageFileNames?.isEmpty ?? true)
-                && ($0.fileFileNames?.isEmpty ?? true)
-                && !$0.content.isEmpty
-        }) {
-            primaryUserMessage = textMessage
-        } else {
+        if primaryUserMessage == nil {
             primaryUserMessage = userMessages.first
         }
         let responseAttempt = ResponseAttemptMetadata(
@@ -239,7 +253,10 @@ extension ChatService {
 
             // 用户发送第一条消息时，立即异步生成标题（无需等待AI响应）
             let trimmedTitleSource = sessionTitleSource.content.trimmingCharacters(in: .whitespacesAndNewlines)
-            let isPlaceholderTitle = trimmedTitleSource == audioPlaceholder || trimmedTitleSource == imagePlaceholder || trimmedTitleSource == filePlaceholder
+            let isPlaceholderTitle = trimmedTitleSource == audioPlaceholder
+                || trimmedTitleSource == imagePlaceholder
+                || trimmedTitleSource == filePlaceholder
+                || trimmedTitleSource == videoPlaceholder
             if !trimmedTitleSource.isEmpty && !isPlaceholderTitle {
                 let sessionIDForTitle = currentSession.id
                 let userMessageForTitle = sessionTitleSource

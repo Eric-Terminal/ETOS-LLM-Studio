@@ -373,6 +373,43 @@ extension ChatService {
             }
         }
 
+        var loadedFileAttachments: [UUID: [FileAttachment]] = [:]
+        for msg in messagesToSend {
+            guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
+            var attachments: [FileAttachment] = []
+            for fileName in fileFileNames {
+                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
+                    attachments.append(attachment)
+                    logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
+                }
+            }
+            if !attachments.isEmpty {
+                loadedFileAttachments[msg.id] = attachments
+            }
+        }
+
+        let videoPreprocessing = await preprocessVideoAttachments(
+            messages: messagesToSend,
+            imageAttachments: imageAttachments,
+            fileAttachments: loadedFileAttachments,
+            targetModel: runnableModel
+        )
+        if let errorMessage = videoPreprocessing.errorMessage {
+            addErrorMessage(errorMessage, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "video_frame_extraction_failed"
+            )
+            return
+        }
+        messagesToSend = videoPreprocessing.messages
+        imageAttachments = videoPreprocessing.imageAttachments
+
         let imagePreprocessing = await preprocessImageAttachmentsIfNeeded(
             messages: messagesToSend,
             imageAttachments: imageAttachments,
@@ -395,24 +432,9 @@ extension ChatService {
         messagesToSend = imagePreprocessing.messages
         imageAttachments = imagePreprocessing.imageAttachments
 
-        var fileAttachments: [UUID: [FileAttachment]] = [:]
-        for msg in messagesToSend {
-            guard let fileFileNames = msg.fileFileNames, !fileFileNames.isEmpty else { continue }
-            var attachments: [FileAttachment] = []
-            for fileName in fileFileNames {
-                if let attachment = loadFileAttachmentFromStorage(fileName: fileName) {
-                    attachments.append(attachment)
-                    logger.info("已加载历史文件附件: \(fileName) 用于消息 \(msg.id)")
-                }
-            }
-            if !attachments.isEmpty {
-                fileAttachments[msg.id] = attachments
-            }
-        }
-
         let filePreprocessing = preprocessFileAttachmentsForText(
             messages: messagesToSend,
-            fileAttachments: fileAttachments
+            fileAttachments: videoPreprocessing.documentAttachments
         )
         if let errorMessage = filePreprocessing.errorMessage {
             addErrorMessage(errorMessage, sessionID: currentSessionID)
@@ -428,7 +450,10 @@ extension ChatService {
             return
         }
         messagesToSend = filePreprocessing.messages
-        fileAttachments = filePreprocessing.fileAttachments
+        var fileAttachments = filePreprocessing.fileAttachments
+        for (messageID, attachments) in videoPreprocessing.nativeVideoAttachments {
+            fileAttachments[messageID, default: []].append(contentsOf: attachments)
+        }
 
         if !helperScriptIDs.isEmpty {
             if continuationMessages.isEmpty {
@@ -535,12 +560,44 @@ extension ChatService {
             return
         }
 
+        var selectedGeminiAPIKey: String?
+        if let geminiAdapter = adapter as? GeminiAdapter {
+            do {
+                let preparation = try await prepareGeminiNativeVideoAttachments(
+                    fileAttachments,
+                    provider: runnableModel.provider,
+                    adapter: geminiAdapter
+                )
+                fileAttachments = preparation.attachments
+                selectedGeminiAPIKey = preparation.apiKey
+            } catch {
+                let errorMessage = String(
+                    format: NSLocalizedString("Gemini 原生视频上传失败：%@", comment: "Gemini native video upload failed"),
+                    error.localizedDescription
+                )
+                addErrorMessage(errorMessage, sessionID: currentSessionID)
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    recordUsageEvent: false,
+                    errorKind: "gemini_video_upload_failed"
+                )
+                return
+            }
+        }
+
         let temperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
         let topPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
         var commonPayload: [String: Any] = ["stream": effectiveStreaming]
         if temperatureEnabled { commonPayload["temperature"] = aiTemperature }
         if topPEnabled { commonPayload["top_p"] = aiTopP }
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
+        if let selectedGeminiAPIKey {
+            commonPayload[GeminiAdapter.apiKeyControlKey] = selectedGeminiAPIKey
+        }
         if adapter is OpenAIAdapter {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
@@ -677,6 +734,152 @@ extension ChatService {
         }
         #endif
         return "application/octet-stream"
+    }
+
+    func preprocessVideoAttachments(
+        messages: [ChatMessage],
+        imageAttachments: [UUID: [ImageAttachment]],
+        fileAttachments: [UUID: [FileAttachment]],
+        targetModel: RunnableModel
+    ) async -> VideoAttachmentPreprocessingResult {
+        guard !fileAttachments.isEmpty else {
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
+                documentAttachments: [:],
+                errorMessage: nil
+            )
+        }
+
+        var videoAttachments: [UUID: [FileAttachment]] = [:]
+        var documentAttachments: [UUID: [FileAttachment]] = [:]
+        for (messageID, attachments) in fileAttachments {
+            for attachment in attachments {
+                if VideoAttachmentSupport.isVideo(attachment) {
+                    videoAttachments[messageID, default: []].append(attachment)
+                } else {
+                    documentAttachments[messageID, default: []].append(attachment)
+                }
+            }
+        }
+
+        guard !videoAttachments.isEmpty else {
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let usesNativeVideo = VideoAttachmentSupport.usesNativeInput(for: targetModel)
+        if usesNativeVideo {
+            logger.info("当前 Gemini 模型已启用视频输入，将发送原始视频附件。")
+            return VideoAttachmentPreprocessingResult(
+                messages: messages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: videoAttachments,
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let configuration = await MainActor.run {
+            let appConfig = AppConfigStore.shared
+            return VideoFrameExtractionConfiguration(
+                mode: VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode),
+                fixedFPS: appConfig.videoFrameExtractionFPS,
+                maximumFrameCount: appConfig.videoFrameMaximumCount
+            )
+        }
+        let extractor = VideoFrameExtractor()
+        var updatedMessages = messages
+        var updatedImageAttachments = imageAttachments
+        let orderedMessageIDs = updatedMessages.map(\.id)
+        let sortedPairs = videoAttachments.sorted { lhs, rhs in
+            let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+            let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+
+        for (messageID, attachments) in sortedPairs {
+            guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                continue
+            }
+            for attachment in attachments {
+                do {
+                    let result = try await extractor.extractFrames(
+                        from: attachment,
+                        configuration: configuration
+                    )
+                    updatedImageAttachments[messageID, default: []].append(
+                        contentsOf: result.frames.map(\.attachment)
+                    )
+                    let appendix = makeVideoFrameAppendixText(
+                        fileName: attachment.fileName,
+                        result: result,
+                        mode: configuration.mode
+                    )
+                    if updatedMessages[messageIndex].content
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .isEmpty {
+                        updatedMessages[messageIndex].content = appendix
+                    } else {
+                        updatedMessages[messageIndex].content += "\n\n\(appendix)"
+                    }
+                    logger.info(
+                        "视频抽帧完成: \(attachment.fileName)，生成 \(result.frames.count) 帧。"
+                    )
+                } catch {
+                    let errorMessage = String(
+                        format: NSLocalizedString("视频“%@”处理失败：%@", comment: "Video extraction failed"),
+                        attachment.fileName,
+                        error.localizedDescription
+                    )
+                    return VideoAttachmentPreprocessingResult(
+                        messages: messages,
+                        imageAttachments: imageAttachments,
+                        nativeVideoAttachments: [:],
+                        documentAttachments: documentAttachments,
+                        errorMessage: errorMessage
+                    )
+                }
+            }
+        }
+
+        return VideoAttachmentPreprocessingResult(
+            messages: updatedMessages,
+            imageAttachments: updatedImageAttachments,
+            nativeVideoAttachments: [:],
+            documentAttachments: documentAttachments,
+            errorMessage: nil
+        )
+    }
+
+    private func makeVideoFrameAppendixText(
+        fileName: String,
+        result: VideoFrameExtractionResult,
+        mode: VideoFrameExtractionMode
+    ) -> String {
+        let frameLines = result.frames.map { frame in
+            String(
+                format: "  <frame file=\"%@\" timestamp_seconds=\"%.3f\" />",
+                xmlEscapedAttribute(frame.attachment.fileName),
+                frame.timestamp
+            )
+        }.joined(separator: "\n")
+        let localizedInstruction = NSLocalizedString(
+            "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。",
+            comment: "Video extracted frames prompt"
+        )
+        return """
+        <video_frames name="\(xmlEscapedAttribute(fileName))" duration_seconds="\(String(format: "%.3f", result.duration))" mode="\(mode.rawValue)">
+        \(localizedInstruction)
+        \(frameLines)
+        </video_frames>
+        """
     }
 
     func preprocessFileAttachmentsForText(

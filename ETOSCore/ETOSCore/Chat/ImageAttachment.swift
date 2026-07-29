@@ -78,11 +78,20 @@ public struct FileAttachment: Identifiable, Sendable {
     public let data: Data
     public let mimeType: String
     public let fileName: String
+    /// Gemini Files API 返回的临时文件地址，仅用于当前请求构建。
+    public let remoteFileURI: String?
     
-    public init(id: UUID = UUID(), data: Data, mimeType: String, fileName: String) {
+    public init(
+        id: UUID = UUID(),
+        data: Data,
+        mimeType: String,
+        fileName: String,
+        remoteFileURI: String? = nil
+    ) {
         self.id = id
         self.data = data
         self.mimeType = mimeType
         self.fileName = fileName
+        self.remoteFileURI = remoteFileURI
     }
 }

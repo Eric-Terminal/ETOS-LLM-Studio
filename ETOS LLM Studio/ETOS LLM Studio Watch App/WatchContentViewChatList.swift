@@ -168,9 +168,10 @@ extension ContentView {
             }
 
             ForEach(viewModel.pendingFileAttachments) { attachment in
+                let isVideo = VideoAttachmentSupport.isVideo(attachment)
                 WatchPendingAttachmentRowView(
-                    systemImage: "doc",
-                    title: NSLocalizedString("文件", comment: ""),
+                    systemImage: isVideo ? "video" : "doc",
+                    title: NSLocalizedString(isVideo ? "视频" : "文件", comment: ""),
                     fileName: attachment.fileName,
                     tint: .cyan
                 )

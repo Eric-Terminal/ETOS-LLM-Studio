@@ -20,7 +20,10 @@ extension GeminiAdapter {
             return nil
         }
         
-        guard let apiKey = model.provider.apiKeys.randomElement(), !apiKey.isEmpty else {
+        let controlledAPIKey = commonPayload[Self.apiKeyControlKey] as? String
+        guard let apiKey = controlledAPIKey.flatMap({ $0.isEmpty ? nil : $0 })
+            ?? model.provider.apiKeys.randomElement(),
+              !apiKey.isEmpty else {
             logger.error("构建聊天请求失败: 提供商 '\(model.provider.name)' 未配置有效的 API Key。")
             return nil
         }
@@ -104,6 +107,25 @@ extension GeminiAdapter {
             let msgFileAttachments = fileAttachments[msg.id] ?? []
             let audioAttachment = audioAttachments[msg.id]
             
+            // Gemini 视频理解建议先放视频，再放用户问题，便于模型按附件解释后续文本。
+            for fileAttachment in msgFileAttachments where VideoAttachmentSupport.isVideo(fileAttachment) {
+                if let remoteFileURI = fileAttachment.remoteFileURI {
+                    parts.append([
+                        "file_data": [
+                            "mime_type": fileAttachment.mimeType,
+                            "file_uri": remoteFileURI
+                        ]
+                    ])
+                } else {
+                    parts.append([
+                        "inline_data": [
+                            "mime_type": fileAttachment.mimeType,
+                            "data": fileAttachment.data.base64EncodedString()
+                        ]
+                    ])
+                }
+            }
+
             // 添加文本内容
             let trimmed = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
             if shouldSendText(trimmed) {
@@ -136,7 +158,7 @@ extension GeminiAdapter {
             }
 
             // 添加文件 (Gemini 格式: inline_data)
-            for fileAttachment in msgFileAttachments {
+            for fileAttachment in msgFileAttachments where !VideoAttachmentSupport.isVideo(fileAttachment) {
                 let base64File = fileAttachment.data.base64EncodedString()
                 parts.append([
                     "inline_data": [

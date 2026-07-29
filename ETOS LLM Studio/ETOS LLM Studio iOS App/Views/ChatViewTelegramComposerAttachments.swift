@@ -92,14 +92,15 @@ extension TelegramMessageComposer {
             }
 
             ForEach(viewModel.pendingFileAttachments) { attachment in
+                let isVideo = VideoAttachmentSupport.isVideo(attachment)
                 ZStack(alignment: .topTrailing) {
                     HStack(spacing: 8) {
-                        Image(systemName: "doc")
+                        Image(systemName: isVideo ? "video" : "doc")
                             .etFont(.system(size: 18))
                             .foregroundColor(TelegramColors.attachButtonColor)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("文件", comment: ""))
+                            Text(NSLocalizedString(isVideo ? "视频" : "文件", comment: ""))
                                 .etFont(.system(size: 13, weight: .medium))
                             Text(attachment.fileName)
                                 .etFont(.system(size: 11))

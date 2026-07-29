@@ -198,11 +198,10 @@ extension ChatBubble {
     func fileAttachmentsView(fileNames: [String], isOutgoing: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(fileNames, id: \.self) { fileName in
-                Button {
-                    loadFilePreview(fileName)
-                } label: {
+                let isVideo = VideoAttachmentSupport.isVideo(fileName: fileName)
+                if isVideo {
                     HStack(spacing: 6) {
-                        Image(systemName: "doc")
+                        Image(systemName: "video")
                             .etFont(.system(size: 13, weight: .semibold))
                             .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
 
@@ -212,10 +211,6 @@ extension ChatBubble {
                             .foregroundStyle(resolvedTextColor(default: .primary))
 
                         Spacer(minLength: 4)
-
-                        Image(systemName: "eye")
-                            .etFont(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
@@ -224,9 +219,37 @@ extension ChatBubble {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color.secondary.opacity(0.15))
                     )
+                } else {
+                    Button {
+                        loadFilePreview(fileName)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc")
+                                .etFont(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+
+                            Text(fileName)
+                                .etFont(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                                .foregroundStyle(resolvedTextColor(default: .primary))
+
+                            Spacer(minLength: 4)
+
+                            Image(systemName: "eye")
+                                .etFont(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.8))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.secondary.opacity(0.15))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("预览", comment: ""))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("预览", comment: ""))
             }
         }
         .frame(maxWidth: bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)

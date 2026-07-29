@@ -8,6 +8,7 @@
 
 import SwiftUI
 import Foundation
+import CoreTransferable
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
@@ -106,12 +107,33 @@ struct TelegramMessageComposer: View {
                 : .spring(response: 0.3, dampingFraction: 1),
             value: slashCommandSuggestions
         )
-        .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotos, matching: .images)
+        .photosPicker(
+            isPresented: $showImagePicker,
+            selection: $selectedPhotos,
+            matching: .any(of: [.images, .videos])
+        )
         .onChange(of: selectedPhotos) { _, newItems in
             Task {
                 for item in newItems {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
+                    let videoType = item.supportedContentTypes.first { $0.conforms(to: .movie) }
+                    if let videoType {
+                        guard let video = try? await item.loadTransferable(
+                            type: PickedChatVideo.self
+                        ) else {
+                            continue
+                        }
+                        let fileExtension = video.fileExtension
+                        let mimeType = videoType.preferredMIMEType ?? video.mimeType
+                        let fileName = "video_\(UUID().uuidString).\(fileExtension)"
+                        await MainActor.run {
+                            viewModel.addFileAttachment(FileAttachment(
+                                data: video.data,
+                                mimeType: mimeType,
+                                fileName: fileName
+                            ))
+                        }
+                    } else if let data = try? await item.loadTransferable(type: Data.self),
+                              let image = UIImage(data: data) {
                         await MainActor.run {
                             viewModel.addImageAttachment(image)
                         }
@@ -240,7 +262,7 @@ struct TelegramMessageComposer: View {
             Button {
                 showImagePicker = true
             } label: {
-                Label(NSLocalizedString("选择图片", comment: ""), systemImage: "photo")
+                Label(NSLocalizedString("选择照片或视频", comment: ""), systemImage: "photo.on.rectangle")
             }
 
             Button {
@@ -686,5 +708,25 @@ struct TelegramMessageComposer: View {
 
     var glassShadowColor: Color {
         Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
+    }
+}
+
+private struct PickedChatVideo: Transferable {
+    let data: Data
+    let mimeType: String
+    let fileExtension: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { receivedFile in
+            let rawExtension = receivedFile.file.pathExtension.lowercased()
+            let fileExtension = rawExtension.isEmpty ? "mov" : rawExtension
+            let mimeType = UTType(filenameExtension: fileExtension)?.preferredMIMEType
+                ?? "video/quicktime"
+            return PickedChatVideo(
+                data: try Data(contentsOf: receivedFile.file),
+                mimeType: mimeType,
+                fileExtension: fileExtension
+            )
+        }
     }
 }

@@ -252,6 +252,40 @@ struct ModelAdvancedSettingsView: View {
                 }
             }
 
+            Section {
+                Picker(
+                    NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
+                    selection: videoFrameExtractionModeBinding
+                ) {
+                    ForEach(VideoFrameExtractionMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
+                    samplingParameterField(
+                        title: NSLocalizedString("抽帧 FPS", comment: "Video extraction FPS"),
+                        value: videoFrameExtractionFPSBinding
+                    )
+                }
+
+                Stepper(value: videoFrameMaximumCountBinding, in: 4...120, step: 4) {
+                    Text(
+                        String(
+                            format: NSLocalizedString("最多 %d 帧", comment: "Maximum extracted video frames"),
+                            videoFrameMaximumCountBinding.wrappedValue
+                        )
+                    )
+                }
+            } header: {
+                Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
+            } footer: {
+                Text(NSLocalizedString(
+                    "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。",
+                    comment: "Watch video sending settings explanation"
+                ))
+            }
+
             // MARK: Section 4：生成与输出
             Section(
                 header: Text(NSLocalizedString("生成与输出", comment: "")),
@@ -368,6 +402,27 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
+    private var videoFrameExtractionModeBinding: Binding<VideoFrameExtractionMode> {
+        Binding(
+            get: { VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode) },
+            set: { appConfig.videoFrameExtractionMode = $0.rawValue }
+        )
+    }
+
+    private var videoFrameExtractionFPSBinding: Binding<Double> {
+        Binding(
+            get: { min(max(appConfig.videoFrameExtractionFPS, 0.1), 5) },
+            set: { appConfig.videoFrameExtractionFPS = min(max($0, 0.1), 5) }
+        )
+    }
+
+    private var videoFrameMaximumCountBinding: Binding<Int> {
+        Binding(
+            get: { min(max(appConfig.videoFrameMaximumCount, 4), 120) },
+            set: { appConfig.videoFrameMaximumCount = min(max($0, 4), 120) }
+        )
+    }
+
     private var settingsIntroSummary: String {
         [
             NSLocalizedString("提示与注入", comment: ""),
@@ -400,7 +455,8 @@ struct ModelAdvancedSettingsView: View {
                     NSLocalizedString("离开时间未超过该期限时恢复上次会话；超过后打开新对话。", comment: "Recent session restore behavior explanation"),
                     NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"),
                     NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""),
-                    NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "Watch context compression reminder settings explanation")
+                    NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "Watch context compression reminder settings explanation"),
+                    NSLocalizedString("在 Gemini 模型的输入模态中启用“视频”后，手表会通过 Gemini Files API 发送原视频；关闭该模态或切换到其他模型时，会从保留的原视频生成带时间戳的画面。watchOS 的非原生视频抽帧由配对 iPhone 协助完成。", comment: "Watch video sending settings detailed explanation")
                 ].joined(separator: "\n\n")
             ),
             (

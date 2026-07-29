@@ -1402,6 +1402,9 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
+        if VideoFrameExtractionRelay.handleIncomingFile(file, session: session) {
+            return
+        }
         let transferKind = file.metadata?["kind"] as? String
         let isResponse = (file.metadata?["response"] as? Bool) ?? false
         let requestID = file.metadata?["requestID"] as? String
@@ -1485,6 +1488,12 @@ extension WatchSyncManager: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            if await VideoFrameExtractionRelay.shared.handleFinishedTransfer(
+                fileTransfer,
+                error: error
+            ) {
+                return
+            }
             let identifier = ObjectIdentifier(fileTransfer)
             let transferContext = pendingTransfers[identifier]
             defer { pendingTransfers.removeValue(forKey: identifier) }

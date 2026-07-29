@@ -321,7 +321,7 @@ extension ModelSettingsView {
     @ViewBuilder
     private var chatModelCapabilitySections: some View {
         Section(NSLocalizedString("输入模态", comment: "聊天模型输入模态区块标题")) {
-            ForEach(ModelModality.allCases, id: \.self) { modality in
+            ForEach(availableInputModalities, id: \.self) { modality in
                 Toggle(modality.localizedName, isOn: modalityBinding(modality, keyPath: \.inputModalities))
             }
         }
@@ -338,6 +338,14 @@ extension ModelSettingsView {
             Text(NSLocalizedString("能力", comment: "聊天模型能力区块标题"))
         } footer: {
             Text(NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明"))
+        }
+    }
+
+    private var availableInputModalities: [ModelModality] {
+        ModelModality.allCases.filter { modality in
+            modality != .video
+                || provider.apiFormat.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased() == "gemini"
         }
     }
 

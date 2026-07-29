@@ -309,6 +309,41 @@ struct ModelAdvancedSettingsView: View {
                     }
 
                 }
+
+                Section {
+                    Picker(
+                        NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
+                        selection: videoFrameExtractionModeBinding
+                    ) {
+                        ForEach(VideoFrameExtractionMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
+                        Stepper(value: videoFrameExtractionFPSBinding, in: 0.1...5, step: 0.1) {
+                            LabeledContent(NSLocalizedString("抽帧速率", comment: "Video extraction FPS")) {
+                                Text("\(videoFrameExtractionFPSBinding.wrappedValue, specifier: "%.1f") FPS")
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+
+                    Stepper(value: videoFrameMaximumCountBinding, in: 4...120, step: 4) {
+                        LabeledContent(NSLocalizedString("最多画面数", comment: "Maximum extracted video frames")) {
+                            Text("\(videoFrameMaximumCountBinding.wrappedValue)")
+                                .monospacedDigit()
+                        }
+                    }
+                } header: {
+                    Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
+                } footer: {
+                    Text(NSLocalizedString(
+                        "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。",
+                        comment: "Video sending settings explanation"
+                    ))
+                }
             }
             .background {
                 SettingsKeyboardDismissTapView {
@@ -521,6 +556,27 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
+    private var videoFrameExtractionModeBinding: Binding<VideoFrameExtractionMode> {
+        Binding(
+            get: { VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode) },
+            set: { appConfig.videoFrameExtractionMode = $0.rawValue }
+        )
+    }
+
+    private var videoFrameExtractionFPSBinding: Binding<Double> {
+        Binding(
+            get: { min(max(appConfig.videoFrameExtractionFPS, 0.1), 5) },
+            set: { appConfig.videoFrameExtractionFPS = min(max($0, 0.1), 5) }
+        )
+    }
+
+    private var videoFrameMaximumCountBinding: Binding<Int> {
+        Binding(
+            get: { min(max(appConfig.videoFrameMaximumCount, 4), 120) },
+            set: { appConfig.videoFrameMaximumCount = min(max($0, 4), 120) }
+        )
+    }
+
     private var promptInjectionIntroSummary: String {
         [
             NSLocalizedString("全局系统提示词", comment: ""),
@@ -575,6 +631,10 @@ struct ModelAdvancedSettingsView: View {
             (
                 NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
                 NSLocalizedString("达到估算阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话保持不变。Token 数为近似值，不会为了提醒读取附件或调用模型。", comment: "Context compression reminder settings explanation")
+            ),
+            (
+                NSLocalizedString("视频发送", comment: "Video sending settings section"),
+                NSLocalizedString("在 Gemini 模型的输入模态中启用“视频”后，应用会通过 Gemini Files API 发送原视频；关闭该模态或切换到其他模型时，会从保留的原视频按智能抽帧或固定 FPS 生成带时间戳的画面。智能抽帧会优先保留场景变化，并去除黑帧和近似重复帧。", comment: "Video sending settings detailed explanation")
             )
         ])
     }

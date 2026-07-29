@@ -331,6 +331,69 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
+    @Test("视频与问题保存在同一消息并保留原文件供模型切换")
+    func testVideoAndPromptShareMessageAndKeepOriginalAttachment() async throws {
+        await cleanup()
+        let videoAdapter = MockAPIAdapter()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let service = ChatService(
+            adapters: ["gemini": videoAdapter],
+            memoryManager: memoryManager,
+            urlSession: URLSession(configuration: configuration)
+        )
+        let session = service.createSavedSession(name: "原生视频历史测试")
+        service.setCurrentSession(session)
+        defer { service.deleteSessions([session]) }
+
+        let provider = Provider(
+            name: "Gemini Video Test",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta",
+            apiKeys: ["video-key"],
+            apiFormat: "gemini"
+        )
+        let model = Model(
+            modelName: "gemini-video",
+            isActivated: true,
+            inputModalities: [.text, .video]
+        )
+        service.setSelectedModel(RunnableModel(provider: provider, model: model))
+        setupMockResponsesForChatAndTitle()
+        videoAdapter.responseToReturn = ChatMessage(role: .assistant, content: "视频已收到")
+
+        let fileName = "history-\(UUID().uuidString).mp4"
+        let attachment = FileAttachment(
+            data: Data([0x01, 0x02, 0x03]),
+            mimeType: "video/mp4",
+            fileName: fileName
+        )
+        await service.sendAndProcessMessage(
+            content: "概括这段视频",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            fileAttachments: [attachment]
+        )
+
+        let storedUserMessages = Persistence.loadMessages(for: session.id)
+            .filter { $0.role == .user }
+        let storedMessage = try #require(storedUserMessages.first)
+        let sentMessage = try #require(videoAdapter.receivedMessages?.first {
+            $0.id == storedMessage.id
+        })
+
+        #expect(storedUserMessages.count == 1)
+        #expect(storedMessage.content == "概括这段视频")
+        #expect(storedMessage.fileFileNames == [fileName])
+        #expect(videoAdapter.receivedFileAttachments?[sentMessage.id]?.first?.data == attachment.data)
+    }
+
     @Test("历史消息选区附件会沿文件注入链路保留来源元数据")
     func testMessageExcerptAttachmentKeepsMetadataDuringInjection() async throws {
         await cleanup()
