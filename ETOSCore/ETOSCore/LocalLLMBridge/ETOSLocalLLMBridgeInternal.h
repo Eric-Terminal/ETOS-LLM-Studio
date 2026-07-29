@@ -254,9 +254,8 @@ int32_t generate(
 int32_t embed(
     const char * model_path,
     const char * const * texts,
-    int32_t text_count,
-    int32_t context_size,
-    int32_t n_gpu_layers,
+    int32_t input_count,
+    const etos_local_llm_embedding_config * config,
     std::vector<float> * output_embeddings,
     int32_t * embedding_dimension,
     char ** error_message

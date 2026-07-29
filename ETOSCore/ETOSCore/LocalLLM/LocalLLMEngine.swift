@@ -94,15 +94,27 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
 }
 
 public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
+    public var mmprojPath: String?
     public var contextSize: Int
     public var gpuLayers: Int
+    public var flashAttention: LocalLLMFlashAttentionMode
+    public var imageMinTokens: Int
+    public var imageMaxTokens: Int
 
     public init(
         contextSize: Int,
-        gpuLayers: Int = LocalModelRecord.defaultGPULayers
+        gpuLayers: Int = LocalModelRecord.defaultGPULayers,
+        mmprojPath: String? = nil,
+        flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
+        imageMinTokens: Int = LocalModelRecord.defaultImageMinTokens,
+        imageMaxTokens: Int = LocalModelRecord.defaultImageMaxTokens
     ) {
+        self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.contextSize = max(1, contextSize)
         self.gpuLayers = gpuLayers
+        self.flashAttention = flashAttention
+        self.imageMinTokens = imageMinTokens.clamped(to: -1...1_048_576)
+        self.imageMaxTokens = imageMaxTokens.clamped(to: -1...1_048_576)
     }
 }
 
@@ -129,6 +141,16 @@ public struct LocalLLMMediaAttachment: Hashable, Sendable {
         self.data = data
         self.mimeType = mimeType
         self.fileName = fileName
+    }
+}
+
+public struct LocalLLMEmbeddingInput: Hashable, Sendable {
+    public var text: String
+    public var mediaAttachments: [LocalLLMMediaAttachment]
+
+    public init(text: String = "", mediaAttachments: [LocalLLMMediaAttachment] = []) {
+        self.text = text
+        self.mediaAttachments = mediaAttachments
     }
 }
 
@@ -296,16 +318,27 @@ public final class LocalLLMEngine: @unchecked Sendable {
         modelURL: URL,
         options: LocalLLMEmbeddingOptions
     ) async throws -> [[Float]] {
+        try await embed(
+            inputs: texts.map { LocalLLMEmbeddingInput(text: $0) },
+            modelURL: modelURL,
+            options: options
+        )
+    }
+
+    public func embed(
+        inputs: [LocalLLMEmbeddingInput],
+        modelURL: URL,
+        options: LocalLLMEmbeddingOptions
+    ) async throws -> [[Float]] {
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw LocalLLMEngineError.modelFileMissing(modelURL.lastPathComponent)
         }
 
         return try await Task.detached(priority: .userInitiated) {
             try LocalLLMBridge.embed(
-                texts: texts,
+                inputs: inputs,
                 modelPath: modelURL.path,
-                contextSize: options.contextSize,
-                gpuLayers: options.gpuLayers
+                options: options
             )
         }.value
     }
@@ -624,24 +657,60 @@ private enum LocalLLMBridge {
     }
 
     static func embed(
-        texts: [String],
+        inputs: [LocalLLMEmbeddingInput],
         modelPath: String,
-        contextSize: Int,
-        gpuLayers: Int
+        options: LocalLLMEmbeddingOptions
     ) throws -> [[Float]] {
-        let normalizedTexts = texts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard !normalizedTexts.isEmpty, normalizedTexts.allSatisfy({ !$0.isEmpty }) else {
+        guard !inputs.isEmpty else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本为空。", comment: "Local LLM empty embedding texts"))
         }
 
-        let textPointers = normalizedTexts.compactMap { strdup($0) }
+        let preparedInputs = try inputs.enumerated().map { inputIndex, input -> (prompt: String, attachments: [LocalLLMMediaAttachment]) in
+            let text = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard input.mediaAttachments.allSatisfy({ !$0.id.isEmpty && !$0.data.isEmpty }) else {
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地多模态图片内存分配失败。", comment: "Local LLM media allocation failed"))
+            }
+            let markers = Array(
+                repeating: LocalLLMChatMessage.mediaMarker,
+                count: input.mediaAttachments.count
+            ).joined()
+            let prompt: String
+            if markers.isEmpty {
+                prompt = text
+            } else if text.isEmpty {
+                prompt = markers
+            } else {
+                prompt = "\(markers)\n\(text)"
+            }
+            guard !prompt.isEmpty else {
+                throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本为空。", comment: "Local LLM empty embedding texts"))
+            }
+            let attachments = input.mediaAttachments.enumerated().map { attachmentIndex, attachment in
+                LocalLLMMediaAttachment(
+                    id: "embedding-\(inputIndex)-\(attachmentIndex)-\(attachment.id)",
+                    data: attachment.data,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.fileName
+                )
+            }
+            return (prompt, attachments)
+        }
+        let prompts = preparedInputs.map(\.prompt)
+        let textPointers = prompts.compactMap { strdup($0) }
         defer {
             textPointers.forEach { free($0) }
         }
-        guard textPointers.count == normalizedTexts.count else {
+        guard textPointers.count == prompts.count else {
             throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地嵌入文本内存分配失败。", comment: "Local LLM embedding text allocation failed"))
         }
         let bridgedTextPointers: [UnsafePointer<CChar>?] = textPointers.map { UnsafePointer($0) }
+        let mediaEntries = preparedInputs.enumerated().flatMap { inputIndex, preparedInput in
+            preparedInput.attachments.map { (attachment: $0, inputIndex: Int32(inputIndex)) }
+        }
+        let preparedConfig = try PreparedLocalLLMEmbeddingConfig(
+            options: options,
+            mediaEntries: mediaEntries
+        )
 
         var outputPointer: UnsafeMutablePointer<Float>?
         var errorPointer: UnsafeMutablePointer<CChar>?
@@ -650,17 +719,18 @@ private enum LocalLLMBridge {
         let status = LocalLLMExecutionGate.withExclusiveAccess {
             modelPath.withCString { modelPathCString in
                 bridgedTextPointers.withUnsafeBufferPointer { textsPointer in
-                    etos_local_llm_embed(
-                        modelPathCString,
-                        textsPointer.baseAddress,
-                        Int32(textsPointer.count),
-                        Int32(max(1, contextSize)),
-                        Int32(gpuLayers),
-                        &outputPointer,
-                        &embeddingCount,
-                        &embeddingDimension,
-                        &errorPointer
-                    )
+                    preparedConfig.withUnsafePointer { configPointer in
+                        etos_local_llm_embed(
+                            modelPathCString,
+                            textsPointer.baseAddress,
+                            Int32(textsPointer.count),
+                            configPointer,
+                            &outputPointer,
+                            &embeddingCount,
+                            &embeddingDimension,
+                            &errorPointer
+                        )
+                    }
                 }
             }
         }
@@ -675,7 +745,7 @@ private enum LocalLLMBridge {
 
         guard status == 0,
               let outputPointer,
-              embeddingCount == normalizedTexts.count,
+              embeddingCount == prompts.count,
               embeddingDimension > 0 else {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
@@ -967,6 +1037,108 @@ private final class PreparedLocalLLMGenerationConfig {
     }
 }
 
+private struct ETOSLocalLLMEmbeddingConfig {
+    var mmprojPath: UnsafePointer<CChar>?
+    var contextSize: Int32
+    var gpuLayers: Int32
+    var flashAttention: Int32
+    var imageMinTokens: Int32
+    var imageMaxTokens: Int32
+    var mediaData: UnsafePointer<UnsafePointer<UInt8>?>?
+    var mediaDataSizes: UnsafePointer<Int64>?
+    var mediaIDs: UnsafePointer<UnsafePointer<CChar>?>?
+    var mediaInputIndices: UnsafePointer<Int32>?
+    var mediaCount: Int32
+}
+
+private final class PreparedLocalLLMEmbeddingConfig {
+    private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let mediaDataPointers: [UnsafeMutablePointer<UInt8>]
+    private let bridgedMediaDataPointers: [UnsafePointer<UInt8>?]
+    private let mediaDataByteCounts: [Int64]
+    private let mediaIDPointers: [UnsafeMutablePointer<CChar>]
+    private let bridgedMediaIDs: [UnsafePointer<CChar>?]
+    private let mediaInputIndices: [Int32]
+    private var bridgedConfig: ETOSLocalLLMEmbeddingConfig
+
+    init(
+        options: LocalLLMEmbeddingOptions,
+        mediaEntries: [(attachment: LocalLLMMediaAttachment, inputIndex: Int32)]
+    ) throws {
+        let mmprojPathPointer = try Self.duplicate(options.mmprojPath ?? "")
+        let mediaDataPointers = try mediaEntries.map { try Self.duplicate($0.attachment.data) }
+        let mediaIDPointers = try mediaEntries.map { try Self.duplicate($0.attachment.id) }
+
+        self.mmprojPathPointer = mmprojPathPointer
+        self.mediaDataPointers = mediaDataPointers
+        self.bridgedMediaDataPointers = mediaDataPointers.map { UnsafePointer($0) }
+        self.mediaDataByteCounts = mediaEntries.map { Int64($0.attachment.data.count) }
+        self.mediaIDPointers = mediaIDPointers
+        self.bridgedMediaIDs = mediaIDPointers.map { UnsafePointer($0) }
+        self.mediaInputIndices = mediaEntries.map(\.inputIndex)
+        self.bridgedConfig = ETOSLocalLLMEmbeddingConfig(
+            mmprojPath: UnsafePointer(mmprojPathPointer),
+            contextSize: Int32(clamping: options.contextSize),
+            gpuLayers: Int32(clamping: options.gpuLayers),
+            flashAttention: options.flashAttention.rawValue,
+            imageMinTokens: Int32(clamping: options.imageMinTokens),
+            imageMaxTokens: Int32(clamping: options.imageMaxTokens),
+            mediaData: nil,
+            mediaDataSizes: nil,
+            mediaIDs: nil,
+            mediaInputIndices: nil,
+            mediaCount: Int32(mediaEntries.count)
+        )
+    }
+
+    deinit {
+        free(mmprojPathPointer)
+        mediaDataPointers.forEach { $0.deallocate() }
+        mediaIDPointers.forEach { free($0) }
+    }
+
+    func withUnsafePointer<Result>(
+        _ body: (UnsafePointer<ETOSLocalLLMEmbeddingConfig>) throws -> Result
+    ) rethrows -> Result {
+        try bridgedMediaDataPointers.withUnsafeBufferPointer { mediaDataPointer in
+            try mediaDataByteCounts.withUnsafeBufferPointer { mediaSizePointer in
+                try bridgedMediaIDs.withUnsafeBufferPointer { mediaIDPointer in
+                    try mediaInputIndices.withUnsafeBufferPointer { mediaInputIndexPointer in
+                        bridgedConfig.mediaData = mediaDataPointer.baseAddress
+                        bridgedConfig.mediaDataSizes = mediaSizePointer.baseAddress
+                        bridgedConfig.mediaIDs = mediaIDPointer.baseAddress
+                        bridgedConfig.mediaInputIndices = mediaInputIndexPointer.baseAddress
+                        bridgedConfig.mediaCount = Int32(mediaDataPointer.count)
+                        return try Swift.withUnsafePointer(to: &bridgedConfig, body)
+                    }
+                }
+            }
+        }
+    }
+
+    private static func duplicate(_ value: String) throws -> UnsafeMutablePointer<CChar> {
+        guard let pointer = strdup(value) else {
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地推理配置内存分配失败。", comment: "Local LLM config allocation failed"))
+        }
+        return pointer
+    }
+
+    private static func duplicate(_ data: Data) throws -> UnsafeMutablePointer<UInt8> {
+        let pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: data.count)
+        guard data.withUnsafeBytes({ rawBuffer -> Bool in
+            guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return false
+            }
+            pointer.initialize(from: baseAddress, count: data.count)
+            return true
+        }) else {
+            pointer.deallocate()
+            throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地多模态图片内存分配失败。", comment: "Local LLM media allocation failed"))
+        }
+        return pointer
+    }
+}
+
 private final class LocalLLMCancellationState: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
@@ -1176,9 +1348,8 @@ private func etos_local_llm_parse_chat_response(
 private func etos_local_llm_embed(
     _ modelPath: UnsafePointer<CChar>,
     _ texts: UnsafePointer<UnsafePointer<CChar>?>?,
-    _ textCount: Int32,
-    _ contextSize: Int32,
-    _ gpuLayers: Int32,
+    _ inputCount: Int32,
+    _ config: UnsafePointer<ETOSLocalLLMEmbeddingConfig>,
     _ output: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>,
     _ embeddingCount: UnsafeMutablePointer<Int32>,
     _ embeddingDimension: UnsafeMutablePointer<Int32>,

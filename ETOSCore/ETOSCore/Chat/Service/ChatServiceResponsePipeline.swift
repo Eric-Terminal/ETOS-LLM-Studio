@@ -837,6 +837,7 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: false,
                 currentAudioAttachment: nil,
+                currentImageAttachments: [],
                 currentFileAttachments: []
             )
         } else {

@@ -689,18 +689,25 @@ public class MemoryManager {
 
     // MARK: - 公开方法 (搜索)
 
-    /// 使用向量、词法、实体与时间信息进行混合检索；向量不可用时自动退化为本地检索。
-    public func searchMemoriesHybrid(query: String, topK: Int) async -> [MemoryItem] {
+    /// 使用文本与图片向量、词法、实体和时间信息进行混合检索；向量不可用时自动退化为本地检索。
+    public func searchMemoriesHybrid(
+        query: String,
+        imageAttachments: [ImageAttachment] = [],
+        topK: Int
+    ) async -> [MemoryItem] {
         await initializationTask.value
         guard topK > 0 else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
+        guard !trimmed.isEmpty || !imageAttachments.isEmpty else { return [] }
 
         var semanticScores: [UUID: Double] = [:]
         if hasConfiguredEmbeddingModel(), !similarityIndex.indexItems.isEmpty {
             do {
                 let embeddings = try await embeddingGenerator.generateEmbeddings(
-                    for: [trimmed],
+                    for: [MemoryEmbeddingInput(
+                        text: trimmed,
+                        imageAttachments: imageAttachments
+                    )],
                     preferredModelID: preferredEmbeddingModelIdentifier()
                 )
                 if let queryEmbedding = embeddings.first,
@@ -728,19 +735,26 @@ public class MemoryManager {
         return memories
     }
 
-    /// 根据查询文本搜索最相关的记忆。
-    public func searchMemories(query: String, topK: Int) async -> [MemoryItem] {
+    /// 根据查询文本和图片搜索最相关的记忆。
+    public func searchMemories(
+        query: String,
+        imageAttachments: [ImageAttachment] = [],
+        topK: Int
+    ) async -> [MemoryItem] {
         await initializationTask.value
         guard topK > 0 else { return [] }
         
         guard hasConfiguredEmbeddingModel() else { return [] }
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
+        guard !trimmed.isEmpty || !imageAttachments.isEmpty else { return [] }
         
         do {
             let embeddings = try await embeddingGenerator.generateEmbeddings(
-                for: [trimmed],
+                for: [MemoryEmbeddingInput(
+                    text: trimmed,
+                    imageAttachments: imageAttachments
+                )],
                 preferredModelID: preferredEmbeddingModelIdentifier()
             )
             guard let queryEmbedding = embeddings.first else { return [] }

@@ -84,6 +84,21 @@ typedef struct etos_local_llm_generation_config {
     int32_t media_count;
 } etos_local_llm_generation_config;
 
+typedef struct etos_local_llm_embedding_config {
+    const char * mmproj_path;
+    int32_t context_size;
+    int32_t n_gpu_layers;
+    int32_t flash_attention;
+    int32_t image_min_tokens;
+    int32_t image_max_tokens;
+    const unsigned char * const * media_data;
+    const int64_t * media_data_sizes;
+    const char * const * media_ids;
+    // 扁平附件在 texts 中所属的输入下标。
+    const int32_t * media_input_indices;
+    int32_t media_count;
+} etos_local_llm_embedding_config;
+
 int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
@@ -161,9 +176,8 @@ int32_t etos_local_llm_parse_chat_response(
 int32_t etos_local_llm_embed(
     const char * model_path,
     const char * const * texts,
-    int32_t text_count,
-    int32_t context_size,
-    int32_t n_gpu_layers,
+    int32_t input_count,
+    const etos_local_llm_embedding_config * config,
     float ** output,
     int32_t * embedding_count,
     int32_t * embedding_dimension,

@@ -9,8 +9,37 @@
 import Foundation
 import os.log
 
+public struct MemoryEmbeddingInput: Sendable {
+    /// 文本与图片会由多模态模型编码到同一个稠密向量空间。
+    public var text: String
+    public var imageAttachments: [ImageAttachment]
+
+    public init(text: String = "", imageAttachments: [ImageAttachment] = []) {
+        self.text = text
+        self.imageAttachments = imageAttachments
+    }
+}
+
 public protocol MemoryEmbeddingGenerating {
     func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]]
+    func generateEmbeddings(for inputs: [MemoryEmbeddingInput], preferredModelID: String?) async throws -> [[Float]]
+}
+
+public extension MemoryEmbeddingGenerating {
+    func generateEmbeddings(
+        for inputs: [MemoryEmbeddingInput],
+        preferredModelID: String?
+    ) async throws -> [[Float]] {
+        guard inputs.allSatisfy({
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) else {
+            throw MemoryEmbeddingError.requestBuildFailed
+        }
+        return try await generateEmbeddings(
+            for: inputs.map(\.text),
+            preferredModelID: preferredModelID
+        )
+    }
 }
 
 public enum MemoryEmbeddingError: LocalizedError {
@@ -87,7 +116,20 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
     }
     
     func generateEmbeddings(for texts: [String], preferredModelID: String?) async throws -> [[Float]] {
-        if texts.isEmpty {
+        try await generateEmbeddings(
+            for: texts.map { MemoryEmbeddingInput(text: $0) },
+            preferredModelID: preferredModelID
+        )
+    }
+
+    func generateEmbeddings(
+        for inputs: [MemoryEmbeddingInput],
+        preferredModelID: String?
+    ) async throws -> [[Float]] {
+        if inputs.isEmpty || inputs.contains(where: {
+            $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && $0.imageAttachments.isEmpty
+        }) {
             throw MemoryEmbeddingError.emptyInput
         }
         
@@ -99,11 +141,17 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         
         let targetModel = try resolveModel(preferredID: preferredModelID, from: embeddingModels)
         if LocalModelProviderBridge.isLocalRunnableModel(targetModel) {
-            return try await generateLocalEmbeddings(for: texts, using: targetModel)
+            return try await generateLocalEmbeddings(for: inputs, using: targetModel)
+        }
+        guard inputs.allSatisfy({
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) else {
+            throw MemoryEmbeddingError.requestBuildFailed
         }
         guard let adapter = adapters[targetModel.provider.apiFormat] else {
             throw MemoryEmbeddingError.adapterMissing(targetModel.provider.apiFormat)
         }
+        let texts = inputs.map(\.text)
         guard let request = adapter.buildEmbeddingRequest(for: targetModel, texts: texts) else {
             throw MemoryEmbeddingError.requestBuildFailed
         }
@@ -160,20 +208,45 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         return models[0]
     }
 
-    private func generateLocalEmbeddings(for texts: [String], using runnableModel: RunnableModel) async throws -> [[Float]] {
+    private func generateLocalEmbeddings(
+        for inputs: [MemoryEmbeddingInput],
+        using runnableModel: RunnableModel
+    ) async throws -> [[Float]] {
         guard let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id),
               let record = LocalModelStore.shared.models.first(where: { $0.id == recordID }),
               LocalModelStore.shared.fileExists(for: record) else {
             throw MemoryEmbeddingError.preferredModelUnavailable(runnableModel.id)
         }
+        let includesImages = inputs.contains { !$0.imageAttachments.isEmpty }
+        if includesImages && !LocalModelStore.shared.mmprojFileExists(for: record) {
+            throw MemoryEmbeddingError.requestBuildFailed
+        }
 
         let overrides = runnableModel.effectiveOverrideParameters
         return try await LocalLLMEngine.shared.embed(
-            texts: texts,
+            inputs: inputs.enumerated().map { inputIndex, input in
+                LocalLLMEmbeddingInput(
+                    text: input.text,
+                    mediaAttachments: input.imageAttachments.enumerated().map { attachmentIndex, attachment in
+                        LocalLLMMediaAttachment(
+                            id: "memory-\(inputIndex)-\(attachmentIndex)-\(attachment.id.uuidString.lowercased())",
+                            data: attachment.data,
+                            mimeType: attachment.mimeType,
+                            fileName: attachment.fileName
+                        )
+                    }
+                )
+            },
             modelURL: LocalModelStore.shared.fileURL(for: record),
             options: LocalLLMEmbeddingOptions(
                 contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
-                gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers
+                gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
+                mmprojPath: LocalModelStore.shared.mmprojURL(for: record)?.path,
+                flashAttention: overrides.localIntValue(for: "flash_attn")
+                    .flatMap { LocalLLMFlashAttentionMode(rawValue: Int32(clamping: $0)) }
+                    ?? record.effectiveFlashAttention,
+                imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
+                imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens
             )
         )
     }

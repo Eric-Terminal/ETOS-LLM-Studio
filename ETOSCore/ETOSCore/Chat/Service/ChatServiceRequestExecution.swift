@@ -61,7 +61,8 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
-        currentFileAttachments _: [FileAttachment]
+        currentImageAttachments: [ImageAttachment],
+        currentFileAttachments: [FileAttachment]
     ) async {
         let currentSessionSnapshot = currentSessionSubject.value
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
@@ -127,8 +128,16 @@ extension ChatService {
                 memories = await self.memoryManager.getActiveMemories()
             } else {
                 let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
-                if let queryText {
-                    memories = await self.memoryManager.searchMemoriesHybrid(query: queryText, topK: topK)
+                let queryImages = await memoryQueryImageAttachments(
+                    currentImages: currentImageAttachments,
+                    currentFiles: currentFileAttachments
+                )
+                if queryText != nil || !queryImages.isEmpty {
+                    memories = await self.memoryManager.searchMemoriesHybrid(
+                        query: queryText ?? "",
+                        imageAttachments: queryImages,
+                        topK: topK
+                    )
                 }
             }
             if !memories.isEmpty {
@@ -734,6 +743,37 @@ extension ChatService {
         }
         #endif
         return "application/octet-stream"
+    }
+
+    private func memoryQueryImageAttachments(
+        currentImages: [ImageAttachment],
+        currentFiles: [FileAttachment]
+    ) async -> [ImageAttachment] {
+        let videos = currentFiles.filter(VideoAttachmentSupport.isVideo)
+        guard !videos.isEmpty else { return currentImages }
+
+        let configuration = await MainActor.run {
+            let appConfig = AppConfigStore.shared
+            return VideoFrameExtractionConfiguration(
+                mode: VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode),
+                fixedFPS: appConfig.videoFrameExtractionFPS,
+                maximumFrameCount: appConfig.videoFrameMaximumCount
+            )
+        }
+        var images = currentImages
+        let extractor = VideoFrameExtractor()
+        for video in videos {
+            do {
+                let result = try await extractor.extractFrames(
+                    from: video,
+                    configuration: configuration
+                )
+                images.append(contentsOf: result.frames.map(\.attachment))
+            } catch {
+                logger.warning("视频帧无法用于多模态记忆检索，将继续使用其他查询信息：\(error.localizedDescription)")
+            }
+        }
+        return images
     }
 
     func preprocessVideoAttachments(

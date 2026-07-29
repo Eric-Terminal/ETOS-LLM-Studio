@@ -262,9 +262,8 @@ int32_t etos_local_llm_parse_chat_response(
 int32_t etos_local_llm_embed(
     const char * model_path,
     const char * const * texts,
-    int32_t text_count,
-    int32_t context_size,
-    int32_t n_gpu_layers,
+    int32_t input_count,
+    const etos_local_llm_embedding_config * config,
     float ** output,
     int32_t * embedding_count,
     int32_t * embedding_dimension,
@@ -290,9 +289,8 @@ int32_t etos_local_llm_embed(
     const int32_t status = etos_local_llm_bridge::embed(
         model_path,
         texts,
-        text_count,
-        context_size,
-        n_gpu_layers,
+        input_count,
+        config,
         &embeddings,
         embedding_dimension,
         error_message
@@ -308,7 +306,7 @@ int32_t etos_local_llm_embed(
     }
     std::memcpy(copied, embeddings.data(), byte_count);
     *output = copied;
-    *embedding_count = text_count;
+    *embedding_count = input_count;
     return 0;
 }
 

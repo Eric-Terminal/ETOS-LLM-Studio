@@ -323,6 +323,9 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: audioAttachment,
+                currentImageAttachments: imageAttachments.filter {
+                    savedImageFileNames.contains($0.fileName)
+                },
                 currentFileAttachments: fileAttachments
             )
         }

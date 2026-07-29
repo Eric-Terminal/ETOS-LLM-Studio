@@ -147,6 +147,10 @@ extension ChatService {
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
 
+        let imageAttachments = (messageToSend.imageFileNames ?? []).compactMap { fileName in
+            loadImageAttachmentFromStorage(fileName: fileName)
+        }
+
         // 恢复原消息的文件附件（如果有）
         var fileAttachments: [FileAttachment] = []
         if let fileFileNames = messageToSend.fileFileNames {
@@ -179,6 +183,7 @@ extension ChatService {
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
             enableResponseSpeedMetrics: enableResponseSpeedMetrics,
             currentAudioAttachment: audioAttachment,
+            currentImageAttachments: imageAttachments,
             currentFileAttachments: fileAttachments
         )
     }
@@ -204,6 +209,7 @@ extension ChatService {
         periodicTimeLandmarkIntervalMinutes: Int,
         enableResponseSpeedMetrics: Bool,
         currentAudioAttachment: AudioAttachment?,
+        currentImageAttachments: [ImageAttachment],
         currentFileAttachments: [FileAttachment]
     ) async {
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
@@ -250,6 +256,7 @@ extension ChatService {
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 currentAudioAttachment: currentAudioAttachment,
+                currentImageAttachments: currentImageAttachments,
                 currentFileAttachments: currentFileAttachments
             )
         }
