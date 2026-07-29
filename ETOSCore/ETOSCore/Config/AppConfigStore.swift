@@ -380,6 +380,9 @@ public final class AppConfigStore: ObservableObject {
         modelPickerFolderPathsByProvider = updated
     }
     @Published public var chatQuickActionIDs: String { didSet { write(.chatQuickActionIDs, chatQuickActionIDs) } }
+    @Published public var temporaryChatMemoryEnabled: Bool {
+        didSet { write(.temporaryChatMemoryEnabled, temporaryChatMemoryEnabled) }
+    }
     @Published public var enableSlashCommands: Bool { didSet { write(.enableSlashCommands, enableSlashCommands) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
@@ -589,6 +592,7 @@ public final class AppConfigStore: ObservableObject {
             from: Self.textValue(.modelPickerFolderPathsByProvider, userDefaults: userDefaults)
         ) ?? [:]
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
+        temporaryChatMemoryEnabled = Self.boolValue(.temporaryChatMemoryEnabled, userDefaults: userDefaults)
         enableSlashCommands = Self.boolValue(.enableSlashCommands, userDefaults: userDefaults)
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
@@ -1058,6 +1062,7 @@ public final class AppConfigStore: ObservableObject {
         case .modelPickerFolderPathsByProvider:
             return .text(Self.encodeStringDictionary(modelPickerFolderPathsByProvider))
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
+        case .temporaryChatMemoryEnabled: return .bool(temporaryChatMemoryEnabled)
         case .enableSlashCommands: return .bool(enableSlashCommands)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
@@ -1149,6 +1154,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableAutoSessionNaming: enableAutoSessionNaming = value
         case .enableMemory: enableMemory = value
         case .enableMemoryWrite: enableMemoryWrite = value
+        case .temporaryChatMemoryEnabled: temporaryChatMemoryEnabled = value
         case .enableMemoryActiveRetrieval: enableMemoryActiveRetrieval = value
         case .memorySendUpdateTime: memorySendUpdateTime = value
         case .enableMemoryAutoConsolidation: enableMemoryAutoConsolidation = value

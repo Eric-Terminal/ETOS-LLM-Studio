@@ -169,7 +169,7 @@ public class ChatService {
     private var runtimeMessagesBySessionID: [UUID: [ChatMessage]] = [:]
     private let runtimeMessagesLock = NSRecursiveLock()
     /// 显式临时对话只保留运行期消息，和“尚未发送首条消息”的占位会话语义分开。
-    var ephemeralSessionIDs: Set<UUID> = []
+    var ephemeralSessionStates: [UUID: TemporaryChatRuntimeState] = [:]
     let ephemeralSessionLock = NSLock()
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]

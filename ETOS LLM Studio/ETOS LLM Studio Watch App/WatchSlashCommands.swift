@@ -83,31 +83,74 @@ extension ContentView {
 
     private func performWatchTemporaryChatSlashCommand() {
         let isEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
-        let isAvailable = TemporaryChatToggleAvailability.isAvailable(
+        let canEnable = TemporaryChatToggleAvailability.isAvailable(
             isTemporaryChatEnabled: isEnabled,
             hasConversationStarted: !viewModel.allMessagesForSession.isEmpty || continuationContext != nil
         )
-        guard isAvailable else {
+        guard canEnable else {
             showUnavailableWatchSlashCommandNotice(
                 NSLocalizedString("临时对话仅可在对话开始前开启。", comment: "Temporary chat slash command unavailable")
             )
             return
         }
 
-        if isEnabled {
-            viewModel.saveCurrentTemporarySession()
-        } else {
-            viewModel.enableTemporaryChat()
-        }
-        showChatTransientNotice(
-            WatchChatTransientNotice(
-                message: isEnabled
-                    ? NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status")
-                    : NSLocalizedString("临时对话已开启", comment: "Watch temporary chat status"),
-                systemImage: isEnabled ? "eye" : "eye.slash",
-                tint: isEnabled ? .secondary : .accentColor
-            )
+        let preferredMode: TemporaryChatMemoryMode = appConfig.temporaryChatMemoryEnabled
+            ? .enabled
+            : .isolated
+        let outcome = viewModel.performTemporaryChatTap(
+            preferredMemoryMode: preferredMode,
+            canEnable: canEnable
         )
+
+        let notice: WatchChatTransientNotice
+        switch outcome {
+        case .enabled(let memoryMode):
+            notice = WatchChatTransientNotice(
+                message: watchTemporaryChatEnabledMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .memoryModeChanged(let memoryMode):
+            appConfig.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            notice = WatchChatTransientNotice(
+                message: watchTemporaryChatMemoryModeChangedMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .disabled:
+            notice = WatchChatTransientNotice(
+                message: NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status"),
+                systemImage: "eye",
+                tint: .secondary
+            )
+        case .unavailable:
+            return
+        }
+        showChatTransientNotice(notice)
+    }
+
+    private func watchTemporaryChatEnabledMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString(
+                "临时对话已开启，可使用记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory"
+            )
+        case .isolated:
+            return NSLocalizedString(
+                "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory isolation"
+            )
+        }
+    }
+
+    private func watchTemporaryChatMemoryModeChangedMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString("临时对话已切换为可使用记忆", comment: "Watch temporary chat memory enabled")
+        case .isolated:
+            return NSLocalizedString("临时对话已切换为记忆隔离", comment: "Watch temporary chat memory isolated")
+        }
     }
 
     private func showUnavailableWatchSlashCommandNotice(_ message: String) {

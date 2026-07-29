@@ -16,6 +16,10 @@ struct ChatQuickActionSelectionTests {
     func temporaryChatStateUsesSlash() {
         #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: false) == "eye")
         #expect(ChatQuickAction.temporaryChat.systemImage(isTemporaryChatEnabled: true) == "eye.slash")
+        #expect(ChatQuickAction.temporaryChat.systemImage(
+            isTemporaryChatEnabled: true,
+            memoryMode: .isolated
+        ) == "eye.slash.fill")
     }
 
     @Test("空配置和未知配置回退到临时对话")

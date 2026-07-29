@@ -75,9 +75,13 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         }
     }
 
-    func systemImage(isTemporaryChatEnabled: Bool) -> String {
+    func systemImage(
+        isTemporaryChatEnabled: Bool,
+        memoryMode: TemporaryChatMemoryMode = .enabled
+    ) -> String {
         guard self == .temporaryChat else { return systemImage }
-        return isTemporaryChatEnabled ? "eye.slash" : "eye"
+        guard isTemporaryChatEnabled else { return "eye" }
+        return memoryMode == .isolated ? "eye.slash.fill" : "eye.slash"
     }
 }
 
@@ -196,6 +200,7 @@ extension ChatView {
             ChatQuickActionFolderPanel(
                 actions: selectedChatQuickActions,
                 isTemporaryChatEnabled: isTemporaryChatEnabled,
+                temporaryChatMemoryMode: temporaryChatMemoryMode,
                 isTemporaryChatToggleAvailable: isQuickActionAvailable(.temporaryChat),
                 isPresented: isChatQuickActionFolderPresented,
                 collapsedSize: navBarIconSize,
@@ -223,13 +228,16 @@ extension ChatView {
     }
 
     func singleQuickActionSystemImage(for action: ChatQuickAction) -> String {
-        action.systemImage(isTemporaryChatEnabled: isTemporaryChatEnabled)
+        action.systemImage(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            memoryMode: temporaryChatMemoryMode
+        )
     }
 
     func performQuickAction(_ action: ChatQuickAction) {
         if action == .temporaryChat {
             guard isQuickActionAvailable(action) else { return }
-            setTemporaryChatEnabled(!isTemporaryChatEnabled)
+            performTemporaryChatTap()
         } else if action == .contextCompression {
             guard let session = viewModel.currentSession,
                   !session.isTemporary,
@@ -252,28 +260,85 @@ extension ChatView {
         }
     }
 
-    func setTemporaryChatEnabled(_ isEnabled: Bool) {
-        if isEnabled {
-            viewModel.enableTemporaryChat()
-        } else {
-            viewModel.saveCurrentTemporarySession()
-        }
-        isTemporaryChatEnabled = isEnabled
-        showChatTransientNotice(
-            ChatTransientNotice(
-                message: isEnabled
-                    ? NSLocalizedString("临时对话已开启", comment: "临时对话状态提示")
-                    : NSLocalizedString("临时对话已关闭", comment: "临时对话状态提示"),
+    func performTemporaryChatTap() {
+        let preferredMode: TemporaryChatMemoryMode = appConfig.temporaryChatMemoryEnabled
+            ? .enabled
+            : .isolated
+        let outcome = viewModel.performTemporaryChatTap(
+            preferredMemoryMode: preferredMode,
+            canEnable: isQuickActionAvailable(.temporaryChat)
+        )
+
+        let notice: ChatTransientNotice
+        switch outcome {
+        case .enabled(let memoryMode):
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = ChatTransientNotice(
+                message: temporaryChatEnabledMessage(for: memoryMode),
                 systemImage: ChatQuickAction.temporaryChat.systemImage(
-                    isTemporaryChatEnabled: isEnabled
+                    isTemporaryChatEnabled: true,
+                    memoryMode: memoryMode
                 ),
-                tint: isEnabled ? .accentColor : .secondary
+                tint: .accentColor
             )
+        case .memoryModeChanged(let memoryMode):
+            appConfig.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = ChatTransientNotice(
+                message: temporaryChatMemoryModeChangedMessage(for: memoryMode),
+                systemImage: ChatQuickAction.temporaryChat.systemImage(
+                    isTemporaryChatEnabled: true,
+                    memoryMode: memoryMode
+                ),
+                tint: .accentColor
+            )
+        case .disabled:
+            isTemporaryChatEnabled = false
+            notice = ChatTransientNotice(
+                message: NSLocalizedString("临时对话已关闭", comment: "临时对话状态提示"),
+                systemImage: "eye",
+                tint: .secondary
+            )
+        case .unavailable:
+            return
+        }
+
+        showChatTransientNotice(
+            notice
         )
     }
 
     func refreshTemporaryChatState() {
         isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
+        if let memoryMode = viewModel.temporaryChatMemoryMode(for: viewModel.currentSession?.id) {
+            temporaryChatMemoryMode = memoryMode
+        }
+    }
+
+    private func temporaryChatEnabledMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString(
+                "临时对话已开启，可使用记忆。2 秒内再点可切换模式。",
+                comment: "开启允许记忆的临时对话提示"
+            )
+        case .isolated:
+            return NSLocalizedString(
+                "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。",
+                comment: "开启隔离记忆的临时对话提示"
+            )
+        }
+    }
+
+    private func temporaryChatMemoryModeChangedMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString("临时对话已切换为可使用记忆", comment: "临时对话允许记忆提示")
+        case .isolated:
+            return NSLocalizedString("临时对话已切换为记忆隔离", comment: "临时对话隔离记忆提示")
+        }
     }
 
     func isQuickActionAvailable(_ action: ChatQuickAction) -> Bool {
@@ -332,6 +397,7 @@ private struct ChatQuickActionFolderPanel: View {
 
     let actions: [ChatQuickAction]
     let isTemporaryChatEnabled: Bool
+    let temporaryChatMemoryMode: TemporaryChatMemoryMode
     let isTemporaryChatToggleAvailable: Bool
     let isPresented: Bool
     let collapsedSize: CGFloat
@@ -487,7 +553,10 @@ private struct ChatQuickActionFolderPanel: View {
     }
 
     private func systemImage(for action: ChatQuickAction) -> String {
-        action.systemImage(isTemporaryChatEnabled: isTemporaryChatEnabled)
+        action.systemImage(
+            isTemporaryChatEnabled: isTemporaryChatEnabled,
+            memoryMode: temporaryChatMemoryMode
+        )
     }
 }
 

@@ -32,8 +32,22 @@ extension ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool
     ) -> AuxiliaryContextPolicy {
-        let isolationActive = session?.isWorldbookContextIsolationActive ?? false
-        guard isolationActive else {
+        let fullIsolationActive = session?.isWorldbookContextIsolationActive ?? false
+        guard !fullIsolationActive else {
+            logger.info("当前会话已启用记忆与工具隔离，将屏蔽长期记忆与工具上下文。")
+            return AuxiliaryContextPolicy(
+                enableMemory: false,
+                enableMemoryWrite: false,
+                enableMemoryActiveRetrieval: false,
+                includeBuiltInAppTools: false,
+                includeMCPTools: false,
+                includeShortcutTools: false,
+                includeSkills: false
+            )
+        }
+
+        let temporaryMemoryIsolationActive = isTemporaryChatMemoryIsolated(for: session?.id)
+        guard temporaryMemoryIsolationActive else {
             return AuxiliaryContextPolicy(
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
@@ -45,15 +59,15 @@ extension ChatService {
             )
         }
 
-        logger.info("当前会话已启用记忆与工具隔离，将屏蔽长期记忆与工具上下文。")
+        logger.info("当前临时对话已启用记忆隔离，将屏蔽长期记忆上下文与记忆工具。")
         return AuxiliaryContextPolicy(
             enableMemory: false,
             enableMemoryWrite: false,
             enableMemoryActiveRetrieval: false,
-            includeBuiltInAppTools: false,
-            includeMCPTools: false,
-            includeShortcutTools: false,
-            includeSkills: false
+            includeBuiltInAppTools: true,
+            includeMCPTools: true,
+            includeShortcutTools: true,
+            includeSkills: true
         )
     }
 

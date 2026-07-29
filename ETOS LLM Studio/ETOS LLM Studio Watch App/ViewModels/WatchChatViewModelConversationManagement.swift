@@ -183,8 +183,18 @@ extension ChatViewModel {
         chatService.isTemporaryChatEnabled(for: sessionID)
     }
 
-    func enableTemporaryChat() {
-        chatService.enableTemporaryChat()
+    func temporaryChatMemoryMode(for sessionID: UUID?) -> TemporaryChatMemoryMode? {
+        chatService.temporaryChatMemoryMode(for: sessionID)
+    }
+
+    func performTemporaryChatTap(
+        preferredMemoryMode: TemporaryChatMemoryMode,
+        canEnable: Bool
+    ) -> TemporaryChatTapOutcome {
+        chatService.performTemporaryChatTap(
+            preferredMemoryMode: preferredMemoryMode,
+            canEnable: canEnable
+        )
     }
 
     @discardableResult

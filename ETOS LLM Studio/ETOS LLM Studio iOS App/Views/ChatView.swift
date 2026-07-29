@@ -34,6 +34,7 @@ struct ChatView: View {
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
     @State var isChatQuickActionFolderPresented = false
     @State var isTemporaryChatEnabled = false
+    @State var temporaryChatMemoryMode: TemporaryChatMemoryMode = .enabled
     @State var chatTransientNotice: ChatTransientNotice?
     @State var chatTransientNoticeDismissTask: Task<Void, Never>?
     @State var editingMessage: ChatMessage?
@@ -316,6 +317,9 @@ struct ChatView: View {
                 if isMessageSelectionMode {
                     exitMessageSelection()
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
+                refreshTemporaryChatState()
             }
             .task(id: viewModel.currentSession?.id) {
                 await reloadContinuationContext()

@@ -235,6 +235,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
     case modelPickerFolderPathsByProvider = "ui.modelPicker.folderPathsByProvider"
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
+    case temporaryChatMemoryEnabled = "chat.temporary.memoryEnabled"
     case enableSlashCommands = "chat.slashCommands.enabled"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
@@ -400,6 +401,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
 
         case .enableMemory,
              .enableMemoryWrite,
+             .temporaryChatMemoryEnabled,
              .memorySendUpdateTime,
              .enableMemoryAutoConsolidation,
              .enableConversationMemoryAsync,

@@ -89,7 +89,7 @@ extension ChatView {
             )
             return
         }
-        setTemporaryChatEnabled(!isTemporaryChatEnabled)
+        performTemporaryChatTap()
     }
 
     private func performContextCompressionSlashCommand() {

@@ -5361,3 +5361,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "从照片选择" = "Elegir desde Fotos";
 "从文件选择" = "Elegir desde Archivos";
 "请选择 PNG 格式的角色卡图片。" = "Elige una imagen de tarjeta de personaje en formato PNG.";
+"临时对话已开启，可使用记忆。2 秒内再点可切换模式。" = "El chat temporal está activo con memoria. Toca de nuevo en 2 segundos para cambiar de modo.";
+"临时对话已开启，已隔离记忆。2 秒内再点可切换模式。" = "El chat temporal está activo con la memoria aislada. Toca de nuevo en 2 segundos para cambiar de modo.";
+"临时对话已切换为可使用记忆" = "El chat temporal ahora puede usar la memoria";
+"临时对话已切换为记忆隔离" = "El chat temporal ahora aísla la memoria";

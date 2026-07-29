@@ -5361,3 +5361,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "从照片选择" = "Choisir dans Photos";
 "从文件选择" = "Choisir dans Fichiers";
 "请选择 PNG 格式的角色卡图片。" = "Choisissez une image de carte de personnage au format PNG.";
+"临时对话已开启，可使用记忆。2 秒内再点可切换模式。" = "La discussion temporaire est active avec la mémoire. Touchez à nouveau dans les 2 secondes pour changer de mode.";
+"临时对话已开启，已隔离记忆。2 秒内再点可切换模式。" = "La discussion temporaire est active avec la mémoire isolée. Touchez à nouveau dans les 2 secondes pour changer de mode.";
+"临时对话已切换为可使用记忆" = "La discussion temporaire peut maintenant utiliser la mémoire";
+"临时对话已切换为记忆隔离" = "La discussion temporaire isole maintenant la mémoire";

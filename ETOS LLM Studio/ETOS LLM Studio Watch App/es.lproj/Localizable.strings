@@ -5294,3 +5294,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。" = "Cuando la entrada de vídeo de Gemini no está activada, la app convierte el original en fotogramas con marcas de tiempo. Tras cambiar de modelo, vuelve a procesarlo con estos ajustes.";
 "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。" = "Al desactivar el vídeo nativo de Gemini o cambiar de modelo, los fotogramas se extraen de nuevo con estos ajustes.";
 "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。" = "Las siguientes imágenes adjuntas son fotogramas extraídos del vídeo en orden cronológico. Usa las marcas de tiempo para analizar acciones, cambios de escena y secuencia; no trates los fotogramas contiguos como simultáneos.";
+"临时对话已开启，可使用记忆。2 秒内再点可切换模式。" = "El chat temporal está activo con memoria. Toca de nuevo en 2 segundos para cambiar de modo.";
+"临时对话已开启，已隔离记忆。2 秒内再点可切换模式。" = "El chat temporal está activo con la memoria aislada. Toca de nuevo en 2 segundos para cambiar de modo.";
+"临时对话已切换为可使用记忆" = "El chat temporal ahora puede usar la memoria";
+"临时对话已切换为记忆隔离" = "El chat temporal ahora aísla la memoria";

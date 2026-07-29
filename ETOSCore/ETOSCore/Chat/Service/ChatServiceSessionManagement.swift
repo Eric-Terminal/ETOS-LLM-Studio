@@ -10,7 +10,39 @@ import Foundation
 import Combine
 import os.log
 
+public enum TemporaryChatMemoryMode: Equatable, Sendable {
+    case enabled
+    case isolated
+
+    public var isMemoryEnabled: Bool {
+        self == .enabled
+    }
+
+    var toggled: TemporaryChatMemoryMode {
+        self == .enabled ? .isolated : .enabled
+    }
+}
+
+public enum TemporaryChatTapOutcome: Equatable, Sendable {
+    case enabled(TemporaryChatMemoryMode)
+    case memoryModeChanged(TemporaryChatMemoryMode)
+    case disabled
+    case unavailable
+}
+
+struct TemporaryChatRuntimeState {
+    var memoryMode: TemporaryChatMemoryMode
+    let enabledAt: Date
+    var didSwitchMemoryMode: Bool
+}
+
+public extension Notification.Name {
+    static let temporaryChatStateDidChange = Notification.Name("com.ETOS.temporaryChat.stateDidChange")
+}
+
 public enum TemporaryChatToggleAvailability {
+    public static let memoryModeSwitchInterval: TimeInterval = 2
+
     /// 已开启的临时对话始终允许关闭；新的临时对话只能在对话开始前开启。
     public static func isAvailable(
         isTemporaryChatEnabled: Bool,
@@ -27,7 +59,18 @@ extension ChatService {
         guard let sessionID else { return false }
         ephemeralSessionLock.lock()
         defer { ephemeralSessionLock.unlock() }
-        return ephemeralSessionIDs.contains(sessionID)
+        return ephemeralSessionStates[sessionID] != nil
+    }
+
+    public func temporaryChatMemoryMode(for sessionID: UUID?) -> TemporaryChatMemoryMode? {
+        guard let sessionID else { return nil }
+        ephemeralSessionLock.lock()
+        defer { ephemeralSessionLock.unlock() }
+        return ephemeralSessionStates[sessionID]?.memoryMode
+    }
+
+    public func isTemporaryChatMemoryIsolated(for sessionID: UUID?) -> Bool {
+        temporaryChatMemoryMode(for: sessionID) == .isolated
     }
 
     public func temporaryChatMessageCount(for sessionID: UUID) -> Int? {
@@ -36,12 +79,55 @@ extension ChatService {
     }
 
     /// 切换到唯一的运行期临时会话；其消息在关闭临时模式前不会写入会话数据库。
-    public func enableTemporaryChat() {
+    public func enableTemporaryChat(
+        memoryMode: TemporaryChatMemoryMode = .enabled,
+        now: Date = Date()
+    ) {
         createNewSession()
         guard let sessionID = currentSessionSubject.value?.id else { return }
         ephemeralSessionLock.lock()
-        ephemeralSessionIDs.insert(sessionID)
+        ephemeralSessionStates[sessionID] = TemporaryChatRuntimeState(
+            memoryMode: memoryMode,
+            enabledAt: now,
+            didSwitchMemoryMode: false
+        )
         ephemeralSessionLock.unlock()
+        notifyTemporaryChatStateDidChange(sessionID: sessionID)
+    }
+
+    /// 首次轻点立即开启；开启后两秒内再次轻点切换记忆模式，之后再点关闭。
+    public func performTemporaryChatTap(
+        preferredMemoryMode: TemporaryChatMemoryMode,
+        canEnable: Bool,
+        now: Date = Date()
+    ) -> TemporaryChatTapOutcome {
+        if let sessionID = currentSessionSubject.value?.id {
+            ephemeralSessionLock.lock()
+            let state = ephemeralSessionStates[sessionID]
+            ephemeralSessionLock.unlock()
+
+            if var state {
+                let elapsed = now.timeIntervalSince(state.enabledAt)
+                if !state.didSwitchMemoryMode,
+                   elapsed >= 0,
+                   elapsed <= TemporaryChatToggleAvailability.memoryModeSwitchInterval {
+                    state.memoryMode = state.memoryMode.toggled
+                    state.didSwitchMemoryMode = true
+                    ephemeralSessionLock.lock()
+                    ephemeralSessionStates[sessionID] = state
+                    ephemeralSessionLock.unlock()
+                    notifyTemporaryChatStateDidChange(sessionID: sessionID)
+                    return .memoryModeChanged(state.memoryMode)
+                }
+
+                _ = saveCurrentTemporaryChat()
+                return .disabled
+            }
+        }
+
+        guard canEnable else { return .unavailable }
+        enableTemporaryChat(memoryMode: preferredMemoryMode, now: now)
+        return .enabled(preferredMemoryMode)
     }
 
     /// 将当前临时对话转为正式会话，并一次性写入完整消息快照。
@@ -53,8 +139,9 @@ extension ChatService {
         }
 
         ephemeralSessionLock.lock()
-        ephemeralSessionIDs.remove(currentSession.id)
+        ephemeralSessionStates.removeValue(forKey: currentSession.id)
         ephemeralSessionLock.unlock()
+        notifyTemporaryChatStateDidChange(sessionID: currentSession.id)
 
         let messages = messagesSnapshot(for: currentSession.id)
         guard !messages.isEmpty else {
@@ -190,8 +277,11 @@ extension ChatService {
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
             ephemeralSessionLock.lock()
-            ephemeralSessionIDs.remove(session.id)
+            let removedTemporaryState = ephemeralSessionStates.removeValue(forKey: session.id)
             ephemeralSessionLock.unlock()
+            if removedTemporaryState != nil {
+                notifyTemporaryChatStateDidChange(sessionID: session.id)
+            }
             clearRuntimeMessagesSnapshot(for: session.id)
             let messages = Persistence.loadMessages(for: session.id)
             deletedSessionMessages.append(contentsOf: messages)
@@ -228,6 +318,14 @@ extension ChatService {
         if isClearingAllConversationRecords {
             scheduleAchievementUnlockIfNeeded(.memoryPurge)
         }
+    }
+
+    private func notifyTemporaryChatStateDidChange(sessionID: UUID) {
+        NotificationCenter.default.post(
+            name: .temporaryChatStateDidChange,
+            object: self,
+            userInfo: ["sessionID": sessionID]
+        )
     }
 
     @discardableResult

@@ -35,6 +35,12 @@ extension ChatService {
 
         switch toolCall.toolName {
         case "save_memory":
+            guard !isTemporaryChatMemoryIsolated(for: sessionID) else {
+                content = policyDeniedText(toolCall.toolName)
+                displayResult = content
+                break
+            }
+
             struct SaveMemoryArgs: Decodable {
                 let content: String
                 let kind: String?
@@ -76,6 +82,12 @@ extension ChatService {
             }
 
         case "search_memory":
+            guard !isTemporaryChatMemoryIsolated(for: sessionID) else {
+                content = policyDeniedText(toolCall.toolName)
+                displayResult = content
+                break
+            }
+
             struct SearchMemoryArgs: Decodable {
                 let mode: String
                 let query: String

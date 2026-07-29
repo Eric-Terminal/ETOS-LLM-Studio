@@ -5283,3 +5283,7 @@
 "从照片选择" = "Choose from Photos";
 "从文件选择" = "Choose from Files";
 "请选择 PNG 格式的角色卡图片。" = "Choose a PNG character card image.";
+"临时对话已开启，可使用记忆。2 秒内再点可切换模式。" = "Temporary chat is on with memory. Tap again within 2 seconds to switch modes.";
+"临时对话已开启，已隔离记忆。2 秒内再点可切换模式。" = "Temporary chat is on with memory isolated. Tap again within 2 seconds to switch modes.";
+"临时对话已切换为可使用记忆" = "Temporary chat can now use memory";
+"临时对话已切换为记忆隔离" = "Temporary chat now isolates memory";

@@ -44,6 +44,7 @@ struct WatchInputBubbleView: View {
     @State private var presentedQuickActionEdge: WatchInputQuickActionEdge?
     @State private var pendingQuickAction: WatchInputQuickAction?
     @State private var isTemporaryChatEnabled = false
+    @State private var temporaryChatMemoryMode: TemporaryChatMemoryMode = .enabled
     @State private var visibleLeadingQuickActions: [WatchInputQuickAction] = []
     @State private var visibleTrailingQuickActions: [WatchInputQuickAction] = []
     @State private var slashCommandSuggestions: [ChatSlashCommand] = []
@@ -367,6 +368,9 @@ struct WatchInputBubbleView: View {
                     roleplayScriptRevision &+= 1
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
+                refreshTemporaryChatState()
+            }
             .onReceive(appConfig.$watchInputQuickActionSettings) { configuration in
                 refreshVisibleQuickActions(using: configuration)
             }
@@ -491,7 +495,8 @@ struct WatchInputBubbleView: View {
 
     private func systemImage(for action: WatchInputQuickAction) -> String {
         guard action == .temporaryChat else { return action.systemImage }
-        return isTemporaryChatEnabled ? "eye.slash" : "eye"
+        guard isTemporaryChatEnabled else { return "eye" }
+        return temporaryChatMemoryMode == .isolated ? "eye.slash.fill" : "eye.slash"
     }
 
     private func shouldShowQuickAction(_ action: WatchInputQuickAction) -> Bool {
@@ -530,7 +535,7 @@ struct WatchInputBubbleView: View {
         case .roleplayScripts:
             isRoleplayScriptActionMenuPresented = true
         case .temporaryChat:
-            setTemporaryChatEnabled(!isTemporaryChatEnabled)
+            performTemporaryChatTap()
         case .addAttachment:
             attachmentSourceText = importSourceHistory.first ?? lastAttachmentSource
             isAttachmentImportPresented = true
@@ -592,31 +597,80 @@ struct WatchInputBubbleView: View {
         performQuickAction(action)
     }
 
-    private func setTemporaryChatEnabled(_ isEnabled: Bool) {
-        guard TemporaryChatToggleAvailability.isAvailable(
+    private func performTemporaryChatTap() {
+        let canEnable = TemporaryChatToggleAvailability.isAvailable(
             isTemporaryChatEnabled: isTemporaryChatEnabled,
             hasConversationStarted: !isTemporaryChatActivationAvailable
-        ) else { return }
-
-        if isEnabled {
-            viewModel.enableTemporaryChat()
-        } else {
-            viewModel.saveCurrentTemporarySession()
-        }
-        isTemporaryChatEnabled = isEnabled
-        onShowTransientNotice(
-            WatchChatTransientNotice(
-                message: isEnabled
-                    ? NSLocalizedString("临时对话已开启", comment: "Watch temporary chat status")
-                    : NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status"),
-                systemImage: isEnabled ? "eye.slash" : "eye",
-                tint: isEnabled ? .accentColor : .secondary
-            )
         )
+        let preferredMode: TemporaryChatMemoryMode = appConfig.temporaryChatMemoryEnabled
+            ? .enabled
+            : .isolated
+        let outcome = viewModel.performTemporaryChatTap(
+            preferredMemoryMode: preferredMode,
+            canEnable: canEnable
+        )
+
+        let notice: WatchChatTransientNotice
+        switch outcome {
+        case .enabled(let memoryMode):
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = WatchChatTransientNotice(
+                message: temporaryChatEnabledMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .memoryModeChanged(let memoryMode):
+            appConfig.temporaryChatMemoryEnabled = memoryMode.isMemoryEnabled
+            isTemporaryChatEnabled = true
+            temporaryChatMemoryMode = memoryMode
+            notice = WatchChatTransientNotice(
+                message: temporaryChatMemoryModeChangedMessage(for: memoryMode),
+                systemImage: memoryMode == .isolated ? "eye.slash.fill" : "eye.slash",
+                tint: .accentColor
+            )
+        case .disabled:
+            isTemporaryChatEnabled = false
+            notice = WatchChatTransientNotice(
+                message: NSLocalizedString("临时对话已关闭", comment: "Watch temporary chat status"),
+                systemImage: "eye",
+                tint: .secondary
+            )
+        case .unavailable:
+            return
+        }
+        onShowTransientNotice(notice)
     }
 
     private func refreshTemporaryChatState() {
         isTemporaryChatEnabled = viewModel.isTemporaryChatEnabled(for: viewModel.currentSession?.id)
+        if let memoryMode = viewModel.temporaryChatMemoryMode(for: viewModel.currentSession?.id) {
+            temporaryChatMemoryMode = memoryMode
+        }
+    }
+
+    private func temporaryChatEnabledMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString(
+                "临时对话已开启，可使用记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory"
+            )
+        case .isolated:
+            return NSLocalizedString(
+                "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。",
+                comment: "Watch temporary chat enabled with memory isolation"
+            )
+        }
+    }
+
+    private func temporaryChatMemoryModeChangedMessage(for memoryMode: TemporaryChatMemoryMode) -> String {
+        switch memoryMode {
+        case .enabled:
+            return NSLocalizedString("临时对话已切换为可使用记忆", comment: "Watch temporary chat memory enabled")
+        case .isolated:
+            return NSLocalizedString("临时对话已切换为记忆隔离", comment: "Watch temporary chat memory isolated")
+        }
     }
 
     private var isInlineSpeechComposerPresented: Bool {
