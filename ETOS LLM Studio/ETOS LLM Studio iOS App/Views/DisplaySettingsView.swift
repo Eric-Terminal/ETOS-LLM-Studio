@@ -66,6 +66,37 @@ struct DisplaySettingsView: View {
 
                         if #available(iOS 26.0, *) {
                             Toggle(NSLocalizedString("液态玻璃效果", comment: ""), isOn: $enableLiquidGlass)
+                            if enableLiquidGlass {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(NSLocalizedString("玻璃底色不透明度", comment: ""))
+                                        Spacer(minLength: 8)
+                                        Text(
+                                            String(
+                                                format: NSLocalizedString("%.0f%%", comment: ""),
+                                                liquidGlassTintOpacityBinding.wrappedValue * 100
+                                            )
+                                        )
+                                            .foregroundStyle(.secondary)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(
+                                        value: liquidGlassTintOpacityBinding,
+                                        in: LiquidGlassTintSetting.minimumOpacity...LiquidGlassTintSetting.maximumOpacity,
+                                        step: LiquidGlassTintSetting.opacityStep
+                                    )
+                                }
+
+                                Button(NSLocalizedString("恢复默认玻璃底色", comment: "")) {
+                                    liquidGlassTintOpacityBinding.wrappedValue = LiquidGlassTintSetting.defaultOpacity
+                                }
+                                .disabled(
+                                    abs(
+                                        liquidGlassTintOpacityBinding.wrappedValue
+                                            - LiquidGlassTintSetting.defaultOpacity
+                                    ) < 0.001
+                                )
+                            }
                         }
                     }
                 }
@@ -209,6 +240,13 @@ struct DisplaySettingsView: View {
                 appConfig.appLanguage = newValue
                 AppLanguageRuntime.apply(rawValue: newValue)
             }
+        )
+    }
+
+    private var liquidGlassTintOpacityBinding: Binding<Double> {
+        Binding(
+            get: { LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity) },
+            set: { appConfig.liquidGlassTintOpacity = LiquidGlassTintSetting.normalized($0) }
         )
     }
 

@@ -37,6 +37,11 @@ struct FontSettingsView: View {
         nonmutating set { appConfig.fontCustomScale = newValue }
     }
 
+    private var lineSpacingEm: Double {
+        get { appConfig.fontLineSpacingEm }
+        nonmutating set { appConfig.fontLineSpacingEm = newValue }
+    }
+
     var body: some View {
         Form {
             Section {
@@ -57,6 +62,7 @@ struct FontSettingsView: View {
             }
 
             fontScaleSection
+            lineSpacingSection
             fallbackScopeSection
 
             fontFilesSection
@@ -198,6 +204,13 @@ struct FontSettingsView: View {
         )
     }
 
+    private var lineSpacingBinding: Binding<Double> {
+        Binding(
+            get: { FontLibrary.normalizedLineSpacingEm(lineSpacingEm) },
+            set: { lineSpacingEm = FontLibrary.normalizedLineSpacingEm($0) }
+        )
+    }
+
     private var allFallbackScopes: [FontFallbackScope] {
         FontFallbackScope.allCases
     }
@@ -226,6 +239,40 @@ struct FontSettingsView: View {
             Text(NSLocalizedString("字体大小", comment: ""))
         } footer: {
             Text(NSLocalizedString("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var lineSpacingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(NSLocalizedString("聊天正文行距", comment: ""))
+                    Spacer(minLength: 8)
+                    Text(
+                        String(
+                            format: NSLocalizedString("%.3f em", comment: "Chat text line spacing value"),
+                            lineSpacingBinding.wrappedValue
+                        )
+                    )
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: lineSpacingBinding,
+                    in: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm,
+                    step: FontLibrary.lineSpacingStepEm
+                )
+            }
+            Button(NSLocalizedString("恢复默认行距", comment: "")) {
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultLineSpacingEm
+            }
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultLineSpacingEm) < 0.001)
+        } header: {
+            Text(NSLocalizedString("行距", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.20 em。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -346,8 +393,10 @@ struct FontSettingsView: View {
         Section(NSLocalizedString("预览", comment: "")) {
             Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
                 .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
+                .lineSpacing(previewLineSpacing)
             Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
                 .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
+                .lineSpacing(previewLineSpacing)
             Text(NSLocalizedString("斜体预览 / Emphasis", comment: ""))
                 .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))
                 .italic()
@@ -357,6 +406,17 @@ struct FontSettingsView: View {
             Text(NSLocalizedString("let message = \"Code Preview\"", comment: "Font preview code sample"))
                 .font(FontRoutePreview.font(for: .code, sample: "let message = \"Code Preview\""))
         }
+    }
+
+    private var previewLineSpacing: CGFloat {
+        CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 17,
+                lineSpacingEm: lineSpacingBinding.wrappedValue,
+                fontScale: customFontScale,
+                isCustomFontEnabled: isCustomFontEnabled
+            )
+        )
     }
 
     private var supportedFontTypes: [UTType] {

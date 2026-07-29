@@ -65,6 +65,15 @@ extension PersistenceTests {
         #expect(AppConfigKey.watchModelPickerExpandedGroupIDs.participatesInSync == false)
     }
 
+    @Test("液态玻璃底色默认兼顾透明感与复杂背景可读性")
+    func liquidGlassTintDefaultsAndClamps() {
+        #expect(AppConfigKey.liquidGlassTintOpacity.defaultValue == .real(0.3))
+        #expect(AppConfigKey.liquidGlassTintOpacity.participatesInSync)
+        #expect(LiquidGlassTintSetting.normalized(.nan) == LiquidGlassTintSetting.defaultOpacity)
+        #expect(LiquidGlassTintSetting.normalized(-1) == LiquidGlassTintSetting.minimumOpacity)
+        #expect(LiquidGlassTintSetting.normalized(1) == LiquidGlassTintSetting.maximumOpacity)
+    }
+
     @Test("AppConfig 迁移标记已存在时仍补写缺失的专用模型键")
     @MainActor
     func testAppConfigBootstrapBackfillsMissingSpecializedModelKey() async throws {

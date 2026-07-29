@@ -19,6 +19,7 @@ struct ETMathWebShellConfiguration: Equatable {
         let customCodeTextHex: String?
         let prefersDarkPalette: Bool
         let fontScale: Double
+        let lineSpacingEm: Double
 
         var htmlDocument: String {
             let defaultTextColor = isOutgoing ? "#FFFFFF" : (prefersDarkPalette ? "#FFFFFF" : "#1C1C1E")
@@ -98,6 +99,7 @@ struct ETMathWebShellConfiguration: Equatable {
       --font-strong: \(strongFontFamily);
       --font-code: \(codeFontFamily);
       --font-scale: \(String(format: "%.3f", fontScale));
+      --line-spacing-em: \(String(format: "%.3f", FontLibrary.normalizedLineSpacingEm(lineSpacingEm)));
     }
 
     html, body {
@@ -118,7 +120,7 @@ struct ETMathWebShellConfiguration: Equatable {
       max-width: var(--max-width);
       box-sizing: border-box;
       font-size: calc(1em * var(--font-scale));
-      line-height: 1.45;
+      line-height: calc(1.25 + var(--line-spacing-em));
       word-break: break-word;
       overflow-wrap: anywhere;
       color: var(--text);

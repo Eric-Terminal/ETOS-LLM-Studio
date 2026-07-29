@@ -22,6 +22,10 @@ public enum FontLibrary {
     public static let maximumFontScale = 2.0
     public static let defaultFontScale = 1.0
     public static let fontScaleStep = 0.05
+    public static let minimumLineSpacingEm = 0.0
+    public static let maximumLineSpacingEm = 0.5
+    public static let defaultLineSpacingEm = 0.2
+    public static let lineSpacingStepEm = 0.025
     private static let cacheLock = NSLock()
     private static let sampledResolutionCacheLimit = 256
 
@@ -101,6 +105,22 @@ public enum FontLibrary {
     public static func normalizedFontScale(_ value: Double) -> Double {
         guard value.isFinite else { return defaultFontScale }
         return min(max(value, minimumFontScale), maximumFontScale)
+    }
+
+    public static func normalizedLineSpacingEm(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultLineSpacingEm }
+        return min(max(value, minimumLineSpacingEm), maximumLineSpacingEm)
+    }
+
+    public static func lineSpacingPoints(
+        basePointSize: Double,
+        lineSpacingEm: Double,
+        fontScale: Double,
+        isCustomFontEnabled: Bool
+    ) -> Double {
+        basePointSize
+            * normalizedLineSpacingEm(lineSpacingEm)
+            * effectiveFontScale(fontScale, isCustomFontEnabled: isCustomFontEnabled)
     }
 
     public static func effectiveFontScale(_ value: Double, isCustomFontEnabled: Bool) -> Double {

@@ -337,6 +337,29 @@ struct FontRouteSyncTests {
         }
     }
 
+    @Test("聊天正文行距默认值与范围保持稳定")
+    func testChatLineSpacingDefaultsAndClamping() {
+        #expect(AppConfigKey.fontLineSpacingEm.defaultValue == .real(0.2))
+        #expect(FontLibrary.normalizedLineSpacingEm(.nan) == FontLibrary.defaultLineSpacingEm)
+        #expect(FontLibrary.normalizedLineSpacingEm(-1) == FontLibrary.minimumLineSpacingEm)
+        #expect(FontLibrary.normalizedLineSpacingEm(0.225) == 0.225)
+        #expect(FontLibrary.normalizedLineSpacingEm(1) == FontLibrary.maximumLineSpacingEm)
+        let customFontSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.2,
+            fontScale: 1.5,
+            isCustomFontEnabled: true
+        )
+        let systemFontSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.2,
+            fontScale: 1.5,
+            isCustomFontEnabled: false
+        )
+        #expect(abs(customFontSpacing - 5.1) < 0.000_1)
+        #expect(abs(systemFontSpacing - 3.4) < 0.000_1)
+    }
+
     @Test("字体渲染读取只使用内存快照")
     func testFontRenderingReadsOnlyRuntimeSnapshot() async throws {
         let key = AppConfigKey.fontCustomScale

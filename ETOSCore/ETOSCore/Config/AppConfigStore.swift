@@ -241,6 +241,16 @@ public final class AppConfigStore: ObservableObject {
     @Published public var enableAutoRotateBackground: Bool { didSet { write(.enableAutoRotateBackground, enableAutoRotateBackground) } }
     @Published public var enableReasoningSummary: Bool { didSet { write(.enableReasoningSummary, enableReasoningSummary) } }
     @Published public var enableLiquidGlass: Bool { didSet { write(.enableLiquidGlass, enableLiquidGlass) } }
+    @Published public var liquidGlassTintOpacity: Double {
+        didSet {
+            let normalizedValue = LiquidGlassTintSetting.normalized(liquidGlassTintOpacity)
+            guard normalizedValue == liquidGlassTintOpacity else {
+                liquidGlassTintOpacity = normalizedValue
+                return
+            }
+            write(.liquidGlassTintOpacity, liquidGlassTintOpacity)
+        }
+    }
     @Published public var enableChatTopBlurFade: Bool { didSet { write(.enableChatTopBlurFade, enableChatTopBlurFade) } }
     @Published public var enableNoBubbleUI: Bool { didSet { write(.enableNoBubbleUI, enableNoBubbleUI) } }
     @Published public var chatScrollAnimationEnabled: Bool { didSet { write(.chatScrollAnimationEnabled, chatScrollAnimationEnabled) } }
@@ -284,6 +294,16 @@ public final class AppConfigStore: ObservableObject {
         didSet {
             write(.fontCustomScale, fontCustomScale)
             updateFontRuntimeSettings()
+        }
+    }
+    @Published public var fontLineSpacingEm: Double {
+        didSet {
+            let normalizedValue = FontLibrary.normalizedLineSpacingEm(fontLineSpacingEm)
+            guard normalizedValue == fontLineSpacingEm else {
+                fontLineSpacingEm = normalizedValue
+                return
+            }
+            write(.fontLineSpacingEm, fontLineSpacingEm)
         }
     }
     @Published public var appLanguage: String { didSet { write(.appLanguage, appLanguage) } }
@@ -545,6 +565,7 @@ public final class AppConfigStore: ObservableObject {
         enableAutoRotateBackground = Self.boolValue(.enableAutoRotateBackground, userDefaults: userDefaults)
         enableReasoningSummary = Self.boolValue(.enableReasoningSummary, userDefaults: userDefaults)
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
+        liquidGlassTintOpacity = Self.realValue(.liquidGlassTintOpacity, userDefaults: userDefaults)
         enableChatTopBlurFade = Self.boolValue(.enableChatTopBlurFade, userDefaults: userDefaults)
         enableNoBubbleUI = Self.boolValue(.enableNoBubbleUI, userDefaults: userDefaults)
         chatScrollAnimationEnabled = Self.boolValue(.chatScrollAnimationEnabled, userDefaults: userDefaults)
@@ -561,6 +582,7 @@ public final class AppConfigStore: ObservableObject {
         fontUseCustomFonts = Self.boolValue(.fontUseCustomFonts, userDefaults: userDefaults)
         fontFallbackScope = Self.textValue(.fontFallbackScope, userDefaults: userDefaults)
         fontCustomScale = Self.realValue(.fontCustomScale, userDefaults: userDefaults)
+        fontLineSpacingEm = Self.realValue(.fontLineSpacingEm, userDefaults: userDefaults)
         appLanguage = Self.textValue(.appLanguage, userDefaults: userDefaults)
         let initialWatchInputQuickActionConfiguration = Self.textValue(
             .watchInputQuickActionConfiguration,
@@ -1031,6 +1053,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableAutoRotateBackground: return .bool(enableAutoRotateBackground)
         case .enableReasoningSummary: return .bool(enableReasoningSummary)
         case .enableLiquidGlass: return .bool(enableLiquidGlass)
+        case .liquidGlassTintOpacity: return .real(liquidGlassTintOpacity)
         case .enableChatTopBlurFade: return .bool(enableChatTopBlurFade)
         case .enableNoBubbleUI: return .bool(enableNoBubbleUI)
         case .chatScrollAnimationEnabled: return .bool(chatScrollAnimationEnabled)
@@ -1045,6 +1068,7 @@ public final class AppConfigStore: ObservableObject {
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
         case .fontFallbackScope: return .text(fontFallbackScope)
         case .fontCustomScale: return .real(fontCustomScale)
+        case .fontLineSpacingEm: return .real(fontLineSpacingEm)
         case .appLanguage: return .text(appLanguage)
         case .watchInputQuickActionConfiguration: return .text(watchInputQuickActionConfiguration)
         case .watchAttachmentLastSource: return .text(watchAttachmentLastSource)
@@ -1226,7 +1250,11 @@ public final class AppConfigStore: ObservableObject {
         case .aiTopP: aiTopP = value
         case .backgroundBlur: backgroundBlur = value
         case .backgroundOpacity: backgroundOpacity = value
+        case .liquidGlassTintOpacity:
+            liquidGlassTintOpacity = LiquidGlassTintSetting.normalized(value)
         case .fontCustomScale: fontCustomScale = value
+        case .fontLineSpacingEm:
+            fontLineSpacingEm = FontLibrary.normalizedLineSpacingEm(value)
         case .reasoningPreviewHeightPercent: reasoningPreviewHeightPercent = value
         case .chatScrollAnimationSpringResponse: chatScrollAnimationSpringResponse = value
         case .chatScrollAnimationSpringDamping: chatScrollAnimationSpringDamping = value
@@ -1654,6 +1682,10 @@ public final class AppConfigStore: ObservableObject {
         case .videoFrameExtractionFPS:
             guard value.isFinite else { return 1 }
             return min(max(0.1, value), 5)
+        case .fontLineSpacingEm:
+            return FontLibrary.normalizedLineSpacingEm(value)
+        case .liquidGlassTintOpacity:
+            return LiquidGlassTintSetting.normalized(value)
         default:
             return value
         }

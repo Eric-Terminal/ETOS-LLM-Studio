@@ -22,6 +22,7 @@ extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
+        lineSpacingEm: Double,
         codeHighlightLimit: Int = 12_000
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -90,6 +91,12 @@ extension View {
                     FontFamily(.system(.monospaced))
                 }
                 ForegroundColor(codeTextColor)
+            }
+            .markdownBlockStyle(\.paragraph) { configuration in
+                configuration.label
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativeLineSpacing(.em(CGFloat(lineSpacingEm)))
+                    .markdownMargin(top: .zero, bottom: .em(1))
             }
             .markdownBlockStyle(\.blockquote) { configuration in
                 configuration.label

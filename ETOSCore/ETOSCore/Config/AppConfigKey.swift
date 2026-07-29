@@ -88,6 +88,18 @@ public enum VideoFrameExtractionMode: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+public enum LiquidGlassTintSetting {
+    public static let minimumOpacity = 0.0
+    public static let maximumOpacity = 0.6
+    public static let defaultOpacity = 0.3
+    public static let opacityStep = 0.05
+
+    public static func normalized(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultOpacity }
+        return min(max(value, minimumOpacity), maximumOpacity)
+    }
+}
+
 public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncProviders = "sync.options.providers"
     case syncSessions = "sync.options.sessions"
@@ -206,6 +218,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableAutoRotateBackground = "enableAutoRotateBackground"
     case enableReasoningSummary = "enableReasoningSummary"
     case enableLiquidGlass = "enableLiquidGlass"
+    case liquidGlassTintOpacity = "liquidGlass.tintOpacity"
     case enableChatTopBlurFade = "enableChatTopBlurFade"
     case enableNoBubbleUI = "enableNoBubbleUI"
     case chatScrollAnimationEnabled = "chat.scrollAnimation.enabled"
@@ -220,6 +233,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case fontUseCustomFonts = "font.useCustomFonts"
     case fontFallbackScope = "font.fallbackScope"
     case fontCustomScale = "font.customScale"
+    case fontLineSpacingEm = "font.lineSpacingEm"
     case appLanguage = "ui.appLanguage"
     case watchInputQuickActionConfiguration = "watch.input.quickActions.configuration"
     case watchAttachmentLastSource = "watch.attachment.lastSource"
@@ -471,6 +485,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(10.0)
         case .backgroundOpacity:
             return .real(0.7)
+        case .liquidGlassTintOpacity:
+            return .real(LiquidGlassTintSetting.defaultOpacity)
         case .reasoningPreviewHeightPercent:
             #if os(watchOS)
             return .real(58.0)
@@ -490,6 +506,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("segment")
         case .fontCustomScale:
             return .real(1.0)
+        case .fontLineSpacingEm:
+            return .real(FontLibrary.defaultLineSpacingEm)
         case .appLanguage:
             return .text("system")
         case .watchInputQuickActionConfiguration:

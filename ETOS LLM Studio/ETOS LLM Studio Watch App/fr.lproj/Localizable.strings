@@ -5298,3 +5298,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "临时对话已开启，已隔离记忆。2 秒内再点可切换模式。" = "La discussion temporaire est active avec la mémoire isolée. Touchez à nouveau dans les 2 secondes pour changer de mode.";
 "临时对话已切换为可使用记忆" = "La discussion temporaire peut maintenant utiliser la mémoire";
 "临时对话已切换为记忆隔离" = "La discussion temporaire isole maintenant la mémoire";
+"聊天正文行距" = "Interligne du texte du chat";
+"恢复默认行距" = "Rétablir l’interligne par défaut";
+"行距" = "Interligne";
+"控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.20 em。" = "Ajuste l’espace supplémentaire entre les lignes du texte du chat, de 0,00 em à 0,50 em ; la valeur par défaut est 0,20 em.";
+"%.3f em" = "%.3f em";

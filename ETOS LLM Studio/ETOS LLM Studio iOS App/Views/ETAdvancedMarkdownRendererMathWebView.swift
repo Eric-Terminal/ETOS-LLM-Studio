@@ -21,6 +21,7 @@ struct ETMathWebMarkdownView: View {
     let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
+    let lineSpacingEm: Double
 
     @State private var renderedHeight: CGFloat = 28
 
@@ -36,6 +37,7 @@ struct ETMathWebMarkdownView: View {
                 customCodeTextHex: customCodeTextHex,
                 prefersDarkPalette: prefersDarkPalette,
                 fontScale: fontScale,
+                lineSpacingEm: lineSpacingEm,
                 availableWidth: max(1, geometry.size.width),
                 renderedHeight: $renderedHeight
             )
@@ -92,6 +94,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let customCodeTextHex: String?
     let prefersDarkPalette: Bool
     let fontScale: Double
+    let lineSpacingEm: Double
     let availableWidth: CGFloat
     @Binding var renderedHeight: CGFloat
 
@@ -151,7 +154,8 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             customStrongTextHex: customStrongTextHex,
             customCodeTextHex: customCodeTextHex,
             prefersDarkPalette: prefersDarkPalette,
-            fontScale: fontScale
+            fontScale: fontScale,
+            lineSpacingEm: lineSpacingEm
         )
         context.coordinator.render(
             payload,

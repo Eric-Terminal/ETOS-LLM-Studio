@@ -84,6 +84,7 @@ struct TelegramMessageComposer: View {
                 ChatSlashCommandSuggestionPanel(
                     commands: slashCommandSuggestions,
                     usesLiquidGlass: viewModel.enableLiquidGlass,
+                    glassTintOpacity: appConfig.liquidGlassTintOpacity,
                     onSelect: performSuggestedSlashCommand
                 )
                 .padding(.horizontal, 16)
@@ -699,7 +700,8 @@ struct TelegramMessageComposer: View {
     }
 
     var glassOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
 
     var glassStrokeColor: Color {

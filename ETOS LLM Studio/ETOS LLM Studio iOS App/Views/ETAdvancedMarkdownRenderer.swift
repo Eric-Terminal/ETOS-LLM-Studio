@@ -36,11 +36,21 @@ struct ETAdvancedMarkdownRenderer: View {
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         let fontScale = FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts)
+        let lineSpacingEm = FontLibrary.normalizedLineSpacingEm(appConfig.fontLineSpacingEm)
+        let lineSpacing = CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 17,
+                lineSpacingEm: lineSpacingEm,
+                fontScale: appConfig.fontCustomScale,
+                isCustomFontEnabled: appConfig.fontUseCustomFonts
+            )
+        )
         Group {
             if preparedRuleRequest == ruleRenderRequest,
                let ruleAttributedText {
                 Text(ruleAttributedText)
                     .etFont(.body, sampleText: content)
+                    .lineSpacing(lineSpacing)
                     .foregroundStyle(textColor)
             } else if enableMarkdown {
                 if let streamingLineParts {
@@ -48,7 +58,9 @@ struct ETAdvancedMarkdownRenderer: View {
                         prefix: streamingLineParts.prefix,
                         activeLine: streamingLineParts.activeLine,
                         textColor: textColor,
-                        fontScale: fontScale
+                        fontScale: fontScale,
+                        lineSpacingEm: lineSpacingEm,
+                        lineSpacing: lineSpacing
                     )
                 } else if let prepared = effectivePreparedContent {
                     if shouldUseWebRenderer(prepared) {
@@ -61,7 +73,8 @@ struct ETAdvancedMarkdownRenderer: View {
                             customStrongTextHex: enabledHex(customTextStyleColors?.strong),
                             customCodeTextHex: enabledHex(customTextStyleColors?.code),
                             prefersDarkPalette: colorScheme == .dark,
-                            fontScale: fontScale
+                            fontScale: fontScale,
+                            lineSpacingEm: lineSpacingEm
                         )
                     } else {
                         let markdownContent = resolvedMarkdownContent(for: prepared)
@@ -69,7 +82,8 @@ struct ETAdvancedMarkdownRenderer: View {
                             markdownContent: markdownContent,
                             sampleText: prepared.sourceText,
                             textColor: textColor,
-                            fontScale: fontScale
+                            fontScale: fontScale,
+                            lineSpacingEm: lineSpacingEm
                         )
                     }
                 } else {
@@ -77,11 +91,12 @@ struct ETAdvancedMarkdownRenderer: View {
                         markdownContent: MarkdownContent(content),
                         sampleText: content,
                         textColor: textColor,
-                        fontScale: fontScale
+                        fontScale: fontScale,
+                        lineSpacingEm: lineSpacingEm
                     )
                 }
             } else {
-                plainTextView(content, textColor: textColor)
+                plainTextView(content, textColor: textColor, lineSpacing: lineSpacing)
             }
         }
         .task(id: ruleRenderRequest) {
@@ -155,7 +170,8 @@ struct ETAdvancedMarkdownRenderer: View {
         markdownContent: MarkdownContent,
         sampleText: String,
         textColor: Color,
-        fontScale: Double
+        fontScale: Double,
+        lineSpacingEm: Double
     ) -> some View {
         let mathTextColor = ETIOSMathColorComponents(textColor)
         let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
@@ -178,6 +194,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
                 fontScale: fontScale,
+                lineSpacingEm: lineSpacingEm,
                 codeHighlightLimit: isStreaming ? 4_096 : 12_000
             )
     }
@@ -187,31 +204,34 @@ struct ETAdvancedMarkdownRenderer: View {
         prefix: String,
         activeLine: String,
         textColor: Color,
-        fontScale: Double
+        fontScale: Double,
+        lineSpacingEm: Double,
+        lineSpacing: CGFloat
     ) -> some View {
-        let normalizedFontScale = CGFloat(FontLibrary.normalizedFontScale(fontScale))
         VStack(alignment: .leading, spacing: 0) {
             if !prefix.isEmpty {
                 markdownTextView(
                     markdownContent: MarkdownContent(prefix),
                     sampleText: prefix,
                     textColor: textColor,
-                    fontScale: fontScale
+                    fontScale: fontScale,
+                    lineSpacingEm: lineSpacingEm
                 )
             }
             ETStreamingActiveLineText(
                 text: activeLine,
                 textColor: textColor,
-                lineSpacing: 3 * normalizedFontScale
+                lineSpacing: lineSpacing
             )
-            .padding(.top, prefix.isEmpty ? 0 : 3 * normalizedFontScale)
+            .padding(.top, prefix.isEmpty ? 0 : lineSpacing)
         }
     }
 
     @ViewBuilder
-    private func plainTextView(_ text: String, textColor: Color) -> some View {
+    private func plainTextView(_ text: String, textColor: Color, lineSpacing: CGFloat) -> some View {
         Text(text)
             .etFont(.body, sampleText: text)
+            .lineSpacing(lineSpacing)
             .foregroundStyle(textColor)
     }
 

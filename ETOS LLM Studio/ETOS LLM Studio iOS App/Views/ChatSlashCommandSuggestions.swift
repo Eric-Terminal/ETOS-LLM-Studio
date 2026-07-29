@@ -14,6 +14,7 @@ struct ChatSlashCommandSuggestionPanel: View {
 
     let commands: [ChatSlashCommand]
     let usesLiquidGlass: Bool
+    let glassTintOpacity: Double
     let onSelect: (ChatSlashCommand) -> Void
 
     private let rowHeight: CGFloat = 52
@@ -90,7 +91,8 @@ struct ChatSlashCommandSuggestionPanel: View {
     }
 
     private var glassOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(glassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
 
     private var glassStrokeColor: Color {

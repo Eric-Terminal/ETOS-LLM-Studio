@@ -62,11 +62,21 @@ struct ETAdvancedMarkdownRenderer: View {
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         let fontScale = FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts)
+        let lineSpacingEm = FontLibrary.normalizedLineSpacingEm(appConfig.fontLineSpacingEm)
+        let lineSpacing = CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 16,
+                lineSpacingEm: lineSpacingEm,
+                fontScale: appConfig.fontCustomScale,
+                isCustomFontEnabled: appConfig.fontUseCustomFonts
+            )
+        )
         Group {
             if preparedRuleRequest == ruleRenderRequest,
                let ruleAttributedText {
                 Text(ruleAttributedText)
                     .etFont(.body, sampleText: content)
+                    .lineSpacing(lineSpacing)
                     .foregroundStyle(textColor)
             } else if enableMarkdown {
                 if let streamingLineParts {
@@ -74,25 +84,29 @@ struct ETAdvancedMarkdownRenderer: View {
                         prefix: streamingLineParts.prefix,
                         activeLine: streamingLineParts.activeLine,
                         textColor: textColor,
-                        fontScale: fontScale
+                        fontScale: fontScale,
+                        lineSpacingEm: lineSpacingEm,
+                        lineSpacing: lineSpacing
                     )
                 } else if let prepared = effectivePreparedContent {
                     markdownTextView(
                         markdownContent: prepared.markdownContent,
                         sampleText: prepared.sourceText,
                         textColor: textColor,
-                        fontScale: fontScale
+                        fontScale: fontScale,
+                        lineSpacingEm: lineSpacingEm
                     )
                 } else {
                     markdownTextView(
                         markdownContent: MarkdownContent(content),
                         sampleText: content,
                         textColor: textColor,
-                        fontScale: fontScale
+                        fontScale: fontScale,
+                        lineSpacingEm: lineSpacingEm
                     )
                 }
             } else {
-                plainTextView(content, textColor: textColor)
+                plainTextView(content, textColor: textColor, lineSpacing: lineSpacing)
             }
         }
         .task(id: ruleRenderRequest) {
@@ -149,7 +163,8 @@ struct ETAdvancedMarkdownRenderer: View {
         markdownContent: MarkdownContent,
         sampleText: String,
         textColor: Color,
-        fontScale: Double
+        fontScale: Double,
+        lineSpacingEm: Double
     ) -> some View {
         let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
         let strongTextColor = resolvedStyleColor(customTextStyleColors?.strong, fallback: textColor)
@@ -170,6 +185,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
                 fontScale: fontScale,
+                lineSpacingEm: lineSpacingEm,
                 codeHighlightLimit: isStreaming ? 4_096 : 12_000,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
@@ -183,31 +199,34 @@ struct ETAdvancedMarkdownRenderer: View {
         prefix: String,
         activeLine: String,
         textColor: Color,
-        fontScale: Double
+        fontScale: Double,
+        lineSpacingEm: Double,
+        lineSpacing: CGFloat
     ) -> some View {
-        let normalizedFontScale = CGFloat(FontLibrary.normalizedFontScale(fontScale))
         VStack(alignment: .leading, spacing: 0) {
             if !prefix.isEmpty {
                 markdownTextView(
                     markdownContent: MarkdownContent(prefix),
                     sampleText: prefix,
                     textColor: textColor,
-                    fontScale: fontScale
+                    fontScale: fontScale,
+                    lineSpacingEm: lineSpacingEm
                 )
             }
             ETStreamingActiveLineText(
                 text: activeLine,
                 textColor: textColor,
-                lineSpacing: 2 * normalizedFontScale
+                lineSpacing: lineSpacing
             )
-            .padding(.top, prefix.isEmpty ? 0 : 2 * normalizedFontScale)
+            .padding(.top, prefix.isEmpty ? 0 : lineSpacing)
         }
     }
 
     @ViewBuilder
-    private func plainTextView(_ text: String, textColor: Color) -> some View {
+    private func plainTextView(_ text: String, textColor: Color, lineSpacing: CGFloat) -> some View {
         Text(text)
             .etFont(.body, sampleText: text)
+            .lineSpacing(lineSpacing)
             .foregroundStyle(textColor)
     }
 
@@ -327,6 +346,7 @@ private extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
+        lineSpacingEm: Double,
         codeHighlightLimit: Int = 12_000,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
@@ -396,6 +416,12 @@ private extension View {
                     FontFamily(.system(.monospaced))
                 }
                 ForegroundColor(codeTextColor)
+            }
+            .markdownBlockStyle(\.paragraph) { configuration in
+                configuration.label
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativeLineSpacing(.em(CGFloat(lineSpacingEm)))
+                    .markdownMargin(top: .zero, bottom: .em(1))
             }
             .markdownBlockStyle(\.blockquote) { configuration in
                 configuration.label

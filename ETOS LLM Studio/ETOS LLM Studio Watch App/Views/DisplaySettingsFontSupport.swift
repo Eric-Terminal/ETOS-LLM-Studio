@@ -36,6 +36,11 @@ struct WatchFontSettingsView: View {
         nonmutating set { appConfig.fontCustomScale = newValue }
     }
 
+    private var lineSpacingEm: Double {
+        get { appConfig.fontLineSpacingEm }
+        nonmutating set { appConfig.fontLineSpacingEm = newValue }
+    }
+
     var body: some View {
         List {
             Section {
@@ -56,6 +61,7 @@ struct WatchFontSettingsView: View {
             }
 
             fontScaleSection
+            lineSpacingSection
 
             Section(NSLocalizedString("回退范围", comment: "")) {
                 Picker(NSLocalizedString("字体回退范围", comment: ""), selection: fallbackScopeBinding) {
@@ -162,6 +168,7 @@ struct WatchFontSettingsView: View {
             Section(NSLocalizedString("预览", comment: "")) {
                 Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
                     .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
+                    .lineSpacing(previewLineSpacing)
                 Text(NSLocalizedString("Emphasis", comment: "Font preview emphasis sample"))
                     .font(FontRoutePreview.font(for: .emphasis, sample: "Emphasis", size: 14))
                     .italic()
@@ -308,6 +315,13 @@ struct WatchFontSettingsView: View {
         )
     }
 
+    private var lineSpacingBinding: Binding<Double> {
+        Binding(
+            get: { FontLibrary.normalizedLineSpacingEm(lineSpacingEm) },
+            set: { lineSpacingEm = FontLibrary.normalizedLineSpacingEm($0) }
+        )
+    }
+
     private var fontScaleSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
@@ -335,6 +349,51 @@ struct WatchFontSettingsView: View {
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var lineSpacingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(NSLocalizedString("聊天正文行距", comment: ""))
+                    Spacer(minLength: 8)
+                    Text(
+                        String(
+                            format: NSLocalizedString("%.3f em", comment: "Chat text line spacing value"),
+                            lineSpacingBinding.wrappedValue
+                        )
+                    )
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Slider(
+                    value: lineSpacingBinding,
+                    in: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm,
+                    step: FontLibrary.lineSpacingStepEm
+                )
+            }
+            Button(NSLocalizedString("恢复默认行距", comment: "")) {
+                lineSpacingBinding.wrappedValue = FontLibrary.defaultLineSpacingEm
+            }
+            .disabled(abs(lineSpacingBinding.wrappedValue - FontLibrary.defaultLineSpacingEm) < 0.001)
+        } header: {
+            Text(NSLocalizedString("行距", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.20 em。", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var previewLineSpacing: CGFloat {
+        CGFloat(
+            FontLibrary.lineSpacingPoints(
+                basePointSize: 14,
+                lineSpacingEm: lineSpacingBinding.wrappedValue,
+                fontScale: customFontScale,
+                isCustomFontEnabled: isCustomFontEnabled
+            )
+        )
     }
 
     private func updateSelectedRoleChain(_ chain: [UUID]) {

@@ -206,6 +206,7 @@ extension ChatView {
                 collapsedSize: navBarIconSize,
                 expandedWidth: min(max(220, viewportWidth - 32), 420),
                 usesLiquidGlass: isLiquidGlassEnabled,
+                glassTintOpacity: appConfig.liquidGlassTintOpacity,
                 onTogglePresentation: {
                     setChatQuickActionFolderPresented(!isChatQuickActionFolderPresented)
                 },
@@ -403,6 +404,7 @@ private struct ChatQuickActionFolderPanel: View {
     let collapsedSize: CGFloat
     let expandedWidth: CGFloat
     let usesLiquidGlass: Bool
+    let glassTintOpacity: Double
     let onTogglePresentation: () -> Void
     let onPerform: (ChatQuickAction) -> Void
 
@@ -512,7 +514,8 @@ private struct ChatQuickActionFolderPanel: View {
     }
 
     private var glassOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(glassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
 
     private var glassStrokeColor: Color {

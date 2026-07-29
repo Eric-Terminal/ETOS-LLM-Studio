@@ -239,13 +239,15 @@ struct ChatView: View {
         )
     }
     var navBarGlassOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
     var scrollToBottomButtonIconColor: Color {
         TelegramColors.attachButtonColor
     }
     var scrollToBottomButtonMaterialOverlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
     var scrollToBottomButtonMaterialStrokeColor: Color {
         Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
