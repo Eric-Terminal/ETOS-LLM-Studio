@@ -5212,6 +5212,7 @@
 "视频画面编码失败。" = "Failed to encode a video frame.";
 "选择照片或视频" = "Choose Photos or Videos";
 "非原生视频发送需要配对 iPhone 协助抽帧，请确认 iPhone 已安装并启动本应用。" = "Non-native video sending requires a paired iPhone to extract frames. Make sure this app is installed and has been launched on iPhone.";
+"无法抽帧：当前无法连接配对 iPhone。请连接 iPhone 后重试。" = "Unable to extract frames: the paired iPhone is currently unreachable. Connect the iPhone and try again.";
 "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。" = "When Gemini video input is not enabled, the app converts the original video into timestamped frames. After switching models, it processes the video again using these settings.";
 "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。" = "After Gemini native video is disabled or you switch to another model, frames are extracted again using these settings.";
 "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。" = "The following image attachments are frames extracted from this video in chronological order. Use the timestamps to analyze actions, scene changes, and sequence; do not treat adjacent frames as simultaneous.";

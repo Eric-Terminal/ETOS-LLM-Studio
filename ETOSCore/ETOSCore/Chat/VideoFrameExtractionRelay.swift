@@ -56,9 +56,11 @@ actor VideoFrameExtractionRelay {
             throw VideoFrameExtractionRelayError.unsupported
         }
         let session = WCSession.default
-        guard session.activationState == .activated, session.isCompanionAppInstalled else {
-            throw VideoFrameExtractionRelayError.companionUnavailable
-        }
+        try Self.validateCompanionAvailability(
+            isActivated: session.activationState == .activated,
+            isCompanionAppInstalled: session.isCompanionAppInstalled,
+            isReachable: session.isReachable
+        )
 
         let requestID = UUID()
         let fileExtension = (attachment.fileName as NSString).pathExtension
@@ -96,6 +98,19 @@ actor VideoFrameExtractionRelay {
 #else
         throw VideoFrameExtractionRelayError.unsupported
 #endif
+    }
+
+    nonisolated static func validateCompanionAvailability(
+        isActivated: Bool,
+        isCompanionAppInstalled: Bool,
+        isReachable: Bool
+    ) throws {
+        guard isActivated, isCompanionAppInstalled else {
+            throw VideoFrameExtractionRelayError.companionUnavailable
+        }
+        guard isReachable else {
+            throw VideoFrameExtractionRelayError.companionUnreachable
+        }
     }
 
     nonisolated static func handleIncomingFile(
@@ -294,9 +309,10 @@ actor VideoFrameExtractionRelay {
     }
 }
 
-enum VideoFrameExtractionRelayError: LocalizedError {
+enum VideoFrameExtractionRelayError: LocalizedError, Equatable {
     case unsupported
     case companionUnavailable
+    case companionUnreachable
     case transferFailed(String)
     case timeout
     case invalidResponse
@@ -308,6 +324,8 @@ enum VideoFrameExtractionRelayError: LocalizedError {
             return NSLocalizedString("此设备不支持视频抽帧中继。", comment: "Video frame relay unsupported")
         case .companionUnavailable:
             return NSLocalizedString("非原生视频发送需要配对 iPhone 协助抽帧，请确认 iPhone 已安装并启动本应用。", comment: "Video frame relay companion unavailable")
+        case .companionUnreachable:
+            return NSLocalizedString("无法抽帧：当前无法连接配对 iPhone。请连接 iPhone 后重试。", comment: "Video frame relay companion unreachable")
         case .transferFailed(let message):
             return String(
                 format: NSLocalizedString("视频发送到 iPhone 失败：%@", comment: "Video frame relay transfer failed"),

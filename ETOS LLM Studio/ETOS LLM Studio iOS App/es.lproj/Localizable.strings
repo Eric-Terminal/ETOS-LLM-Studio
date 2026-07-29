@@ -5354,6 +5354,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "视频画面编码失败。" = "No se pudo codificar un fotograma del vídeo.";
 "选择照片或视频" = "Elegir fotos o vídeos";
 "非原生视频发送需要配对 iPhone 协助抽帧，请确认 iPhone 已安装并启动本应用。" = "Para enviar vídeo a modelos sin entrada nativa, el iPhone enlazado debe extraer los fotogramas. Comprueba que esta app esté instalada y se haya abierto en el iPhone.";
+"无法抽帧：当前无法连接配对 iPhone。请连接 iPhone 后重试。" = "No se pueden extraer fotogramas: el iPhone enlazado no está disponible. Conecta el iPhone e inténtalo de nuevo.";
 "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。" = "Cuando la entrada de vídeo de Gemini no está activada, la app convierte el original en fotogramas con marcas de tiempo. Tras cambiar de modelo, vuelve a procesarlo con estos ajustes.";
 "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。" = "Al desactivar el vídeo nativo de Gemini o cambiar de modelo, los fotogramas se extraen de nuevo con estos ajustes.";
 "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。" = "Las siguientes imágenes adjuntas son fotogramas extraídos del vídeo en orden cronológico. Usa las marcas de tiempo para analizar acciones, cambios de escena y secuencia; no trates los fotogramas contiguos como simultáneos.";
