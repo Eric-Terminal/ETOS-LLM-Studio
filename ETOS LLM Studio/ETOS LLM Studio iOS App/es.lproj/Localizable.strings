@@ -5357,3 +5357,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。" = "Cuando la entrada de vídeo de Gemini no está activada, la app convierte el original en fotogramas con marcas de tiempo. Tras cambiar de modelo, vuelve a procesarlo con estos ajustes.";
 "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。" = "Al desactivar el vídeo nativo de Gemini o cambiar de modelo, los fotogramas se extraen de nuevo con estos ajustes.";
 "以下图片附件是该视频按时间顺序提取的画面。请结合时间戳分析动作、场景变化和前后关系，不要把相邻画面误认为同时发生。" = "Las siguientes imágenes adjuntas son fotogramas extraídos del vídeo en orden cronológico. Usa las marcas de tiempo para analizar acciones, cambios de escena y secuencia; no trates los fotogramas contiguos como simultáneos.";
+"从照片选择" = "Elegir desde Fotos";
+"从文件选择" = "Elegir desde Archivos";
+"请选择 PNG 格式的角色卡图片。" = "Elige una imagen de tarjeta de personaje en formato PNG.";

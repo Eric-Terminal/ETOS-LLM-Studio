@@ -7,7 +7,9 @@
 // ============================================================================
 
 import ETOSCore
+import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct RoleplaySettingsView: View {
@@ -38,6 +40,8 @@ struct RoleplaySettingsView: View {
 private struct RoleplayCharacterLibraryView: View {
     @State private var characters: [RoleplayCharacter] = []
     @State private var isImporting = false
+    @State private var isSelectingCardPhoto = false
+    @State private var selectedCardPhoto: PhotosPickerItem?
     @State private var importError: String?
     @State private var importedCharacter: RoleplayCharacter?
     @State private var characterToDelete: RoleplayCharacter?
@@ -68,8 +72,18 @@ private struct RoleplayCharacterLibraryView: View {
                     Label(NSLocalizedString("新增角色卡", comment: "Add character card"), systemImage: "person.badge.plus")
                 }
 
-                Button {
-                    isImporting = true
+                Menu {
+                    Button {
+                        isSelectingCardPhoto = true
+                    } label: {
+                        Label(NSLocalizedString("从照片选择", comment: "Choose roleplay card from Photos"), systemImage: "photo.on.rectangle")
+                    }
+
+                    Button {
+                        isImporting = true
+                    } label: {
+                        Label(NSLocalizedString("从文件选择", comment: "Choose roleplay card from Files"), systemImage: "folder")
+                    }
                 } label: {
                     Label(NSLocalizedString("导入角色卡", comment: "Import roleplay card"), systemImage: "square.and.arrow.down")
                 }
@@ -124,6 +138,16 @@ private struct RoleplayCharacterLibraryView: View {
             allowsMultipleSelection: false,
             onCompletion: importCard
         )
+        .photosPicker(
+            isPresented: $isSelectingCardPhoto,
+            selection: $selectedCardPhoto,
+            matching: .images,
+            preferredItemEncoding: .current
+        )
+        .onChange(of: selectedCardPhoto) { _, photo in
+            guard let photo else { return }
+            importCard(from: photo)
+        }
         .alert(
             NSLocalizedString("角色卡导入完成", comment: "Roleplay card import complete"),
             isPresented: Binding(
@@ -181,16 +205,40 @@ private struct RoleplayCharacterLibraryView: View {
             defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try await Task.detached(priority: .userInitiated) { try Data(contentsOf: url) }.value
-                let imported = try await Task.detached(priority: .userInitiated) {
-                    try ChatService.shared.importRoleplayCard(data: data, fileName: url.lastPathComponent)
-                }.value
-                importError = nil
-                importedCharacter = imported.character
-                reload()
+                try await importCard(data: data, fileName: url.lastPathComponent)
             } catch {
                 importError = error.localizedDescription
             }
         }
+    }
+
+    private func importCard(from photo: PhotosPickerItem) {
+        Task {
+            defer { selectedCardPhoto = nil }
+            do {
+                guard let data = try await photo.loadTransferable(type: Data.self) else {
+                    importError = NSLocalizedString("无法读取图片数据。", comment: "Unable to read roleplay card image data")
+                    return
+                }
+                let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+                guard data.starts(with: pngSignature) else {
+                    importError = NSLocalizedString("请选择 PNG 格式的角色卡图片。", comment: "Roleplay card photo must be PNG")
+                    return
+                }
+                try await importCard(data: data, fileName: "photo-library-card.png")
+            } catch {
+                importError = error.localizedDescription
+            }
+        }
+    }
+
+    private func importCard(data: Data, fileName: String) async throws {
+        let imported = try await Task.detached(priority: .userInitiated) {
+            try ChatService.shared.importRoleplayCard(data: data, fileName: fileName)
+        }.value
+        importError = nil
+        importedCharacter = imported.character
+        reload()
     }
 }
 
@@ -461,6 +509,8 @@ private struct PersonaEditorView: View {
     @State private var persona: PersonaProfile
     @State private var avatarData: Data?
     @State private var isImportingAvatar = false
+    @State private var isSelectingAvatarPhoto = false
+    @State private var selectedAvatarPhoto: PhotosPickerItem?
     @State private var avatarError: String?
     let onSave: (PersonaProfile, Data?) -> Void
 
@@ -477,8 +527,18 @@ private struct PersonaEditorView: View {
                     TextField(NSLocalizedString("称谓或代词", comment: "Pronouns"), text: $persona.pronouns)
                 }
                 Section(NSLocalizedString("头像", comment: "Persona avatar section")) {
-                    Button {
-                        isImportingAvatar = true
+                    Menu {
+                        Button {
+                            isSelectingAvatarPhoto = true
+                        } label: {
+                            Label(NSLocalizedString("从照片选择", comment: "Choose persona avatar from Photos"), systemImage: "photo.on.rectangle")
+                        }
+
+                        Button {
+                            isImportingAvatar = true
+                        } label: {
+                            Label(NSLocalizedString("从文件选择", comment: "Choose persona avatar from Files"), systemImage: "folder")
+                        }
                     } label: {
                         Label(NSLocalizedString("选择头像", comment: "Choose persona avatar"), systemImage: "person.crop.circle.badge.plus")
                     }
@@ -526,14 +586,51 @@ private struct PersonaEditorView: View {
                 Task {
                     defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
                     do {
-                        avatarData = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
-                        avatarError = nil
+                        let data = try await Task.detached(priority: .utility) { try Data(contentsOf: url) }.value
+                        await selectAvatar(data: data)
                     } catch {
                         avatarError = error.localizedDescription
                     }
                 }
             }
+            .photosPicker(
+                isPresented: $isSelectingAvatarPhoto,
+                selection: $selectedAvatarPhoto,
+                matching: .images,
+                preferredItemEncoding: .current
+            )
+            .onChange(of: selectedAvatarPhoto) { _, photo in
+                guard let photo else { return }
+                importAvatar(from: photo)
+            }
         }
+    }
+
+    private func importAvatar(from photo: PhotosPickerItem) {
+        Task {
+            defer { selectedAvatarPhoto = nil }
+            do {
+                guard let data = try await photo.loadTransferable(type: Data.self) else {
+                    avatarError = NSLocalizedString("无法读取图片数据。", comment: "Unable to read persona avatar image data")
+                    return
+                }
+                await selectAvatar(data: data)
+            } catch {
+                avatarError = error.localizedDescription
+            }
+        }
+    }
+
+    private func selectAvatar(data: Data) async {
+        let pngData = await Task.detached(priority: .utility) {
+            UIImage(data: data)?.pngData()
+        }.value
+        guard let pngData else {
+            avatarError = NSLocalizedString("无法解析图片。", comment: "Unable to decode persona avatar image")
+            return
+        }
+        avatarData = pngData
+        avatarError = nil
     }
 }
 
