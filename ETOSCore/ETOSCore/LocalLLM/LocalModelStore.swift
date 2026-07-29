@@ -187,6 +187,14 @@ public final class LocalModelStore: ObservableObject {
 
     public func delete(_ record: LocalModelRecord, deleteFile: Bool = true) {
         models.removeAll { $0.id == record.id }
+        for index in models.indices {
+            if models[index].speechDecoderModelID == record.id {
+                models[index].speechDecoderModelID = nil
+            }
+            if models[index].speechVADModelID == record.id {
+                models[index].speechVADModelID = nil
+            }
+        }
         if deleteFile {
             try? fileManager.removeItem(at: fileURL(for: record))
             if let mmprojRelativePath = record.mmprojRelativePath,
@@ -233,7 +241,7 @@ public final class LocalModelStore: ObservableObject {
         let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
         let size = attributes[.size] as? Int64 ?? 0
         let now = Date()
-        let record = LocalModelRecord(
+        var record = LocalModelRecord(
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent,
             fileName: fileName,
@@ -242,16 +250,50 @@ public final class LocalModelStore: ObservableObject {
             mmprojFileName: importedProjector?.fileName,
             mmprojRelativePath: importedProjector?.relativePath,
             mmprojFileSize: importedProjector?.fileSize,
+            ggufArchitecture: LocalGGUFMetadata.architecture(at: destinationURL),
             createdAt: now,
             updatedAt: now
         )
+        autoLinkSpeechCompanions(to: &record)
         models.append(record)
+        linkNewSpeechCompanion(record)
         persistModels()
         if !isProviderEnabled {
             setProviderEnabled(true)
         }
         NotificationCenter.default.post(name: .localModelStoreDidChange, object: nil)
         return record
+    }
+
+    private func autoLinkSpeechCompanions(to record: inout LocalModelRecord) {
+        guard let architecture = record.speechArchitecture else { return }
+        if architecture.requiresDecoderModel {
+            record.speechDecoderModelID = models.first {
+                $0.ggufArchitecture == "qwen3" && fileExists(for: $0)
+            }?.id
+        }
+        if architecture.isTranscriptionModel {
+            record.speechVADModelID = models.first {
+                $0.speechArchitecture == .fsmnVAD && fileExists(for: $0)
+            }?.id
+        }
+    }
+
+    private func linkNewSpeechCompanion(_ record: LocalModelRecord) {
+        if record.ggufArchitecture == "qwen3" {
+            for index in models.indices where
+                models[index].speechArchitecture == .funASRNanoEncoder
+                    && models[index].speechDecoderModelID == nil {
+                models[index].speechDecoderModelID = record.id
+            }
+        }
+        if record.speechArchitecture == .fsmnVAD {
+            for index in models.indices where
+                models[index].isSpeechTranscriptionModel
+                    && models[index].speechVADModelID == nil {
+                models[index].speechVADModelID = record.id
+            }
+        }
     }
 
     private struct ImportedProjectorFile {
@@ -292,9 +334,35 @@ public final class LocalModelStore: ObservableObject {
         guard let data = try? Data(contentsOf: metadataURL) else { return [] }
         do {
             let snapshot = try JSONDecoder.localModelDecoder.decode(LocalModelStoreSnapshot.self, from: data)
-            let models = snapshot.schemaVersion < 2
+            var models = snapshot.schemaVersion < 2
                 ? snapshot.models.map { $0.removingLegacyForcedDefaultOverrides() }
                 : snapshot.models
+            for index in models.indices where models[index].ggufArchitecture == nil {
+                let url = directoryURL.appendingPathComponent(models[index].relativePath)
+                models[index].ggufArchitecture = LocalGGUFMetadata.architecture(at: url)
+            }
+            let qwenDecoderID = models.first {
+                $0.ggufArchitecture == "qwen3"
+                    && fileManager.fileExists(
+                        atPath: directoryURL.appendingPathComponent($0.relativePath).path
+                    )
+            }?.id
+            let vadModelID = models.first {
+                $0.speechArchitecture == .fsmnVAD
+                    && fileManager.fileExists(
+                        atPath: directoryURL.appendingPathComponent($0.relativePath).path
+                    )
+            }?.id
+            for index in models.indices {
+                if models[index].speechArchitecture == .funASRNanoEncoder,
+                   models[index].speechDecoderModelID == nil {
+                    models[index].speechDecoderModelID = qwenDecoderID
+                }
+                if models[index].isSpeechTranscriptionModel,
+                   models[index].speechVADModelID == nil {
+                    models[index].speechVADModelID = vadModelID
+                }
+            }
             return models.sorted { lhs, rhs in
                 if lhs.createdAt == rhs.createdAt {
                     return lhs.id.uuidString < rhs.id.uuidString

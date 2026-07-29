@@ -37,7 +37,9 @@ public enum LocalModelProviderBridge {
     }
 
     public static func runnableModels(from records: [LocalModelRecord]) -> [RunnableModel] {
-        records.map(runnableModel(for:))
+        records
+            .filter { !$0.isSpeechAuxiliaryModel }
+            .map(runnableModel(for:))
     }
 
     public static func localRecordID(from runnableModelID: String) -> UUID? {
@@ -71,8 +73,13 @@ public enum LocalModelProviderBridge {
         writeOverride("sampler_seq", value: record.samplerKinds.map { .string(LocalLLMSamplerKind.chainString($0)) }, to: &overrideParameters, preferRecordBasics: preferRecordBasics)
         writeOverride("llama_cli_args", value: record.advancedArguments.nilIfEmpty.map(JSONValue.string), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
 
-        let capabilities = Model.orderedCapabilities((existingModel?.capabilities ?? []) + [.streaming])
-        let inputModalities = resolvedInputModalities(for: record, existingModel: existingModel, preferRecordBasics: preferRecordBasics)
+        let isSpeechModel = record.isSpeechTranscriptionModel
+        let capabilities = isSpeechModel
+            ? [.speechToText]
+            : Model.orderedCapabilities((existingModel?.capabilities ?? []) + [.streaming])
+        let inputModalities = isSpeechModel
+            ? [.audio]
+            : resolvedInputModalities(for: record, existingModel: existingModel, preferRecordBasics: preferRecordBasics)
 
         return Model(
             id: record.id,
@@ -83,9 +90,9 @@ public enum LocalModelProviderBridge {
             pickerGroupName: existingModel?.pickerGroupName,
             isActivated: preferRecordBasics ? record.isActivated : (existingModel?.isActivated ?? record.isActivated),
             overrideParameters: overrideParameters,
-            kind: existingModel?.kind ?? .chat,
+            kind: isSpeechModel ? .speechToText : (existingModel?.kind ?? .chat),
             inputModalities: inputModalities,
-            outputModalities: existingModel?.outputModalities ?? [.text],
+            outputModalities: isSpeechModel ? [.text] : (existingModel?.outputModalities ?? [.text]),
             capabilities: capabilities,
             requestBodyOverrideMode: existingModel?.requestBodyOverrideMode ?? .keyValue,
             rawRequestBodyJSON: existingModel?.rawRequestBodyJSON,
@@ -103,7 +110,7 @@ public enum LocalModelProviderBridge {
             baseURL: sanitized(existingProvider?.baseURL).nilIfEmpty ?? defaultBaseURL,
             apiKeys: existingProvider?.apiKeys ?? [],
             apiFormat: apiFormat,
-            models: records.map { record in
+            models: records.filter { !$0.isSpeechAuxiliaryModel }.map { record in
                 model(
                     for: record,
                     preserving: existingModelsByID[record.id],

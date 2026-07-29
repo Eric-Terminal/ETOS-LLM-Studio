@@ -219,6 +219,11 @@ private struct LocalModelRow: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+            if let architecture = record.speechArchitecture {
+                Label(architecture.localizedTitle, systemImage: "waveform")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if !record.isActivated {
                 Text(NSLocalizedString("未启用", comment: "Inactive local model"))
                     .etFont(.caption2)
@@ -293,9 +298,15 @@ private struct LocalModelDetailView: View {
 
             Section {
                 TextField(NSLocalizedString("名称", comment: "Local model display name"), text: $draft.displayName.watchKeyboardNewlineBinding())
-                Toggle(NSLocalizedString("加入候选模型", comment: "Activate local model"), isOn: $draft.isActivated)
+                if draft.isSpeechAuxiliaryModel {
+                    Label(NSLocalizedString("语音分段辅助模型", comment: "Speech VAD auxiliary model role"), systemImage: "waveform")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Toggle(NSLocalizedString("加入候选模型", comment: "Activate local model"), isOn: $draft.isActivated)
+                }
             }
 
+            speechSection
             runtimeSection
             multimodalSection
             samplingSection
@@ -382,6 +393,80 @@ private struct LocalModelDetailView: View {
         } message: {
             Text(NSLocalizedString("要保存当前本地模型设置，还是放弃更改并离开？", comment: "Unsaved local model settings alert message"))
         }
+    }
+
+    @ViewBuilder
+    private var speechSection: some View {
+        if let architecture = draft.speechArchitecture {
+            Section {
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("GGUF 架构", comment: "Local GGUF architecture label"))
+                    Text(architecture.localizedTitle)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if architecture.requiresDecoderModel {
+                    Picker(
+                        NSLocalizedString("解码模型", comment: "Local speech decoder model picker"),
+                        selection: $draft.speechDecoderModelID
+                    ) {
+                        Text(NSLocalizedString("未选择", comment: "No associated local model"))
+                            .tag(UUID?.none)
+                        ForEach(speechDecoderCandidates) { record in
+                            Text(record.sanitizedDisplayName)
+                                .tag(Optional(record.id))
+                        }
+                    }
+                }
+
+                if architecture.isTranscriptionModel {
+                    Picker(
+                        NSLocalizedString("VAD 模型", comment: "Local speech VAD model picker"),
+                        selection: $draft.speechVADModelID
+                    ) {
+                        Text(NSLocalizedString("不使用", comment: "Do not use an optional local model"))
+                            .tag(UUID?.none)
+                        ForEach(speechVADCandidates) { record in
+                            Text(record.sanitizedDisplayName)
+                                .tag(Optional(record.id))
+                        }
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("本地语音转写", comment: "Local speech transcription section"))
+            } footer: {
+                Text(speechSectionFooter(for: architecture))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var speechDecoderCandidates: [LocalModelRecord] {
+        store.models.filter {
+            $0.id != draft.id
+                && $0.ggufArchitecture == "qwen3"
+                && store.fileExists(for: $0)
+        }
+    }
+
+    private var speechVADCandidates: [LocalModelRecord] {
+        store.models.filter {
+            $0.id != draft.id
+                && $0.speechArchitecture == .fsmnVAD
+                && store.fileExists(for: $0)
+        }
+    }
+
+    private func speechSectionFooter(for architecture: LocalSpeechModelArchitecture) -> String {
+        if architecture == .funASRNanoEncoder {
+            return NSLocalizedString("Fun-ASR-Nano 必须关联本地 Qwen3 解码模型；FSMN-VAD 可选。", comment: "Fun-ASR-Nano local model association footer")
+        }
+        if architecture == .fsmnVAD {
+            return NSLocalizedString("FSMN-VAD 只负责切分语音，请在转写模型中关联使用。", comment: "FSMN-VAD auxiliary model footer")
+        }
+        return NSLocalizedString("SenseVoiceSmall 与 Paraformer 可直接转写，也可以关联 FSMN-VAD 处理长音频。", comment: "Local speech model footer")
     }
 
     private var runtimeSection: some View {

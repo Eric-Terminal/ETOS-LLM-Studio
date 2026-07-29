@@ -99,6 +99,18 @@ typedef struct etos_local_llm_embedding_config {
     int32_t media_count;
 } etos_local_llm_embedding_config;
 
+typedef struct etos_local_speech_config {
+    const char * decoder_model_path;
+    const char * vad_model_path;
+    int32_t context_size;
+    int32_t max_output_tokens;
+    int32_t gpu_layers;
+    int32_t thread_count;
+    int32_t chunk_seconds;
+    int32_t vad_max_segment_milliseconds;
+    int32_t use_model_cache;
+} etos_local_speech_config;
+
 int32_t etos_local_llm_generate(
     const char * model_path,
     const char * prompt,
@@ -181,6 +193,23 @@ int32_t etos_local_llm_embed(
     float ** output,
     int32_t * embedding_count,
     int32_t * embedding_dimension,
+    char ** error_message
+);
+
+int32_t etos_local_gguf_architecture(
+    const char * model_path,
+    char ** architecture,
+    char ** error_message
+);
+
+int32_t etos_local_speech_transcribe(
+    const char * model_path,
+    const float * audio_samples,
+    int32_t sample_count,
+    const etos_local_speech_config * config,
+    etos_local_llm_cancel_callback cancel_callback,
+    void * user_data,
+    char ** output,
     char ** error_message
 );
 

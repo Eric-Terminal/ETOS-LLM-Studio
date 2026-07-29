@@ -8,6 +8,39 @@
 
 import Foundation
 
+public enum LocalSpeechModelArchitecture: String, Codable, Hashable, Sendable {
+    case senseVoiceSmall = "sensevoice-small"
+    case paraformer
+    case funASRNanoEncoder = "funasr-sensevoice-encoder"
+    case fsmnVAD = "fsmn-vad"
+
+    public var isTranscriptionModel: Bool {
+        switch self {
+        case .senseVoiceSmall, .paraformer, .funASRNanoEncoder:
+            return true
+        case .fsmnVAD:
+            return false
+        }
+    }
+
+    public var requiresDecoderModel: Bool {
+        self == .funASRNanoEncoder
+    }
+
+    public var localizedTitle: String {
+        switch self {
+        case .senseVoiceSmall:
+            return "SenseVoiceSmall"
+        case .paraformer:
+            return "Paraformer"
+        case .funASRNanoEncoder:
+            return "Fun-ASR-Nano"
+        case .fsmnVAD:
+            return "FSMN-VAD"
+        }
+    }
+}
+
 public enum LocalLLMFlashAttentionMode: Int32, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case auto = -1
     case disabled = 0
@@ -77,6 +110,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var mmprojFileName: String?
     public var mmprojRelativePath: String?
     public var mmprojFileSize: Int64?
+    public var ggufArchitecture: String?
+    public var speechDecoderModelID: UUID?
+    public var speechVADModelID: UUID?
     public var createdAt: Date
     public var updatedAt: Date
     public var isActivated: Bool
@@ -113,6 +149,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         mmprojFileName: String? = nil,
         mmprojRelativePath: String? = nil,
         mmprojFileSize: Int64? = nil,
+        ggufArchitecture: String? = nil,
+        speechDecoderModelID: UUID? = nil,
+        speechVADModelID: UUID? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isActivated: Bool = true,
@@ -148,6 +187,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.mmprojFileName = mmprojFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.mmprojRelativePath = mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.mmprojFileSize = mmprojFileSize
+        self.ggufArchitecture = ggufArchitecture?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.speechDecoderModelID = speechDecoderModelID
+        self.speechVADModelID = speechVADModelID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isActivated = isActivated
@@ -274,6 +316,19 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
+    public var speechArchitecture: LocalSpeechModelArchitecture? {
+        guard let ggufArchitecture else { return nil }
+        return LocalSpeechModelArchitecture(rawValue: ggufArchitecture)
+    }
+
+    public var isSpeechTranscriptionModel: Bool {
+        speechArchitecture?.isTranscriptionModel == true
+    }
+
+    public var isSpeechAuxiliaryModel: Bool {
+        speechArchitecture == .fsmnVAD
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case displayName
@@ -283,6 +338,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         case mmprojFileName
         case mmprojRelativePath
         case mmprojFileSize
+        case ggufArchitecture
+        case speechDecoderModelID
+        case speechVADModelID
         case createdAt
         case updatedAt
         case isActivated
@@ -322,6 +380,9 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
             mmprojFileName: try container.decodeIfPresent(String.self, forKey: .mmprojFileName),
             mmprojRelativePath: try container.decodeIfPresent(String.self, forKey: .mmprojRelativePath),
             mmprojFileSize: try container.decodeIfPresent(Int64.self, forKey: .mmprojFileSize),
+            ggufArchitecture: try container.decodeIfPresent(String.self, forKey: .ggufArchitecture),
+            speechDecoderModelID: try container.decodeIfPresent(UUID.self, forKey: .speechDecoderModelID),
+            speechVADModelID: try container.decodeIfPresent(UUID.self, forKey: .speechVADModelID),
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             isActivated: try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? true,
@@ -354,6 +415,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public mutating func normalizeGenerationParameters() {
         mmprojFileName = mmprojFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         mmprojRelativePath = mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        ggufArchitecture = ggufArchitecture?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         if mmprojRelativePath == nil {
             mmprojFileName = nil
             mmprojFileSize = nil

@@ -113,12 +113,17 @@ extension ChatService {
         AppConfigStore.persistStringArray(mergedIDs, for: .modelOrderRunnableModels)
     }
 
-    func localModelRecord(for runnableModel: RunnableModel) -> LocalModelRecord? {
+    func localModelRecord(
+        for runnableModel: RunnableModel,
+        requiresExistingFile: Bool = true
+    ) -> LocalModelRecord? {
         guard LocalModelProviderBridge.isLocalRunnableModel(runnableModel),
               let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id) else {
             return nil
         }
-        return localModelStore.models.first { $0.id == recordID && localModelStore.fileExists(for: $0) }
+        return localModelStore.models.first {
+            $0.id == recordID && (!requiresExistingFile || localModelStore.fileExists(for: $0))
+        }
     }
 
     func reconcileStoredProviderOrder() {

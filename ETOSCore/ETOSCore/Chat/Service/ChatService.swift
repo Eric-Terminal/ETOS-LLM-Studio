@@ -682,6 +682,54 @@ public class ChatService {
             return transcript
         }
 
+        if LocalModelProviderBridge.isLocalRunnableModel(model),
+           let record = localModelRecord(for: model, requiresExistingFile: false),
+           record.isSpeechTranscriptionModel {
+            let decoderRecord = record.speechDecoderModelID.flatMap { decoderID in
+                localModelStore.models.first {
+                    $0.id == decoderID && localModelStore.fileExists(for: $0)
+                }
+            }
+            if record.speechArchitecture?.requiresDecoderModel == true,
+               decoderRecord == nil {
+                throw LocalSpeechEngineError.transcriptionFailed(
+                    NSLocalizedString("Fun-ASR-Nano 尚未关联可用的本地 Qwen 解码模型。", comment: "Fun-ASR-Nano decoder not configured")
+                )
+            }
+            let vadRecord = record.speechVADModelID.flatMap { vadID in
+                localModelStore.models.first {
+                    $0.id == vadID
+                        && $0.speechArchitecture == .fsmnVAD
+                        && localModelStore.fileExists(for: $0)
+                }
+            }
+            let extensionFromName = URL(fileURLWithPath: fileName).pathExtension
+            let fallbackExtension = mimeType.lowercased().contains("wav") ? "wav" : "m4a"
+            let localModelCacheEnabled = await MainActor.run {
+                AppConfigStore.shared.localModelCacheEnabled
+            }
+            #if os(watchOS)
+            let gpuLayers = 0
+            #else
+            let gpuLayers = record.effectiveGPULayers
+            #endif
+            let transcript = try await LocalSpeechEngine.transcribe(
+                audioData: audioData,
+                fileExtension: extensionFromName.isEmpty ? fallbackExtension : extensionFromName,
+                modelURL: localModelStore.fileURL(for: record),
+                decoderModelURL: decoderRecord.map(localModelStore.fileURL(for:)),
+                vadModelURL: vadRecord.map(localModelStore.fileURL(for:)),
+                options: LocalSpeechTranscriptionOptions(
+                    contextSize: record.effectiveContextSize,
+                    maxOutputTokens: record.effectiveMaxOutputTokens,
+                    gpuLayers: gpuLayers,
+                    useModelCache: localModelCacheEnabled
+                )
+            )
+            logger.info("本地语音识别完成，长度 \(transcript.count) 字符。")
+            return transcript
+        }
+
         logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
         guard let adapter = adapters[model.provider.apiFormat] else {

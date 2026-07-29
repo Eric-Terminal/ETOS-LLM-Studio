@@ -154,6 +154,86 @@ struct LocalModelStoreTests {
         #expect(model.overrideParameters["image_max_tokens"] == .int(1120))
     }
 
+    @Test("本地语音 GGUF 会映射为语音转文字模型")
+    func localSpeechModelsExposeSpeechCapabilitiesAndHideVAD() throws {
+        let architectures: [LocalSpeechModelArchitecture] = [
+            .senseVoiceSmall,
+            .paraformer,
+            .funASRNanoEncoder
+        ]
+        let records = architectures.map { architecture in
+            LocalModelRecord(
+                displayName: architecture.localizedTitle,
+                fileName: "\(architecture.rawValue).gguf",
+                relativePath: "\(architecture.rawValue).gguf",
+                fileSize: 8,
+                ggufArchitecture: architecture.rawValue
+            )
+        }
+        let vad = LocalModelRecord(
+            displayName: "FSMN-VAD",
+            fileName: "fsmn-vad.gguf",
+            relativePath: "fsmn-vad.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.fsmnVAD.rawValue
+        )
+
+        for record in records {
+            let model = LocalModelProviderBridge.model(for: record)
+            #expect(model.kind == .speechToText)
+            #expect(model.inputModalities == [.audio])
+            #expect(model.outputModalities == [.text])
+            #expect(model.capabilities == [.speechToText])
+            #expect(model.supportsSpeechToText)
+        }
+
+        let provider = LocalModelProviderBridge.provider(records: records + [vad])
+        #expect(provider.models.count == architectures.count)
+        #expect(!provider.models.contains(where: { $0.id == vad.id }))
+    }
+
+    @Test("语音模型关联会持久化并在辅助模型删除后清理")
+    func localSpeechAssociationsPersistAndClearOnDelete() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let decoder = LocalModelRecord(
+            displayName: "Qwen3",
+            fileName: "qwen3.gguf",
+            relativePath: "qwen3.gguf",
+            fileSize: 8,
+            ggufArchitecture: "qwen3"
+        )
+        let vad = LocalModelRecord(
+            displayName: "FSMN-VAD",
+            fileName: "fsmn-vad.gguf",
+            relativePath: "fsmn-vad.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.fsmnVAD.rawValue
+        )
+        let encoder = LocalModelRecord(
+            displayName: "Fun-ASR-Nano",
+            fileName: "encoder.gguf",
+            relativePath: "encoder.gguf",
+            fileSize: 8,
+            ggufArchitecture: LocalSpeechModelArchitecture.funASRNanoEncoder.rawValue,
+            speechDecoderModelID: decoder.id,
+            speechVADModelID: vad.id
+        )
+        store.update(decoder)
+        store.update(vad)
+        store.update(encoder)
+
+        let reloaded = LocalModelStore(directoryURL: store.directoryURL)
+        let persistedEncoder = try #require(reloaded.models.first(where: { $0.id == encoder.id }))
+        #expect(persistedEncoder.speechDecoderModelID == decoder.id)
+        #expect(persistedEncoder.speechVADModelID == vad.id)
+
+        reloaded.delete(vad, deleteFile: false)
+        #expect(reloaded.models.first(where: { $0.id == encoder.id })?.speechVADModelID == nil)
+        #expect(reloaded.models.first(where: { $0.id == encoder.id })?.speechDecoderModelID == decoder.id)
+    }
+
     @Test("本地模型开关决定虚拟提供商是否出现")
     func localProviderBridgeHonorsEnabledSwitch() {
         let record = LocalModelRecord(
@@ -434,6 +514,40 @@ struct LocalModelStoreTests {
                 return
             }
             #expect(fileName == "missing.gguf")
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+    }
+
+    @Test("本地语音转写不会退回远端适配器")
+    func localSpeechTranscriptionRoutesBeforeAdapterLookup() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = LocalModelRecord(
+            displayName: "SenseVoiceSmall",
+            fileName: "missing-sensevoice.gguf",
+            relativePath: "missing-sensevoice.gguf",
+            fileSize: 0,
+            ggufArchitecture: LocalSpeechModelArchitecture.senseVoiceSmall.rawValue
+        )
+        store.update(record)
+        let service = ChatService(adapters: [:], localModelStore: store)
+
+        do {
+            _ = try await service.transcribeAudio(
+                using: LocalModelProviderBridge.runnableModel(for: record),
+                audioData: Data([1, 2, 3]),
+                fileName: "recording.m4a",
+                mimeType: "audio/m4a"
+            )
+            Issue.record("缺失本地语音模型文件时不应转写成功。")
+        } catch let error as LocalSpeechEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "missing-sensevoice.gguf")
         } catch {
             Issue.record("抛出了非预期错误：\(error.localizedDescription)")
         }
