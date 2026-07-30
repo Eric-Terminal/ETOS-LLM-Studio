@@ -393,7 +393,7 @@ struct WatchFontSettingsView: View {
         } header: {
             Text(NSLocalizedString("行距", comment: ""))
         } footer: {
-            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.15 em。", comment: ""))
+            Text(NSLocalizedString("控制聊天正文多行文字的额外行距，范围为 0.00 em 到 1.00 em；默认 0.15 em。", comment: ""))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
         }

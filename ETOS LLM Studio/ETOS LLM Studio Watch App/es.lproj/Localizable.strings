@@ -5301,7 +5301,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "聊天正文行距" = "Interlineado del texto del chat";
 "恢复默认行距" = "Restaurar interlineado predeterminado";
 "行距" = "Interlineado";
-"控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.15 em。" = "Ajusta el espacio adicional entre las líneas del texto del chat, de 0,00 em a 0,50 em; el valor predeterminado es 0,15 em.";
+"控制聊天正文多行文字的额外行距，范围为 0.00 em 到 1.00 em；默认 0.15 em。" = "Ajusta el espacio adicional entre las líneas del texto del chat, de 0,00 em a 1,00 em; el valor predeterminado es 0,15 em.";
 "%.3f em" = "%.3f em";
 "语音分段辅助模型" = "Modelo auxiliar de segmentación de voz";
 "GGUF 架构" = "Arquitectura GGUF";

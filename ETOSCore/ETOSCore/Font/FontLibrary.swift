@@ -23,7 +23,7 @@ public enum FontLibrary {
     public static let defaultFontScale = 1.0
     public static let fontScaleStep = 0.05
     public static let minimumLineSpacingEm = 0.0
-    public static let maximumLineSpacingEm = 0.5
+    public static let maximumLineSpacingEm = 1.0
     public static let defaultIOSLineSpacingEm = 0.2
     public static let defaultWatchLineSpacingEm = 0.15
     public static let lineSpacingStepEm = 0.025

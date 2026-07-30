@@ -5290,7 +5290,7 @@
 "聊天正文行距" = "Chat Text Line Spacing";
 "恢复默认行距" = "Restore Default Line Spacing";
 "行距" = "Line Spacing";
-"控制聊天正文多行文字的额外行距，范围为 0.00 em 到 0.50 em；默认 0.20 em。" = "Adjusts the extra spacing between lines in chat text, from 0.00 em to 0.50 em; the default is 0.20 em.";
+"控制聊天正文多行文字的额外行距，范围为 0.00 em 到 1.00 em；默认 0.20 em。" = "Adjusts the extra spacing between lines in chat text, from 0.00 em to 1.00 em; the default is 0.20 em.";
 "玻璃底色不透明度" = "Glass Tint Opacity";
 "恢复默认玻璃底色" = "Restore Default Glass Tint";
 "%.3f em" = "%.3f em";
