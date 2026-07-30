@@ -126,15 +126,19 @@ struct ETAdvancedMarkdownRenderer: View {
     }
 
     private var ruleRenderRequest: ChatAppearanceTextRuleRenderRequest? {
-        guard !isStreaming,
-              let customTextStyleColors,
-              !customTextStyleColors.customRules.isEmpty else {
-            return nil
-        }
+        guard !isStreaming else { return nil }
+        let fontRules = FontLibrary.resolvedTextFontRules()
+        let resolvedStyleColors = customTextStyleColors
+            ?? ChatAppearanceTextStyleColors(defaultHex: "000000FF")
+        guard !resolvedStyleColors.customRules.isEmpty || !fontRules.isEmpty else { return nil }
         return ChatAppearanceTextRuleRenderRequest(
             source: content,
             usesMarkdown: enableMarkdown,
-            styleColors: customTextStyleColors
+            styleColors: resolvedStyleColors,
+            fontRules: fontRules,
+            fontPointSize: 15,
+            fontScale: FontLibrary.customFontScale,
+            fontFallbackScope: FontLibrary.fallbackScope
         )
     }
 

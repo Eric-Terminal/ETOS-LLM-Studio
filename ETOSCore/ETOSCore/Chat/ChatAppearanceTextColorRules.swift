@@ -1,16 +1,18 @@
 // ============================================================================
 // ChatAppearanceTextColorRules.swift
 // ============================================================================
-// 聊天文字自定义着色规则与纯文本匹配器
+// 聊天文字自定义着色规则与颜色、字体共用的纯文本匹配器
 // ============================================================================
 
 import Foundation
 
-public enum ChatAppearanceTextColorRuleKind: String, Codable, CaseIterable, Sendable {
+public enum ChatAppearanceTextRuleKind: String, Codable, CaseIterable, Hashable, Sendable {
     case exactText
     case delimitedText
     case regularExpression
 }
+
+public typealias ChatAppearanceTextColorRuleKind = ChatAppearanceTextRuleKind
 
 public struct ChatAppearanceTextColorRule: Codable, Identifiable, Equatable, Hashable, Sendable {
     public var id: String
@@ -52,6 +54,29 @@ public struct ChatAppearanceTextColorRule: Codable, Identifiable, Equatable, Has
     }
 }
 
+protocol ChatAppearanceTextMatchingRule {
+    var id: String { get }
+    var isEnabled: Bool { get }
+    var kind: ChatAppearanceTextRuleKind { get }
+    var exactText: String { get }
+    var startDelimiter: String { get }
+    var endDelimiter: String { get }
+    var includesDelimiters: Bool { get }
+    var hasConfiguredMatch: Bool { get }
+}
+
+extension ChatAppearanceTextColorRule: ChatAppearanceTextMatchingRule {
+    var hasConfiguredMatch: Bool {
+        isConfigured
+    }
+}
+
+struct ChatAppearanceTextMatchSpan {
+    let location: Int
+    let length: Int
+    let ruleID: String
+}
+
 public struct ChatAppearanceTextColorSpan: Equatable, Hashable, Sendable {
     public let location: Int
     public let length: Int
@@ -70,12 +95,12 @@ public struct ChatAppearanceTextColorSpan: Equatable, Hashable, Sendable {
     }
 }
 
-public enum ChatAppearanceTextColorMatcher {
-    public static func spans(
+enum ChatAppearanceTextMatchingEngine {
+    static func spans<Rule: ChatAppearanceTextMatchingRule>(
         in text: String,
-        rules: [ChatAppearanceTextColorRule],
+        rules: [Rule],
         excludedRanges: [Range<Int>] = []
-    ) -> [ChatAppearanceTextColorSpan] {
+    ) -> [ChatAppearanceTextMatchSpan] {
         let textUnits = Array(text.utf16)
         guard !textUnits.isEmpty else { return [] }
 
@@ -83,18 +108,17 @@ public enum ChatAppearanceTextColorMatcher {
             .map { max(0, $0.lowerBound)..<min(textUnits.count, $0.upperBound) }
             .filter { !$0.isEmpty }
         var occupiedRanges = protectedRanges
-        var result: [ChatAppearanceTextColorSpan] = []
+        var result: [ChatAppearanceTextMatchSpan] = []
 
-        for rule in rules where rule.isEnabled && rule.isConfigured {
+        for rule in rules where rule.isEnabled && rule.hasConfiguredMatch {
             let candidates = candidateRanges(for: rule, in: text, textUnits: textUnits)
             for candidate in candidates {
                 let availableRanges = subtract(occupiedRanges, from: candidate)
                 for range in availableRanges where !range.isEmpty {
                     result.append(
-                        ChatAppearanceTextColorSpan(
+                        ChatAppearanceTextMatchSpan(
                             location: range.lowerBound,
                             length: range.count,
-                            colorHex: rule.colorHex,
                             ruleID: rule.id
                         )
                     )
@@ -108,8 +132,8 @@ public enum ChatAppearanceTextColorMatcher {
         }
     }
 
-    private static func candidateRanges(
-        for rule: ChatAppearanceTextColorRule,
+    private static func candidateRanges<Rule: ChatAppearanceTextMatchingRule>(
+        for rule: Rule,
         in text: String,
         textUnits: [UTF16.CodeUnit]
     ) -> [Range<Int>] {
@@ -128,7 +152,7 @@ public enum ChatAppearanceTextColorMatcher {
         }
     }
 
-    public static func isValidRegularExpression(_ pattern: String) async -> Bool {
+    static func isValidRegularExpression(_ pattern: String) async -> Bool {
         guard !pattern.isEmpty else { return true }
         return await Task.detached(priority: .userInitiated) {
             (try? NSRegularExpression(pattern: pattern)) != nil
@@ -229,5 +253,36 @@ public enum ChatAppearanceTextColorMatcher {
             }
         }
         return remaining
+    }
+}
+
+public enum ChatAppearanceTextColorMatcher {
+    public static func spans(
+        in text: String,
+        rules: [ChatAppearanceTextColorRule],
+        excludedRanges: [Range<Int>] = []
+    ) -> [ChatAppearanceTextColorSpan] {
+        let colorByRuleID = rules.reduce(into: [String: String]()) { result, rule in
+            if result[rule.id] == nil {
+                result[rule.id] = rule.colorHex
+            }
+        }
+        return ChatAppearanceTextMatchingEngine.spans(
+            in: text,
+            rules: rules,
+            excludedRanges: excludedRanges
+        ).compactMap { span in
+            guard let colorHex = colorByRuleID[span.ruleID] else { return nil }
+            return ChatAppearanceTextColorSpan(
+                location: span.location,
+                length: span.length,
+                colorHex: colorHex,
+                ruleID: span.ruleID
+            )
+        }
+    }
+
+    public static func isValidRegularExpression(_ pattern: String) async -> Bool {
+        await ChatAppearanceTextMatchingEngine.isValidRegularExpression(pattern)
     }
 }

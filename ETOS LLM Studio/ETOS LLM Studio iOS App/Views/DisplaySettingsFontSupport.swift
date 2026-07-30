@@ -67,6 +67,7 @@ struct FontSettingsView: View {
 
             fontFilesSection
             stylePrioritySection
+            textFontRulesSection
             previewSection
         }
         .navigationTitle(NSLocalizedString("字体设置", comment: ""))
@@ -419,6 +420,37 @@ struct FontSettingsView: View {
         }
     }
 
+    private var textFontRulesSection: some View {
+        Section {
+            ForEach(routes.customTextRules) { rule in
+                NavigationLink {
+                    ChatTextFontRuleEditorView(
+                        initialRule: rule,
+                        assets: assets,
+                        onSave: saveTextFontRule
+                    )
+                } label: {
+                    ChatTextFontRuleRow(rule: rule, assets: assets)
+                }
+            }
+            .onDelete(perform: deleteTextFontRules)
+            .onMove(perform: moveTextFontRules)
+
+            Button {
+                addTextFontRule()
+            } label: {
+                Label(NSLocalizedString("添加字体规则", comment: ""), systemImage: "plus")
+            }
+            .disabled(assets.isEmpty)
+        } header: {
+            Text(NSLocalizedString("指定内容字体", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var previewLineSpacing: CGFloat {
         CGFloat(
             FontLibrary.lineSpacingPoints(
@@ -496,6 +528,43 @@ struct FontSettingsView: View {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addTextFontRule() {
+        let assetIDs = Set(assets.map(\.id))
+        let inheritedChain = routes.body.filter { assetIDs.contains($0) }
+        routes.customTextRules.append(
+            ChatAppearanceTextFontRule(
+                fontAssetIDs: inheritedChain.isEmpty ? assets.map(\.id) : inheritedChain
+            )
+        )
+        persistTextFontRules()
+    }
+
+    private func saveTextFontRule(_ rule: ChatAppearanceTextFontRule) {
+        guard let index = routes.customTextRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        routes.customTextRules[index] = rule
+        persistTextFontRules()
+    }
+
+    private func deleteTextFontRules(at offsets: IndexSet) {
+        routes.customTextRules.remove(atOffsets: offsets)
+        persistTextFontRules()
+    }
+
+    private func moveTextFontRules(from source: IndexSet, to destination: Int) {
+        routes.customTextRules.move(fromOffsets: source, toOffset: destination)
+        persistTextFontRules()
+    }
+
+    private func persistTextFontRules() {
+        let rules = routes.customTextRules
+        Task {
+            await FontLibrary.updateCustomTextRulesInBackground(rules)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
     }
 
     private func deleteAssets(at offsets: IndexSet) {

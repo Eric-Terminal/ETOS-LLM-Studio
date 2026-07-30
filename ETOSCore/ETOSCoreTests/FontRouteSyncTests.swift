@@ -10,6 +10,7 @@
 
 import Testing
 import Foundation
+import SwiftUI
 @testable import ETOSCore
 
 @Suite("字体路由与同步测试", .serialized)
@@ -143,6 +144,15 @@ struct FontRouteSyncTests {
                         strong: [secondID, secondID],
                         code: []
                     )
+                ],
+                customTextRules: [
+                    ChatAppearanceTextFontRule(
+                        id: "quoted-dialogue",
+                        kind: .delimitedText,
+                        startDelimiter: "“",
+                        endDelimiter: "”",
+                        fontAssetIDs: [invalidID, secondID, secondID, firstID]
+                    )
                 ]
             )
             let encodedIncoming = try JSONEncoder().encode(incoming)
@@ -162,6 +172,7 @@ struct FontRouteSyncTests {
             #expect(merged.emphasis == [firstID])
             #expect(merged.strong.isEmpty)
             #expect(merged.code == [firstID, secondID])
+            #expect(merged.customTextRules.first?.fontAssetIDs == [secondID, firstID])
 
             guard let zhHans = merged.languageBuckets["zh-Hans"] else {
                 Issue.record("缺少语言桶配置")
@@ -197,12 +208,144 @@ struct FontRouteSyncTests {
                     strong: [bodySecond],
                     code: [codeOnly, bodyFirst]
                 )
+            ],
+            customTextRules: [
+                ChatAppearanceTextFontRule(
+                    id: "custom-font-rule",
+                    kind: .regularExpression,
+                    exactText: "[A-Z]+",
+                    fontAssetIDs: [bodySecond, bodyFirst]
+                )
             ]
         )
 
         let encoded = try JSONEncoder().encode(source)
         let decoded = try JSONDecoder().decode(FontRouteConfiguration.self, from: encoded)
         #expect(decoded == source)
+    }
+
+    @Test("旧字体路由配置缺少局部规则时回退为空数组")
+    func testLegacyFontRouteConfigurationDecodesWithoutCustomTextRules() throws {
+        let legacyJSON = """
+        {
+          "body": [],
+          "emphasis": [],
+          "strong": [],
+          "code": [],
+          "languageBuckets": {}
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(
+            FontRouteConfiguration.self,
+            from: Data(legacyJSON.utf8)
+        )
+
+        #expect(decoded.customTextRules.isEmpty)
+    }
+
+    @Test("局部字体规则沿用文字规则匹配方式与列表优先级")
+    func testCustomTextFontRulesUseSharedMatchingPriority() {
+        let firstFontID = UUID()
+        let secondFontID = UUID()
+        let exactRule = ChatAppearanceTextFontRule(
+            id: "exact",
+            kind: .exactText,
+            exactText: "你好",
+            fontAssetIDs: [firstFontID]
+        )
+        let delimitedRule = ChatAppearanceTextFontRule(
+            id: "dialogue",
+            kind: .delimitedText,
+            startDelimiter: "“",
+            endDelimiter: "”",
+            includesDelimiters: true,
+            fontAssetIDs: [secondFontID]
+        )
+
+        let spans = ChatAppearanceTextFontMatcher.spans(
+            in: "“你好”",
+            rules: [exactRule, delimitedRule]
+        )
+
+        #expect(spans.map(\.ruleID) == ["dialogue", "exact", "dialogue"])
+        #expect(spans.map(\.range) == [0..<1, 1..<3, 3..<4])
+    }
+
+    @Test("后台文字渲染会给命中范围应用规则字体")
+    func testAttributedRendererAppliesCustomTextFontRule() async throws {
+        let fontID = UUID()
+        let rule = ChatAppearanceTextFontRule(
+            id: "font-rule",
+            kind: .exactText,
+            exactText: "GPG",
+            fontAssetIDs: [fontID]
+        )
+        let request = ChatAppearanceTextRuleRenderRequest(
+            source: "前 GPG 后",
+            usesMarkdown: false,
+            styleColors: ChatAppearanceTextStyleColors(defaultHex: "000000FF"),
+            fontRules: [
+                ChatAppearanceResolvedTextFontRule(
+                    rule: rule,
+                    postScriptNames: ["Helvetica"]
+                )
+            ]
+        )
+
+        let rendered = try #require(
+            await ChatAppearanceTextRuleRenderer.shared.prepare(request: request)
+        )
+        let fontRuns = rendered.runs.filter { $0.font != nil }
+
+        #expect(fontRuns.contains { String(rendered[$0.range].characters) == "GPG" })
+    }
+
+    @Test("局部字体规则会按规则内部顺序解析已导入字体")
+    func testResolvedTextFontRulesPreserveInternalPriority() async throws {
+        try await withIsolatedFontStore {
+            let firstID = UUID()
+            let secondID = UUID()
+            #expect(FontLibrary.saveAssets([
+                FontAssetRecord(
+                    id: firstID,
+                    fileName: "first.ttf",
+                    checksum: "first",
+                    displayName: "第一字体",
+                    postScriptName: "FirstPS"
+                ),
+                FontAssetRecord(
+                    id: secondID,
+                    fileName: "second.ttf",
+                    checksum: "second",
+                    displayName: "第二字体",
+                    postScriptName: "SecondPS"
+                )
+            ]))
+            #expect(FontLibrary.saveRouteConfiguration(
+                FontRouteConfiguration(
+                    customTextRules: [
+                        ChatAppearanceTextFontRule(
+                            id: "priority",
+                            kind: .exactText,
+                            exactText: "你好",
+                            fontAssetIDs: [secondID, firstID]
+                        )
+                    ]
+                )
+            ))
+            FontLibrary.updateRuntimeSettings(
+                isCustomFontEnabled: true,
+                fallbackScope: .segment,
+                customFontScale: FontLibrary.defaultFontScale
+            )
+            FontLibrary.preloadRuntimeCache(forceReload: true)
+
+            let resolved = try #require(FontLibrary.resolvedTextFontRules().first)
+
+            #expect(resolved.rule.id == "priority")
+            #expect(resolved.postScriptNames == ["SecondPS", "FirstPS"])
+        }
     }
 
     @Test("当候选字体无法覆盖样本文本时返回 nil（系统字体兜底）")

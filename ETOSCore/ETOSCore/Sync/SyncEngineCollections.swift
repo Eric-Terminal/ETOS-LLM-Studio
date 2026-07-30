@@ -531,7 +531,16 @@ extension SyncEngine {
             emphasis: normalizeRouteIDs(incoming.emphasis, idMapping: idMapping, validIDs: existingIDs),
             strong: normalizeRouteIDs(incoming.strong, idMapping: idMapping, validIDs: existingIDs),
             code: normalizeRouteIDs(incoming.code, idMapping: idMapping, validIDs: existingIDs),
-            languageBuckets: [:]
+            languageBuckets: [:],
+            customTextRules: incoming.customTextRules.map { rule in
+                var normalizedRule = rule
+                normalizedRule.fontAssetIDs = normalizeRouteIDs(
+                    rule.fontAssetIDs,
+                    idMapping: idMapping,
+                    validIDs: existingIDs
+                )
+                return normalizedRule
+            }
         )
 
         for (bucketKey, bucketValue) in incoming.languageBuckets {

@@ -165,6 +165,8 @@ struct WatchFontSettingsView: View {
                 }
             }
 
+            textFontRulesSection
+
             Section(NSLocalizedString("预览", comment: "")) {
                 (
                     Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
@@ -417,6 +419,42 @@ struct WatchFontSettingsView: View {
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
     }
 
+    private var textFontRulesSection: some View {
+        Section {
+            ForEach(textFontRulesBinding, id: \.id, editActions: .move) { $rule in
+                NavigationLink {
+                    WatchChatTextFontRuleEditorView(
+                        initialRule: rule,
+                        assets: assets,
+                        onSave: saveTextFontRule
+                    )
+                } label: {
+                    WatchChatTextFontRuleRow(rule: rule, assets: assets)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        deleteTextFontRule(id: rule.id)
+                    } label: {
+                        Label(NSLocalizedString("删除", comment: ""), systemImage: "trash")
+                    }
+                }
+            }
+
+            Button {
+                addTextFontRule()
+            } label: {
+                Label(NSLocalizedString("添加字体规则", comment: ""), systemImage: "plus")
+            }
+            .disabled(assets.isEmpty)
+        } header: {
+            Text(NSLocalizedString("指定内容字体", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。", comment: ""))
+                .etFont(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func addAssetToSelectedRole(_ assetID: UUID) {
         var chain = routes.chain(for: selectedRole)
         guard !chain.contains(assetID) else { return }
@@ -433,6 +471,48 @@ struct WatchFontSettingsView: View {
         routes.setChain(chain, for: selectedRole)
         FontLibrary.updateChain(chain, for: selectedRole)
         NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+    }
+
+    private func addTextFontRule() {
+        let assetIDs = Set(assets.map(\.id))
+        let inheritedChain = routes.body.filter { assetIDs.contains($0) }
+        routes.customTextRules.append(
+            ChatAppearanceTextFontRule(
+                fontAssetIDs: inheritedChain.isEmpty ? assets.map(\.id) : inheritedChain
+            )
+        )
+        persistTextFontRules()
+    }
+
+    private func saveTextFontRule(_ rule: ChatAppearanceTextFontRule) {
+        guard let index = routes.customTextRules.firstIndex(where: { $0.id == rule.id }) else {
+            return
+        }
+        routes.customTextRules[index] = rule
+        persistTextFontRules()
+    }
+
+    private var textFontRulesBinding: Binding<[ChatAppearanceTextFontRule]> {
+        Binding(
+            get: { routes.customTextRules },
+            set: {
+                routes.customTextRules = $0
+                persistTextFontRules()
+            }
+        )
+    }
+
+    private func deleteTextFontRule(id: String) {
+        routes.customTextRules.removeAll { $0.id == id }
+        persistTextFontRules()
+    }
+
+    private func persistTextFontRules() {
+        let rules = routes.customTextRules
+        Task {
+            await FontLibrary.updateCustomTextRulesInBackground(rules)
+            NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+        }
     }
 
     private func importFontsFromURL() {

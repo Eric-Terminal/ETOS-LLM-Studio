@@ -14,6 +14,12 @@ import os.log
 
 private let fontLibraryLogger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "FontLibrary")
 
+private actor FontRouteConfigurationWriter {
+    func updateCustomTextRules(_ rules: [ChatAppearanceTextFontRule]) {
+        FontLibrary.updateCustomTextRules(rules)
+    }
+}
+
 public enum FontLibrary {
     private static let manifestFileName = "font-manifest-v1.json"
     private static let routeConfigFileName = "font-routes-v1.json"
@@ -28,6 +34,7 @@ public enum FontLibrary {
     public static let defaultWatchLineSpacingEm = 0.15
     public static let lineSpacingStepEm = 0.025
     private static let cacheLock = NSLock()
+    private static let routeConfigurationWriter = FontRouteConfigurationWriter()
     private static let sampledResolutionCacheLimit = 256
 
     private enum FontResolutionCacheEntry {
@@ -42,6 +49,7 @@ public enum FontLibrary {
         var routeConfiguration = FontRouteConfiguration()
         var fallbackPostScriptNamesByRole: [FontSemanticRole: [String]] = [:]
         var preferredPostScriptNameByRole: [FontSemanticRole: String] = [:]
+        var resolvedTextFontRules: [ChatAppearanceResolvedTextFontRule] = []
         var sampledResolutionCache: [String: FontResolutionCacheEntry] = [:]
         var isCustomFontEnabled = true
         var fallbackScope: FontFallbackScope = .segment
@@ -98,6 +106,11 @@ public enum FontLibrary {
                 )
                 snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
                 snapshot.preferredPostScriptNameByRole = roleMappings.preferred
+                snapshot.resolvedTextFontRules = buildResolvedTextFontRules(
+                    assets: snapshot.assets,
+                    routeConfiguration: snapshot.routeConfiguration,
+                    isCustomFontEnabled: isCustomFontEnabled
+                )
             }
             snapshot.adapterCacheRevision &+= 1
         }
@@ -186,6 +199,11 @@ public enum FontLibrary {
             snapshot.routeConfiguration = routeConfiguration
             snapshot.fallbackPostScriptNamesByRole = roleMappings.fallback
             snapshot.preferredPostScriptNameByRole = roleMappings.preferred
+            snapshot.resolvedTextFontRules = buildResolvedTextFontRules(
+                assets: assets,
+                routeConfiguration: routeConfiguration,
+                isCustomFontEnabled: snapshot.isCustomFontEnabled
+            )
             snapshot.sampledResolutionCache.removeAll(keepingCapacity: true)
         }
     }
@@ -331,6 +349,11 @@ public enum FontLibrary {
             let chain = routes.chain(for: role).filter { $0 != id }
             routes.setChain(chain, for: role)
         }
+        routes.customTextRules = routes.customTextRules.map { rule in
+            var updated = rule
+            updated.fontAssetIDs.removeAll { $0 == id }
+            return updated
+        }
         _ = saveRouteConfiguration(routes)
     }
 
@@ -340,6 +363,26 @@ public enum FontLibrary {
         let normalizedChain = chain.filter { validIDs.contains($0) }
         configuration.setChain(normalizedChain, for: role)
         _ = saveRouteConfiguration(configuration)
+    }
+
+    public static func updateCustomTextRules(_ rules: [ChatAppearanceTextFontRule]) {
+        var configuration = loadRouteConfiguration()
+        let validIDs = Set(loadAssets().map(\.id))
+        configuration.customTextRules = rules.map { rule in
+            var updated = rule
+            var seen = Set<UUID>()
+            updated.fontAssetIDs = rule.fontAssetIDs.filter {
+                validIDs.contains($0) && seen.insert($0).inserted
+            }
+            return updated
+        }
+        _ = saveRouteConfiguration(configuration)
+    }
+
+    public static func updateCustomTextRulesInBackground(
+        _ rules: [ChatAppearanceTextFontRule]
+    ) async {
+        await routeConfigurationWriter.updateCustomTextRules(rules)
     }
 
     @discardableResult
@@ -366,6 +409,13 @@ public enum FontLibrary {
         return withRuntimeSnapshot { snapshot in
             guard snapshot.isPrepared else { return nil }
             return snapshot.preferredPostScriptNameByRole[role]
+        }
+    }
+
+    public static func resolvedTextFontRules() -> [ChatAppearanceResolvedTextFontRule] {
+        withRuntimeSnapshot { snapshot in
+            guard snapshot.isPrepared, snapshot.isCustomFontEnabled else { return [] }
+            return snapshot.resolvedTextFontRules
         }
     }
 
@@ -625,6 +675,29 @@ public enum FontLibrary {
             }
         }
         return (fallbackByRole, preferredByRole)
+    }
+
+    private static func buildResolvedTextFontRules(
+        assets: [FontAssetRecord],
+        routeConfiguration: FontRouteConfiguration,
+        isCustomFontEnabled: Bool
+    ) -> [ChatAppearanceResolvedTextFontRule] {
+        guard isCustomFontEnabled else { return [] }
+        let enabledAssets = Dictionary(
+            uniqueKeysWithValues: assets
+                .filter(\.isEnabled)
+                .map { ($0.id, $0) }
+        )
+
+        return routeConfiguration.customTextRules.compactMap { rule in
+            let names = rule.fontAssetIDs.compactMap {
+                enabledAssets[$0]?.postScriptName.nonEmpty
+            }
+            guard rule.isEnabled, rule.hasConfiguredMatch, !names.isEmpty else {
+                return nil
+            }
+            return ChatAppearanceResolvedTextFontRule(rule: rule, postScriptNames: names)
+        }
     }
 
     private static func extractPostScriptName(from data: Data) -> String? {

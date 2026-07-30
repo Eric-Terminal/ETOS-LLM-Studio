@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable {
+public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case body
     case emphasis
     case strong
@@ -30,7 +30,7 @@ public enum FontSemanticRole: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum FontFallbackScope: String, Codable, CaseIterable, Identifiable {
+public enum FontFallbackScope: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case segment
     case character
 
@@ -108,19 +108,22 @@ public struct FontRouteConfiguration: Codable, Equatable {
     public var strong: [UUID]
     public var code: [UUID]
     public var languageBuckets: [String: LanguageBucketConfiguration]
+    public var customTextRules: [ChatAppearanceTextFontRule]
 
     public init(
         body: [UUID] = [],
         emphasis: [UUID] = [],
         strong: [UUID] = [],
         code: [UUID] = [],
-        languageBuckets: [String: LanguageBucketConfiguration] = [:]
+        languageBuckets: [String: LanguageBucketConfiguration] = [:],
+        customTextRules: [ChatAppearanceTextFontRule] = []
     ) {
         self.body = body
         self.emphasis = emphasis
         self.strong = strong
         self.code = code
         self.languageBuckets = languageBuckets
+        self.customTextRules = customTextRules
     }
 
     public func chain(for role: FontSemanticRole) -> [UUID] {
@@ -147,6 +150,41 @@ public struct FontRouteConfiguration: Codable, Equatable {
         case .code:
             code = ids
         }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case body
+        case emphasis
+        case strong
+        case code
+        case languageBuckets
+        case customTextRules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        body = try container.decodeIfPresent([UUID].self, forKey: .body) ?? []
+        emphasis = try container.decodeIfPresent([UUID].self, forKey: .emphasis) ?? []
+        strong = try container.decodeIfPresent([UUID].self, forKey: .strong) ?? []
+        code = try container.decodeIfPresent([UUID].self, forKey: .code) ?? []
+        languageBuckets = try container.decodeIfPresent(
+            [String: LanguageBucketConfiguration].self,
+            forKey: .languageBuckets
+        ) ?? [:]
+        customTextRules = try container.decodeIfPresent(
+            [ChatAppearanceTextFontRule].self,
+            forKey: .customTextRules
+        ) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(body, forKey: .body)
+        try container.encode(emphasis, forKey: .emphasis)
+        try container.encode(strong, forKey: .strong)
+        try container.encode(code, forKey: .code)
+        try container.encode(languageBuckets, forKey: .languageBuckets)
+        try container.encode(customTextRules, forKey: .customTextRules)
     }
 }
 

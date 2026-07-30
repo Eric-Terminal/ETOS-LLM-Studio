@@ -1,0 +1,258 @@
+// ============================================================================
+// DisplaySettingsTextFontRuleSupport.swift
+// ============================================================================
+// iOS 聊天文字局部字体规则管理。
+// ============================================================================
+
+import SwiftUI
+import ETOSCore
+
+struct ChatTextFontRuleRow: View {
+    let rule: ChatAppearanceTextFontRule
+    let assets: [FontAssetRecord]
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(ruleSummary)
+                    .lineLimit(1)
+                Text(ruleKindTitle)
+                    .etFont(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(fontSummary)
+                .etFont(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .opacity(rule.isEnabled ? 1 : 0.4)
+        }
+    }
+
+    private var ruleSummary: String {
+        switch rule.kind {
+        case .exactText:
+            return rule.exactText.isEmpty
+                ? NSLocalizedString("未设置文字", comment: "")
+                : rule.exactText
+        case .delimitedText:
+            guard rule.hasConfiguredMatch else {
+                return NSLocalizedString("未设置起止标记", comment: "")
+            }
+            return "\(rule.startDelimiter)…\(rule.endDelimiter)"
+        case .regularExpression:
+            return rule.exactText.isEmpty
+                ? NSLocalizedString("未设置正则表达式", comment: "")
+                : rule.exactText
+        }
+    }
+
+    private var ruleKindTitle: String {
+        let title: String
+        switch rule.kind {
+        case .exactText:
+            title = NSLocalizedString("指定文字", comment: "")
+        case .delimitedText:
+            title = NSLocalizedString("起止标记之间", comment: "")
+        case .regularExpression:
+            title = NSLocalizedString("正则表达式", comment: "")
+        }
+        return rule.isEnabled
+            ? title
+            : String(format: NSLocalizedString("%@（已停用）", comment: ""), title)
+    }
+
+    private var fontSummary: String {
+        let assetsByID = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
+        let selectedAssets = rule.fontAssetIDs.compactMap { assetsByID[$0] }
+        guard let first = selectedAssets.first else {
+            return NSLocalizedString("未选择字体", comment: "")
+        }
+        return String(
+            format: NSLocalizedString("%@，共 %d 种字体", comment: ""),
+            first.displayName,
+            selectedAssets.count
+        )
+    }
+}
+
+struct ChatTextFontRuleEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var rule: ChatAppearanceTextFontRule
+    @State private var isRegularExpressionValid = true
+
+    let assets: [FontAssetRecord]
+    let onSave: (ChatAppearanceTextFontRule) -> Void
+
+    init(
+        initialRule: ChatAppearanceTextFontRule,
+        assets: [FontAssetRecord],
+        onSave: @escaping (ChatAppearanceTextFontRule) -> Void
+    ) {
+        _rule = State(initialValue: initialRule)
+        self.assets = assets
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(NSLocalizedString("启用规则", comment: ""), isOn: $rule.isEnabled)
+            }
+
+            matchSection
+            fontPrioritySection
+        }
+        .navigationTitle(NSLocalizedString("字体规则", comment: ""))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                EditButton()
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("保存", comment: "")) {
+                    onSave(rule)
+                    dismiss()
+                }
+                .disabled(!canSave)
+            }
+        }
+        .task(id: regularExpressionValidationPattern) {
+            guard let pattern = regularExpressionValidationPattern else {
+                isRegularExpressionValid = true
+                return
+            }
+            let isValid = await ChatAppearanceTextColorMatcher.isValidRegularExpression(pattern)
+            guard regularExpressionValidationPattern == pattern else { return }
+            isRegularExpressionValid = isValid
+        }
+    }
+
+    private var matchSection: some View {
+        Section {
+            Picker(NSLocalizedString("匹配方式", comment: ""), selection: $rule.kind) {
+                Text(NSLocalizedString("指定文字", comment: ""))
+                    .tag(ChatAppearanceTextRuleKind.exactText)
+                Text(NSLocalizedString("起止标记之间", comment: ""))
+                    .tag(ChatAppearanceTextRuleKind.delimitedText)
+                Text(NSLocalizedString("正则表达式", comment: ""))
+                    .tag(ChatAppearanceTextRuleKind.regularExpression)
+            }
+
+            switch rule.kind {
+            case .exactText:
+                TextField(NSLocalizedString("要匹配的文字", comment: ""), text: $rule.exactText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            case .delimitedText:
+                TextField(NSLocalizedString("起始标记", comment: ""), text: $rule.startDelimiter)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField(NSLocalizedString("结束标记", comment: ""), text: $rule.endDelimiter)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Toggle(NSLocalizedString("包含起止标记", comment: ""), isOn: $rule.includesDelimiters)
+            case .regularExpression:
+                TextField(NSLocalizedString("要匹配的正则表达式", comment: ""), text: $rule.exactText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+        } header: {
+            Text(NSLocalizedString("匹配内容", comment: ""))
+        } footer: {
+            VStack(alignment: .leading) {
+                Text(matchDescription)
+                if rule.kind == .regularExpression, !isRegularExpressionValid {
+                    Text(NSLocalizedString("正则表达式无效，请检查语法。", comment: ""))
+                        .foregroundStyle(.red)
+                }
+            }
+            .etFont(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var fontPrioritySection: some View {
+        Section {
+            if selectedAssets.isEmpty {
+                Text(NSLocalizedString("当前规则没有字体，不会改变匹配内容。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(selectedAssets) { asset in
+                    VStack(alignment: .leading) {
+                        Text(asset.displayName)
+                        Text(asset.postScriptName)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onMove(perform: moveFonts)
+                .onDelete(perform: removeFonts)
+            }
+
+            if availableAssets.isEmpty {
+                Text(NSLocalizedString("没有可添加的字体。", comment: ""))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Menu {
+                    ForEach(availableAssets) { asset in
+                        Button(asset.displayName) {
+                            rule.fontAssetIDs.append(asset.id)
+                        }
+                    }
+                } label: {
+                    Label(NSLocalizedString("添加字体到规则", comment: ""), systemImage: "plus.circle")
+                }
+            }
+        } header: {
+            Text(NSLocalizedString("字体优先级", comment: ""))
+        } footer: {
+            Text(NSLocalizedString("规则内字体从上到下尝试；匹配内容优先使用这里的字体，未命中内容继续使用外层全局字体。", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var selectedAssets: [FontAssetRecord] {
+        let assetsByID = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
+        return rule.fontAssetIDs.compactMap { assetsByID[$0] }
+    }
+
+    private var availableAssets: [FontAssetRecord] {
+        let selectedIDs = Set(rule.fontAssetIDs)
+        return assets.filter { !selectedIDs.contains($0.id) }
+    }
+
+    private var canSave: Bool {
+        rule.hasConfiguredMatch
+            && !rule.fontAssetIDs.isEmpty
+            && (rule.kind != .regularExpression || isRegularExpressionValid)
+    }
+
+    private var matchDescription: String {
+        switch rule.kind {
+        case .exactText:
+            return NSLocalizedString("只修改完全相同的文字片段，不使用正则表达式。", comment: "")
+        case .delimitedText:
+            return NSLocalizedString("从起始标记匹配到下一处结束标记；没有结束标记时不会应用字体。", comment: "")
+        case .regularExpression:
+            return NSLocalizedString("正则表达式的完整匹配范围会使用规则字体。", comment: "")
+        }
+    }
+
+    private var regularExpressionValidationPattern: String? {
+        rule.kind == .regularExpression ? rule.exactText : nil
+    }
+
+    private func moveFonts(from source: IndexSet, to destination: Int) {
+        rule.fontAssetIDs.move(fromOffsets: source, toOffset: destination)
+    }
+
+    private func removeFonts(at offsets: IndexSet) {
+        rule.fontAssetIDs.remove(atOffsets: offsets)
+    }
+}

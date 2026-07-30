@@ -4540,7 +4540,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。" = "توفير ملفات مهارات مخصصة للنماذج، يتم استدعاؤها عند الطلب عبر أداة use_skill في الدردشة.";
 "图片相册说明正文" = "What appears here\n• Images returned by assistant messages in the current session.\n• These are chat results, not a separate image generation workspace.\n\nWhat you can do\n• Open an image to view it larger and inspect its prompt context when available.\n• Save or share images from the action menu.\n• Deleting an image removes the local image reference from that message.\n\nTips\n• To keep generating or editing images, return to chat and describe the change.\n• To organize older results, switch to the relevant session first.";
 "在手表端查看服务器状态、工具能力和治理日志。" = "اعرض على Apple Watch حالة الخوادم وقدرات الأدوات وسجلات الحوكمة.";
-"字体样式优先级说明正文" = "Recommended flow\n1. Import the font files you want to use.\n2. Choose a style slot, such as body, italic, bold, or code.\n3. Reorder fonts so the preferred one is higher.\n4. Add missing fonts to the current slot when needed.\n5. Removing a font from a slot does not delete the font file.\n\nRules\n• Each style slot has its own priority chain.\n• The same font can appear in multiple slots.\n• If all fonts in a slot are unavailable, the app falls back to the system font.";
+"字体样式优先级说明正文" = "Recommended flow\n1. Import the font files you want to use.\n2. Choose a style slot, such as body, italic, bold, or code.\n3. Reorder fonts so the preferred one is higher.\n4. Add missing fonts to the current slot when needed.\n5. To change only part of chat text, add a Fonts for Specific Content rule and choose exact text, delimiters, or a regular expression.\n6. Reorder fonts inside the rule; matched text uses this local chain first.\n7. Removing a font from a slot or rule does not delete the font file.\n\nRules\n• Outer style slots define global fonts; local rules override only matched chat text.\n• Rules and fonts inside each rule both use top-to-bottom priority.\n• The same font can appear in multiple slots and rules.\n• If no candidate is available, the app falls back to the outer font or system font.";
 "开始操作" = "ابدأ operating";
 "快捷指令工具箱说明正文" = "When to use\n• Let the model call iOS Shortcuts during chat for automation tasks.\n• Manage import sources, enabled state, run mode, and approval behavior in one place.\n\nRecommended flow\n1. Import tools on iPhone with the official shortcut or clipboard manifest.\n2. Confirm the tool list has synced to Apple Watch if you use watchOS.\n3. Turn on “Expose shortcut tools to model”.\n4. Review each tool description, enabled state, run mode, and approval countdown.\n\nImport modes\n• Light import only reads names and is good for quick setup.\n• Deep import tries to parse iCloud shares and generate descriptions; if it fails, it falls back to links only.\n\nTroubleshooting\n• If a tool is not called, check the global switch and the individual enabled state.\n• If URL Scheme or urlshim navigation fails, import again from the clipboard manifest.";
 "拓展功能说明正文" = "What this page is for\n• Manage advanced capabilities that are outside the core chat flow.\n• Jump quickly into maintenance, import, debugging, voice, and tool integration pages.\n\nHow to choose\n• Memory System / Worldbook manage long-term context and rule knowledge.\n• MCP / Shortcuts / Agent Skills expose external capabilities or reusable skills to the model.\n• Storage Management / Remote File Access help with cleanup and troubleshooting.\n\nTips\n• Enable advanced features as needed so the main chat flow stays focused.\n• Back up important data before imports, restores, or cleanup.";
@@ -5445,3 +5445,20 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "JavaScript 工具必须声明同步 function main(input)。" = "يجب أن تعلن أداة JavaScript عن function main(input) متزامنة.";
 "JavaScript 工具暂不支持返回 Promise，请使用同步算法。" = "لا يمكن لأدوات JavaScript إرجاع Promise. استخدم خوارزمية متزامنة.";
 "%@ [%@ 分支]" = "%@ [فرع %@]";
+
+/* قواعد الخط للنص المحلي */
+"%@，共 %d 种字体" = "%@، إجمالي %d خطوط";
+"未选择字体" = "لم يتم اختيار خط";
+"字体规则" = "قاعدة الخط";
+"当前规则没有字体，不会改变匹配内容。" = "لا تحتوي هذه القاعدة على خطوط، لذلك لن يتغير النص المطابق.";
+"没有可添加的字体。" = "لا توجد خطوط متاحة للإضافة.";
+"添加字体到规则" = "إضافة خط إلى القاعدة";
+"字体优先级" = "أولوية الخطوط";
+"规则内字体从上到下尝试；匹配内容优先使用这里的字体，未命中内容继续使用外层全局字体。" = "تُجرّب خطوط القاعدة من الأعلى إلى الأسفل. يستخدم النص المطابق هذه القائمة أولًا، بينما يستمر النص الآخر باستخدام الخطوط العامة الخارجية.";
+"只修改完全相同的文字片段，不使用正则表达式。" = "يغيّر مقاطع النص المتطابقة تمامًا فقط، من دون تعبيرات نمطية.";
+"从起始标记匹配到下一处结束标记；没有结束标记时不会应用字体。" = "يطابق من علامة البداية حتى علامة النهاية التالية؛ إذا لم توجد علامة نهاية فلن يُطبّق أي خط.";
+"正则表达式的完整匹配范围会使用规则字体。" = "يستخدم النطاق الكامل المطابق للتعبير النمطي خطوط القاعدة.";
+"添加字体规则" = "إضافة قاعدة خط";
+"指定内容字体" = "خطوط لمحتوى محدد";
+"规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "تُطابق القواعد من الأعلى إلى الأسفل، وللقواعد الأعلى أولوية. يستخدم المحتوى المطابق أولوية الخطوط داخل القاعدة، بينما يستمر المحتوى الآخر باستخدام الخطوط العامة الخارجية.";
+"规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "تُطابق القواعد من الأعلى إلى الأسفل. يستخدم المحتوى المطابق أولوية الخطوط داخل القاعدة، بينما يستمر المحتوى الآخر باستخدام الخطوط العامة الخارجية.";
