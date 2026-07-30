@@ -80,6 +80,7 @@ extension View {
                    !strongFontName.isEmpty {
                     FontFamily(.custom(strongFontName))
                 }
+                FontWeight(.bold)
                 ForegroundColor(strongTextColor)
             }
             .markdownTextStyle(\.code) {

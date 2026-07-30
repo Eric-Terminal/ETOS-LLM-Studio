@@ -7,6 +7,7 @@
 // - 验证无效正则不会中断后续规则
 // ============================================================================
 
+import Foundation
 import Testing
 @testable import ETOSCore
 
@@ -32,6 +33,38 @@ struct MessageRegexRuleTransformerTests {
         )
 
         #expect(output == "Ada Lovelace (Lovelace, Ada)")
+    }
+
+    @Test("仅显示替换生成的加粗 Markdown 会在渲染前生效")
+    func testVisualReplacementProducesStrongMarkdownBeforeRendering() throws {
+        let rules = [
+            MessageRegexRule(
+                name: "引号加粗",
+                pattern: #"“([^”]+?)”"#,
+                replacement: #"**“$1”**"#,
+                scopes: [.user],
+                mode: .visualOnly
+            )
+        ]
+
+        let transformed = MessageRegexRuleTransformer.apply(
+            "“这是一段对话”",
+            rules: rules,
+            scope: .user,
+            mode: .visualOnly
+        )
+        #expect(transformed == "**“这是一段对话”**")
+
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        let rendered = try AttributedString(markdown: transformed, options: options)
+
+        #expect(String(rendered.characters) == "“这是一段对话”")
+        #expect(rendered.runs.contains { run in
+            run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true
+        })
     }
 
     @Test("只应用匹配作用范围与模式的规则")
