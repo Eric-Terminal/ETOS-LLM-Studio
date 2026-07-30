@@ -12,6 +12,7 @@ import Dispatch
 
 public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var mmprojPath: String?
+    public var kvCacheKey: String?
     public var contextSize: Int
     public var maxOutputTokens: Int
     public var gpuLayers: Int
@@ -20,6 +21,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var kvOffload: Bool
     public var flashAttention: LocalLLMFlashAttentionMode
     public var useModelCache: Bool
+    public var reuseKVCache: Bool
     public var seed: UInt32
     public var temperature: Double
     public var topK: Int
@@ -39,6 +41,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
 
     public init(
         mmprojPath: String? = nil,
+        kvCacheKey: String? = nil,
         contextSize: Int,
         maxOutputTokens: Int,
         temperature: Double = LocalModelRecord.defaultTemperature,
@@ -49,6 +52,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         kvOffload: Bool = LocalModelRecord.defaultKVOffload,
         flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
         useModelCache: Bool = true,
+        reuseKVCache: Bool = false,
         seed: UInt32 = LocalModelRecord.defaultSeed,
         topK: Int = LocalModelRecord.defaultTopK,
         minP: Double = LocalModelRecord.defaultMinP,
@@ -65,6 +69,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
     ) {
         self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.kvCacheKey = kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.contextSize = contextSize.clamped(to: 1...1_048_576)
         self.maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
         self.gpuLayers = gpuLayers
@@ -73,6 +78,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.kvOffload = kvOffload
         self.flashAttention = flashAttention
         self.useModelCache = useModelCache
+        self.reuseKVCache = reuseKVCache && self.kvCacheKey != nil
         self.seed = seed
         self.temperature = temperature.clamped(to: 0...5)
         self.topK = topK.clamped(to: 0...1_000)
@@ -346,6 +352,10 @@ public final class LocalLLMEngine: @unchecked Sendable {
     public func clearModelCache() {
         LocalLLMBridge.clearModelCache()
     }
+
+    public func clearKVCache(for cacheKey: String? = nil) {
+        LocalLLMBridge.clearKVCache(for: cacheKey)
+    }
 }
 
 private enum LocalLLMExecutionGate {
@@ -363,6 +373,18 @@ private enum LocalLLMBridge {
 
     static func clearModelCache() {
         etos_local_llm_clear_model_cache()
+    }
+
+    static func clearKVCache(for cacheKey: String?) {
+        if let normalizedKey = cacheKey?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty {
+            normalizedKey.withCString { expectedCacheKey in
+                etos_local_llm_clear_kv_cache(expectedCacheKey)
+            }
+        } else {
+            etos_local_llm_clear_kv_cache(nil)
+        }
     }
 
     static func generateChat(
@@ -807,6 +829,7 @@ private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallPar
 
 private struct ETOSLocalLLMGenerationConfig {
     var mmprojPath: UnsafePointer<CChar>?
+    var kvCacheKey: UnsafePointer<CChar>?
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
@@ -815,6 +838,7 @@ private struct ETOSLocalLLMGenerationConfig {
     var kvOffload: Int32
     var flashAttention: Int32
     var useModelCache: Int32
+    var reuseKVCache: Int32
     var seed: UInt32
     var minKeep: Int32
     var topK: Int32
@@ -859,6 +883,7 @@ private struct ETOSLocalLLMGenerationConfig {
 
 private final class PreparedLocalLLMGenerationConfig {
     private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let kvCacheKeyPointer: UnsafeMutablePointer<CChar>
     private let drySequenceBreakerPointers: [UnsafeMutablePointer<CChar>]
     private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
     private let bridgedSamplerKinds: [Int32]
@@ -876,6 +901,7 @@ private final class PreparedLocalLLMGenerationConfig {
 
     init(_ config: LocalLLMGenerationConfig, mediaAttachments: [LocalLLMMediaAttachment]) throws {
         let mmprojPathPointer = try Self.duplicate(config.mmprojPath)
+        let kvCacheKeyPointer = try Self.duplicate(config.kvCacheKey)
         let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
         let grammarPointer = try Self.duplicate(config.grammar)
         let chatTemplateKwargs = try Self.encodedChatTemplateKwargs(config.chatTemplateKwargs)
@@ -886,6 +912,7 @@ private final class PreparedLocalLLMGenerationConfig {
         let mediaIDPointers = try validMediaAttachments.map { try Self.duplicate($0.id) }
 
         self.mmprojPathPointer = mmprojPathPointer
+        self.kvCacheKeyPointer = kvCacheKeyPointer
         self.drySequenceBreakerPointers = drySequenceBreakerPointers
         self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
         self.bridgedSamplerKinds = config.samplerKinds.map(\.rawValue)
@@ -901,6 +928,7 @@ private final class PreparedLocalLLMGenerationConfig {
         self.bridgedMediaIDs = mediaIDPointers.map { UnsafePointer($0) }
         self.bridgedConfig = ETOSLocalLLMGenerationConfig(
             mmprojPath: UnsafePointer(mmprojPathPointer),
+            kvCacheKey: UnsafePointer(kvCacheKeyPointer),
             contextSize: config.contextSize,
             maxOutputTokens: config.maxOutputTokens,
             gpuLayers: config.gpuLayers,
@@ -909,6 +937,7 @@ private final class PreparedLocalLLMGenerationConfig {
             kvOffload: config.kvOffload ? 1 : 0,
             flashAttention: config.flashAttention.rawValue,
             useModelCache: config.useModelCache ? 1 : 0,
+            reuseKVCache: config.reuseKVCache ? 1 : 0,
             seed: config.seed,
             minKeep: config.minKeep,
             topK: config.topK,
@@ -954,6 +983,7 @@ private final class PreparedLocalLLMGenerationConfig {
 
     deinit {
         free(mmprojPathPointer)
+        free(kvCacheKeyPointer)
         drySequenceBreakerPointers.forEach { free($0) }
         free(grammarPointer)
         chatTemplateKwargKeyPointers.forEach { free($0) }
@@ -1364,6 +1394,9 @@ private func etos_local_llm_free_float(_ pointer: UnsafeMutablePointer<Float>)
 
 @_silgen_name("etos_local_llm_clear_model_cache")
 private func etos_local_llm_clear_model_cache()
+
+@_silgen_name("etos_local_llm_clear_kv_cache")
+private func etos_local_llm_clear_kv_cache(_ expectedCacheKey: UnsafePointer<CChar>?)
 
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {

@@ -31,6 +31,8 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.flashAttention == .auto)
         #expect(config.useModelCache)
         #expect(config.mmprojPath.isEmpty)
+        #expect(config.kvCacheKey.isEmpty)
+        #expect(!config.reuseKVCache)
         #expect(config.imageMinTokens == -1)
         #expect(config.imageMaxTokens == -1)
         #expect(config.samplerKinds == [.temperature])
@@ -99,6 +101,7 @@ struct LocalLLMGenerationConfigTests {
     func structuredOptionsMapToGenerationConfig() throws {
         let options = LocalLLMGenerationOptions(
             mmprojPath: " /tmp/mmproj.gguf ",
+            kvCacheKey: " conversation-a ",
             contextSize: 4096,
             maxOutputTokens: 256,
             temperature: 0.65,
@@ -109,6 +112,7 @@ struct LocalLLMGenerationConfigTests {
             kvOffload: false,
             flashAttention: .disabled,
             useModelCache: false,
+            reuseKVCache: true,
             seed: 7,
             topK: 20,
             minP: 0.12,
@@ -149,11 +153,30 @@ struct LocalLLMGenerationConfigTests {
         #expect(config.grammar == "root ::= \"ok\"")
         #expect(config.ignoreEOS)
         #expect(config.mmprojPath == "/tmp/mmproj.gguf")
+        #expect(config.kvCacheKey == "conversation-a")
+        #expect(config.reuseKVCache)
         #expect(config.imageMinTokens == 512)
         #expect(config.imageMaxTokens == 1024)
         #expect(config.samplerKinds == [.penalties, .topK, .topP, .temperature])
         #expect(config.chatTemplateKwargs["enable_thinking"] == .bool(false))
         #expect(config.chatTemplateKwargs["reasoning_budget"] == .int(0))
+    }
+
+    @Test("KV 缓存复用必须提供非空对话键")
+    func kvCacheReuseRequiresConversationKey() throws {
+        let options = LocalLLMGenerationOptions(
+            kvCacheKey: " ",
+            contextSize: 2048,
+            maxOutputTokens: 128,
+            reuseKVCache: true
+        )
+
+        let config = try LocalLLMGenerationConfig(options: options)
+
+        #expect(options.kvCacheKey == nil)
+        #expect(!options.reuseKVCache)
+        #expect(config.kvCacheKey.isEmpty)
+        #expect(!config.reuseKVCache)
     }
 
     @Test("llama.cpp-style 导入会收集应用、不支持和出错参数")

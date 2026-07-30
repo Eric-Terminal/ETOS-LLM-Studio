@@ -148,6 +148,9 @@ extension ChatService {
         let resolvedCurrentSession = mergedSessions.first(where: { $0.id == previousCurrentSessionID })
             ?? persistedSessions.first
             ?? existingTemporary
+        if previousCurrentSessionID != resolvedCurrentSession.id {
+            clearLocalLLMKVCache(for: previousCurrentSessionID)
+        }
 
         chatSessionsSubject.send(mergedSessions)
         sessionFoldersSubject.send(persistedFolders)
@@ -181,6 +184,7 @@ extension ChatService {
             return
         }
 
+        clearLocalLLMKVCache(for: currentSession?.id)
         currentSessionSubject.send(session)
         let messages = session.map { messagesForSessionActivation($0.id) } ?? []
         if let session {
@@ -188,6 +192,13 @@ extension ChatService {
         }
         publishMessages(messages)
         logger.info("已切换到会话: \(session?.name ?? "无")")
+    }
+
+    func clearLocalLLMKVCache(for sessionID: UUID?) {
+        guard let sessionID else { return }
+        Task.detached(priority: .utility) {
+            LocalLLMEngine.shared.clearKVCache(for: sessionID.uuidString)
+        }
     }
 
     func promoteSessionToTopIfNeeded(sessionID: UUID) {

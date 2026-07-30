@@ -5323,3 +5323,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "本地语音运行时没有返回错误详情。" = "El motor de voz local no devolvió detalles del error.";
 "系统音频转换器返回失败。" = "El conversor de audio del sistema falló.";
 "音频中没有可转写的采样。" = "El audio no contiene muestras que se puedan transcribir.";
+"对话 KV 缓存" = "Caché KV de conversación";
+"打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。" = "Al activarlo, los modelos de texto locales conservan la caché KV de la conversación actual para que el siguiente turno procese solo el contenido nuevo. Se libera al cambiar de conversación o desactivar esta opción. Usa memoria adicional y no se reutiliza en chats multimodales.";

@@ -139,6 +139,7 @@ bool emit_text_chunk(
 local_generation_params generation_params_from_config(const etos_local_llm_generation_config & config) {
     local_generation_params params;
     params.mmproj_path = config.mmproj_path ? config.mmproj_path : "";
+    params.kv_cache_key = config.kv_cache_key ? config.kv_cache_key : "";
     params.context_size = std::max<int32_t>(1, config.context_size);
     params.max_output_tokens = std::max<int32_t>(1, config.max_output_tokens);
     params.gpu_layers = config.gpu_layers;
@@ -156,6 +157,7 @@ local_generation_params generation_params_from_config(const etos_local_llm_gener
         break;
     }
     params.use_model_cache = config.use_model_cache != 0;
+    params.reuse_kv_cache = config.reuse_kv_cache != 0;
     params.seed = config.seed;
     params.min_keep = config.min_keep;
     params.top_k = config.top_k;

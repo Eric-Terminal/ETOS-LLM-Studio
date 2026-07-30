@@ -5314,3 +5314,5 @@
 "本地语音运行时没有返回错误详情。" = "The local speech runtime did not return error details.";
 "系统音频转换器返回失败。" = "The system audio converter failed.";
 "音频中没有可转写的采样。" = "The audio contains no samples to transcribe.";
+"对话 KV 缓存" = "Conversation KV Cache";
+"打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。" = "When enabled, local text models keep the current conversation’s KV cache so the next turn processes only new content. It is released when you switch conversations or turn this off. This uses additional memory and is not reused for multimodal chats.";

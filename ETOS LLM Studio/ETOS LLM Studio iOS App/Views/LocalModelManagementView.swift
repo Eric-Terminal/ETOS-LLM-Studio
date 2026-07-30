@@ -46,6 +46,14 @@ struct LocalModelManagementView: View {
             }
 
             Section {
+                Toggle(NSLocalizedString("对话 KV 缓存", comment: "Conversation KV cache toggle"), isOn: localModelKVCacheEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。", comment: "Conversation KV cache footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 Button {
                     isImportingModel = true
                 } label: {
@@ -133,7 +141,22 @@ struct LocalModelManagementView: View {
         } set: { isEnabled in
             appConfig.localModelCacheEnabled = isEnabled
             if !isEnabled {
-                LocalLLMEngine.shared.clearModelCache()
+                Task.detached(priority: .utility) {
+                    LocalLLMEngine.shared.clearModelCache()
+                }
+            }
+        }
+    }
+
+    private var localModelKVCacheEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelKVCacheEnabled
+        } set: { isEnabled in
+            appConfig.localModelKVCacheEnabled = isEnabled
+            if !isEnabled {
+                Task.detached(priority: .utility) {
+                    LocalLLMEngine.shared.clearKVCache()
+                }
             }
         }
     }

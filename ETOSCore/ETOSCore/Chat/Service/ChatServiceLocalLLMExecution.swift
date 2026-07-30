@@ -154,6 +154,14 @@ extension ChatService {
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let globalTopPEnabled = await MainActor.run { AppConfigStore.shared.aiTopPEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
+            let localModelKVCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelKVCacheEnabled }
+            // 会话可能在本地生成入场前切走，结束时再按旧会话键兜底清理。
+            defer {
+                if localModelKVCacheEnabled,
+                   currentSessionSubject.value?.id != currentSessionID {
+                    clearLocalLLMKVCache(for: currentSessionID)
+                }
+            }
             let localMessagesToSend = LocalLLMChatMessageBuilder.templateCompatibleMessages(
                 from: messagesToSend,
                 imageAttachments: imageAttachments
@@ -165,6 +173,7 @@ extension ChatService {
                 modelURL: localModelStore.fileURL(for: record),
                 options: LocalLLMGenerationOptions(
                     mmprojPath: localModelStore.mmprojURL(for: record)?.path,
+                    kvCacheKey: currentSessionID.uuidString,
                     contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                     maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                     temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
@@ -175,6 +184,7 @@ extension ChatService {
                     kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
                     flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
                     useModelCache: localModelCacheEnabled,
+                    reuseKVCache: localModelKVCacheEnabled,
                     seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
                     topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
                     minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,

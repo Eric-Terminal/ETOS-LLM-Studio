@@ -111,6 +111,7 @@ struct local_generation_params {
     };
 
     std::string mmproj_path;
+    std::string kv_cache_key;
     int32_t context_size = 2048;
     int32_t max_output_tokens = 512;
     int32_t gpu_layers = -1;
@@ -119,6 +120,7 @@ struct local_generation_params {
     bool kv_offload = true;
     int32_t flash_attention = LLAMA_FLASH_ATTN_TYPE_AUTO;
     bool use_model_cache = true;
+    bool reuse_kv_cache = false;
     uint32_t seed = LLAMA_DEFAULT_SEED;
     int32_t min_keep = 0;
     int32_t top_k = 0;
@@ -261,6 +263,7 @@ int32_t embed(
     char ** error_message
 );
 void clear_model_cache();
+void clear_kv_cache(const char * expected_cache_key);
 
 } // namespace etos_local_llm_bridge
 

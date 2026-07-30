@@ -432,7 +432,12 @@ void etos_local_llm_free_float(float * pointer) {
     std::free(pointer);
 }
 
+void etos_local_llm_clear_kv_cache(const char * expected_cache_key) {
+    etos_local_llm_bridge::clear_kv_cache(expected_cache_key);
+}
+
 void etos_local_llm_clear_model_cache(void) {
+    etos_local_llm_bridge::clear_kv_cache(nullptr);
     etos_local_llm_bridge::clear_model_cache();
     etos_local_speech::clear_speech_model_cache();
 }

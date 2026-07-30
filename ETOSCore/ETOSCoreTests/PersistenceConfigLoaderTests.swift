@@ -51,6 +51,25 @@ extension PersistenceTests {
         #expect(AppConfigKey.requestLogPlainMessageEnabled.defaultValue == .bool(false))
     }
 
+    @Test("对话 KV 缓存默认关闭且仅保存在本机")
+    @MainActor
+    func localModelKVCacheDefaultsToDisabledAndLocalOnly() {
+        let key = AppConfigKey.localModelKVCacheEnabled
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(false))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: true])
+
+        #expect(AppConfigStore.shared.localModelKVCacheEnabled)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
+    }
+
     @Test("iOS 与 watchOS 默认使用按提供商选择模型")
     func modelPickerDefaultsToProviderGrouping() {
         #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))

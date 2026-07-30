@@ -29,6 +29,14 @@ struct LocalModelManagementView: View {
             }
 
             Section {
+                Toggle(NSLocalizedString("对话 KV 缓存", comment: "Conversation KV cache toggle"), isOn: localModelKVCacheEnabledBinding)
+            } footer: {
+                Text(NSLocalizedString("打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。", comment: "Conversation KV cache footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 TextField(NSLocalizedString("模型文件链接", comment: "Local model download URL"), text: $downloadURLText.watchKeyboardNewlineBinding())
                     .textInputAutocapitalization(.never)
                 TextField(NSLocalizedString("名称", comment: "Local model display name"), text: $displayName.watchKeyboardNewlineBinding())
@@ -87,6 +95,19 @@ struct LocalModelManagementView: View {
         } set: { isEnabled in
             appConfig.localModelsEnabled = isEnabled
             ChatService.shared.setLocalModelsEnabled(isEnabled)
+        }
+    }
+
+    private var localModelKVCacheEnabledBinding: Binding<Bool> {
+        Binding {
+            appConfig.localModelKVCacheEnabled
+        } set: { isEnabled in
+            appConfig.localModelKVCacheEnabled = isEnabled
+            if !isEnabled {
+                Task.detached(priority: .utility) {
+                    LocalLLMEngine.shared.clearKVCache()
+                }
+            }
         }
     }
 

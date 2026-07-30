@@ -10,6 +10,7 @@ import Foundation
 
 struct LocalLLMGenerationConfig: Hashable, Sendable {
     var mmprojPath: String
+    var kvCacheKey: String
     var contextSize: Int32
     var maxOutputTokens: Int32
     var gpuLayers: Int32
@@ -18,6 +19,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
     var kvOffload: Bool
     var flashAttention: LocalLLMFlashAttentionMode
     var useModelCache: Bool
+    var reuseKVCache: Bool
     var seed: UInt32
     var minKeep: Int32
     var topK: Int32
@@ -53,6 +55,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
 
     init(options: LocalLLMGenerationOptions) throws {
         self.mmprojPath = options.mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.kvCacheKey = options.kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.contextSize = Int32(clamping: options.contextSize.clamped(to: 1...1_048_576))
         self.maxOutputTokens = Int32(clamping: options.maxOutputTokens.clamped(to: 1...131_072))
         self.gpuLayers = Int32(clamping: options.gpuLayers.clamped(to: -1...999))
@@ -61,6 +64,7 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
         self.kvOffload = options.kvOffload
         self.flashAttention = options.flashAttention
         self.useModelCache = options.useModelCache
+        self.reuseKVCache = options.reuseKVCache && !self.kvCacheKey.isEmpty
         self.seed = options.seed
         self.minKeep = 0
         self.topK = Int32(clamping: options.topK.clamped(to: 0...1_000))
