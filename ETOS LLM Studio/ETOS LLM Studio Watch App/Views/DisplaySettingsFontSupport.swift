@@ -166,8 +166,12 @@ struct WatchFontSettingsView: View {
             }
 
             Section(NSLocalizedString("预览", comment: "")) {
-                Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
-                    .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。", size: 14))
+                (
+                    Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
+                        + Text(verbatim: "\n")
+                        + Text(NSLocalizedString("风来疏竹，风过而竹不留声。", comment: ""))
+                )
+                    .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox 风来疏竹", size: 14))
                     .lineSpacing(previewLineSpacing)
                 Text(NSLocalizedString("Emphasis", comment: "Font preview emphasis sample"))
                     .font(FontRoutePreview.font(for: .emphasis, sample: "Emphasis", size: 14))

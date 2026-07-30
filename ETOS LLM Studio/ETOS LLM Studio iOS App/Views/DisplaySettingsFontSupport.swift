@@ -401,11 +401,12 @@ struct FontSettingsView: View {
 
     private var previewSection: some View {
         Section(NSLocalizedString("预览", comment: "")) {
-            Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
-                .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox"))
-                .lineSpacing(previewLineSpacing)
-            Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
-                .font(FontRoutePreview.font(for: .body, sample: "风来疏竹，风过而竹不留声。"))
+            (
+                Text(NSLocalizedString("The quick brown fox jumps over the lazy dog.", comment: "Font preview sample"))
+                    + Text(verbatim: "\n")
+                    + Text(NSLocalizedString("中文：风来疏竹，风过而竹不留声。", comment: ""))
+            )
+                .font(FontRoutePreview.font(for: .body, sample: "The quick brown fox 风来疏竹"))
                 .lineSpacing(previewLineSpacing)
             Text(NSLocalizedString("斜体预览 / Emphasis", comment: ""))
                 .font(FontRoutePreview.font(for: .emphasis, sample: "斜体预览 Emphasis"))

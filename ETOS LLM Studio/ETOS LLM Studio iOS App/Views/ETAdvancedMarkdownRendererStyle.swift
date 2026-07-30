@@ -22,7 +22,7 @@ extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
-        lineSpacingEm: Double,
+        lineSpacing: CGFloat,
         codeHighlightLimit: Int = 12_000
     ) -> some View {
         let codeBlockBackground = isOutgoing
@@ -95,7 +95,6 @@ extension View {
             .markdownBlockStyle(\.paragraph) { configuration in
                 configuration.label
                     .fixedSize(horizontal: false, vertical: true)
-                    .relativeLineSpacing(.em(CGFloat(lineSpacingEm)))
                     .markdownMargin(top: .zero, bottom: .em(1))
             }
             .markdownBlockStyle(\.blockquote) { configuration in
@@ -137,7 +136,6 @@ extension View {
                 } bodyContent: {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
-                            .relativeLineSpacing(.em(0.15))
                             .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
                                 if !usesCharacterFallback,
@@ -163,6 +161,18 @@ extension View {
                 }
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
+            .markdownBlockStyle(\.tableCell) { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        if configuration.row == 0 {
+                            FontWeight(.semibold)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativePadding(.horizontal, length: .em(0.72))
+                    .relativePadding(.vertical, length: .em(0.35))
+            }
+            .lineSpacing(lineSpacing)
     }
 }
 

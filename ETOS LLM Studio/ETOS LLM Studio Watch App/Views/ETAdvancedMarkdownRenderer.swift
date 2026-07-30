@@ -89,7 +89,6 @@ struct ETAdvancedMarkdownRenderer: View {
                         activeLine: streamingLineParts.activeLine,
                         textColor: textColor,
                         fontScale: fontScale,
-                        lineSpacingEm: lineSpacingEm,
                         lineSpacing: lineSpacing
                     )
                 } else if let prepared = effectivePreparedContent {
@@ -98,7 +97,7 @@ struct ETAdvancedMarkdownRenderer: View {
                         sampleText: prepared.sourceText,
                         textColor: textColor,
                         fontScale: fontScale,
-                        lineSpacingEm: lineSpacingEm
+                        lineSpacing: lineSpacing
                     )
                 } else {
                     markdownTextView(
@@ -106,7 +105,7 @@ struct ETAdvancedMarkdownRenderer: View {
                         sampleText: content,
                         textColor: textColor,
                         fontScale: fontScale,
-                        lineSpacingEm: lineSpacingEm
+                        lineSpacing: lineSpacing
                     )
                 }
             } else {
@@ -168,7 +167,7 @@ struct ETAdvancedMarkdownRenderer: View {
         sampleText: String,
         textColor: Color,
         fontScale: Double,
-        lineSpacingEm: Double
+        lineSpacing: CGFloat
     ) -> some View {
         let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
         let strongTextColor = resolvedStyleColor(customTextStyleColors?.strong, fallback: textColor)
@@ -189,7 +188,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
                 fontScale: fontScale,
-                lineSpacingEm: lineSpacingEm,
+                lineSpacing: lineSpacing,
                 codeHighlightLimit: isStreaming ? 4_096 : 12_000,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
@@ -204,7 +203,6 @@ struct ETAdvancedMarkdownRenderer: View {
         activeLine: String,
         textColor: Color,
         fontScale: Double,
-        lineSpacingEm: Double,
         lineSpacing: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -214,7 +212,7 @@ struct ETAdvancedMarkdownRenderer: View {
                     sampleText: prefix,
                     textColor: textColor,
                     fontScale: fontScale,
-                    lineSpacingEm: lineSpacingEm
+                    lineSpacing: lineSpacing
                 )
             }
             ETStreamingActiveLineText(
@@ -350,7 +348,7 @@ private extension View {
         prefersDarkPalette: Bool,
         sampleText: String,
         fontScale: Double,
-        lineSpacingEm: Double,
+        lineSpacing: CGFloat,
         codeHighlightLimit: Int = 12_000,
         onCodeBlockHeaderTap: ((String) -> Void)? = nil
     ) -> some View {
@@ -424,7 +422,6 @@ private extension View {
             .markdownBlockStyle(\.paragraph) { configuration in
                 configuration.label
                     .fixedSize(horizontal: false, vertical: true)
-                    .relativeLineSpacing(.em(CGFloat(lineSpacingEm)))
                     .markdownMargin(top: .zero, bottom: .em(1))
             }
             .markdownBlockStyle(\.blockquote) { configuration in
@@ -467,7 +464,6 @@ private extension View {
                 } bodyContent: {
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
-                            .relativeLineSpacing(.em(0.12))
                             .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
                                 if !usesCharacterFallback,
@@ -493,5 +489,17 @@ private extension View {
                 }
                 .markdownMargin(top: .zero, bottom: .em(1))
             }
+            .markdownBlockStyle(\.tableCell) { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        if configuration.row == 0 {
+                            FontWeight(.semibold)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativePadding(.horizontal, length: .em(0.72))
+                    .relativePadding(.vertical, length: .em(0.35))
+            }
+            .lineSpacing(lineSpacing)
     }
 }

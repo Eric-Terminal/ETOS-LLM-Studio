@@ -63,7 +63,6 @@ struct ETAdvancedMarkdownRenderer: View {
                         activeLine: streamingLineParts.activeLine,
                         textColor: textColor,
                         fontScale: fontScale,
-                        lineSpacingEm: lineSpacingEm,
                         lineSpacing: lineSpacing
                     )
                 } else if let prepared = effectivePreparedContent {
@@ -87,7 +86,7 @@ struct ETAdvancedMarkdownRenderer: View {
                             sampleText: prepared.sourceText,
                             textColor: textColor,
                             fontScale: fontScale,
-                            lineSpacingEm: lineSpacingEm
+                            lineSpacing: lineSpacing
                         )
                     }
                 } else {
@@ -96,7 +95,7 @@ struct ETAdvancedMarkdownRenderer: View {
                         sampleText: content,
                         textColor: textColor,
                         fontScale: fontScale,
-                        lineSpacingEm: lineSpacingEm
+                        lineSpacing: lineSpacing
                     )
                 }
             } else {
@@ -175,7 +174,7 @@ struct ETAdvancedMarkdownRenderer: View {
         sampleText: String,
         textColor: Color,
         fontScale: Double,
-        lineSpacingEm: Double
+        lineSpacing: CGFloat
     ) -> some View {
         let mathTextColor = ETIOSMathColorComponents(textColor)
         let emphasisTextColor = resolvedStyleColor(customTextStyleColors?.emphasis, fallback: textColor)
@@ -198,7 +197,7 @@ struct ETAdvancedMarkdownRenderer: View {
                 prefersDarkPalette: colorScheme == .dark,
                 sampleText: sampleText,
                 fontScale: fontScale,
-                lineSpacingEm: lineSpacingEm,
+                lineSpacing: lineSpacing,
                 codeHighlightLimit: isStreaming ? 4_096 : 12_000
             )
     }
@@ -209,7 +208,6 @@ struct ETAdvancedMarkdownRenderer: View {
         activeLine: String,
         textColor: Color,
         fontScale: Double,
-        lineSpacingEm: Double,
         lineSpacing: CGFloat
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -219,7 +217,7 @@ struct ETAdvancedMarkdownRenderer: View {
                     sampleText: prefix,
                     textColor: textColor,
                     fontScale: fontScale,
-                    lineSpacingEm: lineSpacingEm
+                    lineSpacing: lineSpacing
                 )
             }
             ETStreamingActiveLineText(

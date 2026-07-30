@@ -385,8 +385,25 @@ struct FontRouteSyncTests {
             isCustomFontEnabled: false,
             fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
         )
+        let compactMarkdownSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.025,
+            fontScale: 1,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
+        let spaciousMarkdownSpacing = FontLibrary.lineSpacingPoints(
+            basePointSize: 17,
+            lineSpacingEm: 0.425,
+            fontScale: 1,
+            isCustomFontEnabled: false,
+            fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
+        )
         #expect(abs(customFontSpacing - 5.1) < 0.000_1)
         #expect(abs(systemFontSpacing - 3.4) < 0.000_1)
+        #expect(abs(compactMarkdownSpacing - 0.425) < 0.000_1)
+        #expect(abs(spaciousMarkdownSpacing - 7.225) < 0.000_1)
+        #expect(spaciousMarkdownSpacing - compactMarkdownSpacing > 6)
     }
 
     @Test("字体渲染读取只使用内存快照")
