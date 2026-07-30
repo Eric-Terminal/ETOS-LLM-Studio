@@ -514,7 +514,9 @@ public enum SkillStore {
             enforceSizeLimit: enforceSizeLimit
         )
         guard candidate.canAttemptRead else {
-            throw SkillStoreError.saveFailed(candidate.reason ?? "该技能资源不能作为文本读取。")
+            throw SkillStoreError.saveFailed(
+                candidate.reason ?? NSLocalizedString("该技能资源不能作为文本读取。", comment: "Skill resource is not text-readable")
+            )
         }
         return ResolvedSkillResource(relativePath: normalizedPath, fileURL: fileURL)
     }
@@ -575,7 +577,9 @@ public enum SkillStore {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+            throw SkillStoreError.saveFailed(
+                String(format: NSLocalizedString("无法读取技能资源：%@", comment: "Skill resource read failure"), relativePath)
+            )
         }
         do {
             return try FileAttachmentTextExtractor().extractText(from: makeAttachment(data: data, relativePath: relativePath))
@@ -589,7 +593,9 @@ public enum SkillStore {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+            throw SkillStoreError.saveFailed(
+                String(format: NSLocalizedString("无法读取技能资源：%@", comment: "Skill resource read failure"), relativePath)
+            )
         }
         do {
             return try FileAttachmentTextExtractor().extractText(from: makeAttachment(data: data, relativePath: relativePath))
@@ -603,7 +609,9 @@ public enum SkillStore {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            throw SkillStoreError.saveFailed("无法读取技能资源：\(relativePath)")
+            throw SkillStoreError.saveFailed(
+                String(format: NSLocalizedString("无法读取技能资源：%@", comment: "Skill resource read failure"), relativePath)
+            )
         }
         guard isRecognizableImageData(data, relativePath: relativePath) else {
             throw SkillStoreError.saveFailed(NSLocalizedString("非 UTF-8 文本资源，仅列出不读取", comment: "Skill resource unreadable reason"))

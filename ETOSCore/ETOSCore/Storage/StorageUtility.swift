@@ -460,18 +460,40 @@ public enum StorageUtility {
         public var description: String {
             var parts: [String] = []
             if ghostSessionsCleaned > 0 {
-                parts.append("\(ghostSessionsCleaned) 个幽灵会话")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个幽灵会话", comment: "Cleaned ghost session count"),
+                        ghostSessionsCleaned
+                    )
+                )
             }
             if orphanedAudioFilesCleaned > 0 {
-                parts.append("\(orphanedAudioFilesCleaned) 个孤立音频")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个孤立音频", comment: "Cleaned orphaned audio count"),
+                        orphanedAudioFilesCleaned
+                    )
+                )
             }
             if orphanedImageFilesCleaned > 0 {
-                parts.append("\(orphanedImageFilesCleaned) 个孤立图片")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个孤立图片", comment: "Cleaned orphaned image count"),
+                        orphanedImageFilesCleaned
+                    )
+                )
             }
             if orphanedAudioReferencesCleaned > 0 {
-                parts.append("\(orphanedAudioReferencesCleaned) 个无效音频引用")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个无效音频引用", comment: "Cleaned invalid audio reference count"),
+                        orphanedAudioReferencesCleaned
+                    )
+                )
             }
-            return parts.isEmpty ? "没有需要清理的内容" : parts.joined(separator: "、")
+            return parts.isEmpty
+                ? NSLocalizedString("没有需要清理的内容", comment: "No orphaned data needed cleanup")
+                : parts.joined(separator: NSLocalizedString("、", comment: "Localized list separator"))
         }
     }
     
@@ -513,18 +535,40 @@ public enum StorageUtility {
         public var description: String {
             var parts: [String] = []
             if ghostSessions > 0 {
-                parts.append("\(ghostSessions) 个幽灵会话")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个幽灵会话", comment: "Ghost session count"),
+                        ghostSessions
+                    )
+                )
             }
             if orphanedAudioFiles > 0 {
-                parts.append("\(orphanedAudioFiles) 个孤立音频")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个孤立音频", comment: "Orphaned audio count"),
+                        orphanedAudioFiles
+                    )
+                )
             }
             if orphanedImageFiles > 0 {
-                parts.append("\(orphanedImageFiles) 个孤立图片")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个孤立图片", comment: "Orphaned image count"),
+                        orphanedImageFiles
+                    )
+                )
             }
             if orphanedAudioReferences > 0 {
-                parts.append("\(orphanedAudioReferences) 个无效音频引用")
+                parts.append(
+                    String(
+                        format: NSLocalizedString("%d 个无效音频引用", comment: "Invalid audio reference count"),
+                        orphanedAudioReferences
+                    )
+                )
             }
-            return parts.isEmpty ? "无孤立数据" : parts.joined(separator: "、")
+            return parts.isEmpty
+                ? NSLocalizedString("无孤立数据", comment: "No orphaned data")
+                : parts.joined(separator: NSLocalizedString("、", comment: "Localized list separator"))
         }
     }
     

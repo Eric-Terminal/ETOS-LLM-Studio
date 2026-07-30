@@ -42,8 +42,10 @@ public enum AudioRecordingFormat: String, CaseIterable, Codable {
     /// 格式说明
     public var formatDescription: String {
         switch self {
-        case .aac: return "AAC 压缩格式，文件小，兼容性好"
-        case .wav: return "WAV 无压缩格式，音质最佳，文件较大"
+        case .aac:
+            return NSLocalizedString("AAC 压缩格式，文件小，兼容性好", comment: "AAC recording format description")
+        case .wav:
+            return NSLocalizedString("WAV 无压缩格式，音质最佳，文件较大", comment: "WAV recording format description")
         }
     }
 }

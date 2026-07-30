@@ -414,7 +414,7 @@ public final class ShortcutToolManager: ObservableObject {
 
     public func displayLabel(for toolName: String) -> String? {
         guard let tool = routedTools[toolName] else { return nil }
-        return "[快捷指令] \(tool.displayName)"
+        return "\(NSLocalizedString("[快捷指令]", comment: "Shortcut tool display prefix")) \(tool.displayName)"
     }
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {

@@ -266,7 +266,9 @@ extension MCPManager {
 
     public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
         guard chatToolsEnabled else {
-            throw MCPChatBridgeError.toolGroupDisabled("MCP 工具")
+            throw MCPChatBridgeError.toolGroupDisabled(
+                NSLocalizedString("MCP 工具", comment: "MCP tool group display name")
+            )
         }
         guard let routed = routedTools[toolName] else {
             throw MCPChatBridgeError.unknownTool

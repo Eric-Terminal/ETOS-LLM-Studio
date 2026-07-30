@@ -156,11 +156,20 @@ public enum Persistence {
         public var errorDescription: String? {
             switch self {
             case .grdbUnavailable:
-                return "当前无法访问 SQLite 数据库，暂时不能执行 JSON 迁移。"
+                return NSLocalizedString(
+                    "当前无法访问 SQLite 数据库，暂时不能执行 JSON 迁移。",
+                    comment: "Legacy JSON migration database unavailable"
+                )
             case .importFailed(let reason):
-                return "迁移失败：\(reason)"
+                return String(
+                    format: NSLocalizedString("迁移失败：%@", comment: "Legacy JSON migration failure"),
+                    reason
+                )
             case .cleanupFailed(let reason):
-                return "清理失败：\(reason)"
+                return String(
+                    format: NSLocalizedString("清理失败：%@", comment: "Legacy JSON cleanup failure"),
+                    reason
+                )
             }
         }
     }

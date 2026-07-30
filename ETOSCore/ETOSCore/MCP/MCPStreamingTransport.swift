@@ -326,13 +326,21 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
                     if let samplingRequest = try? JSONDecoder().decode(MCPServerSamplingRequest.self, from: jsonData) {
                         await handleSamplingRequest(samplingRequest)
                     } else {
-                        await sendErrorResponse(requestId: requestID, code: -32602, message: "Sampling 请求参数无效")
+            await sendErrorResponse(
+                requestId: requestID,
+                code: -32602,
+                message: NSLocalizedString("Sampling 请求参数无效", comment: "Invalid MCP Sampling request")
+            )
                     }
                 case "elicitation/create":
                     if let elicitationRequest = try? JSONDecoder().decode(MCPServerElicitationRequest.self, from: jsonData) {
                         await handleElicitationRequest(elicitationRequest)
                     } else {
-                        await sendErrorResponse(requestId: requestID, code: -32602, message: "Elicitation 请求参数无效")
+            await sendErrorResponse(
+                requestId: requestID,
+                code: -32602,
+                message: NSLocalizedString("Elicitation 请求参数无效", comment: "Invalid MCP Elicitation request")
+            )
                     }
                 default:
                     return
@@ -385,7 +393,11 @@ public final class MCPStreamingTransport: MCPTransport, MCPStreamingTransportPro
     private func handleSamplingRequest(_ request: MCPServerSamplingRequest) async {
         guard let handler = samplingHandler else {
             streamingLogger.warning("收到 Sampling 请求但未设置 handler")
-            await sendErrorResponse(requestId: request.id, code: -32603, message: "客户端未启用 Sampling 能力")
+            await sendErrorResponse(
+                requestId: request.id,
+                code: -32603,
+                message: NSLocalizedString("客户端未启用 Sampling 能力", comment: "MCP Sampling capability unavailable")
+            )
             return
         }
         

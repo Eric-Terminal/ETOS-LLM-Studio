@@ -6,6 +6,7 @@
 // - 覆盖摘要与原始返回回退逻辑
 // ============================================================================
 
+import Foundation
 import Testing
 @testable import ETOSCore
 
@@ -31,7 +32,12 @@ struct MCPToolResultFormatterTests {
 
         let display = MCPToolResultFormatter.displayModel(from: raw)
 
-        #expect(display.summaryText == "返回 MCP 内容（1 段）")
+        #expect(
+            display.summaryText == String(
+                format: NSLocalizedString("返回 MCP 内容（%d 段）", comment: "MCP structured content summary"),
+                1
+            )
+        )
         #expect(display.primaryContentText == nil)
         #expect(display.rawDisplayText.contains(#""mimeType""#))
         #expect(display.isStructuredMCPEnvelope)
@@ -57,7 +63,12 @@ struct MCPToolResultFormatterTests {
 
         let display = MCPToolResultFormatter.displayModel(from: raw)
 
-        #expect(display.summaryText == "返回 JSON 数据（2 个字段）")
+        #expect(
+            display.summaryText == String(
+                format: NSLocalizedString("返回 JSON 数据（%d 个字段）", comment: "JSON object summary"),
+                2
+            )
+        )
         #expect(display.primaryContentText == nil)
         #expect(display.rawDisplayText.contains("\n"))
         #expect(!display.isStructuredMCPEnvelope)

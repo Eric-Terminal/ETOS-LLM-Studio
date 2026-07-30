@@ -76,7 +76,10 @@ extension ThirdPartyImportService {
             let topicID = nonEmpty(string(topic["id"])) ?? "cherry-topic-\(index)"
             let topicName = nonEmpty(string(topic["name"]))
                 ?? topicNameByID[topicID]
-                ?? "Cherry 对话 \(index + 1)"
+                ?? String(
+                    format: NSLocalizedString("Cherry 对话 %d", comment: "Imported Cherry Studio conversation fallback name"),
+                    index + 1
+                )
 
             let rawMessages = normalizeJSONArray(topic["messages"])
             guard !rawMessages.isEmpty else { continue }
@@ -263,7 +266,10 @@ extension ThirdPartyImportService {
                 text = nonEmpty(string(block["content"])) ?? ""
             case "error":
                 if let content = nonEmpty(string(block["content"])) {
-                    text = "[错误] \(content)"
+                    text = String(
+                        format: NSLocalizedString("[错误] %@", comment: "Imported message error prefix"),
+                        content
+                    )
                 }
             case "tool":
                 if let content = nonEmpty(string(block["content"])) {

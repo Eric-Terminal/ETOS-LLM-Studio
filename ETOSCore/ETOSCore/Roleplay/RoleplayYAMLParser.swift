@@ -17,11 +17,20 @@ enum RoleplayYAMLParser {
         var errorDescription: String? {
             switch self {
             case .invalidMapping(let line):
-                return "第 \(line) 行不是有效的 YAML 键值。"
+                return String(
+                    format: NSLocalizedString("第 %d 行不是有效的 YAML 键值。", comment: "Invalid YAML key-value line"),
+                    line
+                )
             case .invalidIndentation(let line):
-                return "第 \(line) 行的 YAML 缩进无效。"
+                return String(
+                    format: NSLocalizedString("第 %d 行的 YAML 缩进无效。", comment: "Invalid YAML indentation"),
+                    line
+                )
             case .trailingContent(let line):
-                return "第 \(line) 行包含无法归属的 YAML 内容。"
+                return String(
+                    format: NSLocalizedString("第 %d 行包含无法归属的 YAML 内容。", comment: "Invalid YAML container"),
+                    line
+                )
             }
         }
     }

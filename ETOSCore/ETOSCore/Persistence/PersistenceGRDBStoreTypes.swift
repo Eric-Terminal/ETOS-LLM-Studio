@@ -46,9 +46,17 @@ enum LegacyIncrementalImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .malformedSessionRecord(let sessionID, let path):
-            return "会话 \(sessionID.uuidString) 的旧版会话文件无法解析：\(path)"
+            return String(
+                format: NSLocalizedString("会话 %@ 的旧版会话文件无法解析：%@", comment: "Legacy session index parse failure"),
+                sessionID.uuidString,
+                path
+            )
         case .malformedMessagesFile(let sessionID, let path):
-            return "会话 \(sessionID.uuidString) 的旧版消息文件无法解析：\(path)"
+            return String(
+                format: NSLocalizedString("会话 %@ 的旧版消息文件无法解析：%@", comment: "Legacy message payload parse failure"),
+                sessionID.uuidString,
+                path
+            )
         }
     }
 }

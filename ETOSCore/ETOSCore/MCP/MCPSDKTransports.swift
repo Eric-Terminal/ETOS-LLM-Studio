@@ -372,10 +372,14 @@ public final class MCPOAuthEndpointAuthorizer: HTTPClientAuthorizer, @unchecked 
                 queryItems.append(URLQueryItem(name: "grant_type", value: "client_credentials"))
             case .authorizationCode:
                 guard let code = normalized(authorizationCode) else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 authorizationCode。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 authorizationCode。", comment: "OAuth authorization code missing")
+                    )
                 }
                 guard let redirectURI = normalized(redirectURI) else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 redirectURI。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 redirectURI。", comment: "OAuth redirect URI missing")
+                    )
                 }
                 queryItems.append(URLQueryItem(name: "grant_type", value: "authorization_code"))
                 queryItems.append(URLQueryItem(name: "code", value: code))

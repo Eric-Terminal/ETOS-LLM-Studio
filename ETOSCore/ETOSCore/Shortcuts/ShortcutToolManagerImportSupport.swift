@@ -203,7 +203,10 @@ extension ShortcutToolManager {
             metadata["scanSource"] = .string("icloud_api")
         } else {
             if next.source?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                next.source = "iCloud 分享链接：\(link)"
+                next.source = String(
+                    format: NSLocalizedString("iCloud 分享链接：%@", comment: "Shortcut iCloud source link"),
+                    link
+                )
             }
             metadata["scanStatus"] = .string("link_only")
         }
@@ -303,9 +306,12 @@ extension ShortcutToolManager {
         let actions = (root["WFWorkflowActions"] as? [[String: Any]]) ?? []
         guard !actions.isEmpty else {
             if let workflowName, !workflowName.isEmpty {
-                return "流程名：\(workflowName)。未解析到动作详情。"
+                return String(
+                    format: NSLocalizedString("流程名：%@。未解析到动作详情。", comment: "Shortcut workflow without action details"),
+                    workflowName
+                )
             }
-            return "未解析到动作详情。"
+            return NSLocalizedString("未解析到动作详情。", comment: "Shortcut workflow action details unavailable")
         }
 
         var orderedActionNames: [String] = []
@@ -321,13 +327,19 @@ extension ShortcutToolManager {
         let preview = orderedActionNames.prefix(12).joined(separator: "、")
         var fragments: [String] = []
         if let workflowName, !workflowName.isEmpty {
-            fragments.append("流程名：\(workflowName)")
+            fragments.append(
+                String(format: NSLocalizedString("流程名：%@", comment: "Shortcut workflow name"), workflowName)
+            )
         }
-        fragments.append("动作总数：\(actions.count)")
+        fragments.append(
+            String(format: NSLocalizedString("动作总数：%d", comment: "Shortcut workflow action count"), actions.count)
+        )
         if !preview.isEmpty {
-            fragments.append("关键动作：\(preview)")
+            fragments.append(
+                String(format: NSLocalizedString("关键动作：%@", comment: "Shortcut workflow key actions"), preview)
+            )
         }
-        return fragments.joined(separator: "；")
+        return fragments.joined(separator: NSLocalizedString("；", comment: "Localized clause separator"))
     }
 
     func normalizeActionIdentifier(_ identifier: String) -> String {

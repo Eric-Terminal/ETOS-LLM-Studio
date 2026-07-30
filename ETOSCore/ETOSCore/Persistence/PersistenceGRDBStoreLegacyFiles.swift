@@ -126,7 +126,11 @@ extension PersistenceGRDBStore {
         return orphanMessageFiles.enumerated().compactMap { position, url in
             let baseName = url.deletingPathExtension().lastPathComponent
             guard let sessionID = UUID(uuidString: baseName) else { return nil }
-            let fallbackSession = ChatSession(id: sessionID, name: "历史会话", isTemporary: false)
+            let fallbackSession = ChatSession(
+                id: sessionID,
+                name: NSLocalizedString("历史会话", comment: "Legacy session fallback name"),
+                isTemporary: false
+            )
             return LegacySessionImportPlan(
                 id: sessionID,
                 fallbackSession: fallbackSession,

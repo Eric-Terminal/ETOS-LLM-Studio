@@ -64,7 +64,7 @@ public enum AppLanguagePreference: String, CaseIterable, Identifiable {
     public var nativeDisplayName: String {
         switch self {
         case .system:
-            return "跟随系统"
+            return NSLocalizedString("跟随系统", comment: "Follow system language option")
         case .simplifiedChinese:
             return "简体中文"
         case .traditionalChinese:

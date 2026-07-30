@@ -286,7 +286,10 @@ extension MCPIntegrationView {
                         .etFont(.caption2)
                         .foregroundStyle(.tertiary)
                         Button(NSLocalizedString("取消调用", comment: ""), role: .destructive) {
-                            manager.cancelToolCall(callID: call.id, reason: "用户在 MCP 工具箱取消")
+                            manager.cancelToolCall(
+                                callID: call.id,
+                                reason: NSLocalizedString("用户在 MCP 工具箱取消", comment: "MCP toolbox cancellation reason")
+                            )
                         }
                         .buttonStyle(.bordered)
                     }

@@ -42,12 +42,22 @@ public enum MCPTransportError: LocalizedError {
         switch self {
         case .httpStatus(let code, let body):
             if let body, !body.isEmpty {
-                return "HTTP \(code): \(body)"
+                return String(
+                    format: NSLocalizedString("HTTP %d：%@", comment: "MCP HTTP error with response body"),
+                    code,
+                    body
+                )
             } else {
-                return "HTTP \(code): 服务器返回错误"
+                return String(
+                    format: NSLocalizedString("HTTP %d：服务器返回错误", comment: "MCP HTTP error without response body"),
+                    code
+                )
             }
         case .oauthConfiguration(let message):
-            return "OAuth 配置错误：\(message)"
+            return String(
+                format: NSLocalizedString("OAuth 配置错误：%@", comment: "MCP OAuth configuration error"),
+                message
+            )
         }
     }
 }
@@ -192,10 +202,14 @@ public actor MCPOAuthHTTPTransport: MCPTransport, MCPProtocolVersionConfigurable
                 queryItems.append(URLQueryItem(name: "grant_type", value: "client_credentials"))
             case .authorizationCode:
                 guard let resolvedCode = normalized(authorizationCode), !resolvedCode.isEmpty else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 authorizationCode。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 authorizationCode。", comment: "OAuth authorization code missing")
+                    )
                 }
                 guard let resolvedRedirectURI = normalized(redirectURI), !resolvedRedirectURI.isEmpty else {
-                    throw MCPTransportError.oauthConfiguration(message: "授权码模式缺少 redirectURI。")
+                    throw MCPTransportError.oauthConfiguration(
+                        message: NSLocalizedString("授权码模式缺少 redirectURI。", comment: "OAuth redirect URI missing")
+                    )
                 }
                 queryItems.append(URLQueryItem(name: "grant_type", value: "authorization_code"))
                 queryItems.append(URLQueryItem(name: "code", value: resolvedCode))

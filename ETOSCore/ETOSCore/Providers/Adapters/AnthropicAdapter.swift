@@ -426,7 +426,14 @@ public class AnthropicAdapter: APIAdapter {
     public func parseModelListResponse(data: Data) throws -> [Model] {
         if let errorEnvelope = try? JSONDecoder().decode(AnthropicErrorEnvelope.self, from: data),
            let error = errorEnvelope.error {
-            throw NSError(domain: "AnthropicAPIError", code: -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(
+                domain: "AnthropicAPIError",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: error.message
+                        ?? NSLocalizedString("未知错误", comment: "Generic unknown error")
+                ]
+            )
         }
 
         let response = try JSONDecoder().decode(AnthropicModelListResponse.self, from: data)
@@ -443,7 +450,14 @@ public class AnthropicAdapter: APIAdapter {
         let apiResponse = try JSONDecoder().decode(AnthropicResponse.self, from: data)
         
         if let error = apiResponse.error {
-            throw NSError(domain: "AnthropicAPIError", code: -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(
+                domain: "AnthropicAPIError",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: error.message
+                        ?? NSLocalizedString("未知错误", comment: "Generic unknown error")
+                ]
+            )
         }
         
         guard let contentBlocks = apiResponse.content else {

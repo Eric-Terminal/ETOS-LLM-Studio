@@ -24,11 +24,11 @@ public extension MCPToolApprovalPolicy {
     var displayName: String {
         switch self {
         case .askEveryTime:
-            return "每次询问"
+            return NSLocalizedString("每次询问", comment: "MCP approval policy ask every time")
         case .alwaysAllow:
-            return "总是允许"
+            return NSLocalizedString("总是允许", comment: "MCP approval policy always allow")
         case .alwaysDeny:
-            return "始终拒绝"
+            return NSLocalizedString("始终拒绝", comment: "MCP approval policy always deny")
         }
     }
 }

@@ -630,7 +630,8 @@ private final class SyncPackageJSONFileWriter {
         stream.open()
         guard stream.streamStatus == .open || stream.streamStatus == .writing else {
             throw SyncPackageTransferError.fileWriteFailed(
-                stream.streamError?.localizedDescription ?? "输出流打开失败"
+                stream.streamError?.localizedDescription
+                    ?? NSLocalizedString("输出流打开失败", comment: "Sync package output stream open failure")
             )
         }
     }
@@ -641,7 +642,9 @@ private final class SyncPackageJSONFileWriter {
 
     func write(_ text: String) throws {
         guard let data = text.data(using: .utf8) else {
-            throw SyncPackageTransferError.fileWriteFailed("无法编码文本片段")
+            throw SyncPackageTransferError.fileWriteFailed(
+                NSLocalizedString("无法编码文本片段", comment: "Sync package text encoding failure")
+            )
         }
         try write(data)
     }
@@ -665,11 +668,14 @@ private final class SyncPackageJSONFileWriter {
                 let count = stream.write(baseAddress.advanced(by: written), maxLength: data.count - written)
                 if count < 0 {
                     throw SyncPackageTransferError.fileWriteFailed(
-                        stream.streamError?.localizedDescription ?? "输出流写入失败"
+                        stream.streamError?.localizedDescription
+                            ?? NSLocalizedString("输出流写入失败", comment: "Sync package output stream write failure")
                     )
                 }
                 if count == 0 {
-                    throw SyncPackageTransferError.fileWriteFailed("输出流未写入任何数据")
+                    throw SyncPackageTransferError.fileWriteFailed(
+                        NSLocalizedString("输出流未写入任何数据", comment: "Sync package output stream wrote no data")
+                    )
                 }
                 written += count
             }

@@ -281,17 +281,26 @@ public enum MCPToolResultFormatter {
         switch value {
         case .dictionary(let dictionary):
             if case .array(let contentItems)? = dictionary["content"] {
-                return "返回 MCP 内容（\(contentItems.count) 段）"
+                return String(
+                    format: NSLocalizedString("返回 MCP 内容（%d 段）", comment: "MCP structured content summary"),
+                    contentItems.count
+                )
             }
-            return "返回 JSON 数据（\(dictionary.count) 个字段）"
+            return String(
+                format: NSLocalizedString("返回 JSON 数据（%d 个字段）", comment: "JSON object summary"),
+                dictionary.count
+            )
         case .array(let array):
-            return "返回 JSON 数组（\(array.count) 项）"
+            return String(
+                format: NSLocalizedString("返回 JSON 数组（%d 项）", comment: "JSON array summary"),
+                array.count
+            )
         case .bool:
-            return "返回 JSON 布尔值"
+            return NSLocalizedString("返回 JSON 布尔值", comment: "JSON Boolean summary")
         case .int, .double:
-            return "返回 JSON 数值"
+            return NSLocalizedString("返回 JSON 数值", comment: "JSON number summary")
         case .null:
-            return "返回空值"
+            return NSLocalizedString("返回空值", comment: "JSON null summary")
         case .string(let text):
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : truncatedSingleLine(trimmed, limit: summaryLimit)

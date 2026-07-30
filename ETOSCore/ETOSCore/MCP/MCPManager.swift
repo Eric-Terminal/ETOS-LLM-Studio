@@ -773,7 +773,9 @@ public final class MCPManager: ObservableObject {
         autoConnectFailureNotifiedAt[server.id] = now
 
         let isHandshakeTimeout = isInitializeTimeoutError(error)
-        let reason = isHandshakeTimeout ? "握手超时" : error.localizedDescription
+        let reason = isHandshakeTimeout
+            ? NSLocalizedString("握手超时", comment: "MCP handshake timeout notification reason")
+            : error.localizedDescription
         Task {
             MCPFailureNotificationCenter.shared.notifyMCPConnectionFailure(
                 serverDisplayName: server.displayName,

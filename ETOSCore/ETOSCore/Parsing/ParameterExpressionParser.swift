@@ -216,7 +216,9 @@ public enum ParameterExpressionParser {
             skipSeparators(text, index: &index)
             
             guard index < text.endIndex, text[index] == "=" else {
-                throw ParserError.invalidValue("缺少“=”")
+                throw ParserError.invalidValue(
+                    NSLocalizedString("缺少“=”", comment: "Parameter expression missing equals sign")
+                )
             }
             index = text.index(after: index)
             
@@ -231,7 +233,9 @@ public enum ParameterExpressionParser {
             }
         }
         
-        throw ParserError.invalidValue("缺少“}”")
+        throw ParserError.invalidValue(
+            NSLocalizedString("缺少“}”", comment: "Parameter expression missing closing brace")
+        )
     }
     
     private static func parseArray(_ text: Substring, index: inout Substring.Index) throws -> JSONValue {
@@ -256,7 +260,9 @@ public enum ParameterExpressionParser {
             }
         }
         
-        throw ParserError.invalidValue("缺少“]”")
+        throw ParserError.invalidValue(
+            NSLocalizedString("缺少“]”", comment: "Parameter expression missing closing bracket")
+        )
     }
     
     private static func parseScalar(_ text: Substring, index: inout Substring.Index) throws -> JSONValue {
@@ -316,7 +322,9 @@ public enum ParameterExpressionParser {
             index = text.index(after: index)
         }
         
-        throw ParserError.invalidValue("字符串缺少结束引号")
+        throw ParserError.invalidValue(
+            NSLocalizedString("字符串缺少结束引号", comment: "Parameter expression unterminated string")
+        )
     }
     
     private static func parseKey(_ text: Substring, index: inout Substring.Index) throws -> String {

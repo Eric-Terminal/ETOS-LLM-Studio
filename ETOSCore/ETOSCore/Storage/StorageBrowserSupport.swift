@@ -161,7 +161,9 @@ public enum StorageBrowserSupport {
         let relative = String(currentPath.dropFirst(rootPath.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 
-        return relative.isEmpty ? "根目录" : relative
+        return relative.isEmpty
+            ? NSLocalizedString("根目录", comment: "Storage browser root directory")
+            : relative
     }
 
     public static func isJSONFile(_ url: URL) -> Bool {

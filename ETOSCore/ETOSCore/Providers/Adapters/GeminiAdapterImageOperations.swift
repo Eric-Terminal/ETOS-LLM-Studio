@@ -94,7 +94,14 @@ extension GeminiAdapter {
     public func parseImageGenerationResponse(data: Data) throws -> [GeneratedImageResult] {
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
         if let error = response.error {
-            throw NSError(domain: "GeminiImageAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(
+                domain: "GeminiImageAPIError",
+                code: error.code ?? -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: error.message
+                        ?? NSLocalizedString("未知错误", comment: "Generic unknown error")
+                ]
+            )
         }
 
         var results: [GeneratedImageResult] = []

@@ -304,7 +304,14 @@ extension GeminiAdapter {
     public func parseModelListResponse(data: Data) throws -> [Model] {
         if let errorEnvelope = try? JSONDecoder().decode(GeminiErrorEnvelope.self, from: data),
            let error = errorEnvelope.error {
-            throw NSError(domain: "GeminiAPIError", code: error.code ?? -1, userInfo: [NSLocalizedDescriptionKey: error.message ?? "未知错误"])
+            throw NSError(
+                domain: "GeminiAPIError",
+                code: error.code ?? -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: error.message
+                        ?? NSLocalizedString("未知错误", comment: "Generic unknown error")
+                ]
+            )
         }
 
         let response = try JSONDecoder().decode(GeminiModelListResponse.self, from: data)

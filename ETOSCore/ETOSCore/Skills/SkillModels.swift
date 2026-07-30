@@ -104,19 +104,25 @@ public enum SkillStoreError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidSkillName:
-            return "技能名称不合法。"
+            return NSLocalizedString("技能名称不合法。", comment: "Invalid skill name")
         case .invalidSkillContent:
-            return "技能内容格式不合法，缺少可解析的技能名称。"
+            return NSLocalizedString("技能内容格式不合法，缺少可解析的技能名称。", comment: "Invalid skill content")
         case .missingSkillFile:
-            return "缺少 SKILL.md 文件。"
+            return NSLocalizedString("缺少 SKILL.md 文件。", comment: "Missing SKILL.md")
         case .invalidPath:
-            return "文件路径不合法。"
+            return NSLocalizedString("文件路径不合法。", comment: "Invalid skill file path")
         case .fileNotFound:
-            return "目标文件不存在。"
+            return NSLocalizedString("目标文件不存在。", comment: "Skill file not found")
         case .networkError(let reason):
-            return "网络请求失败：\(reason)"
+            return String(
+                format: NSLocalizedString("网络请求失败：%@", comment: "Skill network request failure"),
+                reason
+            )
         case .saveFailed(let reason):
-            return "保存失败：\(reason)"
+            return String(
+                format: NSLocalizedString("保存失败：%@", comment: "Skill save failure"),
+                reason
+            )
         }
     }
 }

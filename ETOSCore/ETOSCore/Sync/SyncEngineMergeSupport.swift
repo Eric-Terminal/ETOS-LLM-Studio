@@ -70,7 +70,11 @@ extension SyncEngine {
         let resolvedBaseName = baseName.isEmpty ? session.name : baseName
         let platform = normalizedSessionForkPlatform(sourcePlatform)
             ?? inferredSessionForkPlatform(from: session.name)
-        let firstName = "\(resolvedBaseName) [\(platform) 分支]"
+        let firstName = String(
+            format: NSLocalizedString("%@ [%@ 分支]", comment: "Cross-platform sync conflict session name"),
+            resolvedBaseName,
+            platform
+        )
         guard existingNames.contains(firstName) else { return firstName }
 
         var index = 2
