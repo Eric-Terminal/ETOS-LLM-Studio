@@ -211,7 +211,6 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
     case embedding
     // 旧版本曾把专用服务路由暴露为模型类型；保留原始值只为兼容已有配置。
     case rerank
-    case speechToText
     case textToSpeech
 
     /// 普通模型配置只呈现用户能够直接使用的三种用途。
@@ -231,8 +230,6 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("嵌入", comment: "模型主用途：嵌入")
         case .rerank:
             return NSLocalizedString("重排", comment: "模型主用途：重排")
-        case .speechToText:
-            return NSLocalizedString("语音转文字", comment: "模型主用途：语音转文字")
         case .textToSpeech:
             return NSLocalizedString("文字转语音", comment: "模型主用途：文字转语音")
         }
@@ -270,7 +267,6 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case streaming
     case jsonMode
     case embedding
-    case speechToText
     case textToSpeech
 
     public static let editableCases: [ModelCapability] = [
@@ -290,8 +286,6 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("JSON 模式", comment: "模型协议能力：JSON 模式")
         case .embedding:
             return NSLocalizedString("嵌入", comment: "模型兼容能力：嵌入")
-        case .speechToText:
-            return NSLocalizedString("语音转文字", comment: "模型兼容能力：语音转文字")
         case .textToSpeech:
             return NSLocalizedString("文字转语音", comment: "模型兼容能力：文字转语音")
         }
@@ -303,7 +297,6 @@ public struct Model: Codable, Identifiable, Hashable {
     public enum Capability: String, Codable, Hashable, Sendable {
         case chat
         case toolCalling
-        case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
@@ -421,7 +414,8 @@ public struct Model: Codable, Identifiable, Hashable {
         )
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
-        let decodedKind = try container.decodeIfPresent(ModelKind.self, forKey: .kind)
+        let decodedKind = try container.decodeIfPresent(String.self, forKey: .kind)
+            .flatMap(ModelKind.init(rawValue:))
         let decodedInputModalities = try container.decodeIfPresent([String].self, forKey: .inputModalities)
             .map { Self.orderedModalities($0.compactMap(ModelModality.init(rawValue:))) }
         let decodedOutputModalities = try container.decodeIfPresent([String].self, forKey: .outputModalities)

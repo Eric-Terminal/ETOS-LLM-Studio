@@ -243,8 +243,6 @@ extension ModelSettingsView {
             return NSLocalizedString("用于长期记忆和检索向量化，不会出现在聊天模型列表中。", comment: "嵌入模型用途说明")
         case .rerank:
             return NSLocalizedString("用于检索结果重排，通常配合知识库或搜索结果精排使用。", comment: "重排模型用途说明")
-        case .speechToText:
-            return NSLocalizedString("用于把录音转换为文字。", comment: "语音转文字模型用途说明")
         case .textToSpeech:
             return NSLocalizedString("用于把文字转换为语音。", comment: "文字转语音模型用途说明")
         }
@@ -254,7 +252,7 @@ extension ModelSettingsView {
         switch model.kind {
         case .image:
             return NSLocalizedString("图片生成由用途决定；如果模型支持图生图，可以开启参考图片。", comment: "图片模型能力说明")
-        case .embedding, .rerank, .speechToText, .textToSpeech:
+        case .embedding, .rerank, .textToSpeech:
             return NSLocalizedString("专用模型的输入和输出由用途决定，通常不需要额外配置。", comment: "专用模型能力说明")
         case .chat:
             return ""
@@ -376,9 +374,6 @@ extension ModelSettingsView {
                 .foregroundStyle(.secondary)
         case .rerank:
             Text(NSLocalizedString("此模型用于重新排序候选内容。", comment: "重排模型能力说明"))
-                .foregroundStyle(.secondary)
-        case .speechToText:
-            Text(NSLocalizedString("此模型接收音频并输出文字。", comment: "语音转文字模型能力说明"))
                 .foregroundStyle(.secondary)
         case .textToSpeech:
             Text(NSLocalizedString("此模型接收文字并输出语音。", comment: "文字转语音模型能力说明"))

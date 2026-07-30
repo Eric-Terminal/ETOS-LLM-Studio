@@ -5,12 +5,6 @@ import Foundation
 @Suite("语音模型选择测试")
 struct SpeechModelSelectionTests {
 
-    @Test("模型能力支持 speechToText")
-    func testModelSupportsSpeechToTextCapability() {
-        let model = Model(modelName: "gpt-4o-transcribe", kind: .speechToText)
-        #expect(model.supportsSpeechToText)
-    }
-
     @Test("语音模型列表默认包含系统语音识别模型")
     func testActivatedSpeechModelsContainsSystemModelByDefault() {
         let backupProviders = ConfigLoader.loadProviders()
@@ -25,8 +19,8 @@ struct SpeechModelSelectionTests {
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
     }
 
-    @Test("没有旧版语音标记时可从已配置聊天模型中选择")
-    func testActivatedSpeechModelsFallsBackToConfiguredChatModels() {
+    @Test("配置模型无需语音能力标记即可选择")
+    func testActivatedSpeechModelsIncludesConfiguredModelsWithoutMarkers() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
 
@@ -53,40 +47,97 @@ struct SpeechModelSelectionTests {
         #expect(activated.contains(where: { $0.model.modelName == "transcription-compatible-model" }))
     }
 
-    @Test("存在可用语音模型时保留系统语音识别并包含远端语音模型")
-    func testActivatedSpeechModelsIncludesSystemAndRemoteSpeechModels() {
+    @Test("语音模型列表不按普通模型用途过滤")
+    func testActivatedSpeechModelsIncludesEveryConfiguredModelKind() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
 
         clearAllProviders()
 
-        let speechModel = Model(
-            modelName: "gpt-4o-transcribe",
-            displayName: "云端语音",
-            isActivated: true,
-            kind: .speechToText
-        )
         let chatModel = Model(
             modelName: "gpt-4o",
             displayName: "普通聊天",
             isActivated: true
+        )
+        let imageModel = Model(
+            modelName: "gpt-image-1",
+            displayName: "图片模型",
+            kind: .image
+        )
+        let embeddingModel = Model(
+            modelName: "text-embedding-3-small",
+            displayName: "嵌入模型",
+            kind: .embedding
         )
         let provider = Provider(
             name: "Speech Provider",
             baseURL: "https://example.com/v1",
             apiKeys: ["key"],
             apiFormat: "openai-compatible",
-            models: [speechModel, chatModel]
+            models: [chatModel, imageModel, embeddingModel]
         )
         ConfigLoader.saveProvider(provider)
 
         let service = ChatService()
         let activated = service.activatedSpeechModels
 
-        #expect(activated.count == 2)
+        #expect(activated.count == 4)
         #expect(activated.first?.id == ChatService.systemSpeechRecognizerRunnableModel.id)
-        #expect(activated.contains(where: { $0.model.modelName == "gpt-4o-transcribe" }))
-        #expect(!activated.contains(where: { $0.model.modelName == "gpt-4o" }))
+        #expect(Set(activated.dropFirst().map(\.model.modelName)) == [
+            "gpt-4o",
+            "gpt-image-1",
+            "text-embedding-3-small"
+        ])
+    }
+
+    @Test("远端语音模型统一使用 OpenAI 转写适配器")
+    func testRemoteTranscriptionAlwaysUsesOpenAICompatibleAdapter() async throws {
+        let expectedURL = URL(string: "https://fake.url/audio/transcriptions")!
+        let response = HTTPURLResponse(
+            url: expectedURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        MockURLProtocol.mockResponses = [
+            expectedURL: .success((response, Data()))
+        ]
+        defer { MockURLProtocol.mockResponses = [:] }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let openAIAdapter = MockAPIAdapter()
+        openAIAdapter.transcriptionRequestURL = expectedURL
+        openAIAdapter.transcriptionResponseToReturn = "识别结果"
+        let providerAdapter = MockAPIAdapter()
+        let service = ChatService(
+            adapters: [
+                "openai-compatible": openAIAdapter,
+                "gemini": providerAdapter
+            ],
+            urlSession: URLSession(configuration: configuration)
+        )
+        let provider = Provider(
+            name: "兼容服务",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "gemini"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "custom-transcriber")
+        )
+
+        let transcript = try await service.transcribeAudio(
+            using: model,
+            audioData: Data([1, 2, 3]),
+            fileName: "recording.m4a",
+            mimeType: "audio/m4a"
+        )
+
+        #expect(transcript == "识别结果")
+        #expect(openAIAdapter.receivedTranscriptionModel?.id == model.id)
+        #expect(providerAdapter.receivedTranscriptionModel == nil)
     }
 
 #if canImport(Speech) && canImport(AVFoundation)

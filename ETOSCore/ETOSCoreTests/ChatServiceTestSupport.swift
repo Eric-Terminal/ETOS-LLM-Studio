@@ -26,6 +26,9 @@ final class MockAPIAdapter: APIAdapter {
     var receivedTitleModel: RunnableModel?
     var receivedReasoningSummaryModel: RunnableModel?
     var receivedChatStreamFlags: [Bool] = []
+    var receivedTranscriptionModel: RunnableModel?
+    var transcriptionRequestURL: URL?
+    var transcriptionResponseToReturn = ""
 
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         let firstContent = messages.first?.content
@@ -75,6 +78,21 @@ final class MockAPIAdapter: APIAdapter {
         }
 
         return responseToReturn ?? ChatMessage(role: .assistant, content: "Default mock response")
+    }
+
+    func buildTranscriptionRequest(
+        for model: RunnableModel,
+        audioData: Data,
+        fileName: String,
+        mimeType: String,
+        language: String?
+    ) -> URLRequest? {
+        receivedTranscriptionModel = model
+        return transcriptionRequestURL.map { URLRequest(url: $0) }
+    }
+
+    func parseTranscriptionResponse(data: Data) throws -> String {
+        transcriptionResponseToReturn
     }
 
     func buildModelListRequest(for provider: Provider) -> URLRequest? { nil }

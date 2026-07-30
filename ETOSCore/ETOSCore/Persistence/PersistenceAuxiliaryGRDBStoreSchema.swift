@@ -880,6 +880,28 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN picker_group_name TEXT")
                 }
             }
+
+            migrator.registerMigration("v15_remove_speech_to_text_model_marker") { db in
+                let providerModelsExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                if providerModelsExist {
+                    try db.execute(
+                        sql: "UPDATE provider_models SET kind = 'chat' WHERE kind = 'speechToText'"
+                    )
+                }
+
+                let capabilitiesExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_model_capabilities'"
+                ) ?? 0) > 0
+                if capabilitiesExist {
+                    try db.execute(
+                        sql: "DELETE FROM provider_model_capabilities WHERE capability = 'speechToText'"
+                    )
+                }
+            }
         }
 
         if supportsMemoryRelationalSchema {

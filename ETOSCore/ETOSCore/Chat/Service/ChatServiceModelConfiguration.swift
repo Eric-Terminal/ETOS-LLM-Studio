@@ -27,20 +27,19 @@ extension ChatService {
     }
 
     public var activatedConversationModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.isConversationModel }
+        activatedRunnableModels.filter { runnable in
+            guard runnable.model.isConversationModel else { return false }
+            return localModelRecord(for: runnable, requiresExistingFile: false)?.isSpeechTranscriptionModel != true
+        }
     }
 
     public var activatedChatModels: [RunnableModel] {
-        activatedRunnableModels.filter { $0.model.isChatModel }
+        activatedConversationModels.filter { $0.model.isChatModel }
     }
 
     public var activatedSpeechModels: [RunnableModel] {
-        // 语音服务由用户在对应设置页显式选择；旧能力标记优先，否则展示已配置的聊天模型。
-        let configuredModels = configuredRunnableModels
-        let speechCapable = configuredModels.filter { $0.model.supportsSpeechToText }
-        var candidates = speechCapable.isEmpty
-            ? configuredModels.filter { $0.model.isChatModel }
-            : speechCapable
+        // 专用模型设置决定转写用途，不要求模型携带额外能力标记。
+        var candidates = configuredRunnableModels
         if !candidates.contains(where: { $0.id == Self.systemSpeechRecognizerRunnableModel.id }) {
             candidates.insert(Self.systemSpeechRecognizerRunnableModel, at: 0)
         }

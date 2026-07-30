@@ -73,14 +73,6 @@ public enum LocalModelProviderBridge {
         writeOverride("sampler_seq", value: record.samplerKinds.map { .string(LocalLLMSamplerKind.chainString($0)) }, to: &overrideParameters, preferRecordBasics: preferRecordBasics)
         writeOverride("llama_cli_args", value: record.advancedArguments.nilIfEmpty.map(JSONValue.string), to: &overrideParameters, preferRecordBasics: preferRecordBasics)
 
-        let isSpeechModel = record.isSpeechTranscriptionModel
-        let capabilities = isSpeechModel
-            ? [.speechToText]
-            : Model.orderedCapabilities((existingModel?.capabilities ?? []) + [.streaming])
-        let inputModalities = isSpeechModel
-            ? [.audio]
-            : resolvedInputModalities(for: record, existingModel: existingModel, preferRecordBasics: preferRecordBasics)
-
         return Model(
             id: record.id,
             modelName: sanitized(existingModel?.modelName).nilIfEmpty ?? record.modelName,
@@ -90,10 +82,14 @@ public enum LocalModelProviderBridge {
             pickerGroupName: existingModel?.pickerGroupName,
             isActivated: preferRecordBasics ? record.isActivated : (existingModel?.isActivated ?? record.isActivated),
             overrideParameters: overrideParameters,
-            kind: isSpeechModel ? .speechToText : (existingModel?.kind ?? .chat),
-            inputModalities: inputModalities,
-            outputModalities: isSpeechModel ? [.text] : (existingModel?.outputModalities ?? [.text]),
-            capabilities: capabilities,
+            kind: existingModel?.kind ?? .chat,
+            inputModalities: resolvedInputModalities(
+                for: record,
+                existingModel: existingModel,
+                preferRecordBasics: preferRecordBasics
+            ),
+            outputModalities: existingModel?.outputModalities ?? [.text],
+            capabilities: Model.orderedCapabilities((existingModel?.capabilities ?? []) + [.streaming]),
             requestBodyOverrideMode: existingModel?.requestBodyOverrideMode ?? .keyValue,
             rawRequestBodyJSON: existingModel?.rawRequestBodyJSON,
             requestBodyControls: existingModel?.requestBodyControls ?? [],

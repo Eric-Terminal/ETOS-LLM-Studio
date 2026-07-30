@@ -154,8 +154,8 @@ struct LocalModelStoreTests {
         #expect(model.overrideParameters["image_max_tokens"] == .int(1120))
     }
 
-    @Test("本地语音 GGUF 会映射为语音转文字模型")
-    func localSpeechModelsExposeSpeechCapabilitiesAndHideVAD() throws {
+    @Test("本地语音 GGUF 不写入通用模型能力标记")
+    func localSpeechModelsKeepRuntimeMetadataWithoutCapabilityMarkers() throws {
         let architectures: [LocalSpeechModelArchitecture] = [
             .senseVoiceSmall,
             .paraformer,
@@ -180,11 +180,10 @@ struct LocalModelStoreTests {
 
         for record in records {
             let model = LocalModelProviderBridge.model(for: record)
-            #expect(model.kind == .speechToText)
-            #expect(model.inputModalities == [.audio])
+            #expect(model.kind == .chat)
+            #expect(model.inputModalities == [.text])
             #expect(model.outputModalities == [.text])
-            #expect(model.capabilities == [.speechToText])
-            #expect(model.supportsSpeechToText)
+            #expect(model.capabilities == [.streaming])
         }
 
         let provider = LocalModelProviderBridge.provider(records: records + [vad])
@@ -533,10 +532,20 @@ struct LocalModelStoreTests {
         )
         store.update(record)
         let service = ChatService(adapters: [:], localModelStore: store)
+        service.providers = LocalModelProviderBridge.applyingLocalProvider(
+            to: [],
+            records: store.models,
+            isEnabled: true,
+            preferRecordBasics: true
+        )
+        let runnableModel = LocalModelProviderBridge.runnableModel(for: record)
+
+        #expect(service.activatedSpeechModels.contains(where: { $0.id == runnableModel.id }))
+        #expect(!service.activatedConversationModels.contains(where: { $0.id == runnableModel.id }))
 
         do {
             _ = try await service.transcribeAudio(
-                using: LocalModelProviderBridge.runnableModel(for: record),
+                using: runnableModel,
                 audioData: Data([1, 2, 3]),
                 fileName: "recording.m4a",
                 mimeType: "audio/m4a"
@@ -550,6 +559,40 @@ struct LocalModelStoreTests {
             #expect(fileName == "missing-sensevoice.gguf")
         } catch {
             Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+    }
+
+    @Test("专用语音设置选择任意本地模型都会进入本地转写")
+    func selectedLocalModelRoutesToLocalSpeechWithoutCapabilityMarker() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        let record = LocalModelRecord(
+            displayName: "未标记的本地模型",
+            fileName: "missing-local.gguf",
+            relativePath: "missing-local.gguf",
+            fileSize: 0,
+            ggufArchitecture: "unknown-speech-architecture"
+        )
+        store.update(record)
+        let service = ChatService(adapters: [:], localModelStore: store)
+
+        do {
+            _ = try await service.transcribeAudio(
+                using: LocalModelProviderBridge.runnableModel(for: record),
+                audioData: Data([1, 2, 3]),
+                fileName: "recording.m4a",
+                mimeType: "audio/m4a"
+            )
+            Issue.record("缺失本地模型文件时不应转写成功。")
+        } catch let error as LocalSpeechEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "missing-local.gguf")
+        } catch {
+            Issue.record("本地模型不应退回远端适配器：\(error.localizedDescription)")
         }
     }
 

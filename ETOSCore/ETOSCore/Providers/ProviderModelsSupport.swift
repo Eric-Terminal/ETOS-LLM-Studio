@@ -102,8 +102,6 @@ public extension Model {
             return [.text, .image]
         case .embedding, .rerank:
             return [.text]
-        case .speechToText:
-            return [.audio]
         case .textToSpeech:
             return [.text]
         }
@@ -119,8 +117,6 @@ public extension Model {
             return []
         case .rerank:
             return [.text]
-        case .speechToText:
-            return [.text]
         case .textToSpeech:
             return [.audio]
         }
@@ -130,7 +126,7 @@ public extension Model {
         switch kind {
         case .chat:
             return defaultCapabilities
-        case .image, .embedding, .rerank, .speechToText, .textToSpeech:
+        case .image, .embedding, .rerank, .textToSpeech:
             return []
         }
     }
@@ -211,7 +207,6 @@ extension Model {
     enum LegacyCapability: String {
         case chat
         case toolCalling
-        case speechToText
         case textToSpeech
         case embedding
         case imageGeneration
@@ -239,8 +234,6 @@ extension Model {
             resolvedKind = explicitKind
         } else if legacySet.contains(.embedding) {
             resolvedKind = .embedding
-        } else if legacySet.contains(.speechToText) {
-            resolvedKind = .speechToText
         } else if legacySet.contains(.textToSpeech) {
             resolvedKind = .textToSpeech
         } else if legacySet.contains(.imageGeneration), !legacySet.contains(.chat) {
@@ -255,12 +248,6 @@ extension Model {
 
         if legacySet.contains(.toolCalling), !resolvedCapabilities.contains(.toolCalling) {
             resolvedCapabilities.append(.toolCalling)
-        }
-        if legacySet.contains(.speechToText), !resolvedInputModalities.contains(.audio) {
-            resolvedInputModalities.append(.audio)
-        }
-        if legacySet.contains(.speechToText), !resolvedCapabilities.contains(.speechToText) {
-            resolvedCapabilities.append(.speechToText)
         }
         if legacySet.contains(.textToSpeech), !resolvedOutputModalities.contains(.audio) {
             resolvedOutputModalities.append(.audio)
@@ -420,10 +407,6 @@ public extension Model {
 
     var supportsJSONMode: Bool {
         capabilities.contains(.jsonMode)
-    }
-
-    var supportsSpeechToText: Bool {
-        kind == .speechToText || capabilities.contains(.speechToText)
     }
 
     var supportsTextToSpeech: Bool {

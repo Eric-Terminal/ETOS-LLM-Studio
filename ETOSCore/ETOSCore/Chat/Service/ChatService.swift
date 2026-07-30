@@ -43,8 +43,7 @@ public class ChatService {
             id: systemSpeechRecognizerModelID,
             modelName: "sf-speech-recognizer",
             displayName: "SFSpeechRecognizer",
-            isActivated: true,
-            kind: .speechToText
+            isActivated: true
         )
         return RunnableModel(provider: provider, model: model)
     }()
@@ -682,9 +681,10 @@ public class ChatService {
             return transcript
         }
 
-        if LocalModelProviderBridge.isLocalRunnableModel(model),
-           let record = localModelRecord(for: model, requiresExistingFile: false),
-           record.isSpeechTranscriptionModel {
+        if LocalModelProviderBridge.isLocalRunnableModel(model) {
+            guard let record = localModelRecord(for: model, requiresExistingFile: false) else {
+                throw LocalSpeechEngineError.modelFileMissing(model.model.modelName)
+            }
             let decoderRecord = record.speechDecoderModelID.flatMap { decoderID in
                 localModelStore.models.first {
                     $0.id == decoderID && localModelStore.fileExists(for: $0)
@@ -732,8 +732,8 @@ public class ChatService {
 
         logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
-        guard let adapter = adapters[model.provider.apiFormat] else {
-            throw NetworkError.adapterNotFound(format: model.provider.apiFormat)
+        guard let adapter = adapters["openai-compatible"] else {
+            throw NetworkError.adapterNotFound(format: "openai-compatible")
         }
         
         guard let request = adapter.buildTranscriptionRequest(

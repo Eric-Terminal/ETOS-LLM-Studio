@@ -841,12 +841,13 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.supportsImageGeneration)
     }
 
-    @Test("旧语音能力解码后仍能通过便捷属性识别")
-    func testLegacySpeechCapabilitiesRemainSelectable() throws {
+    @Test("旧语音转文字标记解码后会被清除")
+    func testLegacySpeechToTextMarkerIsDiscarded() throws {
         let speechJSON = """
         {
           "id": "00000000-0000-0000-0000-000000000125",
           "modelName": "legacy-speech",
+          "kind": "speechToText",
           "capabilities": ["speechToText"]
         }
         """
@@ -861,8 +862,9 @@ struct RequestBodyOverrideModeTests {
         let speechModel = try JSONDecoder().decode(Model.self, from: Data(speechJSON.utf8))
         let ttsModel = try JSONDecoder().decode(Model.self, from: Data(ttsJSON.utf8))
 
-        #expect(speechModel.supportsSpeechToText)
-        #expect(speechModel.inputModalities.contains(.audio))
+        #expect(speechModel.kind == .chat)
+        #expect(speechModel.inputModalities == [.text])
+        #expect(speechModel.capabilities.isEmpty)
         #expect(ttsModel.supportsTextToSpeech)
         #expect(ttsModel.outputModalities.contains(.audio))
     }
