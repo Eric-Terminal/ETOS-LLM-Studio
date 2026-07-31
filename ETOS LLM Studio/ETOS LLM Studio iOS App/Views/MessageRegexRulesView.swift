@@ -61,6 +61,16 @@ struct MessageRegexRulesView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .navigationTitle(NSLocalizedString("消息规则", comment: ""))
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    editingRule = MessageRegexRule()
+                } label: {
+                    Label(NSLocalizedString("新增规则", comment: ""), systemImage: "plus")
+                }
+            }
+        }
         .sheet(item: $editingRule) { rule in
             NavigationStack {
                 MessageRegexRuleEditorView(initialRule: rule) { savedRule in

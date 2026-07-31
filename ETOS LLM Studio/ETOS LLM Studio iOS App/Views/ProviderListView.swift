@@ -104,7 +104,7 @@ struct ProviderListView: View {
                 }
                 .tag(ProviderManagementTab.globalProxy)
         }
-        .navigationTitle(NSLocalizedString("提供商与模型管理", comment: ""))
+        .navigationTitle(NSLocalizedString("模型管理", comment: ""))
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if selectedTab == .provider {

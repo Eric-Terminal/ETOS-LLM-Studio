@@ -127,101 +127,20 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    NavigationLink(destination: SessionListView(
-                        sessions: $viewModel.chatSessions,
-                        folders: $viewModel.sessionFolders,
-                        tags: viewModel.sessionTags,
-                        currentSession: $viewModel.currentSession,
-                        runningSessionIDs: viewModel.runningSessionIDs,
-                        deleteSessionAction: { session in
-                            viewModel.deleteSessions([session])
-                        },
-                        branchAction: { session, copyMessages in
-                            let newSession = viewModel.branchSession(from: session, copyMessages: copyMessages)
-                            return newSession
-                        },
-                        deleteLastMessageAction: { session in
-                            viewModel.deleteLastMessage(for: session)
-                        },
-                        sendSessionToCompanionAction: { session in
-                            WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
-                        },
-                        onSessionSelected: { selectedSession, messageOrdinal in
-                            if let messageOrdinal {
-                                viewModel.requestMessageJump(
-                                    sessionID: selectedSession.id,
-                                    messageOrdinal: messageOrdinal
-                                )
-                            } else {
-                                viewModel.clearPendingMessageJumpTarget()
-                            }
-                            ChatService.shared.setCurrentSession(selectedSession)
-                            dismiss()
-                        },
-                        updateSessionAction: { session in
-                            viewModel.updateSession(session)
-                        },
-                        createFolderAction: { name, parentID in
-                            viewModel.createSessionFolder(name: name, parentID: parentID)
-                        },
-                        renameFolderAction: { folder, newName in
-                            viewModel.renameSessionFolder(folder, newName: newName)
-                        },
-                        deleteFolderAction: { folder in
-                            viewModel.deleteSessionFolder(folder)
-                        },
-                        moveSessionToFolderAction: { session, folderID in
-                            viewModel.moveSession(session, toFolderID: folderID)
-                        },
-                        moveFolderToFolderAction: { folder, parentID in
-                            viewModel.moveSessionFolder(folder, toParentID: parentID)
-                        },
-                        createTagAction: { name, color in
-                            viewModel.createSessionTag(name: name, color: color)
-                        },
-                        updateTagAction: { tag, name, color in
-                            viewModel.updateSessionTag(tag, name: name, color: color)
-                        },
-                        deleteTagAction: { tag in
-                            viewModel.deleteSessionTag(tag)
-                        },
-                        setSessionTagsAction: { session, tagIDs in
-                            viewModel.setSessionTags(for: session, tagIDs: tagIDs)
-                        }
-                    )) {
-                        settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
-                    }
-
                     NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
-                        settingsNavigationLabel("提供商与模型管理", icon: .providerManagement)
+                        settingsNavigationLabel("模型管理", icon: .providerManagement)
                     }
 
-                    NavigationLink(destination: ModelAdvancedSettingsView(
-                        aiTemperature: $viewModel.aiTemperature,
-                        aiTopP: $viewModel.aiTopP,
-                        aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
-                        aiTopPEnabled: $viewModel.aiTopPEnabled,
-                        globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
-                        selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
-                        maxChatHistory: $viewModel.maxChatHistory,
-                        lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
-                        enableStreaming: $viewModel.enableStreaming,
-                        enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
-                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
-                        enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
-                        enableReasoningSummary: $viewModel.enableReasoningSummary,
-                        currentSession: $viewModel.currentSession,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-                        systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
-                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
-                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
-                        addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
-                        selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-                        updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
-                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
-                        deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
-                    )) {
-                        settingsNavigationLabel("偏好设置", icon: .modelAdvanced)
+                    NavigationLink(destination: advancedSettingsView(destination: .conversation)) {
+                        settingsNavigationLabel("会话", icon: .conversationSettings)
+                    }
+
+                    NavigationLink(destination: advancedSettingsView(destination: .prompts)) {
+                        settingsNavigationLabel("提示词", icon: .promptSettings)
+                    }
+
+                    NavigationLink(destination: advancedSettingsView(destination: .output)) {
+                        settingsNavigationLabel("输出", icon: .outputSettings)
                     }
 
                     NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
@@ -462,6 +381,39 @@ struct SettingsView: View {
         }
         return nil
     }
+
+    private func advancedSettingsView(
+        destination: ModelAdvancedSettingsDestination
+    ) -> ModelAdvancedSettingsView {
+        ModelAdvancedSettingsView(
+            viewModel: viewModel,
+            aiTemperature: $viewModel.aiTemperature,
+            aiTopP: $viewModel.aiTopP,
+            aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
+            aiTopPEnabled: $viewModel.aiTopPEnabled,
+            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+            maxChatHistory: $viewModel.maxChatHistory,
+            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+            enableStreaming: $viewModel.enableStreaming,
+            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
+            enableReasoningSummary: $viewModel.enableReasoningSummary,
+            currentSession: $viewModel.currentSession,
+            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) },
+            onSessionSelected: { dismiss() },
+            destination: destination
+        )
+    }
 }
 
 struct SettingsListIcon {
@@ -480,18 +432,14 @@ extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green, legacySystemName: "plus.message")
     static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
-    static let sessionHistory = SettingsListIcon(
-        systemName: "clock",
-        backgroundColor: .indigo,
-        legacySystemName: "list.bullet.rectangle"
-    )
     static let providerManagement = SettingsListIcon(
         systemName: "cube",
         backgroundColor: .orange,
         legacySystemName: "list.bullet.rectangle.portrait"
     )
-    static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple, legacySystemName: "brain.head.profile")
-    static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink, legacySystemName: "speaker.wave.2")
+    static let conversationSettings = SettingsListIcon(systemName: "bubble.left.and.bubble.right", backgroundColor: .indigo)
+    static let promptSettings = SettingsListIcon(systemName: "text.quote", backgroundColor: .purple)
+    static let outputSettings = SettingsListIcon(systemName: "waveform", backgroundColor: .blue)
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow, legacySystemName: "sparkles.rectangle.stack")
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan, legacySystemName: "calendar.badge.clock")
