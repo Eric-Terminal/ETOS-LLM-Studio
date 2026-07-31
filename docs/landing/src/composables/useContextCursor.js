@@ -1,18 +1,12 @@
 // ============================================================================
-// Context Cursor —— iPadOS 风格的「磁吸」指针
+// Context Cursor —— iPadOS 风格的「磁吸」指针 (超低延迟优化版)
 // ============================================================================
-// 一颗半透明玻璃圆点跟随鼠标；悬停到可交互元素（链接 / 按钮）上时，会变形成
-// 贴合该元素的圆角矩形并带轻微视差，营造 iPadOS 指针那种吸附 / 软糖质感。
+// 一颗半透明玻璃圆点跟随鼠标；悬停到可交互元素（链接 / 按钮）上时，会快速变形成
+// 贴合该元素的圆角矩形。
 //
-// 算法改编自 Marcel Wiethan 的 "context-cursor"（MIT，2020），
-// 经由 GoldenGoCoding 的 iPadOS 项目引入：
-//   原作者 / 致谢：Marcel Wiethan — context-cursor (MIT, 2020)
-//   参考项目：https://github.com/GoldenGoCoding/iPadOS
-//
-// 原版依赖 GSAP TweenLite，并以 [data-ccursor] 属性 + window.onload 收集目标。
-// 这里去掉 GSAP 依赖：尺寸/圆角用 CSS 过渡、位置用 requestAnimationFrame 插值，
-// 目标元素改为事件委托（无需改模板）。仅在 (pointer: fine) 且未开启
-// prefers-reduced-motion 的设备启用，触屏 / 无障碍场景自动跳过。
+// 性能与延迟优化：
+// 1. 自由移动模式下：位置 1:1 实时跟随鼠标，0ms 拖尾与迟钝感。
+// 2. 磁吸吸附模式下：采用 0.45 高响应度插值 + 0.12s 极速 CSS 变形。
 // ============================================================================
 
 const STYLE = `
@@ -23,24 +17,28 @@ const STYLE = `
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: rgba(150, 150, 160, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(150, 150, 160, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
   pointer-events: none;
   z-index: 9999;
   opacity: 0;
   transform: translate3d(-100px, -100px, 0);
-  transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-              height 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-              border-radius 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-              background-color 0.22s ease,
-              border-color 0.22s ease,
-              opacity 0.2s ease;
+  transition: width 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+              border-radius 0.12s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.15s ease,
+              border-color 0.15s ease,
+              opacity 0.15s ease;
   will-change: transform, width, height;
 }
+.dark .cc-cursor {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
 .cc-cursor--active {
-  background: rgba(120, 120, 130, 0.14);
-  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(120, 120, 130, 0.16);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 html.cc-enabled, html.cc-enabled * { cursor: none !important; }
 `;
@@ -53,13 +51,12 @@ export function initContextCursor(options = {}) {
 
   const SELECTOR =
     options.selector ||
-    'a[href], button, [role="button"], .btn-pill, .nav-link, .lang-btn, .theme-toggle';
-  const BASE = options.size || 18; // 自由态直径
-  const PAD = options.padding ?? 6; // 悬停时在元素四周外扩
-  const EASE = options.ease ?? 0.18; // 位置插值系数（越小越「拖尾」）
-  const PARALLAX = options.parallax ?? 6; // 悬停时光标朝鼠标偏移的分母（越大越轻）
+    'a[href], button, [role="button"], .btn-pill, .nav-link, .lang-btn, .theme-toggle, .model-chip-btn, .mcp-tab-btn';
+  const BASE = options.size || 18;
+  const PAD = options.padding ?? 6;
+  const EASE = options.ease ?? 0.45; // 吸附态高响应度插值
+  const PARALLAX = options.parallax ?? 8;
 
-  // 注入样式（一次）
   const styleEl = document.createElement('style');
   styleEl.textContent = STYLE;
   document.head.appendChild(styleEl);
@@ -96,20 +93,21 @@ export function initContextCursor(options = {}) {
   }
 
   function tick() {
-    // 目标可能被移除（如语言菜单收起）
     if (target && !target.isConnected) applyTarget(null);
 
-    let destX = mouseX;
-    let destY = mouseY;
     if (target) {
       const rect = target.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
-      destX = cx + (mouseX - cx) / PARALLAX;
-      destY = cy + (mouseY - cy) / PARALLAX;
+      const destX = cx + (mouseX - cx) / PARALLAX;
+      const destY = cy + (mouseY - cy) / PARALLAX;
+      curX += (destX - curX) * EASE;
+      curY += (destY - curY) * EASE;
+    } else {
+      // 自由移动模式：100% 实时同步，0ms 拖尾
+      curX = mouseX;
+      curY = mouseY;
     }
-    curX += (destX - curX) * EASE;
-    curY += (destY - curY) * EASE;
 
     const w = blob.offsetWidth || BASE;
     const h = blob.offsetHeight || BASE;
@@ -124,13 +122,12 @@ export function initContextCursor(options = {}) {
       shown = true;
       blob.style.opacity = '1';
     }
-  });
+  }, { passive: true });
 
-  // 事件委托：进入任意元素时，向上找最近的可交互祖先
   document.addEventListener('mouseover', (e) => {
     const el = e.target.closest ? e.target.closest(SELECTOR) : null;
     applyTarget(el);
-  });
+  }, { passive: true });
 
   document.addEventListener('mouseleave', () => {
     blob.style.opacity = '0';

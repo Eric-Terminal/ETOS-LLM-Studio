@@ -7,6 +7,9 @@ import { useMagneticCursor } from './composables/useMagneticCursor.js';
 import { useTheme } from './composables/useTheme.js';
 import { useLang } from './composables/useLang.js';
 
+import LocalModelDemo from './components/LocalModelDemo.vue';
+import McpSkillsDemo from './components/McpSkillsDemo.vue';
+
 const REPO_URL = 'https://github.com/Eric-Terminal/ETOS-LLM-Studio';
 const DOCS_URL = 'https://etos-llm-studio-docs.pages.dev';
 const QUICKSTART_PATH = '/guide/getting-started';
@@ -19,7 +22,6 @@ const { current: currentLang, list: langList, set: setLang } = useLang();
 
 const text = computed(() => translations[currentLang.value] ?? translations.zh);
 const docsHref = computed(() => {
-  // 中文/英文走对应路径，其它语言暂时回落英文版。
   const lang = currentLang.value;
   if (lang === 'zh' || lang === 'zh-Hant') return `${DOCS_URL}${QUICKSTART_PATH}`;
   return `${DOCS_URL}/en${QUICKSTART_PATH}`;
@@ -31,12 +33,10 @@ const modulesHref = computed(() => {
 });
 
 const titleLetters = computed(() => {
-  // 把标题切成字符数组，CJK 单字也独立动画。空格保留。
   return Array.from(text.value.hero.title);
 });
 
-// 个性化预览：三项真实外观功能——上传壁纸 / 对话框颜色（调色盘）/ 去掉 AI 气泡。
-// 默认值对齐 App：Telegram 浅蓝灰壁纸 + Telegram 蓝气泡（rgb 0.24,0.56,0.95）。
+// 个性化预览
 const DEFAULT_BUBBLE = '#3477d3';
 const DEFAULT_WALL = 'linear-gradient(180deg, #d9e6eb 0%, #e0ebf2 100%)';
 
@@ -44,7 +44,6 @@ const bubbleColor = ref(DEFAULT_BUBBLE);
 const wallpaperUrl = ref('');
 const hideBotBubble = ref(false);
 
-// 把 hex 按比例压暗，模拟 App 用户气泡渐变的深色端（darkened factor 0.86）。
 function darkenHex(hex, factor) {
   const n = hex.replace('#', '');
   if (n.length !== 6) return hex;
@@ -75,18 +74,18 @@ function resetPersona() {
   hideBotBubble.value = false;
 }
 
-// 滚动 marquee：统一英文，不走 i18n。
 const marqueeItems = [
   'OpenAI',
   'Anthropic Claude',
   'Google Gemini',
-  'OpenAI-compatible',
-  'MCP',
+  'llama.cpp Local GGUF',
+  'MCP SDK',
   'Agent Skills',
-  'Shortcuts',
+  'SQLCipher',
   'Local RAG',
   'Worldbook',
-  'Daily Pulse'
+  'Daily Pulse',
+  'WatchConnectivity'
 ];
 
 const isLangMenuOpen = ref(false);
@@ -103,7 +102,6 @@ function onDocClick(event) {
   }
 }
 
-// 滚动进度条 + 回到顶部
 const scrollProgress = ref(0);
 const showBackToTop = ref(false);
 function onScroll() {
@@ -115,7 +113,6 @@ function backToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// 顶部条在滚动到一定距离后压缩高度
 const isCondensed = ref(false);
 function onScrollCondense() {
   isCondensed.value = window.scrollY > 24;
@@ -138,7 +135,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- 开屏遮罩 + 波浪噪声动画 -->
+  <!-- 开屏遮罩 -->
   <div
     v-if="showLoader"
     class="loader-screen"
@@ -167,7 +164,6 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <!-- 加载结束后波浪不销毁，作为背景纹理在两侧渐显 -->
   <svg
     class="loader-waves persistent-waves"
     :class="{ 'is-visible': !showLoader }"
@@ -176,7 +172,6 @@ onBeforeUnmount(() => {
     <path v-for="(p, i) in wavePaths" :key="`p-${i}`" :d="p.d" />
   </svg>
 
-  <!-- 四边收束的边框 -->
   <div
     v-if="showFrame"
     class="site-frame"
@@ -205,6 +200,8 @@ onBeforeUnmount(() => {
       <span class="brand-name">ETOS LLM Studio</span>
     </a>
     <div class="nav-right">
+      <a class="nav-link" href="#local-model">{{ text.nav.localModel }}</a>
+      <a class="nav-link" href="#mcp-skills">{{ text.nav.mcpSkills }}</a>
       <a class="nav-link" href="#features">{{ text.nav.features }}</a>
       <a class="nav-link" href="#personalize">{{ text.nav.personalize }}</a>
       <a class="nav-link" href="#privacy">{{ text.nav.privacy }}</a>
@@ -216,7 +213,7 @@ onBeforeUnmount(() => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14">
             <circle cx="12" cy="12" r="9" />
             <line x1="3" y1="12" x2="21" y2="12" />
-            <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z" />
+            <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9z" />
           </svg>
           <span class="lang-current">{{ langList.find((l) => l.code === currentLang)?.name }}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="12" height="12">
@@ -263,7 +260,7 @@ onBeforeUnmount(() => {
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
       <div class="hero-inner">
-        <div class="section-label">NATIVE · iOS 18 · watchOS 11</div>
+        <div class="section-label">NATIVE · iOS 18 · watchOS 11 · GGUF LOCAL LLM</div>
         <h1 class="hero-title" :aria-label="text.hero.title">
           <span
             v-for="(letter, i) in titleLetters"
@@ -296,6 +293,18 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <!-- STATS COUNTERS BAR -->
+    <section class="stats-counter-section">
+      <div class="container">
+        <div class="stats-grid">
+          <div v-for="(s, idx) in text.stats" :key="idx" class="stat-box">
+            <div class="stat-val-huge">{{ s.val }}</div>
+            <div class="stat-lbl">{{ s.label }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- 滚动横向 marquee -->
     <section class="marquee" aria-hidden="true">
       <div class="marquee-track">
@@ -304,8 +313,28 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <!-- 端侧 GGUF 本地模型 INTERACTIVE DEMO -->
+    <section id="local-model" class="local-demo-section tile-dark">
+      <div class="container">
+        <div class="section-label section-label-light">ON-DEVICE INFERENCE</div>
+        <h2 class="tile-title">{{ text.localDemo.title }}</h2>
+        <p class="tile-lead">{{ text.localDemo.lead }}</p>
+        <LocalModelDemo :text="text" />
+      </div>
+    </section>
+
+    <!-- MCP 协议 & AGENT SKILLS INTERACTIVE DEMO -->
+    <section id="mcp-skills" class="mcp-skills-section tile-parchment">
+      <div class="container">
+        <div class="section-label">EXTENSIBLE TOOLKIT</div>
+        <h2 class="tile-title">{{ text.mcpSkillsSection.title }}</h2>
+        <p class="tile-lead">{{ text.mcpSkillsSection.lead }}</p>
+        <McpSkillsDemo :text="text" />
+      </div>
+    </section>
+
     <!-- 截图 -->
-    <section class="screenshots tile-parchment" v-reveal>
+    <section class="screenshots tile-light">
       <div class="container">
         <div class="section-label">SCREENSHOTS · CURRENT BUILD</div>
         <h2 class="tile-title">{{ text.screenshots.title }}</h2>
@@ -328,14 +357,13 @@ onBeforeUnmount(() => {
     </section>
 
     <!-- 个性化外观 -->
-    <section id="personalize" class="personalize tile-light" v-reveal>
+    <section id="personalize" class="personalize tile-parchment">
       <div class="container">
         <div class="section-label">MAKE IT YOURS</div>
         <h2 class="tile-title">{{ text.personalize.title }}</h2>
         <p class="tile-lead">{{ text.personalize.lead }}</p>
 
         <div class="persona-stage">
-          <!-- 左：三项真实外观功能 -->
           <div class="persona-controls">
             <div class="persona-picker-hint">
               <span class="persona-live-dot" aria-hidden="true"></span>
@@ -356,7 +384,7 @@ onBeforeUnmount(() => {
               </label>
             </div>
 
-            <!-- 2. 对话框颜色（调色盘） -->
+            <!-- 2. 对话框颜色 -->
             <div class="persona-control persona-control-row">
               <span class="persona-control-label">{{ text.personalize.colorLabel }}</span>
               <label class="persona-colorpicker">
@@ -384,7 +412,7 @@ onBeforeUnmount(() => {
             <button class="persona-reset" type="button" @click="resetPersona">{{ text.personalize.reset }}</button>
           </div>
 
-          <!-- 右：仿 iPhone 聊天界面，随预设实时换肤 -->
+          <!-- 右：仿 iPhone 聊天界面 -->
           <div class="persona-phone-wrap">
             <div class="persona-phone" :style="phoneStyle">
               <img class="persona-frame" src="/images/phone-frame.svg" alt="" aria-hidden="true" />
@@ -398,8 +426,6 @@ onBeforeUnmount(() => {
                         <path transform="translate(77,17)" d="M8 14.2C8 14.2 1.2 9.9 1.2 5.4 1.2 3.1 2.9 1.6 4.8 1.6 6.1 1.6 7.3 2.4 8 3.6 8.7 2.4 9.9 1.6 11.2 1.6 13.1 1.6 14.8 3.1 14.8 5.4 14.8 9.9 8 14.2 8 14.2Z" />
                         <path transform="translate(10,54)" d="M1.2 7.4 14.8 1.4 8.8 14.8 7 8.8Z" />
                         <path transform="translate(62,50)" d="M3.5 2H12.5A2 2 0 0 1 14.5 4V9A2 2 0 0 1 12.5 11H6.5L3.5 13.8V11A2 2 0 0 1 1.5 9V4A2 2 0 0 1 3.5 2Z" />
-                        <path transform="translate(40,90)" d="M8 14.2C8 14.2 1.2 9.9 1.2 5.4 1.2 3.1 2.9 1.6 4.8 1.6 6.1 1.6 7.3 2.4 8 3.6 8.7 2.4 9.9 1.6 11.2 1.6 13.1 1.6 14.8 3.1 14.8 5.4 14.8 9.9 8 14.2 8 14.2Z" />
-                        <path transform="translate(92,84)" d="M8 0.6 9.9 5.4 15 5.8 11.1 9.1 12.4 14.1 8 11.3 3.6 14.1 4.9 9.1 1 5.8 6.1 5.4Z" />
                       </g>
                     </pattern>
                   </defs>
@@ -418,7 +444,7 @@ onBeforeUnmount(() => {
                       <rect x="9.2" y="3" width="3" height="9" rx="1" />
                       <rect x="13.8" y="0" width="3" height="12" rx="1" />
                     </svg>
-                    <span class="persona-net">4G</span>
+                    <span class="persona-net">5G</span>
                     <svg class="persona-batt" viewBox="0 0 26 12" fill="none">
                       <rect x="0.6" y="0.6" width="21.5" height="10.8" rx="3" stroke="currentColor" stroke-opacity="0.4" />
                       <rect x="2" y="2" width="18" height="8" rx="1.6" fill="currentColor" />
@@ -427,7 +453,7 @@ onBeforeUnmount(() => {
                   </span>
                 </div>
                 <div class="persona-nav">
-                  <span class="persona-nav-btn" v-liquid-glass aria-hidden="true">
+                  <span class="persona-nav-btn" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                       <circle cx="4.6" cy="7" r="1.15" fill="currentColor" stroke="none" />
                       <line x1="9" y1="7" x2="20" y2="7" />
@@ -437,16 +463,16 @@ onBeforeUnmount(() => {
                       <line x1="9" y1="17" x2="20" y2="17" />
                     </svg>
                   </span>
-                  <span class="persona-nav-pill" v-liquid-glass>
+                  <span class="persona-nav-pill">
                     <span class="persona-nav-texts">
                       <span class="persona-nav-title">{{ text.personalize.chat.title }}</span>
-                      <span class="persona-nav-sub">GPT-5.5 · OpenAI</span>
+                      <span class="persona-nav-sub">Qwen2.5-7B · GGUF Local</span>
                     </span>
                     <svg class="persona-nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </span>
-                  <span class="persona-nav-btn" v-liquid-glass aria-hidden="true">
+                  <span class="persona-nav-btn" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                     </svg>
@@ -454,21 +480,21 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="persona-messages">
                   <div class="persona-row persona-row-user">
-                    <div class="persona-bubble persona-bubble-user" v-liquid-glass="{ blur: 1 }"><span class="persona-btext">{{ text.personalize.chat.user }}</span></div>
+                    <div class="persona-bubble persona-bubble-user"><span class="persona-btext">{{ text.personalize.chat.user }}</span></div>
                   </div>
                   <div class="persona-row persona-row-bot">
-                    <div v-if="!hideBotBubble" class="persona-bubble persona-bubble-bot" v-liquid-glass="{ blur: 6 }"><span class="persona-btext">{{ text.personalize.chat.bot }}</span></div>
+                    <div v-if="!hideBotBubble" class="persona-bubble persona-bubble-bot"><span class="persona-btext">{{ text.personalize.chat.bot }}</span></div>
                     <div v-else class="persona-bubble persona-bubble-bot persona-bubble-bot--bare"><span class="persona-btext">{{ text.personalize.chat.bot }}</span></div>
                   </div>
                 </div>
                 <div class="persona-inputbar">
-                  <span class="persona-circle persona-clip" v-liquid-glass aria-hidden="true">
+                  <span class="persona-circle persona-clip" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M20.5 11.5l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4l8.5-8.5a3 3 0 0 1 4.3 4.3l-8.5 8.5a1.5 1.5 0 0 1-2.1-2.1l7.8-7.8" />
                     </svg>
                   </span>
-                  <span class="persona-input" v-liquid-glass><span class="persona-input-text">{{ text.personalize.chat.placeholder }}</span></span>
-                  <span class="persona-circle persona-send" v-liquid-glass aria-hidden="true">
+                  <span class="persona-input"><span class="persona-input-text">{{ text.personalize.chat.placeholder }}</span></span>
+                  <span class="persona-circle persona-send" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="12" y1="19" x2="12" y2="5" />
                       <polyline points="6 11 12 5 18 11" />
@@ -482,8 +508,8 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- 功能 -->
-    <section id="features" class="features tile-dark" v-reveal>
+    <!-- 功能矩阵 -->
+    <section id="features" class="features tile-dark">
       <div class="container">
         <div class="section-label section-label-light">FEATURE MATRIX</div>
         <h2 class="tile-title">{{ text.features.title }}</h2>
@@ -493,7 +519,6 @@ onBeforeUnmount(() => {
             v-for="(item, idx) in text.features.items"
             :key="idx"
             class="feature-card"
-            v-reveal
             :style="{ '--card-delay': `${idx * 0.06}s` }"
           >
             <div class="feature-kicker">{{ item.kicker }}</div>
@@ -508,7 +533,7 @@ onBeforeUnmount(() => {
     </section>
 
     <!-- 隐私 -->
-    <section id="privacy" class="privacy tile-light" v-reveal>
+    <section id="privacy" class="privacy tile-light">
       <div class="container">
         <div class="section-label">PRIVACY & LOCAL-FIRST</div>
         <h2 class="tile-title">{{ text.privacy.title }}</h2>
@@ -518,7 +543,6 @@ onBeforeUnmount(() => {
             v-for="(b, idx) in text.privacy.bullets"
             :key="idx"
             class="privacy-card"
-            v-reveal
           >
             <div class="privacy-kicker">{{ b.kicker }}</div>
             <div class="privacy-card-title">{{ b.title }}</div>
@@ -529,13 +553,13 @@ onBeforeUnmount(() => {
     </section>
 
     <!-- 技术栈 -->
-    <section id="tech" class="tech tile-parchment" v-reveal>
+    <section id="tech" class="tech tile-parchment">
       <div class="container">
         <div class="section-label">TECH STACK</div>
         <h2 class="tile-title">{{ text.tech.title }}</h2>
         <p class="tile-lead">{{ text.tech.lead }}</p>
         <div class="tech-grid">
-          <div v-for="(t, idx) in text.tech.items" :key="idx" class="stat-card" v-reveal>
+          <div v-for="(t, idx) in text.tech.items" :key="idx" class="stat-card">
             <div class="stat-name">{{ t.name }}</div>
             <div class="stat-desc">{{ t.desc }}</div>
           </div>
@@ -544,7 +568,7 @@ onBeforeUnmount(() => {
     </section>
 
     <!-- CTA -->
-    <section class="cta tile-dark" v-reveal>
+    <section class="cta tile-dark">
       <div class="container cta-inner">
         <div class="section-label section-label-light">READY TO START</div>
         <h2 class="cta-title">{{ text.cta.title }}</h2>

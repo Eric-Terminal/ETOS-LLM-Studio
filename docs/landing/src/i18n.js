@@ -15,14 +15,16 @@ export const LANG_LIST = [
 
 const zh = {
   meta: {
-    title: 'ETOS LLM Studio',
-    subtitle: 'iPhone + Apple Watch 原生 AI 客户端'
+    title: 'ETOS LLM Studio · 原生 AI 客户端',
+    subtitle: 'iPhone + Apple Watch 原生 AI 客户端 · 端侧 LLM 与全能工具中心'
   },
   nav: {
-    features: '功能',
+    localModel: '端侧 LLM',
+    features: '功能矩阵',
+    mcpSkills: '工具与技能',
     personalize: '个性化',
-    privacy: '隐私',
-    tech: '技术',
+    privacy: '隐私与安全',
+    tech: '技术栈',
     docs: '文档',
     github: 'GitHub',
     download: '获取 App'
@@ -30,11 +32,29 @@ const zh = {
   hero: {
     title: '你的 AI，揣在手里，戴在腕上。',
     lead:
-      '运行在 iPhone 与 Apple Watch 上的原生 LLM 客户端。你的 Key、你的数据，从设备直接发往模型，没有中间服务器。',
-    actionsPrimary: '轻松上手',
-    actionsSecondary: '查看功能模块',
-    statusOnline: '正在维护中',
+      '运行在 iPhone 与 Apple Watch 上的原生 LLM 客户端。支持 GGUF 端侧本地模型、MCP 工具协议、Agent Skills 与 SQLCipher 物理加密。你的 Key、你的数据，零中间服务器。',
+    actionsPrimary: '轻松上手教程',
+    actionsSecondary: '探索功能模块',
+    statusOnline: '持续迭代中 · 750+ Swift 源文件',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
+  },
+  stats: [
+    { label: 'Swift 源文件', val: '750+' },
+    { label: '原生 Swift 代码行', val: '280,000+' },
+    { label: '中间服务器', val: '0' },
+    { label: '隐私与物理加密', val: '100% Local' }
+  ],
+  localDemo: {
+    badge: '端侧本地模型',
+    title: 'iOS 端侧硬核 GGUF 本地模型推理',
+    lead: '不需要连接任何网络或 API 服务。底层通过 llama.cpp C ABI 桥接，直接在 iPhone 上加载 GGUF 权重，并提供实时 CPU / Metal / 内存性能监视器。',
+    selectModelLabel: '选择本地 GGUF 模型',
+    thinkHeader: '本地模型思考时间线 (Thinking Timeline)'
+  },
+  mcpSkillsSection: {
+    badge: '工具与生态',
+    title: 'MCP 协议 · Agent Skills · 沙盒 JS',
+    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支持从 GitHub 一键导入 Agent Skills 技能包，并可在沙盒内运行自定义 JavaScript 工具。'
   },
   personalize: {
     title: '一眼认得出，是你的 Studio。',
@@ -48,7 +68,7 @@ const zh = {
     chat: {
       title: '问候与帮助',
       user: '你好',
-      bot: '你好！👋\n很高兴见到你，有什么想聊的或者需要帮忙的吗？无论是图片处理、海报设计、提示词编写、角色设定，还是其他问题，都可以直接告诉我。',
+      bot: '你好！👋\n很高兴见到你，有什么想聊的或者需要帮忙的吗？无论是端侧 GGUF 调参、MCP 工具配置、Agent Skills 导入，还是日常问答，都可以直接告诉我。',
       placeholder: '输入消息…'
     }
   },
@@ -57,64 +77,78 @@ const zh = {
     lead: '主界面只留聊天，其余全部收进设置。下面这些是你装好之后会陆续找到的能力。',
     items: [
       {
-        kicker: '01 / CHAT',
+        kicker: '01 / CHAT & PROVIDERS',
         title: '多模型 · 多 Provider · 兼容到底',
         body:
-          '原生适配 OpenAI Chat、OpenAI Responses、Anthropic、Gemini，外加任意 OpenAI 兼容接口。支持多 Key 轮询、参数表达式、原始 JSON 请求体、提供商级 / 全局两层代理。',
-        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom']
+          '原生适配 OpenAI Chat、OpenAI Responses、Anthropic、Gemini，外加任意 OpenAI 兼容接口。支持多 Key 轮询、参数表达式、原始 JSON 请求体、单条 AI 回复重写与计费估算。',
+        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom JSON']
       },
       {
-        kicker: '02 / TOOLS',
-        title: 'MCP · Skills · 快捷指令',
+        kicker: '02 / LOCAL GGUF',
+        title: '端侧 GGUF 本地模型 & 性能监视器',
         body:
-          '工具中心统一管理 MCP 服务器、Agent Skills 技能包、iOS 快捷指令、内置工具。支持会话级启用、审批策略、流式调试与连线时间线。',
-        tags: ['MCP', 'Skills', 'Shortcuts', '审批策略']
+          '底层通过 llama.cpp C ABI 桥接，在 iOS 上直接运行 GGUF 本地权重。支持 Metal GPU 加速、Flash Attention、KV offload、流式思考解析与浮动性能监视面板（CPU/Metal/RAM）。',
+        tags: ['llama.cpp', 'GGUF', 'Metal GPU', '性能 HUD']
       },
       {
-        kicker: '03 / MEMORY',
-        title: '长期记忆 · 世界书 · 用户画像',
+        kicker: '03 / TOOLS & SKILLS',
+        title: 'MCP 协议 · Agent Skills · 沙盒 JS',
         body:
-          '跨会话的事实记忆、关键词触发的世界书条目、模型可读的用户画像。本地向量索引，离线可用，可与每日脉冲联动。',
-        tags: ['长期记忆', '世界书', '本地 RAG']
+          '统一管理 MCP 服务器（Streamable HTTP/SSE）、Agent Skills 技能包（GitHub/RAW 导入）、iOS 快捷指令与内建 SQLite/文件沙盒/健康/日历工具，具备原生问答Sheet审批控制。',
+        tags: ['MCP SDK', 'Agent Skills', 'Shortcuts', '审批 Sheet']
       },
       {
-        kicker: '04 / DAILY PULSE',
-        title: '主动情报，不是被动问答',
+        kicker: '04 / RAG & WORLDBOOK',
+        title: '本地 RAG 记忆 · 世界书 · 嵌入向量',
         body:
-          '按你设定的节奏自动生成情报卡片：新闻、邮件提醒、日程预判、技术摘要。Watch 端会在抬腕时呈现，错过的可在 iPhone 端回看。',
-        tags: ['定时', '情报卡片', 'Watch 抬腕']
+          '跨会话长期事实记忆、支持 SillyTavern 兼容的世界书 Lorebook（条件触发、注入预算）与用户画像。向量索引完全本地 SQLite 运行，绝不下发云端。',
+        tags: ['长期记忆', '世界书 Lorebook', 'SQLite 向量']
       },
       {
-        kicker: '05 / SYNC',
-        title: 'iPhone ↔ Watch 局域网直连同步',
+        kicker: '05 / DAILY PULSE',
+        title: 'Daily Pulse 每日脉冲主动情报',
         body:
-          '不走服务器、不走 iCloud（除非你愿意）。双端通过 WatchConnectivity 与本地点对点协议互传，SQLCipher 全盘加密，可导出 ETOS 数据包随时迁移。',
-        tags: ['WatchConnectivity', 'SQLCipher', 'ETOS 数据包']
+          '每天定时预生成主动情报卡片：新闻、邮件提醒、日程预判、技术摘要。支持卡片一键转待跟进任务与长效偏好反馈学习，抬腕即看。',
+        tags: ['定时', '情报卡片', '任务跟进', 'Watch 抬腕']
       },
       {
-        kicker: '06 / WATCH',
+        kicker: '06 / WATCH & SYNC',
+        title: 'iPhone ↔ Watch 权威增量同步',
+        body:
+          'WatchConnectivity 局域网快速通道 + CloudKit / APNs 后台漫游。双端配备权威世代指针与数据覆盖冲突裁决短语，离线分叉合并零丢失。',
+        tags: ['WatchConnectivity', 'CloudKit', '世代指针']
+      },
+      {
+        kicker: '07 / WATCH NATIVE',
         title: '手腕上的完整体验，不是阉割版',
         body:
           '数码表冠缩放图片、Markdown 与代码高亮、思考时间线、TTS 朗读、单会话跨端发送。watchOS 设置扁平化为单层 List，零 TabView。',
-        tags: ['watchOS', '数码表冠', '抬腕语音']
+        tags: ['watchOS', '数码表冠', '抬腕语音', 'TTS']
+      },
+      {
+        kicker: '08 / SECURITY & BACKUP',
+        title: 'SQLCipher 全盘加密 & 快照备份',
+        body:
+          '底层数据库采用 SQLCipher 物理加密，结合 PBKDF2 主密码与 Face ID / Touch ID 应用锁。支持加密快照 `.elsbackup` 导出及 Cloudflare R2 / S3 签名云备份。',
+        tags: ['SQLCipher', 'Face ID 锁', 'AES-256', 'S3/R2 云备份']
       }
     ]
   },
   screenshots: {
     title: '看看它在你手里是什么样。',
-    lead: '截图直接来自当前版本。',
-    captionOne: 'iOS · 聊天主界面',
-    captionTwo: 'Apple Watch · 单会话回看'
+    lead: '截图直接来自当前真实 Build。',
+    captionOne: 'iOS · 聊天与功能面板',
+    captionTwo: 'Apple Watch · 独立端侧体验'
   },
   privacy: {
     title: '你的 Key，你的数据，你的设备。',
     lead:
-      '没有任何中间服务器。模型请求从你的设备直接发出，对话存在本机 SQLite（SQLCipher 加密），同步通过 iPhone 与 Watch 在局域网内完成。要不要上 CloudKit、要不要交给第三方，全是你的选择。',
+      '没有任何中间服务器。模型请求从你的设备直接发出，对话存在本机 SQLite（SQLCipher 加密），同步通过 iPhone 与 Watch 在局域网或 CloudKit 完成。要不要交给第三方，全是你的选择。',
     bullets: [
       { kicker: 'BYOK', title: '你提供 Key，App 直发模型', body: '我们不代付、不转发、不缓存你的请求。' },
-      { kicker: 'LOCAL FIRST', title: '会话与记忆存在本机', body: 'SQLCipher 全盘加密，可应用锁 + Face ID 双重门。' },
-      { kicker: 'EXPORTABLE', title: 'ETOS 数据包，随时拎走', body: '一键导出/导入，迁移设备不是难题。' },
-      { kicker: 'OPEN SOURCE', title: 'GPLv3 开源', body: '代码可审计，PR 与 Issue 都欢迎。' }
+      { kicker: 'LOCAL FIRST', title: '会话与记忆存在本机', body: 'SQLCipher 全盘加密，配合 Face ID 应用锁。' },
+      { kicker: 'EXPORTABLE', title: 'ETOS 数据包与加密快照', body: '一键导出/导入 `.elsbackup`，跨端迁移无痛。' },
+      { kicker: 'OPEN SOURCE', title: 'GPLv3 开源', body: '代码完全公开可审计，欢迎 PR 与 Issue。' }
     ]
   },
   tech: {
@@ -122,11 +156,11 @@ const zh = {
     lead: '没有 Electron，没有 React Native，没有 WebView 套壳。快速，性能超强。',
     items: [
       { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11 原生 UI，遵循 Apple HIG。' },
-      { name: 'GRDB · SQLCipher', desc: '加密 SQLite + ValueObservation 响应式查询。' },
-      { name: 'WatchConnectivity', desc: '双端低延迟同步，无中间服务器。' },
-      { name: 'Background Tasks', desc: 'Daily Pulse 在后台预生成，抬腕即看。' },
-      { name: 'SF Symbols 6', desc: '原生图标体系，与系统视觉一致。' },
-      { name: 'App Intents', desc: 'Siri 快捷指令与 Spotlight 深度集成。' }
+      { name: 'llama.cpp C ABI', desc: 'iOS 端侧运行 GGUF 权重，Metal GPU 加速与性能 HUD。' },
+      { name: 'Swift MCP SDK', desc: 'Model Context Protocol 官方 SDK，支持 SSE / Streamable HTTP。' },
+      { name: 'GRDB · SQLCipher', desc: '物理全盘加密 SQLite + ValueObservation 响应式查询。' },
+      { name: 'WatchConnectivity & CloudKit', desc: '双端低延迟增量同步，带世代指针与 APNs 静默唤醒。' },
+      { name: 'SFSpeechRecognizer & TTS', desc: '系统与云端语音识别及朗读引擎，实时回填与自动回退。' }
     ]
   },
   cta: {
@@ -157,26 +191,46 @@ const zh = {
 
 const en = {
   meta: {
-    title: 'ETOS LLM Studio',
-    subtitle: 'A native AI client for iPhone + Apple Watch'
+    title: 'ETOS LLM Studio · Native AI Client',
+    subtitle: 'Native AI Client for iPhone + Apple Watch · On-Device LLM & Powerful Tooling'
   },
   nav: {
+    localModel: 'On-Device LLM',
     features: 'Features',
+    mcpSkills: 'MCP & Skills',
     personalize: 'Personalize',
-    privacy: 'Privacy',
+    privacy: 'Privacy & Security',
     tech: 'Stack',
     docs: 'Docs',
     github: 'GitHub',
-    download: 'Get the App'
+    download: 'Get App'
   },
   hero: {
     title: 'AI in your pocket. And on your wrist.',
     lead:
-      'A native LLM client that runs on iPhone and Apple Watch. Your key, your data — straight from device to model. No middle server.',
-    actionsPrimary: 'Read the quickstart',
-    actionsSecondary: 'See the modules',
-    statusOnline: 'In active development',
+      'A native LLM client that runs on iPhone and Apple Watch. Supporting GGUF on-device local models, MCP protocol, Agent Skills, and SQLCipher physical encryption. Zero middle server.',
+    actionsPrimary: 'Read Quickstart Guide',
+    actionsSecondary: 'Explore Feature Matrix',
+    statusOnline: 'Active Development · 750+ Swift Files',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
+  },
+  stats: [
+    { label: 'Swift Source Files', val: '750+' },
+    { label: 'Native Swift Code Lines', val: '280,000+' },
+    { label: 'Middle Servers', val: '0' },
+    { label: 'Privacy & Physical Encryption', val: '100% Local' }
+  ],
+  localDemo: {
+    badge: 'On-Device Local Model',
+    title: 'Native GGUF Inference & Performance HUD on iOS',
+    lead: 'No network or API keys needed. Bridged via llama.cpp C ABI directly on iOS with Metal GPU acceleration and real-time CPU / Metal / Memory telemetry.',
+    selectModelLabel: 'Select Local GGUF Model',
+    thinkHeader: 'Thinking Timeline'
+  },
+  mcpSkillsSection: {
+    badge: 'Tools & Ecosystem',
+    title: 'MCP Protocol · Agent Skills · Sandboxed JS',
+    lead: 'Official Swift Model Context Protocol SDK, one-click Agent Skill import from GitHub, and sandboxed JavaScript tool runtime.',
   },
   personalize: {
     title: 'Unmistakably yours.',
@@ -190,7 +244,7 @@ const en = {
     chat: {
       title: 'Greetings & Help',
       user: 'Hi',
-      bot: "Hi! 👋\nGreat to meet you — anything you'd like to chat about or need a hand with? Image editing, poster design, prompt writing, character setup, or anything else, just tell me.",
+      bot: "Hi! 👋\nGreat to meet you — anything you'd like to chat about or need a hand with? GGUF local model tuning, MCP tools, Agent Skills, or prompt engineering, just ask!",
       placeholder: 'Message'
     }
   },
@@ -199,64 +253,78 @@ const en = {
     lead: 'The main view is just chat. Everything else lives in Settings. Here is what you will gradually find.',
     items: [
       {
-        kicker: '01 / CHAT',
-        title: 'Multi-model · Multi-provider · Compatible to the end',
+        kicker: '01 / CHAT & PROVIDERS',
+        title: 'Multi-model · Multi-provider · Total Compatibility',
         body:
-          'Native support for OpenAI Chat, OpenAI Responses, Anthropic, Gemini, plus any OpenAI-compatible endpoint. Key rotation, parameter expressions, raw JSON body, two-layer proxy.',
-        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom']
+          'Native support for OpenAI Chat, OpenAI Responses, Anthropic, Gemini, plus any OpenAI-compatible endpoint. Key rotation, parameter expressions, raw JSON, single response rewrite, and cost tracking.',
+        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom JSON']
       },
       {
-        kicker: '02 / TOOLS',
-        title: 'MCP · Skills · Shortcuts',
+        kicker: '02 / LOCAL GGUF',
+        title: 'On-Device GGUF Models & Performance HUD',
         body:
-          'A single tool hub unifies MCP servers, Agent Skills, iOS Shortcuts, and built-ins. Per-session toggles, approval policy, streaming debug, and a tool-call timeline.',
-        tags: ['MCP', 'Skills', 'Shortcuts', 'Approval']
+          'Bridged via llama.cpp C ABI to execute GGUF weights directly on iOS. Metal GPU acceleration, Flash Attention, KV offload, streaming thinking tags, and floating performance monitor HUD.',
+        tags: ['llama.cpp', 'GGUF', 'Metal GPU', 'HUD']
       },
       {
-        kicker: '03 / MEMORY',
-        title: 'Long-term memory · Worldbook · User profile',
+        kicker: '03 / TOOLS & SKILLS',
+        title: 'MCP Protocol · Agent Skills · Sandboxed JS',
         body:
-          'Cross-session facts, keyword-triggered worldbook entries, a model-readable user profile. Local vector index, works offline, plugs into Daily Pulse.',
-        tags: ['Memory', 'Worldbook', 'Local RAG']
+          'Unified tool hub managing MCP servers (SSE/HTTP), Agent Skills (GitHub/RAW import), Shortcuts, SQLite/sandboxed files/Health/Calendar tools with native approval Sheets.',
+        tags: ['MCP SDK', 'Agent Skills', 'Shortcuts', 'Approval Sheet']
       },
       {
-        kicker: '04 / DAILY PULSE',
-        title: 'Proactive briefing, not passive Q&A',
+        kicker: '04 / RAG & WORLDBOOK',
+        title: 'Local RAG Memory · Worldbook · SQLite Vectors',
         body:
-          'Cards generated on your schedule: news, mail nudges, calendar prep, tech digests. Watch shows them on raise; iPhone keeps the backlog.',
-        tags: ['Scheduled', 'Cards', 'Raise to view']
+          'Cross-session facts, SillyTavern compatible Worldbook lorebook (conditional triggers, budget control), and user profile. Vector database runs 100% locally in SQLite.',
+        tags: ['Memory', 'Worldbook', 'Local RAG', 'SQLite']
       },
       {
-        kicker: '05 / SYNC',
-        title: 'iPhone ↔ Watch over LAN',
+        kicker: '05 / DAILY PULSE',
+        title: 'Daily Pulse Proactive Intelligence',
         body:
-          'No server, no iCloud (unless you opt in). Peer-to-peer over WatchConnectivity and local protocols. SQLCipher full-disk encryption. Export an ETOS bundle to migrate.',
-        tags: ['WatchConnectivity', 'SQLCipher', 'ETOS bundle']
+          'Pre-generated intelligence cards (news, calendar prep, tech digests). Convert cards into actionable follow-up tasks with feedback learning and Apple Watch raise-to-view.',
+        tags: ['Scheduled', 'Cards', 'Task Tracking', 'Watch Raise']
       },
       {
-        kicker: '06 / WATCH',
-        title: 'A complete experience on the wrist — not a crippled one',
+        kicker: '06 / WATCH & SYNC',
+        title: 'iPhone ↔ Watch Authority Sync',
         body:
-          'Digital Crown zoom, Markdown + code highlighting, thinking timeline, TTS readout, cross-device send. watchOS settings stay flat — one List, no TabView.',
-        tags: ['watchOS', 'Digital Crown', 'Voice']
+          'WatchConnectivity low-latency channel + CloudKit / APNs background sync. Equipped with generation pointers and conflict resolution phrase for zero data loss.',
+        tags: ['WatchConnectivity', 'CloudKit', 'Generation Pointers']
+      },
+      {
+        kicker: '07 / WATCH NATIVE',
+        title: 'A complete experience on the wrist',
+        body:
+          'Digital Crown zoom, Markdown + code highlighting, thinking timeline, TTS readout, cross-device send. Flat single-layer list layout without TabView.',
+        tags: ['watchOS', 'Digital Crown', 'Voice', 'TTS']
+      },
+      {
+        kicker: '08 / SECURITY & BACKUP',
+        title: 'SQLCipher Encryption & Cloud Backups',
+        body:
+          'Physical SQLCipher database encryption with PBKDF2 master key & Face ID app lock. Encrypted `.elsbackup` snapshots and S3 / Cloudflare R2 cloud backup.',
+        tags: ['SQLCipher', 'Face ID', 'AES-256', 'S3/R2 Backup']
       }
     ]
   },
   screenshots: {
     title: 'See what it looks like in your hand.',
-    lead: 'Screens are from the current build.',
-    captionOne: 'iOS · Chat',
-    captionTwo: 'Apple Watch · Session view'
+    lead: 'Screens are from the current real build.',
+    captionOne: 'iOS · Chat & Features',
+    captionTwo: 'Apple Watch · Session View'
   },
   privacy: {
     title: 'Your key. Your data. Your device.',
     lead:
-      'ETOS runs no server of its own. Requests go from your device straight to the model. Chats live in local SQLite (SQLCipher). Sync happens over your LAN between iPhone and Watch. CloudKit? Third-party? Only if you choose.',
+      'ETOS runs no server of its own. Requests go from your device straight to the model. Chats live in local SQLite (SQLCipher encrypted). Sync happens over LAN or CloudKit.',
     bullets: [
       { kicker: 'BYOK', title: 'You bring the key', body: 'We never proxy, cache, or bill your requests.' },
-      { kicker: 'LOCAL FIRST', title: 'Chats live on device', body: 'SQLCipher encryption + app lock with Face ID.' },
-      { kicker: 'EXPORTABLE', title: 'Take the data with you', body: 'One-click ETOS bundle export/import for migrations.' },
-      { kicker: 'OPEN SOURCE', title: 'GPLv3, auditable', body: 'Code is open. PRs and issues welcome.' }
+      { kicker: 'LOCAL FIRST', title: 'Chats live on device', body: 'SQLCipher physical encryption + Face ID app lock.' },
+      { kicker: 'EXPORTABLE', title: 'Take data with you', body: 'One-click `.elsbackup` snapshot export/import for effortless migrations.' },
+      { kicker: 'OPEN SOURCE', title: 'GPLv3 License', body: 'Code is open and auditable. PRs and issues welcome.' }
     ]
   },
   tech: {
@@ -264,11 +332,11 @@ const en = {
     lead: 'No Electron. No React Native. No WebView shell.',
     items: [
       { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11, true to Apple HIG.' },
+      { name: 'llama.cpp C ABI', desc: 'Runs GGUF weights on-device with Metal GPU & HUD.' },
+      { name: 'Swift MCP SDK', desc: 'Official Model Context Protocol SDK for Swift.' },
       { name: 'GRDB · SQLCipher', desc: 'Encrypted SQLite with reactive ValueObservation.' },
-      { name: 'WatchConnectivity', desc: 'Low-latency sync. No middle server.' },
-      { name: 'Background Tasks', desc: 'Daily Pulse pre-renders in the background.' },
-      { name: 'SF Symbols 6', desc: 'Stays visually consistent with the system.' },
-      { name: 'App Intents', desc: 'Deep Siri Shortcuts and Spotlight hooks.' }
+      { name: 'WatchConnectivity & CloudKit', desc: 'Low-latency sync with generation pointers and APNs.' },
+      { name: 'SFSpeechRecognizer & TTS', desc: 'System and cloud speech engines with automatic fallback.' }
     ]
   },
   cta: {
@@ -299,134 +367,159 @@ const en = {
 
 const ja = {
   meta: {
-    title: 'ETOS LLM Studio',
-    subtitle: 'iPhone と Apple Watch のためのネイティブ AI クライアント'
+    title: 'ETOS LLM Studio · ネイティブ AI クライアント',
+    subtitle: 'iPhone + Apple Watch 向けネイティブ AI クライアント'
   },
   nav: {
+    localModel: 'ローカル LLM',
     features: '機能',
+    mcpSkills: 'ツールとスキル',
     personalize: 'カスタマイズ',
     privacy: 'プライバシー',
-    tech: '技術',
+    tech: '技術スタック',
     docs: 'ドキュメント',
     github: 'GitHub',
-    download: 'App を入手'
+    download: 'アプリを入手'
   },
   hero: {
-    title: 'AI をポケットに、そして手首に。',
+    title: 'AI を、手の中に。腕の上に。',
     lead:
-      'iPhone と Apple Watch 上で動くネイティブ LLM クライアント。あなたの Key、あなたのデータが、デバイスから直接モデルへ。中継サーバーはありません。',
+      'iPhone と Apple Watch で動作するネイティブ LLM クライアント。オンデバイス GGUF ローカルモデル、MCP プロトコル、Agent Skills、SQLCipher 暗号化をサポート。中間サーバーゼロ。',
     actionsPrimary: 'クイックスタートを読む',
-    actionsSecondary: '機能モジュール',
-    statusOnline: '開発中',
+    actionsSecondary: '機能を見る',
+    statusOnline: 'アクティブに開発中 · 750+ Swift ファイル',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
+  stats: [
+    { label: 'Swift ソースファイル', val: '750+' },
+    { label: 'Swift コード行数', val: '280,000+' },
+    { label: '中間サーバー', val: '0' },
+    { label: '物理暗号化・ローカルファースト', val: '100% Local' }
+  ],
+  localDemo: {
+    badge: 'オンデバイスローカルモデル',
+    title: 'iOS 上での GGUF 推論 & パフォーマンス HUD',
+    lead: 'ネット接続や API キーは一切不要。llama.cpp C ABI 経由で Metal GPU アクセラレーションとリアルタイム CPU/GPU/メモリ モニターを搭載。',
+    selectModelLabel: 'ローカル GGUF モデルを選択',
+    thinkHeader: '思考タイムライン (Thinking Timeline)'
+  },
+  mcpSkillsSection: {
+    badge: 'ツールとエコシステム',
+    title: 'MCP プロトコル · Agent Skills · Sandboxed JS',
+    lead: '公式 Swift MCP SDK、GitHub からのワンクリック Agent Skill インポート、サンドボックス化 JavaScript ランタイムを搭載。'
+  },
   personalize: {
-    title: 'ひと目で分かる、あなたの Studio。',
-    lead: '壁紙をアップロード、バブルの色を選ぶ、AI バブルの有無——右のスマホがリアルタイムで反映します。',
-    pickerHint: '下の3項目を調整、右でプレビュー',
+    title: 'あなただけの Studio。',
+    lead: '壁紙をアップロードし、バブルの色を選び、AI バブルの表示をカスタマイズ。右側のプレビューがリアルタイムで更新されます。',
+    pickerHint: '下で調整、右側でリアルタイム確認',
     wallpaperLabel: '背景レイヤー',
     wallpaperAction: '背景画像を選択',
     colorLabel: 'カラープロファイル',
-    hideBubbleLabel: 'アシスタントの吹き出しを非表示',
+    hideBubbleLabel: '助手バブルを非表示',
     reset: 'デフォルトに戻す',
     chat: {
-      title: 'あいさつとヘルプ',
+      title: '挨拶とサポート',
       user: 'こんにちは',
-      bot: 'こんにちは！👋\nお会いできてうれしいです。話したいことや、お手伝いできることはありますか？画像処理、ポスターデザイン、プロンプト作成、キャラクター設定、その他なんでも、気軽にどうぞ。',
-      placeholder: 'メッセージ'
+      bot: 'こんにちは！👋\n何かお手伝いできることはありますか？ローカル GGUF モデルの調整、MCP ツール、Agent Skills のインポートなど、何でもお気軽にどうぞ！',
+      placeholder: 'メッセージを入力…'
     }
   },
   features: {
-    title: 'ガワだけではない。Apple プラットフォームの一員として設計。',
-    lead: 'メイン画面はチャットのみ。残りはすべて設定に。インストール後に少しずつ見つかる機能たちです。',
+    title: '単なる Web ラッパーではありません。',
+    lead: 'メイン画面はチャットのみ。その他はすべて設定に集約。',
     items: [
       {
-        kicker: '01 / CHAT',
-        title: 'マルチモデル · マルチプロバイダ · どこまでも互換',
-        body:
-          'OpenAI Chat / Responses、Anthropic、Gemini にネイティブ対応。任意の OpenAI 互換 API も。Key ローテーション、パラメータ式、生 JSON ボディ、二層プロキシ。',
-        tags: ['OpenAI', 'Claude', 'Gemini', 'カスタム']
+        kicker: '01 / CHAT & PROVIDERS',
+        title: 'マルチモデル · マルチプロバイダー',
+        body: 'OpenAI、Claude、Gemini、任意の OpenAI 互換 API をサポート。キーローテーション、カスタムパラメータ式、JSON プレビューに対応。',
+        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom']
       },
       {
-        kicker: '02 / TOOLS',
-        title: 'MCP · Skills · ショートカット',
-        body:
-          '統合ツールセンターが MCP サーバー、Agent Skills、iOS ショートカット、組み込みツールを一括管理。会話単位の ON/OFF、承認ポリシー、ストリーミングデバッグ。',
-        tags: ['MCP', 'Skills', 'Shortcuts', '承認']
+        kicker: '02 / LOCAL GGUF',
+        title: 'オンデバイス GGUF ローカルモデル & HUD',
+        body: 'llama.cpp C ABI 経由で iOS 上で直接 GGUF モデルを実行。Metal GPU アクセラレーション、Flash Attention、リアルタイム HUD を搭載。',
+        tags: ['llama.cpp', 'GGUF', 'Metal GPU', 'HUD']
       },
       {
-        kicker: '03 / MEMORY',
-        title: '長期記憶 · ワールドブック · ユーザープロファイル',
-        body:
-          '会話をまたぐ事実、キーワードでトリガーされるワールドブック、モデルが読めるプロファイル。ローカルベクター検索、オフライン可、Daily Pulse 連携。',
-        tags: ['長期記憶', 'ワールドブック', 'ローカル RAG']
+        kicker: '03 / TOOLS & SKILLS',
+        title: 'MCP プロトコル · Agent Skills · JS ツール',
+        body: 'MCP サーバー、Agent Skills、Shortcuts、SQLite/ファイル操作/ヘルスケア/カレンダーツールを統括。',
+        tags: ['MCP SDK', 'Agent Skills', 'Shortcuts']
       },
       {
-        kicker: '04 / DAILY PULSE',
-        title: '受け身ではなく、先回り。',
-        body:
-          'スケジュールに沿ってカードを自動生成：ニュース、メールリマインダ、予定の前準備、技術ダイジェスト。Watch では手首を上げると表示。',
-        tags: ['スケジュール', 'カード', '抬腕']
+        kicker: '04 / RAG & WORLDBOOK',
+        title: 'ローカル RAG 記憶 · ワールドブック',
+        body: '長期記憶、SillyTavern 互換のワールドブック (Lorebook)、ユーザープロファイル。ベクトルインデックスは完全にローカル SQLite で動作。',
+        tags: ['Memory', 'Worldbook', 'SQLite']
       },
       {
-        kicker: '05 / SYNC',
-        title: 'iPhone ↔ Watch を LAN で直結同期',
-        body:
-          'サーバー経由なし、iCloud も任意。WatchConnectivity と P2P プロトコルで双方向。SQLCipher 全体暗号化、ETOS バンドルで持ち運び可。',
-        tags: ['WatchConnectivity', 'SQLCipher', 'ETOS バンドル']
+        kicker: '05 / DAILY PULSE',
+        title: 'Daily Pulse アクティブインテリジェンス',
+        body: '毎日自動でインテリジェンスカードを生成。アクションアイテムへの変換、フィードバック学習、Watch での確認に対応。',
+        tags: ['Scheduled', 'Cards', 'Watch']
       },
       {
-        kicker: '06 / WATCH',
-        title: '手首でもフル体験。簡易版ではありません。',
-        body:
-          'デジタルクラウンでズーム、Markdown とコードハイライト、思考タイムライン、TTS、双方向送信。watchOS の設定は単層 List のみ、TabView は使いません。',
-        tags: ['watchOS', 'デジタルクラウン', '音声入力']
+        kicker: '06 / WATCH & SYNC',
+        title: 'iPhone ↔ Watch 同期',
+        body: 'WatchConnectivity & CloudKit バックグラウンド漫遊。世代ポインタと競合自動解決を搭載。',
+        tags: ['WatchConnectivity', 'CloudKit']
+      },
+      {
+        kicker: '07 / WATCH NATIVE',
+        title: '手首の上の完全な体験',
+        body: 'Digital Crown ズーム、Markdown + コードハイライト、思考タイムライン、TTS 読み上げをサポート。',
+        tags: ['watchOS', 'Digital Crown', 'Voice']
+      },
+      {
+        kicker: '08 / SECURITY & BACKUP',
+        title: 'SQLCipher 暗号化 & クラウドバックアップ',
+        body: 'SQLCipher 物理全盤暗号化、PBKDF2 + Face ID アプリロック。暗号化 `.elsbackup` や S3 / Cloudflare R2 クラウドバックアップに対応。',
+        tags: ['SQLCipher', 'Face ID', 'S3/R2']
       }
     ]
   },
   screenshots: {
-    title: '実機での姿を、そのまま。',
-    lead: '現行ビルドからのスクリーンショット。',
-    captionOne: 'iOS · チャット',
-    captionTwo: 'Apple Watch · 会話ビュー'
+    title: '実際の画面をご覧ください。',
+    lead: '現在のリアルビルドからのスクリーンショットです。',
+    captionOne: 'iOS · チャット画面',
+    captionTwo: 'Apple Watch · セッション画面'
   },
   privacy: {
-    title: 'あなたの Key、データ、デバイス。',
-    lead:
-      'ETOS は自前のサーバーを持ちません。リクエストはデバイスから直接モデルへ。会話はローカル SQLite に SQLCipher で暗号化保存。同期は iPhone と Watch の LAN 直結。CloudKit や第三者連携は完全にオプトインです。',
+    title: 'あなたの Key、あなたのデータ。',
+    lead: '中継サーバーはありません。リクエストはあなたのデバイスからモデルへ直接送信され、会話はローカル SQLite (SQLCipher) に保存されます。',
     bullets: [
-      { kicker: 'BYOK', title: 'Key はあなたが用意', body: 'こちらでプロキシも、キャッシュも、課金もしません。' },
-      { kicker: 'LOCAL FIRST', title: 'チャットは端末内', body: 'SQLCipher 暗号化 + Face ID アプリロック。' },
-      { kicker: 'EXPORTABLE', title: 'ETOS バンドルで持ち運び', body: '機種変更時もワンクリックで移行可能。' },
-      { kicker: 'OPEN SOURCE', title: 'GPLv3 オープンソース', body: 'コードは監査可能。PR と Issue を歓迎。' }
+      { kicker: 'BYOK', title: 'API Key は自身で管理', body: 'リクエストを転送・キャッシュ・課金することはありません。' },
+      { kicker: 'LOCAL FIRST', title: '端末内暗号化保存', body: 'SQLCipher 全盤暗号化 + Face ID ロック。' },
+      { kicker: 'EXPORTABLE', title: 'データのエクスポート', body: 'ワンクリックで `.elsbackup` パックを出力・移行可能。' },
+      { kicker: 'OPEN SOURCE', title: 'GPLv3 ライセンス', body: 'コードは公開されており監査可能です。' }
     ]
   },
   tech: {
-    title: 'ネイティブの道具で、ネイティブの感触を。',
-    lead: 'Electron も React Native も WebView ガワもありません。',
+    title: 'ネイティブツールによる極上のネイティブ体験。',
+    lead: 'Electron も React Native もなし。高速で強力。',
     items: [
-      { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11 のネイティブ UI、HIG 準拠。' },
-      { name: 'GRDB · SQLCipher', desc: '暗号化 SQLite と ValueObservation。' },
-      { name: 'WatchConnectivity', desc: '低遅延同期。中継サーバーなし。' },
-      { name: 'Background Tasks', desc: 'Daily Pulse はバックグラウンドで事前生成。' },
-      { name: 'SF Symbols 6', desc: 'システムの視覚と整合。' },
-      { name: 'App Intents', desc: 'Siri ショートカットと Spotlight 連携。' }
+      { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11 ネイティブ UI。' },
+      { name: 'llama.cpp C ABI', desc: 'iOS 上で GGUF を実行し Metal 加速。' },
+      { name: 'Swift MCP SDK', desc: '公式 Model Context Protocol SDK。' },
+      { name: 'GRDB · SQLCipher', desc: '暗号化 SQLite とレスポンシブクエリ。' },
+      { name: 'WatchConnectivity & CloudKit', desc: '低遅延の世代管理同期。' },
+      { name: 'SFSpeechRecognizer & TTS', desc: '音声認識と自動フォールバック付き読み上げ。' }
     ]
   },
   cta: {
-    title: '10 分で最初の会話を。',
-    lead: 'インストールから初回返信まで、どこを押すか毎ステップ明示します。',
-    primary: 'クイックスタート',
-    secondary: 'GitHub ソース',
-    secondaryDesc: 'Star・Issue・PR お待ちしています。'
+    title: '10分で最初の会話を。',
+    lead: 'インストールから最初の返信までわかりやすく案内します。',
+    primary: 'ガイドを読む',
+    secondary: 'GitHub で見る',
+    secondaryDesc: 'Star や Issue、PR 大歓迎。'
   },
   footer: {
     madeBy: 'Made with care by',
     author: 'Eric-Terminal',
-    license: 'GPL-3.0 ライセンス',
+    license: 'GPL-3.0 License',
     repo: 'github.com/Eric-Terminal/ETOS-LLM-Studio',
     docs: 'ドキュメント',
-    backToTop: 'トップへ戻る'
+    backToTop: 'トップに戻る'
   },
   loader: {
     kicker: 'HELLO FROM ETOS',
@@ -435,137 +528,162 @@ const ja = {
   },
   ui: {
     theme: { light: 'ライト', dark: 'ダーク' },
-    langHint: 'お好みの言語をどうぞ。'
+    langHint: '言語を選択してください。'
   }
 };
 
 const ru = {
   meta: {
-    title: 'ETOS LLM Studio',
-    subtitle: 'Нативный AI-клиент для iPhone и Apple Watch'
+    title: 'ETOS LLM Studio · Нативный AI-клиент',
+    subtitle: 'Нативный AI-клиент для iPhone + Apple Watch · Локальные GGUF модели'
   },
   nav: {
+    localModel: 'Локальный LLM',
     features: 'Возможности',
-    personalize: 'Оформление',
-    privacy: 'Приватность',
+    mcpSkills: 'MCP и Инструменты',
+    personalize: 'Персонализация',
+    privacy: 'Конфиденциальность',
     tech: 'Стек',
-    docs: 'Документация',
+    docs: 'Доки',
     github: 'GitHub',
-    download: 'Получить'
+    download: 'Скачать App'
   },
   hero: {
-    title: 'AI в кармане. И на запястье.',
+    title: 'Ваш ИИ. В кармане и на запястье.',
     lead:
-      'Нативный LLM-клиент для iPhone и Apple Watch. Ваш ключ, ваши данные — с устройства напрямую в модель. Никакого посредника.',
-    actionsPrimary: 'Краткое руководство',
-    actionsSecondary: 'Модули',
-    statusOnline: 'В активной разработке',
+      'Нативный LLM-клиент для iPhone и Apple Watch. Поддержка локальных GGUF моделей, MCP протокола, Agent Skills и шифрования SQLCipher. Без промежуточных серверов.',
+    actionsPrimary: 'Быстрый старт',
+    actionsSecondary: 'Модули и функции',
+    statusOnline: 'В активной разработке · 750+ Swift файлов',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
   },
+  stats: [
+    { label: 'Файлов Swift', val: '750+' },
+    { label: 'Строк кода Swift', val: '280,000+' },
+    { label: 'Промежуточных серверов', val: '0' },
+    { label: 'Локальное шифрование', val: '100% Local' }
+  ],
+  localDemo: {
+    badge: 'Локальная модель на устройстве',
+    title: 'Нативный GGUF инференс и HUD производительности на iOS',
+    lead: 'Работает полностью без интернета. Модели GGUF исполняются через C ABI llama.cpp с ускорением Metal GPU и онлайн-монитором CPU/Metal/Памяти.',
+    selectModelLabel: 'Выберите модель GGUF',
+    thinkHeader: 'Таймлайн размышлений (Thinking Timeline)'
+  },
+  mcpSkillsSection: {
+    badge: 'Инструменты и экосистема',
+    title: 'Протокол MCP · Agent Skills · Песочница JS',
+    lead: 'Официальный Swift MCP SDK, импорт Agent Skills с GitHub в один клик и изолированный запуск JS-скриптов.',
+  },
   personalize: {
-    title: 'Безошибочно ваша Studio.',
-    lead: 'Загрузите обои, выберите цвет пузыря, оставьте или уберите пузырь ИИ — телефон справа меняется вживую.',
-    pickerHint: 'Настройте три пункта, превью справа',
-    wallpaperLabel: 'Слой фона',
-    wallpaperAction: 'Выбрать фоновое изображение',
-    colorLabel: 'Цветовые профили',
-    hideBubbleLabel: 'Скрыть пузыри ассистента',
+    title: 'Ваш уникальный Studio.',
+    lead: 'Загрузите обои, выберите цвет баббла, настройте стиль AI — предпросмотр справа меняется в реальном времени.',
+    pickerHint: 'Настройте элементы слева',
+    wallpaperLabel: 'Фоновый слой',
+    wallpaperAction: 'Выбрать обои',
+    colorLabel: 'Цветовой профиль',
+    hideBubbleLabel: 'Скрыть баббл ассистента',
     reset: 'Сбросить',
     chat: {
-      title: 'Приветствие и помощь',
+      title: 'Приветствие',
       user: 'Привет',
-      bot: 'Привет! 👋\nРад знакомству! О чём хотите поговорить или с чем помочь? Обработка изображений, дизайн постеров, написание промптов, создание персонажей или что-то ещё — просто скажите.',
-      placeholder: 'Сообщение'
+      bot: 'Привет! 👋\nЧем я могу помочь? Локальные GGUF модели, MCP инструменты, Agent Skills или промпты — обращайтесь!',
+      placeholder: 'Сообщение…'
     }
   },
   features: {
-    title: 'Не обёртка. Гражданин платформы Apple.',
-    lead: 'Главный экран — только чат. Всё остальное живёт в «Настройках». Вот что вы найдёте, когда поставите.',
+    title: 'Не просто оболочка. Нативный гражданин экосистемы Apple.',
+    lead: 'Главный экран — это только чат. Всё остальное бережно убрано в Настройки.',
     items: [
       {
-        kicker: '01 / CHAT',
-        title: 'Много моделей · Много провайдеров · Совместимость до конца',
-        body:
-          'Нативная поддержка OpenAI Chat / Responses, Anthropic, Gemini и любых OpenAI-совместимых API. Ротация ключей, выражения параметров, сырое JSON-тело, двухслойный прокси.',
+        kicker: '01 / CHAT & PROVIDERS',
+        title: 'Многомодельность и совместимость',
+        body: 'Поддержка OpenAI, Claude, Gemini и любых совместимых API. Ротация ключей, пользовательские параметры и JSON.',
         tags: ['OpenAI', 'Claude', 'Gemini', 'Custom']
       },
       {
-        kicker: '02 / TOOLS',
-        title: 'MCP · Skills · Shortcuts',
-        body:
-          'Единый центр инструментов: MCP-серверы, Agent Skills, iOS Shortcuts, встроенные. Включение по сессии, политика одобрения, отладка потока.',
-        tags: ['MCP', 'Skills', 'Shortcuts', 'Approval']
+        kicker: '02 / LOCAL GGUF',
+        title: 'Локальные GGUF модели и HUD',
+        body: 'Прямой запуск весов GGUF на iOS через llama.cpp C ABI. Ускорение Metal GPU, Flash Attention и плавающий HUD.',
+        tags: ['llama.cpp', 'GGUF', 'Metal GPU', 'HUD']
       },
       {
-        kicker: '03 / MEMORY',
-        title: 'Долгая память · Worldbook · Профиль',
-        body:
-          'Факты между сессиями, записи Worldbook по триггерам, читаемый моделью профиль. Локальный векторный индекс, оффлайн, интеграция с Daily Pulse.',
-        tags: ['Память', 'Worldbook', 'Local RAG']
+        kicker: '03 / TOOLS & SKILLS',
+        title: 'Протокол MCP · Agent Skills · JS',
+        body: 'Единый центр управления MCP серверами, пакетами Agent Skills, Shortcuts и локальными инструментами.',
+        tags: ['MCP SDK', 'Agent Skills', 'Shortcuts']
       },
       {
-        kicker: '04 / DAILY PULSE',
-        title: 'Не пассивные ответы — проактивные карточки',
-        body:
-          'Карточки по вашему расписанию: новости, напоминания о почте, подготовка к встречам, технологические дайджесты. Watch показывает при поднятии руки.',
-        tags: ['Расписание', 'Карточки', 'Raise to view']
+        kicker: '04 / RAG & WORLDBOOK',
+        title: 'Локальная память RAG и Worldbook',
+        body: 'Долгосрочные факты, совместимый с SillyTavern Worldbook (Lorebook) и векторный индекс в SQLite.',
+        tags: ['Memory', 'Worldbook', 'SQLite']
       },
       {
-        kicker: '05 / SYNC',
-        title: 'iPhone ↔ Watch по локальной сети',
-        body:
-          'Без сервера, без iCloud (если сами не захотите). P2P через WatchConnectivity. SQLCipher шифрует всё. Можно унести ETOS-пакет с собой.',
-        tags: ['WatchConnectivity', 'SQLCipher', 'ETOS-пакет']
+        kicker: '05 / DAILY PULSE',
+        title: 'Daily Pulse — активная аналитика',
+        body: 'Ежедневная генерация карточек новостей и задач с обучением по отзывам и просмотром на Apple Watch.',
+        tags: ['Scheduled', 'Cards', 'Watch']
       },
       {
-        kicker: '06 / WATCH',
-        title: 'Полный опыт на запястье, а не урезанный.',
-        body:
-          'Зум Digital Crown, Markdown и подсветка кода, таймлайн размышлений, TTS, кросс-устройство. Настройки watchOS — один плоский List.',
-        tags: ['watchOS', 'Digital Crown', 'Голос']
+        kicker: '06 / WATCH & SYNC',
+        title: 'Синхронизация iPhone ↔ Watch',
+        body: 'Прямой канал WatchConnectivity и CloudKit с генераторными указателями и защитой от конфликтов.',
+        tags: ['WatchConnectivity', 'CloudKit']
+      },
+      {
+        kicker: '07 / WATCH NATIVE',
+        title: 'Полноценный опыт на запястье',
+        body: 'Зум с Digital Crown, подсветка кода, таймлайн размышлений и озвучка TTS.',
+        tags: ['watchOS', 'Digital Crown', 'Voice']
+      },
+      {
+        kicker: '08 / SECURITY & BACKUP',
+        title: 'Шифрование SQLCipher и бэкапы',
+        body: 'Физическое шифрование SQLCipher, защита Face ID, зашифрованные `.elsbackup` и бэкапы в S3 / Cloudflare R2.',
+        tags: ['SQLCipher', 'Face ID', 'S3/R2']
       }
     ]
   },
   screenshots: {
-    title: 'Как это выглядит в руках.',
+    title: 'Как это выглядит в действии.',
     lead: 'Скриншоты из текущей сборки.',
-    captionOne: 'iOS · Чат',
-    captionTwo: 'Apple Watch · Сессия'
+    captionOne: 'iOS · Чат и панели',
+    captionTwo: 'Apple Watch · Экран сессии'
   },
   privacy: {
-    title: 'Ваш ключ. Ваши данные. Ваше устройство.',
-    lead:
-      'ETOS не держит собственного сервера. Запрос уходит с устройства напрямую в модель. Чаты в локальной SQLite (SQLCipher). Синхронизация — по локальной сети между iPhone и Watch. CloudKit или сторонние сервисы — только если сами выберете.',
+    title: 'Ваши ключи. Ваши данные. Ваше устройство.',
+    lead: 'Никаких промежуточных серверов. Запросы отправляются напрямую с устройства, чаты хранятся в локальном SQLCipher.',
     bullets: [
-      { kicker: 'BYOK', title: 'Ключ — ваш', body: 'Мы не проксируем, не кэшируем, не списываем за запросы.' },
-      { kicker: 'LOCAL FIRST', title: 'Чаты на устройстве', body: 'Шифрование SQLCipher + блокировка по Face ID.' },
-      { kicker: 'EXPORTABLE', title: 'ETOS-пакет с собой', body: 'Экспорт/импорт одной кнопкой при переезде.' },
-      { kicker: 'OPEN SOURCE', title: 'GPLv3, проверяемо', body: 'Код открыт. PR и issue — приветствуются.' }
+      { kicker: 'BYOK', title: 'Свой API ключ', body: 'Мы не проксируем и не кэшируем ваши запросы.' },
+      { kicker: 'LOCAL FIRST', title: 'Шифрование на устройстве', body: 'База данных SQLCipher + блокировка Face ID.' },
+      { kicker: 'EXPORTABLE', title: 'Экспорт данных', body: 'Экспорт `.elsbackup` в один клик для легкого переноса.' },
+      { kicker: 'OPEN SOURCE', title: 'Лицензия GPLv3', body: 'Открытый исходный код для полного аудита.' }
     ]
   },
   tech: {
-    title: 'Нативные инструменты — нативный отклик.',
-    lead: 'Без Electron, без React Native, без оболочек WebView.',
+    title: 'Нативные инструменты для нативной скорости.',
+    lead: 'Без Electron. Без React Native. Без WebView.',
     items: [
-      { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11, следуя Apple HIG.' },
-      { name: 'GRDB · SQLCipher', desc: 'Шифрованная SQLite + реактивные наблюдения.' },
-      { name: 'WatchConnectivity', desc: 'Низкая задержка. Без сервера-посредника.' },
-      { name: 'Background Tasks', desc: 'Daily Pulse рендерится в фоне.' },
-      { name: 'SF Symbols 6', desc: 'Визуально согласовано с системой.' },
-      { name: 'App Intents', desc: 'Глубокая интеграция Siri и Spotlight.' }
+      { name: 'Swift 6 · SwiftUI', desc: 'Нативный UI для iOS 18 и watchOS 11.' },
+      { name: 'llama.cpp C ABI', desc: 'Запуск GGUF весов с Metal GPU на iOS.' },
+      { name: 'Swift MCP SDK', desc: 'Официальный SDK Model Context Protocol.' },
+      { name: 'GRDB · SQLCipher', desc: 'Зашифрованный SQLite с реактивными запросами.' },
+      { name: 'WatchConnectivity & CloudKit', desc: 'Низколатентная синхронизация без серверов.' },
+      { name: 'SFSpeechRecognizer & TTS', desc: 'Распознавание и озвучка речи с фоллбэком.' }
     ]
   },
   cta: {
-    title: 'Первый чат за десять минут.',
-    lead: 'От установки до первого ответа — каждый шаг подскажет, куда нажать.',
-    primary: 'Краткое руководство',
-    secondary: 'GitHub',
-    secondaryDesc: 'Star, issues и PR приветствуются.'
+    title: 'Первый чат за 10 минут.',
+    lead: 'Простые инструкции от установки до первого ответа.',
+    primary: 'Быстрый старт',
+    secondary: 'Код на GitHub',
+    secondaryDesc: 'Star, issue и PR приветствуются.'
   },
   footer: {
-    madeBy: 'С заботой собрано',
+    madeBy: 'Made with care by',
     author: 'Eric-Terminal',
-    license: 'GPL-3.0',
+    license: 'GPL-3.0 License',
     repo: 'github.com/Eric-Terminal/ETOS-LLM-Studio',
     docs: 'Документация',
     backToTop: 'Наверх'
@@ -577,37 +695,57 @@ const ru = {
   },
   ui: {
     theme: { light: 'Светлая', dark: 'Тёмная' },
-    langHint: 'Выберите удобный язык.'
+    langHint: 'Выберите язык.'
   }
 };
 
 const zhHant = {
   meta: {
-    title: 'ETOS LLM Studio',
-    subtitle: 'iPhone + Apple Watch 原生 AI 客戶端'
+    title: 'ETOS LLM Studio · 原生 AI 客戶端',
+    subtitle: 'iPhone + Apple Watch 原生 AI 客戶端 · 端側 LLM 與全能工具中心'
   },
   nav: {
-    features: '功能',
-    personalize: '個人化',
-    privacy: '隱私',
-    tech: '技術',
-    docs: '文件',
+    localModel: '端側 LLM',
+    features: '功能矩陣',
+    mcpSkills: '工具與技能',
+    personalize: '個性化',
+    privacy: '隱私與安全',
+    tech: '技術棧',
+    docs: '文檔',
     github: 'GitHub',
-    download: '取得 App'
+    download: '獲取 App'
   },
   hero: {
-    title: '把 AI 放進口袋，也放上手腕。',
+    title: '你的 AI，揣在手裡，戴在腕上。',
     lead:
-      '一個跑在 iPhone 與 Apple Watch 上的原生 LLM 客戶端。你的 Key、你的資料，從裝置直接送往模型，沒有中介伺服器。',
-    actionsPrimary: '閱讀入門教學',
-    actionsSecondary: '查看功能模組',
-    statusOnline: '持續開發中',
+      '運行在 iPhone 與 Apple Watch 上的原生 LLM 客戶端。支援 GGUF 端側本地模型、MCP 工具協議、Agent Skills 與 SQLCipher 物理加密。你的 Key、你的數據，零中間伺服器。',
+    actionsPrimary: '輕鬆上手教程',
+    actionsSecondary: '探索功能模組',
+    statusOnline: '持續迭代中 · 750+ Swift 源檔案',
     statusBadge: 'BUILT FOR APPLE PLATFORMS'
+  },
+  stats: [
+    { label: 'Swift 源檔案', val: '750+' },
+    { label: '原生 Swift 代碼行', val: '280,000+' },
+    { label: '中間伺服器', val: '0' },
+    { label: '隱私與物理加密', val: '100% Local' }
+  ],
+  localDemo: {
+    badge: '端側本地模型',
+    title: 'iOS 端側硬核 GGUF 本地模型推理',
+    lead: '不需要連接任何網路或 API 服務。底層通過 llama.cpp C ABI 橋接，直接在 iPhone 上加載 GGUF 權重，並提供實時 CPU / Metal / 記憶體性能監視器。',
+    selectModelLabel: '選擇本地 GGUF 模型',
+    thinkHeader: '本地模型思考時間線 (Thinking Timeline)'
+  },
+  mcpSkillsSection: {
+    badge: '工具與生態',
+    title: 'MCP 協議 · Agent Skills · 沙盒 JS',
+    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支援從 GitHub 一鍵導入 Agent Skills 技能包，並可在沙盒內運行自定義 JavaScript 工具。'
   },
   personalize: {
     title: '一眼認得出，是你的 Studio。',
-    lead: '上傳一張壁紙、挑一個對話框顏色、要不要 AI 氣泡——右邊這台即時跟著變。',
-    pickerHint: '調下面三項，右側即時預覽',
+    lead: '上傳一張桌布、挑一個對話框顏色、要不要 AI 氣泡——右邊這台實時跟著變。',
+    pickerHint: '調下面三項，右側實時預覽',
     wallpaperLabel: '背景圖層',
     wallpaperAction: '選擇背景圖',
     colorLabel: '顏色配置',
@@ -616,100 +754,114 @@ const zhHant = {
     chat: {
       title: '問候與幫助',
       user: '你好',
-      bot: '你好！👋\n很高興見到你，有什麼想聊的或者需要幫忙的嗎？無論是圖片處理、海報設計、提示詞編寫、角色設定，還是其他問題，都可以直接告訴我。',
+      bot: '你好！👋\n很高興見到你，有什麼想聊的或者需要幫忙的嗎？無論是端側 GGUF 調參、MCP 工具配置、Agent Skills 導入，還是日常問答，都可以直接告訴我。',
       placeholder: '輸入訊息…'
     }
   },
   features: {
     title: '不是套殼。是把模型當 Apple 平台公民來設計。',
-    lead: '主畫面只留聊天，其餘全部收進設定。下面這些是你裝好之後會慢慢找到的能力。',
+    lead: '主界面只留聊天，其餘全部收進設定。下面這些是你裝好之後會陸續找到的能力。',
     items: [
       {
-        kicker: '01 / CHAT',
-        title: '多模型 · 多 Provider · 相容到底',
+        kicker: '01 / CHAT & PROVIDERS',
+        title: '多模型 · 多 Provider · 兼容到底',
         body:
-          '原生支援 OpenAI Chat、OpenAI Responses、Anthropic、Gemini，外加任意 OpenAI 相容介面。支援多 Key 輪詢、參數表達式、原始 JSON 請求體、提供商 / 全域兩層代理。',
-        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom']
+          '原生適配 OpenAI Chat、OpenAI Responses、Anthropic、Gemini，外加任意 OpenAI 兼容介面。支援多 Key 輪詢、參數表達式、原始 JSON 請求體、單條 AI 回覆重寫與計費估算。',
+        tags: ['OpenAI', 'Claude', 'Gemini', 'Custom JSON']
       },
       {
-        kicker: '02 / TOOLS',
-        title: 'MCP · Skills · 捷徑',
+        kicker: '02 / LOCAL GGUF',
+        title: '端側 GGUF 本地模型 & 性能監視器',
         body:
-          '工具中心統一管理 MCP 伺服器、Agent Skills、iOS 捷徑與內建工具。支援會話級啟用、審批策略、串流除錯與工具時間線。',
-        tags: ['MCP', 'Skills', 'Shortcuts', '審批']
+          '底層通過 llama.cpp C ABI 橋接，在 iOS 上直接運行 GGUF 本地權重。支援 Metal GPU 加速、Flash Attention、KV offload、流式思考解析與浮動性能監視面板（CPU/Metal/RAM）。',
+        tags: ['llama.cpp', 'GGUF', 'Metal GPU', '性能 HUD']
       },
       {
-        kicker: '03 / MEMORY',
-        title: '長期記憶 · 世界書 · 使用者畫像',
+        kicker: '03 / TOOLS & SKILLS',
+        title: 'MCP 協議 · Agent Skills · 沙盒 JS',
         body:
-          '跨會話的事實記憶、關鍵字觸發的世界書條目、模型可讀的使用者畫像。本地向量索引，離線可用，可與 Daily Pulse 串接。',
-        tags: ['長期記憶', '世界書', '本地 RAG']
+          '統一管理 MCP 伺服器（Streamable HTTP/SSE）、Agent Skills 技能包（GitHub/RAW 導入）、iOS 快捷指令與內建 SQLite/檔案沙盒/健康/日曆工具，具備原生問答 Sheet 審批控制。',
+        tags: ['MCP SDK', 'Agent Skills', 'Shortcuts', '審批 Sheet']
       },
       {
-        kicker: '04 / DAILY PULSE',
-        title: '主動情報，不是被動問答',
+        kicker: '04 / RAG & WORLDBOOK',
+        title: '本地 RAG 記憶 · 世界書 · 嵌入向量',
         body:
-          '依你設定的節奏自動生成情報卡片：新聞、郵件提醒、行程預判、技術摘要。Watch 在抬腕時顯示，錯過的可在 iPhone 端回看。',
-        tags: ['排程', '情報卡片', '抬腕']
+          '跨會話長期事實記憶、支援 SillyTavern 兼容的世界書 Lorebook（條件觸發、注入預算）與用戶畫像。向量索引完全本地 SQLite 運行，絕不下發雲端。',
+        tags: ['長期記憶', '世界書 Lorebook', 'SQLite 向量']
       },
       {
-        kicker: '05 / SYNC',
-        title: 'iPhone ↔ Watch 區網直連同步',
+        kicker: '05 / DAILY PULSE',
+        title: 'Daily Pulse 每日脈衝主動情報',
         body:
-          '不走伺服器、不走 iCloud（除非你願意）。雙端透過 WatchConnectivity 與本地點對點協定互傳，SQLCipher 全盤加密，可隨時匯出 ETOS 資料包搬家。',
-        tags: ['WatchConnectivity', 'SQLCipher', 'ETOS 資料包']
+          '每天定時預生成主動情報卡片：新聞、郵件提醒、日程預判、技術摘要。支援卡片一鍵轉待跟進任務與長效偏好反饋學習，抬腕即看。',
+        tags: ['定時', '情報卡片', '任務跟進', 'Watch 抬腕']
       },
       {
-        kicker: '06 / WATCH',
-        title: '手腕上的完整體驗，而不是閹割版。',
+        kicker: '06 / WATCH & SYNC',
+        title: 'iPhone ↔ Watch 權威增量同步',
         body:
-          '數位錶冠縮放圖片、Markdown 與程式碼高亮、思考時間線、TTS 朗讀、跨端發送。watchOS 設定攤平為單層 List，沒有 TabView。',
-        tags: ['watchOS', '數位錶冠', '語音']
+          'WatchConnectivity 局域網快速通道 + CloudKit / APNs 後台漫遊。雙端配備權威世代指針與數據覆蓋衝突裁決短語，離線分叉合併零丟失。',
+        tags: ['WatchConnectivity', 'CloudKit', '世代指針']
+      },
+      {
+        kicker: '07 / WATCH NATIVE',
+        title: '手腕上的完整體驗，不是醃割版',
+        body:
+          '數碼錶冠縮放圖片、Markdown 與代碼高亮、思考時間線、TTS 朗讀、單會話跨端發送。watchOS 設定扁平化為單層 List，零 TabView。',
+        tags: ['watchOS', '數碼錶冠', '抬腕語音', 'TTS']
+      },
+      {
+        kicker: '08 / SECURITY & BACKUP',
+        title: 'SQLCipher 全盤加密 & 快照備份',
+        body:
+          '底層數據庫採用 SQLCipher 物理加密，結合 PBKDF2 主密碼與 Face ID / Touch ID 應用鎖。支援加密快照 `.elsbackup` 導出及 Cloudflare R2 / S3 簽名雲備份。',
+        tags: ['SQLCipher', 'Face ID 鎖', 'AES-256', 'S3/R2 雲備份']
       }
     ]
   },
   screenshots: {
     title: '看看它在你手裡是什麼樣。',
-    lead: '截圖直接來自目前版本。',
-    captionOne: 'iOS · 聊天主畫面',
-    captionTwo: 'Apple Watch · 單會話回看'
+    lead: '截圖直接來自當前真實 Build。',
+    captionOne: 'iOS · 聊天與功能面板',
+    captionTwo: 'Apple Watch · 獨立端側體驗'
   },
   privacy: {
-    title: '你的 Key，你的資料，你的裝置。',
+    title: '你的 Key，你的數據，你的設備。',
     lead:
-      'ETOS LLM Studio 不營運任何中介伺服器。模型請求從你的裝置直接送出，會話存在本機 SQLite（SQLCipher 加密），同步透過 iPhone 與 Watch 在區網內完成。要不要上 CloudKit、要不要交給第三方，全由你決定。',
+      '沒有任何中間伺服器。模型請求從你的設備直接發出，對話存在本地 SQLite（SQLCipher 加密），同步通過 iPhone 與 Watch 在局域網或 CloudKit 完成。要不要交給第三方，全是你的選擇。',
     bullets: [
-      { kicker: 'BYOK', title: '你提供 Key，App 直送模型', body: '我們不代付、不轉發、不快取你的請求。' },
-      { kicker: 'LOCAL FIRST', title: '會話與記憶存在本機', body: 'SQLCipher 全盤加密，可應用鎖 + Face ID 雙重門。' },
-      { kicker: 'EXPORTABLE', title: 'ETOS 資料包，隨時帶走', body: '一鍵匯出/匯入，搬家不成問題。' },
-      { kicker: 'OPEN SOURCE', title: 'GPLv3 開源', body: '程式碼可審計，PR 與 Issue 都歡迎。' }
+      { kicker: 'BYOK', title: '你提供 Key，App 直發模型', body: '我們不代付、不轉發、不快取你的請求。' },
+      { kicker: 'LOCAL FIRST', title: '會話與記憶存在本地', body: 'SQLCipher 全盤加密，配合 Face ID 應用鎖。' },
+      { kicker: 'EXPORTABLE', title: 'ETOS 數據包與加密快照', body: '一鍵導出/導入 `.elsbackup`，跨端遷移無痛。' },
+      { kicker: 'OPEN SOURCE', title: 'GPLv3 開源', body: '代碼完全公開可審計，歡迎 PR 與 Issue。' }
     ]
   },
   tech: {
     title: '用原生工具，做原生體驗。',
-    lead: '沒有 Electron，沒有 React Native，沒有 WebView 套殼。',
+    lead: '沒有 Electron，沒有 React Native，沒有 WebView 套殼。快速，性能超強。',
     items: [
       { name: 'Swift 6 · SwiftUI', desc: 'iOS 18 + watchOS 11 原生 UI，遵循 Apple HIG。' },
-      { name: 'GRDB · SQLCipher', desc: '加密 SQLite + ValueObservation 響應式查詢。' },
-      { name: 'WatchConnectivity', desc: '雙端低延遲同步，無中介伺服器。' },
-      { name: 'Background Tasks', desc: 'Daily Pulse 在背景預先生成。' },
-      { name: 'SF Symbols 6', desc: '原生圖示體系，與系統視覺一致。' },
-      { name: 'App Intents', desc: 'Siri 捷徑與 Spotlight 深度整合。' }
+      { name: 'llama.cpp C ABI', desc: 'iOS 端側運行 GGUF 權重，Metal GPU 加速與性能 HUD。' },
+      { name: 'Swift MCP SDK', desc: 'Model Context Protocol 官方 SDK，支援 SSE / Streamable HTTP。' },
+      { name: 'GRDB · SQLCipher', desc: '物理全盤加密 SQLite + ValueObservation 響應式查詢。' },
+      { name: 'WatchConnectivity & CloudKit', desc: '雙端低延遲增量同步，帶世代指針與 APNs 靜默喚醒。' },
+      { name: 'SFSpeechRecognizer & TTS', desc: '系統與雲端語音識別及朗讀引擎，實時回填與自動回退。' }
     ]
   },
   cta: {
     title: '十分鐘跑通第一條對話。',
-    lead: '裝機、設定 Provider、第一條訊息，每一步都告訴你點哪裡。',
-    primary: '閱讀入門教學',
+    lead: '裝機、配 Provider、第一條訊息，每一步都告訴你點哪裡。',
+    primary: '閱讀上手教程',
     secondary: 'GitHub 原始碼',
     secondaryDesc: '歡迎 Star、Issue、PR。'
   },
   footer: {
     madeBy: 'Made with care by',
     author: 'Eric-Terminal',
-    license: 'GPL-3.0 授權',
+    license: 'GPL-3.0 License',
     repo: 'github.com/Eric-Terminal/ETOS-LLM-Studio',
-    docs: '文件站',
+    docs: '文檔站',
     backToTop: '回到頂部'
   },
   loader: {
@@ -719,7 +871,7 @@ const zhHant = {
   },
   ui: {
     theme: { light: '淺色', dark: '深色' },
-    langHint: '選擇你慣用的語言。'
+    langHint: '選擇你順手的語言。'
   }
 };
 
