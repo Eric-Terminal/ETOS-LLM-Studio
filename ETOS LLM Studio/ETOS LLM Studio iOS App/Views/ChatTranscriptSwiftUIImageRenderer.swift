@@ -41,9 +41,6 @@ struct ChatTranscriptSwiftUIImageConfiguration {
 
 @MainActor
 enum ChatTranscriptSwiftUIImageRenderer {
-    private static let maximumPixelHeight: CGFloat = 50_000
-    private static let maximumBitmapBytes: CGFloat = 128 * 1_024 * 1_024
-
     static func render(
         preparedExport: ChatTranscriptPreparedImageExport,
         sourceMessages: [ChatMessage],
@@ -69,36 +66,27 @@ enum ChatTranscriptSwiftUIImageRenderer {
             sourceMessages: sourceMessages,
             includeReasoning: includeReasoning
         )
-        let totalHeight = try measureHeight(
-            rows: rows,
-            continuationContext: preparedExport.continuationContext,
-            configuration: configuration
-        )
-        let scale = try renderScale(width: configuration.width, height: totalHeight)
-        let tileCount = max(1, Int(ceil(totalHeight / configuration.viewportHeight)))
 
         let canvas = ChatTranscriptExportCanvas(
             rows: rows,
             continuationContext: preparedExport.continuationContext,
             configuration: configuration,
-            backgroundImage: resolvedBackgroundImage,
-            totalHeight: totalHeight,
-            tileCount: tileCount
+            backgroundImage: resolvedBackgroundImage
         )
         .environment(\.chatTranscriptPreloadedAttachmentImages, preloadedAttachments.images)
         .environment(\.colorScheme, configuration.prefersDarkAppearance ? .dark : .light)
         .environment(\.locale, configuration.locale)
         .environment(\.font, configuration.rootFont)
+        .frame(width: configuration.width)
+        .fixedSize(horizontal: false, vertical: true)
 
-        let cgImage = try await capture(
+        let capturedImage = try await ChatTranscriptSwiftUIImageCapture.capture(
             canvas: canvas,
             width: configuration.width,
-            height: totalHeight,
             viewportHeight: configuration.viewportHeight,
-            scale: scale,
             prefersDarkAppearance: configuration.prefersDarkAppearance
         )
-        return try await encodePNG(cgImage, scale: scale)
+        return try await encodePNG(capturedImage.image, scale: capturedImage.scale)
     }
 
     private static func prepareMessages(
@@ -253,46 +241,6 @@ enum ChatTranscriptSwiftUIImageRenderer {
         return hasReasoning || hasToolCall
     }
 
-    private static func measureHeight(
-        rows: [ChatTranscriptRenderedRow],
-        continuationContext: ConversationContinuationContext?,
-        configuration: ChatTranscriptSwiftUIImageConfiguration
-    ) throws -> CGFloat {
-        let foreground = ChatTranscriptExportForeground(
-            rows: rows,
-            continuationContext: continuationContext,
-            configuration: configuration
-        )
-            .frame(width: configuration.width)
-            .fixedSize(horizontal: false, vertical: true)
-            .environment(\.colorScheme, configuration.prefersDarkAppearance ? .dark : .light)
-            .environment(\.locale, configuration.locale)
-            .environment(\.font, configuration.rootFont)
-        let controller = UIHostingController(rootView: foreground)
-        controller.view.backgroundColor = .clear
-        controller.overrideUserInterfaceStyle = configuration.prefersDarkAppearance ? .dark : .light
-        let measured = controller.sizeThatFits(
-            in: CGSize(width: configuration.width, height: maximumPixelHeight * 4)
-        )
-        let height = ceil(measured.height)
-        guard height.isFinite, height > 0 else {
-            throw ChatTranscriptExportError.imageRenderFailed
-        }
-        return height
-    }
-
-    private static func renderScale(width: CGFloat, height: CGFloat) throws -> CGFloat {
-        for scale: CGFloat in [2, 1] {
-            let pixelWidth = ceil(width * scale)
-            let pixelHeight = ceil(height * scale)
-            let estimatedBytes = pixelWidth * pixelHeight * 4
-            if pixelHeight <= maximumPixelHeight && estimatedBytes <= maximumBitmapBytes {
-                return scale
-            }
-        }
-        throw ChatTranscriptExportError.imageTooLong
-    }
-
     private static func resolveBackgroundImage(
         configuration: ChatTranscriptSwiftUIImageConfiguration
     ) async -> UIImage? {
@@ -347,110 +295,6 @@ enum ChatTranscriptSwiftUIImageRenderer {
         return box.image
     }
 
-    private static func capture<Canvas: View>(
-        canvas: Canvas,
-        width: CGFloat,
-        height: CGFloat,
-        viewportHeight: CGFloat,
-        scale: CGFloat,
-        prefersDarkAppearance: Bool
-    ) async throws -> CGImage {
-        let pixelWidth = Int(ceil(width * scale))
-        let pixelHeight = Int(ceil(height * scale))
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let bitmapContext = CGContext(
-            data: nil,
-            width: pixelWidth,
-            height: pixelHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: pixelWidth * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            throw ChatTranscriptExportError.imageRenderFailed
-        }
-        bitmapContext.translateBy(x: 0, y: CGFloat(pixelHeight))
-        bitmapContext.scaleBy(x: scale, y: -scale)
-
-        let hostingController = UIHostingController(rootView: canvas)
-        hostingController.view.backgroundColor = .clear
-        hostingController.overrideUserInterfaceStyle = prefersDarkAppearance ? .dark : .light
-        hostingController.view.frame = CGRect(x: 0, y: 0, width: width, height: height)
-
-        let scrollView = UIScrollView(
-            frame: CGRect(x: 0, y: 0, width: width, height: min(viewportHeight, height))
-        )
-        scrollView.backgroundColor = .clear
-        scrollView.clipsToBounds = true
-        scrollView.isScrollEnabled = false
-        scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.contentSize = CGSize(width: width, height: height)
-
-        let rootController = UIViewController()
-        rootController.view.backgroundColor = .clear
-        rootController.overrideUserInterfaceStyle = prefersDarkAppearance ? .dark : .light
-        rootController.addChild(hostingController)
-        scrollView.addSubview(hostingController.view)
-        rootController.view.addSubview(scrollView)
-        hostingController.didMove(toParent: rootController)
-
-        let window = makeOffscreenWindow(rootController: rootController)
-        defer {
-            hostingController.willMove(toParent: nil)
-            hostingController.view.removeFromSuperview()
-            hostingController.removeFromParent()
-            window.isHidden = true
-            window.rootViewController = nil
-        }
-
-        window.overrideUserInterfaceStyle = prefersDarkAppearance ? .dark : .light
-        window.isHidden = false
-        rootController.view.layoutIfNeeded()
-        hostingController.view.setNeedsLayout()
-        hostingController.view.layoutIfNeeded()
-        await Task.yield()
-
-        var originY: CGFloat = 0
-        while originY < height {
-            try Task.checkCancellation()
-            let sliceHeight = min(viewportHeight, height - originY)
-            scrollView.frame = CGRect(x: 0, y: 0, width: width, height: sliceHeight)
-            scrollView.contentOffset = CGPoint(x: 0, y: originY)
-            scrollView.layoutIfNeeded()
-            hostingController.view.layoutIfNeeded()
-
-            let format = UIGraphicsImageRendererFormat()
-            format.scale = scale
-            format.opaque = true
-            var didCapture = false
-            let sliceImage = autoreleasepool {
-                UIGraphicsImageRenderer(
-                    size: CGSize(width: width, height: sliceHeight),
-                    format: format
-                ).image { _ in
-                    didCapture = scrollView.drawHierarchy(
-                        in: CGRect(x: 0, y: 0, width: width, height: sliceHeight),
-                        afterScreenUpdates: true
-                    )
-                }
-            }
-            guard didCapture else {
-                throw ChatTranscriptExportError.imageRenderFailed
-            }
-
-            UIGraphicsPushContext(bitmapContext)
-            sliceImage.draw(in: CGRect(x: 0, y: originY, width: width, height: sliceHeight))
-            UIGraphicsPopContext()
-            originY += sliceHeight
-            await Task.yield()
-        }
-
-        guard let cgImage = bitmapContext.makeImage() else {
-            throw ChatTranscriptExportError.imageRenderFailed
-        }
-        return cgImage
-    }
-
     private static func encodePNG(_ cgImage: CGImage, scale: CGFloat) async throws -> Data {
         let imageBox = ChatTranscriptCGImageBox(cgImage)
         return try await Task.detached(priority: .userInitiated) {
@@ -465,22 +309,6 @@ enum ChatTranscriptSwiftUIImageRenderer {
         }.value
     }
 
-    private static func makeOffscreenWindow(rootController: UIViewController) -> UIWindow {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-        let window: UIWindow
-        if let scene {
-            window = UIWindow(windowScene: scene)
-            window.frame = scene.screen.bounds
-        } else {
-            window = UIWindow(frame: UIScreen.main.bounds)
-        }
-        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.normal.rawValue - 1)
-        window.isUserInteractionEnabled = false
-        window.rootViewController = rootController
-        return window
-    }
 }
 
 private struct ChatTranscriptPreparedMessage: @unchecked Sendable {
@@ -514,24 +342,25 @@ private struct ChatTranscriptExportCanvas: View {
     let continuationContext: ConversationContinuationContext?
     let configuration: ChatTranscriptSwiftUIImageConfiguration
     let backgroundImage: UIImage?
-    let totalHeight: CGFloat
-    let tileCount: Int
 
     var body: some View {
-        ZStack(alignment: .top) {
-            ChatTranscriptExportWallpaper(
-                configuration: configuration,
-                image: backgroundImage,
-                totalHeight: totalHeight,
-                tileCount: tileCount
-            )
-            ChatTranscriptExportForeground(
-                rows: rows,
-                continuationContext: continuationContext,
-                configuration: configuration
-            )
+        ChatTranscriptExportForeground(
+            rows: rows,
+            continuationContext: continuationContext,
+            configuration: configuration
+        )
+        .background(alignment: .top) {
+            GeometryReader { proxy in
+                let height = max(1, proxy.size.height)
+                ChatTranscriptExportWallpaper(
+                    configuration: configuration,
+                    image: backgroundImage,
+                    totalHeight: height,
+                    tileCount: max(1, Int(ceil(height / configuration.viewportHeight)))
+                )
+            }
         }
-        .frame(width: configuration.width, height: totalHeight, alignment: .top)
+        .frame(width: configuration.width)
         .clipped()
     }
 }
