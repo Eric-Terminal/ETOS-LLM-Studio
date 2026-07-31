@@ -193,26 +193,37 @@ struct SettingsView: View {
                     }
 
                     NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
-                        settingsNavigationLabel("模型管理", icon: .providerManagement)
+                        settingsNavigationLabel("提供商与模型管理", icon: .providerManagement)
                     }
 
-                    NavigationLink(destination: advancedSettingsView(destination: .conversation)) {
-                        settingsNavigationLabel("会话", icon: .conversationSettings)
+                    NavigationLink(destination: ModelAdvancedSettingsView(
+                        aiTemperature: $viewModel.aiTemperature,
+                        aiTopP: $viewModel.aiTopP,
+                        aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
+                        aiTopPEnabled: $viewModel.aiTopPEnabled,
+                        globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+                        selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+                        maxChatHistory: $viewModel.maxChatHistory,
+                        lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+                        enableStreaming: $viewModel.enableStreaming,
+                        enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+                        enableAutoSessionNaming: $viewModel.enableAutoSessionNaming, // 传递新增的绑定
+                        enableReasoningSummary: $viewModel.enableReasoningSummary,
+                        currentSession: $viewModel.currentSession,
+                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+                        systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
+                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+                        addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+                        selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+                        updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+                        deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
+                    )) {
+                        settingsNavigationLabel("偏好设置", icon: .modelAdvanced)
                     }
 
-                    NavigationLink(destination: advancedSettingsView(destination: .prompts)) {
-                        settingsNavigationLabel("提示词", icon: .promptSettings)
-                    }
-
-                    NavigationLink(destination: advancedSettingsView(destination: .output)) {
-                        settingsNavigationLabel("输出", icon: .outputSettings)
-                    }
-
-                } header: {
-                    Text(NSLocalizedString("核心设置", comment: "核心设置分组"))
-                }
-
-                Section {
                     NavigationLink(destination: DailyPulseView(viewModel: viewModel)) {
                         settingsStatusLabel(
                             "每日脉冲",
@@ -234,11 +245,6 @@ struct SettingsView: View {
                         settingsNavigationLabel("拓展功能", icon: .extendedFeatures)
                     }
 
-                } header: {
-                    Text(NSLocalizedString("拓展能力", comment: "拓展能力设置分组"))
-                }
-
-                Section {
                     NavigationLink(destination: DisplaySettingsView(
                         enableMarkdown: $viewModel.enableMarkdown,
                         enableBackground: $viewModel.enableBackground,
@@ -259,8 +265,6 @@ struct SettingsView: View {
                     NavigationLink(destination: DeviceSyncSettingsView()) {
                         settingsNavigationLabel("同步与备份", icon: .sync)
                     }
-                } header: {
-                    Text(NSLocalizedString("显示与体验", comment: "显示与体验设置分组"))
                 }
 
                 Section {
@@ -326,38 +330,6 @@ struct SettingsView: View {
     }
     
     // MARK: - 辅助方法
-
-    private func advancedSettingsView(
-        destination: ModelAdvancedSettingsDestination
-    ) -> some View {
-        ModelAdvancedSettingsView(
-            aiTemperature: $viewModel.aiTemperature,
-            aiTopP: $viewModel.aiTopP,
-            aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
-            aiTopPEnabled: $viewModel.aiTopPEnabled,
-            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
-            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
-            maxChatHistory: $viewModel.maxChatHistory,
-            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
-            enableStreaming: $viewModel.enableStreaming,
-            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
-            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
-            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
-            enableReasoningSummary: $viewModel.enableReasoningSummary,
-            currentSession: $viewModel.currentSession,
-            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
-            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
-            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
-            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
-            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
-            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
-            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) },
-            destination: destination
-        )
-        .environmentObject(viewModel)
-    }
 
     private var usesNativeSettingsIcons: Bool {
         appConfig.settingsColorfulIconsEnabled
@@ -518,12 +490,6 @@ extension SettingsListIcon {
         backgroundColor: .orange,
         legacySystemName: "list.bullet.rectangle.portrait"
     )
-    static let conversationSettings = SettingsListIcon(
-        systemName: "bubble.left.and.bubble.right",
-        backgroundColor: .indigo
-    )
-    static let promptSettings = SettingsListIcon(systemName: "text.quote", backgroundColor: .purple)
-    static let outputSettings = SettingsListIcon(systemName: "waveform", backgroundColor: .blue)
     static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple, legacySystemName: "brain.head.profile")
     static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink, legacySystemName: "speaker.wave.2")
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal, legacySystemName: "slider.horizontal.3")

@@ -5458,4 +5458,3 @@
 "指定内容字体" = "Fonts for Specific Content";
 "规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Rules are matched top to bottom; earlier rules win. Matched text uses the rule's internal font priority; other text continues to use the outer global fonts.";
 "规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Rules match top to bottom. Matched text uses the rule's internal font priority; other text continues to use the outer global fonts.";
-"模型管理" = "Model Management";

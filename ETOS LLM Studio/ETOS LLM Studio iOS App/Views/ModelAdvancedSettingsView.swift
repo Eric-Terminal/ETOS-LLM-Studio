@@ -18,31 +18,13 @@ private enum ModelAdvancedSettingsTab: Hashable {
     case generationOutput
 }
 
-enum ModelAdvancedSettingsDestination {
-    case conversation
-    case prompts
-    case output
-
-    fileprivate var initialTab: ModelAdvancedSettingsTab {
-        switch self {
-        case .conversation:
-            return .sessionContext
-        case .prompts:
-            return .promptInjection
-        case .output:
-            return .generationOutput
-        }
-    }
-}
-
 private enum ModelAdvancedSettingsFocusedField: Hashable {
     case contextCompressionReminderThreshold
 }
 
 struct ModelAdvancedSettingsView: View {
-    @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var selectedTabOverride: ModelAdvancedSettingsTab?
+    @State private var selectedTab: ModelAdvancedSettingsTab = .promptInjection
     @State private var editingMessageRegexRule: MessageRegexRule?
     @State private var selectedGlobalPromptDraft: String = ""
     @State private var topicPromptDraft: String = ""
@@ -77,7 +59,6 @@ struct ModelAdvancedSettingsView: View {
     let updateSelectedGlobalSystemPromptContent: (String) -> Void
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
-    var destination: ModelAdvancedSettingsDestination = .prompts
 
     private let samplingParameterStep = 0.01
     private let temperatureRange = 0.0...2.0
@@ -111,23 +92,8 @@ struct ModelAdvancedSettingsView: View {
         )
     }
 
-    private var selectedTab: ModelAdvancedSettingsTab {
-        selectedTabOverride ?? destination.initialTab
-    }
-
-    private var selectedTabBinding: Binding<ModelAdvancedSettingsTab> {
-        Binding(
-            get: { selectedTab },
-            set: { selectedTabOverride = $0 }
-        )
-    }
-
     var body: some View {
-        configuredSettingsTabs
-    }
-
-    private var settingsTabs: some View {
-        TabView(selection: selectedTabBinding) {
+        TabView(selection: $selectedTab) {
             // MARK: - Tab 1：提示与注入
             Form {
                 Section {
@@ -276,20 +242,6 @@ struct ModelAdvancedSettingsView: View {
 
             // MARK: - Tab 4：会话与上下文
             Form {
-                Section {
-                    NavigationLink {
-                        SessionListView()
-                            .environmentObject(viewModel)
-                    } label: {
-                        Label(
-                            NSLocalizedString("历史会话", comment: "会话设置历史入口"),
-                            systemImage: "clock"
-                        )
-                    }
-                } header: {
-                    Text(NSLocalizedString("会话管理", comment: "会话管理分组"))
-                }
-
                 Section {
                     settingsIntroCard(
                         title: NSLocalizedString("会话与上下文", comment: ""),
@@ -478,28 +430,13 @@ struct ModelAdvancedSettingsView: View {
                     Text(NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title"))
                 }
 
-                Section {
-                    NavigationLink {
-                        TTSSettingsView()
-                            .environmentObject(viewModel)
-                    } label: {
-                        Label(
-                            NSLocalizedString("语音朗读（TTS）", comment: "语音朗读设置入口"),
-                            systemImage: "speaker.wave.2"
-                        )
-                    }
-                }
             }
             .tabItem {
                 Label(NSLocalizedString("生成与输出", comment: ""), systemImage: "waveform")
             }
             .tag(ModelAdvancedSettingsTab.generationOutput)
         }
-    }
-
-    private var configuredSettingsTabs: some View {
-        settingsTabs
-        .navigationTitle(navigationTitle)
+        .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if selectedTab == .messageRules {
@@ -564,17 +501,6 @@ struct ModelAdvancedSettingsView: View {
         .onDisappear {
             commitContextCompressionReminderThresholdDraft()
             persistPromptDrafts()
-        }
-    }
-
-    private var navigationTitle: String {
-        switch selectedTab {
-        case .promptInjection, .builtInPrompts, .messageRules:
-            return NSLocalizedString("提示词", comment: "提示词设置导航标题")
-        case .sessionContext:
-            return NSLocalizedString("会话", comment: "会话设置导航标题")
-        case .generationOutput:
-            return NSLocalizedString("输出", comment: "输出设置导航标题")
         }
     }
 
@@ -717,8 +643,7 @@ struct ModelAdvancedSettingsView: View {
         [
             NSLocalizedString("采样参数", comment: ""),
             NSLocalizedString("输出与思考", comment: ""),
-            NSLocalizedString("响应测速与统计", comment: "响应测速与统计分组标题"),
-            NSLocalizedString("语音朗读（TTS）", comment: "语音朗读设置入口")
+            NSLocalizedString("响应测速与统计", comment: "Response speed metrics section title")
         ].joined(separator: " · ")
     }
 

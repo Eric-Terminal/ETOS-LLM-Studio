@@ -5462,5 +5462,3 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "指定内容字体" = "Polices pour un contenu précis";
 "规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Les règles sont évaluées de haut en bas et les premières sont prioritaires. Le contenu correspondant utilise la priorité interne de la règle ; le reste conserve les polices globales externes.";
 "规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Les règles sont évaluées de haut en bas. Le contenu correspondant utilise la priorité interne de la règle ; le reste conserve les polices globales externes.";
-"模型管理" = "Gestion des modèles";
-"核心设置" = "Réglages principaux";
