@@ -5462,3 +5462,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "指定内容字体" = "Fuentes para contenido específico";
 "规则按从上到下的顺序匹配；靠前规则优先。命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Las reglas se evalúan de arriba abajo y las primeras tienen prioridad. El contenido coincidente usa la prioridad interna de la regla; el resto conserva las fuentes globales externas.";
 "规则从上到下匹配；命中内容使用规则内部的字体优先级，其他内容继续使用外层全局字体。" = "Las reglas se evalúan de arriba abajo. El contenido coincidente usa la prioridad interna de la regla; el resto conserva las fuentes globales externas.";
+"模型管理" = "Gestión de modelos";
+"核心设置" = "Ajustes principales";

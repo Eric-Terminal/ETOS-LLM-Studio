@@ -12,6 +12,23 @@ import SwiftUI
 import Foundation
 import ETOSCore
 
+enum ModelAdvancedSettingsDestination: Equatable {
+    case conversation
+    case prompts
+    case output
+
+    var navigationTitle: String {
+        switch self {
+        case .conversation:
+            return NSLocalizedString("会话", comment: "会话设置导航标题")
+        case .prompts:
+            return NSLocalizedString("提示词", comment: "提示词设置导航标题")
+        case .output:
+            return NSLocalizedString("输出", comment: "输出设置导航标题")
+        }
+    }
+}
+
 /// 偏好设置视图
 struct ModelAdvancedSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -45,6 +62,7 @@ struct ModelAdvancedSettingsView: View {
     let updateSelectedGlobalSystemPromptContent: (String) -> Void
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
+    var destination: ModelAdvancedSettingsDestination = .prompts
 
     private let samplingParameterStep = 0.01
     private let temperatureRange = 0.0...2.0
@@ -95,244 +113,268 @@ struct ModelAdvancedSettingsView: View {
         List {
             Section {
                 settingsIntroCard(
-                    title: NSLocalizedString("偏好设置", comment: ""),
+                    title: destination.navigationTitle,
                     summary: settingsIntroSummary,
                     details: settingsIntroDetails,
                     isExpanded: $isShowingSettingsIntro
                 )
             }
 
-            // MARK: Section 1：提示与注入
-            Section(header: Text(NSLocalizedString("全局系统提示词", comment: ""))) {
-                TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding.watchKeyboardNewlineBinding(), axis: .vertical)
-                    .lineLimit(5...10)
-                    .disabled(selectedGlobalPromptEntry == nil)
+            if destination == .prompts {
+                // MARK: Section 1：提示与注入
+                Section(header: Text(NSLocalizedString("全局系统提示词", comment: ""))) {
+                    TextField(NSLocalizedString("自定义全局系统提示词", comment: ""), text: selectedGlobalPromptContentBinding.watchKeyboardNewlineBinding(), axis: .vertical)
+                        .lineLimit(5...10)
+                        .disabled(selectedGlobalPromptEntry == nil)
 
-                NavigationLink {
-                    GlobalSystemPromptPickerView(
-                        entries: globalSystemPromptEntries,
-                        selectedEntryID: selectedGlobalSystemPromptEntryID,
-                        addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
-                        selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
-                        updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
-                        deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
-                    )
-                } label: {
-                    HStack {
-                        Text(NSLocalizedString("提示词列表", comment: ""))
-                        Spacer()
-                        Text(displayTitle(for: selectedGlobalPromptEntry))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-
-            Section(header: Text(NSLocalizedString("当前话题提示词", comment: "")), footer: Text(NSLocalizedString("仅对当前对话生效。", comment: ""))) {
-                TextField(NSLocalizedString("自定义话题提示词", comment: ""), text: Binding(
-                    get: { currentSession?.topicPrompt ?? "" },
-                    set: { newValue in
-                        if var session = currentSession {
-                            session.topicPrompt = newValue
-                            currentSession = session
-                            ChatService.shared.updateSession(session)
-                        }
-                    }
-                ).watchKeyboardNewlineBinding(), axis: .vertical)
-                .lineLimit(3...8)
-            }
-
-            Section {
-                TextField(NSLocalizedString("自定义增强提示词", comment: ""), text: Binding(
-                    get: { currentSession?.enhancedPrompt ?? "" },
-                    set: { newValue in
-                        if var session = currentSession {
-                            session.enhancedPrompt = newValue
-                            currentSession = session
-                            ChatService.shared.updateSession(session)
-                        }
-                    }
-                ).watchKeyboardNewlineBinding(), axis: .vertical)
-                .lineLimit(3...8)
-                Toggle(
-                    NSLocalizedString("使用 System 角色发送", comment: "OpenAI enhanced prompt role toggle"),
-                    isOn: $appConfig.openAITailContextUsesSystemRole
-                )
-            } header: {
-                Text(NSLocalizedString("增强提示词", comment: ""))
-            } footer: {
-                VStack(alignment: .leading) {
-                    Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
-                    Text(NSLocalizedString("角色设置仅对 OpenAI 适配器生效。", comment: "OpenAI enhanced prompt role footer"))
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-
-            Section(header: Text(NSLocalizedString("系统时间注入", comment: ""))) {
-                Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
-                if includeSystemTimeInPrompt {
-                    Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
-                        ForEach(SystemTimeInjectionPosition.allCases) { position in
-                            Text(position.displayName).tag(position)
-                        }
-                    }
-                }
-            }
-
-            Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
-                Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
-            }
-
-            Section(header: Text(NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"))) {
-                NavigationLink {
-                    BuiltInPromptSettingsView()
-                } label: {
-                    Label(NSLocalizedString("提示词模板", comment: "Built-in prompt settings entry"), systemImage: "curlybraces")
-                }
-            }
-
-            // MARK: Section 2：消息规则
-            Section(header: Text(NSLocalizedString("消息规则", comment: ""))) {
-                NavigationLink {
-                    MessageRegexRulesView()
-                } label: {
-                    Label(NSLocalizedString("正则替换", comment: ""), systemImage: "textformat")
-                }
-            }
-
-            // MARK: Section 3：会话与上下文
-            Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
-                LaunchSessionSettingsRows()
-                Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
-                HStack {
-                    Text(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"))
-                    Spacer()
-                    TextField(NSLocalizedString("秒", comment: "Seconds placeholder"), value: sendDelayBinding, formatter: sendDelayFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .monospacedDigit()
-                        .frame(width: 60)
-                }
-
-                HStack {
-                    Text(NSLocalizedString("最大上下文消息数", comment: ""))
-                    Spacer()
-                    TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                }
-
-                HStack {
-                    Text(NSLocalizedString("懒加载轮次", comment: ""))
-                    Spacer()
-                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 60)
-                }
-
-                Toggle(
-                    NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
-                    isOn: $appConfig.enableContextCompressionReminder
-                )
-
-                if appConfig.enableContextCompressionReminder {
-                    TextField(
-                        NSLocalizedString("提醒阈值（Token）", comment: "Context compression reminder token threshold"),
-                        text: $contextCompressionReminderThresholdDraft,
-                        onEditingChanged: { isEditing in
-                            isEditingContextCompressionReminderThreshold = isEditing
-                            if !isEditing {
-                                commitContextCompressionReminderThresholdDraft()
-                            }
-                        },
-                        onCommit: commitContextCompressionReminderThresholdDraft
-                    )
-                    .monospacedDigit()
-
-                }
-            }
-
-            Section {
-                Picker(
-                    NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
-                    selection: videoFrameExtractionModeBinding
-                ) {
-                    ForEach(VideoFrameExtractionMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-
-                if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
-                    samplingParameterField(
-                        title: NSLocalizedString("抽帧 FPS", comment: "Video extraction FPS"),
-                        value: videoFrameExtractionFPSBinding
-                    )
-                }
-
-                Stepper(value: videoFrameMaximumCountBinding, in: 4...120, step: 4) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("最多 %d 帧", comment: "Maximum extracted video frames"),
-                            videoFrameMaximumCountBinding.wrappedValue
-                        )
-                    )
-                }
-            } header: {
-                Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
-            } footer: {
-                Text(NSLocalizedString(
-                    "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。",
-                    comment: "Watch video sending settings explanation"
-                ))
-            }
-
-            // MARK: Section 4：生成与输出
-            Section(
-                header: Text(NSLocalizedString("生成与输出", comment: "")),
-                footer: reasoningContentEchoFooter
-            ) {
-                Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
-                Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
-                Picker(NSLocalizedString("思维链回传", comment: ""), selection: reasoningContentEchoModeBinding) {
-                    ForEach(ReasoningContentEchoMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
-
-                Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
-                if aiTemperatureEnabled {
                     NavigationLink {
-                        WatchTemperatureSliderView(value: temperatureBinding)
+                        GlobalSystemPromptPickerView(
+                            entries: globalSystemPromptEntries,
+                            selectedEntryID: selectedGlobalSystemPromptEntryID,
+                            addGlobalSystemPromptEntry: addGlobalSystemPromptEntry,
+                            selectGlobalSystemPromptEntry: selectGlobalSystemPromptEntry,
+                            updateGlobalSystemPromptEntry: updateGlobalSystemPromptEntry,
+                            deleteGlobalSystemPromptEntry: deleteGlobalSystemPromptEntry
+                        )
                     } label: {
                         HStack {
-                            Text(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
+                            Text(NSLocalizedString("提示词列表", comment: ""))
                             Spacer()
-                            Text(temperatureDisplayValue)
-                                .monospacedDigit()
-                                .foregroundStyle(
-                                    WatchRequestBodySliderPalette.temperature.color(at: temperatureSliderPosition)
-                                )
+                            Text(displayTitle(for: selectedGlobalPromptEntry))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
                 }
 
-                Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
-                if aiTopPEnabled {
-                    samplingParameterField(
-                        title: NSLocalizedString("Top-P", comment: "Top P sampling parameter title"),
-                        value: topPBinding
+                Section(header: Text(NSLocalizedString("当前话题提示词", comment: "")), footer: Text(NSLocalizedString("仅对当前对话生效。", comment: ""))) {
+                    TextField(
+                        NSLocalizedString("自定义话题提示词", comment: ""),
+                        text: Binding(
+                            get: { currentSession?.topicPrompt ?? "" },
+                            set: { newValue in
+                                if var session = currentSession {
+                                    session.topicPrompt = newValue
+                                    currentSession = session
+                                    ChatService.shared.updateSession(session)
+                                }
+                            }
+                        ).watchKeyboardNewlineBinding(), axis: .vertical
                     )
+                    .lineLimit(3...8)
+                }
+
+                Section {
+                    TextField(
+                        NSLocalizedString("自定义增强提示词", comment: ""),
+                        text: Binding(
+                            get: { currentSession?.enhancedPrompt ?? "" },
+                            set: { newValue in
+                                if var session = currentSession {
+                                    session.enhancedPrompt = newValue
+                                    currentSession = session
+                                    ChatService.shared.updateSession(session)
+                                }
+                            }
+                        ).watchKeyboardNewlineBinding(), axis: .vertical
+                    )
+                    .lineLimit(3...8)
+                    Toggle(
+                        NSLocalizedString("使用 System 角色发送", comment: "OpenAI enhanced prompt role toggle"),
+                        isOn: $appConfig.openAITailContextUsesSystemRole
+                    )
+                } header: {
+                    Text(NSLocalizedString("增强提示词", comment: ""))
+                } footer: {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""))
+                        Text(NSLocalizedString("角色设置仅对 OpenAI 适配器生效。", comment: "OpenAI enhanced prompt role footer"))
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
+                Section(header: Text(NSLocalizedString("系统时间注入", comment: ""))) {
+                    Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
+                    if includeSystemTimeInPrompt {
+                        Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
+                            ForEach(SystemTimeInjectionPosition.allCases) { position in
+                                Text(position.displayName).tag(position)
+                            }
+                        }
+                    }
+                }
+
+                Section(header: Text(NSLocalizedString("提示与注入", comment: ""))) {
+                    Toggle(NSLocalizedString("周期性时间路标", comment: ""), isOn: $enablePeriodicTimeLandmark)
+                }
+
+                Section(header: Text(NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"))) {
+                    NavigationLink {
+                        BuiltInPromptSettingsView()
+                    } label: {
+                        Label(NSLocalizedString("提示词模板", comment: "Built-in prompt settings entry"), systemImage: "curlybraces")
+                    }
+                }
+
+                // MARK: Section 2：消息规则
+                Section(header: Text(NSLocalizedString("消息规则", comment: ""))) {
+                    NavigationLink {
+                        MessageRegexRulesView()
+                    } label: {
+                        Label(NSLocalizedString("正则替换", comment: ""), systemImage: "textformat")
+                    }
                 }
             }
 
-            Section {
-                NavigationLink(destination: WatchKeyboardSettingsView()) {
-                    Label(NSLocalizedString("键盘", comment: "Keyboard settings title"), systemImage: "keyboard")
+            if destination == .conversation {
+                // MARK: Section 3：会话与上下文
+                Section(header: Text(NSLocalizedString("会话与上下文", comment: ""))) {
+                    LaunchSessionSettingsRows()
+                    Toggle(NSLocalizedString("自动生成话题标题", comment: ""), isOn: $enableAutoSessionNaming)
+                    HStack {
+                        Text(NSLocalizedString("延迟发送（秒）", comment: "Send delay seconds setting title"))
+                        Spacer()
+                        TextField(NSLocalizedString("秒", comment: "Seconds placeholder"), value: sendDelayBinding, formatter: sendDelayFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .monospacedDigit()
+                            .frame(width: 60)
+                    }
+
+                    HStack {
+                        Text(NSLocalizedString("最大上下文消息数", comment: ""))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+
+                    HStack {
+                        Text(NSLocalizedString("懒加载轮次", comment: ""))
+                        Spacer()
+                        TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
+
+                    Toggle(
+                        NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),
+                        isOn: $appConfig.enableContextCompressionReminder
+                    )
+
+                    if appConfig.enableContextCompressionReminder {
+                        TextField(
+                            NSLocalizedString("提醒阈值（Token）", comment: "Context compression reminder token threshold"),
+                            text: $contextCompressionReminderThresholdDraft,
+                            onEditingChanged: { isEditing in
+                                isEditingContextCompressionReminderThreshold = isEditing
+                                if !isEditing {
+                                    commitContextCompressionReminderThresholdDraft()
+                                }
+                            },
+                            onCommit: commitContextCompressionReminderThresholdDraft
+                        )
+                        .monospacedDigit()
+
+                    }
+                }
+
+                Section {
+                    Picker(
+                        NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
+                        selection: videoFrameExtractionModeBinding
+                    ) {
+                        ForEach(VideoFrameExtractionMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+
+                    if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
+                        samplingParameterField(
+                            title: NSLocalizedString("抽帧 FPS", comment: "Video extraction FPS"),
+                            value: videoFrameExtractionFPSBinding
+                        )
+                    }
+
+                    Stepper(value: videoFrameMaximumCountBinding, in: 4...120, step: 4) {
+                        Text(
+                            String(
+                                format: NSLocalizedString("最多 %d 帧", comment: "Maximum extracted video frames"),
+                                videoFrameMaximumCountBinding.wrappedValue
+                            )
+                        )
+                    }
+                } header: {
+                    Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
+                } footer: {
+                    Text(
+                        NSLocalizedString(
+                            "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。",
+                            comment: "Watch video sending settings explanation"
+                        ))
+                }
+
+                Section {
+                    NavigationLink(destination: WatchKeyboardSettingsView()) {
+                        Label(NSLocalizedString("键盘", comment: "Keyboard settings title"), systemImage: "keyboard")
+                    }
+                }
+            }
+
+            if destination == .output {
+                // MARK: Section 4：生成与输出
+                Section(
+                    header: Text(NSLocalizedString("生成与输出", comment: "")),
+                    footer: reasoningContentEchoFooter
+                ) {
+                    Toggle(NSLocalizedString("流式输出", comment: ""), isOn: $enableStreaming)
+                    Toggle(NSLocalizedString("启用思考摘要", comment: ""), isOn: $enableReasoningSummary)
+                    Picker(NSLocalizedString("思维链回传", comment: ""), selection: reasoningContentEchoModeBinding) {
+                        ForEach(ReasoningContentEchoMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    Toggle(NSLocalizedString("启用响应测速", comment: "Enable response speed metrics"), isOn: $enableResponseSpeedMetrics)
+
+                    Toggle(NSLocalizedString("自定义 Temperature", comment: ""), isOn: $aiTemperatureEnabled)
+                    if aiTemperatureEnabled {
+                        NavigationLink {
+                            WatchTemperatureSliderView(value: temperatureBinding)
+                        } label: {
+                            HStack {
+                                Text(NSLocalizedString("温度", comment: "Temperature sampling parameter title"))
+                                Spacer()
+                                Text(temperatureDisplayValue)
+                                    .monospacedDigit()
+                                    .foregroundStyle(
+                                        WatchRequestBodySliderPalette.temperature.color(at: temperatureSliderPosition)
+                                    )
+                            }
+                        }
+                    }
+
+                    Toggle(NSLocalizedString("自定义 Top P", comment: ""), isOn: $aiTopPEnabled)
+                    if aiTopPEnabled {
+                        samplingParameterField(
+                            title: NSLocalizedString("Top-P", comment: "Top P sampling parameter title"),
+                            value: topPBinding
+                        )
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        TTSSettingsView()
+                    } label: {
+                        Label(
+                            NSLocalizedString("语音朗读（TTS）", comment: "语音朗读设置入口"),
+                            systemImage: "speaker.wave.2"
+                        )
+                    }
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("偏好设置", comment: ""))
+        .navigationTitle(destination.navigationTitle)
         .onAppear {
             syncContextCompressionReminderThresholdDraft()
             normalizeSamplingParametersIfNeeded()
@@ -424,49 +466,73 @@ struct ModelAdvancedSettingsView: View {
     }
 
     private var settingsIntroSummary: String {
-        [
-            NSLocalizedString("提示与注入", comment: ""),
-            NSLocalizedString("会话与上下文", comment: ""),
-            NSLocalizedString("生成与输出", comment: "")
-        ].joined(separator: " · ")
+        switch destination {
+        case .prompts:
+            return [
+                NSLocalizedString("提示与注入", comment: ""),
+                NSLocalizedString("内置提示词", comment: "内置提示词设置分组"),
+                NSLocalizedString("消息规则", comment: "")
+            ].joined(separator: " · ")
+        case .conversation:
+            return [
+                NSLocalizedString("基础行为", comment: ""),
+                NSLocalizedString("上下文窗口管理", comment: ""),
+                NSLocalizedString("视频发送", comment: "视频发送设置分组")
+            ].joined(separator: " · ")
+        case .output:
+            return [
+                NSLocalizedString("采样参数", comment: ""),
+                NSLocalizedString("输出与思考", comment: ""),
+                NSLocalizedString("语音朗读（TTS）", comment: "语音朗读设置入口")
+            ].joined(separator: " · ")
+        }
     }
 
     private var settingsIntroDetails: String {
-        introDetails([
-            (
-                NSLocalizedString("提示与注入", comment: ""),
-                [
-                    NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""),
-                    NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""),
-                    NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: "")
-                ].joined(separator: "\n\n")
-            ),
-            (
-                NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"),
-                NSLocalizedString("未自定义时会跟随应用语言使用内置模板；自定义后会固定使用保存内容。", comment: "Built-in prompt settings footer")
-            ),
-            (
-                NSLocalizedString("消息规则", comment: ""),
-                NSLocalizedString("规则会按列表顺序应用。保存替换会写入消息；仅发送只影响模型请求；仅显示只影响聊天气泡展示。", comment: "")
-            ),
-            (
-                NSLocalizedString("会话与上下文", comment: ""),
-                [
-                    NSLocalizedString("离开时间未超过该期限时恢复上次会话；超过后打开新对话。", comment: "Recent session restore behavior explanation"),
-                    NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer"),
-                    NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""),
-                    NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "Watch context compression reminder settings explanation"),
-                    NSLocalizedString("在 Gemini 模型的输入模态中启用“视频”后，手表会通过 Gemini Files API 发送原视频；关闭该模态或切换到其他模型时，会从保留的原视频生成带时间戳的画面。watchOS 的非原生视频抽帧由配对 iPhone 协助完成。", comment: "Watch video sending settings detailed explanation")
-                ].joined(separator: "\n\n")
-            ),
-            (
-                NSLocalizedString("生成与输出", comment: ""),
-                [
-                    reasoningContentEchoDetails,
-                    NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "Response speed metrics description")
-                ].joined(separator: "\n\n")
-            )
-        ])
+        switch destination {
+        case .prompts:
+            return introDetails([
+                (
+                    NSLocalizedString("提示与注入", comment: ""),
+                    [
+                        NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""),
+                        NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""),
+                        NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: "")
+                    ].joined(separator: "\n\n")
+                ),
+                (
+                    NSLocalizedString("内置提示词", comment: "内置提示词设置分组"),
+                    NSLocalizedString("未自定义时会跟随应用语言使用内置模板；自定义后会固定使用保存内容。", comment: "内置提示词设置说明")
+                ),
+                (
+                    NSLocalizedString("消息规则", comment: ""),
+                    NSLocalizedString("规则会按列表顺序应用。保存替换会写入消息；仅发送只影响模型请求；仅显示只影响聊天气泡展示。", comment: "")
+                )
+            ])
+        case .conversation:
+            return introDetails([
+                (
+                    NSLocalizedString("会话与上下文", comment: ""),
+                    [
+                        NSLocalizedString("离开时间未超过该期限时恢复上次会话；超过后打开新对话。", comment: "最近会话恢复行为说明"),
+                        NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "延迟发送设置说明"),
+                        NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""),
+                        NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "手表上下文压缩提醒设置说明"),
+                        NSLocalizedString("在 Gemini 模型的输入模态中启用“视频”后，手表会通过 Gemini Files API 发送原视频；关闭该模态或切换到其他模型时，会从保留的原视频生成带时间戳的画面。watchOS 的非原生视频抽帧由配对 iPhone 协助完成。", comment: "手表视频发送设置详细说明")
+                    ].joined(separator: "\n\n")
+                )
+            ])
+        case .output:
+            return introDetails([
+                (
+                    NSLocalizedString("生成与输出", comment: ""),
+                    [
+                        reasoningContentEchoDetails,
+                        NSLocalizedString("开启后会记录单次 API 请求的总回复时间；流式时还会记录首字时间和 token/s。", comment: "响应测速说明")
+                    ].joined(separator: "\n\n")
+                )
+            ])
+        }
     }
 
     private var reasoningContentEchoFooter: some View {

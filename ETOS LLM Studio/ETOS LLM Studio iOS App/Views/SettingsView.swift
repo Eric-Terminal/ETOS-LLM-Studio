@@ -35,7 +35,6 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
 
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
@@ -49,89 +48,29 @@ struct SettingsView: View {
     
     var body: some View {
         List {
-            Section(NSLocalizedString("当前模型", comment: "设置当前模型分组")) {
-                let options = viewModel.activatedConversationModels
-                if options.isEmpty {
-                    Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
-                        .etFont(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    NavigationLink {
-                        CurrentModelSelectionView(
-                            models: options,
-                            selectedModel: selectedModelBinding
-                        )
-                    } label: {
-                        HStack(spacing: 8) {
-                            settingsListIcon(.currentModel)
-                            Text(NSLocalizedString("模型", comment: "模型标签"))
-                            Text(selectedModelLabel(in: options))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            .foregroundStyle(.secondary)
-                            .allowsHitTesting(false)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                    }
-                }
-                
-                Button {
-                    viewModel.createNewSession()
-                    dismiss()
-                    NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
-                } label: {
-                    SettingsListIconLabel("开启新对话", icon: .newConversation)
-                }
-            }
-
-            Section(NSLocalizedString("对话行为", comment: "设置对话行为分组")) {
-                NavigationLink {
-                    SessionListView().environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("历史会话管理", icon: .sessionHistory)
-                }
-
+            Section {
                 NavigationLink {
                     ProviderListView().environmentObject(viewModel)
                 } label: {
-                    SettingsListIconLabel("提供商与模型管理", icon: .providerManagement)
-                }
-                
-                NavigationLink {
-                    ModelAdvancedSettingsView(
-                        aiTemperature: $viewModel.aiTemperature,
-                        aiTopP: $viewModel.aiTopP,
-                        aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
-                        aiTopPEnabled: $viewModel.aiTopPEnabled,
-                        globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
-                        selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
-                        maxChatHistory: $viewModel.maxChatHistory,
-                        lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
-                        enableStreaming: $viewModel.enableStreaming,
-                        enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
-                        enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
-                        enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
-                        enableReasoningSummary: $viewModel.enableReasoningSummary,
-                        currentSession: $viewModel.currentSession,
-                        includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
-                        systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
-                        enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
-                        periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
-                        addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
-                        selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
-                        updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
-                        updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
-                        deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) }
-                    )
-                } label: {
-                    SettingsListIconLabel("偏好设置", icon: .modelAdvanced)
+                    SettingsListIconLabel("模型管理", icon: .providerManagement)
                 }
 
                 NavigationLink {
-                    TTSSettingsView()
-                        .environmentObject(viewModel)
+                    advancedSettingsView(destination: .conversation)
                 } label: {
-                    SettingsListIconLabel("语音朗读（TTS）", icon: .tts)
+                    SettingsListIconLabel("会话", icon: .conversationSettings)
+                }
+
+                NavigationLink {
+                    advancedSettingsView(destination: .prompts)
+                } label: {
+                    SettingsListIconLabel("提示词", icon: .promptSettings)
+                }
+
+                NavigationLink {
+                    advancedSettingsView(destination: .output)
+                } label: {
+                    SettingsListIconLabel("输出", icon: .outputSettings)
                 }
             }
 
@@ -152,7 +91,11 @@ struct SettingsView: View {
                         .environmentObject(viewModel)
                 } label: {
                     HStack(spacing: 8) {
-                        settingsListIcon(.dailyPulse)
+                        if appConfig.settingsColorfulIconsEnabled {
+                            SettingsListIconView(icon: .dailyPulse)
+                        } else {
+                            SettingsListPlainIconView(icon: .dailyPulse)
+                        }
                         Text(NSLocalizedString("每日脉冲", comment: "每日脉冲入口标题"))
                         Spacer()
                         if let status = dailyPulseEntryStatusText {
@@ -287,14 +230,10 @@ struct SettingsView: View {
         }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
         .onAppear {
-            ensureSelectedModel(in: viewModel.activatedConversationModels)
             scheduleSettingsResearchAchievementIfNeeded()
         }
         .onDisappear {
             cancelSettingsResearchAchievementTask()
-        }
-        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
-            ensureSelectedModel(in: viewModel.activatedConversationModels)
         }
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {
@@ -320,13 +259,35 @@ struct SettingsView: View {
 
     // MARK: - 辅助方法
 
-    @ViewBuilder
-    private func settingsListIcon(_ icon: SettingsListIcon) -> some View {
-        if appConfig.settingsColorfulIconsEnabled {
-            SettingsListIconView(icon: icon)
-        } else {
-            SettingsListPlainIconView(icon: icon)
-        }
+    private func advancedSettingsView(
+        destination: ModelAdvancedSettingsDestination
+    ) -> ModelAdvancedSettingsView {
+        ModelAdvancedSettingsView(
+            aiTemperature: $viewModel.aiTemperature,
+            aiTopP: $viewModel.aiTopP,
+            aiTemperatureEnabled: $viewModel.aiTemperatureEnabled,
+            aiTopPEnabled: $viewModel.aiTopPEnabled,
+            globalSystemPromptEntries: $viewModel.globalSystemPromptEntries,
+            selectedGlobalSystemPromptEntryID: $viewModel.selectedGlobalSystemPromptEntryID,
+            maxChatHistory: $viewModel.maxChatHistory,
+            lazyLoadMessageCount: $viewModel.lazyLoadMessageCount,
+            enableStreaming: $viewModel.enableStreaming,
+            enableResponseSpeedMetrics: $viewModel.enableResponseSpeedMetrics,
+            enableOpenAIStreamIncludeUsage: $viewModel.enableOpenAIStreamIncludeUsage,
+            enableAutoSessionNaming: $viewModel.enableAutoSessionNaming,
+            enableReasoningSummary: $viewModel.enableReasoningSummary,
+            currentSession: $viewModel.currentSession,
+            includeSystemTimeInPrompt: $viewModel.includeSystemTimeInPrompt,
+            systemTimeInjectionPosition: $viewModel.systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: $viewModel.enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: $viewModel.periodicTimeLandmarkIntervalMinutes,
+            addGlobalSystemPromptEntry: viewModel.addGlobalSystemPromptEntry,
+            selectGlobalSystemPromptEntry: viewModel.selectGlobalSystemPromptEntry,
+            updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
+            updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
+            deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) },
+            destination: destination
+        )
     }
 
     /// 根据公告类型返回对应图标
@@ -345,16 +306,6 @@ struct SettingsView: View {
         @unknown default:
             Image(systemName: "bell.fill")
                 .foregroundColor(.gray)
-        }
-    }
-
-    private func ensureSelectedModel(in options: [RunnableModel]) {
-        guard let first = options.first else { return }
-        guard let selectedID = viewModel.selectedModel?.id,
-              options.contains(where: { $0.id == selectedID }) else {
-            viewModel.selectedModel = first
-            ChatService.shared.setSelectedModel(first)
-            return
         }
     }
 
@@ -380,16 +331,6 @@ struct SettingsView: View {
         settingsResearchTask = nil
     }
 
-    private var selectedModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedModel },
-            set: { model in
-                viewModel.selectedModel = model
-                ChatService.shared.setSelectedModel(model)
-            }
-        )
-    }
-
     private var dailyPulseEntryStatusText: String? {
         if pulseManager.isPreparingTodayPulse {
             return NSLocalizedString("准备中", comment: "每日脉冲准备中状态")
@@ -409,15 +350,6 @@ struct SettingsView: View {
         return nil
     }
 
-    private func selectedModelLabel(in options: [RunnableModel]) -> String {
-        if let selected = viewModel.selectedModel,
-           options.contains(where: { $0.id == selected.id }) {
-            return "\(selected.model.displayName) | \(selected.provider.name)"
-        }
-
-        guard let first = options.first else { return "" }
-        return "\(first.model.displayName) | \(first.provider.name)"
-    }
 }
 
 struct SettingsListIcon {
@@ -426,14 +358,12 @@ struct SettingsListIcon {
 }
 
 extension SettingsListIcon {
-    static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
-    static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green)
     static let chatQuickAction = SettingsListIcon(systemName: "ellipsis.circle", backgroundColor: .indigo)
     static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
-    static let sessionHistory = SettingsListIcon(systemName: "clock", backgroundColor: .indigo)
     static let providerManagement = SettingsListIcon(systemName: "cube", backgroundColor: .orange)
-    static let modelAdvanced = SettingsListIcon(systemName: "gearshape", backgroundColor: .purple)
-    static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink)
+    static let conversationSettings = SettingsListIcon(systemName: "bubble.left.and.bubble.right", backgroundColor: .indigo)
+    static let promptSettings = SettingsListIcon(systemName: "text.quote", backgroundColor: .purple)
+    static let outputSettings = SettingsListIcon(systemName: "waveform", backgroundColor: .blue)
     static let toolCenter = SettingsListIcon(systemName: "wrench", backgroundColor: .teal)
     static let dailyPulse = SettingsListIcon(systemName: "sparkles", backgroundColor: .yellow)
     static let usageAnalytics = SettingsListIcon(systemName: "chart.bar", backgroundColor: .cyan)
@@ -507,38 +437,5 @@ struct SettingsListIconView: View {
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
-    }
-}
-
-private struct CurrentModelSelectionView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let models: [RunnableModel]
-    @Binding var selectedModel: RunnableModel?
-
-    var body: some View {
-        List {
-            ForEach(models) { model in
-                Button {
-                    select(model)
-                } label: {
-                    MarqueeTitleSubtitleSelectionRow(
-                        title: model.model.displayName,
-                        subtitle: "\(model.provider.name) · \(model.model.modelName)",
-                        isSelected: selectedModel?.id == model.id,
-                        subtitleUIFont: .monospacedSystemFont(
-                            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
-                            weight: .regular
-                        )
-                    )
-                }
-            }
-        }
-        .navigationTitle(NSLocalizedString("当前模型", comment: "当前模型选择页标题"))
-    }
-
-    private func select(_ model: RunnableModel) {
-        selectedModel = model
-        dismiss()
     }
 }
