@@ -83,6 +83,7 @@ struct SettingsView: View {
                     }
                 }
                 .navigationLinkIndicatorVisibility(.hidden)
+                .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
