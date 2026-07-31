@@ -242,7 +242,7 @@ extension Model {
             resolvedKind = .chat
         }
 
-        var resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
+        let resolvedInputModalities = explicitInputModalities ?? defaultInputModalities(for: resolvedKind)
         var resolvedOutputModalities = explicitOutputModalities ?? defaultOutputModalities(for: resolvedKind)
         var resolvedCapabilities = explicitCapabilities ?? (legacyCapabilityRawValues == nil ? defaultCapabilities(for: resolvedKind) : [])
 

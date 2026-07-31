@@ -49,29 +49,41 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                NavigationLink {
-                    ProviderListView().environmentObject(viewModel)
-                } label: {
-                    SettingsListIconLabel("模型管理", icon: .providerManagement)
-                }
+                Grid {
+                    GridRow {
+                        NavigationLink {
+                            ProviderListView().environmentObject(viewModel)
+                        } label: {
+                            SettingsCategoryCard("模型管理", icon: .providerManagement)
+                        }
+                        .buttonStyle(.plain)
 
-                NavigationLink {
-                    advancedSettingsView(destination: .conversation)
-                } label: {
-                    SettingsListIconLabel("会话", icon: .conversationSettings)
-                }
+                        NavigationLink {
+                            advancedSettingsView(destination: .conversation)
+                        } label: {
+                            SettingsCategoryCard("会话", icon: .conversationSettings)
+                        }
+                        .buttonStyle(.plain)
+                    }
 
-                NavigationLink {
-                    advancedSettingsView(destination: .prompts)
-                } label: {
-                    SettingsListIconLabel("提示词", icon: .promptSettings)
-                }
+                    GridRow {
+                        NavigationLink {
+                            advancedSettingsView(destination: .prompts)
+                        } label: {
+                            SettingsCategoryCard("提示词", icon: .promptSettings)
+                        }
+                        .buttonStyle(.plain)
 
-                NavigationLink {
-                    advancedSettingsView(destination: .output)
-                } label: {
-                    SettingsListIconLabel("输出", icon: .outputSettings)
+                        NavigationLink {
+                            advancedSettingsView(destination: .output)
+                        } label: {
+                            SettingsCategoryCard("输出", icon: .outputSettings)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
 
             Section(NSLocalizedString("拓展能力", comment: "设置拓展能力分组")) {
@@ -412,6 +424,56 @@ struct SettingsListIconLabel: View {
                 SettingsListPlainIconView(icon: icon)
             }
             Text(title)
+        }
+    }
+}
+
+private struct SettingsCategoryCard: View {
+    let title: String
+    let icon: SettingsListIcon
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    init(_ titleKey: String, icon: SettingsListIcon) {
+        self.title = NSLocalizedString(titleKey, comment: "核心设置分类入口标题")
+        self.icon = icon
+    }
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            categoryIcon
+            Spacer()
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .aspectRatio(1, contentMode: .fit)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var categoryIcon: some View {
+        if appConfig.settingsColorfulIconsEnabled {
+            Image(systemName: icon.systemName)
+                .symbolVariant(.fill)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(icon.backgroundColor)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: icon.systemName)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.primary)
+                .accessibilityHidden(true)
         }
     }
 }

@@ -437,6 +437,7 @@ extension SettingsListIcon {
         backgroundColor: .orange,
         legacySystemName: "list.bullet.rectangle.portrait"
     )
+    static let tts = SettingsListIcon(systemName: "speaker", backgroundColor: .pink, legacySystemName: "speaker.wave.2")
     static let conversationSettings = SettingsListIcon(systemName: "bubble.left.and.bubble.right", backgroundColor: .indigo)
     static let promptSettings = SettingsListIcon(systemName: "text.quote", backgroundColor: .purple)
     static let outputSettings = SettingsListIcon(systemName: "waveform", backgroundColor: .blue)
