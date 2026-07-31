@@ -82,6 +82,7 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .navigationLinkIndicatorVisibility(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -457,7 +458,10 @@ private struct SettingsCategoryCard: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .aspectRatio(1, contentMode: .fit)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
