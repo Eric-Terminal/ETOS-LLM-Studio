@@ -458,7 +458,7 @@ private struct SettingsCategoryCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(2, contentMode: .fit)
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
