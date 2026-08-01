@@ -38,6 +38,8 @@ private enum CoreSettingsNavigationDestination: Hashable {
     case conversation
     case prompts
     case output
+    case display
+    case sync
 }
 
 struct SettingsView: View {
@@ -86,6 +88,22 @@ struct SettingsView: View {
                             coreSettingsDestination = .output
                         } label: {
                             SettingsCategoryCard("输出", icon: .outputSettings)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    GridRow {
+                        Button {
+                            coreSettingsDestination = .display
+                        } label: {
+                            SettingsCategoryCard("背景与视觉", icon: .display)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            coreSettingsDestination = .sync
+                        } label: {
+                            SettingsCategoryCard("同步与备份", icon: .sync)
                         }
                         .buttonStyle(.plain)
                     }
@@ -188,43 +206,6 @@ struct SettingsView: View {
                     SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }
             }
-            
-            Section(NSLocalizedString("显示与体验", comment: "设置显示与体验分组")) {
-                NavigationLink {
-                    DisplaySettingsView(
-                        enableMarkdown: $viewModel.enableMarkdown,
-                        enableBackground: $viewModel.enableBackground,
-                        backgroundBlur: $viewModel.backgroundBlur,
-                        backgroundOpacity: $viewModel.backgroundOpacity,
-                        enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
-                        currentBackgroundImage: $viewModel.currentBackgroundImage,
-                        backgroundContentMode: $viewModel.backgroundContentMode,
-                        enableLiquidGlass: $viewModel.enableLiquidGlass,
-                        enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
-                        enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
-                        enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
-                        enableNoBubbleUI: $viewModel.enableNoBubbleUI,
-                        allBackgrounds: viewModel.backgroundImages
-                    )
-                } label: {
-                    SettingsListIconLabel("背景与视觉", icon: .display)
-                }
-                
-                NavigationLink {
-                    DeviceSyncSettingsView()
-                } label: {
-                    SettingsListIconLabel("同步与备份", icon: .sync)
-                }
-            }
-
-            Section(NSLocalizedString("关于", comment: "设置关于分组")) {
-                NavigationLink {
-                    AboutView()
-                } label: {
-                    SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
-                }
-            }
-
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section(NSLocalizedString("系统公告", comment: "系统公告分组")) {
@@ -242,6 +223,14 @@ struct SettingsView: View {
                             }
                         }
                     }
+                }
+            }
+
+            Section(NSLocalizedString("关于", comment: "设置关于分组")) {
+                NavigationLink {
+                    AboutView()
+                } label: {
+                    SettingsListIconLabel("关于 ETOS LLM Studio", icon: .about)
                 }
             }
         }
@@ -268,6 +257,24 @@ struct SettingsView: View {
                 advancedSettingsView(destination: .prompts)
             case .output:
                 advancedSettingsView(destination: .output)
+            case .display:
+                DisplaySettingsView(
+                    enableMarkdown: $viewModel.enableMarkdown,
+                    enableBackground: $viewModel.enableBackground,
+                    backgroundBlur: $viewModel.backgroundBlur,
+                    backgroundOpacity: $viewModel.backgroundOpacity,
+                    enableAutoRotateBackground: $viewModel.enableAutoRotateBackground,
+                    currentBackgroundImage: $viewModel.currentBackgroundImage,
+                    backgroundContentMode: $viewModel.backgroundContentMode,
+                    enableLiquidGlass: $viewModel.enableLiquidGlass,
+                    enableChatTopBlurFade: $viewModel.enableChatTopBlurFade,
+                    enableAdvancedRenderer: $viewModel.enableAdvancedRenderer,
+                    enableAutoReasoningPreview: $viewModel.enableAutoReasoningPreview,
+                    enableNoBubbleUI: $viewModel.enableNoBubbleUI,
+                    allBackgrounds: viewModel.backgroundImages
+                )
+            case .sync:
+                DeviceSyncSettingsView()
             }
         }
         .navigationDestination(item: $requestedDestination) { destination in
