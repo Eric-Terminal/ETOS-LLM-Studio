@@ -33,6 +33,13 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
     }
 }
 
+private enum CoreSettingsNavigationDestination: Hashable {
+    case modelManagement
+    case conversation
+    case prompts
+    case output
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var announcementManager = AnnouncementManager.shared
@@ -40,6 +47,7 @@ struct SettingsView: View {
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
+    @State private var coreSettingsDestination: CoreSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -51,15 +59,15 @@ struct SettingsView: View {
             Section {
                 Grid {
                     GridRow {
-                        NavigationLink {
-                            ProviderListView().environmentObject(viewModel)
+                        Button {
+                            coreSettingsDestination = .modelManagement
                         } label: {
                             SettingsCategoryCard("模型管理", icon: .providerManagement)
                         }
                         .buttonStyle(.plain)
 
-                        NavigationLink {
-                            advancedSettingsView(destination: .conversation)
+                        Button {
+                            coreSettingsDestination = .conversation
                         } label: {
                             SettingsCategoryCard("会话", icon: .conversationSettings)
                         }
@@ -67,22 +75,21 @@ struct SettingsView: View {
                     }
 
                     GridRow {
-                        NavigationLink {
-                            advancedSettingsView(destination: .prompts)
+                        Button {
+                            coreSettingsDestination = .prompts
                         } label: {
                             SettingsCategoryCard("提示词", icon: .promptSettings)
                         }
                         .buttonStyle(.plain)
 
-                        NavigationLink {
-                            advancedSettingsView(destination: .output)
+                        Button {
+                            coreSettingsDestination = .output
                         } label: {
                             SettingsCategoryCard("输出", icon: .outputSettings)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .navigationLinkIndicatorVisibility(.hidden)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -248,6 +255,19 @@ struct SettingsView: View {
         .onChange(of: viewModel.enableMarkdown) { _, isEnabled in
             if !isEnabled, viewModel.enableAdvancedRenderer {
                 viewModel.enableAdvancedRenderer = false
+            }
+        }
+        .navigationDestination(item: $coreSettingsDestination) { destination in
+            switch destination {
+            case .modelManagement:
+                ProviderListView()
+                    .environmentObject(viewModel)
+            case .conversation:
+                advancedSettingsView(destination: .conversation)
+            case .prompts:
+                advancedSettingsView(destination: .prompts)
+            case .output:
+                advancedSettingsView(destination: .output)
             }
         }
         .navigationDestination(item: $requestedDestination) { destination in
