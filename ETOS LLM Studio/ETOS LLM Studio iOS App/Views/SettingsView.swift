@@ -421,6 +421,7 @@ extension SettingsListIcon {
     static let roleplay = SettingsListIcon(systemName: "theatermasks", backgroundColor: .purple)
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
+    static let backgroundGeneration = SettingsListIcon(systemName: "location", backgroundColor: .green)
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)

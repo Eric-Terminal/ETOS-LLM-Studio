@@ -5388,3 +5388,18 @@
 "模型管理" = "Model Management";
 "启动与发送" = "Launch & Send";
 "思考与推理" = "Reasoning";
+
+/* Background generation */
+"后台生成" = "Background Generation";
+"后台持续生成" = "Continue Generating in Background";
+"运行状态" = "Activity";
+"定位权限" = "Location Access";
+"请求定位权限" = "Request Location Access";
+"需要定位权限" = "Location Access Required";
+"正在保护回复连接" = "Protecting Reply Connection";
+"等待回复任务" = "Waiting for a Reply";
+"使用 App 期间" = "While Using the App";
+"始终" = "Always";
+"未决定" = "Not Determined";
+"受限" = "Restricted";
+"仅在回复生成期间维持系统定位后台活动，完成后立即停止。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "Maintains a system location background activity only while a response is generating, then stops immediately. ETOS does not read, save, or upload your coordinates. This feature may use additional power and remains subject to system scheduling.";

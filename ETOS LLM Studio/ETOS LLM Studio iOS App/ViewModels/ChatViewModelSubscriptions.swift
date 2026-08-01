@@ -72,6 +72,7 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        BackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
         chatService.reloadLocalModelsAndAppConfigBackedModelState()
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
@@ -179,6 +180,7 @@ extension ChatViewModel {
 
     @objc func handleDidBecomeActive() {
         isApplicationActive = true
+        BackgroundGenerationKeepAliveManager.shared.refreshStatus()
         chatService.reloadLocalModelsAndProvidersIfNeeded()
     }
 
@@ -348,6 +350,7 @@ extension ChatViewModel {
                 } else {
                     beginBackgroundTaskIfNeeded()
                 }
+                BackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
                 updateAutoReasoningPreviewState(with: allMessagesForSession)
             }
             .store(in: &cancellables)

@@ -5538,3 +5538,24 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "模型管理" = "Gestion des modèles";
 "启动与发送" = "Démarrage et envoi";
 "思考与推理" = "Raisonnement";
+
+/* Génération en arrière-plan */
+"后台生成" = "Génération en arrière-plan";
+"减少切换 App 后长回复中断。" = "Réduit l’interruption des réponses longues lors d’un changement d’app.";
+"后台持续生成" = "Continuer la génération en arrière-plan";
+"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "Continue à recevoir une réponse active de l’IA lors du passage à une autre app.";
+"后台持续生成说明正文" = "Lorsque cette option est activée, ETOS crée une activité de localisation système en arrière-plan uniquement pendant la génération d’une réponse que vous avez lancée. Cela réduit le risque qu’iOS suspende la connexion après un changement d’app. iOS peut afficher un indicateur de localisation bleu en arrière-plan. ETOS ne demande aucune mise à jour de position et ne lit, n’enregistre ni ne transmet vos coordonnées. L’activité prend fin immédiatement lorsque la réponse aboutit, échoue ou est annulée. Cette fonction peut consommer davantage d’énergie et ne garantit pas qu’iOS maintienne chaque connexion active.";
+"仅在 AI 回复正在生成时创建定位后台活动；回复完成、失败或取消后会立即停止。" = "Crée une activité de localisation en arrière-plan uniquement pendant la génération d’une réponse, puis l’arrête immédiatement en cas de réussite, d’échec ou d’annulation.";
+"运行状态" = "Activité";
+"定位权限" = "Accès à la localisation";
+"请求定位权限" = "Demander l’accès à la localisation";
+"打开系统设置" = "Ouvrir les réglages système";
+"生成期间切到后台时，iOS 会显示蓝色定位指示器。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "Lors du passage en arrière-plan pendant la génération, iOS affiche un indicateur de localisation bleu. ETOS ne lit, n’enregistre ni ne transmet vos coordonnées. Cette fonction peut consommer davantage d’énergie et reste soumise à la planification du système.";
+"系统定位已关闭" = "Services de localisation désactivés";
+"需要定位权限" = "Accès à la localisation requis";
+"正在保护回复连接" = "Protection de la connexion en cours";
+"等待回复任务" = "En attente d’une réponse";
+"使用 App 期间" = "Lorsque l’app est active";
+"始终" = "Toujours";
+"未决定" = "Non déterminé";
+"受限" = "Restreint";

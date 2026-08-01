@@ -69,6 +69,7 @@ extension ChatViewModel {
 
     func refreshAfterAppConfigPersistentStoreLoad() {
         applyAppConfigSnapshotToLocalState()
+        WatchBackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
         chatService.reloadLocalModelsAndAppConfigBackedModelState()
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
@@ -266,6 +267,7 @@ extension ChatViewModel {
                 } else {
                     startExtendedSession()
                 }
+                WatchBackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
                 updateAutoReasoningPreviewState(with: allMessagesForSession)
             }
             .store(in: &cancellables)

@@ -50,6 +50,18 @@ struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    BackgroundGenerationSettingsView()
+                } label: {
+                    SettingsListIconLabel("后台生成", icon: .backgroundGeneration)
+                }
+            } footer: {
+                Text(NSLocalizedString("减少切换 App 后长回复中断。", comment: "后台生成入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     AppLockSettingsView()
                 } label: {
                     SettingsListIconLabel("应用锁", icon: .security)

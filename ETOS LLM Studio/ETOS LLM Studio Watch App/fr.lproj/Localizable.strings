@@ -5465,3 +5465,18 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "模型管理" = "Gestion des modèles";
 "启动与发送" = "Démarrage et envoi";
 "思考与推理" = "Raisonnement";
+
+/* Génération en arrière-plan */
+"后台生成" = "Génération en arrière-plan";
+"后台持续生成" = "Continuer la génération en arrière-plan";
+"运行状态" = "Activité";
+"定位权限" = "Accès à la localisation";
+"请求定位权限" = "Demander l’accès à la localisation";
+"需要定位权限" = "Accès à la localisation requis";
+"正在保护回复连接" = "Protection de la connexion en cours";
+"等待回复任务" = "En attente d’une réponse";
+"使用 App 期间" = "Lorsque l’app est active";
+"始终" = "Toujours";
+"未决定" = "Non déterminé";
+"受限" = "Restreint";
+"仅在回复生成期间维持系统定位后台活动，完成后立即停止。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "Maintient une activité de localisation système en arrière-plan uniquement pendant la génération d’une réponse, puis l’arrête immédiatement. ETOS ne lit, n’enregistre ni ne transmet vos coordonnées. Cette fonction peut consommer davantage d’énergie et reste soumise à la planification du système.";

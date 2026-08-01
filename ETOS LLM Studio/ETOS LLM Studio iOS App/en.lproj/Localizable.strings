@@ -5461,3 +5461,24 @@
 "模型管理" = "Model Management";
 "启动与发送" = "Launch & Send";
 "思考与推理" = "Reasoning";
+
+/* Background generation */
+"后台生成" = "Background Generation";
+"减少切换 App 后长回复中断。" = "Reduce interruptions to long responses after switching apps.";
+"后台持续生成" = "Continue Generating in Background";
+"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "Keep receiving an active AI response when you switch to another app.";
+"后台持续生成说明正文" = "When enabled, ETOS creates a system location background activity only while a response you started is still being generated. This reduces the chance that iOS pauses the response connection after you switch apps. iOS may show a blue location indicator in the background. ETOS does not request location updates or read, save, or upload your coordinates. The activity ends immediately when the response completes, fails, or is canceled. This feature may use additional power and cannot guarantee that iOS will keep every connection active.";
+"仅在 AI 回复正在生成时创建定位后台活动；回复完成、失败或取消后会立即停止。" = "Creates a location background activity only while an AI response is being generated, then stops immediately when the response completes, fails, or is canceled.";
+"运行状态" = "Activity";
+"定位权限" = "Location Access";
+"请求定位权限" = "Request Location Access";
+"打开系统设置" = "Open System Settings";
+"生成期间切到后台时，iOS 会显示蓝色定位指示器。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "While a response is generating in the background, iOS shows a blue location indicator. ETOS does not read, save, or upload your coordinates. This feature may use additional power and remains subject to system scheduling.";
+"系统定位已关闭" = "Location Services Off";
+"需要定位权限" = "Location Access Required";
+"正在保护回复连接" = "Protecting Reply Connection";
+"等待回复任务" = "Waiting for a Reply";
+"使用 App 期间" = "While Using the App";
+"始终" = "Always";
+"未决定" = "Not Determined";
+"受限" = "Restricted";

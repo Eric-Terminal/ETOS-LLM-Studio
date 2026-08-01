@@ -439,6 +439,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var sendSpeechAsAudio: Bool { didSet { write(.sendSpeechAsAudio, sendSpeechAsAudio) } }
     @Published public var enableSpeechInput: Bool { didSet { write(.enableSpeechInput, enableSpeechInput) } }
     @Published public var audioRecordingFormat: String { didSet { write(.audioRecordingFormat, audioRecordingFormat) } }
+    @Published public var backgroundGenerationKeepAliveEnabled: Bool {
+        didSet { write(.backgroundGenerationKeepAliveEnabled, backgroundGenerationKeepAliveEnabled) }
+    }
     @Published public var enableBackgroundReplyNotification: Bool { didSet { write(.enableBackgroundReplyNotification, enableBackgroundReplyNotification) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermission: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermission, hasRequestedBackgroundReplyNotificationPermission) } }
     @Published public var hasRequestedBackgroundReplyNotificationPermissionWatch: Bool { didSet { write(.hasRequestedBackgroundReplyNotificationPermissionWatch, hasRequestedBackgroundReplyNotificationPermissionWatch) } }
@@ -653,6 +656,7 @@ public final class AppConfigStore: ObservableObject {
         sendSpeechAsAudio = Self.boolValue(.sendSpeechAsAudio, userDefaults: userDefaults)
         enableSpeechInput = Self.boolValue(.enableSpeechInput, userDefaults: userDefaults)
         audioRecordingFormat = Self.textValue(.audioRecordingFormat, userDefaults: userDefaults)
+        backgroundGenerationKeepAliveEnabled = Self.boolValue(.backgroundGenerationKeepAliveEnabled, userDefaults: userDefaults)
         enableBackgroundReplyNotification = Self.boolValue(.enableBackgroundReplyNotification, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermission = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermission, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermissionWatch = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermissionWatch, userDefaults: userDefaults)
@@ -1125,6 +1129,7 @@ public final class AppConfigStore: ObservableObject {
         case .sendSpeechAsAudio: return .bool(sendSpeechAsAudio)
         case .enableSpeechInput: return .bool(enableSpeechInput)
         case .audioRecordingFormat: return .text(audioRecordingFormat)
+        case .backgroundGenerationKeepAliveEnabled: return .bool(backgroundGenerationKeepAliveEnabled)
         case .enableBackgroundReplyNotification: return .bool(enableBackgroundReplyNotification)
         case .hasRequestedBackgroundReplyNotificationPermission: return .bool(hasRequestedBackgroundReplyNotificationPermission)
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: return .bool(hasRequestedBackgroundReplyNotificationPermissionWatch)
@@ -1233,6 +1238,7 @@ public final class AppConfigStore: ObservableObject {
         case .enablePeriodicTimeLandmark: enablePeriodicTimeLandmark = value
         case .sendSpeechAsAudio: sendSpeechAsAudio = value
         case .enableSpeechInput: enableSpeechInput = value
+        case .backgroundGenerationKeepAliveEnabled: backgroundGenerationKeepAliveEnabled = value
         case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
         case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: hasRequestedBackgroundReplyNotificationPermissionWatch = value

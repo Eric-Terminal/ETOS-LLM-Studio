@@ -56,6 +56,8 @@ public struct ExtendedFeaturesView: View {
                     .foregroundStyle(.secondary)
             }
 
+            WatchBackgroundGenerationSettingsRows()
+
             Section {
                 NavigationLink {
                     AppLockSettingsView()

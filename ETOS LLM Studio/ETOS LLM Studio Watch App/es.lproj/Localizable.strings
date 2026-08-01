@@ -5465,3 +5465,18 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "模型管理" = "Gestión de modelos";
 "启动与发送" = "Inicio y envío";
 "思考与推理" = "Razonamiento";
+
+/* Generación en segundo plano */
+"后台生成" = "Generación en segundo plano";
+"后台持续生成" = "Continuar generando en segundo plano";
+"运行状态" = "Actividad";
+"定位权限" = "Acceso a la ubicación";
+"请求定位权限" = "Solicitar acceso a la ubicación";
+"需要定位权限" = "Se requiere acceso a la ubicación";
+"正在保护回复连接" = "Protegiendo la conexión de respuesta";
+"等待回复任务" = "Esperando una respuesta";
+"使用 App 期间" = "Al usar la app";
+"始终" = "Siempre";
+"未决定" = "Sin determinar";
+"受限" = "Restringido";
+"仅在回复生成期间维持系统定位后台活动，完成后立即停止。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "Mantiene una actividad de ubicación del sistema en segundo plano solo mientras se genera una respuesta y se detiene inmediatamente al terminar. ETOS no lee, guarda ni sube tus coordenadas. Esta función puede consumir más energía y sigue sujeta a la programación del sistema.";
