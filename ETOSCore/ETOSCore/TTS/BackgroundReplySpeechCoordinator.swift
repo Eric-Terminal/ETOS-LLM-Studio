@@ -141,8 +141,8 @@ public final class BackgroundReplySpeechCoordinator: ObservableObject {
     private var handledMessageOrder: [UUID] = []
     private let ttsManager: TTSManager
 
-    public init(ttsManager: TTSManager = .shared) {
-        self.ttsManager = ttsManager
+    public init(ttsManager: TTSManager? = nil) {
+        self.ttsManager = ttsManager ?? .shared
     }
 
     public func setFeatureEnabled(_ enabled: Bool) {

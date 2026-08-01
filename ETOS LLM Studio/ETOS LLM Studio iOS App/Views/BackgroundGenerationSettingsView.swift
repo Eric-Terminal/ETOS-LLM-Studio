@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 管理回复生成期间的定位后台活动、后台朗读与权限状态。
+// 管理回复生成期间的定位后台活动、音频保活、后台朗读与权限状态。
 // ============================================================================
 
 import CoreLocation
@@ -13,6 +13,7 @@ import SwiftUI
 struct BackgroundGenerationSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var keepAliveManager = BackgroundGenerationKeepAliveManager.shared
+    @ObservedObject private var audioKeepAliveManager = BackgroundGenerationAudioKeepAliveManager.shared
     @ObservedObject private var speechCoordinator = BackgroundReplySpeechCoordinator.shared
     @ObservedObject private var ttsManager = TTSManager.shared
     @State private var isShowingIntroDetails = false
@@ -29,14 +30,52 @@ struct BackgroundGenerationSettingsView: View {
                     isOn: keepAliveBinding
                 )
                 Toggle(
+                    NSLocalizedString("音频保活", comment: "后台生成音频保活开关"),
+                    isOn: audioKeepAliveBinding
+                )
+                Toggle(
                     NSLocalizedString("后台朗读", comment: "后台生成朗读开关"),
                     isOn: speechBinding
                 )
+
+                if appConfig.backgroundGenerationAudioKeepAliveEnabled {
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text(NSLocalizedString("等待音量", comment: "后台生成等待音量标题"))
+                            Spacer()
+                            Text(
+                                appConfig.backgroundGenerationAudioKeepAliveVolume,
+                                format: .percent.precision(.fractionLength(0))
+                            )
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(
+                            value: audioVolumeBinding,
+                            in: BackgroundGenerationAudioKeepAliveSettings.minimumVolume
+                                ... BackgroundGenerationAudioKeepAliveSettings.maximumVolume,
+                            step: 0.05
+                        )
+                    }
+
+                    Button {
+                        audioKeepAliveManager.togglePreview()
+                    } label: {
+                        Label(
+                            audioKeepAliveManager.isPreviewing
+                                ? NSLocalizedString("停止试听", comment: "停止试听等待音按钮")
+                                : NSLocalizedString("试听等待音", comment: "试听后台生成等待音按钮"),
+                            systemImage: audioKeepAliveManager.isPreviewing
+                                ? "stop.circle"
+                                : "play.circle"
+                        )
+                    }
+                    .disabled(audioKeepAliveManager.isGenerationActive || ttsManager.isSpeaking)
+                }
             } header: {
                 Text(NSLocalizedString("保活方式", comment: "后台生成保活方式分组"))
             } footer: {
                 Text(NSLocalizedString(
-                    "两种方式均默认关闭，可单独使用。后台朗读会用系统语音读出已生成的完整句子，不调用云端 TTS；有声音播放时才能延长后台运行。",
+                    "所有方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；后台朗读会用系统语音读出完整句子，且不调用云端 TTS。",
                     comment: "后台生成保活方式说明"
                 ))
                 .etFont(.footnote)
@@ -48,6 +87,12 @@ struct BackgroundGenerationSettingsView: View {
                     title: NSLocalizedString("位置活动", comment: "后台生成位置活动状态标题"),
                     value: runningStatusText,
                     color: runningStatusColor
+                )
+
+                statusRow(
+                    title: NSLocalizedString("音频保活", comment: "后台生成音频保活状态标题"),
+                    value: audioKeepAliveStatusText,
+                    color: audioKeepAliveStatusColor
                 )
 
                 statusRow(
@@ -75,7 +120,7 @@ struct BackgroundGenerationSettingsView: View {
                 Text(NSLocalizedString("状态", comment: "后台持续生成状态分组"))
             } footer: {
                 Text(NSLocalizedString(
-                    "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。后台朗读只在已有完整句子后生效，首字返回前仍可能受系统调度影响。两种方式都会增加耗电。",
+                    "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。音频保活从任务开始播放，并在回复朗读时自动暂停。后台能力仍受系统调度影响，且会增加耗电。",
                     comment: "后台持续生成状态说明"
                 ))
                 .etFont(.footnote)
@@ -85,6 +130,9 @@ struct BackgroundGenerationSettingsView: View {
         .navigationTitle(NSLocalizedString("后台生成", comment: "后台生成设置页标题"))
         .onAppear {
             keepAliveManager.refreshStatus()
+        }
+        .onDisappear {
+            audioKeepAliveManager.stopPreview()
         }
     }
 
@@ -99,6 +147,20 @@ struct BackgroundGenerationSettingsView: View {
         Binding(
             get: { appConfig.backgroundGenerationSpeechEnabled },
             set: { speechCoordinator.setFeatureEnabled($0) }
+        )
+    }
+
+    private var audioKeepAliveBinding: Binding<Bool> {
+        Binding(
+            get: { appConfig.backgroundGenerationAudioKeepAliveEnabled },
+            set: { audioKeepAliveManager.setFeatureEnabled($0) }
+        )
+    }
+
+    private var audioVolumeBinding: Binding<Double> {
+        Binding(
+            get: { appConfig.backgroundGenerationAudioKeepAliveVolume },
+            set: { audioKeepAliveManager.setVolume($0) }
         )
     }
 
@@ -171,6 +233,32 @@ struct BackgroundGenerationSettingsView: View {
             return .orange
         }
         return .secondary
+    }
+
+    private var audioKeepAliveStatusText: String {
+        guard appConfig.backgroundGenerationAudioKeepAliveEnabled else {
+            return NSLocalizedString("已关闭", comment: "音频保活关闭状态")
+        }
+        if audioKeepAliveManager.hasPlaybackError {
+            return NSLocalizedString("等待音播放失败", comment: "音频保活播放失败状态")
+        }
+        if audioKeepAliveManager.isPlaying {
+            return NSLocalizedString("正在播放等待音", comment: "音频保活运行中状态")
+        }
+        if audioKeepAliveManager.isPreparing {
+            return NSLocalizedString("正在准备等待音", comment: "音频保活准备状态")
+        }
+        if audioKeepAliveManager.isGenerationActive, ttsManager.isSpeaking {
+            return NSLocalizedString("朗读期间已暂停", comment: "音频保活为朗读暂停状态")
+        }
+        return NSLocalizedString("等待回复任务", comment: "音频保活等待任务状态")
+    }
+
+    private var audioKeepAliveStatusColor: Color {
+        if audioKeepAliveManager.hasPlaybackError {
+            return .orange
+        }
+        return audioKeepAliveManager.isPlaying ? .green : .secondary
     }
 
     private var speechStatusText: String {

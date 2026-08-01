@@ -5409,3 +5409,12 @@
 "正在朗读回复" = "Reading Reply";
 "等待完整句子" = "Waiting for a Complete Sentence";
 "两种方式均默认关闭，可单独使用。后台朗读使用系统语音读出完整句子；位置活动不读取、保存或上传坐标。朗读开始前仍可能受系统调度影响。" = "Both methods are off by default and can be used independently. Background Speech reads complete sentences with the system voice. Location Activity doesn't read, save, or upload coordinates. System scheduling can still affect the time before speech starts.";
+"音频保活" = "Audio Keep-Alive";
+"等待音量" = "Waiting Sound Volume";
+"停止试听" = "Stop Preview";
+"试听等待音" = "Preview Waiting Sound";
+"等待音播放失败" = "Waiting Sound Failed";
+"正在播放等待音" = "Playing Waiting Sound";
+"正在准备等待音" = "Preparing Waiting Sound";
+"朗读期间已暂停" = "Paused During Speech";
+"所有方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在回复朗读时暂停；位置活动不读取、保存或上传坐标。" = "All methods are off by default and can be combined as needed. Audio Keep-Alive loops an audible waiting sound and pauses during reply speech. Location Activity doesn't read, save, or upload coordinates.";

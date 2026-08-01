@@ -100,6 +100,17 @@ public enum LiquidGlassTintSetting {
     }
 }
 
+public enum BackgroundGenerationAudioKeepAliveSettings {
+    public static let minimumVolume = 0.05
+    public static let maximumVolume = 1.0
+    public static let defaultVolume = 0.15
+
+    public static func normalizedVolume(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultVolume }
+        return min(max(value, minimumVolume), maximumVolume)
+    }
+}
+
 public enum AppConfigKey: String, CaseIterable, Sendable {
     case syncProviders = "sync.options.providers"
     case syncSessions = "sync.options.sessions"
@@ -270,6 +281,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableSpeechInput = "enableSpeechInput"
     case audioRecordingFormat = "audioRecordingFormat"
     case backgroundGenerationKeepAliveEnabled = "backgroundGeneration.keepAlive.locationEnabled"
+    case backgroundGenerationAudioKeepAliveEnabled = "backgroundGeneration.keepAlive.audioEnabled"
+    case backgroundGenerationAudioKeepAliveVolume = "backgroundGeneration.keepAlive.audioVolume"
     case backgroundGenerationSpeechEnabled = "backgroundGeneration.keepAlive.speechEnabled"
     case enableBackgroundReplyNotification = "enableBackgroundReplyNotification"
     case hasRequestedBackgroundReplyNotificationPermission = "hasRequestedBackgroundReplyNotificationPermission"
@@ -571,6 +584,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .sendSpeechAsAudio,
              .enableSpeechInput,
              .backgroundGenerationKeepAliveEnabled,
+             .backgroundGenerationAudioKeepAliveEnabled,
              .backgroundGenerationSpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
@@ -578,6 +592,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .audioRecordingFormat:
             return .text("aac")
+        case .backgroundGenerationAudioKeepAliveVolume:
+            return .real(BackgroundGenerationAudioKeepAliveSettings.defaultVolume)
         case .enableBackgroundReplyNotification,
              .updateTimelineAutoCheckEnabled:
             return .bool(true)
@@ -607,6 +623,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
              .backgroundGenerationKeepAliveEnabled,
+             .backgroundGenerationAudioKeepAliveEnabled,
+             .backgroundGenerationAudioKeepAliveVolume,
              .backgroundGenerationSpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,

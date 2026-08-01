@@ -80,11 +80,11 @@ extension TTSManager {
             playbackState.duration = 0
         }
 
+        deactivateTTSAudioSessionIfNeeded()
         isSpeaking = false
         currentSpeakingMessageID = nil
         activeBackend = .none
         clearPrefetchState()
-        deactivateTTSAudioSessionIfNeeded()
         workerTask = nil
     }
 

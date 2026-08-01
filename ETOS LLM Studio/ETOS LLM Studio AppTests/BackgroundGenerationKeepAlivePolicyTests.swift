@@ -59,9 +59,11 @@ struct BackgroundGenerationKeepAlivePolicyTests {
     func preferenceDefaultsToLocalOptIn() {
         let keys: [AppConfigKey] = [
             .backgroundGenerationKeepAliveEnabled,
+            .backgroundGenerationAudioKeepAliveEnabled,
             .backgroundGenerationSpeechEnabled
         ]
         #expect(keys.allSatisfy { $0.defaultValue == .bool(false) })
         #expect(keys.allSatisfy { !$0.participatesInSync })
+        #expect(!AppConfigKey.backgroundGenerationAudioKeepAliveVolume.participatesInSync)
     }
 }

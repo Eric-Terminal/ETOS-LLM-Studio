@@ -442,6 +442,21 @@ public final class AppConfigStore: ObservableObject {
     @Published public var backgroundGenerationKeepAliveEnabled: Bool {
         didSet { write(.backgroundGenerationKeepAliveEnabled, backgroundGenerationKeepAliveEnabled) }
     }
+    @Published public var backgroundGenerationAudioKeepAliveEnabled: Bool {
+        didSet { write(.backgroundGenerationAudioKeepAliveEnabled, backgroundGenerationAudioKeepAliveEnabled) }
+    }
+    @Published public var backgroundGenerationAudioKeepAliveVolume: Double {
+        didSet {
+            let normalizedValue = BackgroundGenerationAudioKeepAliveSettings.normalizedVolume(
+                backgroundGenerationAudioKeepAliveVolume
+            )
+            guard normalizedValue == backgroundGenerationAudioKeepAliveVolume else {
+                backgroundGenerationAudioKeepAliveVolume = normalizedValue
+                return
+            }
+            write(.backgroundGenerationAudioKeepAliveVolume, backgroundGenerationAudioKeepAliveVolume)
+        }
+    }
     @Published public var backgroundGenerationSpeechEnabled: Bool {
         didSet { write(.backgroundGenerationSpeechEnabled, backgroundGenerationSpeechEnabled) }
     }
@@ -660,6 +675,10 @@ public final class AppConfigStore: ObservableObject {
         enableSpeechInput = Self.boolValue(.enableSpeechInput, userDefaults: userDefaults)
         audioRecordingFormat = Self.textValue(.audioRecordingFormat, userDefaults: userDefaults)
         backgroundGenerationKeepAliveEnabled = Self.boolValue(.backgroundGenerationKeepAliveEnabled, userDefaults: userDefaults)
+        backgroundGenerationAudioKeepAliveEnabled = Self.boolValue(.backgroundGenerationAudioKeepAliveEnabled, userDefaults: userDefaults)
+        backgroundGenerationAudioKeepAliveVolume = BackgroundGenerationAudioKeepAliveSettings.normalizedVolume(
+            Self.realValue(.backgroundGenerationAudioKeepAliveVolume, userDefaults: userDefaults)
+        )
         backgroundGenerationSpeechEnabled = Self.boolValue(.backgroundGenerationSpeechEnabled, userDefaults: userDefaults)
         enableBackgroundReplyNotification = Self.boolValue(.enableBackgroundReplyNotification, userDefaults: userDefaults)
         hasRequestedBackgroundReplyNotificationPermission = Self.boolValue(.hasRequestedBackgroundReplyNotificationPermission, userDefaults: userDefaults)
@@ -1134,6 +1153,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableSpeechInput: return .bool(enableSpeechInput)
         case .audioRecordingFormat: return .text(audioRecordingFormat)
         case .backgroundGenerationKeepAliveEnabled: return .bool(backgroundGenerationKeepAliveEnabled)
+        case .backgroundGenerationAudioKeepAliveEnabled: return .bool(backgroundGenerationAudioKeepAliveEnabled)
+        case .backgroundGenerationAudioKeepAliveVolume: return .real(backgroundGenerationAudioKeepAliveVolume)
         case .backgroundGenerationSpeechEnabled: return .bool(backgroundGenerationSpeechEnabled)
         case .enableBackgroundReplyNotification: return .bool(enableBackgroundReplyNotification)
         case .hasRequestedBackgroundReplyNotificationPermission: return .bool(hasRequestedBackgroundReplyNotificationPermission)
@@ -1244,6 +1265,7 @@ public final class AppConfigStore: ObservableObject {
         case .sendSpeechAsAudio: sendSpeechAsAudio = value
         case .enableSpeechInput: enableSpeechInput = value
         case .backgroundGenerationKeepAliveEnabled: backgroundGenerationKeepAliveEnabled = value
+        case .backgroundGenerationAudioKeepAliveEnabled: backgroundGenerationAudioKeepAliveEnabled = value
         case .backgroundGenerationSpeechEnabled: backgroundGenerationSpeechEnabled = value
         case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
         case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
@@ -1304,6 +1326,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatSendAnimationSpringResponse: chatSendAnimationSpringResponse = value
         case .chatSendAnimationSpringDamping: chatSendAnimationSpringDamping = value
         case .chatSendDelaySeconds: chatSendDelaySeconds = Self.normalizedRealValue(value, for: key)
+        case .backgroundGenerationAudioKeepAliveVolume:
+            backgroundGenerationAudioKeepAliveVolume = Self.normalizedRealValue(value, for: key)
         case .videoFrameExtractionFPS:
             videoFrameExtractionFPS = Self.normalizedRealValue(value, for: key)
         default: break
@@ -1736,6 +1760,8 @@ public final class AppConfigStore: ObservableObject {
             )
         case .liquidGlassTintOpacity:
             return LiquidGlassTintSetting.normalized(value)
+        case .backgroundGenerationAudioKeepAliveVolume:
+            return BackgroundGenerationAudioKeepAliveSettings.normalizedVolume(value)
         default:
             return value
         }
