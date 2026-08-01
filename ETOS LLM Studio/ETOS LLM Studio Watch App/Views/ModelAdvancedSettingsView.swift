@@ -301,13 +301,21 @@ struct ModelAdvancedSettingsView: View {
                     )
                 }
 
-                Stepper(value: videoFrameMaximumCountBinding, in: 4...120, step: 4) {
-                    Text(
-                        String(
-                            format: NSLocalizedString("最多 %d 帧", comment: "Maximum extracted video frames"),
-                            videoFrameMaximumCountBinding.wrappedValue
-                        )
+                HStack {
+                    Text(NSLocalizedString("最多画面数", comment: "Maximum extracted video frames"))
+                    Spacer()
+                    TextField(
+                        NSLocalizedString("数量", comment: "Maximum extracted video frames field placeholder"),
+                        value: videoFrameMaximumCountBinding,
+                        formatter: numberFormatter
                     )
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 64)
+                    .accessibilityLabel(Text(NSLocalizedString(
+                        "最多画面数",
+                        comment: "Maximum extracted video frames"
+                    )))
                 }
                 } header: {
                     Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
