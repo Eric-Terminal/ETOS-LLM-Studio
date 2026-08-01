@@ -5403,3 +5403,9 @@
 "未决定" = "Not Determined";
 "受限" = "Restricted";
 "仅在回复生成期间维持系统定位后台活动，完成后立即停止。ETOS 不读取、保存或上传位置坐标。此功能会增加一定耗电，且仍受系统调度限制。" = "Maintains a system location background activity only while a response is generating, then stops immediately. ETOS does not read, save, or upload your coordinates. This feature may use additional power and remains subject to system scheduling.";
+"位置追踪" = "Location Tracking";
+"后台朗读" = "Background Speech";
+"位置活动" = "Location Activity";
+"正在朗读回复" = "Reading Reply";
+"等待完整句子" = "Waiting for a Complete Sentence";
+"两种方式均默认关闭，可单独使用。后台朗读使用系统语音读出完整句子；位置活动不读取、保存或上传坐标。朗读开始前仍可能受系统调度影响。" = "Both methods are off by default and can be used independently. Background Speech reads complete sentences with the system voice. Location Activity doesn't read, save, or upload coordinates. System scheduling can still affect the time before speech starts.";

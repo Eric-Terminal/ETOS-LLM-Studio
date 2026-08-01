@@ -122,6 +122,7 @@ extension ChatViewModel {
         }
         syncAutoOpenedPendingToolCallIDs(with: incomingMessages)
         updateAutoReasoningPreviewState(with: incomingMessages)
+        observeBackgroundReplySpeech(in: incomingMessages)
 
         if hasSameMessageIdentity {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)

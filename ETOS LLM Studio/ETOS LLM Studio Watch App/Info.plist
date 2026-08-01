@@ -57,6 +57,7 @@
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>location</string>
 	</array>
 	<key>ETCommitHash</key>

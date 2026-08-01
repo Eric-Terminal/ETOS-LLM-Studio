@@ -270,6 +270,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableSpeechInput = "enableSpeechInput"
     case audioRecordingFormat = "audioRecordingFormat"
     case backgroundGenerationKeepAliveEnabled = "backgroundGeneration.keepAlive.locationEnabled"
+    case backgroundGenerationSpeechEnabled = "backgroundGeneration.keepAlive.speechEnabled"
     case enableBackgroundReplyNotification = "enableBackgroundReplyNotification"
     case hasRequestedBackgroundReplyNotificationPermission = "hasRequestedBackgroundReplyNotificationPermission"
     case hasRequestedBackgroundReplyNotificationPermissionWatch = "hasRequestedBackgroundReplyNotificationPermissionWatch"
@@ -570,6 +571,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .sendSpeechAsAudio,
              .enableSpeechInput,
              .backgroundGenerationKeepAliveEnabled,
+             .backgroundGenerationSpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .hideAnnouncementSection:
@@ -605,6 +607,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
              .backgroundGenerationKeepAliveEnabled,
+             .backgroundGenerationSpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .updateTimelineAutoCheckEnabled,

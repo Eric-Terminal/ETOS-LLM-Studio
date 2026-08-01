@@ -156,6 +156,11 @@ extension ChatViewModel {
     func autoPlayLatestAssistantMessageIfNeeded() {
         let settings = TTSSettingsStore.shared.snapshot
         let latest = allMessagesForSession.last(where: { $0.role == .assistant })
+        if let latest,
+           BackgroundReplySpeechCoordinator.shared.hasHandled(messageID: latest.id) {
+            lastAutoPlayedAssistantMessageID = latest.id
+            return
+        }
         guard Self.shouldAutoPlayAssistantMessage(
             autoPlayEnabled: settings.autoPlayAfterAssistantResponse,
             latestAssistantMessage: latest,
@@ -166,6 +171,32 @@ extension ChatViewModel {
         lastAutoPlayedAssistantMessageID = latest.id
         ttsManager.updateSelectedModel(selectedTTSModel)
         ttsManager.speak(latest.content, messageID: latest.id, flush: true)
+    }
+
+    func observeBackgroundReplySpeech(in messages: [ChatMessage]) {
+        guard AppConfigStore.shared.backgroundGenerationSpeechEnabled,
+              let sessionID = currentSession?.id,
+              runningSessionIDs.contains(sessionID),
+              let latest = messages.last,
+              latest.role == .assistant else { return }
+        BackgroundReplySpeechCoordinator.shared.observe(
+            sessionID: sessionID,
+            messageID: latest.id,
+            content: latest.content
+        )
+    }
+
+    func finishBackgroundReplySpeech(for sessionID: UUID) {
+        guard sessionID == currentSession?.id else {
+            BackgroundReplySpeechCoordinator.shared.cancel(sessionID: sessionID, stopSpeech: false)
+            return
+        }
+        let latest = allMessagesForSession.last(where: { $0.role == .assistant })
+        BackgroundReplySpeechCoordinator.shared.finish(
+            sessionID: sessionID,
+            messageID: latest?.id,
+            content: latest?.content
+        )
     }
 
     nonisolated static func shouldAutoPlayAssistantMessage(

@@ -13,6 +13,24 @@ import AVFoundation
 #endif
 
 extension TTSManager {
+    func activateTTSAudioSessionIfNeeded() throws {
+#if os(iOS) || os(watchOS)
+        guard !ownsPlaybackAudioSession else { return }
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try session.setActive(true)
+        ownsPlaybackAudioSession = true
+#endif
+    }
+
+    func deactivateTTSAudioSessionIfNeeded() {
+#if os(iOS) || os(watchOS)
+        guard ownsPlaybackAudioSession else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        ownsPlaybackAudioSession = false
+#endif
+    }
+
     func fetchData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -99,6 +117,7 @@ extension TTSManager {
 
 #if os(iOS) || os(watchOS)
         stopSpeechMonitor()
+        activeSpeechUtterance = nil
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
