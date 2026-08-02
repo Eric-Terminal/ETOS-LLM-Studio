@@ -4369,6 +4369,8 @@
 "该自定义工具的 JSON Schema 参数定义。省略时使用通用 input 字段。" = "该自定义工具的 JSON Schema 参数定义。省略时使用通用 input 字段。";
 "输入重写要求" = "输入重写要求";
 "返回结果数量，范围 1 到 8。" = "返回结果数量，范围 1 到 8。";
+"首选搜索引擎。可选 duckduckgo 或 bing；未提供时默认使用 duckduckgo，失败或没有结果时会自动回退到另一搜索源。" = "首选搜索引擎。可选 duckduckgo 或 bing；未提供时默认使用 duckduckgo，失败或没有结果时会自动回退到另一搜索源。";
+"search_engine 必须是 duckduckgo 或 bing。" = "search_engine 必须是 duckduckgo 或 bing。";
 "这是内置 Mock 搜索服务针对「%@」生成的第 %d 条示例结果，用于验证 MCP 搜索工具调用链路。" = "这是内置 Mock 搜索服务针对「%@」生成的第 %d 条示例结果，用于验证 MCP 搜索工具调用链路。";
 "连接中..." = "连接中...";
 "重连中" = "重连中";

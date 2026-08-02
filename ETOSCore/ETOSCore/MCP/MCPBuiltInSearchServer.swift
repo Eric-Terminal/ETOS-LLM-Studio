@@ -261,6 +261,12 @@ actor MCPBuiltInSearchServerEngine {
                                 "type": "string",
                                 "description": NSLocalizedString("可选。要直接抓取的网页 URL；提供后会优先作为查询目标。", comment: "Built-in search url parameter description")
                             ],
+                            "search_engine": [
+                                "type": "string",
+                                "enum": ["duckduckgo", "bing"],
+                                "default": "duckduckgo",
+                                "description": NSLocalizedString("首选搜索引擎。可选 duckduckgo 或 bing；未提供时默认使用 duckduckgo，失败或没有结果时会自动回退到另一搜索源。", comment: "Built-in search engine parameter description")
+                            ],
                             "max_results": [
                                 "type": "integer",
                                 "description": NSLocalizedString("返回结果数量，范围 1 到 8。", comment: "Built-in search max results parameter description"),
@@ -300,6 +306,18 @@ actor MCPBuiltInSearchServerEngine {
         if queryArgument == nil, urlArgument != nil, directURL == nil {
             return errorToolResult(message: "url must be a valid http or https URL")
         }
+        let preferredSearchEngine: MCPBuiltInSearchEngine
+        if let rawSearchEngine = arguments["search_engine"] {
+            guard let searchEngineName = normalizedTextArgument(rawSearchEngine),
+                  let searchEngine = MCPBuiltInSearchEngine(rawValue: searchEngineName.lowercased()) else {
+                return errorToolResult(
+                    message: NSLocalizedString("search_engine 必须是 duckduckgo 或 bing。", comment: "Built-in search invalid engine error")
+                )
+            }
+            preferredSearchEngine = searchEngine
+        } else {
+            preferredSearchEngine = .duckDuckGo
+        }
 
         let maxResults = normalizedMaxResults(from: arguments["max_results"])
         let timeout = normalizedTimeout(from: arguments["timeout_seconds"])
@@ -309,7 +327,8 @@ actor MCPBuiltInSearchServerEngine {
                 query: query,
                 directURL: directURL,
                 maxResults: maxResults,
-                timeout: timeout
+                timeout: timeout,
+                preferredSearchEngine: preferredSearchEngine
             )
         } catch {
             return errorToolResult(
@@ -432,6 +451,11 @@ actor MCPBuiltInSearchServerEngine {
     }
 }
 
+private enum MCPBuiltInSearchEngine: String {
+    case duckDuckGo = "duckduckgo"
+    case bing
+}
+
 private final class MCPBuiltInWebSearchClient {
     static let providerID = "etos_builtin_web_search"
     static let defaultTotalTimeout: TimeInterval = 12
@@ -466,7 +490,13 @@ private final class MCPBuiltInWebSearchClient {
         self.dataLoader = dataLoader
     }
 
-    func search(query: String, directURL: URL?, maxResults: Int, timeout: TimeInterval) async throws -> [String: Any] {
+    func search(
+        query: String,
+        directURL: URL?,
+        maxResults: Int,
+        timeout: TimeInterval,
+        preferredSearchEngine: MCPBuiltInSearchEngine
+    ) async throws -> [String: Any] {
         let deadline = Date().addingTimeInterval(timeout)
         var items: [SearchItem] = []
         var seenURLs = Set<String>()
@@ -487,7 +517,8 @@ private final class MCPBuiltInWebSearchClient {
                 query: query,
                 remainingCount: maxResults - items.count,
                 deadline: deadline,
-                totalTimeout: timeout
+                totalTimeout: timeout,
+                preferredSearchEngine: preferredSearchEngine
             )
             for item in searchItems {
                 let key = Self.normalizedURLKey(item.url)
@@ -524,29 +555,51 @@ private final class MCPBuiltInWebSearchClient {
         query: String,
         remainingCount: Int,
         deadline: Date,
-        totalTimeout: TimeInterval
+        totalTimeout: TimeInterval,
+        preferredSearchEngine: MCPBuiltInSearchEngine
     ) async throws -> [SearchItem] {
         do {
-            let items = try await searchDuckDuckGo(
+            let items: [SearchItem]
+            switch preferredSearchEngine {
+            case .duckDuckGo:
+                items = try await searchDuckDuckGo(
+                    query: query,
+                    remainingCount: remainingCount,
+                    deadline: deadline,
+                    totalTimeout: totalTimeout
+                )
+            case .bing:
+                items = try await searchBing(
+                    query: query,
+                    remainingCount: remainingCount,
+                    deadline: deadline,
+                    totalTimeout: totalTimeout
+                )
+            }
+            if !items.isEmpty {
+                return items
+            }
+        } catch {
+            // 首选搜索源不可用时继续尝试备用源，避免单个服务故障中断工具调用。
+            try Task.checkCancellation()
+        }
+
+        switch preferredSearchEngine {
+        case .duckDuckGo:
+            return try await searchBing(
                 query: query,
                 remainingCount: remainingCount,
                 deadline: deadline,
                 totalTimeout: totalTimeout
             )
-            if !items.isEmpty {
-                return items
-            }
-        } catch {
-            // DuckDuckGo 在部分网络环境不可用时，继续尝试备用搜索源。
-            try Task.checkCancellation()
+        case .bing:
+            return try await searchDuckDuckGo(
+                query: query,
+                remainingCount: remainingCount,
+                deadline: deadline,
+                totalTimeout: totalTimeout
+            )
         }
-
-        return try await searchBing(
-            query: query,
-            remainingCount: remainingCount,
-            deadline: deadline,
-            totalTimeout: totalTimeout
-        )
     }
 
     private func searchBing(

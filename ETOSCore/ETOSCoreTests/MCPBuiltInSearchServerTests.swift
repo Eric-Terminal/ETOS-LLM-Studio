@@ -29,6 +29,7 @@ struct MCPBuiltInSearchServerTests {
             return
         }
         #expect(properties["url"] != nil)
+        #expect(properties["search_engine"] != nil)
         #expect(properties["timeout_seconds"] != nil)
 
         let result = try await client.executeTool(
@@ -146,8 +147,8 @@ struct MCPBuiltInSearchServerTests {
         #expect(firstItem["url"] as? String == "https://swift.org/")
     }
 
-    @Test("DuckDuckGo 不可用时回退到 Bing")
-    func testBuiltInSearchFallsBackToBing() async throws {
+    @Test("指定 Bing 时优先请求并在失败后回退 DuckDuckGo")
+    func testBuiltInSearchPrefersBingAndFallsBackToDuckDuckGo() async throws {
         let recorder = SearchRequestRecorder()
         let engine = MCPBuiltInSearchServerEngine { request in
             guard let url = request.url else {
@@ -157,15 +158,10 @@ struct MCPBuiltInSearchServerTests {
             switch url.host {
             case "html.duckduckgo.com":
                 recorder.sawDuckDuckGoRequest = true
-                throw URLError(.cannotConnectToHost)
-            case "www.bing.com":
-                recorder.sawBingRequest = true
                 let html = """
                 <html><body>
-                  <li class="b_algo">
-                    <h2><a href="https://swift.org/">Swift.org</a></h2>
-                    <div class="b_caption"><p>The Swift programming language.</p></div>
-                  </li>
+                  <a class="result__a" href="https://swift.org/">Swift.org</a>
+                  <div class="result__snippet">The Swift programming language.</div>
                 </body></html>
                 """
                 let response = HTTPURLResponse(
@@ -175,6 +171,9 @@ struct MCPBuiltInSearchServerTests {
                     headerFields: ["Content-Type": "text/html; charset=utf-8"]
                 )!
                 return (Data(html.utf8), response)
+            case "www.bing.com":
+                recorder.sawBingRequest = true
+                throw URLError(.cannotConnectToHost)
             default:
                 throw URLError(.cannotFindHost)
             }
@@ -186,7 +185,11 @@ struct MCPBuiltInSearchServerTests {
             "method": "tools/call",
             "params": [
                 "name": MCPBuiltInSearchServer.toolID,
-                "arguments": ["query": "Swift", "max_results": 1]
+                "arguments": [
+                    "query": "Swift",
+                    "search_engine": "bing",
+                    "max_results": 1
+                ]
             ]
         ]
         let response = try await engine.handleMessage(JSONSerialization.data(withJSONObject: payload))
@@ -201,7 +204,7 @@ struct MCPBuiltInSearchServerTests {
 
         #expect(recorder.sawDuckDuckGoRequest)
         #expect(recorder.sawBingRequest)
-        #expect(firstItem["source"] as? String == "bing_html")
+        #expect(firstItem["source"] as? String == "duckduckgo_html")
         #expect(firstItem["url"] as? String == "https://swift.org/")
     }
 
