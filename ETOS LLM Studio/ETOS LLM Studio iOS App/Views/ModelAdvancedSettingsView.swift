@@ -103,73 +103,93 @@ struct ModelAdvancedSettingsView: View {
     }
 
     var body: some View {
+        promptDraftObservationView
+    }
+
+    private var configuredView: some View {
         settingsContent
-        .navigationTitle(destination.title)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                if focusedField == .contextCompressionReminderThreshold {
-                    Spacer()
-                    Button(NSLocalizedString("完成", comment: "Finish numeric input action")) {
-                        commitContextCompressionReminderThresholdDraft()
-                        focusedField = nil
+            .navigationTitle(destination.title)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    if focusedField == .contextCompressionReminderThreshold {
+                        Spacer()
+                        Button(NSLocalizedString("完成", comment: "Finish numeric input action")) {
+                            commitContextCompressionReminderThresholdDraft()
+                            focusedField = nil
+                        }
                     }
                 }
             }
-        }
-        .onAppear {
-            syncPromptDrafts()
-            syncContextCompressionReminderThresholdDraft()
-            normalizeSamplingParametersIfNeeded()
-            syncVideoAnalysisModelSelection()
-        }
-        .onChange(of: focusedField) { oldValue, newValue in
-            if oldValue == .contextCompressionReminderThreshold,
-               newValue != .contextCompressionReminderThreshold {
-                commitContextCompressionReminderThresholdDraft()
+            .onAppear(perform: handleAppear)
+    }
+
+    private var contextCompressionObservationView: some View {
+        configuredView
+            .onChange(of: focusedField) { oldValue, newValue in
+                if oldValue == .contextCompressionReminderThreshold,
+                   newValue != .contextCompressionReminderThreshold {
+                    commitContextCompressionReminderThresholdDraft()
+                }
             }
-        }
-        .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, _ in
-            if focusedField != .contextCompressionReminderThreshold {
-                syncContextCompressionReminderThresholdDraft()
+            .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, _ in
+                if focusedField != .contextCompressionReminderThreshold {
+                    syncContextCompressionReminderThresholdDraft()
+                }
             }
-        }
-        .onChange(of: appConfig.enableContextCompressionReminder) { _, isEnabled in
-            if !isEnabled {
-                commitContextCompressionReminderThresholdDraft()
-                focusedField = nil
+            .onChange(of: appConfig.enableContextCompressionReminder) { _, isEnabled in
+                if !isEnabled {
+                    commitContextCompressionReminderThresholdDraft()
+                    focusedField = nil
+                }
             }
-        }
-        .onChange(of: appConfig.enableVideoAnalysisForNonNativeModels) { _, isEnabled in
-            if isEnabled {
+    }
+
+    private var modelObservationView: some View {
+        contextCompressionObservationView
+            .onChange(of: appConfig.enableVideoAnalysisForNonNativeModels) { _, isEnabled in
+                if isEnabled {
+                    syncVideoAnalysisModelSelection()
+                }
+            }
+            .onChange(of: viewModel.activatedModelListVersion) { _, _ in
                 syncVideoAnalysisModelSelection()
             }
-        }
-        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
-            syncVideoAnalysisModelSelection()
-        }
-        .onChange(of: selectedGlobalSystemPromptEntryID) { _, _ in
-            syncSelectedGlobalPromptDraft()
-        }
-        .onChange(of: selectedGlobalPromptEntry?.content ?? "") { _, _ in
-            syncSelectedGlobalPromptDraft()
-        }
-        .onChange(of: currentSession?.id) { _, _ in
-            syncSessionPromptDrafts()
-        }
-        .onChange(of: currentSession?.topicPrompt ?? "") { _, newValue in
-            if topicPromptDraft != newValue {
-                topicPromptDraft = newValue
+    }
+
+    private var promptDraftObservationView: some View {
+        modelObservationView
+            .onChange(of: selectedGlobalSystemPromptEntryID) { _, _ in
+                syncSelectedGlobalPromptDraft()
             }
-        }
-        .onChange(of: currentSession?.enhancedPrompt ?? "") { _, newValue in
-            if enhancedPromptDraft != newValue {
-                enhancedPromptDraft = newValue
+            .onChange(of: selectedGlobalPromptEntry?.content ?? "") { _, _ in
+                syncSelectedGlobalPromptDraft()
             }
-        }
-        .onDisappear {
-            commitContextCompressionReminderThresholdDraft()
-            persistPromptDrafts()
-        }
+            .onChange(of: currentSession?.id) { _, _ in
+                syncSessionPromptDrafts()
+            }
+            .onChange(of: currentSession?.topicPrompt ?? "") { _, newValue in
+                if topicPromptDraft != newValue {
+                    topicPromptDraft = newValue
+                }
+            }
+            .onChange(of: currentSession?.enhancedPrompt ?? "") { _, newValue in
+                if enhancedPromptDraft != newValue {
+                    enhancedPromptDraft = newValue
+                }
+            }
+            .onDisappear(perform: handleDisappear)
+    }
+
+    private func handleAppear() {
+        syncPromptDrafts()
+        syncContextCompressionReminderThresholdDraft()
+        normalizeSamplingParametersIfNeeded()
+        syncVideoAnalysisModelSelection()
+    }
+
+    private func handleDisappear() {
+        commitContextCompressionReminderThresholdDraft()
+        persistPromptDrafts()
     }
 
     @ViewBuilder
