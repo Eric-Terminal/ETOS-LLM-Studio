@@ -2,8 +2,14 @@ import Foundation
 import Testing
 @testable import ETOSCore
 
-@Suite("后台回复朗读分段测试")
+@Suite("生成时自动朗读分段测试")
 struct BackgroundReplySpeechChunkerTests {
+    @Test("生成时自动朗读默认关闭且仅保存在本机")
+    func streamingSpeechDefaultsToLocalOptIn() {
+        #expect(AppConfigKey.streamingReplySpeechEnabled.defaultValue == .bool(false))
+        #expect(!AppConfigKey.streamingReplySpeechEnabled.participatesInSync)
+    }
+
     @Test("只返回已经结束的完整句子")
     func extractsOnlyStableSentence() {
         let firstSentence = "这是一个已经完整生成的句子。"

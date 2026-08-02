@@ -129,7 +129,7 @@ extension ChatViewModel {
     }
 
     func observeBackgroundReplySpeech(in messages: [ChatMessage]) {
-        guard AppConfigStore.shared.backgroundGenerationSpeechEnabled,
+        guard AppConfigStore.shared.streamingReplySpeechEnabled,
               let sessionID = currentSession?.id,
               runningSessionIDs.contains(sessionID),
               let latest = messages.last,

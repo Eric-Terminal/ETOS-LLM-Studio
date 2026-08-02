@@ -283,7 +283,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case backgroundGenerationKeepAliveEnabled = "backgroundGeneration.keepAlive.locationEnabled"
     case backgroundGenerationAudioKeepAliveEnabled = "backgroundGeneration.keepAlive.audioEnabled"
     case backgroundGenerationAudioKeepAliveVolume = "backgroundGeneration.keepAlive.audioVolume"
-    case backgroundGenerationSpeechEnabled = "backgroundGeneration.keepAlive.speechEnabled"
+    case streamingReplySpeechEnabled = "tts.streamingReplySpeechEnabled"
     case enableBackgroundReplyNotification = "enableBackgroundReplyNotification"
     case hasRequestedBackgroundReplyNotificationPermission = "hasRequestedBackgroundReplyNotificationPermission"
     case hasRequestedBackgroundReplyNotificationPermissionWatch = "hasRequestedBackgroundReplyNotificationPermissionWatch"
@@ -585,7 +585,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableSpeechInput,
              .backgroundGenerationKeepAliveEnabled,
              .backgroundGenerationAudioKeepAliveEnabled,
-             .backgroundGenerationSpeechEnabled,
+             .streamingReplySpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .hideAnnouncementSection:
@@ -625,7 +625,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .backgroundGenerationKeepAliveEnabled,
              .backgroundGenerationAudioKeepAliveEnabled,
              .backgroundGenerationAudioKeepAliveVolume,
-             .backgroundGenerationSpeechEnabled,
+             .streamingReplySpeechEnabled,
              .hasRequestedBackgroundReplyNotificationPermission,
              .hasRequestedBackgroundReplyNotificationPermissionWatch,
              .updateTimelineAutoCheckEnabled,

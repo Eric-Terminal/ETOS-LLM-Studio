@@ -5483,14 +5483,15 @@
 "未决定" = "Not Determined";
 "受限" = "Restricted";
 "位置追踪" = "Location Tracking";
-"后台朗读" = "Background Speech";
+"生成时自动朗读" = "Auto-Read While Generating";
+"生成回复时按完整句子自动朗读，并在切换到后台后继续；使用当前 TTS 模式，全部内容读完后自动停止。开启后不会在回复完成时重复朗读；云端模式可能产生额外费用。" = "Automatically reads complete sentences as the reply is generated and continues after you switch apps. It uses the current TTS mode and stops when all content has been read. It won't repeat the reply after completion; cloud mode may incur additional charges.";
 "保活方式" = "Background Methods";
 "位置活动" = "Location Activity";
 "正在朗读回复" = "Reading Reply";
 "等待完整句子" = "Waiting for a Complete Sentence";
 "两种方式均默认关闭，可单独使用。后台朗读会用系统语音读出已生成的完整句子，不调用云端 TTS；有声音播放时才能延长后台运行。" = "Both methods are off by default and can be used independently. Background Speech reads completed sentences with the system voice and doesn't call cloud TTS; it can extend background execution only while audible speech is playing.";
 "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。后台朗读只在已有完整句子后生效，首字返回前仍可能受系统调度影响。两种方式都会增加耗电。" = "While Location Tracking runs, iOS shows a blue location indicator. ETOS doesn't read, save, or upload location coordinates. Background Speech starts only after a complete sentence is available, so system scheduling can still affect the time before the first text arrives. Both methods use additional power.";
-"后台生成说明正文" = "ETOS provides three optional methods to reduce the chance that iOS pauses a response connection after you switch apps. Location Tracking creates a system location background activity only while a response is generating; iOS may show a blue location indicator, but ETOS doesn't request location updates or read, save, or upload coordinates. Audio Keep-Alive loops an audible gentle waiting sound from the start of the task and pauses automatically while the reply is being read aloud. Background Speech reads completed sentences with the on-device system voice and doesn't call cloud TTS. All methods stop when the response completes, fails, or is canceled, use additional power, and can't guarantee that every connection remains active.";
+"后台生成说明正文" = "ETOS provides two optional keep-alive methods to reduce the chance that iOS pauses a response connection after you switch apps. Location Tracking creates a system location background activity only while a response is generating; iOS may show a blue location indicator, but ETOS doesn't request location updates or read, save, or upload coordinates. Audio Keep-Alive loops an audible gentle waiting sound from the start of the task and pauses automatically during speech. Both methods stop when the response completes, fails, or is canceled, use additional power, and can't guarantee that every connection remains active.";
 "音频保活" = "Audio Keep-Alive";
 "等待音量" = "Waiting Sound Volume";
 "停止试听" = "Stop Preview";
@@ -5499,5 +5500,5 @@
 "正在播放等待音" = "Playing Waiting Sound";
 "正在准备等待音" = "Preparing Waiting Sound";
 "朗读期间已暂停" = "Paused During Speech";
-"所有方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；后台朗读会用系统语音读出完整句子，且不调用云端 TTS。" = "All methods are off by default and can be combined as needed. Audio Keep-Alive loops an audible gentle waiting sound while generating. Background Speech reads complete sentences with the system voice and doesn't call cloud TTS.";
+"两种保活方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；位置追踪则创建系统定位后台活动。" = "Both keep-alive methods are off by default and can be combined. Audio Keep-Alive loops an audible gentle waiting sound while generating; Location Tracking creates a system location background activity.";
 "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。音频保活从任务开始播放，并在回复朗读时自动暂停。后台能力仍受系统调度影响，且会增加耗电。" = "While Location Tracking runs, iOS shows a blue location indicator; ETOS doesn't read, save, or upload coordinates. Audio Keep-Alive starts with the task and pauses automatically during reply speech. Background execution remains subject to system scheduling and uses additional power.";

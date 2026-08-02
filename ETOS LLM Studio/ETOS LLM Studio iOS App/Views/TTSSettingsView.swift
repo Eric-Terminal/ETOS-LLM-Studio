@@ -4,6 +4,8 @@ import ETOSCore
 struct TTSSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var backgroundSpeechCoordinator = BackgroundReplySpeechCoordinator.shared
     @State private var showCustomCloudParameters: Bool = false
 
     private static let customPickerTag = "__custom__"
@@ -132,9 +134,20 @@ struct TTSSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("朗读行为", comment: "")) {
+            Section {
+                Toggle(
+                    NSLocalizedString("生成时自动朗读", comment: "生成过程中自动朗读开关"),
+                    isOn: streamingSpeechBinding
+                )
                 Toggle(NSLocalizedString("回复完成后自动朗读", comment: ""), isOn: $settingsStore.autoPlayAfterAssistantResponse)
                 Toggle(NSLocalizedString("仅朗读引号内容", comment: ""), isOn: $settingsStore.onlyReadQuotedContent)
+            } header: {
+                Text(NSLocalizedString("朗读行为", comment: ""))
+            } footer: {
+                Text(NSLocalizedString(
+                    "生成回复时按完整句子自动朗读，并在切换到后台后继续；使用当前 TTS 模式，全部内容读完后自动停止。开启后不会在回复完成时重复朗读；云端模式可能产生额外费用。",
+                    comment: "生成时自动朗读说明"
+                ))
             }
 
             Section {
@@ -204,6 +217,13 @@ struct TTSSettingsView: View {
 
     private var providerVoiceOptions: [String] {
         TTSProviderPresetCatalog.voiceOptions(for: settingsStore.providerKind)
+    }
+
+    private var streamingSpeechBinding: Binding<Bool> {
+        Binding(
+            get: { appConfig.streamingReplySpeechEnabled },
+            set: { backgroundSpeechCoordinator.setFeatureEnabled($0) }
+        )
     }
 
     private var providerResponseFormatOptions: [String] {

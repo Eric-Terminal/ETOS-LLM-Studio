@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 管理 watchOS 回复生成期间的定位后台活动、音频保活、后台朗读及其设置行。
+// 管理 watchOS 回复生成期间的定位后台活动、音频保活及其设置行。
 // 本功能不请求位置更新，也不读取、保存或上传位置坐标。
 // ============================================================================
 
@@ -93,7 +93,6 @@ struct WatchBackgroundGenerationSettingsRows: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var keepAliveManager = WatchBackgroundGenerationKeepAliveManager.shared
     @ObservedObject private var audioKeepAliveManager = BackgroundGenerationAudioKeepAliveManager.shared
-    @ObservedObject private var speechCoordinator = BackgroundReplySpeechCoordinator.shared
     @ObservedObject private var ttsManager = TTSManager.shared
 
     var body: some View {
@@ -106,11 +105,6 @@ struct WatchBackgroundGenerationSettingsRows: View {
             Toggle(
                 NSLocalizedString("音频保活", comment: "watchOS 后台生成音频保活开关"),
                 isOn: audioKeepAliveBinding
-            )
-
-            Toggle(
-                NSLocalizedString("后台朗读", comment: "watchOS 后台生成朗读开关"),
-                isOn: speechBinding
             )
 
             if appConfig.backgroundGenerationAudioKeepAliveEnabled {
@@ -161,12 +155,6 @@ struct WatchBackgroundGenerationSettingsRows: View {
             )
 
             statusRow(
-                title: NSLocalizedString("后台朗读", comment: "watchOS 后台生成朗读状态"),
-                value: speechStatusText,
-                color: speechStatusColor
-            )
-
-            statusRow(
                 title: NSLocalizedString("定位权限", comment: "watchOS 后台持续生成定位权限"),
                 value: authorizationStatusText,
                 color: hasUsableAuthorization ? .green : .secondary
@@ -183,7 +171,7 @@ struct WatchBackgroundGenerationSettingsRows: View {
             Text(NSLocalizedString("后台生成", comment: "watchOS 后台生成设置分组"))
         } footer: {
             Text(NSLocalizedString(
-                "所有方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在回复朗读时暂停；位置活动不读取、保存或上传坐标。",
+                "两种保活方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在朗读时暂停；位置活动不读取、保存或上传坐标。",
                 comment: "watchOS 后台持续生成说明"
             ))
             .etFont(.footnote)
@@ -201,13 +189,6 @@ struct WatchBackgroundGenerationSettingsRows: View {
         Binding(
             get: { appConfig.backgroundGenerationKeepAliveEnabled },
             set: { keepAliveManager.setFeatureEnabled($0) }
-        )
-    }
-
-    private var speechBinding: Binding<Bool> {
-        Binding(
-            get: { appConfig.backgroundGenerationSpeechEnabled },
-            set: { speechCoordinator.setFeatureEnabled($0) }
         )
     }
 
@@ -286,29 +267,6 @@ struct WatchBackgroundGenerationSettingsRows: View {
             return .orange
         }
         return audioKeepAliveManager.isPlaying ? .green : .secondary
-    }
-
-    private var speechStatusText: String {
-        guard appConfig.backgroundGenerationSpeechEnabled else {
-            return NSLocalizedString("已关闭", comment: "watchOS 后台朗读关闭状态")
-        }
-        if isBackgroundReplySpeaking {
-            return NSLocalizedString("正在朗读回复", comment: "watchOS 后台朗读运行中状态")
-        }
-        if !speechCoordinator.activeSessionIDs.isEmpty {
-            return NSLocalizedString("等待完整句子", comment: "watchOS 后台朗读等待句子状态")
-        }
-        return NSLocalizedString("等待回复任务", comment: "watchOS 后台朗读等待任务状态")
-    }
-
-    private var speechStatusColor: Color {
-        isBackgroundReplySpeaking ? .green : .secondary
-    }
-
-    private var isBackgroundReplySpeaking: Bool {
-        guard ttsManager.isSpeaking,
-              let messageID = ttsManager.currentSpeakingMessageID else { return false }
-        return speechCoordinator.hasHandled(messageID: messageID)
     }
 
     private var authorizationStatusText: String {

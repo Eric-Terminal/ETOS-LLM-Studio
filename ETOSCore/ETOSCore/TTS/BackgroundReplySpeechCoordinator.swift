@@ -146,14 +146,14 @@ public final class BackgroundReplySpeechCoordinator: ObservableObject {
     }
 
     public func setFeatureEnabled(_ enabled: Bool) {
-        AppConfigStore.shared.backgroundGenerationSpeechEnabled = enabled
+        AppConfigStore.shared.streamingReplySpeechEnabled = enabled
         if !enabled {
             stopAllBackgroundSpeech()
         }
     }
 
     public func begin(sessionID: UUID) {
-        guard AppConfigStore.shared.backgroundGenerationSpeechEnabled else { return }
+        guard AppConfigStore.shared.streamingReplySpeechEnabled else { return }
         activeSessionIDs.insert(sessionID)
         stateBySessionID[sessionID] = SessionState()
     }
@@ -163,7 +163,7 @@ public final class BackgroundReplySpeechCoordinator: ObservableObject {
         messageID: UUID,
         content: String
     ) {
-        guard AppConfigStore.shared.backgroundGenerationSpeechEnabled else { return }
+        guard AppConfigStore.shared.streamingReplySpeechEnabled else { return }
         activeSessionIDs.insert(sessionID)
         updateState(
             sessionID: sessionID,
@@ -178,7 +178,7 @@ public final class BackgroundReplySpeechCoordinator: ObservableObject {
         messageID: UUID?,
         content: String?
     ) {
-        guard AppConfigStore.shared.backgroundGenerationSpeechEnabled,
+        guard AppConfigStore.shared.streamingReplySpeechEnabled,
               let messageID,
               let content,
               !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -265,8 +265,7 @@ public final class BackgroundReplySpeechCoordinator: ObservableObject {
                         self.ttsManager.speak(
                             chunk.text,
                             messageID: messageID,
-                            flush: shouldFlush,
-                            playbackModeOverride: .system
+                            flush: shouldFlush
                         )
                     }
                     self.stateBySessionID[sessionID] = latestState

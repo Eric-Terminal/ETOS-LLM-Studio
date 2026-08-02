@@ -55,12 +55,11 @@ struct BackgroundGenerationKeepAlivePolicyTests {
         #expect(!BackgroundGenerationKeepAlivePolicy.hasUsableAuthorization(.restricted))
     }
 
-    @Test("定位与朗读保活均默认关闭且不跨设备同步")
+    @Test("两种保活方式均默认关闭且不跨设备同步")
     func preferenceDefaultsToLocalOptIn() {
         let keys: [AppConfigKey] = [
             .backgroundGenerationKeepAliveEnabled,
-            .backgroundGenerationAudioKeepAliveEnabled,
-            .backgroundGenerationSpeechEnabled
+            .backgroundGenerationAudioKeepAliveEnabled
         ]
         #expect(keys.allSatisfy { $0.defaultValue == .bool(false) })
         #expect(keys.allSatisfy { !$0.participatesInSync })
