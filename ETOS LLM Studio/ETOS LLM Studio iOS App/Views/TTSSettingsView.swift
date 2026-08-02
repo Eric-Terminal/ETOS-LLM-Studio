@@ -5,7 +5,6 @@ struct TTSSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @ObservedObject private var backgroundSpeechCoordinator = BackgroundReplySpeechCoordinator.shared
     @State private var showCustomCloudParameters: Bool = false
 
     private static let customPickerTag = "__custom__"
@@ -136,8 +135,8 @@ struct TTSSettingsView: View {
 
             Section {
                 Toggle(
-                    NSLocalizedString("生成时自动朗读", comment: "生成过程中自动朗读开关"),
-                    isOn: streamingSpeechBinding
+                    NSLocalizedString("后台继续朗读", comment: "TTS 后台继续播放开关"),
+                    isOn: $appConfig.continueTTSPlaybackInBackground
                 )
                 Toggle(NSLocalizedString("回复完成后自动朗读", comment: ""), isOn: $settingsStore.autoPlayAfterAssistantResponse)
                 Toggle(NSLocalizedString("仅朗读引号内容", comment: ""), isOn: $settingsStore.onlyReadQuotedContent)
@@ -145,8 +144,8 @@ struct TTSSettingsView: View {
                 Text(NSLocalizedString("朗读行为", comment: ""))
             } footer: {
                 Text(NSLocalizedString(
-                    "生成回复时按完整句子自动朗读，并在切换到后台后继续；使用当前 TTS 模式，全部内容读完后自动停止。开启后不会在回复完成时重复朗读；云端模式可能产生额外费用。",
-                    comment: "生成时自动朗读说明"
+                    "开启后，正在播放的朗读会在切换到其他 App 后继续，全部内容读完后自动停止；此选项不会自动开始朗读。",
+                    comment: "TTS 后台继续播放说明"
                 ))
             }
 
@@ -217,13 +216,6 @@ struct TTSSettingsView: View {
 
     private var providerVoiceOptions: [String] {
         TTSProviderPresetCatalog.voiceOptions(for: settingsStore.providerKind)
-    }
-
-    private var streamingSpeechBinding: Binding<Bool> {
-        Binding(
-            get: { appConfig.streamingReplySpeechEnabled },
-            set: { backgroundSpeechCoordinator.setFeatureEnabled($0) }
-        )
     }
 
     private var providerResponseFormatOptions: [String] {

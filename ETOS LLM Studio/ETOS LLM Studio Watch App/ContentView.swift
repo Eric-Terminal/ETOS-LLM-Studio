@@ -282,12 +282,14 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
+                TTSManager.shared.setApplicationIsInBackground(false)
                 appLockManager.handleSceneDidBecomeActive()
                 if didEnterBackgroundSinceLastActivation {
                     ChatService.shared.openNewSessionIfRestoreWindowExpired()
                     didEnterBackgroundSinceLastActivation = false
                 }
             case .background:
+                TTSManager.shared.setApplicationIsInBackground(true)
                 appLockManager.handleSceneDidEnterBackground()
                 ChatService.recordAppDidEnterBackground()
                 didEnterBackgroundSinceLastActivation = true

@@ -364,9 +364,7 @@ extension ChatViewModel {
                 switch event.status {
                 case .started:
                     prepareBackgroundReplyNotificationContext(for: event.sessionID)
-                    BackgroundReplySpeechCoordinator.shared.begin(sessionID: event.sessionID)
                 case .finished:
-                    finishBackgroundReplySpeech(for: event.sessionID)
                     if event.sessionID == currentSession?.id {
                         notifyIfAssistantReplyFinishedInBackground(for: event.sessionID)
                         autoPlayLatestAssistantMessageIfNeeded()
@@ -375,10 +373,8 @@ extension ChatViewModel {
                     }
                 case .error, .cancelled:
                     pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
-                    BackgroundReplySpeechCoordinator.shared.cancel(sessionID: event.sessionID)
                 @unknown default:
                     pendingReplyNotificationContextBySessionID.removeValue(forKey: event.sessionID)
-                    BackgroundReplySpeechCoordinator.shared.cancel(sessionID: event.sessionID)
                 }
             }
             .store(in: &cancellables)

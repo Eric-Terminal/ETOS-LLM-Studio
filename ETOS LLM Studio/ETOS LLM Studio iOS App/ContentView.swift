@@ -67,6 +67,7 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    TTSManager.shared.setApplicationIsInBackground(false)
                     appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
                     if didEnterBackgroundSinceLastActivation {
@@ -75,6 +76,7 @@ struct ContentView: View {
                     }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
+                    TTSManager.shared.setApplicationIsInBackground(true)
                     appLockManager.handleSceneDidEnterBackground()
                     ChatService.recordAppDidEnterBackground()
                     didEnterBackgroundSinceLastActivation = true

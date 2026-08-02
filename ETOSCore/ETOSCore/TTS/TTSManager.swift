@@ -25,6 +25,7 @@ public final class TTSManager: NSObject, ObservableObject {
     let prefetchWindowSize: Int = 1
     var isPausedByUser = false
     var activeBackend: ActiveBackend = .none
+    private var isApplicationInBackground = false
 
 #if canImport(AVFoundation)
     var audioPlayer: AVAudioPlayer?
@@ -87,6 +88,14 @@ public final class TTSManager: NSObject, ObservableObject {
         flush: Bool = true,
         playbackModeOverride: TTSPlaybackMode? = nil
     ) {
+        guard TTSBackgroundPlaybackPolicy.allowsPlayback(
+            isApplicationInBackground: isApplicationInBackground,
+            continuePlaybackInBackground: AppConfigStore.shared.continueTTSPlaybackInBackground
+        ) else {
+            logger.info("应用位于后台且未允许后台继续朗读，忽略朗读请求。")
+            return
+        }
+
         logger.info("TTS 收到朗读请求：原始长度=\(text.count, privacy: .public)")
 #if DEBUG
         print("[TTS] 收到朗读请求，原始长度=\(text.count)")
@@ -203,6 +212,16 @@ public final class TTSManager: NSObject, ObservableObject {
         isSpeaking = false
         currentSpeakingMessageID = nil
         playbackState = .init(speed: settingsStore.playbackSpeed)
+    }
+
+    /// 根视图在场景进入或离开后台时调用，确保朗读行为与用户设置一致。
+    public func setApplicationIsInBackground(_ isInBackground: Bool) {
+        isApplicationInBackground = isInBackground
+        guard !TTSBackgroundPlaybackPolicy.allowsPlayback(
+            isApplicationInBackground: isInBackground,
+            continuePlaybackInBackground: AppConfigStore.shared.continueTTSPlaybackInBackground
+        ) else { return }
+        stop()
     }
 
     public func seekBy(seconds: TimeInterval) {
