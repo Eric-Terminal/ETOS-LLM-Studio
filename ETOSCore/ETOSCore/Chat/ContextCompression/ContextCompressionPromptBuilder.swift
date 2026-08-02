@@ -68,7 +68,8 @@ enum ContextCompressionPromptBuilder {
             toolCallsPlacement: message.toolCallsPlacement,
             audioFileName: message.audioFileName,
             imageFileNames: message.imageFileNames,
-            fileFileNames: message.fileFileNames
+            fileFileNames: message.fileFileNames,
+            videoAnalysisResults: message.videoAnalysisResults
         )
     }
 

@@ -203,6 +203,12 @@ public final class AppConfigStore: ObservableObject {
     @Published public var videoFrameExtractionMode: String { didSet { write(.videoFrameExtractionMode, videoFrameExtractionMode) } }
     @Published public var videoFrameExtractionFPS: Double { didSet { write(.videoFrameExtractionFPS, videoFrameExtractionFPS) } }
     @Published public var videoFrameMaximumCount: Int { didSet { write(.videoFrameMaximumCount, videoFrameMaximumCount) } }
+    @Published public var enableVideoAnalysisForNonNativeModels: Bool {
+        didSet { write(.enableVideoAnalysisForNonNativeModels, enableVideoAnalysisForNonNativeModels) }
+    }
+    @Published public var videoAnalysisModelIdentifier: String {
+        didSet { write(.videoAnalysisModelIdentifier, videoAnalysisModelIdentifier) }
+    }
 
     @Published public var enableMemory: Bool { didSet { write(.enableMemory, enableMemory) } }
     @Published public var enableMemoryWrite: Bool { didSet { write(.enableMemoryWrite, enableMemoryWrite) } }
@@ -565,6 +571,8 @@ public final class AppConfigStore: ObservableObject {
         ).rawValue
         videoFrameExtractionFPS = Self.realValue(.videoFrameExtractionFPS, userDefaults: userDefaults)
         videoFrameMaximumCount = Self.integerValue(.videoFrameMaximumCount, userDefaults: userDefaults)
+        enableVideoAnalysisForNonNativeModels = Self.boolValue(.enableVideoAnalysisForNonNativeModels, userDefaults: userDefaults)
+        videoAnalysisModelIdentifier = Self.textValue(.videoAnalysisModelIdentifier, userDefaults: userDefaults)
 
         enableMemory = Self.boolValue(.enableMemory, userDefaults: userDefaults)
         enableMemoryWrite = Self.boolValue(.enableMemoryWrite, userDefaults: userDefaults)
@@ -1061,6 +1069,8 @@ public final class AppConfigStore: ObservableObject {
         case .videoFrameExtractionMode: return .text(videoFrameExtractionMode)
         case .videoFrameExtractionFPS: return .real(videoFrameExtractionFPS)
         case .videoFrameMaximumCount: return .integer(videoFrameMaximumCount)
+        case .enableVideoAnalysisForNonNativeModels: return .bool(enableVideoAnalysisForNonNativeModels)
+        case .videoAnalysisModelIdentifier: return .text(videoAnalysisModelIdentifier)
 
         case .enableMemory: return .bool(enableMemory)
         case .enableMemoryWrite: return .bool(enableMemoryWrite)
@@ -1229,6 +1239,7 @@ public final class AppConfigStore: ObservableObject {
         case .performanceTelemetryEnabled: performanceTelemetryEnabled = value
         case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
         case .enableAutoSessionNaming: enableAutoSessionNaming = value
+        case .enableVideoAnalysisForNonNativeModels: enableVideoAnalysisForNonNativeModels = value
         case .enableMemory: enableMemory = value
         case .enableMemoryWrite: enableMemoryWrite = value
         case .temporaryChatMemoryEnabled: temporaryChatMemoryEnabled = value
@@ -1361,6 +1372,7 @@ public final class AppConfigStore: ObservableObject {
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
             videoFrameExtractionMode = VideoFrameExtractionMode.normalized(value).rawValue
+        case .videoAnalysisModelIdentifier: videoAnalysisModelIdentifier = value
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
         case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value

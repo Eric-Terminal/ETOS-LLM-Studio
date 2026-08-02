@@ -120,6 +120,7 @@ struct ModelAdvancedSettingsView: View {
             syncPromptDrafts()
             syncContextCompressionReminderThresholdDraft()
             normalizeSamplingParametersIfNeeded()
+            syncVideoAnalysisModelSelection()
         }
         .onChange(of: focusedField) { oldValue, newValue in
             if oldValue == .contextCompressionReminderThreshold,
@@ -137,6 +138,14 @@ struct ModelAdvancedSettingsView: View {
                 commitContextCompressionReminderThresholdDraft()
                 focusedField = nil
             }
+        }
+        .onChange(of: appConfig.enableVideoAnalysisForNonNativeModels) { _, isEnabled in
+            if isEnabled {
+                syncVideoAnalysisModelSelection()
+            }
+        }
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
+            syncVideoAnalysisModelSelection()
         }
         .onChange(of: selectedGlobalSystemPromptEntryID) { _, _ in
             syncSelectedGlobalPromptDraft()
@@ -401,6 +410,29 @@ struct ModelAdvancedSettingsView: View {
             }
 
             Section {
+                Toggle(
+                    NSLocalizedString("非原生视频使用解析模型", comment: "Use video analysis model toggle"),
+                    isOn: $appConfig.enableVideoAnalysisForNonNativeModels
+                )
+
+                if appConfig.enableVideoAnalysisForNonNativeModels {
+                    if viewModel.videoAnalysisModelOptions.isEmpty {
+                        Text(NSLocalizedString("暂无支持原生视频输入的可用模型。", comment: "No video analysis model available"))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker(
+                            NSLocalizedString("视频解析模型", comment: "Video analysis model picker"),
+                            selection: videoAnalysisModelIdentifierBinding
+                        ) {
+                            ForEach(viewModel.videoAnalysisModelOptions) { model in
+                                Text("\(model.model.displayName) | \(model.provider.name)")
+                                    .tag(model.id)
+                            }
+                        }
+                    }
+                }
+
                 Picker(
                     NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
                     selection: videoFrameExtractionModeBinding
@@ -435,7 +467,7 @@ struct ModelAdvancedSettingsView: View {
                 Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
             } footer: {
                 Text(NSLocalizedString(
-                    "未启用 Gemini 模型的视频输入时，应用会把原视频转换为带时间戳的画面；切换模型后也会按这里的设置重新处理。",
+                    "开启后，非原生视频会先由所选模型解析并保存文字，再交给当前对话模型；关闭时继续使用抽帧方式。原生视频模型仍直接接收视频。",
                     comment: "Video sending settings explanation"
                 ))
             }
@@ -611,6 +643,32 @@ struct ModelAdvancedSettingsView: View {
             get: { min(max(appConfig.videoFrameMaximumCount, 4), 120) },
             set: { appConfig.videoFrameMaximumCount = min(max($0, 4), 120) }
         )
+    }
+
+    private var videoAnalysisModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { appConfig.videoAnalysisModelIdentifier },
+            set: { setVideoAnalysisModelIdentifier($0) }
+        )
+    }
+
+    private func syncVideoAnalysisModelSelection() {
+        let options = viewModel.videoAnalysisModelOptions
+        guard !options.isEmpty else {
+            if !appConfig.videoAnalysisModelIdentifier.isEmpty {
+                setVideoAnalysisModelIdentifier("")
+            }
+            return
+        }
+        guard !options.contains(where: { $0.id == appConfig.videoAnalysisModelIdentifier }) else {
+            return
+        }
+        setVideoAnalysisModelIdentifier(options[0].id)
+    }
+
+    private func setVideoAnalysisModelIdentifier(_ identifier: String) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: .videoAnalysisModelIdentifier)
+        appConfig.videoAnalysisModelIdentifier = identifier
     }
 
     private var promptInjectionIntroSummary: String {

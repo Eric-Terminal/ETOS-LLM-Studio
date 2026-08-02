@@ -31,6 +31,7 @@ struct MessageActionSheet: View {
     let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
     let onDownloadImages: ([String]) -> Void
+    let onRetryVideoAnalysis: (ChatMessage, String) async throws -> VideoAnalysisResult
     let onAskAI: (String, ChatMessage) -> Void
     let onRewriteSelection: (MessageRewriteSelectionTarget, ChatMessage) -> Void
     let onSelectMultiple: (ChatMessage) -> Void
@@ -41,13 +42,22 @@ struct MessageActionSheet: View {
     @State private var includeSystemPrompt = true
     @State private var jumpInput: String = ""
     @State private var jumpError: String?
+    @State private var videoAnalysisOverrides: [String: VideoAnalysisResult] = [:]
+    @State private var retryingVideoFileNames: Set<String> = []
+    @State private var videoAnalysisErrorMessage: String?
 
     private var message: ChatMessage {
         payload.message
     }
 
     private var hasAttachments: Bool {
-        message.audioFileName != nil || (message.imageFileNames?.isEmpty == false)
+        message.audioFileName != nil
+            || (message.imageFileNames?.isEmpty == false)
+            || (message.fileFileNames?.isEmpty == false)
+    }
+
+    private var videoFileNames: [String] {
+        (message.fileFileNames ?? []).filter { VideoAttachmentSupport.isVideo(fileName: $0) }
     }
 
     private var messageIndex: Int? {
@@ -192,6 +202,7 @@ struct MessageActionSheet: View {
                     }
                 }
 
+                videoAnalysisSections
                 messageSupplementarySections
                 exportSection
                 messageInfoSection
@@ -206,6 +217,69 @@ struct MessageActionSheet: View {
                         dismiss()
                     }
                 }
+            }
+        }
+        .alert(NSLocalizedString("视频解析失败", comment: "Video analysis failure alert title"), isPresented: Binding(
+            get: { videoAnalysisErrorMessage != nil },
+            set: { if !$0 { videoAnalysisErrorMessage = nil } }
+        )) {
+            Button(NSLocalizedString("确定", comment: ""), role: .cancel) {
+                videoAnalysisErrorMessage = nil
+            }
+        } message: {
+            Text(videoAnalysisErrorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var videoAnalysisSections: some View {
+        ForEach(videoFileNames, id: \.self) { fileName in
+            Section {
+                if let result = resolvedVideoAnalysis(for: fileName) {
+                    NavigationLink {
+                        VideoAnalysisDetailView(result: result)
+                    } label: {
+                        Label(NSLocalizedString("查看视频解析", comment: "View video analysis action"), systemImage: "doc.text.magnifyingglass")
+                    }
+                } else {
+                    Label(NSLocalizedString("暂无视频解析结果", comment: "No video analysis result"), systemImage: "doc.text")
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    retryVideoAnalysis(fileName: fileName)
+                } label: {
+                    if retryingVideoFileNames.contains(fileName) {
+                        HStack {
+                            ProgressView()
+                            Text(NSLocalizedString("正在重新解析视频…", comment: "Retrying video analysis progress"))
+                        }
+                    } else {
+                        Label(NSLocalizedString("重新解析视频", comment: "Retry video analysis action"), systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(retryingVideoFileNames.contains(fileName))
+            } header: {
+                Text(fileName)
+            } footer: {
+                Text(NSLocalizedString("重新解析会替换已保存的结果，之后发送和压缩上下文都会使用新内容。", comment: "Video analysis retry footer"))
+            }
+        }
+    }
+
+    private func resolvedVideoAnalysis(for fileName: String) -> VideoAnalysisResult? {
+        videoAnalysisOverrides[fileName] ?? message.videoAnalysisResult(for: fileName)
+    }
+
+    private func retryVideoAnalysis(fileName: String) {
+        retryingVideoFileNames.insert(fileName)
+        Task { @MainActor in
+            defer { retryingVideoFileNames.remove(fileName) }
+            do {
+                videoAnalysisOverrides[fileName] = try await onRetryVideoAnalysis(message, fileName)
+            } catch is CancellationError {
+            } catch {
+                videoAnalysisErrorMessage = error.localizedDescription
             }
         }
     }
@@ -497,6 +571,29 @@ struct MessageActionSheet: View {
         case .png:
             return "photo"
         }
+    }
+}
+
+struct VideoAnalysisDetailView: View {
+    let result: VideoAnalysisResult
+
+    var body: some View {
+        List {
+            Section(NSLocalizedString("视频", comment: "Video analysis detail video section")) {
+                LabeledContent(NSLocalizedString("文件名", comment: ""), value: result.fileName)
+                LabeledContent(NSLocalizedString("解析模型", comment: "Video analysis model detail"), value: result.modelDisplayName)
+                LabeledContent(NSLocalizedString("解析时间", comment: "Video analysis date detail")) {
+                    Text(result.generatedAt.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
+
+            Section(NSLocalizedString("解析文字", comment: "Video analysis text section")) {
+                Text(result.content)
+                    .textSelection(.enabled)
+            }
+        }
+        .navigationTitle(NSLocalizedString("视频解析", comment: "Video analysis detail title"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

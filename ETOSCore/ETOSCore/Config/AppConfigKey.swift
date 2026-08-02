@@ -190,6 +190,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case videoFrameExtractionMode = "video.frameExtraction.mode"
     case videoFrameExtractionFPS = "video.frameExtraction.fps"
     case videoFrameMaximumCount = "video.frameExtraction.maximumCount"
+    case enableVideoAnalysisForNonNativeModels = "video.analysis.enabled"
+    case videoAnalysisModelIdentifier = "video.analysis.modelIdentifier"
 
     case enableMemory = "enableMemory"
     case enableMemoryWrite = "enableMemoryWrite"
@@ -424,6 +426,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(1.0)
         case .videoFrameMaximumCount:
             return .integer(60)
+        case .enableVideoAnalysisForNonNativeModels:
+            return .bool(false)
         case .lazyLoadMessageCount:
             #if os(watchOS)
             return .integer(3)
@@ -461,6 +465,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .dailyPulseModelIdentifier,
              .conversationSummaryModelIdentifier,
              .reasoningSummaryModelIdentifier,
+             .videoAnalysisModelIdentifier,
              .imageGenerationModelIdentifier:
             return .text("")
         case .ocrModelIdentifier:

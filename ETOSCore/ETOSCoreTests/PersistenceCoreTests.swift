@@ -276,6 +276,42 @@ struct PersistenceCoreTests {
         cleanup(sessions: [session])
     }
 
+    @Test("GRDB saveMessages 会保留视频解析结果")
+    func testGRDBSaveAndLoadVideoAnalysisResults() throws {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "视频解析会话", isTemporary: false)
+        let generatedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        let result = VideoAnalysisResult(
+            fileName: "sample.mp4",
+            content: "00:00 出现标题，00:03 人物挥手。",
+            modelIdentifier: "provider-gemini-video",
+            modelDisplayName: "Gemini Video | Provider",
+            generatedAt: generatedAt
+        )
+        let message = ChatMessage(
+            role: .user,
+            content: "这个视频讲了什么？",
+            fileFileNames: ["sample.mp4"],
+            videoAnalysisResults: [result]
+        )
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages([message], for: session.id)
+
+        let loadedMessage = try #require(Persistence.loadMessages(for: session.id).first)
+        #expect(loadedMessage.videoAnalysisResults == [result])
+        #expect(loadedMessage.videoAnalysisResult(for: "sample.mp4") == result)
+
+        cleanup(sessions: [session])
+    }
+
     @Test("GRDB saveMessages 仅增量更新变更行并支持位置变化")
     func testGRDBSaveMessagesUsesIncrementalWrites() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests

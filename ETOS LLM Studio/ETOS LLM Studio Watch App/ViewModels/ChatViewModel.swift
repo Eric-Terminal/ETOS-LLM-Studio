@@ -714,6 +714,14 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    func retryVideoAnalysis(_ message: ChatMessage, fileName: String) async throws -> VideoAnalysisResult {
+        try await chatService.retryVideoAnalysis(
+            messageID: message.id,
+            fileName: fileName,
+            sessionID: currentSession?.id
+        )
+    }
+
     func rewriteMessage(
         _ message: ChatMessage,
         instruction: String,

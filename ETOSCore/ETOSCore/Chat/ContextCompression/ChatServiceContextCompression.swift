@@ -213,6 +213,35 @@ extension ChatService {
         }
 
         for fileName in message.fileFileNames ?? [] {
+            if VideoAttachmentSupport.isVideo(fileName: fileName) {
+                let content = try await cachedContextCompressionAttachment(
+                    identifier: fileName,
+                    kind: .video,
+                    messageID: message.id,
+                    cache: &cache
+                ) {
+                    if let saved = message.videoAnalysisResult(for: fileName) {
+                        return saved.content
+                    }
+                    let enabled = await MainActor.run {
+                        AppConfigStore.shared.enableVideoAnalysisForNonNativeModels
+                    }
+                    guard enabled else {
+                        throw ContextCompressionError.unsupportedAttachments(
+                            messageID: message.id,
+                            identifiers: [fileName]
+                        )
+                    }
+                    return try await self.retryVideoAnalysis(
+                        messageID: message.id,
+                        fileName: fileName,
+                        sessionID: sourceSessionID
+                    ).content
+                }
+                contents.append(content)
+                continue
+            }
+
             let content = try await cachedContextCompressionAttachment(
                 identifier: fileName,
                 kind: .file,

@@ -285,43 +285,66 @@ struct ModelAdvancedSettingsView: View {
                 }
 
                 Section {
-                Picker(
-                    NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
-                    selection: videoFrameExtractionModeBinding
-                ) {
-                    ForEach(VideoFrameExtractionMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
+                    Toggle(
+                        NSLocalizedString("非原生视频使用解析模型", comment: "Use video analysis model toggle"),
+                        isOn: $appConfig.enableVideoAnalysisForNonNativeModels
+                    )
+
+                    if appConfig.enableVideoAnalysisForNonNativeModels {
+                        if viewModel.videoAnalysisModelOptions.isEmpty {
+                            Text(NSLocalizedString("暂无支持原生视频输入的可用模型。", comment: "No video analysis model available"))
+                                .etFont(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker(
+                                NSLocalizedString("视频解析模型", comment: "Video analysis model picker"),
+                                selection: videoAnalysisModelIdentifierBinding
+                            ) {
+                                ForEach(viewModel.videoAnalysisModelOptions) { model in
+                                    Text("\(model.model.displayName) | \(model.provider.name)")
+                                        .tag(model.id)
+                                }
+                            }
+                        }
                     }
-                }
 
-                if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
-                    samplingParameterField(
-                        title: NSLocalizedString("抽帧 FPS", comment: "Video extraction FPS"),
-                        value: videoFrameExtractionFPSBinding
-                    )
-                }
+                    Picker(
+                        NSLocalizedString("视频处理方式", comment: "Video processing mode setting"),
+                        selection: videoFrameExtractionModeBinding
+                    ) {
+                        ForEach(VideoFrameExtractionMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
 
-                HStack {
-                    Text(NSLocalizedString("最多画面数", comment: "Maximum extracted video frames"))
-                    Spacer()
-                    TextField(
-                        NSLocalizedString("数量", comment: "Maximum extracted video frames field placeholder"),
-                        value: videoFrameMaximumCountBinding,
-                        formatter: numberFormatter
-                    )
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .frame(width: 64)
-                    .accessibilityLabel(Text(NSLocalizedString(
-                        "最多画面数",
-                        comment: "Maximum extracted video frames"
-                    )))
-                }
+                    if videoFrameExtractionModeBinding.wrappedValue == .fixedFPS {
+                        samplingParameterField(
+                            title: NSLocalizedString("抽帧 FPS", comment: "Video extraction FPS"),
+                            value: videoFrameExtractionFPSBinding
+                        )
+                    }
+
+                    HStack {
+                        Text(NSLocalizedString("最多画面数", comment: "Maximum extracted video frames"))
+                        Spacer()
+                        TextField(
+                            NSLocalizedString("数量", comment: "Maximum extracted video frames field placeholder"),
+                            value: videoFrameMaximumCountBinding,
+                            formatter: numberFormatter
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .frame(width: 64)
+                        .accessibilityLabel(Text(NSLocalizedString(
+                            "最多画面数",
+                            comment: "Maximum extracted video frames"
+                        )))
+                    }
                 } header: {
                     Text(NSLocalizedString("视频发送", comment: "Video sending settings section"))
                 } footer: {
                     Text(NSLocalizedString(
-                        "Gemini 原生视频关闭或切换到其他模型后，将按这里的设置重新抽帧。",
+                        "开启后，非原生视频会先解析并保存文字，再交给当前对话模型；关闭时继续使用抽帧方式。原生视频模型仍直接接收视频。",
                         comment: "Watch video sending settings explanation"
                     ))
                 }
@@ -396,6 +419,7 @@ struct ModelAdvancedSettingsView: View {
         .onAppear {
             syncContextCompressionReminderThresholdDraft()
             normalizeSamplingParametersIfNeeded()
+            syncVideoAnalysisModelSelection()
         }
         .onChange(of: appConfig.contextCompressionReminderTokenThreshold) { _, _ in
             if !isEditingContextCompressionReminderThreshold {
@@ -406,6 +430,14 @@ struct ModelAdvancedSettingsView: View {
             if !isEnabled {
                 commitContextCompressionReminderThresholdDraft()
             }
+        }
+        .onChange(of: appConfig.enableVideoAnalysisForNonNativeModels) { _, isEnabled in
+            if isEnabled {
+                syncVideoAnalysisModelSelection()
+            }
+        }
+        .onChange(of: viewModel.activatedModelListVersion) { _, _ in
+            syncVideoAnalysisModelSelection()
         }
         .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
             if newValue < 1 {
@@ -550,6 +582,32 @@ struct ModelAdvancedSettingsView: View {
             get: { min(max(appConfig.videoFrameMaximumCount, 4), 120) },
             set: { appConfig.videoFrameMaximumCount = min(max($0, 4), 120) }
         )
+    }
+
+    private var videoAnalysisModelIdentifierBinding: Binding<String> {
+        Binding(
+            get: { appConfig.videoAnalysisModelIdentifier },
+            set: { setVideoAnalysisModelIdentifier($0) }
+        )
+    }
+
+    private func syncVideoAnalysisModelSelection() {
+        let options = viewModel.videoAnalysisModelOptions
+        guard !options.isEmpty else {
+            if !appConfig.videoAnalysisModelIdentifier.isEmpty {
+                setVideoAnalysisModelIdentifier("")
+            }
+            return
+        }
+        guard !options.contains(where: { $0.id == appConfig.videoAnalysisModelIdentifier }) else {
+            return
+        }
+        setVideoAnalysisModelIdentifier(options[0].id)
+    }
+
+    private func setVideoAnalysisModelIdentifier(_ identifier: String) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: .videoAnalysisModelIdentifier)
+        appConfig.videoAnalysisModelIdentifier = identifier
     }
 
     private var settingsIntroSummary: String {

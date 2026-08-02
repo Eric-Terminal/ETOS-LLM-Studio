@@ -190,6 +190,7 @@ public struct ContextCompressionProgress: Sendable, Equatable {
 public enum ContextCompressionAttachmentKind: String, Codable, Hashable, Sendable {
     case audio
     case image
+    case video
     case file
 }
 

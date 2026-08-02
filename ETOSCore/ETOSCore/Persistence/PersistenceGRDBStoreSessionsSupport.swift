@@ -343,7 +343,7 @@ extension PersistenceGRDBStore {
             SELECT id, session_id, role, requested_at, content, content_versions_json,
                    current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                    token_usage_json, model_reference_json, cost_estimate_json,
-                   audio_file_name, image_file_names_json, file_file_names_json,
+                   audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
                    full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                    response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                    position, created_at
@@ -373,6 +373,7 @@ extension PersistenceGRDBStore {
                 audioFileName: row["audio_file_name"],
                 imageFileNamesJSON: row["image_file_names_json"],
                 fileFileNamesJSON: row["file_file_names_json"],
+                videoAnalysisResultsJSON: row["video_analysis_results_json"],
                 fullErrorContent: row["full_error_content"],
                 sentSystemPromptSnapshot: row["sent_system_prompt_snapshot"],
                 responseMetricsJSON: row["response_metrics_json"],
@@ -426,6 +427,7 @@ extension PersistenceGRDBStore {
             audioFileName: message.audioFileName,
             imageFileNamesJSON: encodeJSON(message.imageFileNames),
             fileFileNamesJSON: encodeJSON(message.fileFileNames),
+            videoAnalysisResultsJSON: encodeJSON(message.videoAnalysisResults),
             fullErrorContent: message.fullErrorContent,
             sentSystemPromptSnapshot: message.sentSystemPromptSnapshot,
             responseMetricsJSON: encodeJSON(message.responseMetrics),
@@ -448,11 +450,11 @@ extension PersistenceGRDBStore {
                 id, session_id, role, requested_at, content, content_versions_json,
                 current_version_index, reasoning_content, tool_calls_json, tool_calls_placement,
                 token_usage_json, model_reference_json, cost_estimate_json,
-                audio_file_name, image_file_names_json, file_file_names_json,
+                audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
                 full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                 response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                 position, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 session_id = excluded.session_id,
                 role = excluded.role,
@@ -469,6 +471,7 @@ extension PersistenceGRDBStore {
                 audio_file_name = excluded.audio_file_name,
                 image_file_names_json = excluded.image_file_names_json,
                 file_file_names_json = excluded.file_file_names_json,
+                video_analysis_results_json = excluded.video_analysis_results_json,
                 full_error_content = excluded.full_error_content,
                 sent_system_prompt_snapshot = excluded.sent_system_prompt_snapshot,
                 response_metrics_json = excluded.response_metrics_json,
@@ -496,6 +499,7 @@ extension PersistenceGRDBStore {
                 record.audioFileName,
                 record.imageFileNamesJSON,
                 record.fileFileNamesJSON,
+                record.videoAnalysisResultsJSON,
                 record.fullErrorContent,
                 record.sentSystemPromptSnapshot,
                 record.responseMetricsJSON,

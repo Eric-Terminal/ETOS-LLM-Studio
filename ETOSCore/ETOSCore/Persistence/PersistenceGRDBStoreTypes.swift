@@ -78,6 +78,7 @@ struct PersistedMessageRecord: Equatable {
     let audioFileName: String?
     let imageFileNamesJSON: Data?
     let fileFileNamesJSON: Data?
+    let videoAnalysisResultsJSON: Data?
     let fullErrorContent: String?
     let sentSystemPromptSnapshot: String?
     let responseMetricsJSON: Data?

@@ -136,6 +136,7 @@ final class PersistenceGRDBStore {
                     audio_file_name TEXT,
                     image_file_names_json BLOB,
                     file_file_names_json BLOB,
+                    video_analysis_results_json BLOB,
                     full_error_content TEXT,
                     sent_system_prompt_snapshot TEXT,
                     response_metrics_json BLOB,
@@ -476,6 +477,17 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v9_video_analysis_results") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(messages)")
+            let hasColumn = columns.contains { row in
+                let name: String = row["name"]
+                return name == "video_analysis_results_json"
+            }
+            if !hasColumn {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN video_analysis_results_json BLOB")
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -612,6 +624,7 @@ final class PersistenceGRDBStore {
                 audio_file_name TEXT,
                 image_file_names_json BLOB,
                 file_file_names_json BLOB,
+                video_analysis_results_json BLOB,
                 full_error_content TEXT,
                 sent_system_prompt_snapshot TEXT,
                 response_metrics_json BLOB,

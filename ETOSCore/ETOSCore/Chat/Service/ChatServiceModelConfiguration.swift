@@ -59,6 +59,18 @@ extension ChatService {
         activatedChatModels.filter { $0.model.supportsVisionInput }
     }
 
+    public var activatedVideoAnalysisModels: [RunnableModel] {
+        activatedChatModels.filter(VideoAttachmentSupport.usesNativeInput)
+    }
+
+    func resolveSelectedVideoAnalysisModel() -> RunnableModel? {
+        let identifier = Persistence.readAppConfigText(
+            key: AppConfigKey.videoAnalysisModelIdentifier.rawValue
+        ) ?? ""
+        guard !identifier.isEmpty else { return nil }
+        return activatedVideoAnalysisModels.first { $0.id == identifier }
+    }
+
     func resolveSelectedSpeechModel() -> RunnableModel? {
         let storedIdentifier = Persistence.readAppConfigText(key: AppConfigKey.speechModelIdentifier.rawValue) ?? ""
         if !storedIdentifier.isEmpty,

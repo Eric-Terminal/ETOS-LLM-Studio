@@ -62,6 +62,17 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
+    private var videoAnalysisModelBinding: Binding<RunnableModel?> {
+        Binding(
+            get: {
+                viewModel.videoAnalysisModelOptions.first {
+                    $0.id == appConfig.videoAnalysisModelIdentifier
+                }
+            },
+            set: { setVideoAnalysisModelIdentifier($0?.id ?? "") }
+        )
+    }
+
     private var imageGenerationModelBinding: Binding<RunnableModel?> {
         Binding(
             get: { viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) },
@@ -114,6 +125,14 @@ struct SpecializedModelSelectorView: View {
             )
 
             modelSelectionSection(
+                title: NSLocalizedString("视频解析模型", comment: "Video analysis model specialized selector title"),
+                options: viewModel.videoAnalysisModelOptions,
+                selection: videoAnalysisModelBinding,
+                allowEmptySelection: false,
+                footer: NSLocalizedString("用于先理解非原生视频并把解析文字交给当前对话模型。", comment: "Video analysis model specialized selector footer")
+            )
+
+            modelSelectionSection(
                 title: NSLocalizedString("OCR 模型", comment: "OCR model specialized selector title"),
                 options: viewModel.ocrModelOptions,
                 selection: ocrModelBinding,
@@ -129,8 +148,12 @@ struct SpecializedModelSelectorView: View {
             )
         }
         .navigationTitle(NSLocalizedString("专用模型", comment: ""))
-        .onAppear(perform: syncImageGenerationSelection)
+        .onAppear {
+            syncVideoAnalysisSelection()
+            syncImageGenerationSelection()
+        }
         .onChange(of: viewModel.activatedModelListVersion) { _, _ in
+            syncVideoAnalysisSelection()
             syncImageGenerationSelection()
         }
     }
@@ -190,6 +213,23 @@ struct SpecializedModelSelectorView: View {
         if viewModel.imageGenerationModel(with: appConfig.imageGenerationModelIdentifier) == nil {
             setImageGenerationModelIdentifier("")
         }
+    }
+
+    private func syncVideoAnalysisSelection() {
+        let options = viewModel.videoAnalysisModelOptions
+        guard !options.isEmpty else {
+            setVideoAnalysisModelIdentifier("")
+            return
+        }
+        guard !options.contains(where: { $0.id == appConfig.videoAnalysisModelIdentifier }) else {
+            return
+        }
+        setVideoAnalysisModelIdentifier(options[0].id)
+    }
+
+    private func setVideoAnalysisModelIdentifier(_ identifier: String) {
+        AppConfigStore.persistSynchronously(.text(identifier), for: .videoAnalysisModelIdentifier)
+        appConfig.videoAnalysisModelIdentifier = identifier
     }
 
     private func setImageGenerationModelIdentifier(_ identifier: String) {

@@ -116,6 +116,9 @@ extension ChatView {
                             }
                         }
                     },
+                    onRetryVideoAnalysis: { message, fileName in
+                        try await viewModel.retryVideoAnalysis(message, fileName: fileName)
+                    },
                     onAskAI: { selectedText, message in
                         dismissMessageActionSheet {
                             Task { @MainActor in

@@ -674,6 +674,9 @@ extension ContentView {
                 onRetry: { message in
                     viewModel.retryMessage(message)
                 },
+                onRetryVideoAnalysis: { message, fileName in
+                    try await viewModel.retryVideoAnalysis(message, fileName: fileName)
+                },
                 onSpeak: { message in
                     viewModel.speakMessage(message)
                 },

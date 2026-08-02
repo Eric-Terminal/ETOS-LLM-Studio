@@ -37,6 +37,10 @@ extension ChatViewModel {
         return options
     }
 
+    var videoAnalysisModelOptions: [RunnableModel] {
+        chatService.activatedVideoAnalysisModels
+    }
+
     private func persistSpecializedModelIdentifier(_ identifier: String, for key: AppConfigKey) {
         AppConfigStore.persistSynchronously(.text(identifier), for: key)
     }

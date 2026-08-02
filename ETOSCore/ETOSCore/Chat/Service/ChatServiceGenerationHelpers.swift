@@ -413,12 +413,27 @@ extension ChatService {
             throw DetachedCompletionError.unsupportedAdapter
         }
 
+        var preparedFileAttachments = fileAttachments
+        var selectedGeminiAPIKey: String?
+        if let geminiAdapter = adapter as? GeminiAdapter {
+            let preparation = try await prepareGeminiNativeVideoAttachments(
+                fileAttachments,
+                provider: targetModel.provider,
+                adapter: geminiAdapter
+            )
+            preparedFileAttachments = preparation.attachments
+            selectedGeminiAPIKey = preparation.apiKey
+        }
+
         let payload: [String: Any] = [
             "temperature": temperature,
             "stream": false
         ]
         var commonPayload = payload
         commonPayload[ReasoningContentEchoPayload.key] = await openAIReasoningContentEchoModeControlValue()
+        if let selectedGeminiAPIKey {
+            commonPayload[GeminiAdapter.apiKeyControlKey] = selectedGeminiAPIKey
+        }
         guard let request = adapter.buildChatRequest(
             for: targetModel,
             commonPayload: commonPayload,
@@ -426,7 +441,7 @@ extension ChatService {
             tools: nil,
             audioAttachments: audioAttachments,
             imageAttachments: imageAttachments,
-            fileAttachments: fileAttachments
+            fileAttachments: preparedFileAttachments
         ) else {
             throw DetachedCompletionError.buildRequestFailed
         }

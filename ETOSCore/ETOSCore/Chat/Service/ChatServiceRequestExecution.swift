@@ -401,7 +401,8 @@ extension ChatService {
             messages: messagesToSend,
             imageAttachments: imageAttachments,
             fileAttachments: loadedFileAttachments,
-            targetModel: runnableModel
+            targetModel: runnableModel,
+            sessionID: currentSessionID
         )
         if let errorMessage = videoPreprocessing.errorMessage {
             addErrorMessage(errorMessage, sessionID: currentSessionID)
@@ -780,7 +781,8 @@ extension ChatService {
         messages: [ChatMessage],
         imageAttachments: [UUID: [ImageAttachment]],
         fileAttachments: [UUID: [FileAttachment]],
-        targetModel: RunnableModel
+        targetModel: RunnableModel,
+        sessionID: UUID
     ) async -> VideoAttachmentPreprocessingResult {
         guard !fileAttachments.isEmpty else {
             return VideoAttachmentPreprocessingResult(
@@ -821,6 +823,92 @@ extension ChatService {
                 messages: messages,
                 imageAttachments: imageAttachments,
                 nativeVideoAttachments: videoAttachments,
+                documentAttachments: documentAttachments,
+                errorMessage: nil
+            )
+        }
+
+        let usesVideoAnalysis = await MainActor.run {
+            AppConfigStore.shared.enableVideoAnalysisForNonNativeModels
+        }
+        if usesVideoAnalysis {
+            guard let analysisModel = resolveSelectedVideoAnalysisModel() else {
+                return VideoAttachmentPreprocessingResult(
+                    messages: messages,
+                    imageAttachments: imageAttachments,
+                    nativeVideoAttachments: [:],
+                    documentAttachments: documentAttachments,
+                    errorMessage: VideoAnalysisError.modelNotConfigured.localizedDescription
+                )
+            }
+
+            var updatedMessages = messages
+            let orderedMessageIDs = updatedMessages.map(\.id)
+            let sortedPairs = videoAttachments.sorted { lhs, rhs in
+                let lhsIndex = orderedMessageIDs.firstIndex(of: lhs.key) ?? Int.max
+                let rhsIndex = orderedMessageIDs.firstIndex(of: rhs.key) ?? Int.max
+                return lhsIndex < rhsIndex
+            }
+
+            for (messageID, attachments) in sortedPairs {
+                guard let messageIndex = updatedMessages.firstIndex(where: { $0.id == messageID }) else {
+                    continue
+                }
+                var analysisResults: [VideoAnalysisResult] = []
+                for attachment in attachments {
+                    do {
+                        let result: VideoAnalysisResult
+                        if let cached = updatedMessages[messageIndex].videoAnalysisResult(
+                            for: attachment.fileName
+                        ) {
+                            result = cached
+                            logger.info("复用已保存的视频解析结果: \(attachment.fileName)")
+                        } else {
+                            result = try await analyzeVideoAttachment(
+                                attachment,
+                                using: analysisModel,
+                                sessionID: sessionID
+                            )
+                            updatedMessages[messageIndex].replaceVideoAnalysisResult(result)
+                            persistVideoAnalysisResult(
+                                result,
+                                messageID: messageID,
+                                sessionID: sessionID
+                            )
+                        }
+                        analysisResults.append(result)
+                    } catch {
+                        let errorMessage = String(
+                            format: NSLocalizedString("视频“%@”解析失败：%@", comment: "Video analysis failed"),
+                            attachment.fileName,
+                            error.localizedDescription
+                        )
+                        return VideoAttachmentPreprocessingResult(
+                            messages: messages,
+                            imageAttachments: imageAttachments,
+                            nativeVideoAttachments: [:],
+                            documentAttachments: documentAttachments,
+                            errorMessage: errorMessage
+                        )
+                    }
+                }
+
+                guard !analysisResults.isEmpty else { continue }
+                let appendix = makeVideoAnalysisAppendixText(analysisResults)
+                if updatedMessages[messageIndex].content
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty {
+                    updatedMessages[messageIndex].content = appendix
+                } else {
+                    updatedMessages[messageIndex].content += "\n\n\(appendix)"
+                }
+            }
+
+            logger.info("非原生视频已转换为持久化的视频解析上下文。")
+            return VideoAttachmentPreprocessingResult(
+                messages: updatedMessages,
+                imageAttachments: imageAttachments,
+                nativeVideoAttachments: [:],
                 documentAttachments: documentAttachments,
                 errorMessage: nil
             )
