@@ -27,6 +27,10 @@ public struct ConversationContinuationContext: Identifiable, Codable, Hashable, 
     public let summarizedMessageCount: Int
     public let estimatedSourceTokens: Int?
     public let estimatedResultTokens: Int?
+    /// 是否隐藏续聊会话中指向原会话的独立跳转气泡。
+    public var isSourceSessionLinkHidden: Bool
+    /// 是否隐藏原会话中指向续聊会话的独立跳转气泡。
+    public var isContinuationSessionLinkHidden: Bool
 
     public init(
         id: UUID = UUID(),
@@ -43,7 +47,9 @@ public struct ConversationContinuationContext: Identifiable, Codable, Hashable, 
         sourceMessageCount: Int,
         summarizedMessageCount: Int,
         estimatedSourceTokens: Int? = nil,
-        estimatedResultTokens: Int? = nil
+        estimatedResultTokens: Int? = nil,
+        isSourceSessionLinkHidden: Bool = false,
+        isContinuationSessionLinkHidden: Bool = false
     ) {
         self.id = id
         self.childSessionID = childSessionID
@@ -60,7 +66,93 @@ public struct ConversationContinuationContext: Identifiable, Codable, Hashable, 
         self.summarizedMessageCount = max(0, summarizedMessageCount)
         self.estimatedSourceTokens = estimatedSourceTokens
         self.estimatedResultTokens = estimatedResultTokens
+        self.isSourceSessionLinkHidden = isSourceSessionLinkHidden
+        self.isContinuationSessionLinkHidden = isContinuationSessionLinkHidden
     }
+
+    public func hidingLink(_ kind: ConversationContinuationLinkKind) -> Self {
+        var context = self
+        switch kind {
+        case .sourceSession:
+            context.isSourceSessionLinkHidden = true
+        case .continuationSession:
+            context.isContinuationSessionLinkHidden = true
+        }
+        return context
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case childSessionID
+        case sourceSessionID
+        case sourceSessionNameSnapshot
+        case sourceThroughMessageID
+        case createdAt
+        case summary
+        case retainedMessages
+        case retainedRoundCount
+        case compressionModelIdentifier
+        case promptVersion
+        case sourceMessageCount
+        case summarizedMessageCount
+        case estimatedSourceTokens
+        case estimatedResultTokens
+        case isSourceSessionLinkHidden
+        case isContinuationSessionLinkHidden
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        childSessionID = try container.decode(UUID.self, forKey: .childSessionID)
+        sourceSessionID = try container.decode(UUID.self, forKey: .sourceSessionID)
+        sourceSessionNameSnapshot = try container.decode(String.self, forKey: .sourceSessionNameSnapshot)
+        sourceThroughMessageID = try container.decode(UUID.self, forKey: .sourceThroughMessageID)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        summary = try container.decode(String.self, forKey: .summary)
+        retainedMessages = try container.decode([ChatMessage].self, forKey: .retainedMessages)
+        retainedRoundCount = max(0, try container.decode(Int.self, forKey: .retainedRoundCount))
+        compressionModelIdentifier = try container.decode(String.self, forKey: .compressionModelIdentifier)
+        promptVersion = try container.decode(Int.self, forKey: .promptVersion)
+        sourceMessageCount = max(0, try container.decode(Int.self, forKey: .sourceMessageCount))
+        summarizedMessageCount = max(0, try container.decode(Int.self, forKey: .summarizedMessageCount))
+        estimatedSourceTokens = try container.decodeIfPresent(Int.self, forKey: .estimatedSourceTokens)
+        estimatedResultTokens = try container.decodeIfPresent(Int.self, forKey: .estimatedResultTokens)
+        isSourceSessionLinkHidden = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isSourceSessionLinkHidden
+        ) ?? false
+        isContinuationSessionLinkHidden = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isContinuationSessionLinkHidden
+        ) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(childSessionID, forKey: .childSessionID)
+        try container.encode(sourceSessionID, forKey: .sourceSessionID)
+        try container.encode(sourceSessionNameSnapshot, forKey: .sourceSessionNameSnapshot)
+        try container.encode(sourceThroughMessageID, forKey: .sourceThroughMessageID)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(summary, forKey: .summary)
+        try container.encode(retainedMessages, forKey: .retainedMessages)
+        try container.encode(retainedRoundCount, forKey: .retainedRoundCount)
+        try container.encode(compressionModelIdentifier, forKey: .compressionModelIdentifier)
+        try container.encode(promptVersion, forKey: .promptVersion)
+        try container.encode(sourceMessageCount, forKey: .sourceMessageCount)
+        try container.encode(summarizedMessageCount, forKey: .summarizedMessageCount)
+        try container.encodeIfPresent(estimatedSourceTokens, forKey: .estimatedSourceTokens)
+        try container.encodeIfPresent(estimatedResultTokens, forKey: .estimatedResultTokens)
+        try container.encode(isSourceSessionLinkHidden, forKey: .isSourceSessionLinkHidden)
+        try container.encode(isContinuationSessionLinkHidden, forKey: .isContinuationSessionLinkHidden)
+    }
+}
+
+public enum ConversationContinuationLinkKind: String, Codable, Hashable, Sendable {
+    case sourceSession
+    case continuationSession
 }
 
 public struct ContextCompressionOptions: Codable, Hashable, Sendable {

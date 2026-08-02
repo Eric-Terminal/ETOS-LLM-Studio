@@ -24,6 +24,109 @@ struct WatchContextCompressionReminderNotificationKey: Hashable {
     let tokenThreshold: Int
 }
 
+struct WatchConversationContinuationRelationshipRefreshKey: Hashable {
+    let sessionID: UUID?
+    let messageVersion: Int
+}
+
+private struct WatchConversationContinuationRelationshipState: Sendable {
+    let sessionNamesByID: [UUID: String]
+    let outgoingByMessageID: [UUID: [ConversationContinuationContext]]
+    let unanchoredOutgoing: [ConversationContinuationContext]
+}
+
+struct WatchConversationContinuationLinkRow: View {
+    let kind: ConversationContinuationLinkKind
+    let linkedSessionName: String
+    let linkedSessionAvailable: Bool
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isShowingRemovalActions = false
+
+    var body: some View {
+        Button {
+            guard linkedSessionAvailable else { return }
+            onOpen()
+        } label: {
+            HStack {
+                Image(systemName: relationSystemImage)
+                    .foregroundStyle(linkedSessionAvailable ? Color.accentColor : .secondary)
+
+                Text(title)
+                    .etFont(.caption.weight(.semibold))
+                    .foregroundStyle(linkedSessionAvailable ? .primary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: linkedSessionAvailable ? "chevron.right" : "trash")
+                    .etFont(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onLongPressGesture(minimumDuration: 0.45) {
+            isShowingRemovalActions = true
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: onDelete) {
+                Label(
+                    NSLocalizedString("移除跳转入口", comment: "Remove continuation navigation bubble"),
+                    systemImage: "trash"
+                )
+            }
+        }
+        .confirmationDialog(
+            NSLocalizedString("移除跳转入口", comment: "Remove continuation navigation bubble"),
+            isPresented: $isShowingRemovalActions,
+            titleVisibility: .visible
+        ) {
+            Button(
+                NSLocalizedString("移除跳转入口", comment: "Remove continuation navigation bubble"),
+                role: .destructive,
+                action: onDelete
+            )
+            Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) { }
+        }
+        .accessibilityHint(NSLocalizedString(
+            "左滑或长按可移除此入口。",
+            comment: "Continuation navigation bubble removal hint"
+        ))
+        .accessibilityAction(named: Text(NSLocalizedString(
+            "移除跳转入口",
+            comment: "Remove continuation navigation bubble"
+        )), onDelete)
+    }
+
+    private var title: String {
+        switch kind {
+        case .sourceSession:
+            return String(
+                format: NSLocalizedString("续接自“%@”", comment: "Continuation source navigation bubble"),
+                linkedSessionName
+            )
+        case .continuationSession:
+            return String(
+                format: NSLocalizedString("已压缩为“%@”", comment: "Compressed continuation navigation bubble"),
+                linkedSessionName
+            )
+        }
+    }
+
+    private var relationSystemImage: String {
+        switch kind {
+        case .sourceSession:
+            return "arrow.up.backward.circle"
+        case .continuationSession:
+            return "arrow.down.forward.circle"
+        }
+    }
+}
+
 private struct WatchConversationContinuationTextPreview: Sendable {
     let full: String
     let displayed: String
@@ -105,7 +208,14 @@ struct WatchConversationContinuationCard: View {
                 Text(NSLocalizedString("续聊上下文", comment: "Continuation context card title"))
                     .etFont(.footnote.weight(.semibold))
                     .foregroundStyle(assistantPrimaryTextColor)
-                Text(context.sourceSessionNameSnapshot)
+                Text(String(
+                    format: NSLocalizedString(
+                        "摘要 %d 条 · 保留 %d 轮原文",
+                        comment: "Continuation context bubble subtitle"
+                    ),
+                    context.summarizedMessageCount,
+                    context.retainedRoundCount
+                ))
                     .etFont(.caption2)
                     .foregroundStyle(assistantSecondaryTextColor)
                     .lineLimit(1)
@@ -196,8 +306,6 @@ struct WatchConversationContinuationDetailView: View {
 
     let context: ConversationContinuationContext
     let enableAdvancedRenderer: Bool
-    let sourceSessionAvailable: Bool
-    let onOpenSource: () -> Void
     let onInsertText: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -205,24 +313,6 @@ struct WatchConversationContinuationDetailView: View {
 
     var body: some View {
         List {
-            Section(NSLocalizedString("来源", comment: "Continuation context source section")) {
-                Text(context.sourceSessionNameSnapshot)
-                    .etFont(.footnote)
-
-                Button {
-                    onOpenSource()
-                    dismiss()
-                } label: {
-                    Label(
-                        sourceSessionAvailable
-                            ? NSLocalizedString("打开原会话", comment: "Open continuation source session action")
-                            : NSLocalizedString("原会话已删除", comment: "Continuation source session deleted state"),
-                        systemImage: sourceSessionAvailable ? "arrow.up.backward.circle" : "trash"
-                    )
-                }
-                .disabled(!sourceSessionAvailable)
-            }
-
             Section(NSLocalizedString("较早对话摘要", comment: "Continuation context summary heading")) {
                 NavigationLink {
                     WatchMessageTextSelectionView(message: summaryMessage) { text in
@@ -748,6 +838,13 @@ struct WatchContextCompressionOptionsView: View {
 }
 
 extension ContentView {
+    var conversationContinuationRelationshipRefreshKey: WatchConversationContinuationRelationshipRefreshKey {
+        WatchConversationContinuationRelationshipRefreshKey(
+            sessionID: viewModel.currentSession?.id,
+            messageVersion: viewModel.allMessageIdentityVersion
+        )
+    }
+
     var contextCompressionReminderRefreshKey: WatchContextCompressionReminderRefreshKey {
         WatchContextCompressionReminderRefreshKey(
             sessionID: viewModel.currentSession?.id,
@@ -808,25 +905,118 @@ extension ContentView {
     }
 
     @MainActor
-    func reloadContinuationContext() async {
+    func reloadConversationContinuationRelationships() async {
         guard let sessionID = viewModel.currentSession?.id else {
             continuationContext = nil
-            isContinuationSourceSessionAvailable = false
+            outgoingContinuationContextsByMessageID = [:]
+            unanchoredOutgoingContinuationContexts = []
+            continuationSessionNamesByID = [:]
             return
         }
         do {
-            let loadedContext = try await viewModel.loadConversationContinuationContext(for: sessionID)
+            async let incomingContext = viewModel.loadConversationContinuationContext(for: sessionID)
+            async let outgoingContexts = viewModel.loadConversationContinuationContexts(from: sessionID)
+            let sessions = viewModel.chatSessions
+            let messages = viewModel.allMessagesForSession
+            let loadedContext = try await incomingContext
+            let loadedOutgoingContexts = try await outgoingContexts
+            let relationshipState = await Task.detached(priority: .utility) {
+                let sessionNamesByID = Dictionary(
+                    uniqueKeysWithValues: sessions.map { ($0.id, $0.name) }
+                )
+                let messageIDs = Set(messages.map(\.id))
+                var outgoingByMessageID: [UUID: [ConversationContinuationContext]] = [:]
+                var unanchoredOutgoing: [ConversationContinuationContext] = []
+
+                for context in loadedOutgoingContexts
+                where !context.isContinuationSessionLinkHidden {
+                    if messageIDs.contains(context.sourceThroughMessageID) {
+                        outgoingByMessageID[context.sourceThroughMessageID, default: []].append(context)
+                    } else {
+                        unanchoredOutgoing.append(context)
+                    }
+                }
+                return WatchConversationContinuationRelationshipState(
+                    sessionNamesByID: sessionNamesByID,
+                    outgoingByMessageID: outgoingByMessageID,
+                    unanchoredOutgoing: unanchoredOutgoing
+                )
+            }.value
             try Task.checkCancellation()
             guard viewModel.currentSession?.id == sessionID else { return }
             continuationContext = loadedContext
-            isContinuationSourceSessionAvailable = loadedContext.map { context in
-                viewModel.chatSessions.contains { $0.id == context.sourceSessionID }
-            } ?? false
+            continuationSessionNamesByID = relationshipState.sessionNamesByID
+            outgoingContinuationContextsByMessageID = relationshipState.outgoingByMessageID
+            unanchoredOutgoingContinuationContexts = relationshipState.unanchoredOutgoing
         } catch is CancellationError {
             return
         } catch {
             continuationContext = nil
-            isContinuationSourceSessionAvailable = false
+            outgoingContinuationContextsByMessageID = [:]
+            unanchoredOutgoingContinuationContexts = []
+            continuationSessionNamesByID = [:]
+        }
+    }
+
+    func continuationSourceSessionName(
+        for context: ConversationContinuationContext
+    ) -> String {
+        continuationSessionNamesByID[context.sourceSessionID]
+            ?? context.sourceSessionNameSnapshot
+    }
+
+    func outgoingContinuationLinkRow(
+        _ context: ConversationContinuationContext
+    ) -> some View {
+        let linkedSessionName = continuationSessionNamesByID[context.childSessionID]
+            ?? String(
+                format: NSLocalizedString("%@ · 续聊", comment: "Compressed continuation session name"),
+                context.sourceSessionNameSnapshot
+            )
+        return WatchConversationContinuationLinkRow(
+            kind: .continuationSession,
+            linkedSessionName: linkedSessionName,
+            linkedSessionAvailable: continuationSessionNamesByID[context.childSessionID] != nil,
+            onOpen: {
+                _ = viewModel.setCurrentSessionIfExists(sessionID: context.childSessionID)
+            },
+            onDelete: {
+                hideConversationContinuationLink(
+                    in: context,
+                    kind: .continuationSession
+                )
+            }
+        )
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+    }
+
+    func hideConversationContinuationLink(
+        in context: ConversationContinuationContext,
+        kind: ConversationContinuationLinkKind
+    ) {
+        Task { @MainActor in
+            do {
+                _ = try await viewModel.hideConversationContinuationLink(
+                    in: context,
+                    kind: kind
+                )
+                await reloadConversationContinuationRelationships()
+                showChatTransientNotice(WatchChatTransientNotice(
+                    message: NSLocalizedString(
+                        "跳转入口已移除",
+                        comment: "Continuation navigation bubble removed notice"
+                    ),
+                    systemImage: "checkmark.circle.fill",
+                    tint: .green
+                ))
+            } catch {
+                showChatTransientNotice(WatchChatTransientNotice(
+                    message: error.localizedDescription,
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange
+                ))
+            }
         }
     }
 }

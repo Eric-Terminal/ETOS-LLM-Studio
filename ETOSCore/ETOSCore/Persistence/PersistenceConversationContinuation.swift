@@ -53,6 +53,8 @@ extension PersistenceGRDBStore {
                 summarized_message_count INTEGER NOT NULL,
                 estimated_source_tokens INTEGER,
                 estimated_result_tokens INTEGER,
+                source_session_link_hidden INTEGER NOT NULL DEFAULT 0,
+                continuation_session_link_hidden INTEGER NOT NULL DEFAULT 0,
                 created_at REAL NOT NULL
             )
         """)
@@ -122,7 +124,8 @@ extension PersistenceGRDBStore {
                        source_through_message_id, summary, retained_messages_json,
                        retained_round_count, compression_model_identifier, prompt_version,
                        source_message_count, summarized_message_count,
-                       estimated_source_tokens, estimated_result_tokens, created_at
+                       estimated_source_tokens, estimated_result_tokens,
+                       source_session_link_hidden, continuation_session_link_hidden, created_at
                 FROM conversation_continuation_contexts
                 WHERE child_session_id = ?
                 """,
@@ -140,6 +143,29 @@ extension PersistenceGRDBStore {
         }
     }
 
+    func loadConversationContinuationContexts(
+        from sourceSessionID: UUID
+    ) throws -> [ConversationContinuationContext] {
+        try dbPool.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, child_session_id, source_session_id, source_session_name_snapshot,
+                       source_through_message_id, summary, retained_messages_json,
+                       retained_round_count, compression_model_identifier, prompt_version,
+                       source_message_count, summarized_message_count,
+                       estimated_source_tokens, estimated_result_tokens,
+                       source_session_link_hidden, continuation_session_link_hidden, created_at
+                FROM conversation_continuation_contexts
+                WHERE source_session_id = ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                arguments: [sourceSessionID.uuidString]
+            )
+            return try rows.map(decodeConversationContinuationContext)
+        }
+    }
+
     func loadAllConversationContinuationContexts(
         _ db: Database
     ) throws -> [ConversationContinuationContext] {
@@ -150,7 +176,8 @@ extension PersistenceGRDBStore {
                    source_through_message_id, summary, retained_messages_json,
                    retained_round_count, compression_model_identifier, prompt_version,
                    source_message_count, summarized_message_count,
-                   estimated_source_tokens, estimated_result_tokens, created_at
+                   estimated_source_tokens, estimated_result_tokens,
+                   source_session_link_hidden, continuation_session_link_hidden, created_at
             FROM conversation_continuation_contexts
             ORDER BY created_at ASC, id ASC
             """
@@ -187,8 +214,9 @@ extension PersistenceGRDBStore {
                 source_through_message_id, summary, retained_messages_json,
                 retained_round_count, compression_model_identifier, prompt_version,
                 source_message_count, summarized_message_count,
-                estimated_source_tokens, estimated_result_tokens, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                estimated_source_tokens, estimated_result_tokens,
+                source_session_link_hidden, continuation_session_link_hidden, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(child_session_id) DO UPDATE SET
                 source_session_id = excluded.source_session_id,
                 source_session_name_snapshot = excluded.source_session_name_snapshot,
@@ -202,6 +230,8 @@ extension PersistenceGRDBStore {
                 summarized_message_count = excluded.summarized_message_count,
                 estimated_source_tokens = excluded.estimated_source_tokens,
                 estimated_result_tokens = excluded.estimated_result_tokens,
+                source_session_link_hidden = excluded.source_session_link_hidden,
+                continuation_session_link_hidden = excluded.continuation_session_link_hidden,
                 created_at = excluded.created_at
             """,
             arguments: [
@@ -219,6 +249,8 @@ extension PersistenceGRDBStore {
                 context.summarizedMessageCount,
                 context.estimatedSourceTokens,
                 context.estimatedResultTokens,
+                context.isSourceSessionLinkHidden,
+                context.isContinuationSessionLinkHidden,
                 context.createdAt.timeIntervalSince1970
             ]
         )
@@ -250,7 +282,9 @@ extension PersistenceGRDBStore {
             sourceMessageCount: row["source_message_count"],
             summarizedMessageCount: row["summarized_message_count"],
             estimatedSourceTokens: row["estimated_source_tokens"],
-            estimatedResultTokens: row["estimated_result_tokens"]
+            estimatedResultTokens: row["estimated_result_tokens"],
+            isSourceSessionLinkHidden: row["source_session_link_hidden"],
+            isContinuationSessionLinkHidden: row["continuation_session_link_hidden"]
         )
     }
 }
@@ -316,6 +350,17 @@ extension Persistence {
         }
         return try loadChatSessions().compactMap { session in
             try loadSessionRecordFile(for: session.id)?.continuationContext
+        }
+    }
+
+    public static func loadConversationContinuationContexts(
+        from sourceSessionID: UUID
+    ) throws -> [ConversationContinuationContext] {
+        if let store = activeGRDBStore() {
+            return try store.loadConversationContinuationContexts(from: sourceSessionID)
+        }
+        return try loadAllConversationContinuationContexts().filter {
+            $0.sourceSessionID == sourceSessionID
         }
     }
 

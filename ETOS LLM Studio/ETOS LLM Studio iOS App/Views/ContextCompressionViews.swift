@@ -25,6 +25,17 @@ struct ContextCompressionReminderNotificationKey: Hashable {
     let tokenThreshold: Int
 }
 
+struct ConversationContinuationRelationshipRefreshKey: Hashable {
+    let sessionID: UUID?
+    let messageVersion: Int
+}
+
+private struct ConversationContinuationRelationshipState: Sendable {
+    let sessionNamesByID: [UUID: String]
+    let outgoingByMessageID: [UUID: [ConversationContinuationContext]]
+    let unanchoredOutgoing: [ConversationContinuationContext]
+}
+
 enum ConversationContinuationExpansionState: Hashable {
     case collapsed
     case preview
@@ -32,6 +43,162 @@ enum ConversationContinuationExpansionState: Hashable {
 
     var isExpanded: Bool {
         self != .collapsed
+    }
+}
+
+struct ConversationContinuationLinkBubble: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let kind: ConversationContinuationLinkKind
+    let linkedSessionName: String
+    let linkedSessionAvailable: Bool
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var restingOffset: CGFloat = 0
+
+    private let actionWidth: CGFloat = 76
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            deleteAction
+            linkContent
+                .offset(x: displayedOffset)
+        }
+        .frame(maxWidth: 380)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 4)
+        .simultaneousGesture(swipeGesture)
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label(
+                    NSLocalizedString("移除跳转入口", comment: "Remove continuation navigation bubble"),
+                    systemImage: "trash"
+                )
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(NSLocalizedString(
+            "左滑或长按可移除此入口。",
+            comment: "Continuation navigation bubble removal hint"
+        ))
+        .accessibilityAction(named: Text(NSLocalizedString(
+            "移除跳转入口",
+            comment: "Remove continuation navigation bubble"
+        )), onDelete)
+    }
+
+    private var linkContent: some View {
+        Button {
+            guard linkedSessionAvailable else { return }
+            if restingOffset != 0 {
+                setRestingOffset(0)
+            } else {
+                onOpen()
+            }
+        } label: {
+            HStack {
+                Image(systemName: relationSystemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(linkedSessionAvailable ? Color.accentColor : .secondary)
+
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(linkedSessionAvailable ? .primary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: linkedSessionAvailable ? "chevron.right" : "trash")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity)
+            .background(Color(uiColor: .secondarySystemBackground))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var deleteAction: some View {
+        Button(role: .destructive, action: onDelete) {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Image(systemName: "trash.fill")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: actionWidth)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.red)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(NSLocalizedString(
+            "移除跳转入口",
+            comment: "Remove continuation navigation bubble"
+        ))
+    }
+
+    private var displayedOffset: CGFloat {
+        min(0, max(-actionWidth * 1.7, restingOffset + dragTranslation))
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .updating($dragTranslation) { value, state, _ in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                state = value.translation.width
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                let projectedOffset = restingOffset + value.predictedEndTranslation.width
+                if projectedOffset <= -actionWidth * 1.45 {
+                    onDelete()
+                    return
+                }
+                let proposedOffset = restingOffset + value.translation.width
+                setRestingOffset(proposedOffset <= -actionWidth * 0.45 ? -actionWidth : 0)
+            }
+    }
+
+    private var title: String {
+        switch kind {
+        case .sourceSession:
+            return String(
+                format: NSLocalizedString("续接自“%@”", comment: "Continuation source navigation bubble"),
+                linkedSessionName
+            )
+        case .continuationSession:
+            return String(
+                format: NSLocalizedString("已压缩为“%@”", comment: "Compressed continuation navigation bubble"),
+                linkedSessionName
+            )
+        }
+    }
+
+    private var relationSystemImage: String {
+        switch kind {
+        case .sourceSession:
+            return "arrow.up.backward.circle"
+        case .continuationSession:
+            return "arrow.down.forward.circle"
+        }
+    }
+
+    private func setRestingOffset(_ offset: CGFloat) {
+        if reduceMotion {
+            restingOffset = offset
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 1)) {
+                restingOffset = offset
+            }
+        }
     }
 }
 
@@ -46,9 +213,7 @@ struct ConversationContinuationBubble: View {
     let enableBackground: Bool
     let enableLiquidGlass: Bool
     let enableNoBubbleUI: Bool
-    let sourceSessionAvailable: Bool
     let onExpansionStateChange: (ConversationContinuationExpansionState) -> Void
-    let onOpenSource: () -> Void
 
     @State private var displayContent: ConversationContinuationDisplayContent?
     @State private var preparedPreview: [String: ETPreparedMarkdownRenderPayload] = [:]
@@ -92,19 +257,6 @@ struct ConversationContinuationBubble: View {
 
                 VStack(alignment: .leading) {
                     renderedContent
-
-                    Button(action: onOpenSource) {
-                        Label(
-                            sourceSessionAvailable
-                                ? NSLocalizedString("打开原会话", comment: "Open continuation source session action")
-                                : NSLocalizedString("原会话已删除", comment: "Continuation source session deleted state"),
-                            systemImage: sourceSessionAvailable ? "arrow.up.backward.circle" : "trash"
-                        )
-                        .font(.footnote)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(!sourceSessionAvailable)
-                    .padding(.top)
 
                     HStack {
                         Spacer()
@@ -230,10 +382,9 @@ struct ConversationContinuationBubble: View {
     private var contextSubtitle: String {
         String(
             format: NSLocalizedString(
-                "来自“%@” · 摘要 %d 条 · 保留 %d 轮原文",
+                "摘要 %d 条 · 保留 %d 轮原文",
                 comment: "Continuation context bubble subtitle"
             ),
-            context.sourceSessionNameSnapshot,
             context.summarizedMessageCount,
             context.retainedRoundCount
         )
@@ -700,6 +851,13 @@ struct ContextCompressionOptionsView: View {
 }
 
 extension ChatView {
+    var conversationContinuationRelationshipRefreshKey: ConversationContinuationRelationshipRefreshKey {
+        ConversationContinuationRelationshipRefreshKey(
+            sessionID: viewModel.currentSession?.id,
+            messageVersion: viewModel.allMessageIdentityVersion
+        )
+    }
+
     var contextCompressionReminderRefreshKey: ContextCompressionReminderRefreshKey {
         ContextCompressionReminderRefreshKey(
             sessionID: viewModel.currentSession?.id,
@@ -773,25 +931,116 @@ extension ChatView {
     }
 
     @MainActor
-    func reloadContinuationContext() async {
+    func reloadConversationContinuationRelationships() async {
         guard let sessionID = viewModel.currentSession?.id else {
             continuationContext = nil
-            isContinuationSourceSessionAvailable = false
+            outgoingContinuationContextsByMessageID = [:]
+            unanchoredOutgoingContinuationContexts = []
+            continuationSessionNamesByID = [:]
             return
         }
         do {
-            let loadedContext = try await viewModel.loadConversationContinuationContext(for: sessionID)
+            async let incomingContext = viewModel.loadConversationContinuationContext(for: sessionID)
+            async let outgoingContexts = viewModel.loadConversationContinuationContexts(from: sessionID)
+            let sessions = viewModel.chatSessions
+            let messages = viewModel.allMessagesForSession
+            let loadedContext = try await incomingContext
+            let loadedOutgoingContexts = try await outgoingContexts
+            let relationshipState = await Task.detached(priority: .utility) {
+                let sessionNamesByID = Dictionary(
+                    uniqueKeysWithValues: sessions.map { ($0.id, $0.name) }
+                )
+                let messageIDs = Set(messages.map(\.id))
+                var outgoingByMessageID: [UUID: [ConversationContinuationContext]] = [:]
+                var unanchoredOutgoing: [ConversationContinuationContext] = []
+
+                for context in loadedOutgoingContexts
+                where !context.isContinuationSessionLinkHidden {
+                    if messageIDs.contains(context.sourceThroughMessageID) {
+                        outgoingByMessageID[context.sourceThroughMessageID, default: []].append(context)
+                    } else {
+                        unanchoredOutgoing.append(context)
+                    }
+                }
+                return ConversationContinuationRelationshipState(
+                    sessionNamesByID: sessionNamesByID,
+                    outgoingByMessageID: outgoingByMessageID,
+                    unanchoredOutgoing: unanchoredOutgoing
+                )
+            }.value
             try Task.checkCancellation()
             guard viewModel.currentSession?.id == sessionID else { return }
             continuationContext = loadedContext
-            isContinuationSourceSessionAvailable = loadedContext.map { context in
-                viewModel.chatSessions.contains { $0.id == context.sourceSessionID }
-            } ?? false
+            continuationSessionNamesByID = relationshipState.sessionNamesByID
+            outgoingContinuationContextsByMessageID = relationshipState.outgoingByMessageID
+            unanchoredOutgoingContinuationContexts = relationshipState.unanchoredOutgoing
         } catch is CancellationError {
             return
         } catch {
             continuationContext = nil
-            isContinuationSourceSessionAvailable = false
+            outgoingContinuationContextsByMessageID = [:]
+            unanchoredOutgoingContinuationContexts = []
+            continuationSessionNamesByID = [:]
+        }
+    }
+
+    func continuationSourceSessionName(
+        for context: ConversationContinuationContext
+    ) -> String {
+        continuationSessionNamesByID[context.sourceSessionID]
+            ?? context.sourceSessionNameSnapshot
+    }
+
+    func outgoingContinuationLinkBubble(
+        _ context: ConversationContinuationContext
+    ) -> some View {
+        let linkedSessionName = continuationSessionNamesByID[context.childSessionID]
+            ?? String(
+                format: NSLocalizedString("%@ · 续聊", comment: "Compressed continuation session name"),
+                context.sourceSessionNameSnapshot
+            )
+        return ConversationContinuationLinkBubble(
+            kind: .continuationSession,
+            linkedSessionName: linkedSessionName,
+            linkedSessionAvailable: continuationSessionNamesByID[context.childSessionID] != nil,
+            onOpen: {
+                _ = viewModel.setCurrentSessionIfExists(sessionID: context.childSessionID)
+            },
+            onDelete: {
+                hideConversationContinuationLink(
+                    in: context,
+                    kind: .continuationSession
+                )
+            }
+        )
+    }
+
+    func hideConversationContinuationLink(
+        in context: ConversationContinuationContext,
+        kind: ConversationContinuationLinkKind
+    ) {
+        Task { @MainActor in
+            do {
+                _ = try await viewModel.hideConversationContinuationLink(
+                    in: context,
+                    kind: kind
+                )
+                await reloadConversationContinuationRelationships()
+                showChatTransientNotice(ChatTransientNotice(
+                    message: NSLocalizedString(
+                        "跳转入口已移除",
+                        comment: "Continuation navigation bubble removed notice"
+                    ),
+                    systemImage: "checkmark.circle.fill",
+                    tint: .green
+                ))
+            } catch {
+                showChatTransientNotice(ChatTransientNotice(
+                    message: error.localizedDescription,
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .orange
+                ))
+            }
         }
     }
 }

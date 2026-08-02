@@ -18,6 +18,25 @@ extension ChatViewModel {
         }.value
     }
 
+    func loadConversationContinuationContexts(
+        from sessionID: UUID
+    ) async throws -> [ConversationContinuationContext] {
+        try await Task.detached(priority: .userInitiated) {
+            try Persistence.loadConversationContinuationContexts(from: sessionID)
+        }.value
+    }
+
+    func hideConversationContinuationLink(
+        in context: ConversationContinuationContext,
+        kind: ConversationContinuationLinkKind
+    ) async throws -> ConversationContinuationContext {
+        try await Task.detached(priority: .userInitiated) {
+            let updatedContext = context.hidingLink(kind)
+            try Persistence.saveConversationContinuationContext(updatedContext)
+            return updatedContext
+        }.value
+    }
+
     @discardableResult
     func createCompressedContinuation(
         from sessionID: UUID,

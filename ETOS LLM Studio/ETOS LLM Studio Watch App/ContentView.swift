@@ -60,7 +60,9 @@ struct ContentView: View {
     @State var importSourceHistory: [String] = []
     @State var presentedAskUserInputRequest: AppToolAskUserInputRequest?
     @State var continuationContext: ConversationContinuationContext?
-    @State var isContinuationSourceSessionAvailable = false
+    @State var outgoingContinuationContextsByMessageID: [UUID: [ConversationContinuationContext]] = [:]
+    @State var unanchoredOutgoingContinuationContexts: [ConversationContinuationContext] = []
+    @State var continuationSessionNamesByID: [UUID: String] = [:]
     @State var isContextCompressionPresented = false
     @State var watchInputQuickActionDestination: WatchInputQuickAction?
     @State var contextCompressionReminderSourceSession: ChatSession?
@@ -204,16 +206,16 @@ struct ContentView: View {
         .onChange(of: appConfig.watchAttachmentLastSource) { _, _ in
             refreshAttachmentSourceHistory()
         }
-        .task(id: viewModel.currentSession?.id) {
-            await reloadContinuationContext()
+        .task(id: conversationContinuationRelationshipRefreshKey) {
+            await reloadConversationContinuationRelationships()
         }
         .task(id: contextCompressionReminderRefreshKey) {
             await refreshContextCompressionReminderEstimate()
         }
-        .onChange(of: viewModel.chatSessions) { _, sessions in
-            isContinuationSourceSessionAvailable = continuationContext.map { context in
-                sessions.contains { $0.id == context.sourceSessionID }
-            } ?? false
+        .onChange(of: viewModel.chatSessions) { _, _ in
+            Task { @MainActor in
+                await reloadConversationContinuationRelationships()
+            }
             if notificationCenter.pendingContextCompressionSessionID != nil {
                 Task { @MainActor in
                     openContextCompressionFromNotification()

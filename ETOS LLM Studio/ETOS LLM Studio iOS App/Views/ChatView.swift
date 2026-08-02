@@ -53,7 +53,9 @@ struct ChatView: View {
     @State var contextCompressionReminderSourceSession: ChatSession?
     @State var contextCompressionReminderNotificationKeys: Set<ContextCompressionReminderNotificationKey> = []
     @State var continuationContext: ConversationContinuationContext?
-    @State var isContinuationSourceSessionAvailable = false
+    @State var outgoingContinuationContextsByMessageID: [UUID: [ConversationContinuationContext]] = [:]
+    @State var unanchoredOutgoingContinuationContexts: [ConversationContinuationContext] = []
+    @State var continuationSessionNamesByID: [UUID: String] = [:]
     @State var continuationExpansionState: ConversationContinuationExpansionState = .collapsed
     @State var showGhostSessionAlert = false
     @State var ghostSession: ChatSession?
@@ -323,8 +325,8 @@ struct ChatView: View {
             .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
                 refreshTemporaryChatState()
             }
-            .task(id: viewModel.currentSession?.id) {
-                await reloadContinuationContext()
+            .task(id: conversationContinuationRelationshipRefreshKey) {
+                await reloadConversationContinuationRelationships()
             }
             .task(id: contextCompressionReminderRefreshKey) {
                 await refreshContextCompressionReminderEstimate()
@@ -332,10 +334,10 @@ struct ChatView: View {
             .task(id: localNotificationCenter.pendingContextCompressionSessionID) {
                 await presentPendingContextCompressionNotification()
             }
-            .onChange(of: viewModel.chatSessions) { _, sessions in
-                isContinuationSourceSessionAvailable = continuationContext.map { context in
-                    sessions.contains { $0.id == context.sourceSessionID }
-                } ?? false
+            .onChange(of: viewModel.chatSessions) { _, _ in
+                Task { @MainActor in
+                    await reloadConversationContinuationRelationships()
+                }
                 if localNotificationCenter.pendingContextCompressionSessionID != nil {
                     Task { @MainActor in
                         await presentPendingContextCompressionNotification()
@@ -756,6 +758,31 @@ extension ChatView {
                             // 历史加载提示
                             historyBanner
 
+                            if let continuationContext,
+                               !continuationContext.isSourceSessionLinkHidden {
+                                ConversationContinuationLinkBubble(
+                                    kind: .sourceSession,
+                                    linkedSessionName: continuationSourceSessionName(
+                                        for: continuationContext
+                                    ),
+                                    linkedSessionAvailable: continuationSessionNamesByID[
+                                        continuationContext.sourceSessionID
+                                    ] != nil,
+                                    onOpen: {
+                                        _ = viewModel.setCurrentSessionIfExists(
+                                            sessionID: continuationContext.sourceSessionID
+                                        )
+                                    },
+                                    onDelete: {
+                                        hideConversationContinuationLink(
+                                            in: continuationContext,
+                                            kind: .sourceSession
+                                        )
+                                    }
+                                )
+                                .id(continuationContext.id)
+                            }
+
                             if let continuationContext {
                                 ConversationContinuationBubble(
                                     context: continuationContext,
@@ -764,13 +791,7 @@ extension ChatView {
                                     enableBackground: viewModel.enableBackground,
                                     enableLiquidGlass: isLiquidGlassEnabled,
                                     enableNoBubbleUI: viewModel.enableNoBubbleUI,
-                                    sourceSessionAvailable: isContinuationSourceSessionAvailable,
-                                    onExpansionStateChange: handleContinuationExpansionStateChange,
-                                    onOpenSource: {
-                                        _ = viewModel.setCurrentSessionIfExists(
-                                            sessionID: continuationContext.sourceSessionID
-                                        )
-                                    }
+                                    onExpansionStateChange: handleContinuationExpansionStateChange
                                 )
                                 .padding(.horizontal, 12)
                                 .padding(.bottom, 8)
@@ -892,6 +913,16 @@ extension ChatView {
                                         isFirstDisplayedMessage: index == 0
                                     )
                                 }
+
+                                if let contexts = outgoingContinuationContextsByMessageID[message.id] {
+                                    ForEach(contexts) { context in
+                                        outgoingContinuationLinkBubble(context)
+                                    }
+                                }
+                            }
+
+                            ForEach(unanchoredOutgoingContinuationContexts) { context in
+                                outgoingContinuationLinkBubble(context)
                             }
 
                             Color.clear

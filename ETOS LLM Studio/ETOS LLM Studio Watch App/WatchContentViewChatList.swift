@@ -57,17 +57,35 @@ extension ContentView {
                 .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8))
             }
 
+            if let continuationContext,
+               !continuationContext.isSourceSessionLinkHidden {
+                WatchConversationContinuationLinkRow(
+                    kind: .sourceSession,
+                    linkedSessionName: continuationSourceSessionName(for: continuationContext),
+                    linkedSessionAvailable: continuationSessionNamesByID[
+                        continuationContext.sourceSessionID
+                    ] != nil,
+                    onOpen: {
+                        _ = viewModel.setCurrentSessionIfExists(
+                            sessionID: continuationContext.sourceSessionID
+                        )
+                    },
+                    onDelete: {
+                        hideConversationContinuationLink(
+                            in: continuationContext,
+                            kind: .sourceSession
+                        )
+                    }
+                )
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+            }
+
             if let continuationContext {
                 NavigationLink {
                     WatchConversationContinuationDetailView(
                         context: continuationContext,
                         enableAdvancedRenderer: viewModel.enableAdvancedRenderer,
-                        sourceSessionAvailable: isContinuationSourceSessionAvailable,
-                        onOpenSource: {
-                            _ = viewModel.setCurrentSessionIfExists(
-                                sessionID: continuationContext.sourceSessionID
-                            )
-                        },
                         onInsertText: { text in
                             viewModel.applyToolInputDraftRequest(
                                 AppToolInputDraftRequest(text: text, mode: .append)
@@ -123,6 +141,16 @@ extension ContentView {
                         isFirstDisplayedMessage: index == 0
                     )
                 }
+
+                if let contexts = outgoingContinuationContextsByMessageID[message.id] {
+                    ForEach(contexts) { context in
+                        outgoingContinuationLinkRow(context)
+                    }
+                }
+            }
+
+            ForEach(unanchoredOutgoingContinuationContexts) { context in
+                outgoingContinuationLinkRow(context)
             }
 
             if let progress = viewModel.attachmentImportProgress {

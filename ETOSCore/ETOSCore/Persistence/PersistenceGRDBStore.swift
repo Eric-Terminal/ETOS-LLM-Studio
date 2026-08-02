@@ -456,6 +456,26 @@ final class PersistenceGRDBStore {
             try Self.createConversationContinuationContextTable(db)
         }
 
+        migrator.registerMigration("v8_conversation_continuation_link_visibility") { db in
+            let columns = try Row.fetchAll(
+                db,
+                sql: "PRAGMA table_info(conversation_continuation_contexts)"
+            )
+            let columnNames = Set(columns.compactMap { row -> String? in row["name"] })
+            if !columnNames.contains("source_session_link_hidden") {
+                try db.execute(sql: """
+                    ALTER TABLE conversation_continuation_contexts
+                    ADD COLUMN source_session_link_hidden INTEGER NOT NULL DEFAULT 0
+                """)
+            }
+            if !columnNames.contains("continuation_session_link_hidden") {
+                try db.execute(sql: """
+                    ALTER TABLE conversation_continuation_contexts
+                    ADD COLUMN continuation_session_link_hidden INTEGER NOT NULL DEFAULT 0
+                """)
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -491,6 +511,19 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "sessions", column: "updated_at", definition: "updated_at REAL NOT NULL DEFAULT 0")
             try ensureColumn(db, table: "sessions", column: "conversation_summary", definition: "conversation_summary TEXT")
             try ensureColumn(db, table: "sessions", column: "conversation_summary_updated_at", definition: "conversation_summary_updated_at REAL")
+
+            try ensureColumn(
+                db,
+                table: "conversation_continuation_contexts",
+                column: "source_session_link_hidden",
+                definition: "source_session_link_hidden INTEGER NOT NULL DEFAULT 0"
+            )
+            try ensureColumn(
+                db,
+                table: "conversation_continuation_contexts",
+                column: "continuation_session_link_hidden",
+                definition: "continuation_session_link_hidden INTEGER NOT NULL DEFAULT 0"
+            )
 
             try ensureColumn(db, table: "messages", column: "requested_at", definition: "requested_at REAL")
             try ensureColumn(db, table: "messages", column: "content_versions_json", definition: "content_versions_json BLOB NOT NULL DEFAULT X'5B5D'")

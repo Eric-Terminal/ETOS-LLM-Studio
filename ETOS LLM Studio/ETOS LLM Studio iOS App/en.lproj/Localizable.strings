@@ -5097,8 +5097,6 @@
 "压缩图片语义提取" = "Image Semantic Extraction for Compression";
 "压缩失败" = "Compression Failed";
 "压缩模型" = "Compression Model";
-"原会话已删除" = "Original Chat Deleted";
-"打开原会话" = "Open Original Chat";
 "找不到可用于上下文压缩的聊天模型。" = "No chat model is available for context compression.";
 "找不到要压缩的原会话。" = "The original chat to compress could not be found.";
 "控制续聊会话的完整覆盖分块摘要与递归归并。" = "Controls full-coverage chunk summaries and recursive merging for continuation chats.";
@@ -5113,7 +5111,12 @@
 "最近轮次会按原角色和原文保留；更早内容会完整分片并递归归并，不会通过截断或丢弃旧消息缩短输入。" = "Recent turns are retained verbatim with their original roles. Older content is fully chunked and recursively merged; input is never shortened by truncating or discarding old messages.";
 "来源" = "Source";
 "来源会话" = "Source Chat";
-"来自“%@” · 摘要 %d 条 · 保留 %d 轮原文" = "From “%@” · %d summarized · %d recent turns retained";
+"摘要 %d 条 · 保留 %d 轮原文" = "%d messages summarized · %d recent turns retained";
+"续接自“%@”" = "Continued from “%@”";
+"已压缩为“%@”" = "Compressed into “%@”";
+"移除跳转入口" = "Remove Navigation Link";
+"左滑或长按可移除此入口。" = "Swipe left or touch and hold to remove this link.";
+"跳转入口已移除" = "Navigation link removed";
 "模型多次归并后仍无法形成单一续聊摘要，未创建新会话。" = "The model could not produce a single continuation summary after repeated merges, so no new chat was created.";
 "模型返回了空的续聊摘要，未创建新会话。" = "The model returned an empty continuation summary, so no new chat was created.";
 "正在保存并切换到新会话…" = "Saving and switching to the new chat…";
