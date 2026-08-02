@@ -527,7 +527,7 @@ private final class MCPBuiltInWebSearchClient {
         totalTimeout: TimeInterval
     ) async throws -> [SearchItem] {
         do {
-            let items = try await searchBing(
+            let items = try await searchDuckDuckGo(
                 query: query,
                 remainingCount: remainingCount,
                 deadline: deadline,
@@ -537,11 +537,11 @@ private final class MCPBuiltInWebSearchClient {
                 return items
             }
         } catch {
-            // Bing 在部分网络环境不可用时，继续尝试备用搜索源。
+            // DuckDuckGo 在部分网络环境不可用时，继续尝试备用搜索源。
             try Task.checkCancellation()
         }
 
-        return try await searchDuckDuckGo(
+        return try await searchBing(
             query: query,
             remainingCount: remainingCount,
             deadline: deadline,
