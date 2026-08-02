@@ -12,6 +12,7 @@ import ETOSCore
 
 enum SettingsNavigationDestination: Hashable, Identifiable {
     case dailyPulse
+    case dailyPulseCard(runID: UUID, cardID: UUID)
     case feedbackCenter
     case feedbackIssue(issueNumber: Int)
     case achievementJournal
@@ -21,6 +22,8 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
         switch self {
         case .dailyPulse:
             return "dailyPulse"
+        case .dailyPulseCard(let runID, let cardID):
+            return "dailyPulseCard-\(runID.uuidString)-\(cardID.uuidString)"
         case .feedbackCenter:
             return "feedbackCenter"
         case .feedbackIssue(let issueNumber):
@@ -282,6 +285,9 @@ struct SettingsView: View {
             case .dailyPulse:
                 DailyPulseView()
                     .environmentObject(viewModel)
+            case .dailyPulseCard(let runID, let cardID):
+                DailyPulseView(initialRunID: runID, initialCardID: cardID)
+                    .environmentObject(viewModel)
             case .feedbackCenter:
                 FeedbackCenterView()
             case .feedbackIssue(let issueNumber):
@@ -356,11 +362,16 @@ struct SettingsView: View {
         if pulseManager.todayRun != nil {
             return NSLocalizedString("今日已生成", comment: "每日脉冲今日已生成状态")
         }
+        if pulseManager.tomorrowRun != nil {
+            return NSLocalizedString("明日已准备", comment: "每日脉冲明日已准备状态")
+        }
         if deliveryCoordinator.reminderEnabled {
-            return String(
-                format: NSLocalizedString("明早 %@", comment: "每日脉冲明早提醒状态"),
-                deliveryCoordinator.reminderTimeText
-            )
+            return deliveryCoordinator.deliveryTimes.count == 1
+                ? deliveryCoordinator.reminderTimeText
+                : String(
+                    format: NSLocalizedString("%d 个时间点", comment: "Daily Pulse delivery time count"),
+                    deliveryCoordinator.deliveryTimes.count
+                )
         }
         return nil
     }

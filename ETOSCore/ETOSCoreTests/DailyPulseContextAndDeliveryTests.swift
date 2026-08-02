@@ -213,6 +213,29 @@ struct DailyPulseContextAndDeliveryTests {
         #expect(prompt.contains("偏好 SwiftUI、watchOS 和原生交互细节。"))
     }
 
+    @Test("提前生成时提示词会明确标记目标日期")
+    func futureGenerationPromptIncludesTargetDay() {
+        let input = DailyPulseGenerationInput(
+            focusText: "",
+            curationText: "",
+            sessionExcerpts: [DailyPulseSessionExcerpt(name: "测试", lines: ["用户：准备明天"])],
+            memories: [],
+            requestLogSummary: "",
+            activeTasks: [],
+            preferenceProfile: .empty,
+            externalContext: .empty
+        )
+
+        let prompt = DailyPulseManager.makeUserPrompt(
+            from: input,
+            cardsPerRun: 3,
+            candidateCardsPerRun: 6,
+            targetDayKey: "2099-12-31"
+        )
+
+        #expect(prompt.contains("2099-12-31"))
+    }
+
     @Test("外部信号历史会按主题去重并保留最新记录")
     func appendingExternalSignalDeduplicatesByTopic() {
         let older = DailyPulseExternalSignal(

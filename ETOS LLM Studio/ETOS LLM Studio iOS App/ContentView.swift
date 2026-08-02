@@ -361,7 +361,17 @@ struct ContentView: View {
     }
 
     private func openDailyPulse() {
-        pushNativeSettings(destination: .dailyPulse)
+        _ = notificationCenter.consumePendingRoute()
+        if let selection = notificationCenter.consumePendingDailyPulseSelection() {
+            pushNativeSettings(
+                destination: .dailyPulseCard(
+                    runID: selection.runID,
+                    cardID: selection.cardID
+                )
+            )
+        } else {
+            pushNativeSettings(destination: .dailyPulse)
+        }
     }
 
     private var launchRecoveryNoticePresented: Binding<Bool> {

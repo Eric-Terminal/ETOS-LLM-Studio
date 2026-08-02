@@ -26,10 +26,18 @@ extension ContentView {
     }
 
     func openDailyPulse() {
+        _ = notificationCenter.consumePendingRoute()
         isSettingsPresented = true
         settingsDestination = nil
         DispatchQueue.main.async {
-            settingsDestination = .dailyPulse
+            if let selection = notificationCenter.consumePendingDailyPulseSelection() {
+                settingsDestination = .dailyPulseCard(
+                    runID: selection.runID,
+                    cardID: selection.cardID
+                )
+            } else {
+                settingsDestination = .dailyPulse
+            }
         }
     }
 

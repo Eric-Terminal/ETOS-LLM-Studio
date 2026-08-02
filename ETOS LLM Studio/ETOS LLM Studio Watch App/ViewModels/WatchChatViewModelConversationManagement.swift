@@ -214,8 +214,7 @@ extension ChatViewModel {
         let coordinator = DailyPulseDeliveryCoordinator.shared
         await DailyPulseManager.shared.generateForScheduledDeliveryIfNeeded(
             reminderEnabled: coordinator.reminderEnabled,
-            reminderHour: coordinator.reminderHour,
-            reminderMinute: coordinator.reminderMinute,
+            deliveryTimes: coordinator.deliveryTimes,
             referenceDate: referenceDate
         )
     }

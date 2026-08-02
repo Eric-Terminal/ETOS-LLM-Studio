@@ -58,6 +58,31 @@ extension DailyPulseManager {
             .sorted(by: { $0.generatedAt > $1.generatedAt })
     }
 
+    internal nonisolated static func retainedRuns(from runs: [DailyPulseRun], referenceDate: Date) -> [DailyPulseRun] {
+        let todayKey = dayKey(for: referenceDate)
+        let tomorrowKey = nextDayKey(from: referenceDate)
+        return runs
+            .filter { $0.dayKey == todayKey || $0.dayKey == tomorrowKey }
+            .sorted(by: { $0.generatedAt > $1.generatedAt })
+    }
+
+    internal nonisolated static func hasReachedTomorrowPreparationTime(
+        referenceDate: Date,
+        hour: Int = 20,
+        minute: Int = 0,
+        calendar: Calendar = Calendar(identifier: .gregorian)
+    ) -> Bool {
+        guard let preparationDate = calendar.date(
+            bySettingHour: hour,
+            minute: minute,
+            second: 0,
+            of: referenceDate
+        ) else {
+            return false
+        }
+        return referenceDate >= preparationDate
+    }
+
     internal nonisolated static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {
         guard let todayRunDayKey, !todayRunDayKey.isEmpty else { return false }
         return todayRunDayKey != lastViewedDayKey
@@ -104,18 +129,18 @@ extension DailyPulseManager {
 
     internal nonisolated static func shouldProcessScheduledDelivery(
         reminderEnabled: Bool,
-        reminderHour: Int,
-        reminderMinute: Int,
+        deliveryTimes: [DailyPulseDeliveryTime],
         referenceDate: Date,
         lastDeliveryAttemptDayKey: String?
     ) -> Bool {
         guard reminderEnabled else { return false }
+        guard let firstTime = deliveryTimes.min(by: { $0.totalMinutes < $1.totalMinutes }) else { return false }
         let todayKey = dayKey(for: referenceDate)
         guard lastDeliveryAttemptDayKey != todayKey else { return false }
         return DailyPulseDeliveryCoordinator.hasReachedReminderTime(
             referenceDate: referenceDate,
-            hour: reminderHour,
-            minute: reminderMinute
+            hour: firstTime.hour,
+            minute: firstTime.minute
         )
     }
 

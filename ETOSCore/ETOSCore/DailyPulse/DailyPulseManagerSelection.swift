@@ -138,7 +138,8 @@ extension DailyPulseManager {
     nonisolated static func makeUserPrompt(
         from input: DailyPulseGenerationInput,
         cardsPerRun: Int,
-        candidateCardsPerRun: Int
+        candidateCardsPerRun: Int,
+        targetDayKey: String? = nil
     ) -> String {
         let sessionBlock: String = {
             guard !input.sessionExcerpts.isEmpty else { return NSLocalizedString("（无）", comment: "Daily Pulse prompt empty placeholder") }
@@ -169,10 +170,21 @@ extension DailyPulseManager {
             }.joined(separator: "\n")
         }()
 
+        let now = Date()
+        let todayKey = Self.dayKey(for: now)
+        let resolvedTargetDayKey = targetDayKey ?? todayKey
+        let timeContext = resolvedTargetDayKey == todayKey
+            ? Self.userFacingDateString(from: now)
+            : String(
+                format: NSLocalizedString("%@；目标日期：%@（提前生成）", comment: "Daily Pulse future generation time context"),
+                Self.userFacingDateString(from: now),
+                resolvedTargetDayKey
+            )
+
         return BuiltInPromptStore.render(
             .dailyPulseUser,
             variables: [
-                "time": Self.userFacingDateString(from: Date()),
+                "time": timeContext,
                 "cards_per_run": "\(cardsPerRun)",
                 "candidate_cards_per_run": "\(candidateCardsPerRun)",
                 "focus": focus,

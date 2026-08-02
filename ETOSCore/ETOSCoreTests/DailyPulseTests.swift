@@ -58,6 +58,7 @@ struct DailyPulseTests {
         #expect(userInfo["runID"] as? String == runID.uuidString)
         #expect(userInfo["cardID"] as? String == cardID.uuidString)
         #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "ready") == "dailyPulse.ready")
+        #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "card") == "dailyPulse.ready")
         #expect(AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder") == "dailyPulse.reminder")
     }
 

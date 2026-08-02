@@ -141,13 +141,10 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                 .onChange(of: dailyPulseDeliveryCoordinator.reminderEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderHour) { _, _ in
+                .onChange(of: dailyPulseManager.isDailyPulseEnabled) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
-                .onChange(of: dailyPulseDeliveryCoordinator.reminderMinute) { _, _ in
-                    DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
-                }
-                .onChange(of: dailyPulseManager.todayRun?.dayKey) { _, _ in
+                .onChange(of: dailyPulseManager.tomorrowRun?.dayKey) { _, _ in
                     DailyPulseBackgroundDeliveryScheduler.shared.refreshScheduleIfNeeded()
                 }
                 .task {

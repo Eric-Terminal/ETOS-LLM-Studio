@@ -51,6 +51,16 @@ public struct AppLocalNotificationDailyPulseContinuation: Sendable, Equatable {
     }
 }
 
+public struct AppLocalNotificationDailyPulseSelection: Sendable, Equatable {
+    public let runID: UUID
+    public let cardID: UUID
+
+    public init(runID: UUID, cardID: UUID) {
+        self.runID = runID
+        self.cardID = cardID
+    }
+}
+
 private let appLocalNotificationRouteUserInfoKey = "route"
 private let appLocalNotificationKindUserInfoKey = "kind"
 private let appLocalNotificationDayKeyUserInfoKey = "dayKey"
@@ -109,6 +119,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @Published public private(set) var pendingRoute: AppLocalNotificationRoute?
     @Published public private(set) var pendingDailyPulseContinuation: AppLocalNotificationDailyPulseContinuation?
+    @Published public private(set) var pendingDailyPulseSelection: AppLocalNotificationDailyPulseSelection?
     @Published public private(set) var pendingFeedbackIssueNumber: Int?
     @Published public private(set) var pendingChatSessionID: UUID?
     @Published public private(set) var pendingContextCompressionSessionID: UUID?
@@ -303,9 +314,9 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     }
 
     public nonisolated static func dailyPulseCategoryIdentifier(kind: String) -> String {
-        kind == "ready"
-            ? appLocalNotificationDailyPulseReadyCategoryIdentifier
-            : appLocalNotificationDailyPulseReminderCategoryIdentifier
+        kind == "reminder"
+            ? appLocalNotificationDailyPulseReminderCategoryIdentifier
+            : appLocalNotificationDailyPulseReadyCategoryIdentifier
     }
 
     public func consumePendingRoute() -> AppLocalNotificationRoute? {
@@ -318,6 +329,12 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         let continuation = pendingDailyPulseContinuation
         pendingDailyPulseContinuation = nil
         return continuation
+    }
+
+    public func consumePendingDailyPulseSelection() -> AppLocalNotificationDailyPulseSelection? {
+        let selection = pendingDailyPulseSelection
+        pendingDailyPulseSelection = nil
+        return selection
     }
 
     public func consumePendingFeedbackIssueNumber() -> Int? {
@@ -389,8 +406,14 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         )
     }
 
-    private func openDailyPulseFromNotification() {
+    private func openDailyPulseFromNotification(payload: AppLocalNotificationPayload? = nil) {
         pendingRoute = .dailyPulse
+        if let runID = payload?.runID, let cardID = payload?.cardID {
+            pendingDailyPulseSelection = AppLocalNotificationDailyPulseSelection(
+                runID: runID,
+                cardID: cardID
+            )
+        }
         NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
     }
 
@@ -473,7 +496,7 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     ) {
         switch actionIdentifier {
         case UNNotificationDefaultActionIdentifier, appLocalNotificationDailyPulseOpenActionIdentifier:
-            openDailyPulseFromNotification()
+            openDailyPulseFromNotification(payload: payload)
         case appLocalNotificationDailyPulseLikeActionIdentifier:
             guard let target = dailyPulseTarget(from: payload) else { return }
             DailyPulseManager.shared.applyFeedback(.liked, cardID: target.card.id, runID: target.runID)
