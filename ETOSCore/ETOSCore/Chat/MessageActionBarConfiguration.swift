@@ -51,19 +51,22 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public var assistantAlignment: MessageActionBarAlignment
     public var userAlignment: MessageActionBarAlignment
     public var showsOuterBorder: Bool
+    public var fontScale: Double
 
     public init(
         assistantItems: [MessageActionBarItem],
         userItems: [MessageActionBarItem],
         assistantAlignment: MessageActionBarAlignment,
         userAlignment: MessageActionBarAlignment,
-        showsOuterBorder: Bool = false
+        showsOuterBorder: Bool = false,
+        fontScale: Double = FontLibrary.defaultFontScale
     ) {
         self.assistantItems = Self.normalizedItems(assistantItems, for: .assistant)
         self.userItems = Self.normalizedItems(userItems, for: .user)
         self.assistantAlignment = assistantAlignment
         self.userAlignment = userAlignment
         self.showsOuterBorder = showsOuterBorder
+        self.fontScale = FontLibrary.normalizedFontScale(fontScale)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -72,6 +75,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         case assistantAlignment
         case userAlignment
         case showsOuterBorder
+        case fontScale
     }
 
     public init(from decoder: Decoder) throws {
@@ -81,12 +85,14 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
         let assistantAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .assistantAlignment) ?? .trailing
         let userAlignment = try container.decodeIfPresent(MessageActionBarAlignment.self, forKey: .userAlignment) ?? .trailing
         let showsOuterBorder = try container.decodeIfPresent(Bool.self, forKey: .showsOuterBorder) ?? false
+        let fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? FontLibrary.defaultFontScale
         self.init(
             assistantItems: assistantItems,
             userItems: userItems,
             assistantAlignment: assistantAlignment,
             userAlignment: userAlignment,
-            showsOuterBorder: showsOuterBorder
+            showsOuterBorder: showsOuterBorder,
+            fontScale: fontScale
         )
     }
 
@@ -127,7 +133,7 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
     public func encodedString() -> String {
         guard let data = try? JSONEncoder().encode(normalized()),
               let string = String(data: data, encoding: .utf8) else {
-            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing","showsOuterBorder":false}"#
+            return #"{"assistantItems":["versionSwitcher"],"userItems":[],"assistantAlignment":"trailing","userAlignment":"trailing","showsOuterBorder":false,"fontScale":1}"#
         }
         return string
     }
@@ -174,7 +180,8 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
             userItems: userItems,
             assistantAlignment: assistantAlignment,
             userAlignment: userAlignment,
-            showsOuterBorder: showsOuterBorder
+            showsOuterBorder: showsOuterBorder,
+            fontScale: fontScale
         )
     }
 

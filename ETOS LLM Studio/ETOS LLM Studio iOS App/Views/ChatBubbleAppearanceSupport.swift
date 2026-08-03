@@ -48,6 +48,10 @@ extension ChatBubble {
         appConfig.messageActionBarSettings
     }
 
+    var messageActionBarFontScale: CGFloat {
+        CGFloat(messageActionBarConfiguration.fontScale)
+    }
+
     var messageActionBarRole: MessageActionBarRole {
         isOutgoing ? .user : .assistant
     }
@@ -152,11 +156,13 @@ extension ChatBubble {
 
     @ViewBuilder
     func messageActionBarItemView(_ item: MessageActionBarItem) -> some View {
+        // 字重在字体适配后叠加，确保功能栏沿用正文槽位而不是“粗体”槽位。
         switch item {
         case .quickRetry:
             Button(action: onRetry) {
                 Image(systemName: item.systemImage)
-                    .etFont(.system(size: 13, weight: .semibold))
+                    .etFont(.system(size: 13 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
@@ -164,29 +170,34 @@ extension ChatBubble {
         case .copyMessage:
             Button(action: onCopy) {
                 Image(systemName: item.systemImage)
-                    .etFont(.system(size: 13, weight: .semibold))
+                    .etFont(.system(size: 13 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(item.title))
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .inputTokens:
             Label("\(inputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .outputTokens:
             Label("\(outputTokenCount)", systemImage: item.systemImage)
-                .etFont(.system(size: 12, weight: .semibold))
+                .etFont(.system(size: 12 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
                 .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .costEstimate:
             if let estimate = resolvedCostEstimate {
                 Label(MessageCostFormatter.formatCompact(estimate), systemImage: item.systemImage)
-                    .etFont(.system(size: 12, weight: .semibold))
+                    .etFont(.system(size: 12 * messageActionBarFontScale))
+                    .fontWeight(.semibold)
                     .monospacedDigit()
                     .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
             }
@@ -204,21 +215,24 @@ extension ChatBubble {
                 onSwitchToPreviousVersion()
             } label: {
                 Image(systemName: "chevron.left")
-                    .etFont(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex == 0)
             .opacity(currentIndex > 0 ? 1 : 0.4)
 
             Text("\(currentIndex + 1)/\(totalCount)")
-                .etFont(.system(size: 14, weight: .semibold))
+                .etFont(.system(size: 14 * messageActionBarFontScale))
+                .fontWeight(.semibold)
                 .monospacedDigit()
 
             Button {
                 onSwitchToNextVersion()
             } label: {
                 Image(systemName: "chevron.right")
-                    .etFont(.system(size: 14, weight: .bold))
+                    .etFont(.system(size: 14 * messageActionBarFontScale))
+                    .fontWeight(.bold)
             }
             .buttonStyle(.plain)
             .disabled(currentIndex >= totalCount - 1)

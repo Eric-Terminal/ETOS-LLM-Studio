@@ -20,6 +20,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
         #expect(configuration.showsOuterBorder == false)
+        #expect(configuration.fontScale == FontLibrary.defaultFontScale)
     }
 
     @Test("watchOS 默认配置不启用气泡功能栏项目")
@@ -31,6 +32,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
         #expect(configuration.showsOuterBorder == false)
+        #expect(configuration.fontScale == FontLibrary.defaultFontScale)
     }
 
     @Test("当前平台默认配置符合平台策略")
@@ -46,6 +48,7 @@ struct MessageActionBarConfigurationTests {
         #expect(configuration.assistantAlignment == .trailing)
         #expect(configuration.userAlignment == .trailing)
         #expect(configuration.showsOuterBorder == false)
+        #expect(configuration.fontScale == FontLibrary.defaultFontScale)
     }
 
     @Test("配置编解码会去重并保留助手用户独立顺序")
@@ -55,7 +58,8 @@ struct MessageActionBarConfigurationTests {
             userItems: [.requestTime, .inputTokens, .costEstimate, .outputTokens, .requestTime],
             assistantAlignment: .leading,
             userAlignment: .trailing,
-            showsOuterBorder: true
+            showsOuterBorder: true,
+            fontScale: 1.35
         )
 
         let decoded = MessageActionBarConfiguration.decoded(from: configuration.encodedString())
@@ -65,6 +69,7 @@ struct MessageActionBarConfigurationTests {
         #expect(decoded.assistantAlignment == .leading)
         #expect(decoded.userAlignment == .trailing)
         #expect(decoded.showsOuterBorder == true)
+        #expect(decoded.fontScale == 1.35)
     }
 
     @Test("旧配置缺少外围边框字段时默认关闭")
@@ -76,6 +81,28 @@ struct MessageActionBarConfigurationTests {
         #expect(decoded.assistantItems == [.versionSwitcher])
         #expect(decoded.userItems.isEmpty)
         #expect(decoded.showsOuterBorder == false)
+        #expect(decoded.fontScale == FontLibrary.defaultFontScale)
+    }
+
+    @Test("功能栏字号倍率会限制在允许范围内")
+    func fontScaleIsClampedToSupportedRange() {
+        let minimumConfiguration = MessageActionBarConfiguration(
+            assistantItems: [],
+            userItems: [],
+            assistantAlignment: .trailing,
+            userAlignment: .trailing,
+            fontScale: 0.1
+        )
+        let maximumConfiguration = MessageActionBarConfiguration(
+            assistantItems: [],
+            userItems: [],
+            assistantAlignment: .trailing,
+            userAlignment: .trailing,
+            fontScale: 5
+        )
+
+        #expect(minimumConfiguration.fontScale == FontLibrary.minimumFontScale)
+        #expect(maximumConfiguration.fontScale == FontLibrary.maximumFontScale)
     }
 
     @Test("用户气泡配置会过滤重试和多版本切换")

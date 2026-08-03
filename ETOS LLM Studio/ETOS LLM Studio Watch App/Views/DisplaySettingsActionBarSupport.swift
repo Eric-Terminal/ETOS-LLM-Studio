@@ -45,6 +45,32 @@ struct WatchMessageActionBarSettingsView: View {
                 Toggle(NSLocalizedString("显示外围边框", comment: ""), isOn: outerBorderBinding)
             }
 
+            Section {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text(NSLocalizedString("字号比例", comment: ""))
+                        Spacer()
+                        Text("\(Int((fontScaleBinding.wrappedValue * 100).rounded()))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: fontScaleBinding,
+                        in: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale,
+                        step: FontLibrary.fontScaleStep
+                    )
+                }
+
+                Button(NSLocalizedString("恢复默认字号", comment: "")) {
+                    fontScaleBinding.wrappedValue = FontLibrary.defaultFontScale
+                }
+                .disabled(abs(fontScaleBinding.wrappedValue - FontLibrary.defaultFontScale) < 0.001)
+            } header: {
+                Text(NSLocalizedString("字体大小", comment: ""))
+            } footer: {
+                Text(NSLocalizedString("在全局字号比例的基础上，单独调整气泡功能栏的文字和图标大小。", comment: ""))
+            }
+
             Section(NSLocalizedString("已启用项目", comment: "")) {
                 if selectedItems.isEmpty {
                     Text(NSLocalizedString("当前没有启用项目，可从下方添加。", comment: ""))
@@ -111,6 +137,17 @@ struct WatchMessageActionBarSettingsView: View {
             set: { newValue in
                 var updated = configuration
                 updated.showsOuterBorder = newValue
+                configuration = updated
+            }
+        )
+    }
+
+    private var fontScaleBinding: Binding<Double> {
+        Binding(
+            get: { configuration.fontScale },
+            set: { newValue in
+                var updated = configuration
+                updated.fontScale = FontLibrary.normalizedFontScale(newValue)
                 configuration = updated
             }
         )
