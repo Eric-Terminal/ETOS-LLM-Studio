@@ -96,6 +96,7 @@ struct SettingsView: View {
                     } else {
                         NavigationLink {
                             ModelSelectionView(
+                                viewModel: viewModel,
                                 models: options,
                                 providerGroups: viewModel.activatedConversationModelGroups,
                                 modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
@@ -231,6 +232,7 @@ struct SettingsView: View {
                 switch destination {
                 case .model:
                     ModelSelectionView(
+                        viewModel: viewModel,
                         models: viewModel.activatedConversationModels,
                         providerGroups: viewModel.activatedConversationModelGroups,
                         modelsByProviderID: viewModel.activatedConversationModelsByProviderID,
@@ -527,6 +529,7 @@ private struct ModelSelectionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var viewModel: ChatViewModel
 
     let models: [RunnableModel]
     let providerGroups: [RunnableModelProviderGroup]
@@ -538,12 +541,14 @@ private struct ModelSelectionView: View {
     @State private var showsAllModels = false
 
     init(
+        viewModel: ChatViewModel,
         models: [RunnableModel],
         providerGroups: [RunnableModelProviderGroup],
         modelsByProviderID: [UUID: [RunnableModel]],
         layoutsByProviderID: [UUID: RunnableModelPickerLayout],
         selectedModel: Binding<RunnableModel?>
     ) {
+        self.viewModel = viewModel
         self.models = models
         self.providerGroups = providerGroups
         self.modelsByProviderID = modelsByProviderID
@@ -583,6 +588,7 @@ private struct ModelSelectionView: View {
             } footer: {
                 Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
             }
+            quickPromptSection
         }
     }
 
@@ -608,6 +614,7 @@ private struct ModelSelectionView: View {
                 selectedProviderModelSections
                 showAllModelsSection
             }
+            quickPromptSection
         }
         .id(showsAllModels)
     }
@@ -683,6 +690,19 @@ private struct ModelSelectionView: View {
             }
         } footer: {
             Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
+        }
+    }
+
+    private var quickPromptSection: some View {
+        Section {
+            NavigationLink {
+                WatchQuickPromptEditorView(viewModel: viewModel)
+            } label: {
+                Label(
+                    NSLocalizedString("提示词", comment: "模型选择器快速提示词入口"),
+                    systemImage: "text.quote"
+                )
+            }
         }
     }
 

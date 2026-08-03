@@ -298,6 +298,7 @@ extension ChatView {
     func handleChatPickerSheetDismissed() {
         activeChatPickerDetent = .medium
         quickModelSettingsTarget = nil
+        isQuickPromptEditorPresented = false
         modelPickerShowsAllModels = false
         resetSessionPickerSearchState()
         if let pendingSession = pendingContextCompressionSourceSession {

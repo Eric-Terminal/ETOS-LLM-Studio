@@ -20,6 +20,9 @@ extension ChatView {
             .navigationDestination(item: $quickModelSettingsTarget) { runnable in
                 ChatQuickModelSettingsView(runnableModel: runnable)
             }
+            .navigationDestination(isPresented: $isQuickPromptEditorPresented) {
+                ChatQuickPromptEditorView(viewModel: viewModel)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
@@ -61,6 +64,7 @@ extension ChatView {
                 models: viewModel.activatedConversationModels,
                 showsProviderName: true
             )
+            modelPickerPromptSection
         }
     }
 
@@ -75,6 +79,7 @@ extension ChatView {
                 selectedProviderModelPickerSections
                 modelPickerShowAllModelsSection
             }
+            modelPickerPromptSection
         }
         .id(modelPickerShowsAllModels)
         // 固定栏与列表共享系统表面，避免额外材质叠层产生色差。
@@ -219,6 +224,17 @@ extension ChatView {
         }
     }
 
+    var modelPickerPromptSection: some View {
+        Section {
+            Button(action: presentQuickPromptEditor) {
+                Label(
+                    NSLocalizedString("提示词", comment: "模型选择器快速提示词入口"),
+                    systemImage: "text.quote"
+                )
+            }
+        }
+    }
+
     func nativeModelPickerModelRow(
         _ runnable: RunnableModel,
         showsProviderName: Bool
@@ -261,6 +277,12 @@ extension ChatView {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         activeChatPickerDetent = .large
         quickModelSettingsTarget = runnable
+    }
+
+    func presentQuickPromptEditor() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        activeChatPickerDetent = .large
+        isQuickPromptEditorPresented = true
     }
 
     var selectedProviderModelChoices: [RunnableModel] {
