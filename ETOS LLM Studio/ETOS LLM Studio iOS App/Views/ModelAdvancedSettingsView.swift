@@ -216,6 +216,15 @@ struct ModelAdvancedSettingsView: View {
             }
 
             Section {
+                Toggle(
+                    NSLocalizedString("在模型选择器中显示提示词", comment: "Show prompt shortcut in model picker"),
+                    isOn: $appConfig.modelPickerPromptShortcutEnabled
+                )
+            } footer: {
+                Text(NSLocalizedString("开启后，可从模型选择器快速编辑系统、话题与增强提示词。", comment: "Prompt shortcut setting description"))
+            }
+
+            Section {
                 FullscreenMultilineTextInput(
                     identity: selectedGlobalPromptEntry?.id.uuidString ?? "global-system-prompt-none",
                     placeholder: NSLocalizedString("自定义全局系统提示词", comment: ""),

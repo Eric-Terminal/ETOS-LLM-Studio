@@ -260,6 +260,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case settingsColorfulIconsEnabled = "ui.settingsColorfulIconsEnabled"
     case iOSModelPickerGroupsByProvider = "ui.modelPicker.groupByProvider.iOS"
     case watchModelPickerGroupsByProvider = "ui.modelPicker.groupByProvider.watchOS"
+    case modelPickerPromptShortcutEnabled = "ui.modelPicker.promptShortcut.enabled"
+    case modelPickerWorldbookShortcutEnabled = "ui.modelPicker.worldbookShortcut.enabled"
     case iOSModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.iOS"
     case watchModelPickerExpandedGroupIDs = "ui.modelPicker.expandedGroupIDs.watchOS"
     case modelPickerFolderPathsByProvider = "ui.modelPicker.folderPathsByProvider"
@@ -557,6 +559,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .iOSModelPickerGroupsByProvider,
              .watchModelPickerGroupsByProvider:
             return .bool(true)
+        case .modelPickerPromptShortcutEnabled,
+             .modelPickerWorldbookShortcutEnabled:
+            return .bool(false)
         case .iOSModelPickerExpandedGroupIDs,
              .watchModelPickerExpandedGroupIDs:
             return .text("[]")

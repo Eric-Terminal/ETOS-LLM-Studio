@@ -299,6 +299,7 @@ extension ChatView {
         activeChatPickerDetent = .medium
         quickModelSettingsTarget = nil
         isQuickPromptEditorPresented = false
+        isQuickWorldbookBindingPresented = false
         modelPickerShowsAllModels = false
         resetSessionPickerSearchState()
         if let pendingSession = pendingContextCompressionSourceSession {

@@ -357,6 +357,8 @@ public final class AppConfigStore: ObservableObject {
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
     @Published public var iOSModelPickerGroupsByProvider: Bool { didSet { write(.iOSModelPickerGroupsByProvider, iOSModelPickerGroupsByProvider) } }
     @Published public var watchModelPickerGroupsByProvider: Bool { didSet { write(.watchModelPickerGroupsByProvider, watchModelPickerGroupsByProvider) } }
+    @Published public var modelPickerPromptShortcutEnabled: Bool { didSet { write(.modelPickerPromptShortcutEnabled, modelPickerPromptShortcutEnabled) } }
+    @Published public var modelPickerWorldbookShortcutEnabled: Bool { didSet { write(.modelPickerWorldbookShortcutEnabled, modelPickerWorldbookShortcutEnabled) } }
     // 展开记录按设备独立保存；未记录的新分组自然保持收起。
     @Published public var iOSModelPickerExpandedGroupIDs: Set<String> {
         didSet {
@@ -648,6 +650,8 @@ public final class AppConfigStore: ObservableObject {
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
         iOSModelPickerGroupsByProvider = Self.boolValue(.iOSModelPickerGroupsByProvider, userDefaults: userDefaults)
         watchModelPickerGroupsByProvider = Self.boolValue(.watchModelPickerGroupsByProvider, userDefaults: userDefaults)
+        modelPickerPromptShortcutEnabled = Self.boolValue(.modelPickerPromptShortcutEnabled, userDefaults: userDefaults)
+        modelPickerWorldbookShortcutEnabled = Self.boolValue(.modelPickerWorldbookShortcutEnabled, userDefaults: userDefaults)
         iOSModelPickerExpandedGroupIDs = Set(
             Self.decodeStringArray(
                 from: Self.textValue(.iOSModelPickerExpandedGroupIDs, userDefaults: userDefaults)
@@ -1137,6 +1141,8 @@ public final class AppConfigStore: ObservableObject {
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
         case .iOSModelPickerGroupsByProvider: return .bool(iOSModelPickerGroupsByProvider)
         case .watchModelPickerGroupsByProvider: return .bool(watchModelPickerGroupsByProvider)
+        case .modelPickerPromptShortcutEnabled: return .bool(modelPickerPromptShortcutEnabled)
+        case .modelPickerWorldbookShortcutEnabled: return .bool(modelPickerWorldbookShortcutEnabled)
         case .iOSModelPickerExpandedGroupIDs:
             return .text(Self.encodeStringArray(iOSModelPickerExpandedGroupIDs.sorted()))
         case .watchModelPickerExpandedGroupIDs:
@@ -1266,6 +1272,8 @@ public final class AppConfigStore: ObservableObject {
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
         case .iOSModelPickerGroupsByProvider: iOSModelPickerGroupsByProvider = value
         case .watchModelPickerGroupsByProvider: watchModelPickerGroupsByProvider = value
+        case .modelPickerPromptShortcutEnabled: modelPickerPromptShortcutEnabled = value
+        case .modelPickerWorldbookShortcutEnabled: modelPickerWorldbookShortcutEnabled = value
         case .enableSlashCommands: enableSlashCommands = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
         case .restoreLastSessionOnlyIfRecent: restoreLastSessionOnlyIfRecent = value

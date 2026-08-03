@@ -76,6 +76,36 @@ extension PersistenceTests {
         #expect(AppConfigKey.watchModelPickerGroupsByProvider.defaultValue == .bool(true))
     }
 
+    @Test("模型选择器功能快捷入口默认隐藏并支持配置快照")
+    @MainActor
+    func modelPickerFeatureShortcutsDefaultToHidden() {
+        let promptKey = AppConfigKey.modelPickerPromptShortcutEnabled
+        let worldbookKey = AppConfigKey.modelPickerWorldbookShortcutEnabled
+        let previousPromptValue = AppConfigStore.shared.modelPickerPromptShortcutEnabled
+        let previousWorldbookValue = AppConfigStore.shared.modelPickerWorldbookShortcutEnabled
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: [
+                promptKey.rawValue: previousPromptValue,
+                worldbookKey.rawValue: previousWorldbookValue
+            ])
+        }
+
+        #expect(promptKey.defaultValue == .bool(false))
+        #expect(worldbookKey.defaultValue == .bool(false))
+
+        AppConfigStore.shared.apply(snapshot: [
+            promptKey.rawValue: true,
+            worldbookKey.rawValue: true
+        ])
+
+        #expect(AppConfigStore.shared.modelPickerPromptShortcutEnabled)
+        #expect(AppConfigStore.shared.modelPickerWorldbookShortcutEnabled)
+        let snapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+        #expect(snapshot[promptKey.rawValue] as? Bool == true)
+        #expect(snapshot[worldbookKey.rawValue] as? Bool == true)
+    }
+
     @Test("模型分组文件夹首次默认收起且展开状态仅保存在本机")
     func modelPickerFolderExpansionDefaultsToLocalEmptyState() {
         #expect(AppConfigKey.iOSModelPickerExpandedGroupIDs.defaultValue == .text("[]"))

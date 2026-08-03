@@ -13,6 +13,7 @@ import ETOSCore
 
 struct WorldbookSettingsView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     @State private var worldbooks: [Worldbook] = []
     @State private var isImporting = false
@@ -38,6 +39,15 @@ struct WorldbookSettingsView: View {
                     details: NSLocalizedString("世界书说明正文", comment: "Worldbook intro details"),
                     isExpanded: $isShowingIntroDetails
                 )
+            }
+
+            Section {
+                Toggle(
+                    NSLocalizedString("在模型选择器中显示世界书", comment: "Show worldbook shortcut in model picker"),
+                    isOn: $appConfig.modelPickerWorldbookShortcutEnabled
+                )
+            } footer: {
+                Text(NSLocalizedString("开启后，可从模型选择器快速绑定当前对话使用的世界书。", comment: "Worldbook shortcut setting description"))
             }
 
             if let session = viewModel.currentSession {

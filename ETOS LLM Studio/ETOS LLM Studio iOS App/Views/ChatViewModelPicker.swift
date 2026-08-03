@@ -23,6 +23,14 @@ extension ChatView {
             .navigationDestination(isPresented: $isQuickPromptEditorPresented) {
                 ChatQuickPromptEditorView(viewModel: viewModel)
             }
+            .navigationDestination(isPresented: $isQuickWorldbookBindingPresented) {
+                WorldbookSessionBindingView(
+                    currentSession: Binding(
+                        get: { viewModel.currentSession },
+                        set: { viewModel.currentSession = $0 }
+                    )
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("完成", comment: "")) {
@@ -64,7 +72,12 @@ extension ChatView {
                 models: viewModel.activatedConversationModels,
                 showsProviderName: true
             )
-            modelPickerPromptSection
+            if appConfig.modelPickerPromptShortcutEnabled {
+                modelPickerPromptSection
+            }
+            if appConfig.modelPickerWorldbookShortcutEnabled {
+                modelPickerWorldbookSection
+            }
         }
     }
 
@@ -79,7 +92,12 @@ extension ChatView {
                 selectedProviderModelPickerSections
                 modelPickerShowAllModelsSection
             }
-            modelPickerPromptSection
+            if appConfig.modelPickerPromptShortcutEnabled {
+                modelPickerPromptSection
+            }
+            if appConfig.modelPickerWorldbookShortcutEnabled {
+                modelPickerWorldbookSection
+            }
         }
         .id(modelPickerShowsAllModels)
         // 固定栏与列表共享系统表面，避免额外材质叠层产生色差。
@@ -235,6 +253,18 @@ extension ChatView {
         }
     }
 
+    var modelPickerWorldbookSection: some View {
+        Section {
+            Button(action: presentQuickWorldbookBinding) {
+                Label(
+                    NSLocalizedString("世界书", comment: "模型选择器快速世界书入口"),
+                    systemImage: "books.vertical"
+                )
+            }
+            .disabled(viewModel.currentSession == nil)
+        }
+    }
+
     func nativeModelPickerModelRow(
         _ runnable: RunnableModel,
         showsProviderName: Bool
@@ -283,6 +313,12 @@ extension ChatView {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         activeChatPickerDetent = .large
         isQuickPromptEditorPresented = true
+    }
+
+    func presentQuickWorldbookBinding() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        activeChatPickerDetent = .large
+        isQuickWorldbookBindingPresented = true
     }
 
     var selectedProviderModelChoices: [RunnableModel] {

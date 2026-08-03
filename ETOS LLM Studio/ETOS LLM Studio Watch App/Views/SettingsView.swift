@@ -588,7 +588,12 @@ private struct ModelSelectionView: View {
             } footer: {
                 Text(NSLocalizedString("轻点切换模型，长按打开设置", comment: "模型选择列表操作提示"))
             }
-            quickPromptSection
+            if appConfig.modelPickerPromptShortcutEnabled {
+                quickPromptSection
+            }
+            if appConfig.modelPickerWorldbookShortcutEnabled {
+                quickWorldbookSection
+            }
         }
     }
 
@@ -614,7 +619,12 @@ private struct ModelSelectionView: View {
                 selectedProviderModelSections
                 showAllModelsSection
             }
-            quickPromptSection
+            if appConfig.modelPickerPromptShortcutEnabled {
+                quickPromptSection
+            }
+            if appConfig.modelPickerWorldbookShortcutEnabled {
+                quickWorldbookSection
+            }
         }
         .id(showsAllModels)
     }
@@ -703,6 +713,25 @@ private struct ModelSelectionView: View {
                     systemImage: "text.quote"
                 )
             }
+        }
+    }
+
+    private var quickWorldbookSection: some View {
+        Section {
+            NavigationLink {
+                WatchWorldbookSessionBindingView(
+                    session: Binding(
+                        get: { viewModel.currentSession },
+                        set: { viewModel.currentSession = $0 }
+                    )
+                )
+            } label: {
+                Label(
+                    NSLocalizedString("世界书", comment: "模型选择器快速世界书入口"),
+                    systemImage: "books.vertical"
+                )
+            }
+            .disabled(viewModel.currentSession == nil)
         }
     }
 
