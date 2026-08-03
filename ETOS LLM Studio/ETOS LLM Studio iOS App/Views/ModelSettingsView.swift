@@ -358,17 +358,24 @@ extension ModelSettingsView {
 
     private var editableChatCapabilities: [ModelCapability] {
         var capabilities: [ModelCapability] = [.toolCalling, .reasoning]
-        if case .anthropic = ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        switch ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        case .anthropic, .gemini:
             capabilities.append(.promptCaching)
+        case .openAICompatible, .openAIResponses:
+            break
         }
         return capabilities
     }
 
     private var chatCapabilityFooterText: String {
-        if case .anthropic = ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        switch ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        case .anthropic:
             return NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
+        case .gemini:
+            return NSLocalizedString("Gemini 2.5 及更新模型默认使用隐式缓存，无需添加请求参数或结构化控制；缓存命中由 Google 自动管理。", comment: "Gemini 隐式提示缓存说明")
+        case .openAICompatible, .openAIResponses:
+            return NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
         }
-        return NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
     }
 
     private var availableInputModalities: [ModelModality] {

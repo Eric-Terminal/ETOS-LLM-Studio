@@ -1073,6 +1073,10 @@ struct RequestBodyControlTests {
         var openAIModel = Model(modelName: "openai")
         openAIModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "openai-compatible")
         #expect(openAIModel.requestBodyControls.isEmpty)
+
+        var geminiModel = Model(modelName: "gemini-2.5-pro")
+        geminiModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "gemini")
+        #expect(geminiModel.requestBodyControls.isEmpty)
     }
 
     @Test("已有自定义推理控制时不会重复添加思考预算")

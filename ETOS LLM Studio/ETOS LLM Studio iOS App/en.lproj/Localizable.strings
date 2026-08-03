@@ -5205,6 +5205,7 @@
 "提示缓存" = "Prompt Caching";
 "自动缓存" = "Automatic Caching";
 "开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。" = "Enabling reasoning or prompt caching automatically adds the corresponding structured control. Disabling a capability keeps configured controls.";
+"Gemini 2.5 及更新模型默认使用隐式缓存，无需添加请求参数或结构化控制；缓存命中由 Google 自动管理。" = "Gemini 2.5 and newer models use implicit caching by default, with no request parameter or structured control required. Google manages cache hits automatically.";
 "当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。" = "The current model cannot use standalone image generation. Set Model Type to Image in model settings.";
 "模型分组" = "Model Groups";
 "分组名称（可选）" = "Group Name (Optional)";

@@ -83,6 +83,72 @@ struct GeminiAdapterTests {
         #expect(chatModel?.supportsEmbedding == false)
         #expect(chatModel?.kind == .chat)
         #expect(chatModel?.capabilities.contains(.toolCalling) == true)
+        #expect(chatModel?.capabilities.contains(.promptCaching) == true)
+    }
+
+    @Test("Gemini 模型列表只为 2.5 及更新模型声明隐式缓存")
+    func testGeminiModelListInfersImplicitPromptCachingByVersion() throws {
+        let data = Data("""
+        {
+          "models": [
+            {
+              "name": "models/gemini-2.0-flash",
+              "supportedGenerationMethods": ["generateContent"]
+            },
+            {
+              "name": "models/gemini-2.5-flash",
+              "supportedGenerationMethods": ["generateContent"]
+            },
+            {
+              "name": "models/gemini-3.1-pro-preview",
+              "supportedGenerationMethods": ["generateContent"]
+            }
+          ]
+        }
+        """.utf8)
+
+        let models = try adapter.parseModelListResponse(data: data)
+        let capabilitiesByName = Dictionary(uniqueKeysWithValues: models.map {
+            ($0.modelName, $0.capabilities)
+        })
+
+        #expect(capabilitiesByName["gemini-2.0-flash"]?.contains(.promptCaching) == false)
+        #expect(capabilitiesByName["gemini-2.5-flash"]?.contains(.promptCaching) == true)
+        #expect(capabilitiesByName["gemini-3.1-pro-preview"]?.contains(.promptCaching) == true)
+    }
+
+    @Test("Gemini 隐式缓存能力不会添加请求参数")
+    func testGeminiImplicitPromptCachingDoesNotAddRequestParameter() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Gemini Test Provider",
+            baseURL: "https://generativelanguage.googleapis.com/v1beta",
+            apiKeys: ["test-key"],
+            apiFormat: "gemini"
+        )
+        let model = RunnableModel(
+            provider: provider,
+            model: Model(
+                modelName: "gemini-2.5-pro",
+                capabilities: [.toolCalling, .promptCaching]
+            )
+        )
+
+        let request = try #require(adapter.buildChatRequest(
+            for: model,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "测试隐式缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(payload["cache_control"] == nil)
+        #expect(payload["cachedContent"] == nil)
+        #expect(payload["cached_content"] == nil)
     }
 
     @Test("Gemini 嵌入请求使用原生端点并修正官方 OpenAI 兼容基址")

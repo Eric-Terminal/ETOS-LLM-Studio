@@ -5235,6 +5235,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "提示缓存" = "Caché de prompts";
 "自动缓存" = "Caché automática";
 "开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。" = "Al activar el razonamiento o la caché de prompts se añade automáticamente el control estructurado correspondiente. Al desactivar una capacidad se conservan los controles configurados.";
+"Gemini 2.5 及更新模型默认使用隐式缓存，无需添加请求参数或结构化控制；缓存命中由 Google 自动管理。" = "Los modelos Gemini 2.5 y posteriores usan caché implícita de forma predeterminada, sin parámetros de solicitud ni controles estructurados. Google gestiona automáticamente los aciertos de caché.";
 "当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。" = "El modelo actual no se puede usar para la generación de imágenes independiente. En los ajustes del modelo, establece el tipo de modelo en Imagen.";
 "模型分组" = "Grupos de modelos";
 "分组名称（可选）" = "Nombre del grupo (opcional)";
