@@ -224,6 +224,55 @@ struct AnthropicAdapterTests {
         #expect(payload["effort"] == nil)
     }
 
+    @Test("Anthropic 自动缓存控制按所选 TTL 写入顶层请求体")
+    func testAnthropicBuildRequestUsesAutomaticPromptCachingControl() throws {
+        let provider = Provider(
+            id: UUID(),
+            name: "Anthropic",
+            baseURL: "https://api.anthropic.com/v1",
+            apiKeys: ["test-key"],
+            apiFormat: "anthropic"
+        )
+        var offControl = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        offControl.defaultOptionID = "off"
+        var oneHourControl = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        oneHourControl.defaultOptionID = "1h"
+
+        let offRequest = try #require(adapter.buildChatRequest(
+            for: RunnableModel(
+                provider: provider,
+                model: Model(modelName: "claude-sonnet-4-6", requestBodyControls: [offControl])
+            ),
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "关闭缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let offBody = try #require(offRequest.httpBody)
+        let offPayload = try #require(JSONSerialization.jsonObject(with: offBody) as? [String: Any])
+        #expect(offPayload["cache_control"] == nil)
+
+        let oneHourRequest = try #require(adapter.buildChatRequest(
+            for: RunnableModel(
+                provider: provider,
+                model: Model(modelName: "claude-sonnet-4-6", requestBodyControls: [oneHourControl])
+            ),
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "开启缓存")],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let oneHourBody = try #require(oneHourRequest.httpBody)
+        let oneHourPayload = try #require(JSONSerialization.jsonObject(with: oneHourBody) as? [String: Any])
+        let cacheControl = try #require(oneHourPayload["cache_control"] as? [String: Any])
+        #expect(cacheControl["type"] as? String == "ephemeral")
+        #expect(cacheControl["ttl"] as? String == "1h")
+    }
+
     @Test("Anthropic 自定义 Body 会和运行时工具合并")
     func testAnthropicCustomBodyMergesWithRuntimeTools() throws {
         let provider = Provider(

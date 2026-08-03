@@ -264,6 +264,7 @@ public enum ModelModality: String, Codable, Hashable, CaseIterable, Sendable {
 public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     case toolCalling
     case reasoning
+    case promptCaching
     case streaming
     case jsonMode
     case embedding
@@ -271,7 +272,8 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
 
     public static let editableCases: [ModelCapability] = [
         .toolCalling,
-        .reasoning
+        .reasoning,
+        .promptCaching
     ]
 
     public var localizedName: String {
@@ -280,6 +282,8 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
             return NSLocalizedString("工具调用", comment: "模型协议能力：工具调用")
         case .reasoning:
             return NSLocalizedString("推理", comment: "模型协议能力：推理")
+        case .promptCaching:
+            return NSLocalizedString("提示缓存", comment: "模型协议能力：提示缓存")
         case .streaming:
             return NSLocalizedString("流式输出", comment: "模型协议能力：流式输出")
         case .jsonMode:

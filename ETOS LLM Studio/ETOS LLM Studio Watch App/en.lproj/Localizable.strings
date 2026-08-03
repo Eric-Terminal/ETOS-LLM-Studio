@@ -5191,6 +5191,9 @@
 "输出模态" = "Output Modalities";
 "能力" = "Capabilities";
 "推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。" = "Enabling reasoning automatically adds a Thinking Budget control. Disabling the capability keeps configured controls.";
+"提示缓存" = "Prompt Caching";
+"自动缓存" = "Automatic Caching";
+"开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。" = "Enabling reasoning or prompt caching automatically adds the corresponding structured control. Disabling a capability keeps configured controls.";
 "当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。" = "The current model cannot use standalone image generation. Set Model Type to Image in model settings.";
 "模型分组" = "Model Groups";
 "分组名称（可选）" = "Group Name (Optional)";

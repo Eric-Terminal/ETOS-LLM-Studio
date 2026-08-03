@@ -2442,9 +2442,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 /* RFC #64 安全与快照本地化补齐 */
 "1 分钟" = "1 Minute";
-"1 小时" = "1 Hour";
+"1 小时" = "1 heure";
 "15 分钟" = "15 Minutes";
-"5 分钟" = "5 Minutes";
+"5 分钟" = "5 minutes";
 "ETOS LLM Studio 已锁定" = "ETOS LLM Studio is Locked";
 "上传快照" = "Upload Snapshot";
 "两次输入的快照密码不一致。" = "The snapshot passwords do not match.";
@@ -5232,6 +5232,9 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "输出模态" = "Modalités de sortie";
 "能力" = "Capacités";
 "推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。" = "L’activation du raisonnement ajoute automatiquement un contrôle du budget de réflexion. La désactivation de cette capacité conserve les contrôles configurés.";
+"提示缓存" = "Cache des prompts";
+"自动缓存" = "Mise en cache automatique";
+"开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。" = "L’activation du raisonnement ou du cache des prompts ajoute automatiquement le contrôle structuré correspondant. La désactivation d’une capacité conserve les contrôles configurés.";
 "当前模型不可用于独立生图，请在模型设置中将模型类型设为图像。" = "Le modèle actuel ne peut pas être utilisé pour la génération d’images indépendante. Dans les réglages du modèle, définissez le type sur Image.";
 "模型分组" = "Groupes de modèles";
 "分组名称（可选）" = "Nom du groupe (facultatif)";

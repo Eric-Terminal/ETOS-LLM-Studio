@@ -341,7 +341,7 @@ extension ModelSettingsView {
 
         Section {
             ModelSegmentedSelectionRow(
-                options: [.toolCalling, .reasoning],
+                options: editableChatCapabilities,
                 isSelected: { model.capabilities.contains($0) },
                 title: { $0.localizedName },
                 onSelect: { capability in
@@ -352,8 +352,23 @@ extension ModelSettingsView {
         } header: {
             Text(NSLocalizedString("能力", comment: "聊天模型能力区块标题"))
         } footer: {
-            Text(NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明"))
+            Text(chatCapabilityFooterText)
         }
+    }
+
+    private var editableChatCapabilities: [ModelCapability] {
+        var capabilities: [ModelCapability] = [.toolCalling, .reasoning]
+        if case .anthropic = ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+            capabilities.append(.promptCaching)
+        }
+        return capabilities
+    }
+
+    private var chatCapabilityFooterText: String {
+        if case .anthropic = ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+            return NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
+        }
+        return NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
     }
 
     private var availableInputModalities: [ModelModality] {
@@ -418,6 +433,8 @@ extension ModelSettingsView {
                     capabilitySet.insert(capability)
                     if capability == .reasoning {
                         model.ensureThinkingRequestBodyControl(apiFormat: provider.apiFormat)
+                    } else if capability == .promptCaching {
+                        model.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: provider.apiFormat)
                     }
                 } else {
                     capabilitySet.remove(capability)

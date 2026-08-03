@@ -483,6 +483,12 @@ public enum ModelRequestBodyControlDefaults {
         return payloads.contains(where: containsThinkingParameter)
     }
 
+    public static func isAutomaticPromptCachingControl(_ control: ModelRequestBodyControl) -> Bool {
+        guard control.kind == .optionGroup else { return false }
+        let payloads = [control.payload] + control.options.map(\.payload)
+        return payloads.contains { $0["cache_control"] != nil }
+    }
+
     public static func temperatureControl() -> ModelRequestBodyControl {
         ModelRequestBodyControl(
             title: NSLocalizedString("温度", comment: ""),
@@ -577,6 +583,30 @@ public enum ModelRequestBodyControlDefaults {
         }
     }
 
+    public static func automaticPromptCachingOptionGroup() -> ModelRequestBodyControl {
+        ModelRequestBodyControl(
+            title: NSLocalizedString("自动缓存", comment: "Anthropic 自动提示缓存控制标题"),
+            kind: .optionGroup,
+            defaultOptionID: "off",
+            options: [
+                ModelRequestBodyControlOption(
+                    id: "off",
+                    title: NSLocalizedString("关闭", comment: "Anthropic 自动提示缓存关闭选项")
+                ),
+                ModelRequestBodyControlOption(
+                    id: "5m",
+                    title: NSLocalizedString("5 分钟", comment: "Anthropic 自动提示缓存五分钟选项"),
+                    payload: automaticPromptCachingPayload(ttl: "5m")
+                ),
+                ModelRequestBodyControlOption(
+                    id: "1h",
+                    title: NSLocalizedString("1 小时", comment: "Anthropic 自动提示缓存一小时选项"),
+                    payload: automaticPromptCachingPayload(ttl: "1h")
+                )
+            ]
+        )
+    }
+
     public static func initialOptionGroupControl(
         existingControls: [ModelRequestBodyControl],
         apiFormat: String
@@ -609,6 +639,15 @@ public enum ModelRequestBodyControlDefaults {
             payload["output_config"] = .dictionary(["effort": .string(effort)])
         }
         return payload
+    }
+
+    private static func automaticPromptCachingPayload(ttl: String) -> [String: JSONValue] {
+        [
+            "cache_control": .dictionary([
+                "type": .string("ephemeral"),
+                "ttl": .string(ttl)
+            ])
+        ]
     }
 
     private static func containsThinkingParameter(_ payload: [String: JSONValue]) -> Bool {

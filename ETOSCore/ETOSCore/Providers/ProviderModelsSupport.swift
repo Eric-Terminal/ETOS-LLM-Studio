@@ -84,6 +84,17 @@ public extension Model {
             ModelRequestBodyControlDefaults.thinkingOptionGroup(for: apiFormat)
         )
     }
+
+    /// 为声明了提示缓存能力的 Anthropic 模型补充自动缓存档位，保留用户已有控制。
+    mutating func ensureAutomaticPromptCachingRequestBodyControl(apiFormat: String) {
+        guard case .anthropic = ProviderAPIFormatFamily(apiFormat: apiFormat),
+              !requestBodyControls.contains(where: ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl) else {
+            return
+        }
+        requestBodyControls.append(
+            ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        )
+    }
 }
 
 public extension Model {

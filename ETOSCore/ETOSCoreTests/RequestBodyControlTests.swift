@@ -991,6 +991,90 @@ struct RequestBodyControlTests {
         }
     }
 
+    @Test("Anthropic 自动缓存档位默认关闭并生成显式 TTL")
+    func testAutomaticPromptCachingOptionsCompileExpectedPayloads() throws {
+        let control = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+
+        #expect(control.kind == .optionGroup)
+        #expect(control.defaultOptionID == "off")
+        #expect(control.options.map(\.id) == ["off", "5m", "1h"])
+        #expect(control.options[0].payload.isEmpty)
+        #expect(ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl(control))
+
+        let defaultPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: [control],
+            state: ModelRequestBodyControlState()
+        )
+        #expect(defaultPayload["cache_control"] == nil)
+
+        for ttl in ["5m", "1h"] {
+            let payload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+                base: [:],
+                controls: [control],
+                state: ModelRequestBodyControlState(
+                    selectedOptionIDsByControlID: [control.id: ttl]
+                )
+            )
+            #expect(payload["cache_control"] == .dictionary([
+                "type": .string("ephemeral"),
+                "ttl": .string(ttl)
+            ]))
+        }
+    }
+
+    @Test("自动缓存档位拆分后仍保留关闭和 TTL 语义")
+    func testAutomaticPromptCachingOptionsPreserveSemanticsWhenSplit() throws {
+        let control = ModelRequestBodyControlDefaults.automaticPromptCachingOptionGroup()
+        let splitControls = try #require(ModelRequestBodyControlSplitter.split(control))
+
+        #expect(splitControls.count == 2)
+        #expect(splitControls.allSatisfy { $0.options[0].payload.isEmpty })
+
+        let offState = ModelRequestBodyControlState(
+            selectedOptionIDsByControlID: Dictionary(
+                uniqueKeysWithValues: splitControls.map { ($0.id, $0.options[0].id) }
+            )
+        )
+        let offPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: offState
+        )
+        #expect(offPayload["cache_control"] == nil)
+
+        let oneHourState = ModelRequestBodyControlState(
+            selectedOptionIDsByControlID: Dictionary(
+                uniqueKeysWithValues: splitControls.map { ($0.id, $0.options[2].id) }
+            )
+        )
+        let oneHourPayload = ModelRequestBodyControlCompiler.effectiveOverrideParameters(
+            base: [:],
+            controls: splitControls,
+            state: oneHourState
+        )
+        #expect(oneHourPayload["cache_control"] == .dictionary([
+            "type": .string("ephemeral"),
+            "ttl": .string("1h")
+        ]))
+    }
+
+    @Test("提示缓存能力只为 Anthropic 补充一次自动缓存控制")
+    func testEnsureAutomaticPromptCachingControlOnlyAddsForAnthropic() {
+        var anthropicModel = Model(modelName: "claude")
+        anthropicModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "anthropic")
+        anthropicModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "anthropic")
+
+        #expect(anthropicModel.requestBodyControls.count == 1)
+        #expect(ModelRequestBodyControlDefaults.isAutomaticPromptCachingControl(
+            anthropicModel.requestBodyControls[0]
+        ))
+
+        var openAIModel = Model(modelName: "openai")
+        openAIModel.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: "openai-compatible")
+        #expect(openAIModel.requestBodyControls.isEmpty)
+    }
+
     @Test("已有自定义推理控制时不会重复添加思考预算")
     func testEnsureThinkingControlPreservesExistingControl() {
         let existingControl = ModelRequestBodyControl(
