@@ -17,20 +17,30 @@ struct ChatTranscriptExportLayoutTests {
     func waitsForStableHeightBeforeCapture() {
         var tracker = ChatTranscriptExportHeightTracker()
 
-        #expect(!tracker.record(800))
-        #expect(!tracker.record(800))
-        #expect(tracker.record(800))
+        let firstRecordIsStable = tracker.record(800)
+        let secondRecordIsStable = tracker.record(800)
+        let thirdRecordIsStable = tracker.record(800)
+
+        #expect(!firstRecordIsStable)
+        #expect(!secondRecordIsStable)
+        #expect(thirdRecordIsStable)
     }
 
     @Test("导出高度变化会重新等待布局稳定")
     func heightChangeRestartsStabilityCheck() {
         var tracker = ChatTranscriptExportHeightTracker()
 
-        #expect(!tracker.record(800))
-        #expect(!tracker.record(800))
-        #expect(!tracker.record(1_200))
-        #expect(!tracker.record(1_200.25))
-        #expect(tracker.record(1_200))
+        let firstRecordIsStable = tracker.record(800)
+        let secondRecordIsStable = tracker.record(800)
+        let changedRecordIsStable = tracker.record(1_200)
+        let nearbyRecordIsStable = tracker.record(1_200.25)
+        let settledRecordIsStable = tracker.record(1_200)
+
+        #expect(!firstRecordIsStable)
+        #expect(!secondRecordIsStable)
+        #expect(!changedRecordIsStable)
+        #expect(!nearbyRecordIsStable)
+        #expect(settledRecordIsStable)
     }
 
     @MainActor

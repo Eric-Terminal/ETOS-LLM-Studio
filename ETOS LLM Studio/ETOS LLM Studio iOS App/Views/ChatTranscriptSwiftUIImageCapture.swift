@@ -47,6 +47,7 @@ enum ChatTranscriptSwiftUIImageCapture {
     ) async throws -> ChatTranscriptCapturedImage {
         let hostingController = UIHostingController(rootView: canvas)
         hostingController.view.backgroundColor = .clear
+        hostingController.safeAreaRegions = []
         hostingController.overrideUserInterfaceStyle = prefersDarkAppearance ? .dark : .light
         let initialHeight = try measuredHeight(
             hostingController: hostingController,
