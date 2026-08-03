@@ -55,16 +55,16 @@ extension PersistenceTests {
     @MainActor
     func localModelKVCacheDefaultsToDisabledAndLocalOnly() {
         let key = AppConfigKey.localModelKVCacheEnabled
-        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+        let previousValue = AppConfigStore.shared.localModelKVCacheEnabled
 
         defer {
-            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+            AppConfigStore.shared.localModelKVCacheEnabled = previousValue
         }
 
         #expect(key.defaultValue == .bool(false))
         #expect(key.participatesInSync == false)
 
-        AppConfigStore.shared.apply(snapshot: [key.rawValue: true])
+        AppConfigStore.shared.localModelKVCacheEnabled = true
 
         #expect(AppConfigStore.shared.localModelKVCacheEnabled)
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)

@@ -115,7 +115,7 @@ struct ConversationContinuationPersistenceTests {
             )
 
             let sourceLinkHidden = try #require(
-                store.loadConversationContinuationContext(for: firstChild.id)
+                try store.loadConversationContinuationContext(for: firstChild.id)
             )
             #expect(sourceLinkHidden.isSourceSessionLinkHidden)
             #expect(!sourceLinkHidden.isContinuationSessionLinkHidden)
@@ -125,7 +125,7 @@ struct ConversationContinuationPersistenceTests {
             )
 
             let persisted = try #require(
-                store.loadConversationContinuationContext(for: firstChild.id)
+                try store.loadConversationContinuationContext(for: firstChild.id)
             )
             #expect(persisted.isSourceSessionLinkHidden)
             #expect(persisted.isContinuationSessionLinkHidden)
