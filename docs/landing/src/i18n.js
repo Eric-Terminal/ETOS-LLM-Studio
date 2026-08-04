@@ -49,12 +49,93 @@ const zh = {
     title: 'iOS 端侧硬核 GGUF 本地模型推理',
     lead: '不需要连接任何网络或 API 服务。底层通过 llama.cpp C ABI 桥接，直接在 iPhone 上加载 GGUF 权重，并提供实时 CPU / Metal / 内存性能监视器。',
     selectModelLabel: '选择本地 GGUF 模型',
-    thinkHeader: '本地模型思考时间线 (Thinking Timeline)'
+    thinkHeader: '本地模型思考时间线 (Thinking Timeline)',
+    userQuestion: '运行端侧 GGUF 本地模型需要连接网络或 API Key 吗？',
+    kvCacheActiveLabel: 'KV Cache 前缀复用已生效',
+    kvCacheInactiveLabel: 'KV Cache 未开启',
+    models: [
+      {
+        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
+        size: '4.35 GB',
+        thinking: '正在使用 Metal GPU 加速计算，分析对话上下文与 GGUF Jinja 对话模板...',
+        response: '完全不需要网络或 API Key！模型权重与 Embedding 嵌入向量数据库完全运行在你的 iPhone 本机设备上。零联网权限，不消耗流量，隐私 100% 物理隔离。'
+      },
+      {
+        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '正在解析 <think> 推理链：1. 检索本地 SQLite 数据库；2. 匹配 KV Cache 缓存前缀；3. 生成结构化思考步骤...',
+        response: 'DeepSeek-R1 本地推理完成！思考耗时 1.2 秒，全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常。'
+      },
+      {
+        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
+        size: '5.42 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+      }
+    ]
   },
   mcpSkillsSection: {
     badge: '工具与生态',
     title: 'MCP 协议 · Agent Skills · 沙盒 JS',
-    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支持从 GitHub 一键导入 Agent Skills 技能包，并可在沙盒内运行自定义 JavaScript 工具。'
+    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支持从 GitHub 一键导入 Agent Skills 技能包，并可在沙盒内运行自定义 JavaScript 工具。',
+    tabs: [
+      {
+        id: 'mcp',
+        type: 'MCP SERVER',
+        title: 'Built-in App Tool MCP',
+        badge: 'Official Swift MCP SDK',
+        desc: '在 AI 想要获取设备时间或查询沙盒时，统一通过内建 MCP 服务器调度，且支持原生问答 Sheet 审批策略。',
+        snippet: `// Built-in App Tool MCP Execution
+{
+  "server": "etos_builtin_app_tool",
+  "tool": "app_get_system_time",
+  "arguments": { "timezone": "Asia/Shanghai" },
+  "approval": "ASK_USER_CONFIRMATION"
+}`
+      },
+      {
+        id: 'skills',
+        type: 'AGENT SKILLS',
+        title: 'GitHub 技能包一键导入',
+        badge: 'Agentic Skill Pack',
+        desc: '直接粘贴 GitHub 仓库链接或 RAW 文件地址，即刻注入代码审查、海报生成或工作流指令集。',
+        snippet: `# SKILL: CodeReviewer Pro
+description: "Inspect Swift & Rust diffs for memory leaks"
+tools: [app_read_sandbox_file, app_query_sqlite]
+instructions: |
+  Check for strong reference cycles in closure capture lists.`
+      },
+      {
+        id: 'jsc',
+        type: 'JSC JS TOOL',
+        title: 'JavaScriptCore 格式化工具',
+        badge: 'app_create_custom_jsc_js_tool',
+        desc: '创建可复用的 iOS JSC 自定义脚本工具，脚本声明同步 function main(input)，保存在 CustomJSTools 目录。',
+        snippet: `// CustomJSTools/format_currency.js
+// iOS JSC 执行引擎：同步函数，无 Node/fetch/Promise
+function main(input) {
+  var amount = input.amount || 0;
+  var currency = input.currency || 'USD';
+  return {
+    formatted: currency + ' ' + amount.toFixed(2),
+    timestamp: new Date().toISOString()
+  };
+}`
+      },
+      {
+        id: 'rag',
+        type: 'SQLCIPHER RAG',
+        title: 'SQLite 全盘物理加密向量库',
+        badge: 'GRDB + SQLCipher',
+        desc: '本地 Embedding 与长效记忆直接落地在加密 SQLite 数据库中，支持 SillyTavern 世界书触发。',
+        snippet: `CREATE TABLE memory_vectors (
+  id TEXT PRIMARY KEY,
+  vector BLOB NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT;`
+      }
+    ]
   },
   personalize: {
     title: '一眼认得出，是你的 Studio。',
@@ -225,12 +306,93 @@ const en = {
     title: 'Native GGUF Inference & Performance HUD on iOS',
     lead: 'No network or API keys needed. Bridged via llama.cpp C ABI directly on iOS with Metal GPU acceleration and real-time CPU / Metal / Memory telemetry.',
     selectModelLabel: 'Select Local GGUF Model',
-    thinkHeader: 'Thinking Timeline'
+    thinkHeader: 'Thinking Timeline',
+    userQuestion: 'Does running on-device GGUF models require network or API keys?',
+    kvCacheActiveLabel: 'KV Cache Prefix Reuse Active',
+    kvCacheInactiveLabel: 'KV Cache Disabled',
+    models: [
+      {
+        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
+        size: '4.35 GB',
+        thinking: 'Accelerating via Metal GPU, analyzing chat context and GGUF Jinja chat template...',
+        response: 'No network or API key required! Model weights and SQLite vector database run 100% locally on your iPhone with zero telemetry.'
+      },
+      {
+        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: 'Parsing <think> reasoning chain: 1. Search local SQLite; 2. Match KV Cache prefix; 3. Generate structured thinking steps...',
+        response: 'DeepSeek-R1 local inference complete! Reasoning duration 1.2s with full Metal GPU acceleration and KV Cache prefix reuse.'
+      },
+      {
+        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
+        size: '5.42 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+      }
+    ]
   },
   mcpSkillsSection: {
     badge: 'Tools & Ecosystem',
     title: 'MCP Protocol · Agent Skills · Sandboxed JS',
     lead: 'Official Swift Model Context Protocol SDK, one-click Agent Skill import from GitHub, and sandboxed JavaScript tool runtime.',
+    tabs: [
+      {
+        id: 'mcp',
+        type: 'MCP SERVER',
+        title: 'Built-in App Tool MCP',
+        badge: 'Official Swift MCP SDK',
+        desc: 'When AI requests system time or sandbox access, requests route through the built-in MCP server with native approval Sheet controls.',
+        snippet: `// Built-in App Tool MCP Execution
+{
+  "server": "etos_builtin_app_tool",
+  "tool": "app_get_system_time",
+  "arguments": { "timezone": "America/New_York" },
+  "approval": "ASK_USER_CONFIRMATION"
+}`
+      },
+      {
+        id: 'skills',
+        type: 'AGENT SKILLS',
+        title: 'GitHub Skill Import',
+        badge: 'Agentic Skill Pack',
+        desc: 'Paste GitHub repo links or RAW file URLs to inject code inspection or prompt workflow skill packs.',
+        snippet: `# SKILL: CodeReviewer Pro
+description: "Inspect Swift & Rust diffs for memory leaks"
+tools: [app_read_sandbox_file, app_query_sqlite]
+instructions: |
+  Check for strong reference cycles in closure capture lists.`
+      },
+      {
+        id: 'jsc',
+        type: 'JSC JS TOOL',
+        title: 'JavaScriptCore Formatter',
+        badge: 'app_create_custom_jsc_js_tool',
+        desc: 'Create reusable iOS JSC custom script tools with synchronous main(input) functions saved in CustomJSTools.',
+        snippet: `// CustomJSTools/format_currency.js
+// iOS JSC Execution Engine: Sync function without Node/fetch/Promise
+function main(input) {
+  var amount = input.amount || 0;
+  var currency = input.currency || 'USD';
+  return {
+    formatted: currency + ' ' + amount.toFixed(2),
+    timestamp: new Date().toISOString()
+  };
+}`
+      },
+      {
+        id: 'rag',
+        type: 'SQLCIPHER RAG',
+        title: 'SQLite Encrypted Vector Store',
+        badge: 'GRDB + SQLCipher',
+        desc: 'Local embeddings and long-term memory stored inside encrypted SQLite database with SillyTavern Worldbook support.',
+        snippet: `CREATE TABLE memory_vectors (
+  id TEXT PRIMARY KEY,
+  vector BLOB NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT;`
+      }
+    ]
   },
   personalize: {
     title: 'Unmistakably yours.',
@@ -401,12 +563,93 @@ const ja = {
     title: 'iOS 上での GGUF 推論 & パフォーマンス HUD',
     lead: 'ネット接続や API キーは一切不要。llama.cpp C ABI 経由で Metal GPU アクセラレーションとリアルタイム CPU/GPU/メモリ モニターを搭載。',
     selectModelLabel: 'ローカル GGUF モデルを選択',
-    thinkHeader: '思考タイムライン (Thinking Timeline)'
+    thinkHeader: '思考タイムライン (Thinking Timeline)',
+    userQuestion: 'ローカル GGUF モデルの実行にネット接続や API キーは必要ですか？',
+    kvCacheActiveLabel: 'KV Cache プレフィックス再利用中',
+    kvCacheInactiveLabel: 'KV Cache 未有効化',
+    models: [
+      {
+        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
+        size: '4.35 GB',
+        thinking: 'Metal GPU 加速で計算中、GGUF Jinja テンプレートを解析中...',
+        response: 'ネット接続や API キーは一切不要です！モデルウェイトと SQLite ベクトル DB は端末内で 100% ローカル動作します。'
+      },
+      {
+        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '<think> 推論チェーンを解析中: 1. SQLite 検索; 2. KV Cache マッチング; 3. 思考ステップ生成...',
+        response: 'DeepSeek-R1 ローカル推論完了！思考時間 1.2 秒、Metal GPU 加速と KV Cache 再利用が正常に動作しています。'
+      },
+      {
+        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
+        size: '5.42 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+      }
+    ]
   },
   mcpSkillsSection: {
     badge: 'ツールとエコシステム',
     title: 'MCP プロトコル · Agent Skills · Sandboxed JS',
-    lead: '公式 Swift MCP SDK、GitHub からのワンクリック Agent Skill インポート、サンドボックス化 JavaScript ランタイムを搭載。'
+    lead: '公式 Swift MCP SDK、GitHub からのワンクリック Agent Skill インポート、サンドボックス化 JavaScript ランタイムを搭載。',
+    tabs: [
+      {
+        id: 'mcp',
+        type: 'MCP SERVER',
+        title: 'Built-in App Tool MCP',
+        badge: 'Official Swift MCP SDK',
+        desc: 'システム時間やサンドボックスアクセスの要求は、組み込み MCP サーバーとネイティブ承認 Sheet 経由で安全に処理されます。',
+        snippet: `// Built-in App Tool MCP Execution
+{
+  "server": "etos_builtin_app_tool",
+  "tool": "app_get_system_time",
+  "arguments": { "timezone": "Asia/Tokyo" },
+  "approval": "ASK_USER_CONFIRMATION"
+}`
+      },
+      {
+        id: 'skills',
+        type: 'AGENT SKILLS',
+        title: 'GitHub スキルインポート',
+        badge: 'Agentic Skill Pack',
+        desc: 'GitHub リポジトリリンクや RAW URL を貼り付けるだけで、コードレビューやワークフロースキルを注入。',
+        snippet: `# SKILL: CodeReviewer Pro
+description: "Inspect Swift & Rust diffs for memory leaks"
+tools: [app_read_sandbox_file, app_query_sqlite]
+instructions: |
+  Check for strong reference cycles in closure capture lists.`
+      },
+      {
+        id: 'jsc',
+        type: 'JSC JS TOOL',
+        title: 'JavaScriptCore フォーマッター',
+        badge: 'app_create_custom_jsc_js_tool',
+        desc: 'CustomJSTools に保存される同期 function main(input) を備えた再利用可能な iOS JSC カスタムスクリプト。',
+        snippet: `// CustomJSTools/format_currency.js
+// iOS JSC エンジン: Node/fetch/Promise なしの同期関数
+function main(input) {
+  var amount = input.amount || 0;
+  var currency = input.currency || 'USD';
+  return {
+    formatted: currency + ' ' + amount.toFixed(2),
+    timestamp: new Date().toISOString()
+  };
+}`
+      },
+      {
+        id: 'rag',
+        type: 'SQLCIPHER RAG',
+        title: 'SQLite 暗号化ベクトルストア',
+        badge: 'GRDB + SQLCipher',
+        desc: '暗号化 SQLite データベース内に長期記憶を保存。SillyTavern ワールドブック対応。',
+        snippet: `CREATE TABLE memory_vectors (
+  id TEXT PRIMARY KEY,
+  vector BLOB NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT;`
+      }
+    ]
   },
   personalize: {
     title: 'あなただけの Studio。',
@@ -568,12 +811,93 @@ const ru = {
     title: 'Нативный GGUF инференс и HUD производительности на iOS',
     lead: 'Работает полностью без интернета. Модели GGUF исполняются через C ABI llama.cpp с ускорением Metal GPU и онлайн-монитором CPU/Metal/Памяти.',
     selectModelLabel: 'Выберите модель GGUF',
-    thinkHeader: 'Таймлайн размышлений (Thinking Timeline)'
+    thinkHeader: 'Таймлайн размышлений (Thinking Timeline)',
+    userQuestion: 'Требуется ли интернет или API ключ для локальной модели GGUF?',
+    kvCacheActiveLabel: 'Префикс KV Cache активирован',
+    kvCacheInactiveLabel: 'KV Cache отключен',
+    models: [
+      {
+        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
+        size: '4.35 GB',
+        thinking: 'Ускорение Metal GPU, анализ контекста чата и шаблона GGUF Jinja...',
+        response: 'Интернет и API ключ не требуются! Веса модели и векторная база SQLite работают 100% локально на вашем iPhone.'
+      },
+      {
+        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: 'Разбор цепочки <think>: 1. Поиск SQLite; 2. Совпадение KV Cache; 3. Генерация шагов...',
+        response: 'Локальный инференс DeepSeek-R1 завершен! Время размышления 1.2с с ускорением Metal GPU.'
+      },
+      {
+        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
+        size: '5.42 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+      }
+    ]
   },
   mcpSkillsSection: {
     badge: 'Инструменты и экосистема',
     title: 'Протокол MCP · Agent Skills · Песочница JS',
     lead: 'Официальный Swift MCP SDK, импорт Agent Skills с GitHub в один клик и изолированный запуск JS-скриптов.',
+    tabs: [
+      {
+        id: 'mcp',
+        type: 'MCP SERVER',
+        title: 'Built-in App Tool MCP',
+        badge: 'Official Swift MCP SDK',
+        desc: 'Запросы к системному времени или песочнице направляются через встроенный MCP сервер с нативным подтверждением.',
+        snippet: `// Built-in App Tool MCP Execution
+{
+  "server": "etos_builtin_app_tool",
+  "tool": "app_get_system_time",
+  "arguments": { "timezone": "Europe/Moscow" },
+  "approval": "ASK_USER_CONFIRMATION"
+}`
+      },
+      {
+        id: 'skills',
+        type: 'AGENT SKILLS',
+        title: 'Импорт навыков GitHub',
+        badge: 'Agentic Skill Pack',
+        desc: 'Вставьте ссылку на GitHub или RAW URL для внедрения пакетов навыков ревью кода и рабочих процессов.',
+        snippet: `# SKILL: CodeReviewer Pro
+description: "Inspect Swift & Rust diffs for memory leaks"
+tools: [app_read_sandbox_file, app_query_sqlite]
+instructions: |
+  Check for strong reference cycles in closure capture lists.`
+      },
+      {
+        id: 'jsc',
+        type: 'JSC JS TOOL',
+        title: 'Форматирование JavaScriptCore',
+        badge: 'app_create_custom_jsc_js_tool',
+        desc: 'Создавайте многоразовые инструменты JS с синхронной функцией main(input), сохраняемые в CustomJSTools.',
+        snippet: `// CustomJSTools/format_currency.js
+// Движок iOS JSC: Синхронная функция без Node/fetch/Promise
+function main(input) {
+  var amount = input.amount || 0;
+  var currency = input.currency || 'USD';
+  return {
+    formatted: currency + ' ' + amount.toFixed(2),
+    timestamp: new Date().toISOString()
+  };
+}`
+      },
+      {
+        id: 'rag',
+        type: 'SQLCIPHER RAG',
+        title: 'Зашифрованная база SQLite RAG',
+        badge: 'GRDB + SQLCipher',
+        desc: 'Долгосрочная память сохраняется в зашифрованной базе SQLite с поддержкой SillyTavern Worldbook.',
+        snippet: `CREATE TABLE memory_vectors (
+  id TEXT PRIMARY KEY,
+  vector BLOB NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT;`
+      }
+    ]
   },
   personalize: {
     title: 'Ваш уникальный Studio.',
@@ -735,12 +1059,93 @@ const zhHant = {
     title: 'iOS 端側硬核 GGUF 本地模型推理',
     lead: '不需要連接任何網路或 API 服務。底層通過 llama.cpp C ABI 橋接，直接在 iPhone 上加載 GGUF 權重，並提供實時 CPU / Metal / 記憶體性能監視器。',
     selectModelLabel: '選擇本地 GGUF 模型',
-    thinkHeader: '本地模型思考時間線 (Thinking Timeline)'
+    thinkHeader: '本地模型思考時間線 (Thinking Timeline)',
+    userQuestion: '運行端側 GGUF 本地模型需要連接網路或 API Key 嗎？',
+    kvCacheActiveLabel: 'KV Cache 前綴複用已生效',
+    kvCacheInactiveLabel: 'KV Cache 未開啟',
+    models: [
+      {
+        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
+        size: '4.35 GB',
+        thinking: '正在使用 Metal GPU 加速計算，分析對話上下文與 GGUF Jinja 對話模板...',
+        response: '完全不需要網路或 API Key！模型權重與 Embedding 嵌入向量數據庫完全運行在你的 iPhone 本機設備上。零聯網權限，不消耗流量，隱私 100% 物理隔離。'
+      },
+      {
+        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '正在解析 <think> 推理鏈：1. 檢索本地 SQLite 數據庫；2. 匹配 KV Cache 快取前綴；3. 生成結構化思考步驟...',
+        response: 'DeepSeek-R1 本地推理完成！思考耗時 1.2 秒，全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常。'
+      },
+      {
+        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
+        size: '5.42 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+      }
+    ]
   },
   mcpSkillsSection: {
     badge: '工具與生態',
     title: 'MCP 協議 · Agent Skills · 沙盒 JS',
-    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支援從 GitHub 一鍵導入 Agent Skills 技能包，並可在沙盒內運行自定義 JavaScript 工具。'
+    lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支援從 GitHub 一鍵導入 Agent Skills 技能包，並可在沙盒內運行自定義 JavaScript 工具。',
+    tabs: [
+      {
+        id: 'mcp',
+        type: 'MCP SERVER',
+        title: 'Built-in App Tool MCP',
+        badge: 'Official Swift MCP SDK',
+        desc: '在 AI 想要獲取設備時間或查詢沙盒時，統一通過內建 MCP 伺服器調度，且支援原生問答 Sheet 審批策略。',
+        snippet: `// Built-in App Tool MCP Execution
+{
+  "server": "etos_builtin_app_tool",
+  "tool": "app_get_system_time",
+  "arguments": { "timezone": "Asia/Taipei" },
+  "approval": "ASK_USER_CONFIRMATION"
+}`
+      },
+      {
+        id: 'skills',
+        type: 'AGENT SKILLS',
+        title: 'GitHub 技能包一鍵導入',
+        badge: 'Agentic Skill Pack',
+        desc: '直接粘貼 GitHub 倉庫鏈接或 RAW 檔案地址，即刻注入代碼審查、海報生成或工作流指令集。',
+        snippet: `# SKILL: CodeReviewer Pro
+description: "Inspect Swift & Rust diffs for memory leaks"
+tools: [app_read_sandbox_file, app_query_sqlite]
+instructions: |
+  Check for strong reference cycles in closure capture lists.`
+      },
+      {
+        id: 'jsc',
+        type: 'JSC JS TOOL',
+        title: 'JavaScriptCore 格式化工具',
+        badge: 'app_create_custom_jsc_js_tool',
+        desc: '創建可複用的 iOS JSC 自定義腳本工具，腳本聲明同步 function main(input)，保存在 CustomJSTools 目錄。',
+        snippet: `// CustomJSTools/format_currency.js
+// iOS JSC 執行引擎：同步函數，無 Node/fetch/Promise
+function main(input) {
+  var amount = input.amount || 0;
+  var currency = input.currency || 'USD';
+  return {
+    formatted: currency + ' ' + amount.toFixed(2),
+    timestamp: new Date().toISOString()
+  };
+}`
+      },
+      {
+        id: 'rag',
+        type: 'SQLCIPHER RAG',
+        title: 'SQLite 全盤物理加密向量庫',
+        badge: 'GRDB + SQLCipher',
+        desc: '本地 Embedding 與長效記憶直接落地在加密 SQLite 數據庫中，支援 SillyTavern 世界書觸發。',
+        snippet: `CREATE TABLE memory_vectors (
+  id TEXT PRIMARY KEY,
+  vector BLOB NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+) STRICT;`
+      }
+    ]
   },
   personalize: {
     title: '一眼認得出，是你的 Studio。',
