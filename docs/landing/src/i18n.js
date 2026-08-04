@@ -55,22 +55,22 @@ const zh = {
     kvCacheInactiveLabel: 'KV Cache 未开启',
     models: [
       {
-        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
-        size: '4.35 GB',
+        name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
+        size: '2.48 GB',
         thinking: '正在使用 Metal GPU 加速计算，分析对话上下文与 GGUF Jinja 对话模板...',
         response: '完全不需要网络或 API Key！模型权重与 Embedding 嵌入向量数据库完全运行在你的 iPhone 本机设备上。零联网权限，不消耗流量，隐私 100% 物理隔离。'
       },
       {
-        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
-        size: '4.92 GB',
-        thinking: '正在解析 <think> 推理链：1. 检索本地 SQLite 数据库；2. 匹配 KV Cache 缓存前缀；3. 生成结构化思考步骤...',
-        response: 'DeepSeek-R1 本地推理完成！思考耗时 1.2 秒，全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常。'
+        name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
+        size: '2.85 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，内存占用仅 2.6 GB。'
       },
       {
-        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
-        size: '5.42 GB',
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+        name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '正在解析 <think> 推理链：1. 检索本地 SQLite 数据库；2. 匹配 KV Cache 缓存前缀；3. 生成结构化思考步骤...',
+        response: 'Qwen3 8B 本地推理完成！思考耗时 1.1 秒，全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，速率达 42+ t/s。'
       }
     ]
   },
@@ -312,22 +312,22 @@ const en = {
     kvCacheInactiveLabel: 'KV Cache Disabled',
     models: [
       {
-        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
-        size: '4.35 GB',
+        name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
+        size: '2.48 GB',
         thinking: 'Accelerating via Metal GPU, analyzing chat context and GGUF Jinja chat template...',
         response: 'No network or API key required! Model weights and SQLite vector database run 100% locally on your iPhone with zero telemetry.'
       },
       {
-        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
-        size: '4.92 GB',
-        thinking: 'Parsing <think> reasoning chain: 1. Search local SQLite; 2. Match KV Cache prefix; 3. Generate structured thinking steps...',
-        response: 'DeepSeek-R1 local inference complete! Reasoning duration 1.2s with full Metal GPU acceleration and KV Cache prefix reuse.'
+        name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
+        size: '2.85 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 3 4B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits with 2.6 GB RAM.'
       },
       {
-        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
-        size: '5.42 GB',
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+        name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: 'Parsing <think> reasoning chain: 1. Search local SQLite; 2. Match KV Cache prefix; 3. Generate structured thinking steps...',
+        response: 'Qwen3 8B local inference complete! Reasoning duration 1.1s with full Metal GPU acceleration and 42+ t/s throughput.'
       }
     ]
   },
@@ -569,22 +569,22 @@ const ja = {
     kvCacheInactiveLabel: 'KV Cache 未有効化',
     models: [
       {
-        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
-        size: '4.35 GB',
+        name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
+        size: '2.48 GB',
         thinking: 'Metal GPU 加速で計算中、GGUF Jinja テンプレートを解析中...',
         response: 'ネット接続や API キーは一切不要です！モデルウェイトと SQLite ベクトル DB は端末内で 100% ローカル動作します。'
       },
       {
-        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
-        size: '4.92 GB',
-        thinking: '<think> 推論チェーンを解析中: 1. SQLite 検索; 2. KV Cache マッチング; 3. 思考ステップ生成...',
-        response: 'DeepSeek-R1 ローカル推論完了！思考時間 1.2 秒、Metal GPU 加速と KV Cache 再利用が正常に動作しています。'
+        name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
+        size: '2.85 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 3 4B ローカル推論完了！Metal GPU 加速と KV Cache 再利用が正常に動作しています。'
       },
       {
-        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
-        size: '5.42 GB',
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+        name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '<think> 推論チェーンを解析中: 1. SQLite 検索; 2. KV Cache マッチング; 3. 思考ステップ生成...',
+        response: 'Qwen3 8B ローカル推論完了！思考時間 1.1 秒、42+ t/s で動作しています。'
       }
     ]
   },
@@ -817,22 +817,22 @@ const ru = {
     kvCacheInactiveLabel: 'KV Cache отключен',
     models: [
       {
-        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
-        size: '4.35 GB',
+        name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
+        size: '2.48 GB',
         thinking: 'Ускорение Metal GPU, анализ контекста чата и шаблона GGUF Jinja...',
         response: 'Интернет и API ключ не требуются! Веса модели и векторная база SQLite работают 100% локально на вашем iPhone.'
       },
       {
-        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
-        size: '4.92 GB',
-        thinking: 'Разбор цепочки <think>: 1. Поиск SQLite; 2. Совпадение KV Cache; 3. Генерация шагов...',
-        response: 'Локальный инференс DeepSeek-R1 завершен! Время размышления 1.2с с ускорением Metal GPU.'
+        name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
+        size: '2.85 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Локальный инференс Gemma 3 4B завершен! Ускорение Metal GPU и использование памяти 2.6 ГБ.'
       },
       {
-        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
-        size: '5.42 GB',
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+        name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: 'Разбор цепочки <think>: 1. Поиск SQLite; 2. Совпадение KV Cache; 3. Генерация шагов...',
+        response: 'Локальный инференс Qwen3 8B завершен! Время размышления 1.1с со скоростью 42+ т/с.'
       }
     ]
   },
@@ -1065,22 +1065,22 @@ const zhHant = {
     kvCacheInactiveLabel: 'KV Cache 未開啟',
     models: [
       {
-        name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
-        size: '4.35 GB',
+        name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
+        size: '2.48 GB',
         thinking: '正在使用 Metal GPU 加速計算，分析對話上下文與 GGUF Jinja 對話模板...',
         response: '完全不需要網路或 API Key！模型權重與 Embedding 嵌入向量數據庫完全運行在你的 iPhone 本機設備上。零聯網權限，不消耗流量，隱私 100% 物理隔離。'
       },
       {
-        name: 'DeepSeek-R1-Distill-Llama-8B.Q4_K_M.gguf',
-        size: '4.92 GB',
-        thinking: '正在解析 <think> 推理鏈：1. 檢索本地 SQLite 數據庫；2. 匹配 KV Cache 快取前綴；3. 生成結構化思考步驟...',
-        response: 'DeepSeek-R1 本地推理完成！思考耗時 1.2 秒，全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常。'
+        name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
+        size: '2.85 GB',
+        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
+        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，記憶體佔用僅 2.6 GB。'
       },
       {
-        name: 'Gemma-2-9B-Instruct.Q4_K_M.gguf',
-        size: '5.42 GB',
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 2 9B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits.'
+        name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
+        size: '4.92 GB',
+        thinking: '正在解析 <think> 推理鏈：1. 檢索本地 SQLite 數據庫；2. 匹配 KV Cache 快取前綴；3. 生成結構化思考步驟...',
+        response: 'Qwen3 8B 本地推理完成！思考耗時 1.1 秒，全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，速率達 42+ t/s。'
       }
     ]
   },
