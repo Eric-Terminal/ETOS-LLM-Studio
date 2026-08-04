@@ -331,30 +331,12 @@ extension GeminiAdapter {
         return supportedModels.map { info in
             let rawName = info.name
             let normalizedName = rawName.hasPrefix("models/") ? String(rawName.dropFirst("models/".count)) : rawName
-            var model = Model.inferred(
+            return Model.inferred(
                 modelName: normalizedName,
                 displayName: info.displayName,
                 supportedGenerationMethods: info.supportedGenerationMethods
             )
-            if supportsImplicitPromptCaching(modelName: normalizedName), model.kind == .chat {
-                model.capabilities = Model.orderedCapabilities(model.capabilities + [.promptCaching])
-            }
-            return model
         }
-    }
-
-    /// Gemini 2.5 及更新模型由服务端默认启用隐式缓存，不需要请求参数。
-    func supportsImplicitPromptCaching(modelName: String) -> Bool {
-        let normalizedName = modelName.lowercased()
-        guard let markerRange = normalizedName.range(of: "gemini-") else { return false }
-        let suffix = normalizedName[markerRange.upperBound...]
-        let versionText = suffix.prefix { character in
-            character.isNumber || character == "."
-        }
-        let components = versionText.split(separator: ".", omittingEmptySubsequences: false)
-        guard let major = components.first.flatMap({ Int($0) }) else { return false }
-        let minor = components.dropFirst().first.flatMap { Int($0) } ?? 0
-        return major > 2 || (major == 2 && minor >= 5)
     }
     
     public func parseResponse(data: Data) throws -> ChatMessage {

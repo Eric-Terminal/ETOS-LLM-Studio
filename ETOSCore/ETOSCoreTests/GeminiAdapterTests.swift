@@ -83,11 +83,10 @@ struct GeminiAdapterTests {
         #expect(chatModel?.supportsEmbedding == false)
         #expect(chatModel?.kind == .chat)
         #expect(chatModel?.capabilities.contains(.toolCalling) == true)
-        #expect(chatModel?.capabilities.contains(.promptCaching) == true)
     }
 
-    @Test("Gemini 模型列表只为 2.5 及更新模型声明隐式缓存")
-    func testGeminiModelListInfersImplicitPromptCachingByVersion() throws {
+    @Test("Gemini 模型列表不会根据模型名称推断提示缓存能力")
+    func testGeminiModelListDoesNotInferPromptCachingFromModelName() throws {
         let data = Data("""
         {
           "models": [
@@ -108,13 +107,7 @@ struct GeminiAdapterTests {
         """.utf8)
 
         let models = try adapter.parseModelListResponse(data: data)
-        let capabilitiesByName = Dictionary(uniqueKeysWithValues: models.map {
-            ($0.modelName, $0.capabilities)
-        })
-
-        #expect(capabilitiesByName["gemini-2.0-flash"]?.contains(.promptCaching) == false)
-        #expect(capabilitiesByName["gemini-2.5-flash"]?.contains(.promptCaching) == true)
-        #expect(capabilitiesByName["gemini-3.1-pro-preview"]?.contains(.promptCaching) == true)
+        #expect(models.allSatisfy { !$0.capabilities.contains(.promptCaching) })
     }
 
     @Test("Gemini 隐式缓存能力不会添加请求参数")
