@@ -79,9 +79,7 @@ public enum VideoAttachmentSupport {
     }
 
     public static func usesNativeInput(for targetModel: RunnableModel) -> Bool {
-        targetModel.provider.apiFormat
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() == "gemini"
+        targetModel.effectiveAPIFormat == ProviderAPIFormatOption.gemini.rawValue
             && targetModel.model.supportsNativeVideoInput
     }
 

@@ -306,10 +306,10 @@ extension ChatService {
             return
         }
 
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+        guard let adapter = adapters[runnableModel.effectiveAPIFormat] else {
             let reason = String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
-                runnableModel.provider.apiFormat
+                runnableModel.effectiveAPIFormat
             )
             addErrorMessage(reason, sessionID: currentSession.id)
             emitSessionRequestStatus(.error, sessionID: currentSession.id)

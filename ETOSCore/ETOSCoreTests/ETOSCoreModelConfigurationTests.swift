@@ -765,6 +765,7 @@ struct RequestBodyOverrideModeTests {
         let source = Model(
             modelName: "test-model",
             pickerGroupName: " Reasoning ",
+            apiFormatOverride: " Gemini ",
             overrideParameters: ["temperature": .double(0.8)],
             requestBodyOverrideMode: .rawJSON,
             rawRequestBodyJSON: "{\"temperature\":0.8}"
@@ -775,6 +776,7 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.requestBodyOverrideMode == .rawJSON)
         #expect(decoded.rawRequestBodyJSON == "{\"temperature\":0.8}")
         #expect(decoded.pickerGroupName == "Reasoning")
+        #expect(decoded.apiFormatOverride == "gemini")
     }
 
     @Test("键值对编辑模式是默认请求体编辑模式")
@@ -799,6 +801,28 @@ struct RequestBodyOverrideModeTests {
         #expect(decoded.requestBodyOverrideMode == .keyValue)
         #expect(decoded.rawRequestBodyJSON == nil)
         #expect(decoded.pickerGroupName == nil)
+        #expect(decoded.apiFormatOverride == nil)
+    }
+
+    @Test("模型级 API 格式覆盖优先于提供商默认格式")
+    func testModelAPIFormatOverrideTakesPrecedence() {
+        let provider = Provider(
+            name: "Multi-format Provider",
+            baseURL: "https://example.com/v1beta",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible"
+        )
+        let inherited = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "inherited")
+        )
+        let overridden = RunnableModel(
+            provider: provider,
+            model: Model(modelName: "native-gemini", apiFormatOverride: "gemini")
+        )
+
+        #expect(inherited.effectiveAPIFormat == "openai-compatible")
+        #expect(overridden.effectiveAPIFormat == "gemini")
     }
 
     @Test("聊天模型默认开启工具调用")

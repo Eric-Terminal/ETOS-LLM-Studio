@@ -409,7 +409,7 @@ extension ChatService {
             )
         }
 
-        guard let adapter = adapters[targetModel.provider.apiFormat] else {
+        guard let adapter = adapters[targetModel.effectiveAPIFormat] else {
             throw DetachedCompletionError.unsupportedAdapter
         }
 

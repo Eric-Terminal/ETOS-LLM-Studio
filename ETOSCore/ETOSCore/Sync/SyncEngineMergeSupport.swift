@@ -224,6 +224,7 @@ extension SyncEngine {
             hasher.combine(model.modelName)
             hasher.combine(model.displayName)
             hasher.combine(Model.normalizedPickerGroupName(model.pickerGroupName) ?? "")
+            hasher.combine(Model.normalizedAPIFormatOverride(model.apiFormatOverride) ?? "")
             hasher.combine(model.isActivated)
             hasher.combine(model.kind.rawValue)
             for modality in model.inputModalities.sorted(by: { $0.rawValue < $1.rawValue }) {

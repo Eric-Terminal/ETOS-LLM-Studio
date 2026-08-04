@@ -274,7 +274,7 @@ extension PersistenceTests {
             baseURL: "https://test.com",
             apiKeys: ["key1", "key2"],
             apiFormat: "openai-compatible",
-            models: [Model(modelName: "test-model")]
+            models: [Model(modelName: "test-model", apiFormatOverride: "gemini")]
         )
 
         ConfigLoader.saveProvider(provider)
@@ -287,6 +287,7 @@ extension PersistenceTests {
         #expect(foundProvider?.name == "Test Provider")
         #expect(foundProvider?.apiKeys == ["key1", "key2"])
         #expect(foundProvider?.models.first?.modelName == "test-model")
+        #expect(foundProvider?.models.first?.apiFormatOverride == "gemini")
         #expect(!Persistence.auxiliaryBlobExists(forKey: "providers"))
     }
 

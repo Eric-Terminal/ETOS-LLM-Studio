@@ -175,6 +175,10 @@ struct ModelSettingsView: View {
             Section(NSLocalizedString("请求体预览", comment: "")) {
                 RequestBodyPreviewInlineView(preview: preview)
             }
+
+            if !LocalModelProviderBridge.isLocalProvider(provider) {
+                modelAdapterSection
+            }
         }
         .navigationDestination(isPresented: $isRequestBodyControlImportPresented) {
             RequestBodyControlImportView(sources: requestBodyControlImportSources) { source in
@@ -191,6 +195,42 @@ struct ModelSettingsView: View {
             get: { model.pickerGroupName ?? "" },
             set: { model.pickerGroupName = $0 }
         )
+    }
+
+    private var effectiveAPIFormat: String {
+        model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
+    }
+
+    private var apiFormatOverrideBinding: Binding<String> {
+        Binding(
+            get: { Model.normalizedAPIFormatOverride(model.apiFormatOverride) ?? "" },
+            set: { model.apiFormatOverride = Model.normalizedAPIFormatOverride($0) }
+        )
+    }
+
+    private var providerAPIFormatName: String {
+        ProviderAPIFormatOption(rawValue: provider.apiFormat.lowercased())?.localizedName
+            ?? provider.apiFormat
+    }
+
+    private var modelAdapterSection: some View {
+        Section {
+            Picker(NSLocalizedString("API 格式", comment: "Model adapter API format picker"), selection: apiFormatOverrideBinding) {
+                Text(String(
+                    format: NSLocalizedString("跟随提供商（%@）", comment: "Use provider API format option"),
+                    providerAPIFormatName
+                ))
+                .tag("")
+
+                ForEach(ProviderAPIFormatOption.allCases) { option in
+                    Text(option.localizedName).tag(option.rawValue)
+                }
+            }
+        } header: {
+            Text(NSLocalizedString("模型适配器", comment: "Per-model adapter section title"))
+        } footer: {
+            Text(NSLocalizedString("默认跟随提供商。覆盖后，此模型会使用所选 API 格式构建请求端点，基础 URL、API Key 和请求头保持不变。", comment: "Per-model adapter override explanation"))
+        }
     }
 }
 
@@ -358,7 +398,7 @@ extension ModelSettingsView {
 
     private var editableChatCapabilities: [ModelCapability] {
         var capabilities: [ModelCapability] = [.toolCalling, .reasoning]
-        switch ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
         case .anthropic, .gemini:
             capabilities.append(.promptCaching)
         case .openAICompatible, .openAIResponses:
@@ -368,7 +408,7 @@ extension ModelSettingsView {
     }
 
     private var chatCapabilityFooterText: String {
-        switch ProviderAPIFormatFamily(apiFormat: provider.apiFormat) {
+        switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
         case .anthropic:
             return NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
         case .gemini:
@@ -381,8 +421,7 @@ extension ModelSettingsView {
     private var availableInputModalities: [ModelModality] {
         ModelModality.allCases.filter { modality in
             modality != .video
-                || provider.apiFormat.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .lowercased() == "gemini"
+                || effectiveAPIFormat == ProviderAPIFormatOption.gemini.rawValue
         }
     }
 
@@ -439,9 +478,9 @@ extension ModelSettingsView {
                 if isEnabled {
                     capabilitySet.insert(capability)
                     if capability == .reasoning {
-                        model.ensureThinkingRequestBodyControl(apiFormat: provider.apiFormat)
+                        model.ensureThinkingRequestBodyControl(apiFormat: effectiveAPIFormat)
                     } else if capability == .promptCaching {
-                        model.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: provider.apiFormat)
+                        model.ensureAutomaticPromptCachingRequestBodyControl(apiFormat: effectiveAPIFormat)
                     }
                 } else {
                     capabilitySet.remove(capability)

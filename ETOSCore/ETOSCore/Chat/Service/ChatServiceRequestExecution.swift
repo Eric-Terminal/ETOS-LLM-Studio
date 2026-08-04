@@ -307,7 +307,7 @@ extension ChatService {
         let openAIUsesSystemRole = await MainActor.run {
             AppConfigStore.shared.openAITailContextUsesSystemRole
         }
-        let apiFormat = runnableModel.provider.apiFormat
+        let apiFormat = runnableModel.effectiveAPIFormat
 
         if let enhancedPromptMessage = makeEnhancedPromptMessage(
             enhancedPrompt,
@@ -537,10 +537,10 @@ extension ChatService {
             return
         }
 
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
+        guard let adapter = adapters[runnableModel.effectiveAPIFormat] else {
             addErrorMessage(String(
                 format: NSLocalizedString("错误: 找不到适用于 '%@' 格式的 API 适配器。", comment: "Missing API adapter error"),
-                runnableModel.provider.apiFormat
+                runnableModel.effectiveAPIFormat
             ), sessionID: currentSessionID)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
@@ -1194,7 +1194,7 @@ extension ChatService {
         using ocrModel: RunnableModel,
         sessionID: UUID
     ) async throws -> String {
-        guard let adapter = adapters[ocrModel.provider.apiFormat] else {
+        guard let adapter = adapters[ocrModel.effectiveAPIFormat] else {
             throw DetachedCompletionError.unsupportedAdapter
         }
         if let configurationError = providerConfigurationValidationErrorMessage(

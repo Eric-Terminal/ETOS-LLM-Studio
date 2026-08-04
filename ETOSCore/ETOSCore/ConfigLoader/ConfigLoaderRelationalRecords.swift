@@ -87,6 +87,7 @@ extension ConfigLoader {
             case modelName = "model_name"
             case displayName = "display_name"
             case pickerGroupName = "picker_group_name"
+            case apiFormatOverride = "api_format_override"
             case isActivated = "is_activated"
             case kind
             case inputModalitiesJSON = "input_modalities_json"
@@ -108,6 +109,7 @@ extension ConfigLoader {
         var modelName: String
         var displayName: String
         var pickerGroupName: String?
+        var apiFormatOverride: String?
         var isActivated: Int
         var kind: String?
         var inputModalitiesJSON: String?

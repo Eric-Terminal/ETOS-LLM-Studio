@@ -288,8 +288,8 @@ extension ChatService {
     }
 
     private func connectivityTestAdapter(for runnableModel: RunnableModel) throws -> APIAdapter {
-        guard let adapter = adapters[runnableModel.provider.apiFormat] else {
-            throw NetworkError.adapterNotFound(format: runnableModel.provider.apiFormat)
+        guard let adapter = adapters[runnableModel.effectiveAPIFormat] else {
+            throw NetworkError.adapterNotFound(format: runnableModel.effectiveAPIFormat)
         }
         return adapter
     }

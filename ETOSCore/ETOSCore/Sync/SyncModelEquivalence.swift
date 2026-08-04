@@ -50,6 +50,7 @@ extension Model {
         modelName == other.modelName &&
         displayName == other.displayName &&
         Model.normalizedPickerGroupName(pickerGroupName) == Model.normalizedPickerGroupName(other.pickerGroupName) &&
+        Model.normalizedAPIFormatOverride(apiFormatOverride) == Model.normalizedAPIFormatOverride(other.apiFormatOverride) &&
         isActivated == other.isActivated &&
         overrideParameters == other.overrideParameters &&
         kind == other.kind &&

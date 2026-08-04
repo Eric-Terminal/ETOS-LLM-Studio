@@ -14,6 +14,11 @@ public struct RunnableModel: Identifiable, Hashable {
     public let provider: Provider
     public let model: Model
 
+    /// 模型级覆盖优先于提供商默认值，所有实际请求都应使用这个格式选择适配器。
+    public var effectiveAPIFormat: String {
+        model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
+    }
+
     public var requestBodyControlState: ModelRequestBodyControlState {
         ModelRequestBodyControlRuntimeStore.state(
             forModelKey: id,

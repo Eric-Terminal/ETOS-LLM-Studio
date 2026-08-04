@@ -318,6 +318,8 @@ public struct Model: Codable, Identifiable, Hashable {
     public var modelName: String // 模型ID，例如: "deepseek-chat"
     public var displayName: String
     public var pickerGroupName: String?
+    /// 单个模型使用的 API 格式覆盖；为空时跟随所属提供商。
+    public var apiFormatOverride: String?
     public var isActivated: Bool
     public var overrideParameters: [String: JSONValue]
     public var kind: ModelKind
@@ -334,6 +336,7 @@ public struct Model: Codable, Identifiable, Hashable {
         modelName: String,
         displayName: String? = nil,
         pickerGroupName: String? = nil,
+        apiFormatOverride: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         kind: ModelKind? = .chat,
@@ -357,6 +360,7 @@ public struct Model: Codable, Identifiable, Hashable {
         self.modelName = modelName
         self.displayName = displayName ?? modelName
         self.pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName)
+        self.apiFormatOverride = Self.normalizedAPIFormatOverride(apiFormatOverride)
         self.isActivated = isActivated
         self.overrideParameters = overrideParameters
         self.kind = normalized.kind
@@ -375,6 +379,7 @@ public struct Model: Codable, Identifiable, Hashable {
         modelName: String,
         displayName: String? = nil,
         pickerGroupName: String? = nil,
+        apiFormatOverride: String? = nil,
         isActivated: Bool = false,
         overrideParameters: [String: JSONValue] = [:],
         capabilities legacyCapabilities: [Capability],
@@ -388,6 +393,7 @@ public struct Model: Codable, Identifiable, Hashable {
             modelName: modelName,
             displayName: displayName,
             pickerGroupName: pickerGroupName,
+            apiFormatOverride: apiFormatOverride,
             isActivated: isActivated,
             overrideParameters: overrideParameters,
             kind: nil,
@@ -400,7 +406,7 @@ public struct Model: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, modelName, displayName, pickerGroupName, isActivated, overrideParameters
+        case id, modelName, displayName, pickerGroupName, apiFormatOverride, isActivated, overrideParameters
         case kind, inputModalities, outputModalities, capabilities
         case requestBodyOverrideMode
         case rawRequestBodyJSON
@@ -415,6 +421,9 @@ public struct Model: Codable, Identifiable, Hashable {
         self.displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? modelName
         self.pickerGroupName = Self.normalizedPickerGroupName(
             try container.decodeIfPresent(String.self, forKey: .pickerGroupName)
+        )
+        self.apiFormatOverride = Self.normalizedAPIFormatOverride(
+            try container.decodeIfPresent(String.self, forKey: .apiFormatOverride)
         )
         self.isActivated = try container.decodeIfPresent(Bool.self, forKey: .isActivated) ?? false
         self.overrideParameters = try container.decodeIfPresent([String: JSONValue].self, forKey: .overrideParameters) ?? [:]
@@ -455,6 +464,9 @@ public struct Model: Codable, Identifiable, Hashable {
         if let pickerGroupName = Self.normalizedPickerGroupName(pickerGroupName) {
             try container.encode(pickerGroupName, forKey: .pickerGroupName)
         }
+        if let apiFormatOverride = Self.normalizedAPIFormatOverride(apiFormatOverride) {
+            try container.encode(apiFormatOverride, forKey: .apiFormatOverride)
+        }
         try container.encode(isActivated, forKey: .isActivated)
         if !overrideParameters.isEmpty {
             try container.encode(overrideParameters, forKey: .overrideParameters)
@@ -491,5 +503,18 @@ public struct Model: Codable, Identifiable, Hashable {
             return nil
         }
         return trimmed
+    }
+
+    public static func normalizedAPIFormatOverride(_ apiFormat: String?) -> String? {
+        guard let trimmed = apiFormat?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed.lowercased()
+    }
+
+    public func effectiveAPIFormat(providerAPIFormat: String) -> String {
+        Self.normalizedAPIFormatOverride(apiFormatOverride)
+            ?? providerAPIFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

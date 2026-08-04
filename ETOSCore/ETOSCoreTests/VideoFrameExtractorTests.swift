@@ -43,6 +43,11 @@ struct VideoFrameExtractorTests {
             modelName: "native-video",
             inputModalities: [.text, .video]
         )
+        let overriddenNativeModel = Model(
+            modelName: "native-video-via-gemini",
+            apiFormatOverride: "gemini",
+            inputModalities: [.text, .video]
+        )
         let frameOnlyModel = Model(
             modelName: "frame-only",
             inputModalities: [.text, .image]
@@ -59,6 +64,10 @@ struct VideoFrameExtractorTests {
         #expect(!VideoAttachmentSupport.usesNativeInput(for: RunnableModel(
             provider: openAIProvider,
             model: nativeModel
+        )))
+        #expect(VideoAttachmentSupport.usesNativeInput(for: RunnableModel(
+            provider: openAIProvider,
+            model: overriddenNativeModel
         )))
     }
 

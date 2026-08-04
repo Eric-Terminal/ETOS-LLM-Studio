@@ -94,6 +94,7 @@ extension ModelSettingsView {
 
     func saveEditorState() {
         model.pickerGroupName = Model.normalizedPickerGroupName(model.pickerGroupName)
+        model.apiFormatOverride = Model.normalizedAPIFormatOverride(model.apiFormatOverride)
         model.requestBodyOverrideMode = requestBodyMode
         model.rawRequestBodyJSON = rawJSONInput
 
@@ -156,7 +157,7 @@ extension ModelSettingsView {
             state: model.defaultRequestBodyControlState
         )
         let payload = buildRequestPreviewPayload(
-            apiFormat: provider.apiFormat,
+            apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat),
             model: model,
             overrides: effectiveOverrides
         )
@@ -379,7 +380,7 @@ extension ModelSettingsView {
         model.requestBodyControls.append(
             ModelRequestBodyControlDefaults.initialOptionGroupControl(
                 existingControls: model.requestBodyControls,
-                apiFormat: provider.apiFormat
+                apiFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat)
             )
         )
     }

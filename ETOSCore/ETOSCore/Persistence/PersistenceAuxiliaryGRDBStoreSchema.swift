@@ -122,6 +122,7 @@ extension PersistenceAuxiliaryGRDBStore {
                         model_name TEXT NOT NULL,
                         display_name TEXT NOT NULL,
                         picker_group_name TEXT,
+                        api_format_override TEXT,
                         is_activated INTEGER NOT NULL,
                         kind TEXT,
                         input_modalities_json TEXT,
@@ -900,6 +901,23 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(
                         sql: "DELETE FROM provider_model_capabilities WHERE capability = 'speechToText'"
                     )
+                }
+            }
+
+            migrator.registerMigration("v16_add_provider_model_api_format_override") { db in
+                let providerModelsExist = (try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+                ) ?? 0) > 0
+                guard providerModelsExist else { return }
+
+                let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(provider_models)")
+                let hasAPIFormatOverride = columns.contains { row in
+                    let name: String = row["name"]
+                    return name == "api_format_override"
+                }
+                if !hasAPIFormatOverride {
+                    try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN api_format_override TEXT")
                 }
             }
         }

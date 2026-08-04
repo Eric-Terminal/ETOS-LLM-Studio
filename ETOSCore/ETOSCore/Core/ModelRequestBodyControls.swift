@@ -452,6 +452,28 @@ public enum ModelRequestBodyControlCompiler {
     }
 }
 
+public enum ProviderAPIFormatOption: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case openAICompatible = "openai-compatible"
+    case openAIResponses = "openai-responses"
+    case gemini
+    case anthropic
+
+    public var id: String { rawValue }
+
+    public var localizedName: String {
+        switch self {
+        case .openAICompatible:
+            return NSLocalizedString("OpenAI 兼容", comment: "Provider API format")
+        case .openAIResponses:
+            return NSLocalizedString("OpenAI Responses", comment: "Provider API format")
+        case .gemini:
+            return NSLocalizedString("Gemini", comment: "Provider API format")
+        case .anthropic:
+            return NSLocalizedString("Anthropic", comment: "Provider API format")
+        }
+    }
+}
+
 public enum ProviderAPIFormatFamily {
     case openAICompatible
     case openAIResponses

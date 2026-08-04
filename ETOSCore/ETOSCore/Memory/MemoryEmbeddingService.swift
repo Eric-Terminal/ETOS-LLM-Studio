@@ -148,8 +148,8 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
         }) else {
             throw MemoryEmbeddingError.requestBuildFailed
         }
-        guard let adapter = adapters[targetModel.provider.apiFormat] else {
-            throw MemoryEmbeddingError.adapterMissing(targetModel.provider.apiFormat)
+        guard let adapter = adapters[targetModel.effectiveAPIFormat] else {
+            throw MemoryEmbeddingError.adapterMissing(targetModel.effectiveAPIFormat)
         }
         let texts = inputs.map(\.text)
         guard let request = adapter.buildEmbeddingRequest(for: targetModel, texts: texts) else {
