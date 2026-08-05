@@ -48,11 +48,20 @@ const zh = {
     badge: '端侧本地模型',
     title: 'iOS 端侧硬核 GGUF 本地模型推理',
     lead: '不需要连接任何网络或 API 服务。底层通过 llama.cpp C ABI 桥接，直接在 iPhone 上加载 GGUF 权重，并提供实时 CPU / Metal / 内存性能监视器。',
+    controlBadge: 'GGUF · llama.cpp C ABI',
     selectModelLabel: '选择本地 GGUF 模型',
+    metalOffloadLabel: 'Metal GPU 卸载',
+    flashAttentionLabel: 'Flash Attention',
+    kvCacheLabel: 'KV Cache 前缀复用',
+    cpuLoadLabel: 'CPU 负载',
+    metalGPULabel: 'METAL GPU',
+    memoryLabel: '内存',
+    speedLabel: '推理速度',
+    estimateDisclaimer: '演示数据为估算示例；实际性能取决于设备、量化方式和上下文长度。',
     thinkHeader: '本地模型思考时间线 (Thinking Timeline)',
     userQuestion: '运行端侧 GGUF 本地模型需要连接网络或 API Key 吗？',
-    kvCacheActiveLabel: 'KV Cache 前缀复用已生效',
-    kvCacheInactiveLabel: 'KV Cache 未开启',
+    kvCacheEnabledLabel: 'KV Cache 前缀复用已启用',
+    kvCacheDisabledLabel: 'KV Cache 前缀复用未启用',
     models: [
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
@@ -66,12 +75,10 @@ const zh = {
           ramCpu: '3.1 GB (RAM)',
           ramCpuKV: '3.4 GB (RAM + KV)',
           speedFlash: 49.6,
-          speedFlashKV: 57.8,
-          speedBase: 29.8,
-          speedKV: 34.2
+          speedBase: 29.8
         },
-        thinking: '正在使用 Metal GPU 加速计算，分析对话上下文与 GGUF Jinja 对话模板...',
-        response: '完全不需要网络或 API Key！模型权重与 Embedding 嵌入向量数据库完全运行在你的 iPhone 本机设备上。零联网权限，不消耗流量，隐私 100% 物理隔离。'
+        thinking: '正在解析本地对话上下文与 GGUF Jinja 对话模板...',
+        response: '本地模型推理不需要网络或 API Key，模型权重与生成过程都留在设备上；只有主动使用联网模型或网络工具时才会发起网络请求。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
@@ -85,12 +92,10 @@ const zh = {
           ramCpu: '3.7 GB (RAM)',
           ramCpuKV: '4.1 GB (RAM + KV)',
           speedFlash: 38.0,
-          speedFlashKV: 44.3,
-          speedBase: 23.2,
-          speedKV: 26.8
+          speedBase: 23.2
         },
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，内存占用按上下文缓存同步增加。'
+        thinking: '正在检查本地 GGUF 上下文预算与对话模板...',
+        response: 'Gemma 3 4B 本地推理演示完成。上方 HUD 会根据所选运行选项展示对应的估算数据。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
@@ -104,12 +109,10 @@ const zh = {
           ramCpu: '6.1 GB (RAM)',
           ramCpuKV: '6.8 GB (RAM + KV)',
           speedFlash: 26.4,
-          speedFlashKV: 30.5,
-          speedBase: 15.7,
-          speedKV: 18.2
+          speedBase: 15.7
         },
-        thinking: '正在解析 <think> 推理链：1. 检索本地 SQLite 数据库；2. 匹配 KV Cache 缓存前缀；3. 生成结构化思考步骤...',
-        response: 'Qwen3 8B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，吞吐与内存占用按 8B 模型规模显示。'
+        thinking: '正在解析 <think> 推理链：1. 读取本地上下文；2. 应用对话模板；3. 生成结构化思考步骤...',
+        response: 'Qwen3 8B 本地推理演示完成。HUD 按 8B 模型规模和当前选项展示吞吐与内存估算。'
       }
     ]
   },
@@ -117,17 +120,26 @@ const zh = {
     badge: '工具与生态',
     title: 'MCP 协议 · Agent Skills · 沙盒 JS',
     lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支持从 GitHub 一键导入 Agent Skills 技能包，并可在沙盒内运行自定义 JavaScript 工具。',
+    specLabel: '规格',
     tabs: [
       {
         id: 'mcp',
-        type: 'BUILT-IN APP TOOL',
-        title: '内置系统时间工具',
-        badge: 'Built-in App Tool',
-        desc: '在 AI 想要获取设备时间时，调用内置 App Tool；它不属于外部 MCP 工具，参数为空。',
-        snippet: `// Built-in App Tool Execution
+        type: 'BUILT-IN MCP SERVER',
+        title: '内建数据库 MCP Server',
+        badge: 'Official Swift MCP SDK',
+        desc: 'ETOS 将数据库 App Tool 包装为内建 MCP Server；下面通过标准 tools/call 列出记忆数据库表结构。',
+        snippet: `// builtin://app-tools/database
 {
-  "tool": "app_get_system_time",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "app_list_sqlite_tables",
+    "arguments": {
+      "database": "memory",
+      "include_create_sql": true
+    }
+  }
 }`
       },
       {
@@ -167,18 +179,18 @@ function main(input) {
       },
       {
         id: 'rag',
-        type: 'SQLCIPHER RAG',
-        title: 'SQLite 全盘物理加密向量库',
-        badge: 'GRDB + SQLCipher',
-        desc: '本地 Embedding 与长效记忆直接落地在加密 SQLite 数据库中，支持 SillyTavern 世界书触发。',
+        type: 'LOCAL RAG INDEX',
+        title: 'SQLite 本地向量索引',
+        badge: 'SQLite3',
+        desc: '本地 Embedding 索引保存在 memory_vectors.sqlite 的 memory_chunks 表中，并与长期记忆及 SillyTavern 世界书配合使用。',
         snippet: `-- memory_vectors.sqlite
-CREATE TABLE memory_chunks (
+CREATE TABLE IF NOT EXISTS memory_chunks (
   chunk_id TEXT PRIMARY KEY,
   parent_memory_id TEXT NOT NULL,
   text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   metadata TEXT NOT NULL
-) STRICT;`
+);`
       }
     ]
   },
@@ -350,11 +362,20 @@ const en = {
     badge: 'On-Device Local Model',
     title: 'Native GGUF Inference & Performance HUD on iOS',
     lead: 'No network or API keys needed. Bridged via llama.cpp C ABI directly on iOS with Metal GPU acceleration and real-time CPU / Metal / Memory telemetry.',
+    controlBadge: 'GGUF · llama.cpp C ABI',
     selectModelLabel: 'Select Local GGUF Model',
+    metalOffloadLabel: 'Metal GPU Offload',
+    flashAttentionLabel: 'Flash Attention',
+    kvCacheLabel: 'KV Cache Prefix Reuse',
+    cpuLoadLabel: 'CPU LOAD',
+    metalGPULabel: 'METAL GPU',
+    memoryLabel: 'MEMORY',
+    speedLabel: 'INFERENCE SPEED',
+    estimateDisclaimer: 'Demo values are estimates; actual performance depends on the device, quantization, and context length.',
     thinkHeader: 'Thinking Timeline',
     userQuestion: 'Does running on-device GGUF models require network or API keys?',
-    kvCacheActiveLabel: 'KV Cache Prefix Reuse Active',
-    kvCacheInactiveLabel: 'KV Cache Disabled',
+    kvCacheEnabledLabel: 'KV Cache Prefix Reuse Enabled',
+    kvCacheDisabledLabel: 'KV Cache Prefix Reuse Disabled',
     models: [
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
@@ -368,12 +389,10 @@ const en = {
           ramCpu: '3.1 GB (RAM)',
           ramCpuKV: '3.4 GB (RAM + KV)',
           speedFlash: 49.6,
-          speedFlashKV: 57.8,
-          speedBase: 29.8,
-          speedKV: 34.2
+          speedBase: 29.8
         },
-        thinking: 'Accelerating via Metal GPU, analyzing chat context and GGUF Jinja chat template...',
-        response: 'No network or API key required! Model weights and SQLite vector database run 100% locally on your iPhone with zero telemetry.'
+        thinking: 'Parsing the local conversation context and GGUF Jinja chat template...',
+        response: 'Local model inference needs no network or API key. Model weights and generation stay on the device; network access only occurs when you choose an online model or network tool.'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
@@ -387,12 +406,10 @@ const en = {
           ramCpu: '3.7 GB (RAM)',
           ramCpuKV: '4.1 GB (RAM + KV)',
           speedFlash: 38.0,
-          speedFlashKV: 44.3,
-          speedBase: 23.2,
-          speedKV: 26.8
+          speedBase: 23.2
         },
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B local execution complete. Metal streaming and KV prefix reuse are active, with memory increasing to reflect the cached context.'
+        thinking: 'Checking the local GGUF context budget and chat template...',
+        response: 'Gemma 3 4B local inference demo complete. The HUD above shows estimates for the selected runtime options.'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
@@ -406,12 +423,10 @@ const en = {
           ramCpu: '6.1 GB (RAM)',
           ramCpuKV: '6.8 GB (RAM + KV)',
           speedFlash: 26.4,
-          speedFlashKV: 30.5,
-          speedBase: 15.7,
-          speedKV: 18.2
+          speedBase: 15.7
         },
-        thinking: 'Parsing <think> reasoning chain: 1. Search local SQLite; 2. Match KV Cache prefix; 3. Generate structured thinking steps...',
-        response: 'Qwen3 8B local inference complete. Metal acceleration and KV reuse are active, with throughput and memory shown at the larger 8B scale.'
+        thinking: 'Parsing the <think> reasoning chain: 1. Read local context; 2. Apply the chat template; 3. Generate structured reasoning steps...',
+        response: 'Qwen3 8B local inference demo complete. The HUD estimates throughput and memory for the 8B model and current options.'
       }
     ]
   },
@@ -419,17 +434,26 @@ const en = {
     badge: 'Tools & Ecosystem',
     title: 'MCP Protocol · Agent Skills · Sandboxed JS',
     lead: 'Official Swift Model Context Protocol SDK, one-click Agent Skill import from GitHub, and sandboxed JavaScript tool runtime.',
+    specLabel: 'SPEC',
     tabs: [
       {
         id: 'mcp',
-        type: 'BUILT-IN APP TOOL',
-        title: 'Built-in System Time Tool',
-        badge: 'Built-in App Tool',
-        desc: 'When AI requests device time, it calls a built-in App Tool. This is not an external MCP tool and takes no arguments.',
-        snippet: `// Built-in App Tool Execution
+        type: 'BUILT-IN MCP SERVER',
+        title: 'Built-in Database MCP Server',
+        badge: 'Official Swift MCP SDK',
+        desc: 'ETOS wraps database App Tools in a built-in MCP server. This standard tools/call request lists tables in the memory database.',
+        snippet: `// builtin://app-tools/database
 {
-  "tool": "app_get_system_time",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "app_list_sqlite_tables",
+    "arguments": {
+      "database": "memory",
+      "include_create_sql": true
+    }
+  }
 }`
       },
       {
@@ -469,18 +493,18 @@ function main(input) {
       },
       {
         id: 'rag',
-        type: 'SQLCIPHER RAG',
-        title: 'SQLite Encrypted Vector Store',
-        badge: 'GRDB + SQLCipher',
-        desc: 'Local embeddings and long-term memory stored inside encrypted SQLite database with SillyTavern Worldbook support.',
+        type: 'LOCAL RAG INDEX',
+        title: 'Local SQLite Vector Index',
+        badge: 'SQLite3',
+        desc: 'Local embedding indexes are stored in the memory_chunks table of memory_vectors.sqlite and work with long-term memory and SillyTavern Worldbooks.',
         snippet: `-- memory_vectors.sqlite
-CREATE TABLE memory_chunks (
+CREATE TABLE IF NOT EXISTS memory_chunks (
   chunk_id TEXT PRIMARY KEY,
   parent_memory_id TEXT NOT NULL,
   text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   metadata TEXT NOT NULL
-) STRICT;`
+);`
       }
     ]
   },
@@ -652,11 +676,20 @@ const ja = {
     badge: 'オンデバイスローカルモデル',
     title: 'iOS 上での GGUF 推論 & パフォーマンス HUD',
     lead: 'ネット接続や API キーは一切不要。llama.cpp C ABI 経由で Metal GPU アクセラレーションとリアルタイム CPU/GPU/メモリ モニターを搭載。',
+    controlBadge: 'GGUF · llama.cpp C ABI',
     selectModelLabel: 'ローカル GGUF モデルを選択',
+    metalOffloadLabel: 'Metal GPU オフロード',
+    flashAttentionLabel: 'Flash Attention',
+    kvCacheLabel: 'KV Cache プレフィックス再利用',
+    cpuLoadLabel: 'CPU 負荷',
+    metalGPULabel: 'METAL GPU',
+    memoryLabel: 'メモリ',
+    speedLabel: '推論速度',
+    estimateDisclaimer: '表示値はデモ用の推定値です。実際の性能はデバイス、量子化方式、コンテキスト長によって異なります。',
     thinkHeader: '思考タイムライン (Thinking Timeline)',
     userQuestion: 'ローカル GGUF モデルの実行にネット接続や API キーは必要ですか？',
-    kvCacheActiveLabel: 'KV Cache プレフィックス再利用中',
-    kvCacheInactiveLabel: 'KV Cache 未有効化',
+    kvCacheEnabledLabel: 'KV Cache プレフィックス再利用を有効化',
+    kvCacheDisabledLabel: 'KV Cache プレフィックス再利用を無効化',
     models: [
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
@@ -670,12 +703,10 @@ const ja = {
           ramCpu: '3.1 GB (RAM)',
           ramCpuKV: '3.4 GB (RAM + KV)',
           speedFlash: 49.6,
-          speedFlashKV: 57.8,
-          speedBase: 29.8,
-          speedKV: 34.2
+          speedBase: 29.8
         },
-        thinking: 'Metal GPU 加速で計算中、GGUF Jinja テンプレートを解析中...',
-        response: 'ネット接続や API キーは一切不要です！モデルウェイトと SQLite ベクトル DB は端末内で 100% ローカル動作します。'
+        thinking: 'ローカルの会話コンテキストと GGUF Jinja テンプレートを解析中...',
+        response: 'ローカルモデル推論にネット接続や API キーは不要です。モデルウェイトと生成処理は端末内に留まり、オンラインモデルやネットワークツールを選んだ場合のみ通信します。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
@@ -689,12 +720,10 @@ const ja = {
           ramCpu: '3.7 GB (RAM)',
           ramCpuKV: '4.1 GB (RAM + KV)',
           speedFlash: 38.0,
-          speedFlashKV: 44.3,
-          speedBase: 23.2,
-          speedKV: 26.8
+          speedBase: 23.2
         },
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B ローカル推論完了！Metal GPU 加速と KV Cache 再利用が正常に動作し、キャッシュ分のメモリも反映されています。'
+        thinking: 'ローカル GGUF のコンテキスト予算とチャットテンプレートを確認中...',
+        response: 'Gemma 3 4B のローカル推論デモが完了しました。上の HUD は選択中の実行オプションに基づく推定値です。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
@@ -708,12 +737,10 @@ const ja = {
           ramCpu: '6.1 GB (RAM)',
           ramCpuKV: '6.8 GB (RAM + KV)',
           speedFlash: 26.4,
-          speedFlashKV: 30.5,
-          speedBase: 15.7,
-          speedKV: 18.2
+          speedBase: 15.7
         },
-        thinking: '<think> 推論チェーンを解析中: 1. SQLite 検索; 2. KV Cache マッチング; 3. 思考ステップ生成...',
-        response: 'Qwen3 8B ローカル推論完了。8B モデル規模に合わせたスループットとメモリ使用量を表示しています。'
+        thinking: '<think> 推論チェーンを解析中: 1. ローカルコンテキストを読む; 2. チャットテンプレートを適用; 3. 構造化された思考ステップを生成...',
+        response: 'Qwen3 8B のローカル推論デモが完了しました。HUD は 8B モデルと現在のオプションに基づくスループットとメモリの推定値です。'
       }
     ]
   },
@@ -721,17 +748,26 @@ const ja = {
     badge: 'ツールとエコシステム',
     title: 'MCP プロトコル · Agent Skills · Sandboxed JS',
     lead: '公式 Swift MCP SDK、GitHub からのワンクリック Agent Skill インポート、サンドボックス化 JavaScript ランタイムを搭載。',
+    specLabel: '仕様',
     tabs: [
       {
         id: 'mcp',
-        type: 'BUILT-IN APP TOOL',
-        title: '内蔵システム時刻ツール',
-        badge: 'Built-in App Tool',
-        desc: 'AI がデバイス時刻を必要とするときは内蔵 App Tool を呼び出します。外部 MCP ツールではなく、引数も不要です。',
-        snippet: `// Built-in App Tool Execution
+        type: 'BUILT-IN MCP SERVER',
+        title: '内蔵データベース MCP Server',
+        badge: 'Official Swift MCP SDK',
+        desc: 'ETOS はデータベース App Tool を内蔵 MCP Server として公開します。以下の標準 tools/call はメモリデータベースのテーブル一覧を取得します。',
+        snippet: `// builtin://app-tools/database
 {
-  "tool": "app_get_system_time",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "app_list_sqlite_tables",
+    "arguments": {
+      "database": "memory",
+      "include_create_sql": true
+    }
+  }
 }`
       },
       {
@@ -771,18 +807,18 @@ function main(input) {
       },
       {
         id: 'rag',
-        type: 'SQLCIPHER RAG',
-        title: 'SQLite 暗号化ベクトルストア',
-        badge: 'GRDB + SQLCipher',
-        desc: '暗号化 SQLite データベース内に長期記憶を保存。SillyTavern ワールドブック対応。',
+        type: 'LOCAL RAG INDEX',
+        title: 'SQLite ローカルベクトルインデックス',
+        badge: 'SQLite3',
+        desc: 'ローカル Embedding インデックスは memory_vectors.sqlite の memory_chunks テーブルに保存され、長期記憶と SillyTavern ワールドブックで利用されます。',
         snippet: `-- memory_vectors.sqlite
-CREATE TABLE memory_chunks (
+CREATE TABLE IF NOT EXISTS memory_chunks (
   chunk_id TEXT PRIMARY KEY,
   parent_memory_id TEXT NOT NULL,
   text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   metadata TEXT NOT NULL
-) STRICT;`
+);`
       }
     ]
   },
@@ -945,11 +981,20 @@ const ru = {
     badge: 'Локальная модель на устройстве',
     title: 'Нативный GGUF инференс и HUD производительности на iOS',
     lead: 'Работает полностью без интернета. Модели GGUF исполняются через C ABI llama.cpp с ускорением Metal GPU и онлайн-монитором CPU/Metal/Памяти.',
+    controlBadge: 'GGUF · llama.cpp C ABI',
     selectModelLabel: 'Выберите модель GGUF',
+    metalOffloadLabel: 'Выгрузка слоёв на Metal GPU',
+    flashAttentionLabel: 'Flash Attention',
+    kvCacheLabel: 'Повторное использование префикса KV Cache',
+    cpuLoadLabel: 'ЗАГРУЗКА CPU',
+    metalGPULabel: 'METAL GPU',
+    memoryLabel: 'ПАМЯТЬ',
+    speedLabel: 'СКОРОСТЬ ИНФЕРЕНСА',
+    estimateDisclaimer: 'Значения приведены для демонстрации. Реальная производительность зависит от устройства, квантования и длины контекста.',
     thinkHeader: 'Таймлайн размышлений (Thinking Timeline)',
     userQuestion: 'Требуется ли интернет или API ключ для локальной модели GGUF?',
-    kvCacheActiveLabel: 'Префикс KV Cache активирован',
-    kvCacheInactiveLabel: 'KV Cache отключен',
+    kvCacheEnabledLabel: 'Повторное использование KV Cache включено',
+    kvCacheDisabledLabel: 'Повторное использование KV Cache отключено',
     models: [
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
@@ -963,12 +1008,10 @@ const ru = {
           ramCpu: '3.1 GB (RAM)',
           ramCpuKV: '3.4 GB (RAM + KV)',
           speedFlash: 49.6,
-          speedFlashKV: 57.8,
-          speedBase: 29.8,
-          speedKV: 34.2
+          speedBase: 29.8
         },
-        thinking: 'Ускорение Metal GPU, анализ контекста чата и шаблона GGUF Jinja...',
-        response: 'Интернет и API ключ не требуются! Веса модели и векторная база SQLite работают 100% локально на вашем iPhone.'
+        thinking: 'Анализ локального контекста диалога и шаблона GGUF Jinja...',
+        response: 'Для локального инференса не нужны интернет и API ключ. Веса модели и генерация остаются на устройстве; сеть используется только при выборе онлайн-модели или сетевого инструмента.'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
@@ -982,12 +1025,10 @@ const ru = {
           ramCpu: '3.7 GB (RAM)',
           ramCpuKV: '4.1 GB (RAM + KV)',
           speedFlash: 38.0,
-          speedFlashKV: 44.3,
-          speedBase: 23.2,
-          speedKV: 26.8
+          speedBase: 23.2
         },
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Локальный инференс Gemma 3 4B завершен! Metal GPU и KV Cache активны, а память включает дополнительный контекстный кэш.'
+        thinking: 'Проверка бюджета контекста GGUF и шаблона диалога...',
+        response: 'Демонстрация локального инференса Gemma 3 4B завершена. HUD показывает оценки для выбранных параметров запуска.'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
@@ -1001,12 +1042,10 @@ const ru = {
           ramCpu: '6.1 GB (RAM)',
           ramCpuKV: '6.8 GB (RAM + KV)',
           speedFlash: 26.4,
-          speedFlashKV: 30.5,
-          speedBase: 15.7,
-          speedKV: 18.2
+          speedBase: 15.7
         },
-        thinking: 'Разбор цепочки <think>: 1. Поиск SQLite; 2. Совпадение KV Cache; 3. Генерация шагов...',
-        response: 'Локальный инференс Qwen3 8B завершен. HUD показывает пропускную способность и память с учетом масштаба 8B модели.'
+        thinking: 'Разбор цепочки <think>: 1. Чтение локального контекста; 2. Применение шаблона диалога; 3. Генерация структурированных шагов...',
+        response: 'Демонстрация локального инференса Qwen3 8B завершена. HUD оценивает скорость и память для модели 8B и текущих параметров.'
       }
     ]
   },
@@ -1014,17 +1053,26 @@ const ru = {
     badge: 'Инструменты и экосистема',
     title: 'Протокол MCP · Agent Skills · Песочница JS',
     lead: 'Официальный Swift MCP SDK, импорт Agent Skills с GitHub в один клик и изолированный запуск JS-скриптов.',
+    specLabel: 'СПЕЦИФИКАЦИЯ',
     tabs: [
       {
         id: 'mcp',
-        type: 'BUILT-IN APP TOOL',
-        title: 'Встроенный инструмент системного времени',
-        badge: 'Built-in App Tool',
-        desc: 'Когда AI требуется время устройства, он вызывает встроенный App Tool. Это не внешний MCP инструмент, и аргументы не нужны.',
-        snippet: `// Built-in App Tool Execution
+        type: 'BUILT-IN MCP SERVER',
+        title: 'Встроенный MCP-сервер базы данных',
+        badge: 'Official Swift MCP SDK',
+        desc: 'ETOS публикует инструменты базы данных через встроенный MCP-сервер. Стандартный запрос tools/call ниже выводит таблицы базы памяти.',
+        snippet: `// builtin://app-tools/database
 {
-  "tool": "app_get_system_time",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "app_list_sqlite_tables",
+    "arguments": {
+      "database": "memory",
+      "include_create_sql": true
+    }
+  }
 }`
       },
       {
@@ -1064,18 +1112,18 @@ function main(input) {
       },
       {
         id: 'rag',
-        type: 'SQLCIPHER RAG',
-        title: 'Зашифрованная база SQLite RAG',
-        badge: 'GRDB + SQLCipher',
-        desc: 'Долгосрочная память сохраняется в зашифрованной базе SQLite с поддержкой SillyTavern Worldbook.',
+        type: 'LOCAL RAG INDEX',
+        title: 'Локальный векторный индекс SQLite',
+        badge: 'SQLite3',
+        desc: 'Локальный индекс Embedding хранится в таблице memory_chunks файла memory_vectors.sqlite и используется с долгосрочной памятью и SillyTavern Worldbook.',
         snippet: `-- memory_vectors.sqlite
-CREATE TABLE memory_chunks (
+CREATE TABLE IF NOT EXISTS memory_chunks (
   chunk_id TEXT PRIMARY KEY,
   parent_memory_id TEXT NOT NULL,
   text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   metadata TEXT NOT NULL
-) STRICT;`
+);`
       }
     ]
   },
@@ -1238,11 +1286,20 @@ const zhHant = {
     badge: '端側本地模型',
     title: 'iOS 端側硬核 GGUF 本地模型推理',
     lead: '不需要連接任何網路或 API 服務。底層通過 llama.cpp C ABI 橋接，直接在 iPhone 上加載 GGUF 權重，並提供實時 CPU / Metal / 記憶體性能監視器。',
+    controlBadge: 'GGUF · llama.cpp C ABI',
     selectModelLabel: '選擇本地 GGUF 模型',
+    metalOffloadLabel: 'Metal GPU 卸載',
+    flashAttentionLabel: 'Flash Attention',
+    kvCacheLabel: 'KV Cache 前綴複用',
+    cpuLoadLabel: 'CPU 負載',
+    metalGPULabel: 'METAL GPU',
+    memoryLabel: '記憶體',
+    speedLabel: '推理速度',
+    estimateDisclaimer: '演示數據為估算示例；實際性能取決於裝置、量化方式和上下文長度。',
     thinkHeader: '本地模型思考時間線 (Thinking Timeline)',
     userQuestion: '運行端側 GGUF 本地模型需要連接網路或 API Key 嗎？',
-    kvCacheActiveLabel: 'KV Cache 前綴複用已生效',
-    kvCacheInactiveLabel: 'KV Cache 未開啟',
+    kvCacheEnabledLabel: 'KV Cache 前綴複用已啟用',
+    kvCacheDisabledLabel: 'KV Cache 前綴複用未啟用',
     models: [
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
@@ -1256,12 +1313,10 @@ const zhHant = {
           ramCpu: '3.1 GB (RAM)',
           ramCpuKV: '3.4 GB (RAM + KV)',
           speedFlash: 49.6,
-          speedFlashKV: 57.8,
-          speedBase: 29.8,
-          speedKV: 34.2
+          speedBase: 29.8
         },
-        thinking: '正在使用 Metal GPU 加速計算，分析對話上下文與 GGUF Jinja 對話模板...',
-        response: '完全不需要網路或 API Key！模型權重與 Embedding 嵌入向量數據庫完全運行在你的 iPhone 本機設備上。零聯網權限，不消耗流量，隱私 100% 物理隔離。'
+        thinking: '正在解析本地對話上下文與 GGUF Jinja 對話模板...',
+        response: '本地模型推理不需要網路或 API Key，模型權重與生成過程都留在裝置上；只有主動使用聯網模型或網路工具時才會發起網路請求。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
@@ -1275,12 +1330,10 @@ const zhHant = {
           ramCpu: '3.7 GB (RAM)',
           ramCpuKV: '4.1 GB (RAM + KV)',
           speedFlash: 38.0,
-          speedFlashKV: 44.3,
-          speedBase: 23.2,
-          speedKV: 26.8
+          speedBase: 23.2
         },
-        thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，記憶體佔用會隨上下文快取同步增加。'
+        thinking: '正在檢查本地 GGUF 上下文預算與對話模板...',
+        response: 'Gemma 3 4B 本地推理演示完成。上方 HUD 會根據所選運行選項展示對應的估算數據。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
@@ -1294,12 +1347,10 @@ const zhHant = {
           ramCpu: '6.1 GB (RAM)',
           ramCpuKV: '6.8 GB (RAM + KV)',
           speedFlash: 26.4,
-          speedFlashKV: 30.5,
-          speedBase: 15.7,
-          speedKV: 18.2
+          speedBase: 15.7
         },
-        thinking: '正在解析 <think> 推理鏈：1. 檢索本地 SQLite 數據庫；2. 匹配 KV Cache 快取前綴；3. 生成結構化思考步驟...',
-        response: 'Qwen3 8B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，吞吐與記憶體佔用按 8B 模型規模顯示。'
+        thinking: '正在解析 <think> 推理鏈：1. 讀取本地上下文；2. 套用對話模板；3. 生成結構化思考步驟...',
+        response: 'Qwen3 8B 本地推理演示完成。HUD 按 8B 模型規模和目前選項展示吞吐與記憶體估算。'
       }
     ]
   },
@@ -1307,17 +1358,26 @@ const zhHant = {
     badge: '工具與生態',
     title: 'MCP 協議 · Agent Skills · 沙盒 JS',
     lead: '集成 Swift Model Context Protocol (MCP) 官方 SDK，支援從 GitHub 一鍵導入 Agent Skills 技能包，並可在沙盒內運行自定義 JavaScript 工具。',
+    specLabel: '規格',
     tabs: [
       {
         id: 'mcp',
-        type: 'BUILT-IN APP TOOL',
-        title: '內建系統時間工具',
-        badge: 'Built-in App Tool',
-        desc: '在 AI 想要獲取設備時間時，調用內建 App Tool；它不屬於外部 MCP 工具，參數為空。',
-        snippet: `// Built-in App Tool Execution
+        type: 'BUILT-IN MCP SERVER',
+        title: '內建資料庫 MCP Server',
+        badge: 'Official Swift MCP SDK',
+        desc: 'ETOS 將資料庫 App Tool 包裝為內建 MCP Server；下面透過標準 tools/call 列出記憶資料庫表結構。',
+        snippet: `// builtin://app-tools/database
 {
-  "tool": "app_get_system_time",
-  "arguments": {}
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "app_list_sqlite_tables",
+    "arguments": {
+      "database": "memory",
+      "include_create_sql": true
+    }
+  }
 }`
       },
       {
@@ -1357,18 +1417,18 @@ function main(input) {
       },
       {
         id: 'rag',
-        type: 'SQLCIPHER RAG',
-        title: 'SQLite 全盤物理加密向量庫',
-        badge: 'GRDB + SQLCipher',
-        desc: '本地 Embedding 與長效記憶直接落地在加密 SQLite 數據庫中，支援 SillyTavern 世界書觸發。',
+        type: 'LOCAL RAG INDEX',
+        title: 'SQLite 本地向量索引',
+        badge: 'SQLite3',
+        desc: '本地 Embedding 索引保存在 memory_vectors.sqlite 的 memory_chunks 表中，並與長效記憶及 SillyTavern 世界書配合使用。',
         snippet: `-- memory_vectors.sqlite
-CREATE TABLE memory_chunks (
+CREATE TABLE IF NOT EXISTS memory_chunks (
   chunk_id TEXT PRIMARY KEY,
   parent_memory_id TEXT NOT NULL,
   text TEXT NOT NULL,
   embedding BLOB NOT NULL,
   metadata TEXT NOT NULL
-) STRICT;`
+);`
       }
     ]
   },

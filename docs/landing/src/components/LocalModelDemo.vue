@@ -11,7 +11,7 @@ const props = defineProps({
 const selectedModelIndex = ref(0);
 const metalOffload = ref(true);
 const flashAttention = ref(true);
-const kvCache = ref(true);
+const kvCache = ref(false);
 
 const localDemoText = computed(() => props.text.localDemo || {});
 
@@ -41,8 +41,8 @@ const currentModel = computed(() => {
     ? (isKV ? (hud.ramMetalKV || '5.2 GB (Metal + KV)') : (hud.ramMetal || '4.8 GB (Metal)'))
     : (isKV ? (hud.ramCpuKV || '5.8 GB (RAM + KV)') : (hud.ramCpu || '5.1 GB (RAM)'));
   const speedVal = isFlash
-    ? (isKV ? (hud.speedFlashKV || 42.6) : (hud.speedFlash || 38.4))
-    : (isKV ? (hud.speedKV || 25.8) : (hud.speedBase || 22.1));
+    ? (hud.speedFlash || 38.4)
+    : (hud.speedBase || 22.1);
 
   return {
     ...base,
@@ -51,8 +51,8 @@ const currentModel = computed(() => {
     cpuUtil: cpu,
     speed: `${speedVal} t/s`,
     kvStatusLabel: isKV
-      ? (localDemoText.value.kvCacheActiveLabel || 'KV Cache Reused')
-      : (localDemoText.value.kvCacheInactiveLabel || 'KV Cache Off')
+      ? localDemoText.value.kvCacheEnabledLabel
+      : localDemoText.value.kvCacheDisabledLabel
   };
 });
 </script>
@@ -61,8 +61,8 @@ const currentModel = computed(() => {
   <div class="local-demo-wrapper">
     <div class="local-demo-controls">
       <div class="control-header">
-        <span class="control-badge">GGUF · llama.cpp C ABI</span>
-        <span class="control-title">{{ localDemoText.selectModelLabel || 'Select Local GGUF Model' }}</span>
+        <span class="control-badge">{{ localDemoText.controlBadge }}</span>
+        <span class="control-title">{{ localDemoText.selectModelLabel }}</span>
       </div>
 
       <div class="model-buttons">
@@ -72,6 +72,7 @@ const currentModel = computed(() => {
           type="button"
           class="model-chip-btn"
           :class="{ active: selectedModelIndex === i }"
+          :aria-pressed="selectedModelIndex === i"
           @click="selectedModelIndex = i"
         >
           <span class="chip-name">{{ m.name.split('.')[0] }}</span>
@@ -83,43 +84,44 @@ const currentModel = computed(() => {
         <label class="toggle-item">
           <input type="checkbox" v-model="metalOffload" />
           <span class="toggle-box"></span>
-          <span class="toggle-text">Metal GPU Offload</span>
+          <span class="toggle-text">{{ localDemoText.metalOffloadLabel }}</span>
         </label>
 
         <label class="toggle-item">
           <input type="checkbox" v-model="flashAttention" />
           <span class="toggle-box"></span>
-          <span class="toggle-text">Flash Attention</span>
+          <span class="toggle-text">{{ localDemoText.flashAttentionLabel }}</span>
         </label>
 
         <label class="toggle-item">
           <input type="checkbox" v-model="kvCache" />
           <span class="toggle-box"></span>
-          <span class="toggle-text">KV Cache Prefix Reuse</span>
+          <span class="toggle-text">{{ localDemoText.kvCacheLabel }}</span>
         </label>
       </div>
 
-      <!-- Real-time HUD stats -->
+      <!-- 这里展示估算数据，真实性能取决于设备、量化与上下文。 -->
       <div class="hud-stats-grid">
         <div class="hud-stat">
-          <div class="stat-label">CPU LOAD</div>
+          <div class="stat-label">{{ localDemoText.cpuLoadLabel }}</div>
           <div class="stat-val">{{ currentModel.cpuUtil }}</div>
           <div class="stat-bar-track"><div class="stat-bar-fill" :style="{ width: currentModel.cpuUtil }"></div></div>
         </div>
         <div class="hud-stat">
-          <div class="stat-label">METAL GPU</div>
+          <div class="stat-label">{{ localDemoText.metalGPULabel }}</div>
           <div class="stat-val">{{ currentModel.gpuUtil }}</div>
           <div class="stat-bar-track"><div class="stat-bar-fill metal" :style="{ width: currentModel.gpuUtil }"></div></div>
         </div>
         <div class="hud-stat">
-          <div class="stat-label">MEMORY</div>
+          <div class="stat-label">{{ localDemoText.memoryLabel }}</div>
           <div class="stat-val">{{ currentModel.ram }}</div>
         </div>
         <div class="hud-stat">
-          <div class="stat-label">SPEED</div>
+          <div class="stat-label">{{ localDemoText.speedLabel }}</div>
           <div class="stat-val highlight">{{ currentModel.speed }}</div>
         </div>
       </div>
+      <p class="hud-estimate-note">{{ localDemoText.estimateDisclaimer }}</p>
     </div>
 
     <div class="local-demo-screen">

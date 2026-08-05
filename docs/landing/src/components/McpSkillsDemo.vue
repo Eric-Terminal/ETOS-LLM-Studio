@@ -34,6 +34,7 @@ const currentTabItem = computed(() => {
         type="button"
         class="mcp-tab-btn"
         :class="{ active: activeTab === item.id }"
+        :aria-pressed="activeTab === item.id"
         @click="activeTab = item.id"
       >
         <span class="tab-type">{{ item.type }}</span>
@@ -55,7 +56,7 @@ const currentTabItem = computed(() => {
           <span class="dot red"></span>
           <span class="dot yellow"></span>
           <span class="dot green"></span>
-          <span class="code-filename">{{ currentTabItem.id.toUpperCase() }} SPEC</span>
+          <span class="code-filename">{{ currentTabItem.id.toUpperCase() }} {{ sectionText.specLabel }}</span>
         </div>
         <pre><code>{{ currentTabItem.snippet }}</code></pre>
       </div>

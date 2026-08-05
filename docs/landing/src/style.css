@@ -1791,6 +1791,13 @@ img {
   margin-top: 4px;
 }
 
+.hud-estimate-note {
+  margin: -8px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .hud-stat {
   background: #141417;
   border: 1px solid #26262c;
@@ -1859,7 +1866,14 @@ img {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   color: #e2e8f0;
+}
+
+.hud-model-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-dot {
@@ -1874,6 +1888,7 @@ img {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .hud-kv-tag {
@@ -2109,6 +2124,9 @@ img {
   .stats-grid { grid-template-columns: 1fr; }
   .local-demo-wrapper { padding: 16px; }
   .hud-stats-grid { grid-template-columns: 1fr; }
+  .screen-hud-bar { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .hud-left, .hud-right { width: 100%; }
+  .hud-right { flex-wrap: wrap; }
 }
 
 /* 磁吸 */
@@ -2173,4 +2191,3 @@ img {
   .reveal-block { opacity: 1; transform: none; }
   .marquee-track { animation: none; }
 }
-
