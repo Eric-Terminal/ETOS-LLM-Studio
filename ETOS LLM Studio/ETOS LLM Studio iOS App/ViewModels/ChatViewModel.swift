@@ -114,15 +114,16 @@ final class ChatViewModel: ObservableObject {
     @Published var latestAssistantMessageID: UUID?
     @Published var toolCallResultIDs: Set<String> = []
     @Published var runningSessionIDs: Set<UUID> = []
-    @Published var streamingScrollAnchorVersion: Int = 0
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
     var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var streamingMarkdownPrepareTasks: [ETStreamingMarkdownStreamID: Task<Void, Never>] = [:]
     var visualMessagePrepareGenerations: [UUID: Int] = [:]
     var markdownPrepareGenerations: [UUID: Int] = [:]
     var reasoningMarkdownPrepareGenerations: [UUID: Int] = [:]
+    var streamingMarkdownPrepareGenerations: [ETStreamingMarkdownStreamID: Int] = [:]
     
     // MARK: - Attachment State
     

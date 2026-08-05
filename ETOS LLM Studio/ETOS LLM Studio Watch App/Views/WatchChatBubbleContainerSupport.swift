@@ -204,7 +204,9 @@ extension ChatBubble {
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
                             fallbackReasoningDuration: fallbackReasoningDuration,
-                            reasoningSummary: reasoningSummaryText
+                            reasoningSummary: reasoningSummaryText,
+                            streamingMarkdownState: messageState.streamingMarkdownState,
+                            isStreaming: showsStreamingIndicators
                         )
                     }
                 }

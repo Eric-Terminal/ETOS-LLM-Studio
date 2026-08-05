@@ -432,9 +432,11 @@ class ChatViewModel: ObservableObject {
     var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
     var markdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
     var reasoningMarkdownPrepareTasks: [UUID: Task<Void, Never>] = [:]
+    var streamingMarkdownPrepareTasks: [ETStreamingMarkdownStreamID: Task<Void, Never>] = [:]
     var visualMessagePrepareGenerations: [UUID: Int] = [:]
     var markdownPrepareGenerations: [UUID: Int] = [:]
     var reasoningMarkdownPrepareGenerations: [UUID: Int] = [:]
+    var streamingMarkdownPrepareGenerations: [ETStreamingMarkdownStreamID: Int] = [:]
     var autoReasoningPreviewMessageIDs: Set<UUID> = []
     var userControlledReasoningPreviewMessageIDs: Set<UUID> = []
     var isPersistingGlobalSystemPrompts = false

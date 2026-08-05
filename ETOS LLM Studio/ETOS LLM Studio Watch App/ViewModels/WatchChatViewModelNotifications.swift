@@ -15,11 +15,18 @@ import UserNotifications
 
 extension ChatViewModel {
     func refreshCurrentSessionSendingState() {
+        let wasSendingMessage = isSendingMessage
         guard let currentSessionID = currentSession?.id else {
             isSendingMessage = false
+            if wasSendingMessage {
+                finalizeStreamingMarkdownIfNeeded()
+            }
             return
         }
         isSendingMessage = runningSessionIDs.contains(currentSessionID)
+        if wasSendingMessage, !isSendingMessage {
+            finalizeStreamingMarkdownIfNeeded()
+        }
     }
 
     func prepareBackgroundReplyNotificationContext(for sessionID: UUID) {

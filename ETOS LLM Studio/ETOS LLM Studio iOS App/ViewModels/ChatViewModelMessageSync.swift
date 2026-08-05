@@ -157,8 +157,14 @@ extension ChatViewModel {
                 state = created
             }
             state.update(with: message)
-            scheduleVisualMessagePreparationIfNeeded(for: state, source: message)
-            scheduleReasoningMarkdownPreparationIfNeeded(for: message)
+            if canUseStreamingMarkdownFastPath(for: message) {
+                state.updateVisualMessage(message)
+                state.updateRoleplayHTML(nil)
+                scheduleStreamingMarkdownPreparationIfEligible(for: state, message: message)
+            } else {
+                scheduleVisualMessagePreparationIfNeeded(for: state, source: message)
+                scheduleReasoningMarkdownPreparationIfNeeded(for: message)
+            }
             newStates.append(state)
         }
 
@@ -166,6 +172,7 @@ extension ChatViewModel {
             messageStateByID = messageStateByID.filter { visibleIDSet.contains($0.key) }
         }
         cleanupPreparedMarkdownCache(validIDs: visibleIDSet)
+        cleanupStreamingMarkdownPreparation(validIDs: visibleIDSet)
 
         if currentIDs != newIDs {
             messages = newStates
@@ -178,6 +185,12 @@ extension ChatViewModel {
     func scheduleMarkdownPreparationIfNeeded(for message: ChatMessage) {
         let messageID = message.id
         let sourceText = message.content
+
+        if isActivelyStreaming(message) {
+            markdownPrepareTasks[messageID]?.cancel()
+            markdownPrepareTasks.removeValue(forKey: messageID)
+            return
+        }
 
         if preparedMarkdownByMessageID[messageID]?.sourceText == sourceText {
             markdownPrepareTasks[messageID]?.cancel()
@@ -391,7 +404,6 @@ extension ChatViewModel {
         var updatedLatestAssistantID = latestAssistantMessageID
         var needsDisplayRefilter = false
         var needsFullDisplayRefresh = false
-        var shouldBumpStreamingScrollAnchor = false
 
         for (oldMessage, newMessage) in zip(previousMessages, incomingMessages) where oldMessage != newMessage {
             if oldMessage.selectedResponseAttemptID != newMessage.selectedResponseAttemptID
@@ -402,15 +414,26 @@ extension ChatViewModel {
             }
 
             if visibleIDs.contains(newMessage.id) {
-                messageStateByID[newMessage.id]?.update(with: newMessage)
                 if let state = messageStateByID[newMessage.id] {
-                    scheduleVisualMessagePreparationIfNeeded(for: state, source: newMessage)
-                }
-                scheduleReasoningMarkdownPreparationIfNeeded(for: newMessage)
-                if oldMessage.content != newMessage.content
-                    || oldMessage.reasoningContent != newMessage.reasoningContent
-                    || oldMessage.toolCalls != newMessage.toolCalls {
-                    shouldBumpStreamingScrollAnchor = true
+                    let usesFastPath = canUseStreamingMarkdownFastPath(for: newMessage)
+                        && ETStreamingMessageUpdatePolicy.isTextOnlyChange(
+                            from: oldMessage,
+                            to: newMessage
+                        )
+                    if usesFastPath {
+                        state.updateWithoutPublishing(with: newMessage)
+                        scheduleStreamingMarkdownPreparationIfEligible(for: state, message: newMessage)
+                    } else {
+                        state.update(with: newMessage)
+                        if canUseStreamingMarkdownFastPath(for: newMessage) {
+                            state.updateVisualMessage(newMessage)
+                            state.updateRoleplayHTML(nil)
+                            scheduleStreamingMarkdownPreparationIfEligible(for: state, message: newMessage)
+                        } else {
+                            scheduleVisualMessagePreparationIfNeeded(for: state, source: newMessage)
+                            scheduleReasoningMarkdownPreparationIfNeeded(for: newMessage)
+                        }
+                    }
                 }
             }
 
@@ -438,9 +461,6 @@ extension ChatViewModel {
         }
         if latestAssistantMessageID != updatedLatestAssistantID {
             latestAssistantMessageID = updatedLatestAssistantID
-        }
-        if shouldBumpStreamingScrollAnchor {
-            streamingScrollAnchorVersion &+= 1
         }
         if needsFullDisplayRefresh {
             updateDisplayedMessages()
@@ -535,11 +555,18 @@ extension ChatViewModel {
     }
 
     func refreshCurrentSessionSendingState() {
+        let wasSendingMessage = isSendingMessage
         guard let currentSessionID = currentSession?.id else {
             isSendingMessage = false
+            if wasSendingMessage {
+                finalizeStreamingMarkdownIfNeeded()
+            }
             return
         }
         isSendingMessage = runningSessionIDs.contains(currentSessionID)
+        if wasSendingMessage, !isSendingMessage {
+            finalizeStreamingMarkdownIfNeeded()
+        }
     }
 
     func visibleMessages(from source: [ChatMessage]) -> [ChatMessage] {

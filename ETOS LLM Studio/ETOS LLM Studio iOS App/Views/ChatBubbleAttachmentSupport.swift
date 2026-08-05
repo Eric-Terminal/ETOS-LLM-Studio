@@ -164,7 +164,8 @@ extension ChatBubble {
                         enableMathRendering: enableMathRendering,
                         customTextColor: customTextColorOverride,
                         customTextStyleColors: customTextStyleColors,
-                        isStreaming: showsStreamingIndicators
+                        isStreaming: showsStreamingIndicators,
+                        streamingState: messageState.streamingMarkdownState
                     )
                 }
                 RoleplayHTMLCardView(
@@ -184,7 +185,8 @@ extension ChatBubble {
                 enableMathRendering: enableMathRendering,
                 customTextColor: customTextColorOverride,
                 customTextStyleColors: customTextStyleColors,
-                isStreaming: showsStreamingIndicators
+                isStreaming: showsStreamingIndicators,
+                streamingState: messageState.streamingMarkdownState
             )
         }
     }

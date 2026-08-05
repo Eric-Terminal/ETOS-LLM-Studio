@@ -140,6 +140,8 @@ struct TimelineReasoningStepView: View {
     let reasoningStartedAt: Date?
     let reasoningCompletedAt: Date?
     let reasoningSummary: String?
+    let streamingMarkdownState: ETStreamingMarkdownRenderState?
+    let isStreaming: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -181,7 +183,9 @@ struct TimelineReasoningStepView: View {
                         isOutgoing: false,
                         textColor: secondaryColor,
                         customTextStyleColors: customTextStyleColors,
-                        font: .subheadline
+                        font: .subheadline,
+                        streamingMarkdownState: streamingMarkdownState,
+                        isStreaming: isStreaming
                     )
                 }
                 .transition(.opacity)

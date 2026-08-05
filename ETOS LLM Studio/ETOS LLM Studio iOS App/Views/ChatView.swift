@@ -745,7 +745,10 @@ extension ChatView {
                 // Z-Index 1: 消息列表
                 ScrollView {
                     VStack(spacing: 0) {
-                        ScrollDistanceToBottomObserver { distanceToBottom, isUserInteracting in
+                        ScrollDistanceToBottomObserver(
+                            isStreaming: viewModel.isSendingMessage,
+                            keepsBottomPinned: shouldKeepBottomPinned
+                        ) { distanceToBottom, isUserInteracting in
                             updateScrollToBottomVisibility(
                                 distanceToBottom: distanceToBottom,
                                 isUserInteracting: isUserInteracting
@@ -854,7 +857,7 @@ extension ChatView {
                                         performDeferredRetry(message)
                                     },
                                     onCopy: {
-                                        UIPasteboard.general.string = message.content
+                                        UIPasteboard.general.string = state.message.content
                                     },
                                     onSwitchToPreviousVersion: {
                                         viewModel.switchToPreviousVersion(of: message)
@@ -994,10 +997,6 @@ extension ChatView {
                         scheduleImmediateBottomSnap()
                     }
                     resolvePendingSearchJumpIfNeeded()
-                }
-                .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
-                    guard viewModel.isSendingMessage, shouldKeepBottomPinned else { return }
-                    scrollToBottom(animated: false)
                 }
                 .onAppear {
                     if shouldRestorePendingJumpOnAppear {

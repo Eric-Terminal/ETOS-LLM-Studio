@@ -51,6 +51,7 @@ extension ChatBubble {
                         customTextColor: customTextColorOverride,
                         customTextStyleColors: customTextStyleColors,
                         isStreaming: showsStreamingIndicators,
+                        streamingState: messageState.streamingMarkdownState,
                         onCodeBlockHeaderTap: onCodeBlockHeaderTap
                     )
                 }
@@ -74,6 +75,7 @@ extension ChatBubble {
                 customTextColor: customTextColorOverride,
                 customTextStyleColors: customTextStyleColors,
                 isStreaming: showsStreamingIndicators,
+                streamingState: messageState.streamingMarkdownState,
                 onCodeBlockHeaderTap: onCodeBlockHeaderTap
             )
         }
@@ -319,7 +321,9 @@ extension ChatBubble {
                         textColor: contentColor,
                         customTextStyleColors: customTextStyleColors,
                         font: .footnote,
-                        onCodeBlockHeaderTap: onCodeBlockHeaderTap
+                        onCodeBlockHeaderTap: onCodeBlockHeaderTap,
+                        streamingMarkdownState: messageState.streamingMarkdownState,
+                        isStreaming: showsStreamingIndicators
                     )
                 }
             }

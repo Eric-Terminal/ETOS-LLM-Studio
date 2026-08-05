@@ -114,7 +114,7 @@ struct WatchMessageRowView: View {
             },
             onCopy: {
                 viewModel.applyToolInputDraftRequest(
-                    AppToolInputDraftRequest(text: message.content, mode: .append)
+                    AppToolInputDraftRequest(text: state.message.content, mode: .append)
                 )
             },
             onSwitchToPreviousVersion: {

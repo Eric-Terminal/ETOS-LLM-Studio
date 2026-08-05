@@ -74,7 +74,9 @@ extension ChatBubble {
                     enableMathRendering: enableMathRendering,
                     reasoningStartedAt: reasoningStartedAt,
                     reasoningCompletedAt: reasoningCompletedAt,
-                    reasoningSummary: message.responseMetrics?.reasoningSummary
+                    reasoningSummary: message.responseMetrics?.reasoningSummary,
+                    streamingMarkdownState: messageState.streamingMarkdownState,
+                    isStreaming: showsStreamingIndicators
                 )
             }
 
@@ -180,7 +182,9 @@ extension ChatBubble {
                             enableMathRendering: enableMathRendering,
                             reasoningStartedAt: reasoningStartedAt,
                             reasoningCompletedAt: reasoningCompletedAt,
-                            reasoningSummary: message.responseMetrics?.reasoningSummary
+                            reasoningSummary: message.responseMetrics?.reasoningSummary,
+                            streamingMarkdownState: messageState.streamingMarkdownState,
+                            isStreaming: showsStreamingIndicators
                         )
                     }
                 }
