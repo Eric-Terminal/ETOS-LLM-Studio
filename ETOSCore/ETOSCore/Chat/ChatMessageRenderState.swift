@@ -12,20 +12,27 @@ import Foundation
 @MainActor
 public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public let id: UUID
-    // 注意：这里必须使用系统合成的 objectWillChange，
-    // 否则流式更新 message 时不会稳定触发 SwiftUI 刷新。
-    @Published public private(set) var message: ChatMessage
+    public private(set) var message: ChatMessage
     @Published public private(set) var visualMessage: ChatMessage
     @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
+    public let streamingMarkdownState: ETStreamingMarkdownRenderState
     
     public init(message: ChatMessage) {
         self.id = message.id
         self.message = message
         self.visualMessage = message
         self.roleplayHTML = nil
+        self.streamingMarkdownState = ETStreamingMarkdownRenderState()
     }
     
     public func update(with message: ChatMessage) {
+        guard self.message != message else { return }
+        objectWillChange.send()
+        self.message = message
+    }
+
+    /// 流式纯文本增长只更新业务真值，由独立 Markdown 状态负责局部刷新。
+    public func updateWithoutPublishing(with message: ChatMessage) {
         guard self.message != message else { return }
         self.message = message
     }

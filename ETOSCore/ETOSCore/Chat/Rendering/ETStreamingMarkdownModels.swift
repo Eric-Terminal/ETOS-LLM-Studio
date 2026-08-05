@@ -1,0 +1,168 @@
+// ============================================================================
+// ETStreamingMarkdownModels.swift
+// ============================================================================
+// ETOSCore
+//
+// 流式 Markdown 的跨平台不可变渲染快照。
+// ============================================================================
+
+import Combine
+import Foundation
+
+public enum ETStreamingMarkdownChannel: String, Hashable, Sendable {
+    case content
+    case reasoning
+}
+
+public struct ETStreamingMarkdownStreamID: Hashable, Sendable {
+    public let messageID: UUID
+    public let channel: ETStreamingMarkdownChannel
+
+    public init(messageID: UUID, channel: ETStreamingMarkdownChannel) {
+        self.messageID = messageID
+        self.channel = channel
+    }
+}
+
+public struct ETStreamingMarkdownBlockID: Hashable, Sendable {
+    public let messageID: UUID
+    public let channel: ETStreamingMarkdownChannel
+    public let generation: Int
+    public let ordinal: Int
+
+    public init(
+        messageID: UUID,
+        channel: ETStreamingMarkdownChannel = .content,
+        generation: Int = 0,
+        ordinal: Int
+    ) {
+        self.messageID = messageID
+        self.channel = channel
+        self.generation = generation
+        self.ordinal = ordinal
+    }
+}
+
+public enum ETStreamingMarkdownBlockKind: Hashable, Sendable {
+    case markdown
+    case fencedCode(language: String?)
+    case mermaid
+}
+
+public struct ETStreamingMarkdownBlock: Identifiable, Hashable, Sendable {
+    public let id: ETStreamingMarkdownBlockID
+    public let source: String
+    public let kind: ETStreamingMarkdownBlockKind
+
+    public init(
+        id: ETStreamingMarkdownBlockID,
+        source: String,
+        kind: ETStreamingMarkdownBlockKind
+    ) {
+        self.id = id
+        self.source = source
+        self.kind = kind
+    }
+}
+
+public enum ETStreamingMarkdownActivePresentation: Hashable, Sendable {
+    case markdownSource
+    case code(language: String?)
+    case mermaidSource
+}
+
+public enum ETStreamingMarkdownUpdateKind: Hashable, Sendable {
+    case append(previousUTF16Length: Int)
+    case reset
+}
+
+public struct ETStreamingMarkdownActiveBlock: Identifiable, Hashable, Sendable {
+    public let id: ETStreamingMarkdownBlockID
+    public let source: String
+    public let displayText: String
+    public let presentation: ETStreamingMarkdownActivePresentation
+    public let updateKind: ETStreamingMarkdownUpdateKind
+
+    public init(
+        id: ETStreamingMarkdownBlockID,
+        source: String,
+        displayText: String,
+        presentation: ETStreamingMarkdownActivePresentation,
+        updateKind: ETStreamingMarkdownUpdateKind
+    ) {
+        self.id = id
+        self.source = source
+        self.displayText = displayText
+        self.presentation = presentation
+        self.updateKind = updateKind
+    }
+}
+
+public struct ETStreamingMarkdownSnapshot: Hashable, Sendable {
+    public let messageID: UUID
+    public let channel: ETStreamingMarkdownChannel
+    public let sourceText: String
+    public let revision: Int
+    public let committedBlocks: [ETStreamingMarkdownBlock]
+    public let activeBlock: ETStreamingMarkdownActiveBlock?
+    public let isFinal: Bool
+
+    public init(
+        messageID: UUID,
+        channel: ETStreamingMarkdownChannel = .content,
+        sourceText: String,
+        revision: Int,
+        committedBlocks: [ETStreamingMarkdownBlock],
+        activeBlock: ETStreamingMarkdownActiveBlock?,
+        isFinal: Bool
+    ) {
+        self.messageID = messageID
+        self.channel = channel
+        self.sourceText = sourceText
+        self.revision = revision
+        self.committedBlocks = committedBlocks
+        self.activeBlock = activeBlock
+        self.isFinal = isFinal
+    }
+}
+
+/// 正文与推理共享同一消息生命周期，但各自独立发布，避免正文增长刷新整颗气泡。
+@MainActor
+public final class ETStreamingMarkdownRenderState: ObservableObject {
+    @Published public private(set) var contentSnapshot: ETStreamingMarkdownSnapshot?
+    @Published public private(set) var reasoningSnapshot: ETStreamingMarkdownSnapshot?
+
+    public init() {}
+
+    public func snapshot(for channel: ETStreamingMarkdownChannel) -> ETStreamingMarkdownSnapshot? {
+        switch channel {
+        case .content:
+            return contentSnapshot
+        case .reasoning:
+            return reasoningSnapshot
+        }
+    }
+
+    public func apply(_ snapshot: ETStreamingMarkdownSnapshot) {
+        switch snapshot.channel {
+        case .content:
+            guard contentSnapshot != snapshot else { return }
+            contentSnapshot = snapshot
+        case .reasoning:
+            guard reasoningSnapshot != snapshot else { return }
+            reasoningSnapshot = snapshot
+        }
+    }
+
+    public func clear(_ channel: ETStreamingMarkdownChannel? = nil) {
+        switch channel {
+        case .content:
+            contentSnapshot = nil
+        case .reasoning:
+            reasoningSnapshot = nil
+        case nil:
+            contentSnapshot = nil
+            reasoningSnapshot = nil
+        }
+    }
+}
