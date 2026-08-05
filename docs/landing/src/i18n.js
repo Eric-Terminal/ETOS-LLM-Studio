@@ -57,20 +57,59 @@ const zh = {
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
         size: '2.48 GB',
+        hud: {
+          cpuMetal: '13%',
+          cpuOnly: '63%',
+          gpuMetal: '78%',
+          ramMetal: '2.7 GB (Metal)',
+          ramMetalKV: '3.0 GB (Metal + KV)',
+          ramCpu: '3.1 GB (RAM)',
+          ramCpuKV: '3.4 GB (RAM + KV)',
+          speedFlash: 49.6,
+          speedFlashKV: 57.8,
+          speedBase: 29.8,
+          speedKV: 34.2
+        },
         thinking: '正在使用 Metal GPU 加速计算，分析对话上下文与 GGUF Jinja 对话模板...',
         response: '完全不需要网络或 API Key！模型权重与 Embedding 嵌入向量数据库完全运行在你的 iPhone 本机设备上。零联网权限，不消耗流量，隐私 100% 物理隔离。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
         size: '2.85 GB',
+        hud: {
+          cpuMetal: '17%',
+          cpuOnly: '69%',
+          gpuMetal: '84%',
+          ramMetal: '3.1 GB (Metal)',
+          ramMetalKV: '3.5 GB (Metal + KV)',
+          ramCpu: '3.7 GB (RAM)',
+          ramCpuKV: '4.1 GB (RAM + KV)',
+          speedFlash: 38.0,
+          speedFlashKV: 44.3,
+          speedBase: 23.2,
+          speedKV: 26.8
+        },
         thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，内存占用仅 2.6 GB。'
+        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，内存占用按上下文缓存同步增加。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
         size: '4.92 GB',
+        hud: {
+          cpuMetal: '24%',
+          cpuOnly: '82%',
+          gpuMetal: '91%',
+          ramMetal: '5.2 GB (Metal)',
+          ramMetalKV: '5.8 GB (Metal + KV)',
+          ramCpu: '6.1 GB (RAM)',
+          ramCpuKV: '6.8 GB (RAM + KV)',
+          speedFlash: 26.4,
+          speedFlashKV: 30.5,
+          speedBase: 15.7,
+          speedKV: 18.2
+        },
         thinking: '正在解析 <think> 推理链：1. 检索本地 SQLite 数据库；2. 匹配 KV Cache 缓存前缀；3. 生成结构化思考步骤...',
-        response: 'Qwen3 8B 本地推理完成！思考耗时 1.1 秒，全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，速率达 42+ t/s。'
+        response: 'Qwen3 8B 本地推理完成！全流式 Metal GPU 加速输出与 KV Cache 前缀复用正常，吞吐与内存占用按 8B 模型规模显示。'
       }
     ]
   },
@@ -81,16 +120,14 @@ const zh = {
     tabs: [
       {
         id: 'mcp',
-        type: 'MCP SERVER',
-        title: 'Built-in App Tool MCP',
-        badge: 'Official Swift MCP SDK',
-        desc: '在 AI 想要获取设备时间或查询沙盒时，统一通过内建 MCP 服务器调度，且支持原生问答 Sheet 审批策略。',
-        snippet: `// Built-in App Tool MCP Execution
+        type: 'BUILT-IN APP TOOL',
+        title: '内置系统时间工具',
+        badge: 'Built-in App Tool',
+        desc: '在 AI 想要获取设备时间时，调用内置 App Tool；它不属于外部 MCP 工具，参数为空。',
+        snippet: `// Built-in App Tool Execution
 {
-  "server": "etos_builtin_app_tool",
   "tool": "app_get_system_time",
-  "arguments": { "timezone": "Asia/Shanghai" },
-  "approval": "ASK_USER_CONFIRMATION"
+  "arguments": {}
 }`
       },
       {
@@ -99,11 +136,17 @@ const zh = {
         title: 'GitHub 技能包一键导入',
         badge: 'Agentic Skill Pack',
         desc: '直接粘贴 GitHub 仓库链接或 RAW 文件地址，即刻注入代码审查、海报生成或工作流指令集。',
-        snippet: `# SKILL: CodeReviewer Pro
+        snippet: `---
+name: code-reviewer-pro
 description: "Inspect Swift & Rust diffs for memory leaks"
-tools: [app_read_sandbox_file, app_query_sqlite]
-instructions: |
-  Check for strong reference cycles in closure capture lists.`
+allowed-tools:
+  - app_read_sandbox_file
+  - app_query_sqlite
+---
+
+# CodeReviewer Pro
+
+检查 Swift 闭包捕获列表、Rust unsafe 边界与数据库迁移风险。`
       },
       {
         id: 'jsc',
@@ -128,11 +171,13 @@ function main(input) {
         title: 'SQLite 全盘物理加密向量库',
         badge: 'GRDB + SQLCipher',
         desc: '本地 Embedding 与长效记忆直接落地在加密 SQLite 数据库中，支持 SillyTavern 世界书触发。',
-        snippet: `CREATE TABLE memory_vectors (
-  id TEXT PRIMARY KEY,
-  vector BLOB NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+        snippet: `-- memory_vectors.sqlite
+CREATE TABLE memory_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  parent_memory_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,
+  metadata TEXT NOT NULL
 ) STRICT;`
       }
     ]
@@ -314,20 +359,59 @@ const en = {
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
         size: '2.48 GB',
+        hud: {
+          cpuMetal: '13%',
+          cpuOnly: '63%',
+          gpuMetal: '78%',
+          ramMetal: '2.7 GB (Metal)',
+          ramMetalKV: '3.0 GB (Metal + KV)',
+          ramCpu: '3.1 GB (RAM)',
+          ramCpuKV: '3.4 GB (RAM + KV)',
+          speedFlash: 49.6,
+          speedFlashKV: 57.8,
+          speedBase: 29.8,
+          speedKV: 34.2
+        },
         thinking: 'Accelerating via Metal GPU, analyzing chat context and GGUF Jinja chat template...',
         response: 'No network or API key required! Model weights and SQLite vector database run 100% locally on your iPhone with zero telemetry.'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
         size: '2.85 GB',
+        hud: {
+          cpuMetal: '17%',
+          cpuOnly: '69%',
+          gpuMetal: '84%',
+          ramMetal: '3.1 GB (Metal)',
+          ramMetalKV: '3.5 GB (Metal + KV)',
+          ramCpu: '3.7 GB (RAM)',
+          ramCpuKV: '4.1 GB (RAM + KV)',
+          speedFlash: 38.0,
+          speedFlashKV: 44.3,
+          speedBase: 23.2,
+          speedKV: 26.8
+        },
         thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B local execution complete. All memory and KV offload operating strictly within iOS sandbox limits with 2.6 GB RAM.'
+        response: 'Gemma 3 4B local execution complete. Metal streaming and KV prefix reuse are active, with memory increasing to reflect the cached context.'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
         size: '4.92 GB',
+        hud: {
+          cpuMetal: '24%',
+          cpuOnly: '82%',
+          gpuMetal: '91%',
+          ramMetal: '5.2 GB (Metal)',
+          ramMetalKV: '5.8 GB (Metal + KV)',
+          ramCpu: '6.1 GB (RAM)',
+          ramCpuKV: '6.8 GB (RAM + KV)',
+          speedFlash: 26.4,
+          speedFlashKV: 30.5,
+          speedBase: 15.7,
+          speedKV: 18.2
+        },
         thinking: 'Parsing <think> reasoning chain: 1. Search local SQLite; 2. Match KV Cache prefix; 3. Generate structured thinking steps...',
-        response: 'Qwen3 8B local inference complete! Reasoning duration 1.1s with full Metal GPU acceleration and 42+ t/s throughput.'
+        response: 'Qwen3 8B local inference complete. Metal acceleration and KV reuse are active, with throughput and memory shown at the larger 8B scale.'
       }
     ]
   },
@@ -338,16 +422,14 @@ const en = {
     tabs: [
       {
         id: 'mcp',
-        type: 'MCP SERVER',
-        title: 'Built-in App Tool MCP',
-        badge: 'Official Swift MCP SDK',
-        desc: 'When AI requests system time or sandbox access, requests route through the built-in MCP server with native approval Sheet controls.',
-        snippet: `// Built-in App Tool MCP Execution
+        type: 'BUILT-IN APP TOOL',
+        title: 'Built-in System Time Tool',
+        badge: 'Built-in App Tool',
+        desc: 'When AI requests device time, it calls a built-in App Tool. This is not an external MCP tool and takes no arguments.',
+        snippet: `// Built-in App Tool Execution
 {
-  "server": "etos_builtin_app_tool",
   "tool": "app_get_system_time",
-  "arguments": { "timezone": "America/New_York" },
-  "approval": "ASK_USER_CONFIRMATION"
+  "arguments": {}
 }`
       },
       {
@@ -356,11 +438,17 @@ const en = {
         title: 'GitHub Skill Import',
         badge: 'Agentic Skill Pack',
         desc: 'Paste GitHub repo links or RAW file URLs to inject code inspection or prompt workflow skill packs.',
-        snippet: `# SKILL: CodeReviewer Pro
+        snippet: `---
+name: code-reviewer-pro
 description: "Inspect Swift & Rust diffs for memory leaks"
-tools: [app_read_sandbox_file, app_query_sqlite]
-instructions: |
-  Check for strong reference cycles in closure capture lists.`
+allowed-tools:
+  - app_read_sandbox_file
+  - app_query_sqlite
+---
+
+# CodeReviewer Pro
+
+Check Swift closure captures, Rust unsafe boundaries, and database migration risks.`
       },
       {
         id: 'jsc',
@@ -385,11 +473,13 @@ function main(input) {
         title: 'SQLite Encrypted Vector Store',
         badge: 'GRDB + SQLCipher',
         desc: 'Local embeddings and long-term memory stored inside encrypted SQLite database with SillyTavern Worldbook support.',
-        snippet: `CREATE TABLE memory_vectors (
-  id TEXT PRIMARY KEY,
-  vector BLOB NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+        snippet: `-- memory_vectors.sqlite
+CREATE TABLE memory_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  parent_memory_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,
+  metadata TEXT NOT NULL
 ) STRICT;`
       }
     ]
@@ -571,20 +661,59 @@ const ja = {
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
         size: '2.48 GB',
+        hud: {
+          cpuMetal: '13%',
+          cpuOnly: '63%',
+          gpuMetal: '78%',
+          ramMetal: '2.7 GB (Metal)',
+          ramMetalKV: '3.0 GB (Metal + KV)',
+          ramCpu: '3.1 GB (RAM)',
+          ramCpuKV: '3.4 GB (RAM + KV)',
+          speedFlash: 49.6,
+          speedFlashKV: 57.8,
+          speedBase: 29.8,
+          speedKV: 34.2
+        },
         thinking: 'Metal GPU 加速で計算中、GGUF Jinja テンプレートを解析中...',
         response: 'ネット接続や API キーは一切不要です！モデルウェイトと SQLite ベクトル DB は端末内で 100% ローカル動作します。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
         size: '2.85 GB',
+        hud: {
+          cpuMetal: '17%',
+          cpuOnly: '69%',
+          gpuMetal: '84%',
+          ramMetal: '3.1 GB (Metal)',
+          ramMetalKV: '3.5 GB (Metal + KV)',
+          ramCpu: '3.7 GB (RAM)',
+          ramCpuKV: '4.1 GB (RAM + KV)',
+          speedFlash: 38.0,
+          speedFlashKV: 44.3,
+          speedBase: 23.2,
+          speedKV: 26.8
+        },
         thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B ローカル推論完了！Metal GPU 加速と KV Cache 再利用が正常に動作しています。'
+        response: 'Gemma 3 4B ローカル推論完了！Metal GPU 加速と KV Cache 再利用が正常に動作し、キャッシュ分のメモリも反映されています。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
         size: '4.92 GB',
+        hud: {
+          cpuMetal: '24%',
+          cpuOnly: '82%',
+          gpuMetal: '91%',
+          ramMetal: '5.2 GB (Metal)',
+          ramMetalKV: '5.8 GB (Metal + KV)',
+          ramCpu: '6.1 GB (RAM)',
+          ramCpuKV: '6.8 GB (RAM + KV)',
+          speedFlash: 26.4,
+          speedFlashKV: 30.5,
+          speedBase: 15.7,
+          speedKV: 18.2
+        },
         thinking: '<think> 推論チェーンを解析中: 1. SQLite 検索; 2. KV Cache マッチング; 3. 思考ステップ生成...',
-        response: 'Qwen3 8B ローカル推論完了！思考時間 1.1 秒、42+ t/s で動作しています。'
+        response: 'Qwen3 8B ローカル推論完了。8B モデル規模に合わせたスループットとメモリ使用量を表示しています。'
       }
     ]
   },
@@ -595,16 +724,14 @@ const ja = {
     tabs: [
       {
         id: 'mcp',
-        type: 'MCP SERVER',
-        title: 'Built-in App Tool MCP',
-        badge: 'Official Swift MCP SDK',
-        desc: 'システム時間やサンドボックスアクセスの要求は、組み込み MCP サーバーとネイティブ承認 Sheet 経由で安全に処理されます。',
-        snippet: `// Built-in App Tool MCP Execution
+        type: 'BUILT-IN APP TOOL',
+        title: '内蔵システム時刻ツール',
+        badge: 'Built-in App Tool',
+        desc: 'AI がデバイス時刻を必要とするときは内蔵 App Tool を呼び出します。外部 MCP ツールではなく、引数も不要です。',
+        snippet: `// Built-in App Tool Execution
 {
-  "server": "etos_builtin_app_tool",
   "tool": "app_get_system_time",
-  "arguments": { "timezone": "Asia/Tokyo" },
-  "approval": "ASK_USER_CONFIRMATION"
+  "arguments": {}
 }`
       },
       {
@@ -613,11 +740,17 @@ const ja = {
         title: 'GitHub スキルインポート',
         badge: 'Agentic Skill Pack',
         desc: 'GitHub リポジトリリンクや RAW URL を貼り付けるだけで、コードレビューやワークフロースキルを注入。',
-        snippet: `# SKILL: CodeReviewer Pro
+        snippet: `---
+name: code-reviewer-pro
 description: "Inspect Swift & Rust diffs for memory leaks"
-tools: [app_read_sandbox_file, app_query_sqlite]
-instructions: |
-  Check for strong reference cycles in closure capture lists.`
+allowed-tools:
+  - app_read_sandbox_file
+  - app_query_sqlite
+---
+
+# CodeReviewer Pro
+
+Swift のクロージャキャプチャ、Rust unsafe 境界、データベース移行リスクを確認します。`
       },
       {
         id: 'jsc',
@@ -642,11 +775,13 @@ function main(input) {
         title: 'SQLite 暗号化ベクトルストア',
         badge: 'GRDB + SQLCipher',
         desc: '暗号化 SQLite データベース内に長期記憶を保存。SillyTavern ワールドブック対応。',
-        snippet: `CREATE TABLE memory_vectors (
-  id TEXT PRIMARY KEY,
-  vector BLOB NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+        snippet: `-- memory_vectors.sqlite
+CREATE TABLE memory_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  parent_memory_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,
+  metadata TEXT NOT NULL
 ) STRICT;`
       }
     ]
@@ -819,20 +954,59 @@ const ru = {
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
         size: '2.48 GB',
+        hud: {
+          cpuMetal: '13%',
+          cpuOnly: '63%',
+          gpuMetal: '78%',
+          ramMetal: '2.7 GB (Metal)',
+          ramMetalKV: '3.0 GB (Metal + KV)',
+          ramCpu: '3.1 GB (RAM)',
+          ramCpuKV: '3.4 GB (RAM + KV)',
+          speedFlash: 49.6,
+          speedFlashKV: 57.8,
+          speedBase: 29.8,
+          speedKV: 34.2
+        },
         thinking: 'Ускорение Metal GPU, анализ контекста чата и шаблона GGUF Jinja...',
         response: 'Интернет и API ключ не требуются! Веса модели и векторная база SQLite работают 100% локально на вашем iPhone.'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
         size: '2.85 GB',
+        hud: {
+          cpuMetal: '17%',
+          cpuOnly: '69%',
+          gpuMetal: '84%',
+          ramMetal: '3.1 GB (Metal)',
+          ramMetalKV: '3.5 GB (Metal + KV)',
+          ramCpu: '3.7 GB (RAM)',
+          ramCpuKV: '4.1 GB (RAM + KV)',
+          speedFlash: 38.0,
+          speedFlashKV: 44.3,
+          speedBase: 23.2,
+          speedKV: 26.8
+        },
         thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Локальный инференс Gemma 3 4B завершен! Ускорение Metal GPU и использование памяти 2.6 ГБ.'
+        response: 'Локальный инференс Gemma 3 4B завершен! Metal GPU и KV Cache активны, а память включает дополнительный контекстный кэш.'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
         size: '4.92 GB',
+        hud: {
+          cpuMetal: '24%',
+          cpuOnly: '82%',
+          gpuMetal: '91%',
+          ramMetal: '5.2 GB (Metal)',
+          ramMetalKV: '5.8 GB (Metal + KV)',
+          ramCpu: '6.1 GB (RAM)',
+          ramCpuKV: '6.8 GB (RAM + KV)',
+          speedFlash: 26.4,
+          speedFlashKV: 30.5,
+          speedBase: 15.7,
+          speedKV: 18.2
+        },
         thinking: 'Разбор цепочки <think>: 1. Поиск SQLite; 2. Совпадение KV Cache; 3. Генерация шагов...',
-        response: 'Локальный инференс Qwen3 8B завершен! Время размышления 1.1с со скоростью 42+ т/с.'
+        response: 'Локальный инференс Qwen3 8B завершен. HUD показывает пропускную способность и память с учетом масштаба 8B модели.'
       }
     ]
   },
@@ -843,16 +1017,14 @@ const ru = {
     tabs: [
       {
         id: 'mcp',
-        type: 'MCP SERVER',
-        title: 'Built-in App Tool MCP',
-        badge: 'Official Swift MCP SDK',
-        desc: 'Запросы к системному времени или песочнице направляются через встроенный MCP сервер с нативным подтверждением.',
-        snippet: `// Built-in App Tool MCP Execution
+        type: 'BUILT-IN APP TOOL',
+        title: 'Встроенный инструмент системного времени',
+        badge: 'Built-in App Tool',
+        desc: 'Когда AI требуется время устройства, он вызывает встроенный App Tool. Это не внешний MCP инструмент, и аргументы не нужны.',
+        snippet: `// Built-in App Tool Execution
 {
-  "server": "etos_builtin_app_tool",
   "tool": "app_get_system_time",
-  "arguments": { "timezone": "Europe/Moscow" },
-  "approval": "ASK_USER_CONFIRMATION"
+  "arguments": {}
 }`
       },
       {
@@ -861,11 +1033,17 @@ const ru = {
         title: 'Импорт навыков GitHub',
         badge: 'Agentic Skill Pack',
         desc: 'Вставьте ссылку на GitHub или RAW URL для внедрения пакетов навыков ревью кода и рабочих процессов.',
-        snippet: `# SKILL: CodeReviewer Pro
+        snippet: `---
+name: code-reviewer-pro
 description: "Inspect Swift & Rust diffs for memory leaks"
-tools: [app_read_sandbox_file, app_query_sqlite]
-instructions: |
-  Check for strong reference cycles in closure capture lists.`
+allowed-tools:
+  - app_read_sandbox_file
+  - app_query_sqlite
+---
+
+# CodeReviewer Pro
+
+Check Swift closure captures, Rust unsafe boundaries, and database migration risks.`
       },
       {
         id: 'jsc',
@@ -890,11 +1068,13 @@ function main(input) {
         title: 'Зашифрованная база SQLite RAG',
         badge: 'GRDB + SQLCipher',
         desc: 'Долгосрочная память сохраняется в зашифрованной базе SQLite с поддержкой SillyTavern Worldbook.',
-        snippet: `CREATE TABLE memory_vectors (
-  id TEXT PRIMARY KEY,
-  vector BLOB NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+        snippet: `-- memory_vectors.sqlite
+CREATE TABLE memory_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  parent_memory_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,
+  metadata TEXT NOT NULL
 ) STRICT;`
       }
     ]
@@ -1067,20 +1247,59 @@ const zhHant = {
       {
         name: 'Phi-4-mini-Instruct.Q4_K_M.gguf',
         size: '2.48 GB',
+        hud: {
+          cpuMetal: '13%',
+          cpuOnly: '63%',
+          gpuMetal: '78%',
+          ramMetal: '2.7 GB (Metal)',
+          ramMetalKV: '3.0 GB (Metal + KV)',
+          ramCpu: '3.1 GB (RAM)',
+          ramCpuKV: '3.4 GB (RAM + KV)',
+          speedFlash: 49.6,
+          speedFlashKV: 57.8,
+          speedBase: 29.8,
+          speedKV: 34.2
+        },
         thinking: '正在使用 Metal GPU 加速計算，分析對話上下文與 GGUF Jinja 對話模板...',
         response: '完全不需要網路或 API Key！模型權重與 Embedding 嵌入向量數據庫完全運行在你的 iPhone 本機設備上。零聯網權限，不消耗流量，隱私 100% 物理隔離。'
       },
       {
         name: 'Gemma-3-4B-Instruct.Q4_K_M.gguf',
         size: '2.85 GB',
+        hud: {
+          cpuMetal: '17%',
+          cpuOnly: '69%',
+          gpuMetal: '84%',
+          ramMetal: '3.1 GB (Metal)',
+          ramMetalKV: '3.5 GB (Metal + KV)',
+          ramCpu: '3.7 GB (RAM)',
+          ramCpuKV: '4.1 GB (RAM + KV)',
+          speedFlash: 38.0,
+          speedFlashKV: 44.3,
+          speedBase: 23.2,
+          speedKV: 26.8
+        },
         thinking: 'Checking local GGUF memory budget and Metal GPU offload layers...',
-        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，記憶體佔用僅 2.6 GB。'
+        response: 'Gemma 3 4B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，記憶體佔用會隨上下文快取同步增加。'
       },
       {
         name: 'Qwen3-8B-Instruct.Q4_K_M.gguf',
         size: '4.92 GB',
+        hud: {
+          cpuMetal: '24%',
+          cpuOnly: '82%',
+          gpuMetal: '91%',
+          ramMetal: '5.2 GB (Metal)',
+          ramMetalKV: '5.8 GB (Metal + KV)',
+          ramCpu: '6.1 GB (RAM)',
+          ramCpuKV: '6.8 GB (RAM + KV)',
+          speedFlash: 26.4,
+          speedFlashKV: 30.5,
+          speedBase: 15.7,
+          speedKV: 18.2
+        },
         thinking: '正在解析 <think> 推理鏈：1. 檢索本地 SQLite 數據庫；2. 匹配 KV Cache 快取前綴；3. 生成結構化思考步驟...',
-        response: 'Qwen3 8B 本地推理完成！思考耗時 1.1 秒，全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，速率達 42+ t/s。'
+        response: 'Qwen3 8B 本地推理完成！全流式 Metal GPU 加速輸出與 KV Cache 快取前綴複用正常，吞吐與記憶體佔用按 8B 模型規模顯示。'
       }
     ]
   },
@@ -1091,16 +1310,14 @@ const zhHant = {
     tabs: [
       {
         id: 'mcp',
-        type: 'MCP SERVER',
-        title: 'Built-in App Tool MCP',
-        badge: 'Official Swift MCP SDK',
-        desc: '在 AI 想要獲取設備時間或查詢沙盒時，統一通過內建 MCP 伺服器調度，且支援原生問答 Sheet 審批策略。',
-        snippet: `// Built-in App Tool MCP Execution
+        type: 'BUILT-IN APP TOOL',
+        title: '內建系統時間工具',
+        badge: 'Built-in App Tool',
+        desc: '在 AI 想要獲取設備時間時，調用內建 App Tool；它不屬於外部 MCP 工具，參數為空。',
+        snippet: `// Built-in App Tool Execution
 {
-  "server": "etos_builtin_app_tool",
   "tool": "app_get_system_time",
-  "arguments": { "timezone": "Asia/Taipei" },
-  "approval": "ASK_USER_CONFIRMATION"
+  "arguments": {}
 }`
       },
       {
@@ -1109,11 +1326,17 @@ const zhHant = {
         title: 'GitHub 技能包一鍵導入',
         badge: 'Agentic Skill Pack',
         desc: '直接粘貼 GitHub 倉庫鏈接或 RAW 檔案地址，即刻注入代碼審查、海報生成或工作流指令集。',
-        snippet: `# SKILL: CodeReviewer Pro
+        snippet: `---
+name: code-reviewer-pro
 description: "Inspect Swift & Rust diffs for memory leaks"
-tools: [app_read_sandbox_file, app_query_sqlite]
-instructions: |
-  Check for strong reference cycles in closure capture lists.`
+allowed-tools:
+  - app_read_sandbox_file
+  - app_query_sqlite
+---
+
+# CodeReviewer Pro
+
+檢查 Swift 閉包捕獲列表、Rust unsafe 邊界與資料庫遷移風險。`
       },
       {
         id: 'jsc',
@@ -1138,11 +1361,13 @@ function main(input) {
         title: 'SQLite 全盤物理加密向量庫',
         badge: 'GRDB + SQLCipher',
         desc: '本地 Embedding 與長效記憶直接落地在加密 SQLite 數據庫中，支援 SillyTavern 世界書觸發。',
-        snippet: `CREATE TABLE memory_vectors (
-  id TEXT PRIMARY KEY,
-  vector BLOB NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+        snippet: `-- memory_vectors.sqlite
+CREATE TABLE memory_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  parent_memory_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,
+  metadata TEXT NOT NULL
 ) STRICT;`
       }
     ]

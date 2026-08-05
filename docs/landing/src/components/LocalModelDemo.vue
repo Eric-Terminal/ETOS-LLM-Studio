@@ -22,22 +22,27 @@ const currentModel = computed(() => {
     name: 'Qwen2.5-7B-Instruct.Q4_K_M.gguf',
     size: '4.35 GB',
     thinking: '',
-    response: ''
+    response: '',
+    hud: {}
   };
 
   const isMetal = metalOffload.value;
   const isFlash = flashAttention.value;
   const isKV = kvCache.value;
+  const hud = base.hud || {};
 
-  // Calculate dynamic HUD stats based on hardware toggles including kvCache
-  let cpu = isMetal ? '18%' : '78%';
-  let gpu = isMetal ? '92%' : '0%';
-  let ram = isMetal
-    ? (isKV ? '4.2 GB (Metal)' : '4.8 GB (Metal)')
-    : (isKV ? '4.5 GB (RAM)' : '5.1 GB (RAM)');
-  let speedVal = isFlash
-    ? (isKV ? 42.6 : 38.4)
-    : (isKV ? 25.8 : 22.1);
+  const cpu = isMetal
+    ? (hud.cpuMetal || '18%')
+    : (hud.cpuOnly || '78%');
+  const gpu = isMetal
+    ? (hud.gpuMetal || '92%')
+    : '0%';
+  const ram = isMetal
+    ? (isKV ? (hud.ramMetalKV || '5.2 GB (Metal + KV)') : (hud.ramMetal || '4.8 GB (Metal)'))
+    : (isKV ? (hud.ramCpuKV || '5.8 GB (RAM + KV)') : (hud.ramCpu || '5.1 GB (RAM)'));
+  const speedVal = isFlash
+    ? (isKV ? (hud.speedFlashKV || 42.6) : (hud.speedFlash || 38.4))
+    : (isKV ? (hud.speedKV || 25.8) : (hud.speedBase || 22.1));
 
   return {
     ...base,

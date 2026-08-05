@@ -1735,6 +1735,7 @@ img {
 }
 
 .toggle-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1745,7 +1746,11 @@ img {
 }
 
 .toggle-item input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .toggle-box {
@@ -1772,6 +1777,11 @@ img {
   border: solid #ffffff;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+}
+
+.toggle-item input:focus-visible + .toggle-box {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
 }
 
 .hud-stats-grid {
