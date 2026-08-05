@@ -204,8 +204,9 @@ struct DailyPulseContextAndDeliveryTests {
 
         let prompt = DailyPulseManager.makeUserPrompt(
             from: input,
-            cardsPerRun: 3,
-            candidateCardsPerRun: 6
+            cardsPerDelivery: 3,
+            candidateCardsPerDelivery: 6,
+            scheduledDeliveryDate: Date(timeIntervalSince1970: 4_102_444_200)
         )
 
         #expect(input.hasUsableContext)
@@ -213,12 +214,20 @@ struct DailyPulseContextAndDeliveryTests {
         #expect(prompt.contains("偏好 SwiftUI、watchOS 和原生交互细节。"))
     }
 
-    @Test("提前生成时提示词会明确标记目标日期")
-    func futureGenerationPromptIncludesTargetDay() {
+    @Test("提前生成时提示词会把精确送达时间作为当前时间")
+    func futureGenerationPromptIncludesScheduledDeliveryTime() {
+        let activityDate = Date(timeIntervalSince1970: 4_102_354_200)
+        let deliveryDate = Date(timeIntervalSince1970: 4_102_444_200)
         let input = DailyPulseGenerationInput(
             focusText: "",
             curationText: "",
-            sessionExcerpts: [DailyPulseSessionExcerpt(name: "测试", lines: ["用户：准备明天"])],
+            sessionExcerpts: [
+                DailyPulseSessionExcerpt(
+                    name: "测试",
+                    lines: ["用户：准备明天"],
+                    lastActivityAt: activityDate
+                )
+            ],
             memories: [],
             requestLogSummary: "",
             activeTasks: [],
@@ -228,12 +237,31 @@ struct DailyPulseContextAndDeliveryTests {
 
         let prompt = DailyPulseManager.makeUserPrompt(
             from: input,
-            cardsPerRun: 3,
-            candidateCardsPerRun: 6,
-            targetDayKey: "2099-12-31"
+            cardsPerDelivery: 3,
+            candidateCardsPerDelivery: 6,
+            scheduledDeliveryDate: deliveryDate
         )
 
-        #expect(prompt.contains("2099-12-31"))
+        #expect(prompt.contains(DailyPulseManager.promptTimestampString(from: deliveryDate)))
+        #expect(prompt.contains(DailyPulseManager.userFacingDateString(from: activityDate)))
+        #expect(prompt.contains("准备明天"))
+    }
+
+    @Test("多个送达批次会按卡片数量分配互不重复的历史会话")
+    func deliveryBatchesUseDistinctSessionWindows() {
+        let excerpts = (1...9).map {
+            DailyPulseSessionExcerpt(name: "会话 \($0)", lines: ["内容 \($0)"])
+        }
+
+        let batches = DailyPulseManager.partitionedSessionExcerpts(
+            excerpts,
+            cardCounts: [3, 2, 4]
+        )
+
+        #expect(batches.map(\.count) == [3, 2, 4])
+        #expect(batches[0].map(\.name) == ["会话 1", "会话 2", "会话 3"])
+        #expect(batches[1].map(\.name) == ["会话 4", "会话 5"])
+        #expect(Set(batches.flatMap { $0.map(\.name) }).count == 9)
     }
 
     @Test("外部信号历史会按主题去重并保留最新记录")

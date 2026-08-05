@@ -4,8 +4,8 @@
 // ETOS LLM Studio 每日脉冲主动送达协调器
 //
 // 功能特性:
-// - 管理主动送达开关与多个卡片时间点
-// - 负责调度或移除绑定具体卡片的一次性本地通知
+// - 管理主动送达开关，以及每个时间点对应的卡片批次
+// - 负责调度或移除绑定具体批次的一次性本地通知
 // - 为 UI 提供提醒时间说明与通知权限状态摘要
 // ============================================================================
 
@@ -19,6 +19,7 @@ import UserNotifications
 @MainActor
 public final class DailyPulseDeliveryCoordinator: ObservableObject {
     public static let shared = DailyPulseDeliveryCoordinator()
+    public nonisolated static let maximumDeliveryTimes = 6
 
     @Published public var reminderEnabled: Bool {
         didSet {
@@ -56,7 +57,6 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     private static let reminderHourDefaultsKey = "dailyPulse.delivery.reminderHour"
     private static let reminderMinuteDefaultsKey = "dailyPulse.delivery.reminderMinute"
     private static let deliveryTimesDefaultsKey = "dailyPulse.delivery.times"
-    private static let cardsPerRunDefaultsKey = "dailyPulse.cardsPerRun"
     private static let lastReadyDayKeyDefaultsKey = "dailyPulse.delivery.lastReadyDayKey"
 
     @Published public private(set) var lastReadyDayKey: String?
@@ -64,23 +64,20 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
-        let storedTimes = Self.loadDeliveryTimes(defaults: defaults)
+        let storedSchedule = Self.loadDeliveryTimes(defaults: defaults)
         let migratedTime = DailyPulseDeliveryTime(
             hour: Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
             minute: Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
         )
-        let cardsPerRun = Self.integerValue(
-            forKey: Self.cardsPerRunDefaultsKey,
-            defaults: defaults,
-            defaultValue: 3
-        )
-        self.deliveryTimes = Self.synchronizedDeliveryTimes(
-            storedTimes ?? [migratedTime],
-            count: cardsPerRun
+        // 上一版会按卡片数自动扩成多个时间；没有 cardCount 字段即可识别并收回为旧版单时间默认值。
+        self.deliveryTimes = Self.normalizedDeliveryTimes(
+            storedSchedule?.hasPerTimeCardCount == true
+                ? storedSchedule?.times ?? [migratedTime]
+                : [storedSchedule?.times.first ?? migratedTime]
         )
         let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
         self.lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
-        if storedTimes != deliveryTimes {
+        if storedSchedule?.times != deliveryTimes || storedSchedule?.hasPerTimeCardCount != true {
             Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
         }
     }
@@ -95,20 +92,19 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     public func reloadFromStorage() {
         isApplyingStoredSettings = true
         reminderEnabled = Self.boolValue(forKey: Self.reminderEnabledDefaultsKey, defaults: defaults, defaultValue: false)
-        let storedTimes = Self.loadDeliveryTimes(defaults: defaults) ?? [
-            DailyPulseDeliveryTime(
-                hour: Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
-                minute: Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
-            )
-        ]
-        deliveryTimes = Self.synchronizedDeliveryTimes(
-            storedTimes,
-            count: Self.integerValue(
-                forKey: Self.cardsPerRunDefaultsKey,
-                defaults: defaults,
-                defaultValue: 3
-            )
+        let storedSchedule = Self.loadDeliveryTimes(defaults: defaults)
+        let migratedTime = DailyPulseDeliveryTime(
+            hour: Self.integerValue(forKey: Self.reminderHourDefaultsKey, defaults: defaults, defaultValue: 8),
+            minute: Self.integerValue(forKey: Self.reminderMinuteDefaultsKey, defaults: defaults, defaultValue: 30)
         )
+        deliveryTimes = Self.normalizedDeliveryTimes(
+            storedSchedule?.hasPerTimeCardCount == true
+                ? storedSchedule?.times ?? [migratedTime]
+                : [storedSchedule?.times.first ?? migratedTime]
+        )
+        if storedSchedule?.hasPerTimeCardCount != true {
+            Self.saveDeliveryTimes(deliveryTimes, defaults: defaults)
+        }
         let storedLastReadyDayKey = Self.textValue(forKey: Self.lastReadyDayKeyDefaultsKey, defaults: defaults, defaultValue: "")
         lastReadyDayKey = storedLastReadyDayKey.isEmpty ? nil : storedLastReadyDayKey
         isApplyingStoredSettings = false
@@ -125,17 +121,21 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         ListFormatter.localizedString(byJoining: deliveryTimes.map(\.timeText))
     }
 
+    public var totalCardCount: Int {
+        deliveryTimes.reduce(0) { $0 + $1.cardCount }
+    }
+
     public var reminderStatusText: String {
 #if canImport(UserNotifications)
         switch AppLocalNotificationCenter.shared.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
 #if os(iOS)
             return reminderEnabled
-                ? String(format: NSLocalizedString("将按 %@ 分时提醒对应卡片；整期会尽量在前一天晚间一起生成，完成后所有卡片均可随时查看。", comment: "Daily pulse iOS scheduled card delivery status"), deliveryTimeSummaryText)
+                ? String(format: NSLocalizedString("将按 %@ 送达对应批次；每个时间点会提前单独生成，并结合该时刻与不同的近期对话。", comment: "Daily pulse iOS scheduled batch delivery status"), deliveryTimeSummaryText)
                 : NSLocalizedString("提醒已关闭；你仍可在应用内手动查看今日卡片。", comment: "Daily pulse reminder disabled status")
 #else
             return reminderEnabled
-                ? String(format: NSLocalizedString("将按 %@ 分时提醒对应卡片；整期会一起生成，手表在前台恢复时会补充准备缺失内容。", comment: "Daily pulse watchOS scheduled card delivery status"), deliveryTimeSummaryText)
+                ? String(format: NSLocalizedString("将按 %@ 送达对应批次；手表会使用已提前准备的内容，并在前台恢复时补充缺失批次。", comment: "Daily pulse watchOS scheduled batch delivery status"), deliveryTimeSummaryText)
                 : NSLocalizedString("提醒已关闭；你仍可在应用内手动查看今日卡片。", comment: "Daily pulse reminder disabled status")
 #endif
         case .denied:
@@ -187,17 +187,21 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
 #if canImport(UserNotifications)
     private func scheduleCardNotifications(for run: DailyPulseRun, referenceDate: Date) async {
-        for (index, pair) in zip(deliveryTimes, run.cards).enumerated() {
-            let (deliveryTime, card) = pair
-            guard card.isVisible,
+        for (index, batch) in effectiveDeliveryBatches(for: run).enumerated() {
+            guard let deliveryTime = deliveryTimes.first(where: { $0.id == batch.deliveryTimeID }),
                   let deliveryDate = Self.deliveryDate(dayKey: run.dayKey, time: deliveryTime),
                   deliveryDate > referenceDate else {
                 continue
             }
 
+            let visibleCards = batch.cardIDs.compactMap { cardID in
+                run.cards.first(where: { $0.id == cardID && $0.isVisible })
+            }
+            guard let primaryCard = visibleCards.first else { continue }
+
             let content = UNMutableNotificationContent()
-            content.title = card.title
-            content.body = card.summary
+            content.title = batch.headline
+            content.body = Self.notificationBody(for: visibleCards)
             content.sound = .default
             content.threadIdentifier = "dailyPulse.delivery"
             content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "card")
@@ -205,7 +209,7 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
                 kind: "card",
                 dayKey: run.dayKey,
                 runID: run.id,
-                cardID: card.id
+                cardID: primaryCard.id
             )
 
             let request = UNNotificationRequest(
@@ -220,32 +224,57 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         }
     }
 
-    private func scheduleFallbackNotification(dayKey: String, referenceDate: Date) async {
-        let deliveryDate = deliveryTimes
-            .compactMap { Self.deliveryDate(dayKey: dayKey, time: $0) }
-            .filter { $0 > referenceDate }
-            .min()
-        guard let deliveryDate else {
-            return
+    private func effectiveDeliveryBatches(for run: DailyPulseRun) -> [DailyPulseDeliveryBatch] {
+        if let storedBatches = run.deliveryBatches, !storedBatches.isEmpty {
+            return storedBatches
         }
 
-        let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("每日脉冲提醒", comment: "Daily pulse fallback notification title")
-        content.body = NSLocalizedString("今天的每日脉冲尚未完成预先准备，打开应用后会继续尝试生成。", comment: "Daily pulse fallback notification body")
-        content.sound = .default
-        content.threadIdentifier = "dailyPulse.delivery"
-        content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder")
-        content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "reminder", dayKey: dayKey)
-
-        let request = UNNotificationRequest(
-            identifier: Self.fallbackIdentifierPrefix + dayKey,
-            content: content,
-            trigger: UNCalendarNotificationTrigger(
-                dateMatching: Self.notificationDateComponents(for: deliveryDate),
-                repeats: false
+        guard let firstTime = deliveryTimes.first else { return [] }
+        return [
+            DailyPulseDeliveryBatch(
+                deliveryTimeID: firstTime.id,
+                scheduledAt: Self.deliveryDate(dayKey: run.dayKey, time: firstTime) ?? run.generatedAt,
+                headline: run.headline,
+                cardIDs: run.cards.map(\.id)
             )
+        ]
+    }
+
+    private nonisolated static func notificationBody(for cards: [DailyPulseCard]) -> String {
+        guard cards.count > 1 else {
+            return cards.first?.summary ?? NSLocalizedString("打开应用查看这次每日脉冲。", comment: "Daily Pulse notification empty batch body")
+        }
+        let titles = ListFormatter.localizedString(byJoining: cards.prefix(3).map(\.title))
+        return String(
+            format: NSLocalizedString("为你准备了 %d 张卡片：%@", comment: "Daily Pulse notification batch body"),
+            cards.count,
+            titles
         )
-        _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
+    }
+
+    private func scheduleFallbackNotification(dayKey: String, referenceDate: Date) async {
+        for (index, deliveryTime) in deliveryTimes.enumerated() {
+            guard let deliveryDate = Self.deliveryDate(dayKey: dayKey, time: deliveryTime),
+                  deliveryDate > referenceDate else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = NSLocalizedString("每日脉冲提醒", comment: "Daily pulse fallback notification title")
+            content.body = NSLocalizedString("这次每日脉冲尚未完成预先准备，打开应用后会继续尝试生成。", comment: "Daily pulse fallback notification body")
+            content.sound = .default
+            content.threadIdentifier = "dailyPulse.delivery"
+            content.categoryIdentifier = AppLocalNotificationCenter.dailyPulseCategoryIdentifier(kind: "reminder")
+            content.userInfo = AppLocalNotificationCenter.dailyPulseUserInfo(kind: "reminder", dayKey: dayKey)
+
+            let request = UNNotificationRequest(
+                identifier: Self.fallbackNotificationIdentifier(dayKey: dayKey, index: index),
+                content: content,
+                trigger: UNCalendarNotificationTrigger(
+                    dateMatching: Self.notificationDateComponents(for: deliveryDate),
+                    repeats: false
+                )
+            )
+            _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
+        }
     }
 #endif
 
@@ -307,18 +336,53 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     @discardableResult
     public func updateDeliveryTime(id: UUID, hour: Int, minute: Int) -> Bool {
         guard let index = deliveryTimes.firstIndex(where: { $0.id == id }) else { return false }
-        let normalized = DailyPulseDeliveryTime(id: id, hour: hour, minute: minute)
+        let normalized = DailyPulseDeliveryTime(
+            id: id,
+            hour: hour,
+            minute: minute,
+            cardCount: deliveryTimes[index].cardCount
+        )
         guard !deliveryTimes.contains(where: { $0.id != id && $0.totalMinutes == normalized.totalMinutes }) else {
             return false
         }
         deliveryTimes[index] = normalized
+        invalidatePreparedTomorrowRun()
         return true
     }
 
-    public func synchronizeDeliveryTimes(to cardCount: Int) {
-        let synchronizedTimes = Self.synchronizedDeliveryTimes(deliveryTimes, count: cardCount)
-        guard synchronizedTimes != deliveryTimes else { return }
-        deliveryTimes = synchronizedTimes
+    @discardableResult
+    public func updateCardCount(id: UUID, count: Int) -> Bool {
+        guard let index = deliveryTimes.firstIndex(where: { $0.id == id }) else { return false }
+        let normalizedCount = DailyPulseDeliveryTime.normalizedCardCount(count)
+        guard deliveryTimes[index].cardCount != normalizedCount else { return true }
+        deliveryTimes[index].cardCount = normalizedCount
+        invalidatePreparedTomorrowRun()
+        return true
+    }
+
+    @discardableResult
+    public func addDeliveryTime() -> DailyPulseDeliveryTime? {
+        guard deliveryTimes.count < Self.maximumDeliveryTimes,
+              let time = Self.nextAvailableDeliveryTime(after: deliveryTimes.last, excluding: deliveryTimes) else {
+            return nil
+        }
+        deliveryTimes.append(time)
+        invalidatePreparedTomorrowRun()
+        return time
+    }
+
+    @discardableResult
+    public func removeDeliveryTime(id: UUID) -> Bool {
+        guard deliveryTimes.count > 1,
+              deliveryTimes.contains(where: { $0.id == id }) else { return false }
+        deliveryTimes.removeAll(where: { $0.id == id })
+        invalidatePreparedTomorrowRun()
+        return true
+    }
+
+    private func invalidatePreparedTomorrowRun() {
+        guard Self.usesDatabase(defaults: defaults) else { return }
+        DailyPulseManager.shared.invalidatePreparedTomorrowRun()
     }
 
     public nonisolated static func reminderTimeComponents(from input: String) -> (hour: Int, minute: Int)? {
@@ -432,6 +496,10 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         cardIdentifierPrefix + dayKey + ".\(index)"
     }
 
+    private nonisolated static func fallbackNotificationIdentifier(dayKey: String, index: Int) -> String {
+        fallbackIdentifierPrefix + dayKey + ".\(index)"
+    }
+
     private nonisolated static func managedNotificationIdentifiers(referenceDate: Date) -> [String] {
         let dayKeys = [
             DailyPulseManager.dayKey(for: referenceDate),
@@ -440,7 +508,10 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         var identifiers = [legacyReminderIdentifier]
         for dayKey in dayKeys {
             identifiers.append(fallbackIdentifierPrefix + dayKey)
-            identifiers.append(contentsOf: (0..<DailyPulseManager.maximumCardsPerRun).map {
+            identifiers.append(contentsOf: (0..<maximumDeliveryTimes).map {
+                fallbackNotificationIdentifier(dayKey: dayKey, index: $0)
+            })
+            identifiers.append(contentsOf: (0..<maximumDeliveryTimes).map {
                 cardNotificationIdentifier(dayKey: dayKey, index: $0)
             })
         }
@@ -503,43 +574,61 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
     ) -> [DailyPulseDeliveryTime] {
         var seenMinutes = Set<Int>()
         let normalized = times
-            .map { DailyPulseDeliveryTime(id: $0.id, hour: $0.hour, minute: $0.minute) }
+            .map {
+                DailyPulseDeliveryTime(
+                    id: $0.id,
+                    hour: $0.hour,
+                    minute: $0.minute,
+                    cardCount: $0.cardCount
+                )
+            }
             .filter { seenMinutes.insert($0.totalMinutes).inserted }
-        return normalized.isEmpty ? [DailyPulseDeliveryTime(hour: 8, minute: 30)] : normalized
+            .sorted(by: { $0.totalMinutes < $1.totalMinutes })
+        return normalized.isEmpty ? [DailyPulseDeliveryTime(hour: 8, minute: 30)] : Array(normalized.prefix(maximumDeliveryTimes))
     }
 
-    private nonisolated static func synchronizedDeliveryTimes(
-        _ times: [DailyPulseDeliveryTime],
-        count: Int
-    ) -> [DailyPulseDeliveryTime] {
-        let targetCount = DailyPulseManager.normalizedCardsPerRun(count)
-        var synchronized = Array(normalizedDeliveryTimes(times).prefix(targetCount))
-
-        while synchronized.count < targetCount {
-            let usedMinutes = Set(synchronized.map(\.totalMinutes))
-            let lastMinutes = synchronized.last?.totalMinutes ?? (8 * 60 + 30)
-            let forwardCandidates = [240, 180, 120, 60, 30]
-                .map { lastMinutes + $0 }
-                .filter { $0 < 24 * 60 && !usedMinutes.contains($0) }
-            let fallbackCandidates = stride(from: 8 * 60 + 30, through: 23 * 60 + 30, by: 60)
-                .filter { !usedMinutes.contains($0) }
-            guard let totalMinutes = forwardCandidates.first ?? fallbackCandidates.first else { break }
-            synchronized.append(
-                DailyPulseDeliveryTime(hour: totalMinutes / 60, minute: totalMinutes % 60)
+    private nonisolated static func nextAvailableDeliveryTime(
+        after previous: DailyPulseDeliveryTime?,
+        excluding existing: [DailyPulseDeliveryTime]
+    ) -> DailyPulseDeliveryTime? {
+        let usedMinutes = Set(existing.map(\.totalMinutes))
+        let startMinutes = previous?.totalMinutes ?? (8 * 60 + 30)
+        let preferredCandidates = [240, 180, 120, 60, 30]
+            .map { startMinutes + $0 }
+            .filter { $0 < 24 * 60 }
+        let fallbackCandidates = Array(stride(from: 0, to: 24 * 60, by: 30))
+        for candidate in preferredCandidates + fallbackCandidates {
+            guard !usedMinutes.contains(candidate) else { continue }
+            return DailyPulseDeliveryTime(
+                hour: candidate / 60,
+                minute: candidate % 60,
+                cardCount: DailyPulseDeliveryTime.defaultCardCount
             )
         }
-
-        return synchronized
+        return nil
     }
 
-    private static func loadDeliveryTimes(defaults: UserDefaults) -> [DailyPulseDeliveryTime]? {
+    private struct StoredDeliverySchedule {
+        let times: [DailyPulseDeliveryTime]
+        let hasPerTimeCardCount: Bool
+    }
+
+    private struct StoredDeliveryTimeProbe: Decodable {
+        let cardCount: Int?
+    }
+
+    private static func loadDeliveryTimes(defaults: UserDefaults) -> StoredDeliverySchedule? {
         let rawValue = textValue(forKey: deliveryTimesDefaultsKey, defaults: defaults, defaultValue: "")
         guard !rawValue.isEmpty,
               let data = rawValue.data(using: .utf8),
               let decoded = try? JSONDecoder().decode([DailyPulseDeliveryTime].self, from: data) else {
             return nil
         }
-        return normalizedDeliveryTimes(decoded)
+        let probes = try? JSONDecoder().decode([StoredDeliveryTimeProbe].self, from: data)
+        return StoredDeliverySchedule(
+            times: normalizedDeliveryTimes(decoded),
+            hasPerTimeCardCount: probes?.allSatisfy { $0.cardCount != nil } == true
+        )
     }
 
     private static func saveDeliveryTimes(_ times: [DailyPulseDeliveryTime], defaults: UserDefaults) {

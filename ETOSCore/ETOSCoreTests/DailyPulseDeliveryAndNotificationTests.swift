@@ -33,17 +33,19 @@ struct DailyPulseDeliveryAndNotificationTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         defaults.set(false, forKey: "dailyPulse.delivery.reminderEnabled")
-        defaults.set(1, forKey: "dailyPulse.cardsPerRun")
         defaults.set(8, forKey: "dailyPulse.delivery.reminderHour")
         defaults.set(30, forKey: "dailyPulse.delivery.reminderMinute")
 
         let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
         #expect(coordinator.deliveryTimes.count == 1)
         #expect(coordinator.deliveryTimes.first?.timeText == "08:30")
+        #expect(coordinator.deliveryTimes.first?.cardCount == 3)
 
         let id = coordinator.deliveryTimes[0].id
         #expect(coordinator.updateDeliveryTime(id: id, hour: 99, minute: -20))
         #expect(coordinator.deliveryTimes.first?.timeText == "23:00")
+        #expect(coordinator.updateDeliveryTime(id: id, hour: 2, minute: 15))
+        #expect(coordinator.deliveryTimes.first?.timeText == "02:15")
     }
 
     @Test("文本提醒时间支持常见 24 小时制输入格式")
@@ -65,27 +67,57 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "83000") == nil)
     }
 
-    @Test("送达时间会与卡片数量保持一一对应并拒绝重复值")
+    @Test("送达时间默认只有一条并可独立设置卡片数量")
     @MainActor
-    func deliveryTimesNormalizeAndRespectCardCount() {
+    func deliveryTimesCanBeAddedAndConfiguredIndependently() throws {
         let suiteName = "DailyPulseDeliveryTimesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
-        #expect(coordinator.deliveryTimes.count == 3)
+        #expect(coordinator.deliveryTimes.count == 1)
         let firstID = coordinator.deliveryTimes[0].id
-        #expect(coordinator.updateDeliveryTime(id: firstID, hour: 18, minute: 0))
-        #expect(coordinator.deliveryTimes[0].id == firstID)
+        #expect(coordinator.updateCardCount(id: firstID, count: 5))
+        #expect(coordinator.deliveryTimes.first?.cardCount == 5)
 
-        coordinator.synchronizeDeliveryTimes(to: 2)
+        let added = coordinator.addDeliveryTime()
+        #expect(added != nil)
         #expect(coordinator.deliveryTimes.count == 2)
-        let duplicateTarget = coordinator.deliveryTimes[1]
+        let duplicateTarget = try #require(added)
+        #expect(duplicateTarget.timeText == "12:30")
+        #expect(duplicateTarget.cardCount == 3)
         #expect(!coordinator.updateDeliveryTime(
             id: duplicateTarget.id,
             hour: coordinator.deliveryTimes[0].hour,
             minute: coordinator.deliveryTimes[0].minute
         ))
+        #expect(coordinator.removeDeliveryTime(id: duplicateTarget.id))
+        #expect(coordinator.deliveryTimes.count == 1)
+        #expect(!coordinator.removeDeliveryTime(id: firstID))
+    }
+
+    @Test("上一版自动扩出的多个时间会迁移回单时间三张卡片")
+    @MainActor
+    func automaticLegacyTimesCollapseToSingleDelivery() {
+        let suiteName = "DailyPulseAutomaticTimesMigrationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(
+            """
+            [
+              {"id":"11111111-1111-1111-1111-111111111111","hour":8,"minute":30},
+              {"id":"22222222-2222-2222-2222-222222222222","hour":12,"minute":30},
+              {"id":"33333333-3333-3333-3333-333333333333","hour":16,"minute":30}
+            ]
+            """,
+            forKey: "dailyPulse.delivery.times"
+        )
+
+        let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
+
+        #expect(coordinator.deliveryTimes.count == 1)
+        #expect(coordinator.deliveryTimes.first?.timeText == "08:30")
+        #expect(coordinator.deliveryTimes.first?.cardCount == 3)
     }
 
     @Test("卡片送达日期会绑定目标日期和具体时间")
@@ -110,8 +142,8 @@ struct DailyPulseDeliveryAndNotificationTests {
         ))
     }
 
-    @Test("后台预准备时间会优先落在提醒前的准备窗口")
-    func nextBackgroundPreparationDatePrefersLeadWindow() {
+    @Test("明日内容缺失时后台预准备会尽快申请机会")
+    func nextBackgroundPreparationDateRunsSoonWhenTomorrowIsMissing() {
         var calendar = Calendar(identifier: .gregorian)
         let timeZone = TimeZone(secondsFromGMT: 0)!
         calendar.timeZone = timeZone
@@ -121,17 +153,17 @@ struct DailyPulseDeliveryAndNotificationTests {
         let referenceDate = formatter.date(from: "2026-03-22T01:00:00Z")!
         let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
             referenceDate: referenceDate,
-            hour: 8,
-            minute: 30,
+            hour: 0,
+            minute: 0,
             forceNextDay: false,
-            leadTimeMinutes: 15,
+            leadTimeMinutes: 0,
             calendar: calendar
         )
 
-        #expect(formatter.string(from: scheduledDate!) == "2026-03-22T08:15:00Z")
+        #expect(formatter.string(from: scheduledDate!) == "2026-03-22T01:01:00Z")
     }
 
-    @Test("进入准备窗口后，后台预准备会尽快补一个未来时间")
+    @Test("过了日界线后后台预准备不等待固定晚间时间")
     func nextBackgroundPreparationDateFallsBackToSoon() {
         var calendar = Calendar(identifier: .gregorian)
         let timeZone = TimeZone(secondsFromGMT: 0)!
@@ -142,10 +174,10 @@ struct DailyPulseDeliveryAndNotificationTests {
         let referenceDate = formatter.date(from: "2026-03-22T08:25:00Z")!
         let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
             referenceDate: referenceDate,
-            hour: 8,
-            minute: 30,
+            hour: 0,
+            minute: 0,
             forceNextDay: false,
-            leadTimeMinutes: 15,
+            leadTimeMinutes: 0,
             calendar: calendar
         )
 
@@ -163,14 +195,14 @@ struct DailyPulseDeliveryAndNotificationTests {
         let referenceDate = formatter.date(from: "2026-03-22T07:00:00Z")!
         let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
             referenceDate: referenceDate,
-            hour: 8,
-            minute: 30,
+            hour: 0,
+            minute: 0,
             forceNextDay: true,
-            leadTimeMinutes: 15,
+            leadTimeMinutes: 0,
             calendar: calendar
         )
 
-        #expect(formatter.string(from: scheduledDate!) == "2026-03-23T08:15:00Z")
+        #expect(formatter.string(from: scheduledDate!) == "2026-03-23T00:00:00Z")
     }
 
     @Test("到达首个时间点后才允许定时送达尝试")
@@ -281,31 +313,11 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(Set(retained.map(\.dayKey)) == ["2026-03-22", "2026-03-23"])
     }
 
-    @Test("明日预生成只会在前一天晚间准备窗口后开始")
-    func tomorrowPreparationRequiresEveningWindow() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = calendar.timeZone
-
-        let beforeWindow = formatter.date(from: "2026-03-22T19:59:00Z")!
-        let afterWindow = formatter.date(from: "2026-03-22T20:00:00Z")!
-
-        #expect(!DailyPulseManager.hasReachedTomorrowPreparationTime(
-            referenceDate: beforeWindow,
-            calendar: calendar
-        ))
-        #expect(DailyPulseManager.hasReachedTomorrowPreparationTime(
-            referenceDate: afterWindow,
-            calendar: calendar
-        ))
-    }
-
-    @Test("每日脉冲卡片数量限制在一到六张")
+    @Test("单个送达批次卡片数量限制在一到六张")
     func cardCountIsNormalized() {
-        #expect(DailyPulseManager.normalizedCardsPerRun(0) == 1)
-        #expect(DailyPulseManager.normalizedCardsPerRun(4) == 4)
-        #expect(DailyPulseManager.normalizedCardsPerRun(12) == 6)
+        #expect(DailyPulseDeliveryTime.normalizedCardCount(0) == 1)
+        #expect(DailyPulseDeliveryTime.normalizedCardCount(4) == 4)
+        #expect(DailyPulseDeliveryTime.normalizedCardCount(12) == 6)
     }
 
     @Test("准备状态会按当天开启和收口")

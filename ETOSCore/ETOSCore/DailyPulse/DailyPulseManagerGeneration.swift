@@ -51,7 +51,12 @@ extension DailyPulseManager {
         }
 
         do {
-            let input = await buildGenerationInput(for: generationDayKey)
+            let deliveryTimes = DailyPulseDeliveryCoordinator.shared.deliveryTimes
+            let requestedCardCount = deliveryTimes.reduce(0) { $0 + $1.cardCount }
+            let input = await buildGenerationInput(
+                for: generationDayKey,
+                sessionLimit: requestedCardCount
+            )
             guard input.hasUsableContext else {
                 throw DailyPulseGenerationError.insufficientContext
             }
@@ -59,36 +64,77 @@ extension DailyPulseManager {
                 throw DailyPulseGenerationError.noModelSelected
             }
 
-            let userPrompt = Self.makeUserPrompt(
-                from: input,
-                cardsPerRun: cardsPerRun,
-                candidateCardsPerRun: candidateCardsPerRun,
-                targetDayKey: generationDayKey
+            let scheduledDeliveries = deliveryTimes.compactMap { deliveryTime in
+                DailyPulseDeliveryCoordinator.deliveryDate(
+                    dayKey: generationDayKey,
+                    time: deliveryTime
+                ).map { (deliveryTime, $0) }
+            }
+            let sessionGroups = Self.partitionedSessionExcerpts(
+                input.sessionExcerpts,
+                cardCounts: scheduledDeliveries.map { $0.0.cardCount },
+                scheduledDeliveryDates: scheduledDeliveries.map { $0.1 }
             )
-            let raw = try await chatService.generateDetachedChatCompletion(
-                systemPrompt: Self.systemPrompt,
-                userPrompt: userPrompt,
-                temperature: 0.45,
-                runnableModel: generationModel,
-                requestSource: .dailyPulse
-            )
-            let parsed = try Self.parseModelResponse(from: raw)
-            let cards = Self.makeCards(
-                from: parsed.cards,
-                fallbackFocus: input.focusText,
-                profile: input.preferenceProfile,
-                limit: cardsPerRun
-            )
-            guard !cards.isEmpty else {
+            var generatedCards: [DailyPulseCard] = []
+            var deliveryBatches: [DailyPulseDeliveryBatch] = []
+            var firstHeadline: String?
+
+            for (index, scheduledDelivery) in scheduledDeliveries.enumerated() {
+                let (deliveryTime, scheduledAt) = scheduledDelivery
+
+                let userPrompt = Self.makeUserPrompt(
+                    from: input,
+                    sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
+                    cardsPerDelivery: deliveryTime.cardCount,
+                    candidateCardsPerDelivery: deliveryTime.cardCount * 2,
+                    scheduledDeliveryDate: scheduledAt,
+                    excludedTopics: generatedCards.map(\.title)
+                )
+                let raw = try await chatService.generateDetachedChatCompletion(
+                    systemPrompt: Self.systemPrompt,
+                    userPrompt: userPrompt,
+                    temperature: 0.45,
+                    runnableModel: generationModel,
+                    requestSource: .dailyPulse
+                )
+                let parsed = try Self.parseModelResponse(from: raw)
+                let cards = Self.makeCards(
+                    from: parsed.cards,
+                    fallbackFocus: input.focusText,
+                    profile: input.preferenceProfile,
+                    limit: deliveryTime.cardCount,
+                    excluding: generatedCards
+                )
+                guard cards.count == deliveryTime.cardCount else {
+                    throw DailyPulseGenerationError.invalidModelOutput
+                }
+
+                let headline = Self.normalizedText(
+                    parsed.headline,
+                    fallback: NSLocalizedString("这次有几条值得你看", comment: "Daily Pulse delivery batch fallback headline")
+                )
+                firstHeadline = firstHeadline ?? headline
+                generatedCards.append(contentsOf: cards)
+                deliveryBatches.append(
+                    DailyPulseDeliveryBatch(
+                        deliveryTimeID: deliveryTime.id,
+                        scheduledAt: scheduledAt,
+                        headline: headline,
+                        cardIDs: cards.map(\.id)
+                    )
+                )
+            }
+            guard !generatedCards.isEmpty, !deliveryBatches.isEmpty else {
                 throw DailyPulseGenerationError.invalidModelOutput
             }
 
             let newRun = DailyPulseRun(
                 dayKey: generationDayKey,
                 generatedAt: Date(),
-                headline: Self.normalizedText(parsed.headline, fallback: NSLocalizedString("今天这几条值得你看", comment: "Daily Pulse fallback headline")),
-                cards: cards,
-                sourceDigest: input.sourceDigest
+                headline: firstHeadline ?? NSLocalizedString("今天这几条值得你看", comment: "Daily Pulse fallback headline"),
+                cards: generatedCards,
+                sourceDigest: input.sourceDigest,
+                deliveryBatches: deliveryBatches
             )
             upsertRun(newRun)
             if pendingCuration?.targetDayKey == generationDayKey {
@@ -103,7 +149,7 @@ extension DailyPulseManager {
             if notifyReadyWhenFinished {
                 await DailyPulseDeliveryCoordinator.shared.notifyReadyIfNeeded(for: newRun)
             }
-            logger.info("每日脉冲已生成，触发方式: \(trigger.rawValue, privacy: .public)，卡片数: \(cards.count)")
+            logger.info("每日脉冲已生成，触发方式: \(trigger.rawValue, privacy: .public)，卡片数: \(generatedCards.count)")
         } catch {
             if Self.isCancellationError(error) || Task.isCancelled {
                 logger.info("每日脉冲生成已取消，触发方式: \(trigger.rawValue, privacy: .public)")
@@ -200,10 +246,13 @@ extension DailyPulseManager {
         runs.first(where: { $0.id == runID })?.cards.first(where: { $0.id == cardID })
     }
 
-    private func buildGenerationInput(for targetDayKey: String) async -> DailyPulseGenerationInput {
+    private func buildGenerationInput(
+        for targetDayKey: String,
+        sessionLimit: Int
+    ) async -> DailyPulseGenerationInput {
         await memoryManager.waitForInitialization()
         prunePendingCurationIfNeeded(referenceDate: Date())
-        let sessionExcerpts = buildSessionExcerpts()
+        let sessionExcerpts = await buildSessionExcerpts(limit: sessionLimit)
         let memories = buildMemoryExcerpts()
         let requestLogSummary = buildRequestLogSummary()
         let activeTasks = pendingTasks
@@ -275,47 +324,67 @@ extension DailyPulseManager {
         )
     }
 
-    private func buildSessionExcerpts() -> [DailyPulseSessionExcerpt] {
+    private func buildSessionExcerpts(limit: Int) async -> [DailyPulseSessionExcerpt] {
         var orderedSessions = chatService.chatSessionsSubject.value
         if let current = chatService.currentSessionSubject.value,
            !orderedSessions.contains(where: { $0.id == current.id }) {
             orderedSessions.insert(current, at: 0)
         }
+        let sessions = orderedSessions
+        let excerptLimit = max(1, limit)
+        let messageLimit = maxMessagesPerSession
+        let userRole = NSLocalizedString("用户", comment: "Daily Pulse prompt user role label")
+        let assistantRole = NSLocalizedString("助手", comment: "Daily Pulse prompt assistant role label")
+        let untitledName = NSLocalizedString("未命名会话", comment: "Untitled session fallback")
 
-        var results: [DailyPulseSessionExcerpt] = []
-        results.reserveCapacity(maxSessionsInPrompt)
+        return await Task.detached(priority: .utility) {
+            let loaded = sessions.enumerated().compactMap { offset, session -> (Int, DailyPulseSessionExcerpt)? in
+                let messages = Persistence.loadMessages(for: session.id)
+                    .filter { $0.role == .user || $0.role == .assistant }
+                guard !messages.isEmpty else { return nil }
 
-        for session in orderedSessions {
-            let messages = Persistence.loadMessages(for: session.id)
-                .filter { $0.role == .user || $0.role == .assistant }
-            guard !messages.isEmpty else { continue }
+                let latestActivityAt = messages.compactMap(Self.messageActivityDate).max()
+                let lines = messages.suffix(messageLimit).compactMap { message -> String? in
+                    let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return nil }
+                    let prefix = message.role == .user ? userRole : assistantRole
+                    let content = String(
+                        format: NSLocalizedString("%@：%@", comment: "Daily Pulse prompt role line"),
+                        prefix,
+                        Self.truncated(trimmed, limit: 180)
+                    )
+                    guard let activityAt = Self.messageActivityDate(message) else { return content }
+                    return "[\(Self.promptTimestampString(from: activityAt))] \(content)"
+                }
+                guard !lines.isEmpty else { return nil }
 
-            let lines = messages.suffix(maxMessagesPerSession).compactMap { message -> String? in
-                let trimmed = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return nil }
-                let prefix = message.role == .user
-                    ? NSLocalizedString("用户", comment: "Daily Pulse prompt user role label")
-                    : NSLocalizedString("助手", comment: "Daily Pulse prompt assistant role label")
-                return String(
-                    format: NSLocalizedString("%@：%@", comment: "Daily Pulse prompt role line"),
-                    prefix,
-                    Self.truncated(trimmed, limit: 180)
+                let name = session.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return (
+                    offset,
+                    DailyPulseSessionExcerpt(
+                        name: name.isEmpty ? untitledName : name,
+                        lines: Array(lines),
+                        lastActivityAt: latestActivityAt
+                    )
                 )
             }
-            guard !lines.isEmpty else { continue }
 
-            let name = session.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            results.append(
-                DailyPulseSessionExcerpt(
-                    name: name.isEmpty ? NSLocalizedString("未命名会话", comment: "Untitled session fallback") : name,
-                    lines: Array(lines)
-                )
-            )
-            if results.count >= maxSessionsInPrompt {
-                break
-            }
-        }
-        return results
+            return loaded
+                .sorted { lhs, rhs in
+                    switch (lhs.1.lastActivityAt, rhs.1.lastActivityAt) {
+                    case let (left?, right?):
+                        return left == right ? lhs.0 < rhs.0 : left > right
+                    case (_?, nil):
+                        return true
+                    case (nil, _?):
+                        return false
+                    case (nil, nil):
+                        return lhs.0 < rhs.0
+                    }
+                }
+                .prefix(excerptLimit)
+                .map { $0.1 }
+        }.value
     }
 
     private func buildMemoryExcerpts() -> [String] {

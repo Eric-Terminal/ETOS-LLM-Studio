@@ -184,6 +184,7 @@ public struct DailyPulseRun: Identifiable, Codable, Hashable, Sendable {
     public var headline: String
     public var cards: [DailyPulseCard]
     public var sourceDigest: String
+    public var deliveryBatches: [DailyPulseDeliveryBatch]?
 
     public init(
         id: UUID = UUID(),
@@ -191,7 +192,8 @@ public struct DailyPulseRun: Identifiable, Codable, Hashable, Sendable {
         generatedAt: Date,
         headline: String,
         cards: [DailyPulseCard],
-        sourceDigest: String
+        sourceDigest: String,
+        deliveryBatches: [DailyPulseDeliveryBatch]? = nil
     ) {
         self.id = id
         self.dayKey = dayKey
@@ -199,10 +201,33 @@ public struct DailyPulseRun: Identifiable, Codable, Hashable, Sendable {
         self.headline = headline
         self.cards = cards
         self.sourceDigest = sourceDigest
+        self.deliveryBatches = deliveryBatches
     }
 
     public var visibleCards: [DailyPulseCard] {
         cards.filter(\.isVisible)
+    }
+}
+
+public struct DailyPulseDeliveryBatch: Identifiable, Codable, Hashable, Sendable {
+    public var id: UUID
+    public var deliveryTimeID: UUID
+    public var scheduledAt: Date
+    public var headline: String
+    public var cardIDs: [UUID]
+
+    public init(
+        id: UUID = UUID(),
+        deliveryTimeID: UUID,
+        scheduledAt: Date,
+        headline: String,
+        cardIDs: [UUID]
+    ) {
+        self.id = id
+        self.deliveryTimeID = deliveryTimeID
+        self.scheduledAt = scheduledAt
+        self.headline = headline
+        self.cardIDs = cardIDs
     }
 }
 
@@ -270,7 +295,9 @@ internal struct DailyPulseGenerationInput: Sendable {
 
     var sourceDigest: String {
         let sessionDigest = sessionExcerpts
-            .flatMap { [[$0.name], $0.lines].flatMap { $0 } }
+            .flatMap { excerpt in
+                [excerpt.name, excerpt.lastActivityAt.map(DailyPulseManager.promptTimestampString) ?? ""] + excerpt.lines
+            }
             .joined(separator: "|")
         let memoryDigest = memories.joined(separator: "|")
         return [
@@ -383,6 +410,13 @@ internal struct DailyPulseExternalContext: Hashable, Sendable {
 internal struct DailyPulseSessionExcerpt: Codable, Hashable, Sendable {
     let name: String
     let lines: [String]
+    let lastActivityAt: Date?
+
+    init(name: String, lines: [String], lastActivityAt: Date? = nil) {
+        self.name = name
+        self.lines = lines
+        self.lastActivityAt = lastActivityAt
+    }
 }
 
 internal struct DailyPulseModelResponse: Codable, Sendable {

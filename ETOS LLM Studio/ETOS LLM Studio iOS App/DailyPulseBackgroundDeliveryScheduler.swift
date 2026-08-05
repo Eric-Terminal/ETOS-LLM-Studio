@@ -6,7 +6,7 @@
 // 功能特性:
 // - 基于 BGAppRefreshTaskRequest 为每日脉冲申请后台预准备窗口
 // - 在提醒关闭时自动取消后台任务
-// - 前一天晚间生成明日整期；若任务提前触发，则为当天补生成兜底
+// - 今天内容存在后尽快生成明日整期，不再等待固定晚间窗口
 // ============================================================================
 
 import Foundation
@@ -20,7 +20,7 @@ final class DailyPulseBackgroundDeliveryScheduler {
     static let taskIdentifier = "com.ericterminal.els.dailyPulse.refresh"
 
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "DailyPulseBackground")
-    private let preparationHour = 20
+    private let nextDayBoundaryHour = 0
 
     private init() {}
 
@@ -38,12 +38,12 @@ final class DailyPulseBackgroundDeliveryScheduler {
 
         guard let scheduledDate = DailyPulseDeliveryCoordinator.nextBackgroundPreparationDate(
             referenceDate: referenceDate,
-            hour: preparationHour,
+            hour: nextDayBoundaryHour,
             minute: 0,
             forceNextDay: DailyPulseManager.shared.tomorrowRun != nil,
             leadTimeMinutes: 0
         ) else {
-            logger.error("每日脉冲明日预准备时间计算失败，跳过本次调度。")
+            logger.error("每日脉冲预准备时间计算失败，跳过本次调度。")
             return
         }
 
@@ -58,9 +58,9 @@ final class DailyPulseBackgroundDeliveryScheduler {
                 dateStyle: .short,
                 timeStyle: .short
             )
-            logger.info("每日脉冲明日预准备已调度：\(scheduledText, privacy: .public)")
+            logger.info("每日脉冲预准备已调度：\(scheduledText, privacy: .public)")
         } catch {
-            logger.error("每日脉冲明日预准备调度失败：\(error.localizedDescription, privacy: .public)")
+            logger.error("每日脉冲预准备调度失败：\(error.localizedDescription, privacy: .public)")
         }
     }
 

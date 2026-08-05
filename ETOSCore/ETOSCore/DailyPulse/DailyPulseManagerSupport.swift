@@ -66,21 +66,58 @@ extension DailyPulseManager {
             .sorted(by: { $0.generatedAt > $1.generatedAt })
     }
 
-    internal nonisolated static func hasReachedTomorrowPreparationTime(
-        referenceDate: Date,
-        hour: Int = 20,
-        minute: Int = 0,
-        calendar: Calendar = Calendar(identifier: .gregorian)
-    ) -> Bool {
-        guard let preparationDate = calendar.date(
-            bySettingHour: hour,
-            minute: minute,
-            second: 0,
-            of: referenceDate
-        ) else {
-            return false
+    internal nonisolated static func partitionedSessionExcerpts(
+        _ excerpts: [DailyPulseSessionExcerpt],
+        cardCounts: [Int],
+        scheduledDeliveryDates: [Date] = []
+    ) -> [[DailyPulseSessionExcerpt]] {
+        var unusedExcerpts = excerpts
+        return cardCounts.enumerated().map { index, count in
+            let scheduledAt = scheduledDeliveryDates.indices.contains(index)
+                ? scheduledDeliveryDates[index]
+                : .distantFuture
+            var batch: [DailyPulseSessionExcerpt] = []
+            var remaining: [DailyPulseSessionExcerpt] = []
+
+            for excerpt in unusedExcerpts {
+                let isAvailableAtDelivery = excerpt.lastActivityAt.map { $0 <= scheduledAt } ?? true
+                if batch.count < max(1, count), isAvailableAtDelivery {
+                    batch.append(excerpt)
+                } else {
+                    remaining.append(excerpt)
+                }
+            }
+            unusedExcerpts = remaining
+            return batch
         }
-        return referenceDate >= preparationDate
+    }
+
+    internal nonisolated static func messageActivityDate(_ message: ChatMessage) -> Date? {
+        [
+            message.requestedAt,
+            message.responseMetrics?.requestStartedAt,
+            message.responseMetrics?.responseCompletedAt
+        ]
+        .compactMap { $0 }
+        .max()
+    }
+
+    internal nonisolated static func promptTimestampString(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    internal nonisolated static func relativeIntervalString(_ interval: TimeInterval) -> String {
+        guard interval >= 60 else {
+            return NSLocalizedString("不到 1 分钟", comment: "Daily Pulse prompt short relative interval")
+        }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.day, .hour, .minute]
+        formatter.maximumUnitCount = 2
+        formatter.unitsStyle = .full
+        return formatter.string(from: interval)
+            ?? NSLocalizedString("不到 1 分钟", comment: "Daily Pulse prompt short relative interval")
     }
 
     internal nonisolated static func hasUnviewedRun(todayRunDayKey: String?, lastViewedDayKey: String?) -> Bool {

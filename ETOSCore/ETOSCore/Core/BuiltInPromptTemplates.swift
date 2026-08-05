@@ -313,7 +313,7 @@ public enum BuiltInPromptID: String, CaseIterable, Identifiable, Sendable {
             return [
                 .time, .cardsPerRun, .candidateCardsPerRun, .focus, .curation,
                 .globalPrompt, .sessions, .memory, .requestLogs, .tasks,
-                .preferenceProfile, .externalContext
+                .preferenceProfile, .externalContext, .excludedTopics
             ]
         case .dailyPulseContinuation:
             return []
@@ -485,7 +485,7 @@ private extension BuiltInPromptVariable {
     )
     static let cardsPerRun = BuiltInPromptVariable(
         name: "cards_per_run",
-        description: NSLocalizedString("{cards_per_run}：最终展示卡片数。", comment: "Built-in prompt variable description")
+        description: NSLocalizedString("{cards_per_run}：当前送达时间的卡片数。", comment: "Built-in prompt variable description")
     )
     static let candidateCardsPerRun = BuiltInPromptVariable(
         name: "candidate_cards_per_run",
@@ -505,7 +505,11 @@ private extension BuiltInPromptVariable {
     )
     static let sessions = BuiltInPromptVariable(
         name: "sessions",
-        description: NSLocalizedString("{sessions}：最近聊天摘要。", comment: "Built-in prompt variable description")
+        description: NSLocalizedString("{sessions}：分配给当前送达时间且带时间信息的聊天摘要。", comment: "Built-in prompt variable description")
+    )
+    static let excludedTopics = BuiltInPromptVariable(
+        name: "excluded_topics",
+        description: NSLocalizedString("{excluded_topics}：当天更早送达批次已经生成的主题。", comment: "Built-in prompt variable description")
     )
     static let requestLogs = BuiltInPromptVariable(
         name: "request_logs",
@@ -966,7 +970,7 @@ private extension BuiltInPromptID {
                 "{conversation}"
             )
         case .dailyPulseSystem:
-            return NSLocalizedString(
+            let basePrompt = NSLocalizedString(
                 "Daily Pulse generation system prompt",
                 value: """
                 You are the Daily Pulse curator for ETOS LLM Studio.
@@ -1004,8 +1008,20 @@ private extension BuiltInPromptID {
                 """,
                 comment: "Daily Pulse generation system prompt"
             )
+            let scheduledDeliveryAppendix = NSLocalizedString(
+                "Daily Pulse scheduled generation system appendix",
+                value: """
+                Scheduled delivery rules:
+                - Each request corresponds to one planned delivery time. Treat the planned delivery time in the user prompt as the current time when writing, even if the cards are generated earlier and stored.
+                - Let the time of day naturally influence tone and usefulness, so a morning, afternoon, or evening delivery feels like a timely message from an attentive assistant. Never mention advance generation.
+                - Chat excerpts include their real activity times and distance from the planned delivery. Use chronology carefully and never describe an old conversation as if it just happened.
+                - The chat excerpts assigned to this delivery are intentionally different from other deliveries. Ground cards in these excerpts and avoid topics already generated for earlier delivery times.
+                """,
+                comment: "Daily Pulse scheduled generation system appendix"
+            )
+            return basePrompt + "\n\n" + scheduledDeliveryAppendix
         case .dailyPulseUser:
-            return NSLocalizedString(
+            let basePrompt = NSLocalizedString(
                 "Daily Pulse generation user prompt",
                 value: """
                 Current time: {time}
@@ -1043,6 +1059,19 @@ private extension BuiltInPromptID {
                 """,
                 comment: "Daily Pulse generation user prompt"
             )
+            let scheduledDeliverySupplement = NSLocalizedString(
+                "Daily Pulse scheduled generation user supplement",
+                value: """
+                Important scheduled-delivery interpretation:
+                - The “current time” above is the exact planned delivery time. Write as though you are proactively contacting the user at that moment; do not mention advance generation.
+                - The card counts above apply only to this delivery batch.
+                - The recent chats above were assigned only to this delivery and include real activity times. Respect their chronology.
+                - Topics already generated for earlier delivery times today; do not repeat them:
+                {excluded_topics}
+                """,
+                comment: "Daily Pulse scheduled generation user supplement"
+            )
+            return basePrompt + "\n\n" + scheduledDeliverySupplement
         case .dailyPulseContinuation:
             return NSLocalizedString(
                 "Built-in Prompt: Daily Pulse Continuation",
