@@ -80,12 +80,19 @@ struct ETIOSStreamingMarkdownLiveView: View {
         snapshot?.committedBlocks.last?.id
     }
 
+    private func interBlockSpacing(_ multiplier: Double) -> CGFloat {
+        guard enableMarkdown else { return 0 }
+        let rootFontSize = round(CGFloat(17 * FontLibrary.normalizedFontScale(fontScale)))
+        return round(CGFloat(multiplier) * rootFontSize)
+    }
+
     var body: some View {
         Group {
             if let snapshot {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(snapshot.committedBlocks) { block in
                         committedBlockView(block)
+                            .padding(.top, interBlockSpacing(block.leadingSpacingEm))
                     }
                     if let activeBlock = snapshot.activeBlock {
                         ETStreamingMarkdownTextView(
@@ -94,6 +101,7 @@ struct ETIOSStreamingMarkdownLiveView: View {
                             fontScale: fontScale,
                             lineSpacing: lineSpacing
                         )
+                        .padding(.top, interBlockSpacing(activeBlock.leadingSpacingEm))
                     }
                 }
             } else {

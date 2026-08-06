@@ -155,8 +155,8 @@ struct ETStreamingMarkdownPipelineTests {
         #expect(snapshot.activeBlock?.displayText == "graph TD\nA-->B")
     }
 
-    @Test("结束刷新提交最后活动 Block")
-    func finalFlushCommitsLastBlock() async throws {
+    @Test("结束刷新保留最后活动 Block 等待静态渲染接管")
+    func finalFlushKeepsLastBlockActive() async throws {
         let messageID = UUID()
         let pipeline = ETStreamingMarkdownPipeline()
         _ = await pipeline.prepare(
@@ -171,8 +171,8 @@ struct ETStreamingMarkdownPipelineTests {
             isFinal: true
         )
         #expect(final.isFinal)
-        #expect(final.activeBlock == nil)
-        #expect(final.committedBlocks.map(\.source) == ["最终内容"])
+        #expect(final.activeBlock?.source == "最终内容")
+        #expect(final.committedBlocks.isEmpty)
     }
 
     @Test("正文与推理使用互不干扰的流状态")
@@ -255,6 +255,31 @@ struct ETStreamingMarkdownPipelineTests {
             "# 标题\n"
         ])
         #expect(snapshot.activeBlock?.source == "正文")
+    }
+
+    @Test("Block 前间距遵循 MarkdownUI 的 margin 合并规则")
+    func blockSpacingMatchesMarkdownUI() async throws {
+        let paragraphToHeading = await ETStreamingMarkdownPipeline().prepare(
+            messageID: UUID(),
+            sourceText: "正文\n# 标题",
+            isFinal: false
+        )
+        #expect(paragraphToHeading.committedBlocks.first?.leadingSpacingEm == 0)
+        #expect(paragraphToHeading.activeBlock?.leadingSpacingEm == 1.5)
+
+        let headingToRule = await ETStreamingMarkdownPipeline().prepare(
+            messageID: UUID(),
+            sourceText: "# 标题\n\n---",
+            isFinal: false
+        )
+        #expect(headingToRule.activeBlock?.leadingSpacingEm == 2)
+
+        let paragraphToParagraph = await ETStreamingMarkdownPipeline().prepare(
+            messageID: UUID(),
+            sourceText: "第一段\n\n第二段",
+            isFinal: false
+        )
+        #expect(paragraphToParagraph.activeBlock?.leadingSpacingEm == 1)
     }
 
     @Test("AST 的 UTF-8 源位置换算保留 Unicode 与 Block 缩进")

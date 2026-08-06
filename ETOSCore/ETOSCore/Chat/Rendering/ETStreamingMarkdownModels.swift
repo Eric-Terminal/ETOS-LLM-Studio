@@ -53,15 +53,18 @@ public struct ETStreamingMarkdownBlock: Identifiable, Hashable, Sendable {
     public let id: ETStreamingMarkdownBlockID
     public let source: String
     public let kind: ETStreamingMarkdownBlockKind
+    public let leadingSpacingEm: Double
 
     public init(
         id: ETStreamingMarkdownBlockID,
         source: String,
-        kind: ETStreamingMarkdownBlockKind
+        kind: ETStreamingMarkdownBlockKind,
+        leadingSpacingEm: Double
     ) {
         self.id = id
         self.source = source
         self.kind = kind
+        self.leadingSpacingEm = leadingSpacingEm
     }
 }
 
@@ -82,19 +85,22 @@ public struct ETStreamingMarkdownActiveBlock: Identifiable, Hashable, Sendable {
     public let displayText: String
     public let presentation: ETStreamingMarkdownActivePresentation
     public let updateKind: ETStreamingMarkdownUpdateKind
+    public let leadingSpacingEm: Double
 
     public init(
         id: ETStreamingMarkdownBlockID,
         source: String,
         displayText: String,
         presentation: ETStreamingMarkdownActivePresentation,
-        updateKind: ETStreamingMarkdownUpdateKind
+        updateKind: ETStreamingMarkdownUpdateKind,
+        leadingSpacingEm: Double
     ) {
         self.id = id
         self.source = source
         self.displayText = displayText
         self.presentation = presentation
         self.updateKind = updateKind
+        self.leadingSpacingEm = leadingSpacingEm
     }
 }
 

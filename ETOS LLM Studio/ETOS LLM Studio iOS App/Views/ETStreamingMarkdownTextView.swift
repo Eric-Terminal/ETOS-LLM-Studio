@@ -72,7 +72,9 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
             role = .code
         }
 
-        let basePointSize: CGFloat = 17 * CGFloat(fontScale)
+        // MarkdownUI 会在 Font.withProperties 中先取整字号，再创建 system/custom Font。
+        // TextKit 使用同一字号规则，避免流式与静态状态之间出现细微的行高跳变。
+        let basePointSize = round(17 * CGFloat(fontScale))
         let font: UIFont
         if let postScriptName = FontLibrary.resolvePostScriptName(
             for: role,
@@ -83,7 +85,8 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
             let base = UIFont.monospacedSystemFont(ofSize: basePointSize, weight: .regular)
             font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
         } else {
-            font = UIFont.preferredFont(forTextStyle: .body)
+            let base = UIFont.systemFont(ofSize: basePointSize, weight: .regular)
+            font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
         }
 
         let paragraphStyle = NSMutableParagraphStyle()

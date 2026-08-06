@@ -21,6 +21,7 @@ public actor ETStreamingMarkdownPipeline {
         var activeSource = ""
         var activeDisplayText = ""
         var nextOrdinal = 0
+        var lastCommittedBottomSpacingEm = 0.0
         var lastSnapshot: ETStreamingMarkdownSnapshot?
     }
 
@@ -66,6 +67,9 @@ public actor ETStreamingMarkdownPipeline {
         let committedCountBeforeUpdate = state.committedBlocks.count
 
         for committed in split.committedBlocks where !committed.source.isEmpty {
+            let leadingSpacingEm = state.committedBlocks.isEmpty
+                ? 0
+                : max(state.lastCommittedBottomSpacingEm, committed.topSpacingEm)
             let block = ETStreamingMarkdownBlock(
                 id: ETStreamingMarkdownBlockID(
                     messageID: messageID,
@@ -74,28 +78,17 @@ public actor ETStreamingMarkdownPipeline {
                     ordinal: state.nextOrdinal
                 ),
                 source: committed.source,
-                kind: committed.kind
+                kind: committed.kind,
+                leadingSpacingEm: leadingSpacingEm
             )
             state.committedBlocks.append(block)
+            state.lastCommittedBottomSpacingEm = committed.bottomSpacingEm
             state.nextOrdinal += 1
         }
 
-        var active = split.activeBlock
-        if isFinal, let finalActive = active {
-            let block = ETStreamingMarkdownBlock(
-                id: ETStreamingMarkdownBlockID(
-                    messageID: messageID,
-                    channel: channel,
-                    generation: state.generation,
-                    ordinal: state.nextOrdinal
-                ),
-                source: finalActive.source,
-                kind: finalActive.kind
-            )
-            state.committedBlocks.append(block)
-            state.nextOrdinal += 1
-            active = nil
-        }
+        // 结束信号抵达时仍保留活动 Block，让 UI 在静态 Markdown 预计算完成前继续
+        // 展示同一个 TextKit/SwiftUI 尾部，避免最后一段短暂退回未经解析的纯文本。
+        let active = split.activeBlock
 
         let activeBlock: ETStreamingMarkdownActiveBlock?
         let activeDisplayText: String
@@ -121,7 +114,10 @@ public actor ETStreamingMarkdownPipeline {
                 source: active.source,
                 displayText: activeDisplayText,
                 presentation: presentation,
-                updateKind: updateKind
+                updateKind: updateKind,
+                leadingSpacingEm: state.committedBlocks.isEmpty
+                    ? 0
+                    : max(state.lastCommittedBottomSpacingEm, active.topSpacingEm)
             )
         } else {
             activeBlock = nil
@@ -162,6 +158,8 @@ enum ETStreamingMarkdownASTParser {
         let kind: ETStreamingMarkdownBlockKind
         let presentation: ETStreamingMarkdownActivePresentation
         let displayText: String
+        let topSpacingEm: Double
+        let bottomSpacingEm: Double
     }
 
     struct SplitResult: Equatable {
@@ -218,12 +216,15 @@ enum ETStreamingMarkdownASTParser {
     }
 
     private static func parsedBlock(source: String, markup: Markup?) -> ParsedBlock {
+        let spacing = blockSpacing(for: markup)
         guard let codeBlock = markup as? CodeBlock else {
             return ParsedBlock(
                 source: source,
                 kind: .markdown,
                 presentation: .markdownSource,
-                displayText: source
+                displayText: source,
+                topSpacingEm: spacing.top,
+                bottomSpacingEm: spacing.bottom
             )
         }
 
@@ -236,15 +237,35 @@ enum ETStreamingMarkdownASTParser {
                 source: source,
                 kind: .mermaid,
                 presentation: .mermaidSource,
-                displayText: codeBody(source: source, parsedCode: codeBlock.code)
+                displayText: codeBody(source: source, parsedCode: codeBlock.code),
+                topSpacingEm: spacing.top,
+                bottomSpacingEm: spacing.bottom
             )
         }
         return ParsedBlock(
             source: source,
             kind: .fencedCode(language: language),
             presentation: .code(language: language),
-            displayText: codeBody(source: source, parsedCode: codeBlock.code)
+            displayText: codeBody(source: source, parsedCode: codeBlock.code),
+            topSpacingEm: spacing.top,
+            bottomSpacingEm: spacing.bottom
         )
+    }
+
+    /// 与 MarkdownUI Basic Theme 及聊天自定义 BlockStyle 的 margin 合并规则保持一致。
+    private static func blockSpacing(for markup: Markup?) -> (top: Double, bottom: Double) {
+        switch markup {
+        case is Heading:
+            return (1.5, 1)
+        case is ThematicBreak:
+            return (2, 2)
+        case is CodeBlock:
+            return (0.2, 0.75)
+        case is BlockQuote:
+            return (0.2, 1)
+        default:
+            return (0, 1)
+        }
     }
 
     private static func codeBody(source: String, parsedCode: String) -> String {

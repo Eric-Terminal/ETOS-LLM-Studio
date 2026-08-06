@@ -67,6 +67,17 @@ struct ETAdvancedMarkdownRenderer: View {
         return asynchronouslyPreparedContent
     }
 
+    private var shouldUseStreamingRenderer: Bool {
+        if isStreaming { return true }
+        guard enableMarkdown,
+              effectivePreparedContent == nil,
+              let snapshot = streamingState?.snapshot(for: streamingChannel) else {
+            return false
+        }
+        // 静态 Markdown 尚未准备好时保留最后一帧流式内容，避免短暂暴露源码标记。
+        return snapshot.sourceText == content
+    }
+
     var body: some View {
         let textColor: Color = customTextColor ?? (isOutgoing ? .white : .primary)
         let fontScale = FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts)
@@ -90,7 +101,7 @@ struct ETAdvancedMarkdownRenderer: View {
                     .etFont(.body, sampleText: content)
                     .lineSpacing(lineSpacing)
                     .foregroundStyle(textColor)
-            } else if isStreaming, let streamingState {
+            } else if shouldUseStreamingRenderer, let streamingState {
                 ETWatchStreamingMarkdownLiveView(
                     state: streamingState,
                     channel: streamingChannel,
