@@ -15,6 +15,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public private(set) var message: ChatMessage
     @Published public private(set) var visualMessage: ChatMessage
     @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
+    public private(set) var layoutRevision: UInt = 0
     public let streamingMarkdownState: ETStreamingMarkdownRenderState
     
     public init(message: ChatMessage) {
@@ -29,6 +30,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         guard self.message != message else { return }
         objectWillChange.send()
         self.message = message
+        layoutRevision &+= 1
     }
 
     /// 流式纯文本增长只更新业务真值，由独立 Markdown 状态负责局部刷新。
@@ -39,11 +41,13 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
 
     public func updateVisualMessage(_ message: ChatMessage) {
         guard visualMessage != message else { return }
+        layoutRevision &+= 1
         visualMessage = message
     }
 
     public func updateRoleplayHTML(_ extraction: RoleplayHTMLExtraction?) {
         guard roleplayHTML != extraction else { return }
+        layoutRevision &+= 1
         roleplayHTML = extraction
     }
 }

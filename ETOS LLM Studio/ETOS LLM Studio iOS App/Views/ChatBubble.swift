@@ -246,6 +246,14 @@ struct ChatBubble: View {
                     .allowsHitTesting(false)
             }
         }
+        // 外层消息锚点保持稳定；只替换气泡的视觉子树，让 LazyVStack 重新测量
+        // 结构变化和流式/静态切换后的真实高度，同时保留本视图持有的预览状态。
+        .id(ChatBubbleLayoutIdentity(
+            structuralRevision: showsStreamingIndicators ? 0 : messageState.layoutRevision,
+            isStreaming: showsStreamingIndicators,
+            hasPreparedMarkdown: preparedMarkdownPayload != nil,
+            hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil
+        ))
         .modifier(
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,

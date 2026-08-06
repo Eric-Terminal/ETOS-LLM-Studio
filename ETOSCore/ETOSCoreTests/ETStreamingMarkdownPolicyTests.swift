@@ -12,6 +12,24 @@ import Testing
 
 @Suite("流式 Markdown UI 策略")
 struct ETStreamingMarkdownPolicyTests {
+    @Test("纯流式追加不会反复重建气泡，结构变化会推进布局版本")
+    @MainActor
+    func layoutRevisionOnlyTracksStructuralChanges() {
+        let id = UUID()
+        let initial = ChatMessage(id: id, role: .assistant, content: "你")
+        let state = ChatMessageRenderState(message: initial)
+        var streamingUpdate = initial
+        streamingUpdate.content = "你好"
+
+        state.updateWithoutPublishing(with: streamingUpdate)
+        #expect(state.layoutRevision == 0)
+
+        var structuralUpdate = streamingUpdate
+        structuralUpdate.toolCalls = [InternalToolCall(id: "call", toolName: "tool", arguments: "{}")]
+        state.update(with: structuralUpdate)
+        #expect(state.layoutRevision == 1)
+    }
+
     @Test("连续正文和速度采样变化属于纯文本更新")
     func textAndMetricsGrowthUsesFastPath() {
         let id = UUID()
@@ -44,22 +62,19 @@ struct ETStreamingMarkdownPolicyTests {
         #expect(!ETStreamingMessageUpdatePolicy.isTextOnlyChange(from: old, to: new))
     }
 
-    @Test("贴底且没有用户交互时维持流式底部")
-    func bottomPinRequiresStreamingAndNoInteraction() {
-        #expect(ETStreamingBottomPinPolicy.shouldKeepPinned(
-            isStreaming: true,
+    @Test("贴底且没有用户交互时维持内容底部")
+    func bottomPinRequiresPinnedStateAndNoInteraction() {
+        #expect(ETScrollBottomPinPolicy.shouldKeepPinned(
             keepsBottomPinned: true,
             previousDistanceToBottom: 12,
             isUserInteracting: false
         ))
-        #expect(!ETStreamingBottomPinPolicy.shouldKeepPinned(
-            isStreaming: true,
+        #expect(!ETScrollBottomPinPolicy.shouldKeepPinned(
             keepsBottomPinned: true,
             previousDistanceToBottom: 80,
             isUserInteracting: false
         ))
-        #expect(!ETStreamingBottomPinPolicy.shouldKeepPinned(
-            isStreaming: true,
+        #expect(!ETScrollBottomPinPolicy.shouldKeepPinned(
             keepsBottomPinned: true,
             previousDistanceToBottom: 0,
             isUserInteracting: true

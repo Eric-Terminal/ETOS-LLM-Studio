@@ -22,6 +22,57 @@ extension ChatView {
         return phaseValue * CGFloat(configuredOffset)
     }
 
+    /// 消息版本切换可能让当前滚动目标退出可见集合，必须先释放失效目标。
+    nonisolated static func retainedChatScrollTarget(
+        _ target: ChatScrollTargetID?,
+        visibleMessageIDs: Set<UUID>
+    ) -> ChatScrollTargetID? {
+        guard let target else { return nil }
+        guard case .message(let messageID) = target else { return target }
+        return visibleMessageIDs.contains(messageID) ? target : nil
+    }
+
+    nonisolated static func isChatScrollTargetAvailable(
+        _ target: ChatScrollTargetID,
+        visibleMessageIDs: Set<UUID>
+    ) -> Bool {
+        switch target {
+        case .bottom:
+            return true
+        case .message(let messageID):
+            return visibleMessageIDs.contains(messageID)
+        }
+    }
+
+    /// 完整消息栈不能再用 View 生命周期判断是否抵达顶部，只响应真实滚动手势。
+    nonisolated static func shouldLoadAutomaticHistory(
+        usesAutomaticHistoryWindow: Bool,
+        isUserInteracting: Bool,
+        distanceToTop: CGFloat,
+        triggerDistance: CGFloat,
+        firstMessageID: UUID?,
+        lastLoadAnchorID: UUID?
+    ) -> Bool {
+        guard usesAutomaticHistoryWindow,
+              isUserInteracting,
+              distanceToTop < triggerDistance,
+              let firstMessageID else {
+            return false
+        }
+        return firstMessageID != lastLoadAnchorID
+    }
+
+    nonisolated static func shouldReleaseAutomaticHistoryLoad(
+        isLoadInFlight: Bool,
+        awaitsAnchorMetrics: Bool,
+        distanceToTop: CGFloat,
+        triggerDistance: CGFloat
+    ) -> Bool {
+        isLoadInFlight
+            && awaitsAnchorMetrics
+            && distanceToTop >= triggerDistance
+    }
+
     func resolvePendingSearchJumpIfNeeded() {
         guard let target = viewModel.pendingSearchJumpTarget,
               viewModel.currentSession?.id == target.sessionID,
@@ -46,9 +97,7 @@ extension ChatView {
             viewModel.loadEntireHistory()
         }
 
-        DispatchQueue.main.async {
-            pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
-        }
+        scheduleMessageJump(to: targetMessageID)
         return true
     }
 
@@ -57,9 +106,44 @@ extension ChatView {
         pendingHistoryResetWorkItem = nil
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
+        cancelPendingScrollTargetCommand()
+        pendingJumpRequest = nil
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
         shouldKeepBottomPinned = false
+    }
+
+    func handleDisplayedMessageIdentityChange() {
+        let visibleMessageIDs = Set(viewModel.displayMessages.map(\.id))
+        let retainedTarget = Self.retainedChatScrollTarget(
+            chatScrollTarget,
+            visibleMessageIDs: visibleMessageIDs
+        )
+        if retainedTarget != chatScrollTarget {
+            chatScrollTarget = retainedTarget
+        }
+
+        guard !viewModel.displayMessages.isEmpty else {
+            shouldKeepBottomPinned = true
+            showScrollToBottom = false
+            resolvePendingSearchJumpIfNeeded()
+            return
+        }
+
+        if needsImmediateBottomSnap {
+            scheduleImmediateBottomSnap()
+            resolvePendingSearchJumpIfNeeded()
+            return
+        }
+        if suppressAutoScrollOnce {
+            suppressAutoScrollOnce = false
+            resolvePendingSearchJumpIfNeeded()
+            return
+        }
+        if shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold {
+            scrollToBottom()
+        }
+        resolvePendingSearchJumpIfNeeded()
     }
 
     func shouldMergeTurnMessages(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {
@@ -115,6 +199,7 @@ extension ChatView {
         pendingHistoryResetWorkItem?.cancel()
         pendingHistoryResetWorkItem = nil
         shouldRestorePendingJumpOnAppear = false
+        lastAutomaticHistoryLoadAnchorID = nil
 
         let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
         shouldKeepBottomPinned = true
@@ -128,6 +213,7 @@ extension ChatView {
         let workItem = DispatchWorkItem {
             pendingBottomSnapTask?.cancel()
             pendingBottomSnapTask = nil
+            cancelPendingScrollTargetCommand()
             chatScrollTarget = nil
             var transaction = Transaction()
             transaction.animation = nil
@@ -142,30 +228,72 @@ extension ChatView {
         DispatchQueue.main.async(execute: workItem)
     }
 
-    func loadMoreAutomaticHistoryIfNeeded(
-        anchorMessageID: UUID,
-        isFirstDisplayedMessage: Bool
-    ) {
-        guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
+    func loadMoreAutomaticHistoryIfNeeded(anchorMessageID: UUID) {
+        guard viewModel.usesAutomaticHistoryWindow,
+              !isAutomaticHistoryLoadInFlight,
+              lastAutomaticHistoryLoadAnchorID != anchorMessageID else {
+            return
+        }
+        lastAutomaticHistoryLoadAnchorID = anchorMessageID
         suppressAutoScrollOnce = true
         shouldKeepBottomPinned = false
+        isAutomaticHistoryLoadInFlight = true
+        awaitsAutomaticHistoryAnchorMetrics = false
         let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
-        guard didLoad else { return }
-        DispatchQueue.main.async {
-            setScrollTarget(.message(anchorMessageID), anchor: .top, animated: false, animation: .linear(duration: 0))
+        guard didLoad else {
+            suppressAutoScrollOnce = false
+            isAutomaticHistoryLoadInFlight = false
+            return
         }
+        scheduleAutomaticHistoryAnchorRestore(anchorMessageID)
+    }
+
+    func handleChatScrollMetrics(
+        distanceToBottom: CGFloat,
+        distanceToTop: CGFloat,
+        isUserInteracting: Bool
+    ) {
+        updateScrollToBottomVisibility(
+            distanceToBottom: distanceToBottom,
+            isUserInteracting: isUserInteracting
+        )
+        // 只有底层滚动视图确认已经离开顶部，才算旧首条消息真正完成锚定。
+        if Self.shouldReleaseAutomaticHistoryLoad(
+            isLoadInFlight: isAutomaticHistoryLoadInFlight,
+            awaitsAnchorMetrics: awaitsAutomaticHistoryAnchorMetrics,
+            distanceToTop: distanceToTop,
+            triggerDistance: automaticHistoryLoadTriggerDistance
+        ) {
+            isAutomaticHistoryLoadInFlight = false
+            awaitsAutomaticHistoryAnchorMetrics = false
+        }
+        let firstMessageID = viewModel.displayMessages.first?.id
+        guard !isAutomaticHistoryLoadInFlight,
+              Self.shouldLoadAutomaticHistory(
+            usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
+            isUserInteracting: isUserInteracting,
+            distanceToTop: distanceToTop,
+            triggerDistance: automaticHistoryLoadTriggerDistance,
+            firstMessageID: firstMessageID,
+            lastLoadAnchorID: lastAutomaticHistoryLoadAnchorID
+        ), let firstMessageID else {
+            return
+        }
+        loadMoreAutomaticHistoryIfNeeded(anchorMessageID: firstMessageID)
     }
 
     func scheduleImmediateBottomSnap() {
         pendingBottomSnapTask?.cancel()
         shouldKeepBottomPinned = true
+        guard !viewModel.displayMessages.isEmpty else {
+            needsImmediateBottomSnap = true
+            pendingBottomSnapTask = nil
+            return
+        }
         pendingBottomSnapTask = Task { @MainActor in
-            for _ in 0..<3 {
-                guard !Task.isCancelled else { return }
-                scrollToBottom(animated: false)
-                await Task.yield()
-            }
+            await Task.yield()
             guard !Task.isCancelled else { return }
+            scrollToBottom(animated: false)
             needsImmediateBottomSnap = false
             pendingBottomSnapTask = nil
         }
@@ -176,12 +304,8 @@ extension ChatView {
         shouldKeepBottomPinned = true
         pendingBottomSnapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
-            for _ in 0..<3 {
-                guard !Task.isCancelled else { return }
-                scrollToBottom(animated: false)
-                try? await Task.sleep(nanoseconds: 30_000_000)
-            }
             guard !Task.isCancelled else { return }
+            scrollToBottom(animated: false)
             pendingBottomSnapTask = nil
         }
     }
@@ -194,6 +318,17 @@ extension ChatView {
         setScrollTarget(.message(messageID), anchor: .center, animated: animated, animation: animation)
     }
 
+    func restorePendingMessageJumpIfNeeded() {
+        guard let request = pendingJumpRequest else { return }
+        setScrollTarget(
+            .message(request.messageID),
+            anchor: .center,
+            animated: true,
+            animation: .easeInOut(duration: 0.25),
+            deferred: true
+        )
+    }
+
     var bottomScrollTarget: ChatScrollTargetID {
         if let lastMessageID = viewModel.displayMessages.last?.id {
             return .message(lastMessageID)
@@ -203,34 +338,33 @@ extension ChatView {
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat, isUserInteracting: Bool) {
         let normalizedDistance = max(distanceToBottom, 0)
-        DispatchQueue.main.async {
-            scrollDistanceToBottom = normalizedDistance
-            guard !viewModel.displayMessages.isEmpty else {
-                shouldKeepBottomPinned = true
-                if showScrollToBottom {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        showScrollToBottom = false
-                    }
-                }
-                return
-            }
-            if normalizedDistance < bottomPinnedDistanceThreshold {
-                shouldKeepBottomPinned = true
-            } else if isUserInteracting, !isChatLayoutSettling {
-                shouldKeepBottomPinned = false
-            }
-
-            let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
-            if showScrollToBottom != shouldShow {
+        scrollDistanceToBottom = normalizedDistance
+        guard !viewModel.displayMessages.isEmpty else {
+            shouldKeepBottomPinned = true
+            if showScrollToBottom {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    showScrollToBottom = shouldShow
+                    showScrollToBottom = false
                 }
             }
-            if !isChatLayoutSettling,
-               normalizedDistance < 24,
-               viewModel.resetAutomaticHistoryWindowIfNeeded() {
-                scheduleDeferredBottomSnap()
+            return
+        }
+        if normalizedDistance < bottomPinnedDistanceThreshold {
+            shouldKeepBottomPinned = true
+        } else if isUserInteracting, !isChatLayoutSettling {
+            shouldKeepBottomPinned = false
+        }
+
+        let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
+        if showScrollToBottom != shouldShow {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showScrollToBottom = shouldShow
             }
+        }
+        if !isChatLayoutSettling,
+           normalizedDistance < bottomPinnedDistanceThreshold,
+           viewModel.resetAutomaticHistoryWindowIfNeeded() {
+            lastAutomaticHistoryLoadAnchorID = nil
+            scheduleDeferredBottomSnap()
         }
     }
 
@@ -272,7 +406,84 @@ extension ChatView {
         }
     }
 
-    private func setScrollTarget(
+    func cancelPendingScrollTargetCommand() {
+        scrollTargetGeneration &+= 1
+        pendingScrollTargetTask?.cancel()
+        pendingScrollTargetTask = nil
+        isAutomaticHistoryLoadInFlight = false
+        awaitsAutomaticHistoryAnchorMetrics = false
+    }
+
+    private func scheduleAutomaticHistoryAnchorRestore(_ messageID: UUID) {
+        cancelPendingScrollTargetCommand()
+        isAutomaticHistoryLoadInFlight = true
+        let generation = scrollTargetGeneration
+        let sessionID = viewModel.currentSession?.id
+        let target = ChatScrollTargetID.message(messageID)
+        pendingScrollTargetTask = Task { @MainActor in
+            var didApplyTarget = false
+            defer {
+                if generation == scrollTargetGeneration {
+                    pendingScrollTargetTask = nil
+                    if !didApplyTarget {
+                        isAutomaticHistoryLoadInFlight = false
+                        awaitsAutomaticHistoryAnchorMetrics = false
+                    }
+                }
+            }
+            await Task.yield()
+            guard !Task.isCancelled,
+                  canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else {
+                return
+            }
+            applyScrollTarget(
+                target,
+                anchor: .top,
+                animated: false,
+                animation: .linear(duration: 0)
+            )
+            didApplyTarget = true
+            awaitsAutomaticHistoryAnchorMetrics = true
+        }
+    }
+
+    private func scheduleMessageJump(to messageID: UUID) {
+        cancelPendingScrollTargetCommand()
+        let generation = scrollTargetGeneration
+        let sessionID = viewModel.currentSession?.id
+        pendingScrollTargetTask = Task { @MainActor in
+            defer {
+                if generation == scrollTargetGeneration {
+                    pendingScrollTargetTask = nil
+                }
+            }
+            await Task.yield()
+            guard !Task.isCancelled,
+                  generation == scrollTargetGeneration,
+                  sessionID == viewModel.currentSession?.id,
+                  viewModel.displayMessages.contains(where: { $0.id == messageID }) else {
+                return
+            }
+            pendingJumpRequest = MessageJumpRequest(messageID: messageID)
+        }
+    }
+
+    private func canApplyScrollTarget(
+        _ target: ChatScrollTargetID,
+        generation: UInt,
+        sessionID: UUID?
+    ) -> Bool {
+        guard generation == scrollTargetGeneration,
+              sessionID == viewModel.currentSession?.id else {
+            return false
+        }
+        return Self.isChatScrollTargetAvailable(
+            target,
+            visibleMessageIDs: Set(viewModel.displayMessages.map(\.id))
+        )
+    }
+
+    private func applyScrollTarget(
         _ target: ChatScrollTargetID,
         anchor: UnitPoint,
         animated: Bool,
@@ -282,23 +493,46 @@ extension ChatView {
             chatScrollTargetAnchor = anchor
             chatScrollTarget = target
         }
+        if animated {
+            withAnimation(animation, updateTarget)
+        } else {
+            updateTarget()
+        }
+    }
 
-        guard chatScrollTarget == target else {
-            if animated {
-                withAnimation(animation, updateTarget)
-            } else {
-                updateTarget()
-            }
+    private func setScrollTarget(
+        _ target: ChatScrollTargetID,
+        anchor: UnitPoint,
+        animated: Bool,
+        animation: Animation,
+        deferred: Bool = false
+    ) {
+        let shouldDefer = deferred || chatScrollTarget == target
+        cancelPendingScrollTargetCommand()
+        let generation = scrollTargetGeneration
+        let sessionID = viewModel.currentSession?.id
+
+        guard shouldDefer else {
+            guard canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else { return }
+            applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
             return
         }
 
-        chatScrollTarget = nil
-        DispatchQueue.main.async {
-            if animated {
-                withAnimation(animation, updateTarget)
-            } else {
-                updateTarget()
+        if chatScrollTarget == target {
+            chatScrollTarget = nil
+        }
+        pendingScrollTargetTask = Task { @MainActor in
+            defer {
+                if generation == scrollTargetGeneration {
+                    pendingScrollTargetTask = nil
+                }
             }
+            await Task.yield()
+            guard !Task.isCancelled,
+                  canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else {
+                return
+            }
+            applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
         }
     }
 }

@@ -96,6 +96,11 @@ struct ChatView: View {
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
     @State var pendingBottomSnapTask: Task<Void, Never>?
     @State var chatLayoutSettleTask: Task<Void, Never>?
+    @State var pendingScrollTargetTask: Task<Void, Never>?
+    @State var scrollTargetGeneration: UInt = 0
+    @State var isAutomaticHistoryLoadInFlight = false
+    @State var awaitsAutomaticHistoryAnchorMetrics = false
+    @State var lastAutomaticHistoryLoadAnchorID: UUID?
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var needsImmediateBottomSnap: Bool = true
@@ -137,6 +142,7 @@ struct ChatView: View {
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
     let bottomPinnedDistanceThreshold: CGFloat = 24
     let scrollToBottomButtonRevealDistance: CGFloat = 48
+    let automaticHistoryLoadTriggerDistance: CGFloat = 240
     let scrollToBottomButtonSize: CGFloat = 40
     let scrollToBottomButtonInputSpacing: CGFloat = 16
     let landscapeSessionSidebarMinWidth: CGFloat = 220
@@ -745,12 +751,12 @@ extension ChatView {
                 // Z-Index 1: 消息列表
                 ScrollView {
                     VStack(spacing: 0) {
-                        ScrollDistanceToBottomObserver(
-                            isStreaming: viewModel.isSendingMessage,
-                            keepsBottomPinned: shouldKeepBottomPinned
-                        ) { distanceToBottom, isUserInteracting in
-                            updateScrollToBottomVisibility(
+                        ChatScrollMetricsObserver(
+                            keepsBottomPinned: $shouldKeepBottomPinned
+                        ) { distanceToBottom, distanceToTop, isUserInteracting in
+                            handleChatScrollMetrics(
                                 distanceToBottom: distanceToBottom,
+                                distanceToTop: distanceToTop,
                                 isUserInteracting: isUserInteracting
                             )
                         }
@@ -815,22 +821,34 @@ extension ChatView {
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 let reportsSendFlightTarget = isSendFlightTarget(message.id)
                                 let sendFlightOpacity = sendFlightMessageOpacity(for: message)
+                                let preparedMarkdownPayload = viewModel.preparedMarkdownByMessageID[message.id]
+                                let preparedReasoningMarkdownPayload = viewModel.preparedReasoningMarkdownByMessageID[message.id]
                                 ChatBubble(
                                     messageState: state,
                                     roleplaySessionID: viewModel.currentSession?.id,
                                     layoutWidth: messageLayoutWidth,
                                     reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
-                                    preparedMarkdownPayload: viewModel.preparedMarkdownByMessageID[message.id],
-                                    preparedReasoningMarkdownPayload: viewModel.preparedReasoningMarkdownByMessageID[message.id],
+                                    preparedMarkdownPayload: preparedMarkdownPayload,
+                                    preparedReasoningMarkdownPayload: preparedReasoningMarkdownPayload,
                                     reasoningThinkingTitle: viewModel.reasoningThinkingTitleByMessageID[message.id],
                                     isReasoningExpanded: Binding(
                                         get: { viewModel.reasoningExpandedState[message.id, default: false] },
-                                        set: { viewModel.setReasoningExpanded($0, for: message.id) }
+                                        set: { isExpanded in
+                                            viewModel.setReasoningExpanded(isExpanded, for: message.id)
+                                            if isExpanded {
+                                                shouldKeepBottomPinned = false
+                                            }
+                                        }
                                     ),
                                     isReasoningAutoPreview: viewModel.isAutoReasoningPreview(for: message.id),
                                     isToolCallsExpanded: Binding(
                                         get: { viewModel.toolCallsExpandedState[message.id, default: false] },
-                                        set: { viewModel.toolCallsExpandedState[message.id] = $0 }
+                                        set: { isExpanded in
+                                            viewModel.toolCallsExpandedState[message.id] = isExpanded
+                                            if isExpanded {
+                                                shouldKeepBottomPinned = false
+                                            }
+                                        }
                                     ),
                                     enableMarkdown: viewModel.enableMarkdown,
                                     enableBackground: viewModel.enableBackground,
@@ -932,12 +950,6 @@ extension ChatView {
                                             )
                                         )
                                 }
-                                .onAppear {
-                                    loadMoreAutomaticHistoryIfNeeded(
-                                        anchorMessageID: state.id,
-                                        isFirstDisplayedMessage: index == 0
-                                    )
-                                }
 
                                 if let contexts = outgoingContinuationContextsByMessageID[message.id] {
                                     ForEach(contexts) { context in
@@ -975,22 +987,6 @@ extension ChatView {
                         dismissComposerInput()
                     }
                 )
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    guard !viewModel.messages.isEmpty else {
-                        showScrollToBottom = false
-                        return
-                    }
-                    if needsImmediateBottomSnap {
-                        scheduleImmediateBottomSnap()
-                        return
-                    }
-                    if suppressAutoScrollOnce {
-                        suppressAutoScrollOnce = false
-                        return
-                    }
-                    guard shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
-                    scrollToBottom()
-                }
                 .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
                     guard newValue != nil, shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
                     scrollToBottom()
@@ -1005,28 +1001,24 @@ extension ChatView {
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
                     pendingHistoryResetWorkItem?.cancel()
                     pendingHistoryResetWorkItem = nil
+                    cancelPendingScrollTargetCommand()
+                    lastAutomaticHistoryLoadAnchorID = nil
                     shouldRestorePendingJumpOnAppear = false
+                    pendingJumpRequest = nil
                     shouldKeepBottomPinned = true
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
-                    scheduleImmediateBottomSnap()
+                    chatScrollTarget = nil
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
-                    if needsImmediateBottomSnap, !viewModel.displayMessages.isEmpty {
-                        scheduleImmediateBottomSnap()
-                    }
-                    resolvePendingSearchJumpIfNeeded()
+                    handleDisplayedMessageIdentityChange()
                 }
                 .onAppear {
                     if shouldRestorePendingJumpOnAppear {
                         shouldRestorePendingJumpOnAppear = false
                         resolvePendingSearchJumpIfNeeded()
-                        DispatchQueue.main.async {
-                            if let request = pendingJumpRequest {
-                                scrollToMessage(request.messageID)
-                            }
-                        }
+                        restorePendingMessageJumpIfNeeded()
                         return
                     }
                     resolvePendingSearchJumpIfNeeded()
@@ -1182,6 +1174,7 @@ extension ChatView {
                 pendingBottomSnapTask = nil
                 chatLayoutSettleTask?.cancel()
                 chatLayoutSettleTask = nil
+                cancelPendingScrollTargetCommand()
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
                 chatTransientNoticeDismissTask?.cancel()

@@ -91,6 +91,14 @@ struct MessageJumpRequest: Equatable {
     let messageID: UUID
 }
 
+/// 只在会改变气泡高度的结构切换时重建视觉子树。
+struct ChatBubbleLayoutIdentity: Hashable {
+    let structuralRevision: UInt
+    let isStreaming: Bool
+    let hasPreparedMarkdown: Bool
+    let hasPreparedReasoningMarkdown: Bool
+}
+
 enum ChatScrollTargetID: Hashable {
     case message(UUID)
     case bottom
@@ -112,16 +120,14 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
     }
 }
 
-struct ScrollDistanceToBottomObserver: UIViewRepresentable {
-    let isStreaming: Bool
-    let keepsBottomPinned: Bool
-    let onDistanceChange: (CGFloat, Bool) -> Void
+struct ChatScrollMetricsObserver: UIViewRepresentable {
+    @Binding var keepsBottomPinned: Bool
+    let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            isStreaming: isStreaming,
-            keepsBottomPinned: keepsBottomPinned,
-            onDistanceChange: onDistanceChange
+            keepsBottomPinned: $keepsBottomPinned,
+            onMetricsChange: onMetricsChange
         )
     }
 
@@ -134,9 +140,8 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ObserverView, context: Context) {
-        context.coordinator.onDistanceChange = onDistanceChange
-        context.coordinator.isStreaming = isStreaming
-        context.coordinator.keepsBottomPinned = keepsBottomPinned
+        context.coordinator.onMetricsChange = onMetricsChange
+        context.coordinator.keepsBottomPinned = $keepsBottomPinned
         uiView.coordinator = context.coordinator
         DispatchQueue.main.async {
             uiView.attachToScrollViewIfNeeded()
@@ -144,41 +149,50 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
     }
 
     final class Coordinator {
-        var onDistanceChange: (CGFloat, Bool) -> Void
-        var isStreaming: Bool
-        var keepsBottomPinned: Bool
+        var onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
+        var keepsBottomPinned: Binding<Bool>
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
         private var boundsObservation: NSKeyValueObservation?
+        private var pendingDistanceNotification: DispatchWorkItem?
         private var lastDistanceToBottom: CGFloat = 0
+        private var lastDistanceToTop: CGFloat = 0
         private var hasReportedDistance = false
+        private var lastReportedInteractionState = false
 
         init(
-            isStreaming: Bool,
-            keepsBottomPinned: Bool,
-            onDistanceChange: @escaping (CGFloat, Bool) -> Void
+            keepsBottomPinned: Binding<Bool>,
+            onMetricsChange: @escaping (CGFloat, CGFloat, Bool) -> Void
         ) {
-            self.isStreaming = isStreaming
             self.keepsBottomPinned = keepsBottomPinned
-            self.onDistanceChange = onDistanceChange
+            self.onMetricsChange = onMetricsChange
         }
 
         func attach(to scrollView: UIScrollView) {
             guard self.scrollView !== scrollView else {
-                notifyDistanceChange()
+                scheduleDistanceChangeNotification()
                 return
             }
 
+            contentOffsetObservation?.invalidate()
+            contentSizeObservation?.invalidate()
+            boundsObservation?.invalidate()
+            pendingDistanceNotification?.cancel()
+            pendingDistanceNotification = nil
+            hasReportedDistance = false
+            lastDistanceToBottom = 0
+            lastDistanceToTop = 0
+            lastReportedInteractionState = false
             self.scrollView = scrollView
             contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
-                self?.notifyDistanceChange()
+                self?.scheduleDistanceChangeNotification()
             }
             contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
                 self?.handleContentSizeChange()
             }
             boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
-                self?.notifyDistanceChange()
+                self?.scheduleDistanceChangeNotification()
             }
         }
 
@@ -188,9 +202,8 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
                 || scrollView.isTracking
                 || scrollView.isDecelerating
             let shouldPin = hasReportedDistance
-                && ETStreamingBottomPinPolicy.shouldKeepPinned(
-                    isStreaming: isStreaming,
-                    keepsBottomPinned: keepsBottomPinned,
+                && ETScrollBottomPinPolicy.shouldKeepPinned(
+                    keepsBottomPinned: keepsBottomPinned.wrappedValue,
                     previousDistanceToBottom: lastDistanceToBottom,
                     isUserInteracting: isUserInteracting
                 )
@@ -209,17 +222,37 @@ struct ScrollDistanceToBottomObserver: UIViewRepresentable {
                     )
                 }
             }
-            notifyDistanceChange()
+            scheduleDistanceChangeNotification()
+        }
+
+        private func scheduleDistanceChangeNotification() {
+            guard pendingDistanceNotification == nil else { return }
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.pendingDistanceNotification = nil
+                self.notifyDistanceChange()
+            }
+            pendingDistanceNotification = workItem
+            DispatchQueue.main.async(execute: workItem)
         }
 
         private func notifyDistanceChange() {
             guard let scrollView else { return }
             let visibleMaxY = scrollView.contentOffset.y + scrollView.bounds.height - scrollView.adjustedContentInset.bottom
             let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
+            let distanceToTop = max(scrollView.contentOffset.y + scrollView.adjustedContentInset.top, 0)
             let isUserInteracting = scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
+            guard !hasReportedDistance
+                    || abs(lastDistanceToBottom - distanceToBottom) > 0.5
+                    || abs(lastDistanceToTop - distanceToTop) > 0.5
+                    || lastReportedInteractionState != isUserInteracting else {
+                return
+            }
             lastDistanceToBottom = distanceToBottom
+            lastDistanceToTop = distanceToTop
             hasReportedDistance = true
-            onDistanceChange(distanceToBottom, isUserInteracting)
+            lastReportedInteractionState = isUserInteracting
+            onMetricsChange(distanceToBottom, distanceToTop, isUserInteracting)
         }
     }
 

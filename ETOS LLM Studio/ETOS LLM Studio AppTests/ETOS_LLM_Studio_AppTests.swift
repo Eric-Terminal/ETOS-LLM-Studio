@@ -40,6 +40,96 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(disabledOffset == 0)
     }
 
+    @Test("消息版本切换会释放已经消失的滚动目标")
+    func testChatScrollTargetDropsInvisibleMessage() {
+        let visibleMessageID = UUID()
+        let removedMessageID = UUID()
+
+        #expect(ChatView.retainedChatScrollTarget(
+            .message(visibleMessageID),
+            visibleMessageIDs: [visibleMessageID]
+        ) == .message(visibleMessageID))
+        #expect(ChatView.retainedChatScrollTarget(
+            .message(removedMessageID),
+            visibleMessageIDs: [visibleMessageID]
+        ) == nil)
+        #expect(ChatView.retainedChatScrollTarget(
+            .bottom,
+            visibleMessageIDs: []
+        ) == .bottom)
+        #expect(ChatView.isChatScrollTargetAvailable(
+            .message(visibleMessageID),
+            visibleMessageIDs: [visibleMessageID]
+        ))
+        #expect(!ChatView.isChatScrollTargetAvailable(
+            .message(removedMessageID),
+            visibleMessageIDs: [visibleMessageID]
+        ))
+        #expect(ChatView.isChatScrollTargetAvailable(
+            .bottom,
+            visibleMessageIDs: []
+        ))
+    }
+
+    @Test("自动历史窗口只在真实滚到顶部时加载一次")
+    func testAutomaticHistoryLoadingRequiresTopInteraction() {
+        let firstMessageID = UUID()
+
+        #expect(!ChatView.shouldLoadAutomaticHistory(
+            usesAutomaticHistoryWindow: true,
+            isUserInteracting: false,
+            distanceToTop: 0,
+            triggerDistance: 240,
+            firstMessageID: firstMessageID,
+            lastLoadAnchorID: nil
+        ))
+        #expect(ChatView.shouldLoadAutomaticHistory(
+            usesAutomaticHistoryWindow: true,
+            isUserInteracting: true,
+            distanceToTop: 120,
+            triggerDistance: 240,
+            firstMessageID: firstMessageID,
+            lastLoadAnchorID: nil
+        ))
+        #expect(!ChatView.shouldLoadAutomaticHistory(
+            usesAutomaticHistoryWindow: true,
+            isUserInteracting: true,
+            distanceToTop: 120,
+            triggerDistance: 240,
+            firstMessageID: firstMessageID,
+            lastLoadAnchorID: firstMessageID
+        ))
+
+        // 回到底部收缩窗口后会清空已加载锚点，同一个首条消息可再次开启新一轮加载。
+        #expect(ChatView.shouldLoadAutomaticHistory(
+            usesAutomaticHistoryWindow: true,
+            isUserInteracting: true,
+            distanceToTop: 120,
+            triggerDistance: 240,
+            firstMessageID: firstMessageID,
+            lastLoadAnchorID: nil
+        ))
+
+        #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
+            isLoadInFlight: true,
+            awaitsAnchorMetrics: false,
+            distanceToTop: 400,
+            triggerDistance: 240
+        ))
+        #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
+            isLoadInFlight: true,
+            awaitsAnchorMetrics: true,
+            distanceToTop: 120,
+            triggerDistance: 240
+        ))
+        #expect(ChatView.shouldReleaseAutomaticHistoryLoad(
+            isLoadInFlight: true,
+            awaitsAnchorMetrics: true,
+            distanceToTop: 400,
+            triggerDistance: 240
+        ))
+    }
+
     @Test("发送气泡落位前只延后同轮回复")
     func testSendFlightDefersOnlyCurrentReplyGroup() {
         let startedAt = Date()

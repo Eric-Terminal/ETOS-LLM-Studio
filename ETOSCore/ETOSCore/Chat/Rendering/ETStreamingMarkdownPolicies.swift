@@ -36,15 +36,13 @@ public enum ETStreamingMessageUpdatePolicy {
     }
 }
 
-public enum ETStreamingBottomPinPolicy {
+public enum ETScrollBottomPinPolicy {
     public static func shouldKeepPinned(
-        isStreaming: Bool,
         keepsBottomPinned: Bool,
         previousDistanceToBottom: CGFloat,
         isUserInteracting: Bool
     ) -> Bool {
-        isStreaming
-            && keepsBottomPinned
+        keepsBottomPinned
             && previousDistanceToBottom < 44
             && !isUserInteracting
     }
