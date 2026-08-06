@@ -14,8 +14,10 @@ import UIKit
 #endif
 
 extension DailyPulseManager {
-    func resolveGenerationModel() -> RunnableModel? {
-        let dedicatedModelIdentifier = Persistence.readAppConfigText(key: AppConfigKey.dailyPulseModelIdentifier.rawValue) ?? ""
+    func resolveGenerationModel() async -> RunnableModel? {
+        let dedicatedModelIdentifier = await Task.detached(priority: .utility) {
+            Persistence.readAppConfigText(key: AppConfigKey.dailyPulseModelIdentifier.rawValue) ?? ""
+        }.value
         return Self.resolveGenerationModel(
             dedicatedModelIdentifier: dedicatedModelIdentifier,
             selectedModel: chatService.selectedModelSubject.value,
@@ -29,6 +31,7 @@ extension DailyPulseManager {
         targetDayKey: String? = nil,
         notifyReadyWhenFinished: Bool = false
     ) async {
+        await waitForPersistedStateLoad()
         if isGenerating { return }
         guard Self.shouldStartGeneration(
             isDailyPulseEnabled: isDailyPulseEnabled,
@@ -60,7 +63,7 @@ extension DailyPulseManager {
             guard input.hasUsableContext else {
                 throw DailyPulseGenerationError.insufficientContext
             }
-            guard let generationModel = resolveGenerationModel() else {
+            guard let generationModel = await resolveGenerationModel() else {
                 throw DailyPulseGenerationError.noModelSelected
             }
 
