@@ -65,7 +65,7 @@ extension ChatViewModel {
         )
     }
 
-    func removeGeneratedImage(fileName: String, fromMessageID messageID: UUID) {
+    func removeImageAttachment(fileName: String, fromMessageID messageID: UUID) {
         guard let sessionID = currentSession?.id else { return }
         guard let messageIndex = allMessagesForSession.firstIndex(where: { $0.id == messageID }) else { return }
 
@@ -75,6 +75,22 @@ extension ChatViewModel {
 
         imageFileNames.removeAll { $0 == fileName }
         updatedMessage.imageFileNames = imageFileNames.isEmpty ? nil : imageFileNames
+        var excludedImageFileNames = updatedMessage.modelExcludedImageFileNames ?? []
+        excludedImageFileNames.removeAll { $0 == fileName }
+        updatedMessage.modelExcludedImageFileNames = excludedImageFileNames.isEmpty ? nil : excludedImageFileNames
+
+        let hasRemainingPayload = !updatedMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(updatedMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(updatedMessage.toolCalls ?? []).isEmpty
+            || !(updatedMessage.imageFileNames ?? []).isEmpty
+            || updatedMessage.audioFileName != nil
+            || !(updatedMessage.fileFileNames ?? []).isEmpty
+        if !hasRemainingPayload {
+            chatService.deleteMessage(updatedMessage)
+            saveCurrentSessionDetails()
+            return
+        }
+
         updatedMessages[messageIndex] = updatedMessage
 
         chatService.updateMessages(updatedMessages, for: sessionID)
@@ -84,8 +100,38 @@ extension ChatViewModel {
             (message.imageFileNames ?? []).contains(fileName)
         }
         if !isStillReferenced {
-            Persistence.deleteImage(fileName: fileName)
+            Task.detached(priority: .utility) {
+                Persistence.deleteImage(fileName: fileName)
+            }
         }
+    }
+
+    func removeGeneratedImage(fileName: String, fromMessageID messageID: UUID) {
+        removeImageAttachment(fileName: fileName, fromMessageID: messageID)
+    }
+
+    @discardableResult
+    func convertMarkdownImagesToDisplayAttachments(in message: ChatMessage) async -> Int {
+        let extraction = await chatService.extractInlineImagesFromMarkdown(message.content)
+        guard !extraction.imageFileNames.isEmpty else { return 0 }
+
+        guard var updatedMessage = findMessage(by: message.id),
+              updatedMessage.content == message.content else {
+            let orphanedFileNames = extraction.imageFileNames
+            await Task.detached(priority: .utility) {
+                for fileName in orphanedFileNames {
+                    Persistence.deleteImage(fileName: fileName)
+                }
+            }.value
+            return 0
+        }
+
+        updatedMessage.content = extraction.cleanedContent
+        updatedMessage.imageFileNames = (updatedMessage.imageFileNames ?? []) + extraction.imageFileNames
+        updatedMessage.modelExcludedImageFileNames =
+            (updatedMessage.modelExcludedImageFileNames ?? []) + extraction.imageFileNames
+        updateMessage(updatedMessage)
+        return extraction.imageFileNames.count
     }
 
     func applyImageGenerationStatus(_ status: ChatService.ImageGenerationStatus) {

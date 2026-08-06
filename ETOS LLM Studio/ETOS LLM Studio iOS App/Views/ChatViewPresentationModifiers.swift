@@ -109,10 +109,25 @@ extension ChatView {
                             messageToDelete = message
                         }
                     },
-                    onDownloadImages: { fileNames in
+                    onDownloadImages: { message in
                         dismissMessageActionSheet {
                             Task {
-                                await downloadImagesToPhotoLibrary(fileNames: fileNames)
+                                await downloadMessageImagesToPhotoLibrary(message)
+                            }
+                        }
+                    },
+                    onConvertMarkdownImages: { message in
+                        dismissMessageActionSheet {
+                            Task {
+                                let convertedCount = await viewModel.convertMarkdownImagesToDisplayAttachments(
+                                    in: message
+                                )
+                                imageDownloadAlertMessage = convertedCount > 0
+                                    ? String(
+                                        format: NSLocalizedString("已转换 %d 张图片为附件。", comment: "Converted Markdown image count"),
+                                        convertedCount
+                                    )
+                                    : NSLocalizedString("没有可转换的 Markdown 图片。", comment: "No convertible Markdown images")
                             }
                         }
                     },
@@ -238,10 +253,17 @@ extension ChatView {
                     Text(String(format: NSLocalizedString("将从第 %d 条消息处创建新的分支会话。", comment: ""), index + 1))
                 }
             }
-            .alert(NSLocalizedString("确认删除消息", comment: ""), isPresented: messageDeleteAlertPresented) {
+            .alert(
+                Text(
+                    (messageToDelete?.imageFileNames?.isEmpty == false)
+                        ? NSLocalizedString("确认删除气泡", comment: "Confirm deleting text bubble only")
+                        : NSLocalizedString("确认删除消息", comment: "")
+                ),
+                isPresented: messageDeleteAlertPresented
+            ) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {
                     if let message = messageToDelete {
-                        viewModel.deleteAllVersions(of: message)
+                        viewModel.deleteTextBubbleOrMessage(message)
                     }
                     messageToDelete = nil
                 }
@@ -249,9 +271,13 @@ extension ChatView {
                     messageToDelete = nil
                 }
             } message: {
-                Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
-                     ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
-                     : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
+                if messageToDelete?.imageFileNames?.isEmpty == false {
+                    Text(NSLocalizedString("只会删除正文气泡，图片附件将继续保留。", comment: "Delete bubble while preserving images explanation"))
+                } else {
+                    Text(messageToDelete.map { viewModel.hasDisplayVersions(for: $0) } == true
+                         ? NSLocalizedString("删除后将无法恢复这条消息的所有版本。", comment: "")
+                         : NSLocalizedString("删除后无法恢复这条消息。", comment: ""))
+                }
             }
             .alert(NSLocalizedString("确认删除所选消息", comment: "Selected messages delete confirmation title"), isPresented: $showSelectedMessagesDeleteConfirm) {
                 Button(NSLocalizedString("删除", comment: ""), role: .destructive) {

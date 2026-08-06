@@ -74,6 +74,22 @@ extension ChatViewModel {
 
         imageFileNames.removeAll { $0 == fileName }
         updatedMessage.imageFileNames = imageFileNames.isEmpty ? nil : imageFileNames
+        var excludedImageFileNames = updatedMessage.modelExcludedImageFileNames ?? []
+        excludedImageFileNames.removeAll { $0 == fileName }
+        updatedMessage.modelExcludedImageFileNames = excludedImageFileNames.isEmpty ? nil : excludedImageFileNames
+
+        let hasRemainingPayload = !updatedMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(updatedMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(updatedMessage.toolCalls ?? []).isEmpty
+            || !(updatedMessage.imageFileNames ?? []).isEmpty
+            || updatedMessage.audioFileName != nil
+            || !(updatedMessage.fileFileNames ?? []).isEmpty
+        if !hasRemainingPayload {
+            chatService.deleteMessage(updatedMessage)
+            saveCurrentSessionDetails()
+            return
+        }
+
         updatedMessages[messageIndex] = updatedMessage
 
         chatService.updateMessages(updatedMessages, for: sessionID)
@@ -83,7 +99,9 @@ extension ChatViewModel {
             (message.imageFileNames ?? []).contains(fileName)
         }
         if !isStillReferenced {
-            Persistence.deleteImage(fileName: fileName)
+            Task.detached(priority: .utility) {
+                Persistence.deleteImage(fileName: fileName)
+            }
         }
     }
 

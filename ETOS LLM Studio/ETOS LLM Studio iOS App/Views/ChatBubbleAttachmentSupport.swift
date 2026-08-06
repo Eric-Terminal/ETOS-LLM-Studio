@@ -35,6 +35,10 @@ extension ChatBubble {
                         cornerRadius: 16
                     ) { image in
                         imagePreview = ImagePreviewPayload(image: image)
+                    } onDownload: {
+                        onDownloadImageAttachment?(fileName)
+                    } onDelete: {
+                        onDeleteImageAttachment?(fileName)
                     }
                 }
             }

@@ -52,6 +52,8 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
+    let onDownloadImageAttachment: ((String) -> Void)?
+    let onDeleteImageAttachment: ((String) -> Void)?
     let sourceConversationName: String?
     let onOpenSourceConversation: (() -> Void)?
     let onOpenConversation: ((UUID) -> Void)?
@@ -104,6 +106,8 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
+        onDownloadImageAttachment: ((String) -> Void)? = nil,
+        onDeleteImageAttachment: ((String) -> Void)? = nil,
         sourceConversationName: String? = nil,
         onOpenSourceConversation: (() -> Void)? = nil,
         onOpenConversation: ((UUID) -> Void)? = nil,
@@ -145,6 +149,8 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.onDownloadImageAttachment = onDownloadImageAttachment
+        self.onDeleteImageAttachment = onDeleteImageAttachment
         self.sourceConversationName = sourceConversationName
         self.onOpenSourceConversation = onOpenSourceConversation
         self.onOpenConversation = onOpenConversation
@@ -189,10 +195,24 @@ struct ChatBubble: View {
                 if shouldShowTextBubble {
                     if shouldRenderToolCallsAsSeparateBubbles {
                         separatedToolCallBubbleStack
+                            .modifier(
+                                ChatBubbleOpenMoreGestureModifier(
+                                    isSelectionMode: false,
+                                    onToggleSelection: {},
+                                    onOpenMore: isSelectionMode ? nil : openMoreAction
+                                )
+                            )
                     } else {
                         bubbleContainer {
                             textContentStack(includeToolCalls: true)
                         }
+                        .modifier(
+                            ChatBubbleOpenMoreGestureModifier(
+                                isSelectionMode: false,
+                                onToggleSelection: {},
+                                onOpenMore: isSelectionMode ? nil : openMoreAction
+                            )
+                        )
                         .background(sendFlightTargetReporter)
                     }
                 }
@@ -230,7 +250,7 @@ struct ChatBubble: View {
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: onToggleSelection,
-                onOpenMore: openMoreAction
+                onOpenMore: nil
             )
         )
         .fullScreenCover(item: $imagePreview, onDismiss: {

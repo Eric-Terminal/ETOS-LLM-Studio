@@ -293,10 +293,33 @@ struct AttachmentImageView: View {
     let height: CGFloat
     let cornerRadius: CGFloat
     let onPreview: (UIImage) -> Void
+    let onDownload: (() -> Void)?
+    let onDelete: (() -> Void)?
+
+    init(
+        fileName: String,
+        minWidth: CGFloat,
+        maxWidth: CGFloat,
+        height: CGFloat,
+        cornerRadius: CGFloat,
+        onPreview: @escaping (UIImage) -> Void,
+        onDownload: (() -> Void)? = nil,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.fileName = fileName
+        self.minWidth = minWidth
+        self.maxWidth = maxWidth
+        self.height = height
+        self.cornerRadius = cornerRadius
+        self.onPreview = onPreview
+        self.onDownload = onDownload
+        self.onDelete = onDelete
+    }
 
     @Environment(\.chatTranscriptPreloadedAttachmentImages) private var preloadedImages
     @State private var image: UIImage?
     @State private var didAttemptLoad = false
+    @State private var showsDeleteConfirmation = false
 
     private var displayedImage: UIImage? {
         preloadedImages[fileName] ?? image ?? ChatAttachmentImageCache.image(for: fileName)
@@ -340,6 +363,36 @@ struct AttachmentImageView: View {
             guard !didAttemptLoad else { return }
             didAttemptLoad = true
             await loadImage()
+        }
+        .contextMenu {
+            if let onDownload {
+                Button(action: onDownload) {
+                    Label(
+                        NSLocalizedString("下载", comment: "Download image attachment"),
+                        systemImage: "square.and.arrow.down"
+                    )
+                }
+            }
+            if let onDelete {
+                Button(role: .destructive) {
+                    showsDeleteConfirmation = true
+                } label: {
+                    Label(
+                        NSLocalizedString("删除图片", comment: "Delete one image attachment"),
+                        systemImage: "trash"
+                    )
+                }
+            }
+        }
+        .confirmationDialog(
+            NSLocalizedString("确认删除这张图片？", comment: "Delete one image attachment confirmation"),
+            isPresented: $showsDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("删除", comment: "Confirm deleting one image attachment"), role: .destructive) {
+                onDelete?()
+            }
+            Button(NSLocalizedString("取消", comment: "Cancel deleting one image attachment"), role: .cancel) {}
         }
     }
 

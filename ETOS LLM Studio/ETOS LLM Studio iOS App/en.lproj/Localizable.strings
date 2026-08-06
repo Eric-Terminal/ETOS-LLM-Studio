@@ -5665,3 +5665,11 @@
 "可选的已激活聊天模型标识；省略、留空或填写 self 时使用当前模型。" = "Optional identifier of an activated chat model; omit it, leave it blank, or use self to keep the current model.";
 "最多返回的条目数；省略时返回 20 项。" = "Maximum number of items to return; defaults to 20 when omitted.";
 "列出创建协作会话时可以显式选择的已激活聊天模型。" = "Lists the activated chat models that can be explicitly selected when creating a collaborative conversation.";
+"转为图片附件" = "Convert to Image Attachments";
+"删除图片" = "Delete Image";
+"删除气泡" = "Delete Bubble";
+"确认删除气泡" = "Delete Bubble?";
+"只会删除正文气泡，图片附件将继续保留。" = "Only the text bubble will be deleted. Image attachments will remain.";
+"已转换 %d 张图片为附件。" = "Converted images to attachments: %d.";
+"没有可转换的 Markdown 图片。" = "No convertible Markdown images were found.";
+"没有可下载的图片。" = "No downloadable images were found.";

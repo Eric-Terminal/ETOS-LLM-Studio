@@ -9,6 +9,7 @@
 import SwiftUI
 import Photos
 import ETOSCore
+import UIKit
 
 extension ChatView {
     func toggleSpeaking(_ message: ChatMessage) {
@@ -166,6 +167,128 @@ extension ChatView {
                 )
             }
         }
+    }
+
+    func downloadMessageImagesToPhotoLibrary(_ message: ChatMessage) async {
+        do {
+            let content = message.content
+            let imageFileNames = message.imageFileNames ?? []
+            let resources = try await Task.detached(priority: .userInitiated) {
+                let localFileURLs = imageFileNames.map {
+                    Persistence.getImageDirectory().appendingPathComponent($0)
+                }
+                guard localFileURLs.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+                    throw NSError(
+                        domain: "ChatViewImageDownload",
+                        code: 404,
+                        userInfo: [
+                            NSLocalizedDescriptionKey: NSLocalizedString(
+                                "图片文件不存在。",
+                                comment: "Message image file missing"
+                            )
+                        ]
+                    )
+                }
+
+                let remoteSources = MarkdownImageReferenceSupport.downloadableSources(in: content)
+                var remoteImageData: [Data] = []
+                remoteImageData.reserveCapacity(remoteSources.count)
+                for source in remoteSources {
+                    remoteImageData.append(try await Self.loadMarkdownImageData(source: source))
+                }
+                return (localFileURLs, remoteImageData)
+            }.value
+
+            guard !resources.0.isEmpty || !resources.1.isEmpty else {
+                throw NSError(
+                    domain: "ChatViewImageDownload",
+                    code: 404,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: NSLocalizedString(
+                            "没有可下载的图片。",
+                            comment: "No downloadable images"
+                        )
+                    ]
+                )
+            }
+
+            let status = await requestPhotoLibraryAccessStatus()
+            guard status == .authorized || status == .limited else {
+                throw NSError(
+                    domain: "ChatViewImageDownload",
+                    code: 403,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: NSLocalizedString(
+                            "没有相册访问权限。",
+                            comment: "Photo library permission denied"
+                        )
+                    ]
+                )
+            }
+
+            try await withCheckedThrowingContinuation { continuation in
+                PHPhotoLibrary.shared().performChanges({
+                    for fileURL in resources.0 {
+                        PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: fileURL)
+                    }
+                    for data in resources.1 {
+                        let request = PHAssetCreationRequest.forAsset()
+                        request.addResource(with: .photo, data: data, options: nil)
+                    }
+                }) { success, error in
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: error ?? NSError(
+                            domain: "ChatViewImageDownload",
+                            code: -1,
+                            userInfo: [
+                                NSLocalizedDescriptionKey: NSLocalizedString(
+                                    "保存到相册失败。",
+                                    comment: "Failed to save message images"
+                                )
+                            ]
+                        ))
+                    }
+                }
+            }
+
+            await MainActor.run {
+                imageDownloadAlertMessage = NSLocalizedString("已保存到相册。", comment: "Saved to photo library")
+            }
+        } catch {
+            await MainActor.run {
+                imageDownloadAlertMessage = String(
+                    format: NSLocalizedString("保存失败: %@", comment: "Save message images failed"),
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    nonisolated private static func loadMarkdownImageData(source: String) async throws -> Data {
+        if source.lowercased().hasPrefix("data:image/"),
+           let commaIndex = source.firstIndex(of: ","),
+           source[..<commaIndex].lowercased().contains(";base64"),
+           let data = Data(base64Encoded: String(source[source.index(after: commaIndex)...]), options: .ignoreUnknownCharacters),
+           UIImage(data: data) != nil {
+            return data
+        }
+
+        guard let url = URL(string: source),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode),
+              UIImage(data: data) != nil else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        return data
     }
 
     func saveImagesToPhotoLibrary(fileNames: [String]) async throws {

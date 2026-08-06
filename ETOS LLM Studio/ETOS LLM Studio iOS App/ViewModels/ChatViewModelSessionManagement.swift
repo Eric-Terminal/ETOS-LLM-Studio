@@ -16,6 +16,24 @@ extension ChatViewModel {
         chatService.deleteMessage(message)
     }
 
+    /// 正文与图片附件是同一条记录中的独立展示部分；有图片时只清正文气泡。
+    func deleteTextBubbleOrMessage(_ message: ChatMessage) {
+        guard !(message.imageFileNames ?? []).isEmpty else {
+            deleteAllVersions(of: message)
+            return
+        }
+        guard var updatedMessage = findMessage(by: message.id) else { return }
+
+        updatedMessage.clearContentVersions()
+        updatedMessage.reasoningContent = nil
+        updatedMessage.reasoningProviderSpecificFields = nil
+        updatedMessage.providerResponseMetadata = nil
+        updatedMessage.toolCalls = nil
+        updatedMessage.toolCallsPlacement = nil
+        updatedMessage.fullErrorContent = nil
+        updateMessage(updatedMessage)
+    }
+
     func deleteMessages(withIDs messageIDs: Set<UUID>) {
         chatService.deleteMessages(withIDs: messageIDs)
     }

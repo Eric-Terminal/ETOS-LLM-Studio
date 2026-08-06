@@ -873,6 +873,17 @@ extension ChatView {
                                     onOpenMore: { latestMessage in
                                         messageActionSheetPayload = MessageActionSheetPayload(message: latestMessage)
                                     },
+                                    onDownloadImageAttachment: { fileName in
+                                        Task {
+                                            await downloadImagesToPhotoLibrary(fileNames: [fileName])
+                                        }
+                                    },
+                                    onDeleteImageAttachment: { fileName in
+                                        viewModel.removeImageAttachment(
+                                            fileName: fileName,
+                                            fromMessageID: message.id
+                                        )
+                                    },
                                     sourceConversationName: message.sourceSessionID.flatMap { sourceSessionID in
                                         viewModel.chatSessions.first(where: { $0.id == sourceSessionID })?.name
                                     },

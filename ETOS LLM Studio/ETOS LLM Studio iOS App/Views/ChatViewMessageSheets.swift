@@ -11,6 +11,10 @@ import Foundation
 import ETOSCore
 
 struct MessageActionSheet: View {
+    private static let imageOnlyPlaceholders: Set<String> = [
+        "[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"
+    ]
+
     let payload: MessageActionSheetPayload
     let hasDisplayVersions: Bool
     let displayVersionCount: Int
@@ -30,7 +34,8 @@ struct MessageActionSheet: View {
     let onSwitchVersion: (Int, ChatMessage) -> Void
     let onDeleteVersion: (ChatMessage, Int) -> Void
     let onDelete: (ChatMessage) -> Void
-    let onDownloadImages: ([String]) -> Void
+    let onDownloadImages: (ChatMessage) -> Void
+    let onConvertMarkdownImages: (ChatMessage) -> Void
     let onRetryVideoAnalysis: (ChatMessage, String) async throws -> VideoAnalysisResult
     let onAskAI: (String, ChatMessage) -> Void
     let onRewriteSelection: (MessageRewriteSelectionTarget, ChatMessage) -> Void
@@ -45,6 +50,7 @@ struct MessageActionSheet: View {
     @State private var videoAnalysisOverrides: [String: VideoAnalysisResult] = [:]
     @State private var retryingVideoFileNames: Set<String> = []
     @State private var videoAnalysisErrorMessage: String?
+    @State private var hasInlineMarkdownImages = false
 
     private var message: ChatMessage {
         payload.message
@@ -54,6 +60,19 @@ struct MessageActionSheet: View {
         message.audioFileName != nil
             || (message.imageFileNames?.isEmpty == false)
             || (message.fileFileNames?.isEmpty == false)
+    }
+
+    private var hasImageAttachments: Bool {
+        !(message.imageFileNames ?? []).isEmpty
+    }
+
+    private var hasTextBubblePayload: Bool {
+        let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasContent = !content.isEmpty && !Self.imageOnlyPlaceholders.contains(content)
+        let hasReasoning = !(message.reasoningContent ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        return hasContent || hasReasoning || !(message.toolCalls ?? []).isEmpty
     }
 
     private var videoFileNames: [String] {
@@ -89,14 +108,6 @@ struct MessageActionSheet: View {
         NavigationStack {
             List {
                 Section {
-                    if let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty {
-                        Button {
-                            onDownloadImages(imageFileNames)
-                        } label: {
-                            Label(NSLocalizedString("下载", comment: "Download generated image"), systemImage: "square.and.arrow.down")
-                        }
-                    }
-
                     if !hasAttachments {
                         Button {
                             onEdit(message)
@@ -167,13 +178,44 @@ struct MessageActionSheet: View {
                     } label: {
                         Label(NSLocalizedString("多选", comment: "Enter message selection mode"), systemImage: "checkmark.circle")
                     }
+
+                    if hasInlineMarkdownImages {
+                        Button {
+                            onConvertMarkdownImages(message)
+                        } label: {
+                            Label(
+                                NSLocalizedString("转为图片附件", comment: "Convert inline Markdown images to attachments"),
+                                systemImage: "photo.badge.arrow.down"
+                            )
+                        }
+                    }
+
+                    if hasImageAttachments || hasInlineMarkdownImages {
+                        Button {
+                            onDownloadImages(message)
+                        } label: {
+                            Label(
+                                NSLocalizedString("下载", comment: "Download message images"),
+                                systemImage: "square.and.arrow.down"
+                            )
+                        }
+                    }
                 }
 
-                Section {
-                    Button(role: .destructive) {
-                        onDelete(message)
-                    } label: {
-                        Label(hasDisplayVersions ? NSLocalizedString("删除所有版本", comment: "") : NSLocalizedString("删除消息", comment: ""), systemImage: "trash.fill")
+                if !hasImageAttachments || hasTextBubblePayload {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete(message)
+                        } label: {
+                            Label(
+                                hasImageAttachments
+                                    ? NSLocalizedString("删除气泡", comment: "Delete text bubble but keep image attachments")
+                                    : (hasDisplayVersions
+                                        ? NSLocalizedString("删除所有版本", comment: "")
+                                        : NSLocalizedString("删除消息", comment: "")),
+                                systemImage: "trash.fill"
+                            )
+                        }
                     }
                 }
 
@@ -228,6 +270,14 @@ struct MessageActionSheet: View {
             }
         } message: {
             Text(videoAnalysisErrorMessage ?? "")
+        }
+        .task(id: message.content) {
+            let content = message.content
+            let containsImage = await Task.detached(priority: .utility) {
+                MarkdownImageReferenceSupport.hasDownloadableImage(in: content)
+            }.value
+            guard !Task.isCancelled else { return }
+            hasInlineMarkdownImages = containsImage
         }
     }
 
