@@ -924,8 +924,9 @@ public class ChatService {
 
         logger.info("正在向 \(model.provider.name) 的语音模型 \(model.model.displayName) 发起转写请求...")
         
-        guard let adapter = adapters[model.effectiveAPIFormat] else {
-            throw NetworkError.adapterNotFound(format: model.effectiveAPIFormat)
+        // 专用语音选择允许任意远端模型，但转写端点统一遵循 OpenAI Audio Transcriptions 协议。
+        guard let adapter = adapters["openai-compatible"] else {
+            throw NetworkError.adapterNotFound(format: "openai-compatible")
         }
         
         guard let request = adapter.buildTranscriptionRequest(
