@@ -373,7 +373,7 @@ struct AttachmentImageView: View {
                     )
                 }
             }
-            if let onDelete {
+            if onDelete != nil {
                 Button(role: .destructive) {
                     showsDeleteConfirmation = true
                 } label: {
