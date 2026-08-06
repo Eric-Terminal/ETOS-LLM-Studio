@@ -10,6 +10,17 @@
 import SwiftUI
 import ETOSCore
 
+private struct WatchSessionRelationshipDetails: Sendable {
+    struct Child: Identifiable, Sendable {
+        let id: UUID
+        let name: String
+    }
+
+    let origin: ConversationOrigin?
+    let children: [Child]
+    let contacts: [LinkedConversationContact]
+}
+
 struct SessionActionsView: View {
 
     // MARK: - 属性与绑定
@@ -22,9 +33,11 @@ struct SessionActionsView: View {
     @Binding var showDeleteSessionConfirm: Bool
     @Binding var folders: [SessionFolder]
     let tags: [SessionTag]
+    let runtimeState: ConversationRuntimeSessionState?
 
     // MARK: - 操作
 
+    let onOpenSession: (UUID) -> Void
     let onDeleteLastMessage: () -> Void
     let onSendSessionToCompanion: () -> Void
     let onMoveSessionToFolder: (UUID?) -> Void
@@ -36,6 +49,8 @@ struct SessionActionsView: View {
     // MARK: - 环境
 
     @Environment(\.dismiss) private var dismiss
+    @State private var relationshipDetails: WatchSessionRelationshipDetails?
+    @State private var revokingContactID: UUID?
 
     private var folderByID: [UUID: SessionFolder] {
         Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
@@ -91,6 +106,80 @@ struct SessionActionsView: View {
                     dismiss()
                 } label: {
                     Label(NSLocalizedString("发送到 iPhone", comment: ""), systemImage: "iphone")
+                }
+
+                if runtimeState?.runStatus == .pausedByBudget {
+                    Button {
+                        Task {
+                            _ = await ChatService.shared.continueConversationRuntime(for: session.id)
+                        }
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("继续运行", comment: "Continue conversation runtime"), systemImage: "play.circle")
+                    }
+                } else if let status = runtimeState?.runStatus, !status.isTerminal {
+                    Button(role: .destructive) {
+                        Task {
+                            await ChatService.shared.stopConversationRuntime(for: session.id)
+                        }
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("停止运行", comment: "Stop conversation runtime"), systemImage: "stop.circle")
+                    }
+                }
+            }
+
+            if let relationshipDetails {
+                if let origin = relationshipDetails.origin {
+                    Section(NSLocalizedString("创建来源", comment: "Conversation creation origin")) {
+                        Button {
+                            guard let parentSessionID = origin.parentSessionID else { return }
+                            onOpenSession(parentSessionID)
+                            dismiss()
+                        } label: {
+                            Label(origin.parentSessionNameSnapshot, systemImage: "arrow.up.left")
+                        }
+                        .disabled(origin.parentSessionID == nil)
+                    }
+                }
+
+                if !relationshipDetails.children.isEmpty {
+                    Section(NSLocalizedString("直接创建的会话", comment: "Directly created conversations")) {
+                        ForEach(relationshipDetails.children) { child in
+                            Button {
+                                onOpenSession(child.id)
+                                dismiss()
+                            } label: {
+                                Label(child.name, systemImage: "arrow.turn.down.right")
+                            }
+                        }
+                    }
+                }
+
+                if !relationshipDetails.contacts.isEmpty {
+                    Section(
+                        header: Text(NSLocalizedString("联系授权", comment: "Linked conversation capabilities")),
+                        footer: Text(NSLocalizedString("撤销后模型将不能再联系该会话，用户聊天不受影响。", comment: "Watch conversation capability footer"))
+                    ) {
+                        ForEach(relationshipDetails.contacts) { contact in
+                            VStack(alignment: .leading) {
+                                Text(contact.title)
+                                Text(permissionSummary(for: contact))
+                                    .etFont(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Button(role: .destructive) {
+                                revoke(contact)
+                            } label: {
+                                Label(
+                                    NSLocalizedString("撤销授权", comment: "Revoke conversation capability"),
+                                    systemImage: "person.crop.circle.badge.minus"
+                                )
+                            }
+                            .disabled(revokingContactID != nil)
+                        }
+                    }
                 }
             }
 
@@ -164,6 +253,9 @@ struct SessionActionsView: View {
         }
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: session.id) {
+            await reloadRelationshipDetails()
+        }
     }
 
     private var sessionTags: [SessionTag] {
@@ -186,5 +278,60 @@ struct SessionActionsView: View {
         }
 
         return parts.reversed().joined(separator: " /")
+    }
+
+    private func reloadRelationshipDetails() async {
+        let sessionID = session.id
+        relationshipDetails = await Task.detached(priority: .userInitiated) {
+            let origins = Persistence.loadChildConversationOrigins(parentSessionID: sessionID)
+            let namesByID = Dictionary(
+                uniqueKeysWithValues: Persistence.loadChatSessions().map { ($0.id, $0.name) }
+            )
+            let children = origins.map { origin in
+                WatchSessionRelationshipDetails.Child(
+                    id: origin.childSessionID,
+                    name: namesByID[origin.childSessionID]
+                        ?? NSLocalizedString("未知会话", comment: "Unknown conversation")
+                )
+            }
+            return WatchSessionRelationshipDetails(
+                origin: Persistence.loadConversationOrigin(childSessionID: sessionID),
+                children: children,
+                contacts: Persistence.loadLinkedConversationContacts(sourceSessionID: sessionID)
+            )
+        }.value
+    }
+
+    private func revoke(_ contact: LinkedConversationContact) {
+        revokingContactID = contact.id
+        let sourceSessionID = session.id
+        let targetSessionID = contact.sessionID
+        Task {
+            _ = await Task.detached(priority: .userInitiated) {
+                Persistence.revokeConversationCapability(
+                    sourceSessionID: sourceSessionID,
+                    targetSessionID: targetSessionID
+                )
+            }.value
+            revokingContactID = nil
+            await reloadRelationshipDetails()
+        }
+    }
+
+    private func permissionSummary(for contact: LinkedConversationContact) -> String {
+        var permissions: [String] = []
+        if contact.canRead {
+            permissions.append(NSLocalizedString("读取", comment: "Conversation permission: read"))
+        }
+        if contact.canSend {
+            permissions.append(NSLocalizedString("发送", comment: "Conversation permission: send"))
+        }
+        if contact.canTriggerReply {
+            permissions.append(NSLocalizedString("触发回复", comment: "Conversation permission: trigger reply"))
+        }
+        if contact.canInterrupt {
+            permissions.append(NSLocalizedString("停止运行", comment: "Conversation permission: interrupt"))
+        }
+        return permissions.joined(separator: NSLocalizedString("、", comment: "Localized list separator"))
     }
 }

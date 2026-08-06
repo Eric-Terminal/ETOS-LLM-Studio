@@ -72,7 +72,10 @@ extension ChatView {
         if shouldMergeTurnMessages(message, with: nextMessage) {
             return true
         }
-        return message.role == .user && nextMessage.role == .user
+        return message.role == .user
+            && nextMessage.role == .user
+            && message.authorKind == nextMessage.authorKind
+            && message.sourceSessionID == nextMessage.sourceSessionID
     }
 
     func shouldConnectTimeline(_ message: ChatMessage?, with nextMessage: ChatMessage?) -> Bool {

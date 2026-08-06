@@ -264,7 +264,12 @@ extension MCPManager {
         return chatTools
     }
 
-    public func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
+    public func executeToolFromChat(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID? = nil,
+        sourceToolCallID: String? = nil
+    ) async throws -> String {
         guard chatToolsEnabled else {
             throw MCPChatBridgeError.toolGroupDisabled(
                 NSLocalizedString("MCP 工具", comment: "MCP tool group display name")
@@ -278,7 +283,19 @@ extension MCPManager {
         }
         let startedAt = Date()
         appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("开始执行聊天工具：%@", comment: "MCP governance chat tool started"), routed.tool.toolId))
-        let inputs = try decodeJSONDictionary(from: argumentsJSON)
+        var inputs = try decodeJSONDictionary(from: argumentsJSON)
+        if MCPBuiltInAppToolServer.category(for: routed.server.id) == .conversation {
+            guard let sourceSessionID,
+                  let sourceToolCallID,
+                  !sourceToolCallID.isEmpty else {
+                throw ConversationRuntimeError.sessionNotFound
+            }
+            // 这两个字段只在 MCP 路由内部传递，不进入工具 schema，也不能由模型决定来源身份。
+            inputs[MCPBuiltInAppToolServer.conversationSourceSessionIDArgument] = .string(
+                sourceSessionID.uuidString
+            )
+            inputs[MCPBuiltInAppToolServer.conversationToolCallIDArgument] = .string(sourceToolCallID)
+        }
         let callID = UUID()
         do {
             let result = try await executeManagedToolCall(
@@ -310,6 +327,12 @@ extension MCPManager {
     public func displayLabel(for toolName: String) -> String? {
         guard let routed = routedTools[toolName] else { return nil }
         return "[\(routed.server.displayName)] \(routed.tool.toolId)"
+    }
+
+    public func isConversationTool(_ toolName: String) -> Bool {
+        guard let routed = routedTools[toolName] else { return false }
+        return MCPBuiltInAppToolServer.category(for: routed.server.id) == .conversation
+            && ConversationToolDefinitions.contains(routed.tool.toolId)
     }
 
     public func isToolEnabled(serverID: UUID, toolId: String) -> Bool {

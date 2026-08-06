@@ -228,6 +228,14 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var responseAttemptID: UUID? // 当前消息所属的一次回复尝试
     public var responseAttemptIndex: Int? // 当前回复尝试在组内的序号
     public var selectedResponseAttemptID: UUID? // 锚点 user 消息当前选中的回复尝试
+    /// 消息在数据库中的真实作者类型；跨会话输入提交给模型时仍可映射为 user role。
+    public var authorKind: ConversationMessageAuthorKind
+    /// 跨会话消息的实际来源会话。
+    public var sourceSessionID: UUID?
+    /// 复制或转发消息在来源会话中的原消息 ID。
+    public var sourceMessageID: UUID?
+    /// 触发当前消息落库的持久邮箱事件。
+    public var conversationEventID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -252,7 +260,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         responseGroupID: UUID? = nil,
         responseAttemptID: UUID? = nil,
         responseAttemptIndex: Int? = nil,
-        selectedResponseAttemptID: UUID? = nil
+        selectedResponseAttemptID: UUID? = nil,
+        authorKind: ConversationMessageAuthorKind? = nil,
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil,
+        conversationEventID: UUID? = nil
     ) {
         self.id = id
         self.role = role
@@ -278,6 +290,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.responseAttemptID = responseAttemptID
         self.responseAttemptIndex = responseAttemptIndex
         self.selectedResponseAttemptID = selectedResponseAttemptID
+        self.authorKind = authorKind ?? ConversationMessageAuthorKind.defaultValue(for: role)
+        self.sourceSessionID = sourceSessionID
+        self.sourceMessageID = sourceMessageID
+        self.conversationEventID = conversationEventID
     }
 
     // MARK: - 版本管理方法
@@ -325,6 +341,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         case modelReference, costEstimate
         case audioFileName, imageFileNames, fileFileNames, videoAnalysisResults, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
+        case authorKind, sourceSessionID, sourceMessageID, conversationEventID
     }
 
     public init(from decoder: Decoder) throws {
@@ -369,6 +386,11 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.responseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .responseAttemptID)
         self.responseAttemptIndex = try container.decodeIfPresent(Int.self, forKey: .responseAttemptIndex)
         self.selectedResponseAttemptID = try container.decodeIfPresent(UUID.self, forKey: .selectedResponseAttemptID)
+        self.authorKind = try container.decodeIfPresent(ConversationMessageAuthorKind.self, forKey: .authorKind)
+            ?? ConversationMessageAuthorKind.defaultValue(for: role)
+        self.sourceSessionID = try container.decodeIfPresent(UUID.self, forKey: .sourceSessionID)
+        self.sourceMessageID = try container.decodeIfPresent(UUID.self, forKey: .sourceMessageID)
+        self.conversationEventID = try container.decodeIfPresent(UUID.self, forKey: .conversationEventID)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -404,6 +426,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(responseAttemptID, forKey: .responseAttemptID)
         try container.encodeIfPresent(responseAttemptIndex, forKey: .responseAttemptIndex)
         try container.encodeIfPresent(selectedResponseAttemptID, forKey: .selectedResponseAttemptID)
+        try container.encode(authorKind, forKey: .authorKind)
+        try container.encodeIfPresent(sourceSessionID, forKey: .sourceSessionID)
+        try container.encodeIfPresent(sourceMessageID, forKey: .sourceMessageID)
+        try container.encodeIfPresent(conversationEventID, forKey: .conversationEventID)
     }
 }
 

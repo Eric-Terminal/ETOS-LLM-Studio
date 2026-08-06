@@ -17,7 +17,7 @@ enum WatchChatInputActionState: Equatable {
     case inactive
 
     static func resolve(isSending: Bool, hasSendableContent: Bool, canQuickRetry: Bool, isSpeechInputEnabled: Bool) -> Self {
-        if isSending {
+        if isSending && !hasSendableContent {
             return .stop
         }
         if hasSendableContent {

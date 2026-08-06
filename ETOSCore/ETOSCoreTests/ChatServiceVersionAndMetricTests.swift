@@ -111,7 +111,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["用户1"])
 
         let storedMessages = chatService.messagesForSessionSubject.value
@@ -159,7 +159,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["retry-tail-assistant"])
         #expect(sentMessages.last?.role == .user)
 
@@ -259,7 +259,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.content) == ["retry-tail-error"])
         #expect(sentMessages.last?.role == .user)
 

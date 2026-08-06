@@ -391,7 +391,7 @@ extension ChatService {
                 sessionID: currentSessionID,
                 coalescer: &streamingPublishCoalescer
             )
-            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
+            await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .cancelled,

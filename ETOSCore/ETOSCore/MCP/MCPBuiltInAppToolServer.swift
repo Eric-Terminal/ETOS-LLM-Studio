@@ -13,6 +13,8 @@ import MCP
 
 public enum MCPBuiltInAppToolServer {
     public static let endpointPrefix = "builtin://app-tools/"
+    static let conversationSourceSessionIDArgument = "_etos_source_session_id"
+    static let conversationToolCallIDArgument = "_etos_tool_call_id"
 
     private static let serverIDs: [AppToolCatalogCategory: UUID] = [
         .interaction: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0001")!,
@@ -20,11 +22,12 @@ public enum MCPBuiltInAppToolServer {
         .file: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0003")!,
         .database: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0004")!,
         .custom: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0005")!,
-        .feedback: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0006")!
+        .feedback: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0006")!,
+        .conversation: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0007")!
     ]
 
     public static var categories: [AppToolCatalogCategory] {
-        [.interaction, .memory, .file, .database, .custom]
+        [.interaction, .conversation, .memory, .file, .database, .custom]
     }
 
     public static func serverID(for category: AppToolCatalogCategory) -> UUID {
@@ -84,13 +87,20 @@ public enum MCPBuiltInAppToolServer {
             appToolManager: appToolManager,
             includeUnavailablePlatformTools: true
         )
-        let disabledToolIds = tools
-            .filter { !isMigratedEnabled($0, appToolManager: appToolManager) }
-            .map(\.toolId)
-        let approvalPolicies = tools.reduce(into: [String: MCPToolApprovalPolicy]()) { result, tool in
-            guard let policy = migratedApprovalPolicy(for: tool.toolId, appToolManager: appToolManager),
-                  policy != .askEveryTime else { return }
-            result[tool.toolId] = policy
+        let disabledToolIds: [String]
+        let approvalPolicies: [String: MCPToolApprovalPolicy]
+        if category == .conversation {
+            disabledToolIds = []
+            approvalPolicies = Dictionary(uniqueKeysWithValues: tools.map { ($0.toolId, .alwaysAllow) })
+        } else {
+            disabledToolIds = tools
+                .filter { !isMigratedEnabled($0, appToolManager: appToolManager) }
+                .map(\.toolId)
+            approvalPolicies = tools.reduce(into: [String: MCPToolApprovalPolicy]()) { result, tool in
+                guard let policy = migratedApprovalPolicy(for: tool.toolId, appToolManager: appToolManager),
+                      policy != .askEveryTime else { return }
+                result[tool.toolId] = policy
+            }
         }
 
         return MCPServerConfiguration(
@@ -98,7 +108,7 @@ public enum MCPBuiltInAppToolServer {
             displayName: displayName(for: category),
             notes: notes(for: category),
             transport: .builtInAppTool(category: category),
-            isSelectedForChat: appToolManager.chatToolsEnabled,
+            isSelectedForChat: category == .conversation ? true : appToolManager.chatToolsEnabled,
             disabledToolIds: disabledToolIds,
             toolApprovalPolicies: approvalPolicies,
             sortIndex: defaultSortIndex(for: category)
@@ -148,6 +158,8 @@ public enum MCPBuiltInAppToolServer {
         switch category {
         case .interaction:
             return NSLocalizedString("内建交互工具", comment: "Built-in app tool interaction MCP server name")
+        case .conversation:
+            return NSLocalizedString("内建会话协作", comment: "Built-in conversation MCP server name")
         case .memory:
             return NSLocalizedString("内建记忆操作", comment: "Built-in app tool memory MCP server name")
         case .file:
@@ -165,6 +177,8 @@ public enum MCPBuiltInAppToolServer {
         switch category {
         case .interaction:
             return NSLocalizedString("提供文本回显、输入草稿填充与反馈工单提交等本地交互工具。", comment: "Built-in app tool interaction MCP server notes")
+        case .conversation:
+            return NSLocalizedString("提供创建、联系、读取、等待和停止长期协作会话，以及按需查询可用模型的工具。", comment: "Built-in conversation MCP server notes")
         case .memory:
             return NSLocalizedString("提供长期记忆的查看、编辑、归档与恢复工具。", comment: "Built-in app tool memory MCP server notes")
         case .file:
@@ -196,6 +210,17 @@ public enum MCPBuiltInAppToolServer {
         appToolManager: AppToolManager,
         includeUnavailablePlatformTools: Bool = false
     ) -> [MCPToolDescription] {
+        if category == .conversation {
+            return ConversationToolDefinitions.all.map { tool in
+                MCPToolDescription(
+                    toolId: tool.name,
+                    description: tool.description,
+                    inputSchema: tool.parameters,
+                    examples: nil
+                )
+            }
+        }
+
         let staticTools = AppToolKind.allCases
             .filter { !AppToolManager.builtInToolKinds.contains($0) }
             .filter { includeUnavailablePlatformTools || $0.isAvailableOnCurrentPlatform }
@@ -226,6 +251,9 @@ public enum MCPBuiltInAppToolServer {
     }
 
     static func category(for toolName: String) -> AppToolCatalogCategory? {
+        if ConversationToolDefinitions.contains(toolName) {
+            return .conversation
+        }
         if let kind = AppToolKind.resolve(from: toolName),
            !AppToolManager.builtInToolKinds.contains(kind) {
             return ToolCatalogSupport.appToolCategory(for: kind)
@@ -242,6 +270,23 @@ public enum MCPBuiltInAppToolServer {
             toolName: toolName,
             argumentsJSON: argumentsJSON
         )
+    }
+
+    static func executeConversationTool(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID,
+        toolCallID: String
+    ) async throws -> String {
+        let result = try await ChatService.shared.executeConversationTool(
+            InternalToolCall(
+                id: toolCallID,
+                toolName: toolName,
+                arguments: argumentsJSON
+            ),
+            sourceSessionID: sourceSessionID
+        )
+        return result.content
     }
 
     @MainActor
@@ -456,9 +501,30 @@ actor MCPBuiltInAppToolServerEngine {
         guard MCPBuiltInAppToolServer.category(for: name) == category else {
             return errorToolResult(message: "Unknown built-in app tool: \(name)")
         }
-        let arguments = params["arguments"] as? [String: Any] ?? [:]
+        var arguments = params["arguments"] as? [String: Any] ?? [:]
         let argumentsJSON: String
         do {
+            if category == .conversation {
+                guard let rawSourceSessionID = arguments.removeValue(
+                    forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument
+                ) as? String,
+                      let sourceSessionID = UUID(uuidString: rawSourceSessionID),
+                      let toolCallID = arguments.removeValue(
+                        forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument
+                      ) as? String,
+                      !toolCallID.isEmpty else {
+                    throw ConversationRuntimeError.sessionNotFound
+                }
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeConversationTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON,
+                    sourceSessionID: sourceSessionID,
+                    toolCallID: toolCallID
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
             argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
             let result = try await MCPBuiltInAppToolServer.executeTool(
                 toolName: name,

@@ -159,7 +159,7 @@ extension ChatServiceTests {
             includeSystemTime: false
         )
 
-        let sentMessages = mockAdapter.receivedMessages ?? []
+        let sentMessages = messagesExcludingConversationRuntime(mockAdapter.receivedMessages ?? [])
         #expect(sentMessages.map(\.role) == [.user])
         #expect(sentMessages.first?.content == "第二轮问题")
 

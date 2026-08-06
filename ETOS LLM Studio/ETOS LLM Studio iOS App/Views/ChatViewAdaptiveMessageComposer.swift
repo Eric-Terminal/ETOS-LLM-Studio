@@ -537,7 +537,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveGlassActionFill: Color {
-        if isSending {
+        if isSending && !adaptiveHasContent {
             return Color.red.opacity(0.85 * 0.82)
         }
         if adaptiveHasContent {
@@ -561,7 +561,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveActionIconName: String {
-        if isSending {
+        if isSending && !adaptiveHasContent {
             return "stop.fill"
         }
         if adaptiveHasContent {
@@ -574,7 +574,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveActionForegroundColor: Color {
-        if isSending
+        if isSending && !adaptiveHasContent
             || (viewModel.canQuickRetryLatestMessage
                 && !adaptiveHasContent
                 && !inlineSpeechRecorder.phase.isActive) {
@@ -590,7 +590,7 @@ extension TelegramMessageComposer {
 
     @ViewBuilder
     private var adaptiveActionBackground: some View {
-        if isSending {
+        if isSending && !adaptiveHasContent {
             actionCircleBackground(fill: Color.red.opacity(0.85))
         } else if adaptiveHasContent {
             actionCircleBackground(
@@ -617,7 +617,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveActionAccessibilityLabel: String {
-        if isSending {
+        if isSending && !adaptiveHasContent {
             return NSLocalizedString("停止生成", comment: "")
         }
         if viewModel.canQuickRetryLatestMessage,
@@ -675,7 +675,7 @@ extension TelegramMessageComposer {
     }
 
     private func adaptiveHandleAction() {
-        if isSending {
+        if isSending && !adaptiveHasContent {
             stopAction()
         } else if adaptiveHasContent {
             adaptiveCloseRequestControls()

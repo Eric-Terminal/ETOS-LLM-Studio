@@ -222,14 +222,17 @@ extension PersistenceGRDBStore {
         try db.execute(
             sql: """
             INSERT INTO sessions (
-                id, name, topic_prompt, enhanced_prompt, folder_id, lorebook_ids_json,
+                id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
+                folder_id, lorebook_ids_json,
                 worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                 conversation_summary, conversation_summary_updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 sessionID.uuidString,
                 NSLocalizedString("新的对话", comment: "Default new chat session name"),
+                nil,
+                nil,
                 nil,
                 nil,
                 nil,
@@ -262,14 +265,17 @@ extension PersistenceGRDBStore {
             try db.execute(
                 sql: """
                 INSERT INTO sessions (
-                    id, name, topic_prompt, enhanced_prompt, folder_id, lorebook_ids_json,
+                    id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
+                    folder_id, lorebook_ids_json,
                     worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
+                    system_prompt = excluded.system_prompt,
                     topic_prompt = excluded.topic_prompt,
                     enhanced_prompt = excluded.enhanced_prompt,
+                    preferred_model_identifier = excluded.preferred_model_identifier,
                     folder_id = excluded.folder_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
@@ -282,8 +288,10 @@ extension PersistenceGRDBStore {
                 arguments: [
                     session.id.uuidString,
                     session.name,
+                    session.systemPrompt,
                     session.topicPrompt,
                     session.enhancedPrompt,
+                    session.preferredModelIdentifier,
                     session.folderID?.uuidString,
                     lorebookData,
                     session.worldbookContextIsolationEnabled ? 1 : 0,
@@ -298,14 +306,17 @@ extension PersistenceGRDBStore {
             try db.execute(
                 sql: """
                 INSERT INTO sessions (
-                    id, name, topic_prompt, enhanced_prompt, folder_id, lorebook_ids_json,
+                    id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
+                    folder_id, lorebook_ids_json,
                     worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
+                    system_prompt = excluded.system_prompt,
                     topic_prompt = excluded.topic_prompt,
                     enhanced_prompt = excluded.enhanced_prompt,
+                    preferred_model_identifier = excluded.preferred_model_identifier,
                     folder_id = excluded.folder_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
@@ -318,8 +329,10 @@ extension PersistenceGRDBStore {
                 arguments: [
                     session.id.uuidString,
                     session.name,
+                    session.systemPrompt,
                     session.topicPrompt,
                     session.enhancedPrompt,
+                    session.preferredModelIdentifier,
                     session.folderID?.uuidString,
                     lorebookData,
                     session.worldbookContextIsolationEnabled ? 1 : 0,
@@ -346,6 +359,7 @@ extension PersistenceGRDBStore {
                    audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
                    full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                    response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                   author_kind, source_session_id, source_message_id, conversation_event_id,
                    position, created_at
             FROM messages
             WHERE session_id = ?
@@ -381,6 +395,10 @@ extension PersistenceGRDBStore {
                 responseAttemptID: row["response_attempt_id"],
                 responseAttemptIndex: row["response_attempt_index"],
                 selectedResponseAttemptID: row["selected_response_attempt_id"],
+                authorKind: row["author_kind"],
+                sourceSessionID: row["source_session_id"],
+                sourceMessageID: row["source_message_id"],
+                conversationEventID: row["conversation_event_id"],
                 position: row["position"],
                 createdAt: row["created_at"]
             )
@@ -435,6 +453,10 @@ extension PersistenceGRDBStore {
             responseAttemptID: message.responseAttemptID?.uuidString,
             responseAttemptIndex: message.responseAttemptIndex,
             selectedResponseAttemptID: message.selectedResponseAttemptID?.uuidString,
+            authorKind: message.authorKind.rawValue,
+            sourceSessionID: message.sourceSessionID?.uuidString,
+            sourceMessageID: message.sourceMessageID?.uuidString,
+            conversationEventID: message.conversationEventID?.uuidString,
             position: position,
             createdAt: createdAt
         )
@@ -453,8 +475,9 @@ extension PersistenceGRDBStore {
                 audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
                 full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                 response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                author_kind, source_session_id, source_message_id, conversation_event_id,
                 position, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 session_id = excluded.session_id,
                 role = excluded.role,
@@ -479,6 +502,10 @@ extension PersistenceGRDBStore {
                 response_attempt_id = excluded.response_attempt_id,
                 response_attempt_index = excluded.response_attempt_index,
                 selected_response_attempt_id = excluded.selected_response_attempt_id,
+                author_kind = excluded.author_kind,
+                source_session_id = excluded.source_session_id,
+                source_message_id = excluded.source_message_id,
+                conversation_event_id = excluded.conversation_event_id,
                 position = excluded.position,
                 created_at = excluded.created_at
             """,
@@ -507,6 +534,10 @@ extension PersistenceGRDBStore {
                 record.responseAttemptID,
                 record.responseAttemptIndex,
                 record.selectedResponseAttemptID,
+                record.authorKind,
+                record.sourceSessionID,
+                record.sourceMessageID,
+                record.conversationEventID,
                 record.position,
                 record.createdAt
             ]

@@ -531,6 +531,7 @@ extension ContentView {
             tags: viewModel.sessionTags,
             currentSession: $viewModel.currentSession,
             runningSessionIDs: viewModel.runningSessionIDs,
+            conversationRuntimeStates: viewModel.conversationRuntimeStates,
             deleteSessionAction: { session in
                 viewModel.deleteSessions([session])
             },

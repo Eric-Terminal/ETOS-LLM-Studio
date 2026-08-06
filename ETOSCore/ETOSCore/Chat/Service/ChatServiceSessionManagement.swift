@@ -235,11 +235,14 @@ extension ChatService {
     public func createSavedSession(
         name: String,
         initialMessages: [ChatMessage] = [],
+        systemPrompt: String? = nil,
         topicPrompt: String? = nil,
         enhancedPrompt: String? = nil,
+        preferredModelIdentifier: String? = nil,
         lorebookIDs: [UUID] = [],
         worldbookContextIsolationEnabled: Bool = false,
-        folderID: UUID? = nil
+        folderID: UUID? = nil,
+        activate: Bool = true
     ) -> ChatSession {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionName = trimmedName.isEmpty
@@ -248,8 +251,10 @@ extension ChatService {
         let newSession = ChatSession(
             id: UUID(),
             name: sessionName,
+            systemPrompt: systemPrompt,
             topicPrompt: topicPrompt,
             enhancedPrompt: enhancedPrompt,
+            preferredModelIdentifier: preferredModelIdentifier,
             lorebookIDs: lorebookIDs,
             worldbookContextIsolationEnabled: worldbookContextIsolationEnabled,
             folderID: folderID,
@@ -259,9 +264,11 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
-        currentSessionSubject.send(newSession)
         storeRuntimeMessagesSnapshot(initialMessages, for: newSession.id)
-        publishMessages(initialMessages)
+        if activate {
+            currentSessionSubject.send(newSession)
+            publishMessages(initialMessages)
+        }
         persistMessages(initialMessages, for: newSession.id)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("创建了正式会话并写入初始消息: \(newSession.name)")
@@ -276,6 +283,7 @@ extension ChatService {
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
+            prepareConversationRuntimeForSessionDeletion(session.id)
             ephemeralSessionLock.lock()
             let removedTemporaryState = ephemeralSessionStates.removeValue(forKey: session.id)
             ephemeralSessionLock.unlock()

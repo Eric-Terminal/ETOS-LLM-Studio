@@ -255,6 +255,25 @@ struct ModelAdvancedSettingsView: View {
                     }
                 }
 
+                Section(
+                    header: Text(NSLocalizedString("会话协作", comment: "Conversation collaboration settings")),
+                    footer: Text(NSLocalizedString("等待其他会话不占并行名额；预算耗尽后可从会话操作中继续。", comment: "Watch conversation runtime settings explanation"))
+                ) {
+                    TextField(
+                        NSLocalizedString("并行回复数", comment: "Conversation runtime concurrency"),
+                        value: conversationRuntimeConcurrencyBinding,
+                        formatter: numberFormatter
+                    )
+                    .monospacedDigit()
+
+                    TextField(
+                        NSLocalizedString("自动执行预算", comment: "Conversation runtime execution budget"),
+                        value: conversationRuntimeBudgetBinding,
+                        formatter: numberFormatter
+                    )
+                    .monospacedDigit()
+                }
+
                 Section(header: Text(NSLocalizedString("上下文窗口管理", comment: ""))) {
                     HStack {
                         Text(NSLocalizedString("最大上下文消息数", comment: ""))
@@ -463,6 +482,7 @@ struct ModelAdvancedSettingsView: View {
             tags: viewModel.sessionTags,
             currentSession: $viewModel.currentSession,
             runningSessionIDs: viewModel.runningSessionIDs,
+            conversationRuntimeStates: viewModel.conversationRuntimeStates,
             deleteSessionAction: { session in
                 viewModel.deleteSessions([session])
             },
@@ -517,6 +537,20 @@ struct ModelAdvancedSettingsView: View {
             setSessionTagsAction: { session, tagIDs in
                 viewModel.setSessionTags(for: session, tagIDs: tagIDs)
             }
+        )
+    }
+
+    private var conversationRuntimeConcurrencyBinding: Binding<Int> {
+        Binding(
+            get: { max(1, appConfig.conversationRuntimeConcurrencyLimit) },
+            set: { appConfig.conversationRuntimeConcurrencyLimit = max(1, $0) }
+        )
+    }
+
+    private var conversationRuntimeBudgetBinding: Binding<Int> {
+        Binding(
+            get: { max(1, appConfig.conversationRuntimeExecutionBudget) },
+            set: { appConfig.conversationRuntimeExecutionBudget = max(1, $0) }
         )
     }
 

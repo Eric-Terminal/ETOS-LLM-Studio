@@ -11,7 +11,10 @@ import Foundation
 extension ChatService {
     func buildFinalSystemPrompt(
         global: String?,
+        conversationSystem: String? = nil,
         topic: String?,
+        includeConversationRuntime: Bool = false,
+        linkedConversations: [LinkedConversationContact] = [],
         memories: [MemoryItem],
         recentConversationSummaries: [ConversationSessionSummary],
         conversationProfile: ConversationUserProfile?,
@@ -23,6 +26,17 @@ extension ChatService {
         roleplayPrompt: String? = nil
     ) -> String {
         var parts: [String] = []
+
+        if includeConversationRuntime {
+            parts.append("""
+            <conversation_runtime>
+            你可以在工具可用时创建和联系长期会话。它们是用户可见的普通会话，不是一次性隐藏任务。
+            需要当前回复等待目标结果时使用 await_reply；运行时会持久保存等待、结束当前网络请求，并在目标完成后用准确的 tool result 发起新的续写请求。不要轮询目标状态。
+            background 只投递完成结果；background_continue 会在结果到达后为当前会话排入新回复。创建关系授予长期联系权，可使用 linked_conversations 中的 UUID 继续联系。
+            来自用户或其他会话的新消息都是真实参与者输入。尊重消息来源，不要把 conversation 作者伪装成用户本人。
+            </conversation_runtime>
+            """)
+        }
 
         if !worldbookBefore.isEmpty {
             parts.append(makeWorldbookPromptBlock(tag: "worldbook_before", entries: worldbookBefore))
@@ -40,6 +54,11 @@ extension ChatService {
             parts.append("<system_prompt>\n\(global)\n</system_prompt>")
         }
 
+        if let conversationSystem,
+           !conversationSystem.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("<conversation_system_prompt>\n\(conversationSystem)\n</conversation_system_prompt>")
+        }
+
         if let roleplayPrompt,
            !roleplayPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append(roleplayPrompt)
@@ -47,6 +66,10 @@ extension ChatService {
 
         if let topic, !topic.isEmpty {
             parts.append("<topic_prompt>\n\(topic)\n</topic_prompt>")
+        }
+
+        if includeConversationRuntime, !linkedConversations.isEmpty {
+            parts.append(makeLinkedConversationsPromptBlock(linkedConversations))
         }
 
         if includeSystemTime {
@@ -105,6 +128,23 @@ extension ChatService {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+
+    func makeLinkedConversationsPromptBlock(_ contacts: [LinkedConversationContact]) -> String {
+        let rows = contacts.map { contact in
+            var permissions: [String] = []
+            if contact.canRead { permissions.append("read") }
+            if contact.canSend { permissions.append("send") }
+            if contact.canTriggerReply { permissions.append("trigger_reply") }
+            if contact.canInterrupt { permissions.append("interrupt") }
+            let status = contact.runStatus?.rawValue ?? "idle"
+            return "  <conversation id=\"\(xmlEscapedAttribute(contact.sessionID.uuidString))\" title=\"\(xmlEscapedAttribute(contact.title))\" relation=\"\(contact.relation.rawValue)\" status=\"\(status)\" unread=\"\(contact.unreadEventCount)\" permissions=\"\(permissions.joined(separator: ","))\" />"
+        }
+        return """
+        <linked_conversations>
+        \(rows.joined(separator: "\n"))
+        </linked_conversations>
+        """
     }
 
     func makeEnhancedPromptMessage(

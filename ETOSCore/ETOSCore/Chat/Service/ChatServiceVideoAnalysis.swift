@@ -70,7 +70,7 @@ extension ChatService {
             using: model,
             sessionID: targetSessionID
         )
-        persistVideoAnalysisResult(result, messageID: messageID, sessionID: targetSessionID)
+        await persistVideoAnalysisResult(result, messageID: messageID, sessionID: targetSessionID)
         return result
     }
 
@@ -111,11 +111,15 @@ extension ChatService {
         _ result: VideoAnalysisResult,
         messageID: UUID,
         sessionID: UUID
-    ) {
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-        messages[index].replaceVideoAnalysisResult(result)
-        persistAndPublishMessages(messages, for: sessionID)
+    ) async {
+        guard var message = messagesSnapshot(for: sessionID).first(where: { $0.id == messageID }) else { return }
+        message.replaceVideoAnalysisResult(result)
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存视频解析结果失败：\(error.localizedDescription)")
+            return
+        }
         logger.info("已保存视频解析结果: \(result.fileName)")
     }
 

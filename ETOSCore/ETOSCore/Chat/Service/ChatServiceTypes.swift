@@ -903,7 +903,7 @@ func resolvedRequestStreamingEnabled(
     return overriddenValue
 }
 
-public enum SystemTimeInjectionPosition: String, CaseIterable, Identifiable, Sendable {
+public enum SystemTimeInjectionPosition: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
     case front
     case tail
 

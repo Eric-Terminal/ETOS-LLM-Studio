@@ -167,6 +167,10 @@ struct ChatServiceTests {
     func activatedChatModels() -> [RunnableModel] {
         chatService.activatedRunnableModels.filter { $0.model.isChatModel }
     }
+
+    func messagesExcludingConversationRuntime(_ messages: [ChatMessage]) -> [ChatMessage] {
+        messages.filter { !$0.content.contains("<conversation_runtime>") }
+    }
 }
 
 @Suite("Persistence Tests", .serialized)

@@ -383,6 +383,38 @@ struct ModelAdvancedSettingsView: View {
                 Text(NSLocalizedString("启动与发送", comment: "Conversation launch and send settings section"))
             }
 
+            Section {
+                LabeledContent(NSLocalizedString("并行回复数", comment: "Conversation runtime concurrency")) {
+                    TextField(
+                        NSLocalizedString("数量", comment: ""),
+                        value: conversationRuntimeConcurrencyBinding,
+                        formatter: numberFormatter
+                    )
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 80)
+                }
+
+                LabeledContent(NSLocalizedString("自动执行预算", comment: "Conversation runtime execution budget")) {
+                    TextField(
+                        NSLocalizedString("数量", comment: ""),
+                        value: conversationRuntimeBudgetBinding,
+                        formatter: numberFormatter
+                    )
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 80)
+                }
+            } header: {
+                Text(NSLocalizedString("会话协作", comment: "Conversation collaboration settings"))
+            } footer: {
+                Text(NSLocalizedString("并行回复数限制同时占用模型的会话；等待其他会话不占名额。自动执行预算由同一根协作链共享，耗尽后可在会话列表继续。", comment: "Conversation runtime settings explanation"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(NSLocalizedString("上下文窗口管理", comment: "")) {
                 LabeledContent(NSLocalizedString("最大上下文消息数", comment: "")) {
                     TextField(NSLocalizedString("数量", comment: ""), value: $maxChatHistory, formatter: numberFormatter)
@@ -507,6 +539,20 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var conversationRuntimeConcurrencyBinding: Binding<Int> {
+        Binding(
+            get: { max(1, appConfig.conversationRuntimeConcurrencyLimit) },
+            set: { appConfig.conversationRuntimeConcurrencyLimit = max(1, $0) }
+        )
+    }
+
+    private var conversationRuntimeBudgetBinding: Binding<Int> {
+        Binding(
+            get: { max(1, appConfig.conversationRuntimeExecutionBudget) },
+            set: { appConfig.conversationRuntimeExecutionBudget = max(1, $0) }
+        )
     }
 
     private var outputSettingsContent: some View {

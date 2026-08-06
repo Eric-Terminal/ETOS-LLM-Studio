@@ -23,6 +23,7 @@ struct SessionListView: View {
     let tags: [SessionTag]
     @Binding var currentSession: ChatSession?
     let runningSessionIDs: Set<UUID>
+    let conversationRuntimeStates: [UUID: ConversationRuntimeSessionState]
 
     // MARK: - 操作
 
@@ -51,6 +52,7 @@ struct SessionListView: View {
             tags: tags,
             currentSession: $currentSession,
             runningSessionIDs: runningSessionIDs,
+            conversationRuntimeStates: conversationRuntimeStates,
             deleteSessionAction: deleteSessionAction,
             branchAction: branchAction,
             deleteLastMessageAction: deleteLastMessageAction,

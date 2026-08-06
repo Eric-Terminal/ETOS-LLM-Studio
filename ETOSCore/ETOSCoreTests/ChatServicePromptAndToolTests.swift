@@ -138,11 +138,15 @@ extension ChatServiceTests {
         let lastMessage = sentMessages.last
         let enhancedSystemMessage = sentMessages.last(where: { $0.role == .system && $0.content.contains("<enhanced_prompt>") })
         let systemContent = enhancedSystemMessage?.content ?? ""
-        let systemMessages = sentMessages.filter { $0.role == .system }
+        let runtimeSystemMessage = sentMessages.first {
+            $0.role == .system && $0.content.contains("<conversation_runtime>")
+        }
+        let systemMessages = messagesExcludingConversationRuntime(sentMessages).filter { $0.role == .system }
         let userMessage = sentMessages.last(where: { $0.role == .user })
         let userContent = userMessage?.content ?? ""
 
         #expect(lastMessage?.role == .system)
+        #expect(runtimeSystemMessage != nil)
         #expect(systemContent.contains("<enhanced_prompt>"))
         #expect(systemContent.contains(enhancedPrompt))
         #expect(systemContent.contains("\n\n---\n\n\(enhancedPrompt)"))
@@ -201,7 +205,7 @@ extension ChatServiceTests {
         )
 
         let sentMessages = mockAdapter.receivedMessages ?? []
-        let systemMessages = sentMessages.filter { $0.role == .system }
+        let systemMessages = messagesExcludingConversationRuntime(sentMessages).filter { $0.role == .system }
         let firstSystemContent = systemMessages.first?.content ?? ""
         let lastMessage = sentMessages.last
 

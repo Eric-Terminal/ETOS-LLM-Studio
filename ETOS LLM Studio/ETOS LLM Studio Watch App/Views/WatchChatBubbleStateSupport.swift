@@ -19,7 +19,7 @@ extension ChatBubble {
     }
 
     var messageActionBarRole: MessageActionBarRole {
-        message.role == .user ? .user : .assistant
+        isOutgoing ? .user : .assistant
     }
 
     var configuredMessageActionBarItems: [MessageActionBarItem] {
@@ -86,7 +86,7 @@ extension ChatBubble {
         if showsMessageActionBarOuterBorder {
             let shape = Capsule()
 
-            if message.role == .user {
+            if isOutgoing {
                 if enableLiquidGlass {
                     if #available(watchOS 26.0, *) {
                         shape
@@ -133,14 +133,10 @@ extension ChatBubble {
 
     var messageActionBarForegroundColor: Color {
         if showsMessageActionBarOuterBorder {
-            switch message.role {
-            case .user, .error:
+            if isOutgoing || message.role == .error {
                 return resolvedTextColor(default: .white)
-            case .assistant, .system, .tool:
-                return resolvedTextColor(default: .primary)
-            @unknown default:
-                return resolvedTextColor(default: .primary)
             }
+            return resolvedTextColor(default: .primary)
         }
         return resolvedSecondaryTextColor(default: .secondary, customOpacity: 0.86)
     }
@@ -410,13 +406,13 @@ extension ChatBubble {
     }
 
     var shouldRenderReasoningToolTimeline: Bool {
-        message.role != .user
+        !isOutgoing
             && message.role != .error
             && (hasToolCalls || !(message.reasoningContent ?? "").isEmpty)
     }
 
     var usesNoBubbleStyle: Bool {
-        enableNoBubbleUI && message.role != .user && message.role != .error
+        enableNoBubbleUI && !isOutgoing && message.role != .error
     }
 
     var hasMainContentWhenToolCallsSeparated: Bool {
@@ -452,7 +448,7 @@ extension ChatBubble {
     }
 
     var shouldShowMergedSeparator: Bool {
-        !usesNoBubbleStyle && mergeWithPrevious && message.role != .user && message.role != .error
+        !usesNoBubbleStyle && mergeWithPrevious && !isOutgoing && message.role != .error
     }
 
     var separatorThickness: CGFloat {
@@ -484,7 +480,7 @@ extension ChatBubble {
             return min(max(rowWidth * 0.96, 1), availableBubbleWidth)
         }
         let availableBubbleWidth = max(1, rowWidth - rowSpacerReserveWidth)
-        let widthRatio: CGFloat = (message.role == .user || message.role == .error) ? 0.86 : 0.92
+        let widthRatio: CGFloat = (isOutgoing || message.role == .error) ? 0.86 : 0.92
         return min(rowWidth * widthRatio, availableBubbleWidth)
     }
 
@@ -492,7 +488,7 @@ extension ChatBubble {
         if usesNoBubbleStyle {
             return true
         }
-        return message.role != .user
+        return !isOutgoing
             && message.role != .error
             && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
     }

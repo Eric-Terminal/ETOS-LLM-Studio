@@ -274,6 +274,13 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        chatService.conversationRuntimeStatesSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] states in
+                self?.conversationRuntimeStates = states
+            }
+            .store(in: &cancellables)
+
         chatService.sessionRequestStatusSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in

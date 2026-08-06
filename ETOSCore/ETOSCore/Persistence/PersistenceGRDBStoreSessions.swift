@@ -72,7 +72,8 @@ extension PersistenceGRDBStore {
                 let rows = try Row.fetchAll(
                     db,
                     sql: """
-                    SELECT id, name, topic_prompt, enhanced_prompt, folder_id,
+                    SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
+                           preferred_model_identifier, folder_id,
                            lorebook_ids_json, worldbook_context_isolation_enabled
                     FROM sessions
                     WHERE is_temporary = 0
@@ -86,8 +87,10 @@ extension PersistenceGRDBStore {
                     return ChatSession(
                         id: UUID(uuidString: row["id"]) ?? UUID(),
                         name: row["name"],
+                        systemPrompt: row["system_prompt"],
                         topicPrompt: row["topic_prompt"],
                         enhancedPrompt: row["enhanced_prompt"],
+                        preferredModelIdentifier: row["preferred_model_identifier"],
                         lorebookIDs: lorebookIDs,
                         tagIDs: tagAssignments[row["id"]] ?? [],
                         worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
@@ -347,7 +350,8 @@ extension PersistenceGRDBStore {
                            model_reference_json, cost_estimate_json,
                            audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
                            full_error_content, sent_system_prompt_snapshot, response_metrics_json,
-                           response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id
+                           response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
+                           author_kind, source_session_id, source_message_id, conversation_event_id
                     FROM messages
                     WHERE session_id = ?
                     ORDER BY position ASC, created_at ASC, id ASC
@@ -407,7 +411,11 @@ extension PersistenceGRDBStore {
                         responseGroupID: (row["response_group_id"] as String?).flatMap(UUID.init(uuidString:)),
                         responseAttemptID: (row["response_attempt_id"] as String?).flatMap(UUID.init(uuidString:)),
                         responseAttemptIndex: row["response_attempt_index"],
-                        selectedResponseAttemptID: (row["selected_response_attempt_id"] as String?).flatMap(UUID.init(uuidString:))
+                        selectedResponseAttemptID: (row["selected_response_attempt_id"] as String?).flatMap(UUID.init(uuidString:)),
+                        authorKind: (row["author_kind"] as String?).flatMap(ConversationMessageAuthorKind.init(rawValue:)),
+                        sourceSessionID: (row["source_session_id"] as String?).flatMap(UUID.init(uuidString:)),
+                        sourceMessageID: (row["source_message_id"] as String?).flatMap(UUID.init(uuidString:)),
+                        conversationEventID: (row["conversation_event_id"] as String?).flatMap(UUID.init(uuidString:))
                     )
 
                     if contentVersions.count > 1 {

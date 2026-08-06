@@ -330,7 +330,13 @@ extension ChatBubble {
         if let payload = showWidgetPayload(for: call) {
             ToolWidgetRendererCard(payload: payload)
         } else {
-            toolCallSummaryRow(for: call)
+            VStack(alignment: .leading, spacing: 0) {
+                toolCallSummaryRow(for: call)
+                ConversationToolRuntimeCard(
+                    toolCall: call,
+                    onOpenConversation: onOpenConversation
+                )
+            }
         }
     }
 

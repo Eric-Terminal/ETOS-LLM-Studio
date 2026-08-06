@@ -14,6 +14,7 @@ extension ChatService {
         let message: ChatMessage
         let toolResult: String?
         let shouldAwaitUserSupplement: Bool
+        let shouldPauseForConversation: Bool
     }
     
     /// 处理单个工具调用
@@ -23,6 +24,7 @@ extension ChatService {
         var content = ""
         var displayResult: String?
         var shouldAwaitUserSupplement = false
+        var shouldPauseForConversation = false
         let policyDeniedText: (String) -> String = {
             String(format: NSLocalizedString("%@ 已被策略禁止调用。", comment: "Tool result when policy denies a call"), $0)
         }
@@ -147,6 +149,9 @@ extension ChatService {
             let approvalPolicy = await MainActor.run {
                 MCPManager.shared.approvalPolicy(for: toolCall.toolName) ?? .askEveryTime
             }
+            let isConversationTool = await MainActor.run {
+                MCPManager.shared.isConversationTool(toolCall.toolName)
+            }
 
             switch approvalPolicy {
             case .alwaysDeny:
@@ -155,9 +160,16 @@ extension ChatService {
                 logger.info("  - MCP 工具调用被策略拒绝: \(toolCall.toolName)")
             case .alwaysAllow:
                 do {
-                    let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
+                    let result = try await MCPManager.shared.executeToolFromChat(
+                        toolName: toolCall.toolName,
+                        argumentsJSON: toolCall.arguments,
+                        sourceSessionID: sessionID,
+                        sourceToolCallID: toolCall.id
+                    )
                     content = result
-                    displayResult = result
+                    shouldPauseForConversation = isConversationTool
+                        && sessionID.flatMap(Persistence.loadLatestConversationRun)?.status == .waitingConversation
+                    displayResult = shouldPauseForConversation ? nil : result
                     logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
                 } catch {
                     content = callFailedText(toolLabel, error.localizedDescription)
@@ -184,9 +196,16 @@ extension ChatService {
                     logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
                 case .allowOnce, .allowForTool, .allowAll:
                     do {
-                        let result = try await MCPManager.shared.executeToolFromChat(toolName: toolCall.toolName, argumentsJSON: toolCall.arguments)
+                        let result = try await MCPManager.shared.executeToolFromChat(
+                            toolName: toolCall.toolName,
+                            argumentsJSON: toolCall.arguments,
+                            sourceSessionID: sessionID,
+                            sourceToolCallID: toolCall.id
+                        )
                         content = result
-                        displayResult = result
+                        shouldPauseForConversation = isConversationTool
+                            && sessionID.flatMap(Persistence.loadLatestConversationRun)?.status == .waitingConversation
+                        displayResult = shouldPauseForConversation ? nil : result
                         logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
                     } catch {
                         content = callFailedText(toolLabel, error.localizedDescription)
@@ -362,7 +381,8 @@ extension ChatService {
         return ToolCallOutcome(
             message: message,
             toolResult: displayResult,
-            shouldAwaitUserSupplement: shouldAwaitUserSupplement
+            shouldAwaitUserSupplement: shouldAwaitUserSupplement,
+            shouldPauseForConversation: shouldPauseForConversation
         )
     }
 
@@ -413,8 +433,8 @@ extension ChatService {
     }
 
     @MainActor
-    func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) {
-        var messages = messagesSnapshot(for: sessionID)
+    func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) async {
+        let messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
         guard var toolCalls = message.toolCalls else { return }
@@ -429,13 +449,16 @@ extension ChatService {
         guard let resolvedIndex = callIndex else { return }
         toolCalls[resolvedIndex].result = result
         message.toolCalls = toolCalls
-        messages[messageIndex] = message
-        persistAndPublishMessages(messages, for: sessionID)
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存工具结果失败：\(error.localizedDescription)")
+        }
     }
 
-    func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) {
+    func ensureToolCallsVisible(_ toolCalls: [InternalToolCall], in loadingMessageID: UUID, sessionID: UUID) async {
         guard !toolCalls.isEmpty else { return }
-        var messages = messagesSnapshot(for: sessionID)
+        let messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
         var existingCalls = message.toolCalls ?? []
@@ -464,7 +487,10 @@ extension ChatService {
 
         guard didChange else { return }
         message.toolCalls = existingCalls
-        messages[messageIndex] = message
-        persistAndPublishMessages(messages, for: sessionID)
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存工具调用失败：\(error.localizedDescription)")
+        }
     }
 }

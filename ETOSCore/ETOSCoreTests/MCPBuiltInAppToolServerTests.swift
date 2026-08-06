@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOSCoreTests
 //
-// 验证原拓展工具已按分类迁移为应用内建 MCP Server。
+// 验证拓展工具与会话协作工具按分类注册为应用内建 MCP Server。
 // ============================================================================
 
 import Foundation
@@ -12,6 +12,20 @@ import Testing
 
 @Suite("内建 MCP 拓展工具服务器测试")
 struct MCPBuiltInAppToolServerTests {
+    @Test("会话协作分类通过 MCP 暴露完整工具目录")
+    func testConversationTransportToolCatalog() async throws {
+        let transport = MCPBuiltInAppToolTransport(category: .conversation)
+        let client = MCPClient(transport: transport)
+
+        let info = try await client.initialize(clientInfo: .init(name: "Harness", version: "0.1"))
+        #expect(info.name == "ETOS Built-in App Tools - conversation")
+
+        let tools = try await client.listTools()
+        #expect(Set(tools.map(\.toolId)) == Set(ConversationToolName.allCases.map(\.rawValue)))
+
+        await client.disconnect()
+    }
+
     @Test("交互分类 Transport 可发现并调用回显工具")
     func testBuiltInAppToolTransportToolFlow() async throws {
         let transport = MCPBuiltInAppToolTransport(category: .interaction)
@@ -100,6 +114,35 @@ struct MCPBuiltInAppToolServerTests {
         #expect(interactionServer?.disabledToolIds.contains(AppToolKind.fillUserInput.toolName) == true)
         #expect(interactionServer?.disabledToolIds.contains(AppToolKind.submitFeedbackTicket.toolName) == true)
         #expect(interactionServer?.toolApprovalPolicies[AppToolKind.echoText.toolName] == .alwaysAllow)
+
+        let conversationServer = appToolServers.first {
+            $0.id == MCPBuiltInAppToolServer.serverID(for: .conversation)
+        }
+        #expect(conversationServer?.transport == .builtInAppTool(category: .conversation))
+        #expect(conversationServer?.isSelectedForChat == true)
+        #expect(conversationServer?.disabledToolIds.isEmpty == true)
+        #expect(
+            Set(conversationServer?.toolApprovalPolicies.keys.map { $0 } ?? [])
+                == Set(ConversationToolName.allCases.map(\.rawValue))
+        )
+        #expect(conversationServer?.toolApprovalPolicies.values.allSatisfy { $0 == .alwaysAllow } == true)
+    }
+
+    @MainActor
+    @Test("准备内建会话服务器时保留用户的单工具设置")
+    func testPrepareConversationServerPreservesPerToolSettings() {
+        var storedServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .conversation)
+        let modelListTool = ConversationToolName.listAvailableModels.rawValue
+        let createTool = ConversationToolName.createConversation.rawValue
+        storedServer.setToolEnabled(modelListTool, isEnabled: false)
+        storedServer.setApprovalPolicy(.askEveryTime, for: createTool)
+
+        let result = MCPBuiltInAppToolServer.prepareServersForManager([storedServer])
+        let preparedServer = result.servers.first { $0.id == storedServer.id }
+
+        #expect(preparedServer?.disabledToolIds.contains(modelListTool) == true)
+        #expect(preparedServer?.approvalPolicy(for: createTool) == .askEveryTime)
+        #expect(result.serversToPersist.contains(where: { $0.id == storedServer.id }) == false)
     }
 
     @MainActor

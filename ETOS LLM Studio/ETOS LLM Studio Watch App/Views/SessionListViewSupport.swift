@@ -414,6 +414,7 @@ private struct WatchSessionSearchResultRowContent: View {
 struct SessionRowView: View {
     let session: ChatSession
     let isRunning: Bool
+    let runtimeState: ConversationRuntimeSessionState?
     @Binding var currentSession: ChatSession?
     @Binding var folders: [SessionFolder]
     let tags: [SessionTag]
@@ -425,6 +426,7 @@ struct SessionRowView: View {
     @Binding var showDeleteSessionConfirm: Bool
 
     let onSessionSelected: (ChatSession, Int?) -> Void
+    let openSessionAction: (UUID) -> Void
     let deleteLastMessageAction: (ChatSession) -> Void
     let sendSessionToCompanionAction: (ChatSession) -> Void
     let moveSessionToFolderAction: (ChatSession, UUID?) -> Void
@@ -443,14 +445,27 @@ struct SessionRowView: View {
                         .foregroundColor(.primary)
                         .allowsHitTesting(false)
                     WatchSessionTagInlineList(tags: sessionTags)
+                    if let runtimeSummary {
+                        Text(runtimeSummary)
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()
 
-                if isRunning {
+                if isRunning || runtimeState?.runStatus == .running || runtimeState?.runStatus == .waitingTool {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 7, height: 7)
+                } else if runtimeState?.runStatus == .queued
+                            || runtimeState?.runStatus == .waitingConversation
+                            || runtimeState?.runStatus == .waitingUser
+                            || runtimeState?.runStatus == .pausedByBudget {
+                    Image(systemName: runtimeState?.runStatus == .queued ? "clock" : "pause.circle")
+                        .font(.caption)
+                        .foregroundStyle(runtimeState?.runStatus == .pausedByBudget ? Color.orange : Color.secondary)
                 }
 
                 if currentSession?.id == session.id {
@@ -485,6 +500,35 @@ struct SessionRowView: View {
         }
     }
 
+    private var runtimeSummary: String? {
+        guard let runtimeState else { return nil }
+        var parts: [String] = []
+        if let origin = runtimeState.origin {
+            parts.append(String(
+                format: NSLocalizedString("由“%@”创建", comment: "Conversation origin summary"),
+                origin.parentSessionNameSnapshot
+            ))
+        }
+        if let status = runtimeState.runStatus, let label = statusLabel(status) {
+            parts.append(label)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func statusLabel(_ status: ConversationRunStatus) -> String? {
+        switch status {
+        case .queued: return NSLocalizedString("排队中", comment: "Conversation run queued")
+        case .running, .waitingTool: return NSLocalizedString("生成中", comment: "Conversation run running")
+        case .waitingConversation: return NSLocalizedString("等待会话", comment: "Conversation run waiting for conversation")
+        case .waitingUser: return NSLocalizedString("等待用户", comment: "Conversation run waiting for user")
+        case .pausedByBudget: return NSLocalizedString("已暂停", comment: "Conversation run paused")
+        case .failed: return NSLocalizedString("失败", comment: "Conversation run failed")
+        case .cancelled: return NSLocalizedString("已停止", comment: "Conversation run cancelled")
+        case .interrupted: return NSLocalizedString("已中断", comment: "Conversation run interrupted")
+        case .completed: return nil
+        }
+    }
+
     private var actionsView: some View {
         SessionActionsView(
             session: session,
@@ -495,6 +539,8 @@ struct SessionRowView: View {
             showDeleteSessionConfirm: $showDeleteSessionConfirm,
             folders: $folders,
             tags: tags,
+            runtimeState: runtimeState,
+            onOpenSession: openSessionAction,
             onDeleteLastMessage: { deleteLastMessageAction(session) },
             onSendSessionToCompanion: { sendSessionToCompanionAction(session) },
             onMoveSessionToFolder: { targetFolderID in

@@ -127,6 +127,15 @@ struct WatchMessageRowView: View {
             isSelected: isSelected,
             onToggleSelection: onToggleSelection,
             onOpenMore: hasActivePermission ? nil : onOpenMore,
+            sourceConversationName: message.sourceSessionID.flatMap { sourceSessionID in
+                viewModel.chatSessions.first(where: { $0.id == sourceSessionID })?.name
+            },
+            onOpenSourceConversation: message.sourceSessionID.map { sourceSessionID in
+                { _ = viewModel.setCurrentSessionIfExists(sessionID: sourceSessionID) }
+            },
+            onOpenConversation: { sessionID in
+                _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
+            },
             providers: viewModel.providers
         )
         .id(state.id)

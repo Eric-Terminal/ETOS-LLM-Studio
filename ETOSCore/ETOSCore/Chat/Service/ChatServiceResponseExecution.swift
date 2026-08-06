@@ -126,15 +126,20 @@ extension ChatService {
         _ messages: [ChatMessage],
         loadingMessageID: UUID,
         sessionID: UUID
-    ) -> [ChatMessage] {
-        let merged = messagesByMergingStreamingUpdate(
-            messages,
-            loadingMessageID: loadingMessageID,
-            sessionID: sessionID
-        )
-        storeRuntimeMessagesSnapshot(merged, for: sessionID)
-        persistAndPublishMessages(merged, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
-        return merged
+    ) async -> [ChatMessage] {
+        guard let updatedMessage = messages.first(where: { $0.id == loadingMessageID }) else {
+            return messagesSnapshot(for: sessionID)
+        }
+        do {
+            _ = try await upsertConversationMessage(
+                updatedMessage,
+                to: sessionID,
+                keepingSpeedSamplesFor: loadingMessageID
+            )
+        } catch {
+            logger.error("原子保存流式回复失败：\(error.localizedDescription)")
+        }
+        return messagesSnapshot(for: sessionID)
     }
 
     func persistMessages(_ messages: [ChatMessage], for sessionID: UUID) {

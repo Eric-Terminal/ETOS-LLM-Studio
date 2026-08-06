@@ -52,6 +52,9 @@ struct ChatBubble: View {
     let isSelected: Bool
     let onToggleSelection: () -> Void
     let onOpenMore: ((ChatMessage) -> Void)?
+    let sourceConversationName: String?
+    let onOpenSourceConversation: (() -> Void)?
+    let onOpenConversation: ((UUID) -> Void)?
     let reportsSendFlightTarget: Bool
     let providers: [Provider]
     
@@ -101,6 +104,9 @@ struct ChatBubble: View {
         isSelected: Bool = false,
         onToggleSelection: @escaping () -> Void = {},
         onOpenMore: ((ChatMessage) -> Void)? = nil,
+        sourceConversationName: String? = nil,
+        onOpenSourceConversation: (() -> Void)? = nil,
+        onOpenConversation: ((UUID) -> Void)? = nil,
         reportsSendFlightTarget: Bool = false,
         providers: [Provider] = []
     ) {
@@ -139,6 +145,9 @@ struct ChatBubble: View {
         self.isSelected = isSelected
         self.onToggleSelection = onToggleSelection
         self.onOpenMore = onOpenMore
+        self.sourceConversationName = sourceConversationName
+        self.onOpenSourceConversation = onOpenSourceConversation
+        self.onOpenConversation = onOpenConversation
         self.reportsSendFlightTarget = reportsSendFlightTarget
         self.providers = providers
     }
@@ -162,6 +171,8 @@ struct ChatBubble: View {
             }
             
             VStack(alignment: isOutgoing ? .trailing : .leading, spacing: 4) {
+                sourceConversationLabel
+
                 // 图片附件 - 作为气泡显示
                 if !shouldPlaceImagesAfterText,
                    let imageFileNames = message.imageFileNames,
@@ -266,6 +277,29 @@ struct ChatBubble: View {
         }
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var sourceConversationLabel: some View {
+        if message.authorKind == .conversation,
+           let sourceSessionID = message.sourceSessionID {
+            let sourceName = sourceConversationName ?? String(sourceSessionID.uuidString.prefix(8))
+            Button {
+                onOpenSourceConversation?()
+            } label: {
+                Label(
+                    String(
+                        format: NSLocalizedString("来自“%@”", comment: "Cross-conversation message source"),
+                        sourceName
+                    ),
+                    systemImage: "bubble.left.and.bubble.right"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(onOpenSourceConversation == nil)
         }
     }
 

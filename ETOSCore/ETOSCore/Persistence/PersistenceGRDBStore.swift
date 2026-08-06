@@ -488,6 +488,47 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v10_conversation_runtime") { db in
+            let sessionColumns = try Row.fetchAll(db, sql: "PRAGMA table_info(sessions)")
+            let sessionColumnNames = Set(sessionColumns.compactMap { row -> String? in row["name"] })
+            if !sessionColumnNames.contains("system_prompt") {
+                try db.execute(sql: "ALTER TABLE sessions ADD COLUMN system_prompt TEXT")
+            }
+            if !sessionColumnNames.contains("preferred_model_identifier") {
+                try db.execute(sql: "ALTER TABLE sessions ADD COLUMN preferred_model_identifier TEXT")
+            }
+
+            let messageColumns = try Row.fetchAll(db, sql: "PRAGMA table_info(messages)")
+            let messageColumnNames = Set(messageColumns.compactMap { row -> String? in row["name"] })
+            let addedAuthorKind = !messageColumnNames.contains("author_kind")
+            if addedAuthorKind {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN author_kind TEXT NOT NULL DEFAULT 'user'")
+            }
+            if !messageColumnNames.contains("source_session_id") {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN source_session_id TEXT")
+            }
+            if !messageColumnNames.contains("source_message_id") {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN source_message_id TEXT")
+            }
+            if !messageColumnNames.contains("conversation_event_id") {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN conversation_event_id TEXT")
+            }
+            if addedAuthorKind {
+                try db.execute(sql: """
+                    UPDATE messages
+                    SET author_kind = CASE role
+                        WHEN 'assistant' THEN 'assistant'
+                        WHEN 'error' THEN 'assistant'
+                        WHEN 'tool' THEN 'tool'
+                        WHEN 'system' THEN 'system'
+                        ELSE 'user'
+                    END
+                """)
+            }
+
+            try Self.createConversationRuntimeTables(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -496,6 +537,13 @@ final class PersistenceGRDBStore {
         try dbPool.write { db in
             try createCoreTablesIfMissing(db)
             try Self.createConversationContinuationContextTable(db)
+            try Self.createConversationRuntimeTables(db)
+            try ensureColumn(
+                db,
+                table: "conversation_waits",
+                column: "tool_call_id",
+                definition: "tool_call_id TEXT NOT NULL DEFAULT ''"
+            )
             try requireColumns(db, table: "sessions", columns: ["id", "name"])
             try requireColumns(db, table: "messages", columns: ["id", "session_id", "role", "content"])
             try requireColumns(db, table: "request_logs", columns: ["id", "request_id", "provider_name", "model_id"])
@@ -515,6 +563,8 @@ final class PersistenceGRDBStore {
 
             try ensureColumn(db, table: "sessions", column: "topic_prompt", definition: "topic_prompt TEXT")
             try ensureColumn(db, table: "sessions", column: "enhanced_prompt", definition: "enhanced_prompt TEXT")
+            try ensureColumn(db, table: "sessions", column: "system_prompt", definition: "system_prompt TEXT")
+            try ensureColumn(db, table: "sessions", column: "preferred_model_identifier", definition: "preferred_model_identifier TEXT")
             try ensureColumn(db, table: "sessions", column: "folder_id", definition: "folder_id TEXT")
             try ensureColumn(db, table: "sessions", column: "lorebook_ids_json", definition: "lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D'")
             try ensureColumn(db, table: "sessions", column: "worldbook_context_isolation_enabled", definition: "worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0")
@@ -537,6 +587,7 @@ final class PersistenceGRDBStore {
                 definition: "continuation_session_link_hidden INTEGER NOT NULL DEFAULT 0"
             )
 
+            let messageColumnsBeforeRepair = try columnNames(db, table: "messages")
             try ensureColumn(db, table: "messages", column: "requested_at", definition: "requested_at REAL")
             try ensureColumn(db, table: "messages", column: "content_versions_json", definition: "content_versions_json BLOB NOT NULL DEFAULT X'5B5D'")
             try ensureColumn(db, table: "messages", column: "current_version_index", definition: "current_version_index INTEGER NOT NULL DEFAULT 0")
@@ -556,6 +607,22 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "response_attempt_id", definition: "response_attempt_id TEXT")
             try ensureColumn(db, table: "messages", column: "response_attempt_index", definition: "response_attempt_index INTEGER")
             try ensureColumn(db, table: "messages", column: "selected_response_attempt_id", definition: "selected_response_attempt_id TEXT")
+            try ensureColumn(db, table: "messages", column: "author_kind", definition: "author_kind TEXT NOT NULL DEFAULT 'user'")
+            try ensureColumn(db, table: "messages", column: "source_session_id", definition: "source_session_id TEXT")
+            try ensureColumn(db, table: "messages", column: "source_message_id", definition: "source_message_id TEXT")
+            try ensureColumn(db, table: "messages", column: "conversation_event_id", definition: "conversation_event_id TEXT")
+            if !messageColumnsBeforeRepair.contains("author_kind") {
+                try db.execute(sql: """
+                    UPDATE messages
+                    SET author_kind = CASE role
+                        WHEN 'assistant' THEN 'assistant'
+                        WHEN 'error' THEN 'assistant'
+                        WHEN 'tool' THEN 'tool'
+                        WHEN 'system' THEN 'system'
+                        ELSE 'user'
+                    END
+                """)
+            }
             try ensureColumn(db, table: "messages", column: "position", definition: "position INTEGER NOT NULL DEFAULT 0")
             try ensureColumn(db, table: "messages", column: "created_at", definition: "created_at REAL NOT NULL DEFAULT 0")
 
@@ -594,8 +661,10 @@ final class PersistenceGRDBStore {
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
+                system_prompt TEXT,
                 topic_prompt TEXT,
                 enhanced_prompt TEXT,
+                preferred_model_identifier TEXT,
                 folder_id TEXT,
                 lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D',
                 worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0,
@@ -632,6 +701,10 @@ final class PersistenceGRDBStore {
                 response_attempt_id TEXT,
                 response_attempt_index INTEGER,
                 selected_response_attempt_id TEXT,
+                author_kind TEXT NOT NULL DEFAULT 'user',
+                source_session_id TEXT,
+                source_message_id TEXT,
+                conversation_event_id TEXT,
                 position INTEGER NOT NULL DEFAULT 0,
                 created_at REAL NOT NULL DEFAULT 0
             )

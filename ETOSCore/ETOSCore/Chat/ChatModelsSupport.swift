@@ -570,8 +570,12 @@ public struct RequestLogSummary: Codable, Hashable, Sendable {
 public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
     public var name: String
+    /// 仅对当前会话生效的系统提示词，位于全局用户系统提示词之后。
+    public var systemPrompt: String?
     public var topicPrompt: String?
     public var enhancedPrompt: String?
+    /// 会话首选聊天模型；nil 表示继续跟随当前全局模型。
+    public var preferredModelIdentifier: String?
     /// 会话所属文件夹，nil 表示未分类。
     public var folderID: UUID?
     public var lorebookIDs: [UUID]
@@ -594,8 +598,10 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public init(
         id: UUID,
         name: String,
+        systemPrompt: String? = nil,
         topicPrompt: String? = nil,
         enhancedPrompt: String? = nil,
+        preferredModelIdentifier: String? = nil,
         worldbookIDs: [UUID] = [],
         lorebookIDs: [UUID]? = nil,
         tagIDs: [UUID] = [],
@@ -605,8 +611,10 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.systemPrompt = systemPrompt
         self.topicPrompt = topicPrompt
         self.enhancedPrompt = enhancedPrompt
+        self.preferredModelIdentifier = preferredModelIdentifier
         self.folderID = folderID
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
         self.tagIDs = tagIDs
@@ -617,8 +625,10 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case name
+        case systemPrompt
         case topicPrompt
         case enhancedPrompt
+        case preferredModelIdentifier
         case folderID
         case worldbookIDs
         case lorebookIDs
@@ -632,8 +642,10 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.name = try container.decode(String.self, forKey: .name)
+        self.systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt)
         self.topicPrompt = try container.decodeIfPresent(String.self, forKey: .topicPrompt)
         self.enhancedPrompt = try container.decodeIfPresent(String.self, forKey: .enhancedPrompt)
+        self.preferredModelIdentifier = try container.decodeIfPresent(String.self, forKey: .preferredModelIdentifier)
         self.folderID = try container.decodeIfPresent(UUID.self, forKey: .folderID)
         if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIDs) {
             self.lorebookIDs = ids
@@ -659,8 +671,10 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(systemPrompt, forKey: .systemPrompt)
         try container.encodeIfPresent(topicPrompt, forKey: .topicPrompt)
         try container.encodeIfPresent(enhancedPrompt, forKey: .enhancedPrompt)
+        try container.encodeIfPresent(preferredModelIdentifier, forKey: .preferredModelIdentifier)
         try container.encodeIfPresent(folderID, forKey: .folderID)
         if !lorebookIDs.isEmpty {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)

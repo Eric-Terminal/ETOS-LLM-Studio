@@ -86,6 +86,10 @@ struct PersistedMessageRecord: Equatable {
     let responseAttemptID: String?
     let responseAttemptIndex: Int?
     let selectedResponseAttemptID: String?
+    let authorKind: String
+    let sourceSessionID: String?
+    let sourceMessageID: String?
+    let conversationEventID: String?
     let position: Int
     let createdAt: Double
 }

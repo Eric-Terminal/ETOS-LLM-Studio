@@ -114,6 +114,7 @@ final class ChatViewModel: ObservableObject {
     @Published var latestAssistantMessageID: UUID?
     @Published var toolCallResultIDs: Set<String> = []
     @Published var runningSessionIDs: Set<UUID> = []
+    @Published var conversationRuntimeStates: [UUID: ConversationRuntimeSessionState] = [:]
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     var visualMessagePrepareTasks: [UUID: Task<Void, Never>] = [:]
@@ -450,7 +451,7 @@ final class ChatViewModel: ObservableObject {
         let hasFiles = !pendingFileAttachments.isEmpty
         
         // 必须有文字或附件才能发送
-        guard (hasText || hasAudio || hasImages || hasFiles), !isSendingMessage, !isSendDelayPending else { return nil }
+        guard (hasText || hasAudio || hasImages || hasFiles), !isSendDelayPending else { return nil }
         
         let audioToSend = pendingAudioAttachment
         let imagesToSend = pendingImageAttachments
@@ -578,7 +579,7 @@ final class ChatViewModel: ObservableObject {
     var canSendMessage: Bool {
         let hasText = !userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasAttachments = pendingAudioAttachment != nil || !pendingImageAttachments.isEmpty || !pendingFileAttachments.isEmpty
-        return (hasText || hasAttachments) && !isSendingMessage && !isSendDelayPending
+        return (hasText || hasAttachments) && !isSendDelayPending
     }
 
     var canQuickRetryLatestMessage: Bool {

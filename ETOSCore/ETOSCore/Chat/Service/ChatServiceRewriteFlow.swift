@@ -202,7 +202,7 @@ extension ChatService {
             )
             rewrittenMessage.modelReference = modelReference ?? fallbackModelReference
             rewrittenMessage.costEstimate = modelReference == nil ? fallbackCostEstimate : nil
-            self.applyRewriteResult(
+            await self.applyRewriteResult(
                 rewrittenMessage,
                 loadingMessageID: loadingMessageID,
                 sessionID: resolvedSessionID
@@ -223,7 +223,7 @@ extension ChatService {
             if isCancellationError(error) {
                 throw CancellationError()
             }
-            removeMessage(withID: loadingMessageID, in: resolvedSessionID)
+            await removeMessage(withID: loadingMessageID, in: resolvedSessionID)
             emitSessionRequestStatus(.error, sessionID: resolvedSessionID)
             throw error
         }
@@ -389,33 +389,37 @@ extension ChatService {
         _ rewrittenMessage: ChatMessage,
         loadingMessageID: UUID,
         sessionID: UUID
-    ) {
+    ) async {
         let messageRegexRules = MessageRegexRuleStore.currentRules()
         let rewrittenMessage = messageRegexRules.isEmpty
             ? rewrittenMessage
             : applyMessageRegexRules(to: rewrittenMessage, rules: messageRegexRules, mode: .persist)
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
-        messages[index] = ChatMessage(
+        guard let existingMessage = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else { return }
+        let updatedMessage = ChatMessage(
             id: loadingMessageID,
             role: .assistant,
             content: rewrittenMessage.content,
-            requestedAt: messages[index].requestedAt ?? rewrittenMessage.requestedAt,
+            requestedAt: existingMessage.requestedAt ?? rewrittenMessage.requestedAt,
             reasoningContent: nil,
             reasoningProviderSpecificFields: nil,
             toolCalls: nil,
             toolCallsPlacement: nil,
-            tokenUsage: rewrittenMessage.tokenUsage ?? messages[index].tokenUsage,
-            modelReference: rewrittenMessage.modelReference ?? messages[index].modelReference,
-            costEstimate: rewrittenMessage.costEstimate ?? messages[index].costEstimate,
-            sentSystemPromptSnapshot: messages[index].sentSystemPromptSnapshot,
-            responseMetrics: rewrittenMessage.responseMetrics ?? messages[index].responseMetrics,
+            tokenUsage: rewrittenMessage.tokenUsage ?? existingMessage.tokenUsage,
+            modelReference: rewrittenMessage.modelReference ?? existingMessage.modelReference,
+            costEstimate: rewrittenMessage.costEstimate ?? existingMessage.costEstimate,
+            sentSystemPromptSnapshot: existingMessage.sentSystemPromptSnapshot,
+            responseMetrics: rewrittenMessage.responseMetrics ?? existingMessage.responseMetrics,
             responseGroupID: rewrittenMessage.responseGroupID,
             responseAttemptID: rewrittenMessage.responseAttemptID,
             responseAttemptIndex: rewrittenMessage.responseAttemptIndex,
             selectedResponseAttemptID: rewrittenMessage.selectedResponseAttemptID
         )
-        persistAndPublishMessages(messages, for: sessionID)
+        do {
+            _ = try await upsertConversationMessage(updatedMessage, to: sessionID)
+        } catch {
+            logger.error("原子保存消息重写结果失败：\(error.localizedDescription)")
+            return
+        }
         logger.info("已完成消息重写并保存为新版本: \(loadingMessageID.uuidString)")
     }
 }

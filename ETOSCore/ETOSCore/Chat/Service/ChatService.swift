@@ -94,6 +94,7 @@ public class ChatService {
     public let requestStatusSubject = PassthroughSubject<RequestStatus, Never>()
     public let imageGenerationStatusSubject = PassthroughSubject<ImageGenerationStatus, Never>()
     public let runningSessionIDsSubject = CurrentValueSubject<Set<UUID>, Never>([])
+    public let conversationRuntimeStatesSubject = CurrentValueSubject<[UUID: ConversationRuntimeSessionState], Never>([:])
     public let sessionRequestStatusSubject = PassthroughSubject<SessionRequestStatusEvent, Never>()
     
     public enum RequestStatus {
@@ -223,6 +224,8 @@ public class ChatService {
         var task: Task<Void, Error>?
         var loadingMessageID: UUID?
         var imageGenerationContext: ImageGenerationContext?
+        var conversationRunID: UUID? = nil
+        var rootConversationRunID: UUID? = nil
     }
 
     struct ImageOCRPreprocessingResult {
@@ -322,15 +325,158 @@ public class ChatService {
         runtimeMessagesLock.unlock()
     }
 
+    @discardableResult
+    func appendConversationMessage(
+        _ message: ChatMessage,
+        to sessionID: UUID
+    ) async throws -> ChatMessage {
+        try await upsertConversationMessage(message, to: sessionID)
+    }
+
+    @discardableResult
+    func upsertConversationMessage(
+        _ message: ChatMessage,
+        to sessionID: UUID,
+        afterMessageID: UUID? = nil,
+        keepingSpeedSamplesFor preferredMessageID: UUID? = nil
+    ) async throws -> ChatMessage {
+        let cachedMessages = runtimeMessagesLock.withLock {
+            runtimeMessagesBySessionID[sessionID]
+        }
+
+        let writeResult = try await Task.detached(priority: .userInitiated) {
+            let storedMessage = try Persistence.upsertConversationMessage(
+                message,
+                to: sessionID,
+                afterMessageID: afterMessageID
+            )
+            let persistedMessages = cachedMessages == nil ? Persistence.loadMessages(for: sessionID) : nil
+            return (storedMessage, persistedMessages)
+        }.value
+
+        let storedMessage = writeResult.0
+        let messages = runtimeMessagesLock.withLock {
+            var messages = runtimeMessagesBySessionID[sessionID]
+                ?? writeResult.1
+                ?? cachedMessages
+                ?? []
+            if let index = messages.firstIndex(where: { $0.id == storedMessage.id }) {
+                messages[index] = storedMessage
+            } else if let afterMessageID,
+                      let anchorIndex = messages.firstIndex(where: { $0.id == afterMessageID }) {
+                messages.insert(storedMessage, at: messages.index(after: anchorIndex))
+            } else {
+                messages.append(storedMessage)
+            }
+            runtimeMessagesBySessionID[sessionID] = messages
+            return messages
+        }
+        publishMessagesIfCurrentSession(
+            messages,
+            for: sessionID,
+            keepingSpeedSamplesFor: preferredMessageID
+        )
+        promoteSessionToTopIfNeeded(sessionID: sessionID)
+        return storedMessage
+    }
+
+    @discardableResult
+    func deleteConversationMessage(
+        id messageID: UUID,
+        from sessionID: UUID
+    ) async throws -> Bool {
+        let cachedMessages = runtimeMessagesSnapshot(for: sessionID)
+        let writeResult = try await Task.detached(priority: .userInitiated) {
+            let deleted = try Persistence.deleteConversationMessage(id: messageID, from: sessionID)
+            let persistedMessages = cachedMessages == nil ? Persistence.loadMessages(for: sessionID) : nil
+            return (deleted, persistedMessages)
+        }.value
+        guard writeResult.0 else { return false }
+
+        let messages = runtimeMessagesLock.withLock {
+            var messages = runtimeMessagesBySessionID[sessionID]
+                ?? writeResult.1
+                ?? cachedMessages
+                ?? []
+            messages.removeAll { $0.id == messageID }
+            runtimeMessagesBySessionID[sessionID] = messages
+            return messages
+        }
+        publishMessagesIfCurrentSession(messages, for: sessionID)
+        return true
+    }
+
+    func insertConversationResponseAttemptMessagesAtomically(
+        _ additions: [ChatMessage],
+        afterAttemptOf referenceMessageID: UUID,
+        in sessionID: UUID
+    ) async throws -> [ChatMessage] {
+        guard !additions.isEmpty else { return messagesSnapshot(for: sessionID) }
+        let currentMessages = messagesSnapshot(for: sessionID)
+        let referenceAttemptID = currentMessages.first(where: { $0.id == referenceMessageID })?.responseAttemptID
+        var anchorMessageID = referenceAttemptID.flatMap { attemptID in
+            currentMessages.last(where: { $0.responseAttemptID == attemptID })?.id
+        } ?? referenceMessageID
+
+        for message in additions {
+            _ = try await upsertConversationMessage(
+                message,
+                to: sessionID,
+                afterMessageID: anchorMessageID
+            )
+            anchorMessageID = message.id
+        }
+        return messagesSnapshot(for: sessionID)
+    }
+
+    func consumePendingUserSteeringEvents(
+        in sessionID: UUID,
+        includedMessageIDs: Set<UUID>
+    ) async {
+        await Task.detached(priority: .utility) {
+            let events = Persistence.loadPendingConversationEvents(destinationSessionID: sessionID).filter { event in
+                event.kind == .incomingMessage
+                    && event.deliveryPolicy == .respondWhenIdle
+                    && event.sourceSessionID == nil
+                    && event.sourceRunID == nil
+                    && event.messageID.map(includedMessageIDs.contains) == true
+            }
+            for event in events {
+                if let steeringRun = Persistence.loadConversationRun(triggerEventID: event.id),
+                   !steeringRun.status.isTerminal {
+                    _ = Persistence.updateConversationRunStatus(id: steeringRun.id, status: .cancelled)
+                }
+                _ = Persistence.updateConversationEventState(id: event.id, state: .processed)
+            }
+        }.value
+    }
+
     func loadingMessageID(for sessionID: UUID) -> UUID? {
         withRequestStateLock {
             requestContextBySessionID[sessionID]?.loadingMessageID
         }
     }
 
+    func conversationRunIDs(for sessionID: UUID) -> (runID: UUID, rootRunID: UUID)? {
+        withRequestStateLock {
+            guard let context = requestContextBySessionID[sessionID],
+                  let runID = context.conversationRunID,
+                  let rootRunID = context.rootConversationRunID else {
+                return nil
+            }
+            return (runID, rootRunID)
+        }
+    }
+
     func hasActiveRequestContext(for sessionID: UUID) -> Bool {
         withRequestStateLock {
             requestContextBySessionID[sessionID] != nil
+        }
+    }
+
+    func activeRequestSessionIDs() -> Set<UUID> {
+        withRequestStateLock {
+            Set(requestContextBySessionID.keys)
         }
     }
 
@@ -366,6 +512,18 @@ public class ChatService {
         setSessionRunning(sessionID, isRunning: true)
     }
 
+    func reserveRequestContextIfIdle(_ context: RequestExecutionContext, for sessionID: UUID) -> Bool {
+        let reserved = withRequestStateLock { () -> Bool in
+            guard requestContextBySessionID[sessionID] == nil else { return false }
+            requestContextBySessionID[sessionID] = context
+            return true
+        }
+        if reserved {
+            setSessionRunning(sessionID, isRunning: true)
+        }
+        return reserved
+    }
+
     func updateRequestTask(_ task: Task<Void, Error>, for sessionID: UUID, token: UUID) {
         withRequestStateLock {
             guard var context = requestContextBySessionID[sessionID], context.token == token else { return }
@@ -375,10 +533,18 @@ public class ChatService {
     }
 
     func updateRequestLoadingMessageID(_ loadingMessageID: UUID, for sessionID: UUID) {
-        withRequestStateLock {
-            guard var context = requestContextBySessionID[sessionID] else { return }
+        let runID = withRequestStateLock { () -> UUID? in
+            guard var context = requestContextBySessionID[sessionID] else { return nil }
             context.loadingMessageID = loadingMessageID
             requestContextBySessionID[sessionID] = context
+            return context.conversationRunID
+        }
+        if let runID {
+            _ = Persistence.updateConversationRunStatus(
+                id: runID,
+                status: .running,
+                loadingMessageID: loadingMessageID
+            )
         }
     }
 
@@ -392,6 +558,9 @@ public class ChatService {
         setSessionRunning(sessionID, isRunning: false)
         Persistence.flushPendingMessageWritesForSyncSnapshot()
         clearRuntimeMessagesSnapshot(for: sessionID)
+        Task {
+            await ConversationRunCoordinator.shared.signal()
+        }
     }
 
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
@@ -409,6 +578,24 @@ public class ChatService {
     }
 
     func emitSessionRequestStatus(_ status: SessionRequestStatus, sessionID: UUID) {
+        if let runIDs = conversationRunIDs(for: sessionID) {
+            switch status {
+            case .started:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .running)
+            case .finished:
+                let persistedStatus = Persistence.loadConversationRun(id: runIDs.runID)?.status
+                if persistedStatus != .waitingConversation,
+                   persistedStatus != .waitingUser,
+                   persistedStatus != .pausedByBudget {
+                    _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .completed)
+                }
+            case .error:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .failed)
+            case .cancelled:
+                _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .cancelled)
+            }
+        }
+
         switch status {
         case .started:
             break
@@ -620,6 +807,11 @@ public class ChatService {
         logger.info("  - 初始选中模型为: \(initialModel?.model.displayName ?? "无")")
         if !Self.isRunningUnitTests {
             logger.info("  - 已切换为启动后异步加载持久化会话状态。")
+            Task { [weak self] in
+                guard let self else { return }
+                await self.waitForInitialPersistenceStateIfNeeded(priority: .utility)
+                await ConversationRunCoordinator.shared.start(chatService: self)
+            }
         }
         logger.info("  - 初始化完成。")
     }
@@ -789,11 +981,11 @@ public class ChatService {
         }
 
         if let loadingID = activeContext.loadingMessageID {
-            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
-            if restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
+            await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
+            if await restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
                 logger.info("已恢复被取消重试的原始 assistant 消息: \(loadingID.uuidString)")
             } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
-                removeMessage(withID: loadingID, in: sessionID)
+                await removeMessage(withID: loadingID, in: sessionID)
             }
             if retryTargetMessageID == loadingID {
                 retryTargetMessageID = nil

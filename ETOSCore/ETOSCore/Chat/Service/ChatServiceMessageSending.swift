@@ -30,12 +30,27 @@ extension ChatService {
         audioAttachment: AudioAttachment? = nil,
         imageAttachments: [ImageAttachment] = [],
         fileAttachments: [FileAttachment] = [],
-        isRetry: Bool = false
+        isRetry: Bool = false,
+        targetSessionID: UUID? = nil,
+        messageAuthorKind: ConversationMessageAuthorKind = .user,
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil,
+        conversationEventID: UUID? = nil,
+        conversationRun: ConversationRun? = nil,
+        existingInputMessageID: UUID? = nil
     ) async {
         await waitForInitialPersistenceStateIfNeeded()
 
-        guard var currentSession = currentSessionSubject.value else {
-            addErrorMessage(NSLocalizedString("错误: 没有当前会话。", comment: "No current session error"))
+        let resolvedTargetSessionID = targetSessionID ?? currentSessionSubject.value?.id
+        let currentSessionSnapshot = currentSessionSubject.value
+        guard let resolvedTargetSessionID,
+              var currentSession = currentSessionSnapshot?.id == resolvedTargetSessionID
+                ? currentSessionSnapshot
+                : chatSessionsSubject.value.first(where: { $0.id == resolvedTargetSessionID }) else {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有目标会话。", comment: "No target session error"),
+                sessionID: resolvedTargetSessionID
+            )
             requestStatusSubject.send(.error)
             return
         }
@@ -45,7 +60,26 @@ extension ChatService {
         }
 
         // 只有图像类型模型进入独立生图通道，聊天模型的图片输出由对话响应处理。
-        if let selectedModel = selectedModelSubject.value,
+        // 已排队的 Run 必须使用入队时固化的模型；用户后来切换全局模型不能污染它。
+        let runConfiguredModelIdentifier = conversationRun?.requestConfiguration.modelIdentifier
+        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        }
+        if let conversationRun, runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
+            let reason = NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error")
+            addErrorMessage(reason, sessionID: currentSession.id)
+            _ = Persistence.updateConversationRunStatus(
+                id: conversationRun.id,
+                status: .failed,
+                errorMessage: reason
+            )
+            requestStatusSubject.send(.error)
+            return
+        }
+        let selectedModel = runConfiguredModel ?? currentSession.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        } ?? selectedModelSubject.value
+        if let selectedModel,
            shouldRouteMessageToImageGeneration(using: selectedModel) {
             if audioAttachment != nil {
                 let reason = NSLocalizedString("生图模式不支持语音附件。", comment: "Image mode does not support audio attachments")
@@ -143,7 +177,11 @@ extension ChatService {
                 audioFileName: nil,
                 fileFileNames: savedVideoFileNames.isEmpty
                     ? nil
-                    : savedVideoFileNames
+                    : savedVideoFileNames,
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
             )
             userMessages.append(textMessage)
             primaryUserMessage = textMessage
@@ -154,7 +192,11 @@ extension ChatService {
                 role: .user,
                 content: audioPlaceholder,
                 requestedAt: requestTimestamp,
-                audioFileName: savedAudioFileName
+                audioFileName: savedAudioFileName,
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
             ))
         }
 
@@ -163,7 +205,11 @@ extension ChatService {
                 role: .user,
                 content: imagePlaceholder,
                 requestedAt: requestTimestamp,
-                imageFileNames: [imageFileName]
+                imageFileNames: [imageFileName],
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
             ))
         }
 
@@ -172,7 +218,11 @@ extension ChatService {
                 role: .user,
                 content: videoPlaceholder,
                 requestedAt: requestTimestamp,
-                fileFileNames: savedVideoFileNames
+                fileFileNames: savedVideoFileNames,
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
             ))
         }
 
@@ -181,8 +231,27 @@ extension ChatService {
                 role: .user,
                 content: filePlaceholder,
                 requestedAt: requestTimestamp,
-                fileFileNames: [savedFile.fileName]
+                fileFileNames: [savedFile.fileName],
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
             ))
+        }
+
+        if let existingInputMessageID {
+            guard let existingMessage = messagesSnapshot(for: currentSession.id).first(where: {
+                $0.id == existingInputMessageID && $0.role == .user
+            }) else {
+                addErrorMessage(
+                    NSLocalizedString("错误: 未找到待处理的会话输入。", comment: "Missing queued conversation input"),
+                    sessionID: currentSession.id
+                )
+                requestStatusSubject.send(.error)
+                return
+            }
+            userMessages = [existingMessage]
+            primaryUserMessage = existingMessage
         }
 
         // 兜底：如果没有生成任何用户消息，直接报错返回
@@ -199,6 +268,81 @@ extension ChatService {
         if primaryUserMessage == nil {
             primaryUserMessage = userMessages.first
         }
+
+        if messageAuthorKind == .user,
+           let waitingRun = Persistence.loadLatestConversationRun(sessionID: currentSession.id),
+           waitingRun.status == .waitingConversation,
+           !hasActiveRequestContext(for: currentSession.id) {
+            for var wait in Persistence.loadConversationWaits(waitingRunID: waitingRun.id)
+                where wait.status == .pending {
+                wait.status = .cancelled
+                _ = Persistence.saveConversationWait(wait)
+            }
+            _ = Persistence.updateConversationRunStatus(id: waitingRun.id, status: .cancelled)
+        }
+
+        // 供应商请求已经发出时，用户输入先作为 steering 原子落库；协调器会在
+        // 当前请求结束的安全边界启动新 Run，绝不覆盖正在执行的请求上下文。
+        if existingInputMessageID == nil,
+           messageAuthorKind == .user,
+           hasActiveRequestContext(for: currentSession.id) {
+            let eventID = UUID()
+            var storedMessages: [ChatMessage] = []
+            for var message in userMessages {
+                message.conversationEventID = eventID
+                if let stored = try? await appendConversationMessage(message, to: currentSession.id) {
+                    storedMessages.append(stored)
+                }
+            }
+            guard let triggerMessage = storedMessages.last else {
+                addErrorMessage(
+                    NSLocalizedString("错误: 无法保存等待处理的用户消息。", comment: "Unable to persist steering input"),
+                    sessionID: currentSession.id
+                )
+                return
+            }
+            let steeringConfiguration = ConversationRunRequestConfiguration(
+                modelIdentifier: selectedModel?.id,
+                temperature: aiTemperature,
+                topP: aiTopP,
+                systemPrompt: systemPrompt,
+                maxChatHistory: maxChatHistory,
+                enableStreaming: enableStreaming,
+                enhancedPrompt: currentSession.enhancedPrompt ?? enhancedPrompt,
+                enableMemory: enableMemory,
+                enableMemoryWrite: enableMemoryWrite,
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                includeSystemTime: includeSystemTime,
+                systemTimeInjectionPosition: systemTimeInjectionPosition,
+                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics
+            )
+            let steeringRun = ConversationRun(
+                sessionID: currentSession.id,
+                triggerEventID: eventID,
+                status: .queued,
+                requestConfiguration: steeringConfiguration
+            )
+            _ = Persistence.saveConversationRun(steeringRun)
+            _ = Persistence.saveConversationEvent(
+                ConversationEvent(
+                    id: eventID,
+                    destinationSessionID: currentSession.id,
+                    messageID: triggerMessage.id,
+                    kind: .incomingMessage,
+                    deliveryPolicy: .respondWhenIdle,
+                    payloadJSON: encodeConversationToolResult(["source": "user_steering"])
+                )
+            )
+            publishParticipantActivityIfNeeded(
+                sessionID: currentSession.id,
+                messageID: triggerMessage.id
+            )
+            await ConversationRunCoordinator.shared.signal()
+            return
+        }
+
         let responseAttempt = ResponseAttemptMetadata(
             groupID: userMessages[userMessages.index(before: userMessages.endIndex)].id,
             attemptID: UUID(),
@@ -222,10 +366,39 @@ extension ChatService {
         ) // 内容为空的助手消息作为加载占位符
         var wasTemporarySession = false
 
-        var messages = messagesSnapshot(for: currentSession.id)
-        messages.append(contentsOf: userMessages)
-        messages.append(loadingMessage)
-        persistAndPublishMessages(messages, for: currentSession.id)
+        do {
+            if existingInputMessageID == nil {
+                for message in userMessages {
+                    _ = try await appendConversationMessage(message, to: currentSession.id)
+                }
+            }
+            _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
+        } catch {
+            addErrorMessage(
+                NSLocalizedString("错误: 无法保存会话消息。", comment: "Unable to persist conversation messages"),
+                sessionID: currentSession.id
+            )
+            requestStatusSubject.send(.error)
+            return
+        }
+        // 请求以原子追加完成后的数据库顺序为准；读取放到后台，避免陈旧内存缓存
+        // 裁掉此前由邮箱、同步或其他持久化入口写入的消息。
+        let requestSessionID = currentSession.id
+        let messages = await Task.detached(priority: .userInitiated) {
+            Persistence.loadMessages(for: requestSessionID)
+        }.value
+        storeRuntimeMessagesSnapshot(messages, for: currentSession.id)
+        publishMessagesIfCurrentSession(messages, for: currentSession.id)
+        await consumePendingUserSteeringEvents(
+            in: currentSession.id,
+            includedMessageIDs: Set(messages.map(\.id))
+        )
+        if messageAuthorKind == .user, let primaryUserMessage {
+            publishParticipantActivityIfNeeded(
+                sessionID: currentSession.id,
+                messageID: primaryUserMessage.id
+            )
+        }
         scheduleUserMessageAchievementDetectionIfNeeded(
             content: messageContent,
             userMessageCount: messages.filter { $0.role == .user }.count,
@@ -244,7 +417,9 @@ extension ChatService {
             wasTemporarySession = true // 标记此为首次交互
             currentSession.name = String(sessionTitleSource.content.prefix(20))
             currentSession.isTemporary = false
-            currentSessionSubject.send(currentSession)
+            if currentSessionSubject.value?.id == currentSession.id {
+                currentSessionSubject.send(currentSession)
+            }
             var updatedSessions = chatSessionsSubject.value
             if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) { updatedSessions[index] = currentSession }
             chatSessionsSubject.send(updatedSessions)
@@ -272,7 +447,9 @@ extension ChatService {
         } else if let sessionTitleSource = primaryUserMessage,
                   currentSession.name == NSLocalizedString("新的对话", comment: "Default new chat session name") {
             currentSession.name = String(sessionTitleSource.content.prefix(20))
-            currentSessionSubject.send(currentSession)
+            if currentSessionSubject.value?.id == currentSession.id {
+                currentSessionSubject.send(currentSession)
+            }
             var updatedSessions = chatSessionsSubject.value
             if let index = updatedSessions.firstIndex(where: { $0.id == currentSession.id }) {
                 updatedSessions[index] = currentSession
@@ -282,13 +459,52 @@ extension ChatService {
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
 
+        let requestConfiguration = ConversationRunRequestConfiguration(
+            modelIdentifier: selectedModel?.id,
+            temperature: aiTemperature,
+            topP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: currentSession.enhancedPrompt ?? enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            includeSystemTime: includeSystemTime,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics
+        )
+        let isNewRootRun = conversationRun == nil
+        var runtimeRun = conversationRun ?? ConversationRun(
+            sessionID: currentSession.id,
+            requestConfiguration: requestConfiguration
+        )
+        runtimeRun.status = .running
+        runtimeRun.startedAt = runtimeRun.startedAt ?? Date()
+        runtimeRun.requestConfiguration = requestConfiguration
+        runtimeRun.loadingMessageID = loadingMessage.id
+        _ = Persistence.saveConversationRun(runtimeRun)
+        if isNewRootRun {
+            _ = Persistence.saveConversationExecutionBudget(
+                ConversationExecutionBudget(
+                    rootRunID: runtimeRun.rootRunID,
+                    maximumExecutions: ConversationExecutionBudgetPolicy.configuredMaximumExecutions(),
+                    usedExecutions: 1
+                )
+            )
+        }
+
         let requestToken = UUID()
         setRequestContext(
             RequestExecutionContext(
                 token: requestToken,
                 task: nil,
                 loadingMessageID: loadingMessage.id,
-                imageGenerationContext: nil
+                imageGenerationContext: nil,
+                conversationRunID: runtimeRun.id,
+                rootConversationRunID: runtimeRun.rootRunID
             ),
             for: currentSession.id
         )
@@ -347,5 +563,25 @@ extension ChatService {
                 logger.error("请求执行过程中出现未预期错误: \(error.localizedDescription)")
             }
         }
+    }
+
+    private func publishParticipantActivityIfNeeded(sessionID: UUID, messageID: UUID) {
+        guard let origin = Persistence.loadConversationOrigin(childSessionID: sessionID),
+              let parentSessionID = origin.parentSessionID else {
+            return
+        }
+        _ = Persistence.saveConversationEvent(
+            ConversationEvent(
+                destinationSessionID: parentSessionID,
+                sourceSessionID: sessionID,
+                messageID: messageID,
+                kind: .participantActivity,
+                deliveryPolicy: .deliverOnly,
+                payloadJSON: encodeConversationToolResult([
+                    "conversation_id": sessionID.uuidString,
+                    "activity": "user_message"
+                ])
+            )
+        )
     }
 }

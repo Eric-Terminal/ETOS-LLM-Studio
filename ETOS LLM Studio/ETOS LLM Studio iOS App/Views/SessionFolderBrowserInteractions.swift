@@ -514,6 +514,7 @@ extension SessionFolderBrowserView {
                 session: session,
                 isCurrent: session.id == viewModel.currentSession?.id,
                 isRunning: viewModel.runningSessionIDs.contains(session.id),
+                runtimeState: viewModel.conversationRuntimeStates[session.id],
                 isEditing: editingSessionID == session.id,
                 draftName: editingSessionID == session.id ? $draftSessionName : .constant(session.name),
                 currentFolderID: normalizedFolderID(of: session),
@@ -557,7 +558,10 @@ extension SessionFolderBrowserView {
                     sessionInfo = SessionInfoPayload(
                         session: session,
                         messageCount: viewModel.messageCount(for: session),
-                        isCurrent: session.id == viewModel.currentSession?.id
+                        isCurrent: session.id == viewModel.currentSession?.id,
+                        onOpenSession: { sessionID in
+                            _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
+                        }
                     )
                 },
                 onEditTags: {
@@ -565,6 +569,16 @@ extension SessionFolderBrowserView {
                 },
                 onSendToCompanion: {
                     syncManager.sendSessionToCompanion(sessionID: session.id)
+                },
+                onStopRuntime: {
+                    Task {
+                        await ChatService.shared.stopConversationRuntime(for: session.id)
+                    }
+                },
+                onContinueRuntime: {
+                    Task {
+                        _ = await ChatService.shared.continueConversationRuntime(for: session.id)
+                    }
                 }
             )
         }

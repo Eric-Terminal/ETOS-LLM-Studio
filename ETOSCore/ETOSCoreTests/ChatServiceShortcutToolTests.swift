@@ -246,14 +246,21 @@ struct ChatServiceShortcutToolTests {
         )
 
         #expect(adapter.receivedTools == nil)
+        #expect(
+            adapter.receivedMessages?.contains(where: {
+                $0.content.contains("<conversation_runtime>")
+            }) != true
+        )
     }
 }
 
 private final class ShortcutInjectionMockAdapter: APIAdapter {
     var receivedTools: [InternalToolDefinition]?
+    var receivedMessages: [ChatMessage]?
 
     func buildChatRequest(for model: RunnableModel, commonPayload: [String : Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID : AudioAttachment], imageAttachments: [UUID : [ImageAttachment]], fileAttachments: [UUID : [FileAttachment]]) -> URLRequest? {
         receivedTools = tools
+        receivedMessages = messages
         return URLRequest(url: URL(string: "https://example.com/chat")!)
     }
 

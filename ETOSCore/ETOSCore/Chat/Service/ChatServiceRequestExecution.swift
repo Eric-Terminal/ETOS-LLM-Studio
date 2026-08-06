@@ -19,18 +19,21 @@ extension ChatService {
         from messagesToSend: [ChatMessage],
         loadingMessageID: UUID,
         sessionID: UUID
-    ) {
+    ) async {
         let snapshot = messagesToSend
             .filter { $0.role == .system }
             .map(\.content)
             .joined(separator: "\n\n")
-        var persistedMessages = messagesSnapshot(for: sessionID)
-        guard let index = persistedMessages.firstIndex(where: { $0.id == loadingMessageID }) else {
+        guard var loadingMessage = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
             logger.warning("无法记录系统提示词快照：未找到回复占位消息 \(loadingMessageID)。")
             return
         }
-        persistedMessages[index].sentSystemPromptSnapshot = snapshot
-        persistAndPublishMessages(persistedMessages, for: sessionID)
+        loadingMessage.sentSystemPromptSnapshot = snapshot
+        do {
+            _ = try await upsertConversationMessage(loadingMessage, to: sessionID)
+        } catch {
+            logger.error("原子保存系统提示词快照失败：\(error.localizedDescription)")
+        }
     }
 
     func openAIReasoningContentEchoModeControlValue() async -> String {
@@ -68,6 +71,10 @@ extension ChatService {
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
             ? currentSessionSnapshot
             : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
+        let resolvedEnhancedPrompt = sessionForRequest?.enhancedPrompt ?? enhancedPrompt
+        let linkedConversations = await Task.detached(priority: .utility) {
+            Persistence.loadLinkedConversationContacts(sourceSessionID: currentSessionID)
+        }.value
         let continuationMessages: [ChatMessage]
         do {
             continuationMessages = try await Task.detached(priority: .userInitiated) {
@@ -161,7 +168,25 @@ extension ChatService {
             conversationUserProfile = nil
         }
 
-        guard let runnableModel = selectedModelSubject.value else {
+        let sessionPreferredModel = sessionForRequest?.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        }
+        let runConfiguredModelIdentifier = conversationRunIDs(for: currentSessionID).flatMap { runIDs in
+            Persistence.loadConversationRun(id: runIDs.runID)?.requestConfiguration.modelIdentifier
+        }
+        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+                ?? selectedModelSubject.value.flatMap { $0.id == identifier ? $0 : nil }
+        }
+        if runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
+        guard let runnableModel = runConfiguredModel ?? sessionPreferredModel ?? selectedModelSubject.value else {
             addErrorMessage(
                 NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
                 sessionID: currentSessionID
@@ -229,7 +254,7 @@ extension ChatService {
                 worldbooks: boundWorldbooks,
                 messages: requestMessages,
                 topicPrompt: sessionForRequest?.topicPrompt,
-                enhancedPrompt: enhancedPrompt,
+                enhancedPrompt: resolvedEnhancedPrompt,
                 personaDescription: resolvedRoleplay?.persona?.description,
                 characterDescription: resolvedRoleplay?.characters.first?.description,
                 characterPersonality: resolvedRoleplay?.characters.first?.personality,
@@ -247,9 +272,14 @@ extension ChatService {
         )
 
         var messagesToSend: [ChatMessage] = []
+        let includesConversationTools = runnableModel.model.supportsToolCalling
+            && (tools?.contains { ConversationToolDefinitions.containsExposedName($0.name) } == true)
         var finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
+            conversationSystem: sessionForRequest?.systemPrompt,
             topic: sessionForRequest?.topicPrompt,
+            includeConversationRuntime: includesConversationTools,
+            linkedConversations: linkedConversations,
             memories: memories,
             recentConversationSummaries: recentConversationSummaries,
             conversationProfile: conversationUserProfile,
@@ -310,7 +340,7 @@ extension ChatService {
         let apiFormat = runnableModel.effectiveAPIFormat
 
         if let enhancedPromptMessage = makeEnhancedPromptMessage(
-            enhancedPrompt,
+            resolvedEnhancedPrompt,
             apiFormat: apiFormat,
             openAIUsesSystemRole: openAIUsesSystemRole
         ) {
@@ -505,7 +535,11 @@ extension ChatService {
         }
 
         if LocalModelProviderBridge.isLocalRunnableModel(runnableModel) {
-            persistSentSystemPromptSnapshot(
+            let localTools = runnableModel.model.supportsToolCalling ? tools : nil
+            if tools != nil, localTools == nil {
+                logger.info("当前本地模型未启用工具能力，本次请求不会附带工具定义。")
+            }
+            await persistSentSystemPromptSnapshot(
                 from: messagesToSend,
                 loadingMessageID: loadingMessageID,
                 sessionID: currentSessionID
@@ -531,7 +565,7 @@ extension ChatService {
                 enableResponseSpeedMetrics: enableResponseSpeedMetrics,
                 requestStartedAt: requestStartedAt,
                 requestLogContext: requestLogContext,
-                availableTools: nil,
+                availableTools: localTools,
                 imageAttachments: imageAttachments
             )
             return
@@ -656,7 +690,7 @@ extension ChatService {
             isStreaming: requestLogContext.isStreaming
         )
 
-        persistSentSystemPromptSnapshot(
+        await persistSentSystemPromptSnapshot(
             from: messagesToSend,
             loadingMessageID: loadingMessageID,
             sessionID: currentSessionID
@@ -870,7 +904,7 @@ extension ChatService {
                                 sessionID: sessionID
                             )
                             updatedMessages[messageIndex].replaceVideoAnalysisResult(result)
-                            persistVideoAnalysisResult(
+                            await persistVideoAnalysisResult(
                                 result,
                                 messageID: messageID,
                                 sessionID: sessionID

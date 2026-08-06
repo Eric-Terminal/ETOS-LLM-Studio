@@ -146,10 +146,18 @@ extension ChatService {
             requestedAt: Date()
         )
 
-        var messages = existingMessages
-        messages.append(userMessage)
-        messages.append(loadingMessage)
-        persistAndPublishMessages(messages, for: currentSession.id)
+        do {
+            _ = try await appendConversationMessage(userMessage, to: currentSession.id)
+            _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
+        } catch {
+            addErrorMessage(
+                NSLocalizedString("错误: 无法保存会话消息。", comment: "Unable to persist conversation messages"),
+                sessionID: currentSession.id
+            )
+            requestStatusSubject.send(.error)
+            return
+        }
+        let messages = messagesSnapshot(for: currentSession.id)
         scheduleUserMessageAchievementDetectionIfNeeded(
             content: trimmedPrompt,
             userMessageCount: messages.filter { $0.role == .user }.count,
@@ -425,18 +433,21 @@ extension ChatService {
             let revisedPrompt = revisedPrompts.first(where: { !$0.isEmpty })
             let content = revisedPrompt ?? NSLocalizedString("[图片]", comment: "Image message placeholder")
 
-            var messages = messagesSnapshot(for: currentSessionID)
-            if let loadingIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-                messages[loadingIndex] = ChatMessage(
-                    id: messages[loadingIndex].id,
+            if let loadingMessage = messagesSnapshot(for: currentSessionID).first(where: { $0.id == loadingMessageID }) {
+                let completedMessage = ChatMessage(
+                    id: loadingMessage.id,
                     role: .assistant,
                     content: content,
                     imageFileNames: generatedImageFileNames
                 )
-                persistAndPublishMessages(messages, for: currentSessionID)
-                logger.info(
-                    "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
-                )
+                do {
+                    _ = try await upsertConversationMessage(completedMessage, to: currentSessionID)
+                    logger.info(
+                        "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
+                    )
+                } catch {
+                    logger.error("原子保存生图消息失败：\(error.localizedDescription)")
+                }
             } else {
                 logger.warning("未找到生图占位消息，无法替换: loadingMessageID=\(loadingMessageID.uuidString)")
             }

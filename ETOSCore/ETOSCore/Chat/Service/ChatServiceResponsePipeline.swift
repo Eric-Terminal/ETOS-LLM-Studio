@@ -430,7 +430,7 @@ extension ChatService {
                 )
                 attachCostEstimateIfPossible(to: &messages[index], using: requestLogContext)
                 finalAssistantMessage = messages[index]
-                messages = persistAndPublishStreamingMessages(
+                messages = await persistAndPublishStreamingMessages(
                     messages,
                     loadingMessageID: loadingMessageID,
                     sessionID: currentSessionID
@@ -485,7 +485,7 @@ extension ChatService {
                 sessionID: currentSessionID,
                 coalescer: &streamingPublishCoalescer
             )
-            finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
+            await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,
                 status: .cancelled,
@@ -567,7 +567,7 @@ extension ChatService {
                     sessionID: currentSessionID,
                     coalescer: &streamingPublishCoalescer
                 )
-                finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
+                await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingMessageID, in: currentSessionID)
                 persistRequestLog(
                     context: requestLogContext,
                     status: .cancelled,
@@ -692,7 +692,7 @@ extension ChatService {
         }
 
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
-            updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            await updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
             scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
@@ -700,10 +700,10 @@ extension ChatService {
             return
         }
 
-        updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+        await updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
         scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
         let toolCallMessageID = loadingMessageID
-        ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
+        await ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
         let activeAttemptMetadata = responseAttemptMetadata(for: toolCallMessageID, in: currentSessionID)
             ?? responseAttemptMetadata(from: responseMessage)
 
@@ -724,12 +724,17 @@ extension ChatService {
 
         var blockingResultMessages: [ChatMessage] = []
         var shouldAwaitUserSupplement = false
+        var shouldPauseForConversation = false
         if !blockingCalls.isEmpty {
             logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
                 let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
                 if let toolResult = outcome.toolResult {
                     await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                }
+                if outcome.shouldPauseForConversation {
+                    shouldPauseForConversation = true
+                    break
                 }
                 var outcomeMessage = outcome.message
                 applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
@@ -741,14 +746,24 @@ extension ChatService {
             }
         }
 
+        if shouldPauseForConversation {
+            if !blockingResultMessages.isEmpty {
+                _ = try? await insertConversationResponseAttemptMessagesAtomically(
+                    blockingResultMessages,
+                    afterAttemptOf: toolCallMessageID,
+                    in: currentSessionID
+                )
+            }
+            emitSessionRequestStatus(.finished, sessionID: currentSessionID)
+            return
+        }
+
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages = insertingResponseAttemptMessages(
+            _ = try? await insertConversationResponseAttemptMessagesAtomically(
                 blockingResultMessages,
                 afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+                in: currentSessionID
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
@@ -765,13 +780,11 @@ extension ChatService {
                         }
                         var outcomeMessage = outcome.message
                         self.applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
-                        var messages = self.messagesSnapshot(for: currentSessionID)
-                        messages = self.insertingResponseAttemptMessages(
+                        _ = try? await self.insertConversationResponseAttemptMessagesAtomically(
                             [outcomeMessage],
                             afterAttemptOf: toolCallMessageID,
-                            in: messages
+                            in: currentSessionID
                         )
-                        self.persistAndPublishMessages(messages, for: currentSessionID)
                         logger.info("  - 非阻塞式工具 '\(toolCall.toolName)' 已在后台执行完毕并保存了结果。")
                     }
                 }
@@ -794,13 +807,11 @@ extension ChatService {
         }
 
         if shouldAwaitUserSupplement {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-            updatedMessages = insertingResponseAttemptMessages(
+            _ = try? await insertConversationResponseAttemptMessagesAtomically(
                 blockingResultMessages + nonBlockingResultsForFollowUp,
                 afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+                in: currentSessionID
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             emitSessionRequestStatus(.finished, sessionID: currentSessionID)
             return
         }
@@ -808,20 +819,28 @@ extension ChatService {
         let shouldTriggerFollowUp = !blockingResultMessages.isEmpty || !nonBlockingResultsForFollowUp.isEmpty
 
         if shouldTriggerFollowUp {
-            var updatedMessages = self.messagesSnapshot(for: currentSessionID)
-
             var followUpLoadingMessage = ChatMessage(
                 role: .assistant,
                 content: "",
                 requestedAt: Date()
             )
             applyResponseAttemptMetadata(activeAttemptMetadata, to: &followUpLoadingMessage)
-            updatedMessages = insertingResponseAttemptMessages(
-                blockingResultMessages + nonBlockingResultsForFollowUp + [followUpLoadingMessage],
-                afterAttemptOf: toolCallMessageID,
-                in: updatedMessages
+            let updatedMessages: [ChatMessage]
+            do {
+                updatedMessages = try await insertConversationResponseAttemptMessagesAtomically(
+                    blockingResultMessages + nonBlockingResultsForFollowUp + [followUpLoadingMessage],
+                    afterAttemptOf: toolCallMessageID,
+                    in: currentSessionID
+                )
+            } catch {
+                logger.error("原子保存工具续写消息失败：\(error.localizedDescription)")
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                return
+            }
+            await consumePendingUserSteeringEvents(
+                in: currentSessionID,
+                includedMessageIDs: Set(updatedMessages.map(\.id))
             )
-            self.persistAndPublishMessages(updatedMessages, for: currentSessionID)
             updateRequestLoadingMessageID(followUpLoadingMessage.id, for: currentSessionID)
 
             logger.info("正在将工具结果发回 AI 以生成最终回复...")

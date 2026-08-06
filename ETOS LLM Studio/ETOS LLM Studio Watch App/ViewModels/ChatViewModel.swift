@@ -161,6 +161,7 @@ class ChatViewModel: ObservableObject {
     @Published var streamingScrollAnchorVersion: Int = 0
     @Published var toolCallResultIDs: Set<String> = []
     @Published var runningSessionIDs: Set<UUID> = []
+    @Published var conversationRuntimeStates: [UUID: ConversationRuntimeSessionState] = [:]
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
     @Published var imageGenerationFeedback: ImageGenerationFeedback = .idle
     @Published var mathRenderOverrides: Set<UUID> = []
@@ -518,7 +519,7 @@ class ChatViewModel: ObservableObject {
             hasAudio: hasAudio,
             imageCount: pendingImageAttachments.count,
             fileCount: pendingFileAttachments.count,
-            isSending: isSendingMessage || isSendDelayPending
+            isSending: isSendDelayPending
         ) else { return nil }
         
         let audioToSend = pendingAudioAttachment

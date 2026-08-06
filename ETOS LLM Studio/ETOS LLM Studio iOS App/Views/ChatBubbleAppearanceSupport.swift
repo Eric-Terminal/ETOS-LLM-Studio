@@ -323,7 +323,7 @@ extension ChatBubble {
     }
 
     var isOutgoing: Bool {
-        message.role == .user
+        message.role == .user && message.authorKind == .user
     }
 
     var isError: Bool {
@@ -393,8 +393,7 @@ extension ChatBubble {
             )
         }
 
-        switch message.role {
-        case .user:
+        if isOutgoing {
             return AnyShapeStyle(
                 LinearGradient(
                     colors: [
@@ -405,7 +404,10 @@ extension ChatBubble {
                     endPoint: .bottomTrailing
                 )
             )
-        case .assistant, .system, .tool:
+        }
+
+        switch message.role {
+        case .user, .assistant, .system, .tool:
             let baseColor: Color
             if let resolvedAssistantBubbleColor {
                 baseColor = resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1)
@@ -434,10 +436,12 @@ extension ChatBubble {
             return AnyShapeStyle(Color.red.opacity(0.7 * errorOpacity))
         }
 
-        switch message.role {
-        case .user:
+        if isOutgoing {
             return AnyShapeStyle(resolvedUserBubbleEndColor.opacity(userOpacity))
-        case .assistant, .system, .tool:
+        }
+
+        switch message.role {
+        case .user, .assistant, .system, .tool:
             if let resolvedAssistantBubbleColor {
                 return AnyShapeStyle(resolvedAssistantBubbleColor.opacity(enableBackground ? assistantOpacity : 1))
             }

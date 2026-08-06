@@ -71,7 +71,7 @@ extension ChatService {
             )
             let summary = sanitizeReasoningSummaryText(rawSummary)
             guard !summary.isEmpty else { return }
-            applyReasoningSummary(summary, for: messageID, in: sessionID, expectedReasoning: reasoning)
+            await applyReasoningSummary(summary, for: messageID, in: sessionID, expectedReasoning: reasoning)
         } catch {
             logger.warning("异步思考摘要生成失败: \(error.localizedDescription)")
         }
@@ -101,19 +101,22 @@ extension ChatService {
         return String(trimmedPrefix.prefix(maxLength)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func applyReasoningSummary(_ summary: String, for messageID: UUID, in sessionID: UUID, expectedReasoning: String) {
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+    private func applyReasoningSummary(_ summary: String, for messageID: UUID, in sessionID: UUID, expectedReasoning: String) async {
+        guard var message = messagesSnapshot(for: sessionID).first(where: { $0.id == messageID }) else { return }
 
-        let currentReasoning = messages[index].reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let currentReasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard currentReasoning == expectedReasoning else { return }
 
-        var metrics = messages[index].responseMetrics ?? MessageResponseMetrics()
+        var metrics = message.responseMetrics ?? MessageResponseMetrics()
         guard metrics.reasoningSummary != summary else { return }
 
         metrics.reasoningSummary = summary
-        messages[index].responseMetrics = metrics
-        persistAndPublishMessages(messages, for: sessionID)
+        message.responseMetrics = metrics
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存思考摘要失败：\(error.localizedDescription)")
+        }
     }
 
     private func performConversationMemoryUpdateIfNeeded(for sessionID: UUID, messages: [ChatMessage]) async {

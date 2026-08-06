@@ -186,6 +186,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
     case chatSendDelaySeconds = "chat.sendDelaySeconds"
+    case conversationRuntimeConcurrencyLimit = "chat.conversationRuntime.concurrencyLimit"
+    case conversationRuntimeExecutionBudget = "chat.conversationRuntime.executionBudget"
     case messageRegexRules = "chat.messageRegexRules"
     case videoFrameExtractionMode = "video.frameExtraction.mode"
     case videoFrameExtractionFPS = "video.frameExtraction.fps"
@@ -422,6 +424,14 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .integer(1)
         case .chatSendDelaySeconds:
             return .real(0.0)
+        case .conversationRuntimeConcurrencyLimit:
+            #if os(watchOS)
+            return .integer(1)
+            #else
+            return .integer(3)
+            #endif
+        case .conversationRuntimeExecutionBudget:
+            return .integer(32)
         case .videoFrameExtractionMode:
             return .text(VideoFrameExtractionMode.defaultMode.rawValue)
         case .videoFrameExtractionFPS:

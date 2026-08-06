@@ -23,6 +23,8 @@ extension ChatService {
             return
         }
         var messages = messagesSnapshot(for: resolvedSessionID)
+        let originalMessages = messages
+        var forcedMutationMessageIDs = Set<UUID>()
 
         // 格式化错误内容，使其更简洁易读
         let (formattedContent, fullContent) = formatErrorContent(content, httpStatusCode: httpStatusCode)
@@ -145,6 +147,9 @@ extension ChatService {
                 // 系统日志只记录状态，完整错误正文仅保留在应用内消息中。
                 logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡。")
             } else if shouldPreserveLoadingMessage {
+                // 流式正文只存在于运行期快照时，它与 originalMessages 相等，但磁盘仍可能是空占位。
+                // 错误收尾必须强制落盘该助手消息，随后才能追加错误气泡。
+                forcedMutationMessageIDs.insert(loadingMessage.id)
                 messages.insert(makeErrorMessage(loadingMessage.requestedAt, metadata: loadingAttemptMetadata), at: loadingIndex + 1)
                 logger.error("流式内容已保留，并追加错误消息。")
             } else {
@@ -171,7 +176,33 @@ extension ChatService {
             logger.error("错误消息已添加。")
         }
 
-        persistAndPublishMessages(messages, for: resolvedSessionID)
+        let mutations: [(message: ChatMessage, afterMessageID: UUID?)] = messages.indices.compactMap { index in
+            let message = messages[index]
+            if originalMessages.first(where: { $0.id == message.id }) == message,
+               !forcedMutationMessageIDs.contains(message.id) {
+                return nil
+            }
+            let afterMessageID = index > messages.startIndex ? messages[messages.index(before: index)].id : nil
+            return (message, afterMessageID)
+        }
+        // UI 先同步采用内存结果，磁盘写入继续在后台逐条提交；否则入口在返回后
+        // 立即读取当前会话时，可能短暂看不到刚生成的错误气泡。
+        storeRuntimeMessagesSnapshot(messages, for: resolvedSessionID)
+        publishMessagesIfCurrentSession(messages, for: resolvedSessionID)
+        Task { [weak self] in
+            guard let self else { return }
+            for mutation in mutations {
+                do {
+                    _ = try await self.upsertConversationMessage(
+                        mutation.message,
+                        to: resolvedSessionID,
+                        afterMessageID: mutation.afterMessageID
+                    )
+                } catch {
+                    self.logger.error("原子保存错误消息失败：\(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     // MARK: - 附件转写
@@ -201,14 +232,12 @@ extension ChatService {
                 return
             }
 
-            await MainActor.run {
-                self.applyTranscriptionResult(
-                    transcript,
-                    toMessageWithID: messageID,
-                    in: sessionID,
-                    placeholder: placeholder
-                )
-            }
+            await applyTranscriptionResult(
+                transcript,
+                toMessageWithID: messageID,
+                in: sessionID,
+                placeholder: placeholder
+            )
         } catch {
             // 后台转文字失败时静默处理，不显示错误打扰用户
             // 因为音频已经成功发送给模型了，转文字只是可选的UI增强
@@ -216,48 +245,44 @@ extension ChatService {
         }
     }
 
-    @MainActor
-    func applyTranscriptionResult(_ transcript: String, toMessageWithID messageID: UUID, in sessionID: UUID, placeholder: String) {
-        var messages: [ChatMessage]
-        let isCurrentSession = currentSessionSubject.value?.id == sessionID
-
-        if isCurrentSession {
-            messages = messagesForSessionSubject.value
+    func applyTranscriptionResult(_ transcript: String, toMessageWithID messageID: UUID, in sessionID: UUID, placeholder: String) async {
+        let cachedMessage = runtimeMessagesSnapshot(for: sessionID)?.first(where: { $0.id == messageID })
+        let persistedMessage: ChatMessage?
+        if cachedMessage == nil {
+            persistedMessage = await Task.detached(priority: .utility) {
+                Persistence.loadMessages(for: sessionID).first(where: { $0.id == messageID })
+            }.value
         } else {
-            messages = Persistence.loadMessages(for: sessionID)
+            persistedMessage = nil
         }
-
-        guard let index = messages.firstIndex(where: { $0.id == messageID }) else {
+        guard var message = cachedMessage ?? persistedMessage else {
             logger.warning("未找到需要更新的语音消息（可能会话已被切换或删除）。")
             return
         }
 
-        messages[index].content = transcript
-
-        if isCurrentSession {
-            publishMessages(messages)
+        message.content = transcript
+        do {
+            _ = try await upsertConversationMessage(message, to: sessionID)
+        } catch {
+            logger.error("原子保存语音转写结果失败：\(error.localizedDescription)")
+            return
         }
-        persistMessages(messages, for: sessionID)
 
-        // 如果是新建的会话且名称仍为占位符，则同步更新会话名称
-        if isCurrentSession, var currentSession = currentSessionSubject.value, currentSession.name == placeholder {
-            currentSession.name = String(transcript.prefix(20))
-            currentSessionSubject.send(currentSession)
+        let sessionsToPersist = await MainActor.run { () -> [ChatSession]? in
             var sessions = chatSessionsSubject.value
-            if let sessionIndex = sessions.firstIndex(where: { $0.id == currentSession.id }) {
-                sessions[sessionIndex] = currentSession
-                chatSessionsSubject.send(sessions)
-                Persistence.saveChatSessions(sessions)
+            guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }),
+                  sessions[sessionIndex].name == placeholder else { return nil }
+            sessions[sessionIndex].name = String(transcript.prefix(20))
+            chatSessionsSubject.send(sessions)
+            if currentSessionSubject.value?.id == sessionID {
+                currentSessionSubject.send(sessions[sessionIndex])
             }
-        } else {
-            var sessions = chatSessionsSubject.value
-            if let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) {
-                if sessions[sessionIndex].name == placeholder {
-                    sessions[sessionIndex].name = String(transcript.prefix(20))
-                    chatSessionsSubject.send(sessions)
-                    Persistence.saveChatSessions(sessions)
-                }
-            }
+            return sessions
+        }
+        if let sessionsToPersist {
+            await Task.detached(priority: .utility) {
+                Persistence.saveChatSessions(sessionsToPersist)
+            }.value
         }
     }
 
@@ -291,11 +316,14 @@ extension ChatService {
         )
     }
 
-    func removeMessage(withID messageID: UUID, in sessionID: UUID) {
-        var messages = messagesSnapshot(for: sessionID)
-        if let index = messages.firstIndex(where: { $0.id == messageID }) {
-            messages.remove(at: index)
-            persistAndPublishMessages(messages, for: sessionID)
+    func removeMessage(withID messageID: UUID, in sessionID: UUID) async {
+        if messagesSnapshot(for: sessionID).contains(where: { $0.id == messageID }) {
+            do {
+                _ = try await deleteConversationMessage(id: messageID, from: sessionID)
+            } catch {
+                logger.error("原子移除占位消息失败：\(error.localizedDescription)")
+                return
+            }
             logger.info("已移除占位消息 \(messageID.uuidString)。")
         }
     }
@@ -307,31 +335,36 @@ extension ChatService {
         return !messageHasDisplayablePayload(message)
     }
 
-    func finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) {
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
-        let finalizedMessage = finalizeInterruptedReasoningMessage(messages[index])
-        guard finalizedMessage != messages[index] else { return }
-        messages[index] = finalizedMessage
-        persistAndPublishMessages(messages, for: sessionID)
+    func finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) async {
+        guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else { return }
+        let finalizedMessage = finalizeInterruptedReasoningMessage(message)
+        guard finalizedMessage != message else { return }
+        do {
+            _ = try await upsertConversationMessage(finalizedMessage, to: sessionID)
+        } catch {
+            logger.error("原子保存中断推理消息失败：\(error.localizedDescription)")
+        }
     }
 
-    func restoreRetryTargetMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) -> Bool {
+    func restoreRetryTargetMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) async -> Bool {
         guard retryTargetMessageID == loadingMessageID,
               let originalAssistant = retryTargetOriginalAssistantMessage else {
             return false
         }
-        var messages = messagesSnapshot(for: sessionID)
-        guard let index = messages.firstIndex(where: { $0.id == loadingMessageID }) else {
+        guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
             retryTargetMessageID = nil
             retryTargetOriginalAssistantMessage = nil
             return false
         }
-        if messageHasDisplayablePayload(messages[index]) {
+        if messageHasDisplayablePayload(message) {
             return false
         }
-        messages[index] = originalAssistant
-        persistAndPublishMessages(messages, for: sessionID)
+        do {
+            _ = try await upsertConversationMessage(originalAssistant, to: sessionID)
+        } catch {
+            logger.error("原子恢复重试消息失败：\(error.localizedDescription)")
+            return false
+        }
         retryTargetMessageID = nil
         retryTargetOriginalAssistantMessage = nil
         return true
@@ -348,7 +381,7 @@ extension ChatService {
     }
 
     /// 将最终确定的消息更新到消息列表中
-    func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) {
+    func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) async {
         let priorMessages = messagesSnapshot(for: sessionID)
         _ = RoleplayRuntime.processMVU(
             content: newMessage.content,
@@ -362,7 +395,7 @@ extension ChatService {
         let newMessage = messageRegexRules.isEmpty
             ? newMessage
             : applyMessageRegexRules(to: newMessage, rules: messageRegexRules, mode: .persist)
-        var messages = messagesSnapshot(for: sessionID)
+        let messages = messagesSnapshot(for: sessionID)
 
         // 检查是否是重试场景，需要添加新版本
         if let targetID = retryTargetMessageID,
@@ -411,8 +444,6 @@ extension ChatService {
             targetMessage.responseAttemptID = newMessage.responseAttemptID ?? targetMessage.responseAttemptID
             targetMessage.responseAttemptIndex = newMessage.responseAttemptIndex ?? targetMessage.responseAttemptIndex
 
-            messages[targetIndex] = targetMessage
-
             // 注意：这里不需要移除 loading message，因为 targetID 就是 loadingMessageID
             // 我们已经在原位置更新了消息
 
@@ -420,7 +451,15 @@ extension ChatService {
             retryTargetMessageID = nil
             retryTargetOriginalAssistantMessage = nil
 
-            persistAndPublishMessages(messages, for: sessionID, keepingSpeedSamplesFor: loadingMessageID)
+            do {
+                _ = try await upsertConversationMessage(
+                    targetMessage,
+                    to: sessionID,
+                    keepingSpeedSamplesFor: loadingMessageID
+                )
+            } catch {
+                logger.error("原子更新重试消息失败：\(error.localizedDescription)")
+            }
 
             logger.info("已将新内容追加到消息历史: \(targetID)")
         } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
@@ -433,7 +472,7 @@ extension ChatService {
                 // 如果新消息没有附带工具调用，则沿用之前的记录，方便在最终答案中回顾工具使用详情。
                 return preservedToolCalls
             }()
-            messages[index] = ChatMessage(
+            let updatedMessage = ChatMessage(
                 id: loadingMessageID, // 保持ID不变
                 role: newMessage.role,
                 content: newMessage.content,
@@ -457,7 +496,11 @@ extension ChatService {
                 responseAttemptIndex: newMessage.responseAttemptIndex ?? messages[index].responseAttemptIndex,
                 selectedResponseAttemptID: newMessage.selectedResponseAttemptID ?? messages[index].selectedResponseAttemptID
             )
-            persistAndPublishMessages(messages, for: sessionID)
+            do {
+                _ = try await upsertConversationMessage(updatedMessage, to: sessionID)
+            } catch {
+                logger.error("原子更新回复消息失败：\(error.localizedDescription)")
+            }
         }
     }
 
