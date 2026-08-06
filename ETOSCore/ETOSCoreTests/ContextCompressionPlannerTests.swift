@@ -126,6 +126,19 @@ struct ContextCompressionPlannerTests {
         }
     }
 
+    @Test func ignoresDisplayOnlyImagesDuringCompression() throws {
+        let message = ChatMessage(
+            role: .assistant,
+            content: "正文",
+            imageFileNames: ["inline.png"],
+            modelExcludedImageFileNames: ["inline.png"]
+        )
+
+        let source = try ContextCompressionPlanner.prepareTextOnlySourceMessages(from: [message])
+
+        #expect(source.map(\.semanticContent) == ["正文"])
+    }
+
     @Test func includesToolCallArgumentsAndResults() throws {
         let call = InternalToolCall(
             id: "call-1",

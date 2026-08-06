@@ -59,7 +59,8 @@ enum ContextCompressionPromptBuilder {
     }
 
     private static func sanitizedRetainedMessage(_ message: ChatMessage) -> ChatMessage {
-        ChatMessage(
+        let imageFileNames = message.modelVisibleImageFileNames
+        return ChatMessage(
             id: message.id,
             role: message.role,
             content: message.content,
@@ -67,7 +68,7 @@ enum ContextCompressionPromptBuilder {
             toolCalls: message.toolCalls,
             toolCallsPlacement: message.toolCallsPlacement,
             audioFileName: message.audioFileName,
-            imageFileNames: message.imageFileNames,
+            imageFileNames: imageFileNames.isEmpty ? nil : imageFileNames,
             fileFileNames: message.fileFileNames,
             videoAnalysisResults: message.videoAnalysisResults
         )

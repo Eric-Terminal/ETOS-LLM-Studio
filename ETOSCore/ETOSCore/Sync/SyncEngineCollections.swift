@@ -420,6 +420,11 @@ extension SyncEngine {
                     let mappedImageFileNames = imageFileNames.map { imageMapping[$0] ?? $0 }
                     messages[index].imageFileNames = mappedImageFileNames
                 }
+                if let excludedImageFileNames = messages[index].modelExcludedImageFileNames {
+                    messages[index].modelExcludedImageFileNames = excludedImageFileNames.map {
+                        imageMapping[$0] ?? $0
+                    }
+                }
             }
             return SyncedSession(session: payload.session, messages: messages)
         }

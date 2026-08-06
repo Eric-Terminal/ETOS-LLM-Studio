@@ -282,7 +282,7 @@ extension ChatService {
     func latestAssistantImageReference(in messages: [ChatMessage]) -> ImageAttachment? {
         let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
         for message in visibleMessages.reversed() where message.role == .assistant {
-            for fileName in (message.imageFileNames ?? []).reversed() {
+            for fileName in message.modelVisibleImageFileNames.reversed() {
                 if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {
                     logger.info("连续改图复用最近助手图片: \(fileName)")
                     return attachment

@@ -147,7 +147,7 @@ extension ChatService {
             logger.info("重试时恢复音频附件: \(audioFileName)")
         }
 
-        let imageAttachments = (messageToSend.imageFileNames ?? []).compactMap { fileName in
+        let imageAttachments = messageToSend.modelVisibleImageFileNames.compactMap { fileName in
             loadImageAttachmentFromStorage(fileName: fileName)
         }
 
@@ -348,7 +348,7 @@ extension ChatService {
         persistAndPublishMessages(updatedMessages, for: currentSession.id)
 
         let prompt = messageToSend.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let explicitReferenceImages = (messageToSend.imageFileNames ?? []).compactMap { fileName in
+        let explicitReferenceImages = messageToSend.modelVisibleImageFileNames.compactMap { fileName in
             let attachment = loadImageAttachmentFromStorage(fileName: fileName)
             if attachment != nil {
                 logger.info("重试生图时恢复参考图: \(fileName)")

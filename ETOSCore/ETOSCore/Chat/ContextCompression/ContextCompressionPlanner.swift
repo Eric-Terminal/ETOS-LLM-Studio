@@ -44,7 +44,7 @@ public struct ContextCompressionSourceMessage: Hashable, Sendable {
         if let audioFileName = message.audioFileName, !audioFileName.isEmpty {
             identifiers.append(audioFileName)
         }
-        identifiers.append(contentsOf: message.imageFileNames ?? [])
+        identifiers.append(contentsOf: message.modelVisibleImageFileNames)
         identifiers.append(contentsOf: message.fileFileNames ?? [])
         return identifiers
     }

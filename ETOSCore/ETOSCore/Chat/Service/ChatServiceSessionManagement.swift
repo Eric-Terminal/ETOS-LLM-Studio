@@ -425,18 +425,23 @@ extension ChatService {
 
                 if let originalImageFileNames = messagesToCopy[i].imageFileNames, !originalImageFileNames.isEmpty {
                     var newImageFileNames: [String] = []
+                    var copiedImageNamesByOriginal: [String: String] = [:]
                     for originalImageFileName in originalImageFileNames {
                         if let imageData = Persistence.loadImage(fileName: originalImageFileName) {
                             let ext = (originalImageFileName as NSString).pathExtension
                             let newImageFileName = "\(UUID().uuidString).\(ext)"
                             if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
                                 newImageFileNames.append(newImageFileName)
+                                copiedImageNamesByOriginal[originalImageFileName] = newImageFileName
                                 logger.info("  - 复制了图片文件: \(originalImageFileName) -> \(newImageFileName)")
                             }
                         }
                     }
                     if !newImageFileNames.isEmpty {
                         messagesToCopy[i].imageFileNames = newImageFileNames
+                        let excludedNames = (messagesToCopy[i].modelExcludedImageFileNames ?? [])
+                            .compactMap { copiedImageNamesByOriginal[$0] }
+                        messagesToCopy[i].modelExcludedImageFileNames = excludedNames.isEmpty ? nil : excludedNames
                     }
                 }
 

@@ -219,6 +219,8 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var costEstimate: MessageCostEstimate? // 基于本地模型价格配置计算的费用快照
     public var audioFileName: String? // 关联的音频文件名，存储在 AudioFiles 目录下
     public var imageFileNames: [String]? // 关联的图片文件名列表，存储在 ImageFiles 目录下
+    /// 只在本地显示、不应作为历史图片输入发送给模型的附件文件名子集。
+    public var modelExcludedImageFileNames: [String]?
     public var fileFileNames: [String]? // 关联的文件名列表，存储在 FileAttachments 目录下
     public var videoAnalysisResults: [VideoAnalysisResult]? // 视频附件的持久化语义解析结果
     public var fullErrorContent: String? // 错误消息的完整原始内容（当内容被截断时使用）
@@ -252,6 +254,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         costEstimate: MessageCostEstimate? = nil,
         audioFileName: String? = nil,
         imageFileNames: [String]? = nil,
+        modelExcludedImageFileNames: [String]? = nil,
         fileFileNames: [String]? = nil,
         videoAnalysisResults: [VideoAnalysisResult]? = nil,
         fullErrorContent: String? = nil,
@@ -281,6 +284,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.costEstimate = costEstimate
         self.audioFileName = audioFileName
         self.imageFileNames = imageFileNames
+        self.modelExcludedImageFileNames = modelExcludedImageFileNames
         self.fileFileNames = fileFileNames
         self.videoAnalysisResults = videoAnalysisResults
         self.fullErrorContent = fullErrorContent
@@ -333,13 +337,25 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         }
     }
 
+    /// 删除正文气泡时清空所有文本版本，避免切换版本后旧正文重新出现。
+    public mutating func clearContentVersions() {
+        contentVersions = [""]
+        currentVersionIndex = 0
+    }
+
+    /// 只有真正参与模型上下文的图片才会进入请求附件映射。
+    public var modelVisibleImageFileNames: [String] {
+        let excluded = Set(modelExcludedImageFileNames ?? [])
+        return (imageFileNames ?? []).filter { !excluded.contains($0) }
+    }
+
     // MARK: - Codable 支持（向后兼容）
 
     enum CodingKeys: String, CodingKey {
         case id, role, requestedAt, content, currentVersionIndex
         case reasoningContent, reasoningProviderSpecificFields, providerResponseMetadata, toolCalls, toolCallsPlacement, tokenUsage
         case modelReference, costEstimate
-        case audioFileName, imageFileNames, fileFileNames, videoAnalysisResults, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
+        case audioFileName, imageFileNames, modelExcludedImageFileNames, fileFileNames, videoAnalysisResults, fullErrorContent, sentSystemPromptSnapshot, responseMetrics
         case responseGroupID, responseAttemptID, responseAttemptIndex, selectedResponseAttemptID
         case authorKind, sourceSessionID, sourceMessageID, conversationEventID
     }
@@ -377,6 +393,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         self.costEstimate = try container.decodeIfPresent(MessageCostEstimate.self, forKey: .costEstimate)
         self.audioFileName = try container.decodeIfPresent(String.self, forKey: .audioFileName)
         self.imageFileNames = try container.decodeIfPresent([String].self, forKey: .imageFileNames)
+        self.modelExcludedImageFileNames = try container.decodeIfPresent([String].self, forKey: .modelExcludedImageFileNames)
         self.fileFileNames = try container.decodeIfPresent([String].self, forKey: .fileFileNames)
         self.videoAnalysisResults = try container.decodeIfPresent([VideoAnalysisResult].self, forKey: .videoAnalysisResults)
         self.fullErrorContent = try container.decodeIfPresent(String.self, forKey: .fullErrorContent)
@@ -417,6 +434,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(costEstimate, forKey: .costEstimate)
         try container.encodeIfPresent(audioFileName, forKey: .audioFileName)
         try container.encodeIfPresent(imageFileNames, forKey: .imageFileNames)
+        try container.encodeIfPresent(modelExcludedImageFileNames, forKey: .modelExcludedImageFileNames)
         try container.encodeIfPresent(fileFileNames, forKey: .fileFileNames)
         try container.encodeIfPresent(videoAnalysisResults, forKey: .videoAnalysisResults)
         try container.encodeIfPresent(fullErrorContent, forKey: .fullErrorContent)

@@ -135,6 +135,7 @@ final class PersistenceGRDBStore {
                     cost_estimate_json BLOB,
                     audio_file_name TEXT,
                     image_file_names_json BLOB,
+                    model_excluded_image_file_names_json BLOB,
                     file_file_names_json BLOB,
                     video_analysis_results_json BLOB,
                     full_error_content TEXT,
@@ -529,6 +530,14 @@ final class PersistenceGRDBStore {
             try Self.createConversationRuntimeTables(db)
         }
 
+        migrator.registerMigration("v11_model_excluded_image_attachments") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(messages)")
+            let columnNames = Set(columns.compactMap { row -> String? in row["name"] })
+            if !columnNames.contains("model_excluded_image_file_names_json") {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN model_excluded_image_file_names_json BLOB")
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -599,6 +608,7 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "cost_estimate_json", definition: "cost_estimate_json BLOB")
             try ensureColumn(db, table: "messages", column: "audio_file_name", definition: "audio_file_name TEXT")
             try ensureColumn(db, table: "messages", column: "image_file_names_json", definition: "image_file_names_json BLOB")
+            try ensureColumn(db, table: "messages", column: "model_excluded_image_file_names_json", definition: "model_excluded_image_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "file_file_names_json", definition: "file_file_names_json BLOB")
             try ensureColumn(db, table: "messages", column: "full_error_content", definition: "full_error_content TEXT")
             try ensureColumn(db, table: "messages", column: "sent_system_prompt_snapshot", definition: "sent_system_prompt_snapshot TEXT")
@@ -692,6 +702,7 @@ final class PersistenceGRDBStore {
                 cost_estimate_json BLOB,
                 audio_file_name TEXT,
                 image_file_names_json BLOB,
+                model_excluded_image_file_names_json BLOB,
                 file_file_names_json BLOB,
                 video_analysis_results_json BLOB,
                 full_error_content TEXT,

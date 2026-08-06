@@ -671,12 +671,6 @@ extension ChatService {
             finalizeResponsesGeneratedImages(in: &responseMessage)
         }
 
-        let inlineImageExtraction = await extractInlineImagesFromMarkdown(responseMessage.content)
-        if !inlineImageExtraction.imageFileNames.isEmpty {
-            responseMessage.content = inlineImageExtraction.cleanedContent
-            responseMessage.imageFileNames = (responseMessage.imageFileNames ?? []) + inlineImageExtraction.imageFileNames
-        }
-
         scheduleAssistantReplyAchievementDetectionIfNeeded(responseMessage.content)
 
         if let toolCalls = responseMessage.toolCalls {

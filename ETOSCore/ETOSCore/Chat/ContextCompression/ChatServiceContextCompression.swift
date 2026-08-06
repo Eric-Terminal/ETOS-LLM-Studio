@@ -173,7 +173,7 @@ extension ChatService {
             contents.append(content)
         }
 
-        for imageFileName in message.imageFileNames ?? [] {
+        for imageFileName in message.modelVisibleImageFileNames {
             let content = try await cachedContextCompressionAttachment(
                 identifier: imageFileName,
                 kind: .image,

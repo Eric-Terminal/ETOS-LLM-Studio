@@ -99,7 +99,7 @@ public enum ContextCompressionReminderEstimator {
         }
 
         let attachmentCount = (message.audioFileName == nil ? 0 : 1)
-            + (message.imageFileNames?.count ?? 0)
+            + message.modelVisibleImageFileNames.count
             + (message.fileFileNames?.count ?? 0)
         total += attachmentCount * attachmentPlaceholderEstimate
         return total

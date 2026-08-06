@@ -419,6 +419,7 @@ extension ChatService {
             }
             targetMessage.audioFileName = newMessage.audioFileName
             targetMessage.imageFileNames = newMessage.imageFileNames
+            targetMessage.modelExcludedImageFileNames = newMessage.modelExcludedImageFileNames
             targetMessage.fileFileNames = newMessage.fileFileNames
 
             // 更新 token 使用情况
@@ -487,6 +488,8 @@ extension ChatService {
                 costEstimate: newMessage.costEstimate ?? messages[index].costEstimate,
                 audioFileName: newMessage.audioFileName ?? messages[index].audioFileName,
                 imageFileNames: newMessage.imageFileNames ?? messages[index].imageFileNames,
+                modelExcludedImageFileNames: newMessage.modelExcludedImageFileNames
+                    ?? messages[index].modelExcludedImageFileNames,
                 fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 sentSystemPromptSnapshot: newMessage.sentSystemPromptSnapshot ?? messages[index].sentSystemPromptSnapshot,

@@ -147,6 +147,7 @@ extension SyncEngine {
 
         if let originalImageFileNames = message.imageFileNames, !originalImageFileNames.isEmpty {
             var newImageFileNames: [String] = []
+            var copiedImageNamesByOriginal: [String: String] = [:]
             for originalImageFileName in originalImageFileNames {
                 guard let imageData = Persistence.loadImage(fileName: originalImageFileName) else {
                     continue
@@ -155,10 +156,14 @@ extension SyncEngine {
                 let newImageFileName = ext.isEmpty ? UUID().uuidString : "\(UUID().uuidString).\(ext)"
                 if Persistence.saveImage(imageData, fileName: newImageFileName) != nil {
                     newImageFileNames.append(newImageFileName)
+                    copiedImageNamesByOriginal[originalImageFileName] = newImageFileName
                 }
             }
             if !newImageFileNames.isEmpty {
                 message.imageFileNames = newImageFileNames
+                let excludedNames = (message.modelExcludedImageFileNames ?? [])
+                    .compactMap { copiedImageNamesByOriginal[$0] }
+                message.modelExcludedImageFileNames = excludedNames.isEmpty ? nil : excludedNames
             }
         }
 

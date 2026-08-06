@@ -83,6 +83,21 @@ struct ContextCompressionReminderEstimatorTests {
         #expect(withContext > withoutContext)
     }
 
+    @Test func excludesDisplayOnlyImagesFromAttachmentEstimate() {
+        let textOnly = ChatMessage(role: .assistant, content: "正文")
+        let displayOnlyImage = ChatMessage(
+            role: .assistant,
+            content: "正文",
+            imageFileNames: ["inline.png"],
+            modelExcludedImageFileNames: ["inline.png"]
+        )
+
+        #expect(
+            ContextCompressionReminderEstimator.estimate(messages: [displayOnlyImage])
+                == ContextCompressionReminderEstimator.estimate(messages: [textOnly])
+        )
+    }
+
     @Test func normalizesThresholdAndHonorsEnabledState() {
         #expect(
             ContextCompressionReminderPolicy.normalizedTokenThreshold(10)

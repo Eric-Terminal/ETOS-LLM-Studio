@@ -399,7 +399,8 @@ extension ChatService {
 
         var imageAttachments: [UUID: [ImageAttachment]] = [:]
         for msg in messagesToSend {
-            guard let imageFileNames = msg.imageFileNames, !imageFileNames.isEmpty else { continue }
+            let imageFileNames = msg.modelVisibleImageFileNames
+            guard !imageFileNames.isEmpty else { continue }
             var attachments: [ImageAttachment] = []
             for fileName in imageFileNames {
                 if let attachment = loadImageAttachmentFromStorage(fileName: fileName) {

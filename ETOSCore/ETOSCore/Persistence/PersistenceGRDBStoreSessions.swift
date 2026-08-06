@@ -348,7 +348,8 @@ extension PersistenceGRDBStore {
                     SELECT id, role, requested_at, content, content_versions_json, current_version_index,
                            reasoning_content, tool_calls_json, tool_calls_placement, token_usage_json,
                            model_reference_json, cost_estimate_json,
-                           audio_file_name, image_file_names_json, file_file_names_json, video_analysis_results_json,
+                           audio_file_name, image_file_names_json, model_excluded_image_file_names_json,
+                           file_file_names_json, video_analysis_results_json,
                            full_error_content, sent_system_prompt_snapshot, response_metrics_json,
                            response_group_id, response_attempt_id, response_attempt_index, selected_response_attempt_id,
                            author_kind, source_session_id, source_message_id, conversation_event_id
@@ -376,6 +377,7 @@ extension PersistenceGRDBStore {
                     let modelReferenceData: Data? = row["model_reference_json"]
                     let costEstimateData: Data? = row["cost_estimate_json"]
                     let imageFileNamesData: Data? = row["image_file_names_json"]
+                    let modelExcludedImageFileNamesData: Data? = row["model_excluded_image_file_names_json"]
                     let fileFileNamesData: Data? = row["file_file_names_json"]
                     let videoAnalysisResultsData: Data? = row["video_analysis_results_json"]
                     let responseMetricsData: Data? = row["response_metrics_json"]
@@ -386,6 +388,7 @@ extension PersistenceGRDBStore {
                     let modelReference = decodeJSON(MessageModelReference.self, from: modelReferenceData)
                     let costEstimate = decodeJSON(MessageCostEstimate.self, from: costEstimateData)
                     let imageFileNames = decodeJSON([String].self, from: imageFileNamesData)
+                    let modelExcludedImageFileNames = decodeJSON([String].self, from: modelExcludedImageFileNamesData)
                     let fileFileNames = decodeJSON([String].self, from: fileFileNamesData)
                     let videoAnalysisResults = decodeJSON([VideoAnalysisResult].self, from: videoAnalysisResultsData)
                     let responseMetrics = decodeJSON(MessageResponseMetrics.self, from: responseMetricsData)
@@ -403,6 +406,7 @@ extension PersistenceGRDBStore {
                         costEstimate: costEstimate,
                         audioFileName: row["audio_file_name"],
                         imageFileNames: imageFileNames,
+                        modelExcludedImageFileNames: modelExcludedImageFileNames,
                         fileFileNames: fileFileNames,
                         videoAnalysisResults: videoAnalysisResults,
                         fullErrorContent: row["full_error_content"],
