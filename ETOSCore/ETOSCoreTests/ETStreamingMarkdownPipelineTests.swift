@@ -239,6 +239,74 @@ struct ETStreamingMarkdownPipelineTests {
         #expect(snapshot.activeBlock?.source == "后续")
     }
 
+    @Test("AST 能在没有空行时提交已经闭合的顶层 Block")
+    func astCommitsTopLevelBlocksWithoutBlankLines() async throws {
+        let messageID = UUID()
+        let pipeline = ETStreamingMarkdownPipeline()
+        let source = "# 标题\n正文"
+
+        let snapshot = await pipeline.prepare(
+            messageID: messageID,
+            sourceText: source,
+            isFinal: false
+        )
+
+        #expect(snapshot.committedBlocks.map(\.source) == [
+            "# 标题\n"
+        ])
+        #expect(snapshot.activeBlock?.source == "正文")
+    }
+
+    @Test("AST 的 UTF-8 源位置换算保留 Unicode 与 Block 缩进")
+    func astSourceRangesPreserveUnicodeAndIndentation() async throws {
+        let messageID = UUID()
+        let pipeline = ETStreamingMarkdownPipeline()
+        let source = "👩🏽‍💻 中文\n\n   # 缩进标题\n末段"
+
+        let snapshot = await pipeline.prepare(
+            messageID: messageID,
+            sourceText: source,
+            isFinal: false
+        )
+
+        #expect(snapshot.committedBlocks.map(\.source) == [
+            "👩🏽‍💻 中文\n\n",
+            "   # 缩进标题\n"
+        ])
+        #expect(snapshot.activeBlock?.source == "末段")
+    }
+
+    @Test("代码围栏语言由 AST 规范化为首个信息词")
+    func astNormalizesCodeFenceLanguage() async throws {
+        let messageID = UUID()
+        let pipeline = ETStreamingMarkdownPipeline()
+        let source = "```SWIFT additional-info\nprint(1)"
+
+        let snapshot = await pipeline.prepare(
+            messageID: messageID,
+            sourceText: source,
+            isFinal: false
+        )
+
+        #expect(snapshot.activeBlock?.presentation == .code(language: "swift"))
+        #expect(snapshot.activeBlock?.displayText == "print(1)")
+    }
+
+    @Test("已闭合代码围栏末尾换行不会泄漏到活动文本")
+    func closedCodeFenceWithTrailingNewlineHidesFence() async throws {
+        let messageID = UUID()
+        let pipeline = ETStreamingMarkdownPipeline()
+        let source = "```swift\nprint(1)\n```\n"
+
+        let snapshot = await pipeline.prepare(
+            messageID: messageID,
+            sourceText: source,
+            isFinal: false
+        )
+
+        #expect(snapshot.activeBlock?.displayText == "print(1)\n")
+    }
+
     @Test("引用和嵌套列表在同类容器内保持活动")
     func containersRemainActiveAcrossLooseLines() async throws {
         let messageID = UUID()
@@ -249,7 +317,8 @@ struct ETStreamingMarkdownPipelineTests {
             sourceText: "> 第一段\n\n> 第二段",
             isFinal: false
         )
-        #expect(quote.committedBlocks.isEmpty)
+        #expect(quote.committedBlocks.map(\.source) == ["> 第一段\n\n"])
+        #expect(quote.activeBlock?.source == "> 第二段")
 
         let list = await pipeline.prepare(
             messageID: messageID,

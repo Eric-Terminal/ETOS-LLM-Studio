@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Foundation
+import Markdown
 
 public actor ETStreamingMarkdownPipeline {
     public static let shared = ETStreamingMarkdownPipeline()
@@ -60,11 +61,11 @@ public actor ETStreamingMarkdownPipeline {
             TelemetrySignpost.markdownInterval(characterCount: workingSource.count)
         )
         defer { TelemetrySignpost.end(signpost) }
-        let split = ETStreamingMarkdownBoundaryScanner.split(workingSource)
+        let split = ETStreamingMarkdownASTParser.split(workingSource)
         let didReset = !isStrictAppend
         let committedCountBeforeUpdate = state.committedBlocks.count
 
-        for committedSource in split.committedSources where !committedSource.isEmpty {
+        for committed in split.committedBlocks where !committed.source.isEmpty {
             let block = ETStreamingMarkdownBlock(
                 id: ETStreamingMarkdownBlockID(
                     messageID: messageID,
@@ -72,15 +73,15 @@ public actor ETStreamingMarkdownPipeline {
                     generation: state.generation,
                     ordinal: state.nextOrdinal
                 ),
-                source: committedSource,
-                kind: ETStreamingMarkdownBoundaryScanner.blockKind(for: committedSource)
+                source: committed.source,
+                kind: committed.kind
             )
             state.committedBlocks.append(block)
             state.nextOrdinal += 1
         }
 
-        var activeSource = split.activeSource
-        if isFinal, !activeSource.isEmpty {
+        var active = split.activeBlock
+        if isFinal, let finalActive = active {
             let block = ETStreamingMarkdownBlock(
                 id: ETStreamingMarkdownBlockID(
                     messageID: messageID,
@@ -88,25 +89,19 @@ public actor ETStreamingMarkdownPipeline {
                     generation: state.generation,
                     ordinal: state.nextOrdinal
                 ),
-                source: activeSource,
-                kind: ETStreamingMarkdownBoundaryScanner.blockKind(for: activeSource)
+                source: finalActive.source,
+                kind: finalActive.kind
             )
             state.committedBlocks.append(block)
             state.nextOrdinal += 1
-            activeSource = ""
+            active = nil
         }
 
         let activeBlock: ETStreamingMarkdownActiveBlock?
         let activeDisplayText: String
-        if activeSource.isEmpty {
-            activeBlock = nil
-            activeDisplayText = ""
-        } else {
-            let presentation = ETStreamingMarkdownBoundaryScanner.activePresentation(for: activeSource)
-            activeDisplayText = ETStreamingMarkdownBoundaryScanner.displayText(
-                for: activeSource,
-                presentation: presentation
-            )
+        if let active {
+            let presentation = active.presentation
+            activeDisplayText = active.displayText
             let updateKind: ETStreamingMarkdownUpdateKind
             let committedNewBlock = state.committedBlocks.count != committedCountBeforeUpdate
             if !didReset,
@@ -123,15 +118,18 @@ public actor ETStreamingMarkdownPipeline {
                     generation: state.generation,
                     ordinal: state.nextOrdinal
                 ),
-                source: activeSource,
+                source: active.source,
                 displayText: activeDisplayText,
                 presentation: presentation,
                 updateKind: updateKind
             )
+        } else {
+            activeBlock = nil
+            activeDisplayText = ""
         }
 
         state.sourceText = sourceText
-        state.activeSource = activeSource
+        state.activeSource = active?.source ?? ""
         state.activeDisplayText = activeDisplayText
         state.revision &+= 1
 
@@ -158,292 +156,176 @@ public actor ETStreamingMarkdownPipeline {
     }
 }
 
-enum ETStreamingMarkdownBoundaryScanner {
-    private struct SourceLine {
-        let range: Range<String.Index>
-        let content: Substring
-    }
-
-    private enum ContainerKind: Equatable {
-        case regular
-        case blockquote
-        case list(ListMarkerKind)
-        case indented
-        case fenced
-    }
-
-    private enum ListMarkerKind: Equatable {
-        case unordered
-        case ordered
-    }
-
-    private struct Fence {
-        let marker: Character
-        let count: Int
-        let info: String?
+enum ETStreamingMarkdownASTParser {
+    struct ParsedBlock: Equatable {
+        let source: String
+        let kind: ETStreamingMarkdownBlockKind
+        let presentation: ETStreamingMarkdownActivePresentation
+        let displayText: String
     }
 
     struct SplitResult: Equatable {
-        let committedSources: [String]
-        let activeSource: String
+        let committedBlocks: [ParsedBlock]
+        let activeBlock: ParsedBlock?
     }
 
     static func split(_ source: String) -> SplitResult {
         guard !source.isEmpty else {
-            return SplitResult(committedSources: [], activeSource: "")
+            return SplitResult(committedBlocks: [], activeBlock: nil)
         }
 
-        let lines = sourceLines(in: source)
-        var committedSources: [String] = []
-        var segmentStart = source.startIndex
-        var segmentContainer: ContainerKind?
-        var openFence: Fence?
-        var pendingBlankBoundary = false
-        var pendingFenceBoundary = false
-
-        for line in lines {
-            let content = line.content
-            let isBlank = content.allSatisfy(\.isWhitespace)
-
-            if let fence = openFence {
-                if isClosingFence(content, matching: fence) {
-                    openFence = nil
-                    pendingFenceBoundary = true
-                }
-                continue
-            }
-
-            if isBlank {
-                pendingBlankBoundary = segmentContainer != nil
-                continue
-            }
-
-            if pendingFenceBoundary {
-                appendCommittedSource(
-                    source,
-                    range: segmentStart..<line.range.lowerBound,
-                    into: &committedSources
-                )
-                segmentStart = line.range.lowerBound
-                segmentContainer = nil
-                pendingBlankBoundary = false
-                pendingFenceBoundary = false
-            } else if pendingBlankBoundary,
-                      let container = segmentContainer,
-                      !continues(container: container, with: content) {
-                appendCommittedSource(
-                    source,
-                    range: segmentStart..<line.range.lowerBound,
-                    into: &committedSources
-                )
-                segmentStart = line.range.lowerBound
-                segmentContainer = nil
-                pendingBlankBoundary = false
-            } else {
-                pendingBlankBoundary = false
-            }
-
-            if segmentContainer == nil {
-                if let fence = openingFence(content) {
-                    segmentContainer = .fenced
-                    openFence = fence
-                } else {
-                    segmentContainer = containerKind(for: content)
-                }
-            }
+        let children = Array(Document(parsing: source).children)
+        guard !children.isEmpty else {
+            return SplitResult(
+                committedBlocks: [],
+                activeBlock: parsedBlock(source: source, markup: nil)
+            )
         }
 
-        let activeSource = String(source[segmentStart...])
-        return SplitResult(
-            committedSources: committedSources,
-            activeSource: activeSource
-        )
+        let converter = SourceIndexConverter(source: source)
+        var segmentStarts = [source.startIndex]
+        for child in children.dropFirst() {
+            guard let location = child.range?.lowerBound,
+                  converter.index(for: location) != nil,
+                  let lineStart = converter.lineStart(for: location.line),
+                  lineStart >= segmentStarts[segmentStarts.count - 1] else {
+                return SplitResult(
+                    committedBlocks: [],
+                    activeBlock: parsedBlock(source: source, markup: children.last)
+                )
+            }
+            segmentStarts.append(lineStart)
+        }
+
+        var parsedBlocks: [ParsedBlock] = []
+        parsedBlocks.reserveCapacity(children.count)
+        for index in children.indices {
+            let end = index + 1 < segmentStarts.count
+                ? segmentStarts[index + 1]
+                : source.endIndex
+            let blockSource = String(source[segmentStarts[index]..<end])
+            guard !blockSource.isEmpty else { continue }
+            parsedBlocks.append(parsedBlock(source: blockSource, markup: children[index]))
+        }
+
+        guard let activeBlock = parsedBlocks.popLast() else {
+            return SplitResult(
+                committedBlocks: [],
+                activeBlock: parsedBlock(source: source, markup: children.last)
+            )
+        }
+        return SplitResult(committedBlocks: parsedBlocks, activeBlock: activeBlock)
     }
 
-    static func blockKind(for source: String) -> ETStreamingMarkdownBlockKind {
-        guard let firstContentLine = sourceLines(in: source).first(where: {
-            !$0.content.allSatisfy(\.isWhitespace)
-        }), let fence = openingFence(firstContentLine.content) else {
-            return .markdown
+    private static func parsedBlock(source: String, markup: Markup?) -> ParsedBlock {
+        guard let codeBlock = markup as? CodeBlock else {
+            return ParsedBlock(
+                source: source,
+                kind: .markdown,
+                presentation: .markdownSource,
+                displayText: source
+            )
         }
 
-        let language = fence.info?
+        let language = codeBlock.language?
             .split(whereSeparator: \.isWhitespace)
             .first
             .map { String($0).lowercased() }
         if language == "mermaid" || language == "mmd" {
-            return .mermaid
+            return ParsedBlock(
+                source: source,
+                kind: .mermaid,
+                presentation: .mermaidSource,
+                displayText: codeBody(source: source, parsedCode: codeBlock.code)
+            )
         }
-        return .fencedCode(language: language)
+        return ParsedBlock(
+            source: source,
+            kind: .fencedCode(language: language),
+            presentation: .code(language: language),
+            displayText: codeBody(source: source, parsedCode: codeBlock.code)
+        )
     }
 
-    static func activePresentation(
-        for source: String
-    ) -> ETStreamingMarkdownActivePresentation {
-        switch blockKind(for: source) {
-        case .markdown:
-            return .markdownSource
-        case .fencedCode(let language):
-            return .code(language: language)
-        case .mermaid:
-            return .mermaidSource
+    private static func codeBody(source: String, parsedCode: String) -> String {
+        guard let openingLineEnd = source.firstIndex(of: "\n") else {
+            return parsedCode
         }
-    }
 
-    static func displayText(
-        for source: String,
-        presentation: ETStreamingMarkdownActivePresentation
-    ) -> String {
-        switch presentation {
-        case .markdownSource:
-            return source
-        case .code, .mermaidSource:
-            return fencedBody(in: source)
+        let firstLineSource = source[..<openingLineEnd]
+        let openingIndent = firstLineSource.prefix(while: { $0 == " " }).count
+        guard openingIndent <= 3 else { return parsedCode }
+        let firstLine = firstLineSource.dropFirst(openingIndent)
+        guard let marker = firstLine.first,
+              marker == "`" || marker == "~",
+              firstLine.prefix(while: { $0 == marker }).count >= 3 else {
+            return parsedCode
         }
-    }
+        let openingMarkerCount = firstLine.prefix(while: { $0 == marker }).count
 
-    private static func sourceLines(in source: String) -> [SourceLine] {
-        var lines: [SourceLine] = []
-        var lineStart = source.startIndex
-        var cursor = source.startIndex
+        let bodyStart = source.index(after: openingLineEnd)
+        var candidateEnd = source.endIndex
+        while candidateEnd > bodyStart {
+            let previousNewline = source[..<candidateEnd].lastIndex(of: "\n")
+            let candidateStart = previousNewline.map { source.index(after: $0) } ?? bodyStart
+            let candidateSource = source[candidateStart..<candidateEnd]
+            let closingIndent = candidateSource.prefix(while: { $0 == " " }).count
+            let candidate = candidateSource.dropFirst(closingIndent)
+            let closingMarkerCount = candidate.prefix(while: { $0 == marker }).count
 
-        while cursor < source.endIndex {
-            if source[cursor] == "\n" {
-                let afterNewline = source.index(after: cursor)
-                lines.append(SourceLine(
-                    range: lineStart..<afterNewline,
-                    content: source[lineStart..<cursor]
-                ))
-                lineStart = afterNewline
+            if closingIndent <= 3,
+               closingMarkerCount >= openingMarkerCount,
+               candidate.dropFirst(closingMarkerCount).allSatisfy(\.isWhitespace) {
+                return String(source[bodyStart..<candidateStart])
             }
-            cursor = source.index(after: cursor)
+            guard candidate.allSatisfy(\.isWhitespace), let previousNewline else { break }
+            candidateEnd = previousNewline
         }
-
-        if lineStart < source.endIndex {
-            lines.append(SourceLine(
-                range: lineStart..<source.endIndex,
-                content: source[lineStart..<source.endIndex]
-            ))
-        }
-        return lines
+        return String(source[bodyStart...])
     }
 
-    private static func appendCommittedSource(
-        _ source: String,
-        range: Range<String.Index>,
-        into result: inout [String]
-    ) {
-        guard !range.isEmpty else { return }
-        result.append(String(source[range]))
-    }
+    // swift-markdown 的列号按 UTF-8 字节计数，不能直接作为 Swift 字符偏移使用。
+    private struct SourceIndexConverter {
+        let source: String
+        let lineStarts: [String.UTF8View.Index]
 
-    private static func containerKind(for line: Substring) -> ContainerKind {
-        let leadingSpaces = line.prefix { $0 == " " }.count
-        if leadingSpaces >= 4 {
-            return .indented
-        }
-        let trimmed = line.dropFirst(min(leadingSpaces, line.count))
-        if trimmed.first == ">" {
-            return .blockquote
-        }
-        if let marker = listMarkerKind(in: line) {
-            return .list(marker)
-        }
-        return .regular
-    }
-
-    private static func continues(container: ContainerKind, with line: Substring) -> Bool {
-        switch container {
-        case .regular, .fenced:
-            return false
-        case .blockquote:
-            let trimmed = line.drop(while: { $0 == " " })
-            return trimmed.first == ">"
-        case .list(let marker):
-            if listMarkerKind(in: line) == marker {
-                return true
+        init(source: String) {
+            self.source = source
+            var starts = [source.utf8.startIndex]
+            var index = source.utf8.startIndex
+            while index < source.utf8.endIndex {
+                let nextIndex = source.utf8.index(after: index)
+                if source.utf8[index] == 0x0A {
+                    starts.append(nextIndex)
+                }
+                index = nextIndex
             }
-            return line.prefix { $0 == " " }.count >= 2
-        case .indented:
-            return line.prefix { $0 == " " }.count >= 4
-        }
-    }
-
-    private static func listMarkerKind(in line: Substring) -> ListMarkerKind? {
-        let spaces = line.prefix { $0 == " " }.count
-        guard spaces <= 3 else { return nil }
-        let content = line.dropFirst(spaces)
-        guard let first = content.first else { return nil }
-
-        if first == "-" || first == "+" || first == "*" {
-            let next = content.index(after: content.startIndex)
-            guard next < content.endIndex, content[next].isWhitespace else { return nil }
-            return .unordered
+            lineStarts = starts
         }
 
-        var cursor = content.startIndex
-        var digitCount = 0
-        while cursor < content.endIndex,
-              content[cursor].isNumber,
-              digitCount < 9 {
-            digitCount += 1
-            cursor = content.index(after: cursor)
-        }
-        guard digitCount > 0,
-              cursor < content.endIndex,
-              content[cursor] == "." || content[cursor] == ")" else {
-            return nil
-        }
-        cursor = content.index(after: cursor)
-        guard cursor < content.endIndex, content[cursor].isWhitespace else { return nil }
-        return .ordered
-    }
-
-    private static func openingFence(_ line: Substring) -> Fence? {
-        let spaces = line.prefix { $0 == " " }.count
-        guard spaces <= 3 else { return nil }
-        let content = line.dropFirst(spaces)
-        guard let marker = content.first, marker == "`" || marker == "~" else {
-            return nil
-        }
-        let count = content.prefix { $0 == marker }.count
-        guard count >= 3 else { return nil }
-        let tailStart = content.index(content.startIndex, offsetBy: count)
-        let tail = content[tailStart...]
-        if marker == "`", tail.contains("`") {
-            return nil
-        }
-        let info = tail.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Fence(marker: marker, count: count, info: info.isEmpty ? nil : info)
-    }
-
-    private static func isClosingFence(_ line: Substring, matching fence: Fence) -> Bool {
-        let spaces = line.prefix { $0 == " " }.count
-        guard spaces <= 3 else { return false }
-        let content = line.dropFirst(spaces)
-        let count = content.prefix { $0 == fence.marker }.count
-        guard count >= fence.count else { return false }
-        let tailStart = content.index(content.startIndex, offsetBy: count)
-        return content[tailStart...].allSatisfy(\.isWhitespace)
-    }
-
-    private static func fencedBody(in source: String) -> String {
-        let lines = sourceLines(in: source)
-        guard let firstIndex = lines.firstIndex(where: {
-            !$0.content.allSatisfy(\.isWhitespace)
-        }), let fence = openingFence(lines[firstIndex].content) else {
-            return source
+        func index(for location: SourceLocation) -> String.Index? {
+            guard location.line > 0,
+                  location.line <= lineStarts.count,
+                  location.column > 0 else {
+                return nil
+            }
+            let lineStart = lineStarts[location.line - 1]
+            let lineEnd = location.line < lineStarts.count
+                ? lineStarts[location.line]
+                : source.utf8.endIndex
+            guard let utf8Index = source.utf8.index(
+                lineStart,
+                offsetBy: location.column - 1,
+                limitedBy: lineEnd
+            ) else {
+                return nil
+            }
+            return utf8Index.samePosition(in: source)
         }
 
-        let bodyStart = lines[firstIndex].range.upperBound
-        var bodyEnd = source.endIndex
-        if let lastContentIndex = lines.lastIndex(where: {
-            !$0.content.allSatisfy(\.isWhitespace)
-        }), lastContentIndex > firstIndex,
-           isClosingFence(lines[lastContentIndex].content, matching: fence) {
-            bodyEnd = lines[lastContentIndex].range.lowerBound
+        func lineStart(for line: Int) -> String.Index? {
+            guard line > 0, line <= lineStarts.count else { return nil }
+            return lineStarts[line - 1].samePosition(in: source)
         }
-        guard bodyStart <= bodyEnd else { return "" }
-        return String(source[bodyStart..<bodyEnd])
     }
 }
