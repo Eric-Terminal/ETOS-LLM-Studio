@@ -516,6 +516,8 @@ final class PersistenceGRDBStore {
                 try db.execute(sql: "ALTER TABLE messages ADD COLUMN conversation_event_id TEXT")
             }
             if addedAuthorKind {
+                // 旧触发器监听任意字段更新，批量回填会为每条历史消息重建一次 FTS。
+                try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
                 try db.execute(sql: """
                     UPDATE messages
                     SET author_kind = CASE role
@@ -526,6 +528,7 @@ final class PersistenceGRDBStore {
                         ELSE 'user'
                     END
                 """)
+                try Self.createMessagesFTSUpdateTrigger(db)
             }
 
             try Self.createConversationRuntimeTables(db)
@@ -550,6 +553,10 @@ final class PersistenceGRDBStore {
             try db.execute(
                 sql: "CREATE INDEX IF NOT EXISTS idx_sessions_container ON sessions(container_session_id, updated_at DESC)"
             )
+        }
+
+        migrator.registerMigration("v13_limit_messages_fts_update_trigger") { db in
+            try Self.replaceMessagesFTSUpdateTrigger(db)
         }
 
         try migrator.migrate(dbPool)
@@ -617,6 +624,11 @@ final class PersistenceGRDBStore {
             )
 
             let messageColumnsBeforeRepair = try columnNames(db, table: "messages")
+            let shouldBackfillAuthorKind = !messageColumnsBeforeRepair.contains("author_kind")
+            if shouldBackfillAuthorKind {
+                // 修复异常旧库时同样不能让元数据回填触发全文索引重建。
+                try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
+            }
             try ensureColumn(db, table: "messages", column: "requested_at", definition: "requested_at REAL")
             try ensureColumn(db, table: "messages", column: "content_versions_json", definition: "content_versions_json BLOB NOT NULL DEFAULT X'5B5D'")
             try ensureColumn(db, table: "messages", column: "current_version_index", definition: "current_version_index INTEGER NOT NULL DEFAULT 0")
@@ -641,7 +653,7 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "messages", column: "source_session_id", definition: "source_session_id TEXT")
             try ensureColumn(db, table: "messages", column: "source_message_id", definition: "source_message_id TEXT")
             try ensureColumn(db, table: "messages", column: "conversation_event_id", definition: "conversation_event_id TEXT")
-            if !messageColumnsBeforeRepair.contains("author_kind") {
+            if shouldBackfillAuthorKind {
                 try db.execute(sql: """
                     UPDATE messages
                     SET author_kind = CASE role
@@ -652,6 +664,7 @@ final class PersistenceGRDBStore {
                         ELSE 'user'
                     END
                 """)
+                try Self.createMessagesFTSUpdateTrigger(db)
             }
             try ensureColumn(db, table: "messages", column: "position", definition: "position INTEGER NOT NULL DEFAULT 0")
             try ensureColumn(db, table: "messages", column: "created_at", definition: "created_at REAL NOT NULL DEFAULT 0")
@@ -819,8 +832,21 @@ final class PersistenceGRDBStore {
                 DELETE FROM messages_fts WHERE message_id = old.id;
             END
         """)
+        try Self.createMessagesFTSUpdateTrigger(db)
+    }
+
+    private static func replaceMessagesFTSUpdateTrigger(_ db: Database) throws {
+        try db.execute(sql: "DROP TRIGGER IF EXISTS messages_au")
+        try createMessagesFTSUpdateTrigger(db)
+    }
+
+    private static func createMessagesFTSUpdateTrigger(_ db: Database) throws {
         try db.execute(sql: """
-            CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages
+            CREATE TRIGGER IF NOT EXISTS messages_au
+            AFTER UPDATE OF id, session_id, content ON messages
+            WHEN old.id IS NOT new.id
+                OR old.session_id IS NOT new.session_id
+                OR old.content IS NOT new.content
             BEGIN
                 DELETE FROM messages_fts WHERE message_id = old.id;
                 INSERT INTO messages_fts(message_id, session_id, content)
