@@ -98,17 +98,9 @@ actor ConversationRunCoordinator {
 
     private func drainPendingEvents() async {
         guard let chatService else { return }
-        let concurrencyLimit = max(
-            1,
-            Persistence.readAppConfigInteger(
-                key: AppConfigKey.conversationRuntimeConcurrencyLimit.rawValue
-            ) ?? defaultConcurrencyLimit
-        )
-
-        while occupiedModelSessionCount(chatService: chatService) < concurrencyLimit,
-              let event = Persistence.claimNextPendingConversationEvent(
+        while let event = Persistence.claimNextPendingConversationEvent(
                   executorDeviceID: UsageAnalyticsRuntimeContext.currentDeviceIdentifier(),
-                  excludingDestinationSessionIDs: chatService.activeRequestSessionIDs()
+                  excludingDestinationSessionIDs: occupiedModelSessionIDs(chatService: chatService)
               ) {
             runningEventIDs.insert(event.id)
             runningEventSessionIDs[event.id] = event.destinationSessionID
@@ -445,18 +437,10 @@ actor ConversationRunCoordinator {
         ]).prettyPrintedCompact()
     }
 
-    private var defaultConcurrencyLimit: Int {
-        #if os(watchOS)
-        return 1
-        #else
-        return 3
-        #endif
-    }
-
-    private func occupiedModelSessionCount(chatService: ChatService) -> Int {
+    private func occupiedModelSessionIDs(chatService: ChatService) -> Set<UUID> {
         var sessionIDs = chatService.activeRequestSessionIDs()
         sessionIDs.formUnion(runningEventSessionIDs.values)
-        return sessionIDs.count
+        return sessionIDs
     }
 
     private func publishRuntimeStates() async {

@@ -5713,3 +5713,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "会按官方配置更新模型启用状态。" = "Mettre à jour l’activation des modèles depuis la configuration officielle.";
 "该版本已应用，本次不会重复修改本地数据。" = "Cette révision est déjà appliquée et ne modifiera pas à nouveau les données locales.";
 "正在加载会话…" = "Chargement de la conversation…";
+"自动执行预算由同一根协作链共享，耗尽后可从会话列表继续。" = "Le budget d’exécution automatique est partagé par la même chaîne de collaboration racine. Lorsqu’il est épuisé, vous pouvez continuer depuis la liste des conversations.";

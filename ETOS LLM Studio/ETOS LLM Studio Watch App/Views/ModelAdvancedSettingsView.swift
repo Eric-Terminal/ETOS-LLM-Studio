@@ -257,15 +257,8 @@ struct ModelAdvancedSettingsView: View {
 
                 Section(
                     header: Text(NSLocalizedString("会话协作", comment: "Conversation collaboration settings")),
-                    footer: Text(NSLocalizedString("等待其他会话不占并行名额；预算耗尽后可从会话操作中继续。", comment: "Watch conversation runtime settings explanation"))
+                    footer: Text(NSLocalizedString("自动执行预算由同一根协作链共享，耗尽后可从会话列表继续。", comment: "Watch conversation runtime settings explanation"))
                 ) {
-                    TextField(
-                        NSLocalizedString("并行回复数", comment: "Conversation runtime concurrency"),
-                        value: conversationRuntimeConcurrencyBinding,
-                        formatter: numberFormatter
-                    )
-                    .monospacedDigit()
-
                     TextField(
                         NSLocalizedString("自动执行预算", comment: "Conversation runtime execution budget"),
                         value: conversationRuntimeBudgetBinding,
@@ -537,13 +530,6 @@ struct ModelAdvancedSettingsView: View {
             setSessionTagsAction: { session, tagIDs in
                 viewModel.setSessionTags(for: session, tagIDs: tagIDs)
             }
-        )
-    }
-
-    private var conversationRuntimeConcurrencyBinding: Binding<Int> {
-        Binding(
-            get: { max(1, appConfig.conversationRuntimeConcurrencyLimit) },
-            set: { appConfig.conversationRuntimeConcurrencyLimit = max(1, $0) }
         )
     }
 

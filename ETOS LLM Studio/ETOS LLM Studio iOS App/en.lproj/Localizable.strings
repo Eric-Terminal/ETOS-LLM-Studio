@@ -5727,3 +5727,4 @@
 "保留用户设置的模型启用状态。" = "Keep the model activation states set by the user.";
 "会按官方配置更新模型启用状态。" = "Update model activation states from the official configuration.";
 "该版本已应用，本次不会重复修改本地数据。" = "This revision is already applied and will not modify local data again.";
+"自动执行预算由同一根协作链共享，耗尽后可从会话列表继续。" = "The automatic execution budget is shared by the same root collaboration chain. When it runs out, continue from the conversation list.";

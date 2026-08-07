@@ -5713,3 +5713,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "会按官方配置更新模型启用状态。" = "Actualizar los estados de activación desde la configuración oficial.";
 "该版本已应用，本次不会重复修改本地数据。" = "Esta revisión ya está aplicada y no volverá a modificar los datos locales.";
 "正在加载会话…" = "Cargando conversación…";
+"自动执行预算由同一根协作链共享，耗尽后可从会话列表继续。" = "El presupuesto de ejecución automática se comparte en la misma cadena de colaboración raíz. Cuando se agote, puedes continuar desde la lista de conversaciones.";

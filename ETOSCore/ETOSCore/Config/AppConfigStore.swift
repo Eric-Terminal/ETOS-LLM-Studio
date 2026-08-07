@@ -195,7 +195,6 @@ public final class AppConfigStore: ObservableObject {
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
     @Published public var performanceTelemetryEnabled: Bool { didSet { write(.performanceTelemetryEnabled, performanceTelemetryEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
-    @Published public var conversationRuntimeConcurrencyLimit: Int { didSet { write(.conversationRuntimeConcurrencyLimit, conversationRuntimeConcurrencyLimit) } }
     @Published public var conversationRuntimeExecutionBudget: Int { didSet { write(.conversationRuntimeExecutionBudget, conversationRuntimeExecutionBudget) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
@@ -563,7 +562,6 @@ public final class AppConfigStore: ObservableObject {
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
         performanceTelemetryEnabled = Self.boolValue(.performanceTelemetryEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
-        conversationRuntimeConcurrencyLimit = Self.integerValue(.conversationRuntimeConcurrencyLimit, userDefaults: userDefaults)
         conversationRuntimeExecutionBudget = Self.integerValue(.conversationRuntimeExecutionBudget, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
@@ -1069,7 +1067,6 @@ public final class AppConfigStore: ObservableObject {
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
         case .performanceTelemetryEnabled: return .bool(performanceTelemetryEnabled)
         case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
-        case .conversationRuntimeConcurrencyLimit: return .integer(conversationRuntimeConcurrencyLimit)
         case .conversationRuntimeExecutionBudget: return .integer(conversationRuntimeExecutionBudget)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
@@ -1311,8 +1308,6 @@ public final class AppConfigStore: ObservableObject {
             restoreLastSessionWithinMinutes = Self.normalizedIntegerValue(value, for: key)
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
-        case .conversationRuntimeConcurrencyLimit:
-            conversationRuntimeConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .conversationRuntimeExecutionBudget:
             conversationRuntimeExecutionBudget = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
@@ -1762,7 +1757,6 @@ public final class AppConfigStore: ObservableObject {
             return LaunchSessionPolicy.normalizedRestoreWindowMinutes(value)
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit,
-             .conversationRuntimeConcurrencyLimit,
              .conversationRuntimeExecutionBudget:
             return max(1, value)
         case .videoFrameMaximumCount:
