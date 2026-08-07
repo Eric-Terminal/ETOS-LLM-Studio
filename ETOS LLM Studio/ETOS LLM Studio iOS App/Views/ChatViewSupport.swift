@@ -142,6 +142,18 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     @Binding var keepsBottomPinned: Bool
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
+    /// 输入栏或键盘改变可视区域时，底部锁定必须跟着新的视口重新落位。
+    nonisolated static func shouldRestoreBottomAfterViewportResize(
+        from oldSize: CGSize,
+        to newSize: CGSize,
+        keepsBottomPinned: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        let sizeChanged = abs(oldSize.width - newSize.width) > 0.5
+            || abs(oldSize.height - newSize.height) > 0.5
+        return sizeChanged && keepsBottomPinned && !isUserInteracting
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
@@ -175,6 +187,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var boundsObservation: NSKeyValueObservation?
         private var pendingBottomPin: DispatchWorkItem?
         private var pendingDistanceNotification: DispatchWorkItem?
+        private var lastBoundsSize: CGSize?
+        private var restoresBottomAfterViewportResize = false
         private var lastDistanceToBottom: CGFloat = 0
         private var lastDistanceToTop: CGFloat = 0
         private var hasReportedDistance = false
@@ -201,6 +215,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingBottomPin = nil
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
+            lastBoundsSize = scrollView.bounds.size
+            restoresBottomAfterViewportResize = false
             hasReportedDistance = false
             lastDistanceToBottom = 0
             lastDistanceToTop = 0
@@ -212,14 +228,38 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
                 self?.handleContentSizeChange()
             }
-            boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] _, _ in
-                self?.scheduleDistanceChangeNotification()
+            boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] scrollView, _ in
+                self?.handleBoundsChange(scrollView.bounds.size)
             }
         }
 
         private func handleContentSizeChange() {
             scheduleBottomPin()
             scheduleDistanceChangeNotification()
+        }
+
+        private func handleBoundsChange(_ newSize: CGSize) {
+            defer {
+                lastBoundsSize = newSize
+                scheduleDistanceChangeNotification()
+            }
+            guard let lastBoundsSize else { return }
+
+            let isUserInteracting = scrollView?.isDragging == true
+                || scrollView?.isTracking == true
+                || scrollView?.isDecelerating == true
+            guard ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+                from: lastBoundsSize,
+                to: newSize,
+                keepsBottomPinned: keepsBottomPinned.wrappedValue,
+                isUserInteracting: isUserInteracting
+            ) else {
+                return
+            }
+
+            // 先记住尺寸变化前的贴底意图，避免随后上报的新距离覆盖判断依据。
+            restoresBottomAfterViewportResize = true
+            scheduleBottomPin()
         }
 
         /// contentSize 的 KVO 正处在 UIKit/SwiftUI 布局栈内，不能同步改 contentOffset。
@@ -240,12 +280,17 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
-            let shouldPin = hasReportedDistance
+            let shouldRestoreAfterResize = restoresBottomAfterViewportResize
+            restoresBottomAfterViewportResize = false
+            let wasPinnedBeforeLayoutChange = hasReportedDistance
                 && ETScrollBottomPinPolicy.shouldKeepPinned(
                     keepsBottomPinned: keepsBottomPinned.wrappedValue,
                     previousDistanceToBottom: lastDistanceToBottom,
                     isUserInteracting: isUserInteracting
                 )
+            let shouldPin = keepsBottomPinned.wrappedValue
+                && !isUserInteracting
+                && (shouldRestoreAfterResize || wasPinnedBeforeLayoutChange)
 
             if shouldPin {
                 let maximumOffsetY = max(

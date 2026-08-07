@@ -130,6 +130,37 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("输入栏收缩扩大聊天视口时会恢复底部锚点")
+    func testChatScrollViewportResizeRestoresBottomAnchor() {
+        let expandedComposerViewport = CGSize(width: 390, height: 248)
+        let compactComposerViewport = CGSize(width: 390, height: 446)
+
+        #expect(ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: expandedComposerViewport,
+            to: compactComposerViewport,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: compactComposerViewport,
+            to: compactComposerViewport,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: expandedComposerViewport,
+            to: compactComposerViewport,
+            keepsBottomPinned: false,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: expandedComposerViewport,
+            to: compactComposerViewport,
+            keepsBottomPinned: true,
+            isUserInteracting: true
+        ))
+    }
+
     @Test("自动历史窗口只在真实滚到顶部时加载一次")
     func testAutomaticHistoryLoadingRequiresTopInteraction() {
         let firstMessageID = UUID()
