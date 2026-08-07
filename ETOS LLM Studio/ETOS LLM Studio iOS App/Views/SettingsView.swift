@@ -46,6 +46,16 @@ private enum CoreSettingsNavigationDestination: Hashable {
 }
 
 struct SettingsView: View {
+    private static let portraitCoreSettingsColumns = Array(
+        repeating: GridItem(.flexible()),
+        count: 2
+    )
+    private static let landscapeCoreSettingsColumns = Array(
+        repeating: GridItem(.flexible()),
+        count: 3
+    )
+    private static let maximumCoreSettingsCardPreferredHeight: CGFloat = 160
+
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
@@ -53,6 +63,7 @@ struct SettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
     @State private var coreSettingsDestination: CoreSettingsNavigationDestination?
+    @State private var viewportSize = CGSize.zero
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -62,55 +73,7 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                Grid {
-                    GridRow {
-                        Button {
-                            coreSettingsDestination = .modelManagement
-                        } label: {
-                            SettingsCategoryCard("模型管理", icon: .providerManagement)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            coreSettingsDestination = .conversation
-                        } label: {
-                            SettingsCategoryCard("会话", icon: .conversationSettings)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    GridRow {
-                        Button {
-                            coreSettingsDestination = .prompts
-                        } label: {
-                            SettingsCategoryCard("提示词", icon: .promptSettings)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            coreSettingsDestination = .output
-                        } label: {
-                            SettingsCategoryCard("输出", icon: .outputSettings)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    GridRow {
-                        Button {
-                            coreSettingsDestination = .display
-                        } label: {
-                            SettingsCategoryCard("背景与视觉", icon: .display)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button {
-                            coreSettingsDestination = .sync
-                        } label: {
-                            SettingsCategoryCard("同步与备份", icon: .sync)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                coreSettingsGrid
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -237,6 +200,11 @@ struct SettingsView: View {
                 }
             }
         }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { newSize in
+            viewportSize = newSize
+        }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
         .onAppear {
             scheduleSettingsResearchAchievementIfNeeded()
@@ -298,6 +266,76 @@ struct SettingsView: View {
                 UpdateTimelineView()
             }
         }
+    }
+
+    /// 纵向保留两列，横向使用三列；宽屏卡片停止按宽度无限增高。
+    private var coreSettingsGrid: some View {
+        let isLandscape = viewportSize.width > viewportSize.height
+        let columnCount = isLandscape ? 3 : 2
+        let columns = isLandscape
+            ? Self.landscapeCoreSettingsColumns
+            : Self.portraitCoreSettingsColumns
+        let preferredCardHeight = min(
+            viewportSize.width / CGFloat(columnCount) / 2,
+            Self.maximumCoreSettingsCardPreferredHeight
+        )
+
+        return LazyVGrid(columns: columns) {
+            coreSettingsButton(
+                titleKey: "模型管理",
+                icon: .providerManagement,
+                destination: .modelManagement,
+                preferredHeight: preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "会话",
+                icon: .conversationSettings,
+                destination: .conversation,
+                preferredHeight: preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "提示词",
+                icon: .promptSettings,
+                destination: .prompts,
+                preferredHeight: preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "输出",
+                icon: .outputSettings,
+                destination: .output,
+                preferredHeight: preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "背景与视觉",
+                icon: .display,
+                destination: .display,
+                preferredHeight: preferredCardHeight
+            )
+            coreSettingsButton(
+                titleKey: "同步与备份",
+                icon: .sync,
+                destination: .sync,
+                preferredHeight: preferredCardHeight
+            )
+        }
+    }
+
+    private func coreSettingsButton(
+        titleKey: String,
+        icon: SettingsListIcon,
+        destination: CoreSettingsNavigationDestination,
+        preferredHeight: CGFloat
+    ) -> some View {
+        Button {
+            coreSettingsDestination = destination
+        } label: {
+            SettingsCategoryCard(
+                titleKey,
+                icon: icon,
+                preferredHeight: preferredHeight
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 辅助方法
@@ -472,11 +510,13 @@ struct SettingsListIconLabel: View {
 private struct SettingsCategoryCard: View {
     let title: String
     let icon: SettingsListIcon
+    let preferredHeight: CGFloat
     @ObservedObject private var appConfig = AppConfigStore.shared
 
-    init(_ titleKey: String, icon: SettingsListIcon) {
+    init(_ titleKey: String, icon: SettingsListIcon, preferredHeight: CGFloat) {
         self.title = NSLocalizedString(titleKey, comment: "核心设置分类入口标题")
         self.icon = icon
+        self.preferredHeight = preferredHeight
     }
 
     var body: some View {
@@ -496,8 +536,8 @@ private struct SettingsCategoryCard: View {
             }
         }
         .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .aspectRatio(2, contentMode: .fit)
+        // 只限制卡片随宽度增长的目标高度，动态字体仍可按内容继续撑开。
+        .frame(maxWidth: .infinity, minHeight: preferredHeight, alignment: .leading)
         .background(
             Color(uiColor: .secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
