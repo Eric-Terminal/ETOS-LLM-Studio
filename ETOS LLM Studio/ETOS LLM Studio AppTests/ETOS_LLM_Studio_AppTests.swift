@@ -161,6 +161,22 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("锁定底部时消息增长不会被增长后的距离拒绝")
+    func testChatScrollContentGrowthPreservesBottomIntent() {
+        #expect(ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: false,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: true,
+            isUserInteracting: true
+        ))
+    }
+
     @Test("自动历史窗口只在真实滚到顶部时加载一次")
     func testAutomaticHistoryLoadingRequiresTopInteraction() {
         let firstMessageID = UUID()
