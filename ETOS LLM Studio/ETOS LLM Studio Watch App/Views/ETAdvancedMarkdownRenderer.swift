@@ -71,11 +71,14 @@ struct ETAdvancedMarkdownRenderer: View {
         if isStreaming { return true }
         guard enableMarkdown,
               effectivePreparedContent == nil,
-              let snapshot = streamingState?.snapshot(for: streamingChannel) else {
+              let streamingState,
+              streamingState.snapshot(for: streamingChannel) != nil else {
             return false
         }
-        // 静态 Markdown 尚未准备好时保留最后一帧流式内容，避免短暂暴露源码标记。
-        return snapshot.sourceText == content
+        return streamingState.isAwaitingStaticHandoff(
+            sourceText: content,
+            channel: streamingChannel
+        )
     }
 
     var body: some View {

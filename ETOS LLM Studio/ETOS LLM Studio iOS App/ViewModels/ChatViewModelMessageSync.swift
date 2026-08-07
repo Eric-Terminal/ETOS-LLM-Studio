@@ -195,6 +195,10 @@ extension ChatViewModel {
         if preparedMarkdownByMessageID[messageID]?.sourceText == sourceText {
             markdownPrepareTasks[messageID]?.cancel()
             markdownPrepareTasks.removeValue(forKey: messageID)
+            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(
+                sourceText: sourceText,
+                channel: .content
+            )
             return
         }
 
@@ -207,6 +211,10 @@ extension ChatViewModel {
             guard self.markdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.visualMessage.content == sourceText else { return }
             self.preparedMarkdownByMessageID[messageID] = prepared
+            self.messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(
+                sourceText: sourceText,
+                channel: .content
+            )
             if self.markdownPrepareGenerations[messageID] == generation {
                 self.markdownPrepareTasks[messageID] = nil
             }
@@ -297,12 +305,20 @@ extension ChatViewModel {
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
             reasoningMarkdownPrepareGenerations.removeValue(forKey: messageID)
+            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(
+                sourceText: message.reasoningContent ?? "",
+                channel: .reasoning
+            )
             return
         }
 
         if preparedReasoningMarkdownByMessageID[messageID]?.sourceText == sourceText {
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
+            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(
+                sourceText: sourceText,
+                channel: .reasoning
+            )
             return
         }
 
@@ -315,6 +331,10 @@ extension ChatViewModel {
             guard self.reasoningMarkdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.message.reasoningContent == sourceText else { return }
             self.preparedReasoningMarkdownByMessageID[messageID] = prepared
+            self.messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(
+                sourceText: sourceText,
+                channel: .reasoning
+            )
             if self.reasoningMarkdownPrepareGenerations[messageID] == generation {
                 self.reasoningMarkdownPrepareTasks[messageID] = nil
             }

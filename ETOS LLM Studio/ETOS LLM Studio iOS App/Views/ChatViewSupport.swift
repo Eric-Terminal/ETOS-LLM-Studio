@@ -93,6 +93,7 @@ struct MessageJumpRequest: Equatable {
 
 /// 只在会改变气泡高度的结构切换时重建视觉子树。
 struct ChatBubbleLayoutIdentity: Hashable {
+    let messageID: UUID
     let structuralRevision: UInt
     let isStreaming: Bool
     let hasPreparedMarkdown: Bool
@@ -155,6 +156,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
         private var boundsObservation: NSKeyValueObservation?
+        private var pendingBottomPin: DispatchWorkItem?
         private var pendingDistanceNotification: DispatchWorkItem?
         private var lastDistanceToBottom: CGFloat = 0
         private var lastDistanceToTop: CGFloat = 0
@@ -178,6 +180,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             contentOffsetObservation?.invalidate()
             contentSizeObservation?.invalidate()
             boundsObservation?.invalidate()
+            pendingBottomPin?.cancel()
+            pendingBottomPin = nil
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
             hasReportedDistance = false
@@ -197,6 +201,24 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         private func handleContentSizeChange() {
+            scheduleBottomPin()
+            scheduleDistanceChangeNotification()
+        }
+
+        /// contentSize 的 KVO 正处在 UIKit/SwiftUI 布局栈内，不能同步改 contentOffset。
+        /// 合并到下一轮主循环可避免删除高气泡时发生重入布局。
+        private func scheduleBottomPin() {
+            guard pendingBottomPin == nil else { return }
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.pendingBottomPin = nil
+                self.pinToBottomIfNeeded()
+            }
+            pendingBottomPin = workItem
+            DispatchQueue.main.async(execute: workItem)
+        }
+
+        private func pinToBottomIfNeeded() {
             guard let scrollView else { return }
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking

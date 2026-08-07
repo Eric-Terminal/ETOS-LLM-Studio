@@ -950,6 +950,13 @@ public class ChatService {
         }
     }
 
+    /// 删除正在生成的占位消息前先终止对应请求，避免后续 Token
+    /// 持续与消息列表删除竞争。
+    public func cancelRequestIfGenerating(messageID: UUID, in sessionID: UUID) async {
+        guard loadingMessageID(for: sessionID) == messageID else { return }
+        await cancelRequest(for: sessionID)
+    }
+
     /// 取消指定会话正在进行的请求，并进行必要的状态恢复。
     public func cancelRequest(for sessionID: UUID) async {
         guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),

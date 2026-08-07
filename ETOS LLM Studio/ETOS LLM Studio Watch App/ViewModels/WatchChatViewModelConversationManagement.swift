@@ -102,7 +102,17 @@ extension ChatViewModel {
     }
 
     func deleteAllVersions(of message: ChatMessage) {
-        chatService.deleteAllVersions(of: message)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let sessionID = currentSession?.id {
+                await chatService.cancelRequestIfGenerating(
+                    messageID: message.id,
+                    in: sessionID
+                )
+            }
+            guard let currentMessage = findMessage(by: message.id) else { return }
+            chatService.deleteAllVersions(of: currentMessage)
+        }
     }
 
     func addVersionToMessage(_ message: ChatMessage, newContent: String) {

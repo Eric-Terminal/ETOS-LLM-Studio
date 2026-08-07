@@ -229,6 +229,15 @@ struct ChatBubble: View {
             }
             .frame(width: usesNoBubbleStyle ? bubbleMaxWidth : nil, alignment: .leading)
             .frame(maxWidth: usesNoBubbleStyle ? nil : bubbleMaxWidth, alignment: isOutgoing ? .trailing : .leading)
+            // 消息 UUID 保证相邻气泡绝不会共享显式身份；其余字段只重建内容列，
+            // 促使 LazyVStack 重新测量真实高度，同时保留整行手势与预览状态。
+            .id(ChatBubbleLayoutIdentity(
+                messageID: messageState.id,
+                structuralRevision: showsStreamingIndicators ? 0 : messageState.layoutRevision,
+                isStreaming: showsStreamingIndicators,
+                hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil
+            ))
             
             // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
             if !isOutgoing || usesNoBubbleStyle {
@@ -246,14 +255,6 @@ struct ChatBubble: View {
                     .allowsHitTesting(false)
             }
         }
-        // 外层消息锚点保持稳定；只替换气泡的视觉子树，让 LazyVStack 重新测量
-        // 结构变化和流式/静态切换后的真实高度，同时保留本视图持有的预览状态。
-        .id(ChatBubbleLayoutIdentity(
-            structuralRevision: showsStreamingIndicators ? 0 : messageState.layoutRevision,
-            isStreaming: showsStreamingIndicators,
-            hasPreparedMarkdown: preparedMarkdownPayload != nil,
-            hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil
-        ))
         .modifier(
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,

@@ -15,6 +15,37 @@ import Combine
 struct ChatServiceConcurrentSessionInteractionTests {
 
     @MainActor
+    @Test("删除正在生成的消息只取消匹配请求")
+    func testCancellingRequestBeforeDeletingMatchesLoadingMessage() async {
+        let service = ChatService(memoryManager: MemoryManager())
+        let session = service.createSavedSession(name: "删除流式消息")
+        let loadingMessageID = UUID()
+        let requestTask = Task<Void, Error> {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+        service.setRequestContext(
+            ChatService.RequestExecutionContext(
+                token: UUID(),
+                task: requestTask,
+                loadingMessageID: loadingMessageID,
+                imageGenerationContext: nil
+            ),
+            for: session.id
+        )
+        defer {
+            requestTask.cancel()
+            service.deleteSessions([session])
+        }
+
+        await service.cancelRequestIfGenerating(messageID: UUID(), in: session.id)
+        #expect(service.hasActiveRequestContext(for: session.id))
+
+        await service.cancelRequestIfGenerating(messageID: loadingMessageID, in: session.id)
+        #expect(!service.hasActiveRequestContext(for: session.id))
+        #expect(!service.runningSessionIDsSubject.value.contains(session.id))
+    }
+
+    @MainActor
     @Test("切回后台运行会话时优先使用运行期消息快照")
     func testActivatingRunningBackgroundSessionUsesRuntimeMessageSnapshot() {
         let service = ChatService(memoryManager: MemoryManager())

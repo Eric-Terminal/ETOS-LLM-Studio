@@ -30,6 +30,37 @@ struct ETStreamingMarkdownPolicyTests {
         #expect(state.layoutRevision == 1)
     }
 
+    @Test("静态 Markdown 准备完成前保留本次流式交接状态")
+    @MainActor
+    func staticMarkdownHandoffTracksFinalSource() {
+        let state = ETStreamingMarkdownRenderState()
+        let messageID = UUID()
+        state.apply(ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            sourceText: "# 标题",
+            revision: 1,
+            committedBlocks: [],
+            activeBlock: nil,
+            isFinal: false
+        ))
+
+        state.beginStaticHandoff(sourceText: "# 标题完成", channel: .content)
+
+        #expect(state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 其他内容", channel: .content))
+        #expect(state.snapshot(for: .content)?.sourceText == "# 标题")
+
+        state.completeStaticHandoff(sourceText: "# 其他内容", channel: .content)
+        #expect(state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+
+        state.completeStaticHandoff(sourceText: "# 标题完成", channel: .content)
+        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+
+        state.beginStaticHandoff(sourceText: "# 标题完成", channel: .content)
+        state.clear(.content)
+        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+    }
+
     @Test("连续正文和速度采样变化属于纯文本更新")
     func textAndMetricsGrowthUsesFastPath() {
         let id = UUID()

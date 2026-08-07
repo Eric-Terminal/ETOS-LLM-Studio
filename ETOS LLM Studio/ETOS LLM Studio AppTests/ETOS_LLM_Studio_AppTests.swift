@@ -13,6 +13,35 @@ import ETOSCore
 
 struct ETOS_LLM_Studio_AppTests {
 
+    @Test("相邻气泡的局部重测量身份不会冲突")
+    func testChatBubbleLayoutIdentityIncludesMessageID() {
+        let firstMessageID = UUID()
+        let secondMessageID = UUID()
+        let first = ChatBubbleLayoutIdentity(
+            messageID: firstMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        )
+        let second = ChatBubbleLayoutIdentity(
+            messageID: secondMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        )
+
+        #expect(first != second)
+        #expect(first == ChatBubbleLayoutIdentity(
+            messageID: firstMessageID,
+            structuralRevision: 0,
+            isStreaming: false,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        ))
+    }
+
     @Test("弹性滚动不会拉开同轮相连气泡")
     func testChatScrollTransitionKeepsConnectedBubblesTogether() {
         let standaloneOffset = ChatView.chatScrollTransitionOffset(
