@@ -108,6 +108,7 @@ final class PersistenceGRDBStore {
                     topic_prompt TEXT,
                     enhanced_prompt TEXT,
                     folder_id TEXT,
+                    container_session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
                     lorebook_ids_json BLOB NOT NULL,
                     worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0,
                     is_temporary INTEGER NOT NULL DEFAULT 0,
@@ -538,6 +539,19 @@ final class PersistenceGRDBStore {
             }
         }
 
+        migrator.registerMigration("v12_embedded_subagent_sessions") { db in
+            let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(sessions)")
+            let columnNames = Set(columns.compactMap { row -> String? in row["name"] })
+            if !columnNames.contains("container_session_id") {
+                try db.execute(
+                    sql: "ALTER TABLE sessions ADD COLUMN container_session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE"
+                )
+            }
+            try db.execute(
+                sql: "CREATE INDEX IF NOT EXISTS idx_sessions_container ON sessions(container_session_id, updated_at DESC)"
+            )
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -575,6 +589,12 @@ final class PersistenceGRDBStore {
             try ensureColumn(db, table: "sessions", column: "system_prompt", definition: "system_prompt TEXT")
             try ensureColumn(db, table: "sessions", column: "preferred_model_identifier", definition: "preferred_model_identifier TEXT")
             try ensureColumn(db, table: "sessions", column: "folder_id", definition: "folder_id TEXT")
+            try ensureColumn(
+                db,
+                table: "sessions",
+                column: "container_session_id",
+                definition: "container_session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE"
+            )
             try ensureColumn(db, table: "sessions", column: "lorebook_ids_json", definition: "lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D'")
             try ensureColumn(db, table: "sessions", column: "worldbook_context_isolation_enabled", definition: "worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0")
             try ensureColumn(db, table: "sessions", column: "is_temporary", definition: "is_temporary INTEGER NOT NULL DEFAULT 0")
@@ -649,6 +669,7 @@ final class PersistenceGRDBStore {
 
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_sessions_sort ON sessions(sort_index ASC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC)")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_sessions_container ON sessions(container_session_id, updated_at DESC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_session_position ON messages(session_id, position ASC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_session_requested ON messages(session_id, requested_at DESC)")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_requested_at ON request_logs(requested_at DESC)")
@@ -676,6 +697,7 @@ final class PersistenceGRDBStore {
                 enhanced_prompt TEXT,
                 preferred_model_identifier TEXT,
                 folder_id TEXT,
+                container_session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
                 lorebook_ids_json BLOB NOT NULL DEFAULT X'5B5D',
                 worldbook_context_isolation_enabled INTEGER NOT NULL DEFAULT 0,
                 is_temporary INTEGER NOT NULL DEFAULT 0,

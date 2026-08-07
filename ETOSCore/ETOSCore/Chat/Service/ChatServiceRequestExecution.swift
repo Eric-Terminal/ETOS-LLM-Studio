@@ -70,7 +70,7 @@ extension ChatService {
         let currentSessionSnapshot = currentSessionSubject.value
         let sessionForRequest = currentSessionSnapshot?.id == currentSessionID
             ? currentSessionSnapshot
-            : chatSessionsSubject.value.first(where: { $0.id == currentSessionID })
+            : conversationSession(withID: currentSessionID)
         let resolvedEnhancedPrompt = sessionForRequest?.enhancedPrompt ?? enhancedPrompt
         let linkedConversations = await Task.detached(priority: .utility) {
             Persistence.loadLinkedConversationContacts(sourceSessionID: currentSessionID)

@@ -274,6 +274,7 @@ extension PersistenceGRDBStore {
                 SELECT
                     capability.target_session_id,
                     session.name,
+                    session.container_session_id,
                     capability.relation,
                     capability.can_read,
                     capability.can_send,
@@ -310,6 +311,7 @@ extension PersistenceGRDBStore {
                 return LinkedConversationContact(
                     sessionID: sessionID,
                     title: row["name"],
+                    containerSessionID: (row["container_session_id"] as String?).flatMap(UUID.init(uuidString:)),
                     relation: relation,
                     runStatus: statusRaw.flatMap(ConversationRunStatus.init(rawValue:)),
                     unreadEventCount: row["unread_event_count"],
@@ -431,7 +433,7 @@ extension PersistenceGRDBStore {
         try dbPool.read { db in
             let sessionIDs = try String.fetchAll(
                 db,
-                sql: "SELECT id FROM sessions WHERE is_temporary = 0 ORDER BY sort_index ASC"
+                sql: "SELECT id FROM sessions WHERE is_temporary = 0 AND container_session_id IS NULL ORDER BY sort_index ASC"
             )
             return try sessionIDs.compactMap { rawSessionID in
                 guard let sessionID = UUID(uuidString: rawSessionID) else { return nil }
@@ -1061,6 +1063,8 @@ extension PersistenceGRDBStore {
     func createConversationRuntimeBundle(
         targetSession: ChatSession? = nil,
         targetMessages: [ChatMessage] = [],
+        groupingFolder: SessionFolder? = nil,
+        groupingRootSessionID: UUID? = nil,
         origin: ConversationOrigin?,
         capabilities: [ConversationCapability],
         targetRun: ConversationRun?,
@@ -1084,6 +1088,42 @@ extension PersistenceGRDBStore {
         }
 
         try dbPool.write { db in
+            if let groupingFolder {
+                try db.execute(
+                    sql: """
+                    INSERT INTO session_folders (id, name, parent_id, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                    arguments: [
+                        groupingFolder.id.uuidString,
+                        groupingFolder.name,
+                        groupingFolder.parentID?.uuidString,
+                        groupingFolder.updatedAt.timeIntervalSince1970
+                    ]
+                )
+                if let groupingRootSessionID {
+                    let groupingRootExists = try (Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM sessions WHERE id = ? AND container_session_id IS NULL",
+                        arguments: [groupingRootSessionID.uuidString]
+                    ) ?? 0) == 1
+                    guard groupingRootExists else {
+                        throw ConversationRuntimeError.persistenceUnavailable
+                    }
+                    try db.execute(
+                        sql: "UPDATE sessions SET folder_id = ?, updated_at = MAX(updated_at, ?) WHERE id = ? AND container_session_id IS NULL",
+                        arguments: [
+                            groupingFolder.id.uuidString,
+                            groupingFolder.updatedAt.timeIntervalSince1970,
+                            groupingRootSessionID.uuidString
+                        ]
+                    )
+                }
+            } else if groupingRootSessionID != nil {
+                throw ConversationRuntimeError.persistenceUnavailable
+            }
+
             if let targetSession {
                 guard !targetSession.isTemporary else {
                     throw ConversationRuntimeError.persistenceUnavailable
@@ -1858,6 +1898,8 @@ extension Persistence {
     public static func createConversationRuntimeBundle(
         targetSession: ChatSession? = nil,
         targetMessages: [ChatMessage] = [],
+        groupingFolder: SessionFolder? = nil,
+        groupingRootSessionID: UUID? = nil,
         origin: ConversationOrigin?,
         capabilities: [ConversationCapability],
         targetRun: ConversationRun?,
@@ -1871,6 +1913,8 @@ extension Persistence {
             try store.createConversationRuntimeBundle(
                 targetSession: targetSession,
                 targetMessages: targetMessages,
+                groupingFolder: groupingFolder,
+                groupingRootSessionID: groupingRootSessionID,
                 origin: origin,
                 capabilities: capabilities,
                 targetRun: targetRun,

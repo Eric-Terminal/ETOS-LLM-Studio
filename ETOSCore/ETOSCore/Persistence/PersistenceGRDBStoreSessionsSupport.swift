@@ -140,6 +140,7 @@ extension PersistenceGRDBStore {
                         FROM sessions
                         WHERE conversation_summary IS NOT NULL
                           AND TRIM(conversation_summary) <> ''
+                          AND container_session_id IS NULL
                           AND id <> ?
                         ORDER BY COALESCE(conversation_summary_updated_at, updated_at) DESC, id ASC
                         LIMIT ?
@@ -155,6 +156,7 @@ extension PersistenceGRDBStore {
                         FROM sessions
                         WHERE conversation_summary IS NOT NULL
                           AND TRIM(conversation_summary) <> ''
+                          AND container_session_id IS NULL
                           AND id <> ?
                         ORDER BY COALESCE(conversation_summary_updated_at, updated_at) DESC, id ASC
                         """,
@@ -169,6 +171,7 @@ extension PersistenceGRDBStore {
                         FROM sessions
                         WHERE conversation_summary IS NOT NULL
                           AND TRIM(conversation_summary) <> ''
+                          AND container_session_id IS NULL
                         ORDER BY COALESCE(conversation_summary_updated_at, updated_at) DESC, id ASC
                         LIMIT ?
                         """,
@@ -183,6 +186,7 @@ extension PersistenceGRDBStore {
                         FROM sessions
                         WHERE conversation_summary IS NOT NULL
                           AND TRIM(conversation_summary) <> ''
+                          AND container_session_id IS NULL
                         ORDER BY COALESCE(conversation_summary_updated_at, updated_at) DESC, id ASC
                         """
                     )
@@ -223,14 +227,15 @@ extension PersistenceGRDBStore {
             sql: """
             INSERT INTO sessions (
                 id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
-                folder_id, lorebook_ids_json,
+                folder_id, container_session_id, lorebook_ids_json,
                 worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                 conversation_summary, conversation_summary_updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 sessionID.uuidString,
                 NSLocalizedString("新的对话", comment: "Default new chat session name"),
+                nil,
                 nil,
                 nil,
                 nil,
@@ -266,10 +271,10 @@ extension PersistenceGRDBStore {
                 sql: """
                 INSERT INTO sessions (
                     id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
-                    folder_id, lorebook_ids_json,
+                    folder_id, container_session_id, lorebook_ids_json,
                     worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     system_prompt = excluded.system_prompt,
@@ -277,6 +282,7 @@ extension PersistenceGRDBStore {
                     enhanced_prompt = excluded.enhanced_prompt,
                     preferred_model_identifier = excluded.preferred_model_identifier,
                     folder_id = excluded.folder_id,
+                    container_session_id = excluded.container_session_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
                     is_temporary = excluded.is_temporary,
@@ -293,6 +299,7 @@ extension PersistenceGRDBStore {
                     session.enhancedPrompt,
                     session.preferredModelIdentifier,
                     session.folderID?.uuidString,
+                    session.containerSessionID?.uuidString,
                     lorebookData,
                     session.worldbookContextIsolationEnabled ? 1 : 0,
                     session.isTemporary ? 1 : 0,
@@ -307,10 +314,10 @@ extension PersistenceGRDBStore {
                 sql: """
                 INSERT INTO sessions (
                     id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
-                    folder_id, lorebook_ids_json,
+                    folder_id, container_session_id, lorebook_ids_json,
                     worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     system_prompt = excluded.system_prompt,
@@ -318,6 +325,7 @@ extension PersistenceGRDBStore {
                     enhanced_prompt = excluded.enhanced_prompt,
                     preferred_model_identifier = excluded.preferred_model_identifier,
                     folder_id = excluded.folder_id,
+                    container_session_id = excluded.container_session_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
                     is_temporary = excluded.is_temporary,
@@ -334,6 +342,7 @@ extension PersistenceGRDBStore {
                     session.enhancedPrompt,
                     session.preferredModelIdentifier,
                     session.folderID?.uuidString,
+                    session.containerSessionID?.uuidString,
                     lorebookData,
                     session.worldbookContextIsolationEnabled ? 1 : 0,
                     session.isTemporary ? 1 : 0,

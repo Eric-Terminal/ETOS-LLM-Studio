@@ -458,6 +458,7 @@ public struct LinkedConversationContact: Identifiable, Codable, Hashable, Sendab
     public var id: UUID { sessionID }
     public let sessionID: UUID
     public let title: String
+    public let containerSessionID: UUID?
     public let relation: ConversationCapabilityRelation
     public let runStatus: ConversationRunStatus?
     public let unreadEventCount: Int
@@ -469,6 +470,7 @@ public struct LinkedConversationContact: Identifiable, Codable, Hashable, Sendab
     public init(
         sessionID: UUID,
         title: String,
+        containerSessionID: UUID? = nil,
         relation: ConversationCapabilityRelation,
         runStatus: ConversationRunStatus?,
         unreadEventCount: Int,
@@ -479,6 +481,7 @@ public struct LinkedConversationContact: Identifiable, Codable, Hashable, Sendab
     ) {
         self.sessionID = sessionID
         self.title = title
+        self.containerSessionID = containerSessionID
         self.relation = relation
         self.runStatus = runStatus
         self.unreadEventCount = max(0, unreadEventCount)
@@ -486,6 +489,10 @@ public struct LinkedConversationContact: Identifiable, Codable, Hashable, Sendab
         self.canSend = canSend
         self.canTriggerReply = canTriggerReply
         self.canInterrupt = canInterrupt
+    }
+
+    public var isEmbeddedSubagent: Bool {
+        containerSessionID != nil
     }
 }
 

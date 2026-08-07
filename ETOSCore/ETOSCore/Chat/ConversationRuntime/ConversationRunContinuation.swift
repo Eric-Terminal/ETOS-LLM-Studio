@@ -22,7 +22,7 @@ extension ChatService {
         guard !hasActiveRequestContext(for: run.sessionID) else {
             return false
         }
-        guard let session = chatSessionsSubject.value.first(where: { $0.id == run.sessionID }),
+        guard let session = conversationSession(withID: run.sessionID),
               let toolCallMessageID = run.loadingMessageID else {
             _ = Persistence.updateConversationRunStatus(
                 id: run.id,

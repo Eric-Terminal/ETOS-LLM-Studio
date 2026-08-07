@@ -50,7 +50,7 @@ enum ConversationToolDefinitions {
         InternalToolDefinition(
             name: ConversationToolName.createConversation.rawValue,
             description: NSLocalizedString(
-                "创建一个用户可见、长期存在的新会话，并可选择立即让它回复。创建后可以在未来继续联系该会话。",
+                "创建一个长期协作会话，并可选择立即让它回复。默认作为当前主会话内部的隐藏子代理保存；需要用户直接管理时可创建可见会话。",
                 comment: "Create conversation tool description"
             ),
             parameters: .dictionary([
@@ -71,6 +71,11 @@ enum ConversationToolDefinitions {
                         values: ["create_only", "await_reply", "background", "background_continue"],
                         description: NSLocalizedString("只创建、等待回复、后台执行或完成后继续当前会话。", comment: "Create conversation execution mode")
                     ),
+                    "hidden": .dictionary([
+                        "type": .string("boolean"),
+                        "default": .bool(true),
+                        "description": .string(NSLocalizedString("是否把子代理隐藏并存放在当前主会话内部；默认开启。关闭后会创建可见会话并自动归入主会话文件夹。", comment: "Create hidden conversation"))
+                    ]),
                     "model_identifier": stringProperty(NSLocalizedString("可选的已激活聊天模型标识；省略、留空或填写 self 时使用当前模型。", comment: "Create conversation model identifier")),
                     "system_prompt": stringProperty(NSLocalizedString("新会话的系统提示词内容。", comment: "Create conversation system prompt")),
                     "system_prompt_mode": promptModeProperty(),
@@ -265,6 +270,7 @@ struct CreateConversationToolArguments: Decodable {
     let contextMode: String
     let recentRounds: Int?
     let executionMode: String
+    let hidden: Bool?
     let modelIdentifier: String?
     let systemPrompt: String?
     let systemPromptMode: String?
@@ -279,6 +285,7 @@ struct CreateConversationToolArguments: Decodable {
         case contextMode = "context_mode"
         case recentRounds = "recent_rounds"
         case executionMode = "execution_mode"
+        case hidden
         case modelIdentifier = "model_identifier"
         case systemPrompt = "system_prompt"
         case systemPromptMode = "system_prompt_mode"
@@ -286,6 +293,10 @@ struct CreateConversationToolArguments: Decodable {
         case topicPromptMode = "topic_prompt_mode"
         case enhancedPrompt = "enhanced_prompt"
         case enhancedPromptMode = "enhanced_prompt_mode"
+    }
+
+    var hidesConversation: Bool {
+        hidden ?? true
     }
 }
 

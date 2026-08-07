@@ -295,6 +295,15 @@ public class ChatService {
         return Persistence.loadMessages(for: sessionID)
     }
 
+    /// 常规列表只持有可见会话；会话运行时还需要按 ID 定点访问内嵌子代理。
+    func conversationSession(withID sessionID: UUID) -> ChatSession? {
+        if let current = currentSessionSubject.value, current.id == sessionID {
+            return current
+        }
+        return chatSessionsSubject.value.first(where: { $0.id == sessionID })
+            ?? Persistence.loadChatSession(id: sessionID)
+    }
+
     func messagesForSessionActivation(_ sessionID: UUID) -> [ChatMessage] {
         if isTemporaryChatEnabled(for: sessionID) {
             return runtimeMessagesSnapshot(for: sessionID) ?? []
@@ -563,6 +572,15 @@ public class ChatService {
         }
     }
 
+    /// 会话删除是同步操作，先移除并取消请求上下文，避免已删除会话继续接收异步回写。
+    func cancelRequestForSessionDeletion(_ sessionID: UUID) {
+        let task = withRequestStateLock {
+            requestContextBySessionID.removeValue(forKey: sessionID)?.task
+        }
+        task?.cancel()
+        setSessionRunning(sessionID, isRunning: false)
+    }
+
     private func setSessionRunning(_ sessionID: UUID, isRunning: Bool) {
         withRequestStateLock {
             var running = runningSessionIDsSubject.value
@@ -605,16 +623,20 @@ public class ChatService {
             }
         }
 
-        sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
-        switch status {
-        case .started:
-            requestStatusSubject.send(.started)
-        case .finished:
-            requestStatusSubject.send(.finished)
-        case .error:
-            requestStatusSubject.send(.error)
-        case .cancelled:
-            requestStatusSubject.send(.cancelled)
+        let isVisibleSession = currentSessionSubject.value?.id == sessionID
+            || chatSessionsSubject.value.contains(where: { $0.id == sessionID })
+        if isVisibleSession {
+            sessionRequestStatusSubject.send(SessionRequestStatusEvent(sessionID: sessionID, status: status))
+            switch status {
+            case .started:
+                requestStatusSubject.send(.started)
+            case .finished:
+                requestStatusSubject.send(.finished)
+            case .error:
+                requestStatusSubject.send(.error)
+            case .cancelled:
+                requestStatusSubject.send(.cancelled)
+            }
         }
     }
 

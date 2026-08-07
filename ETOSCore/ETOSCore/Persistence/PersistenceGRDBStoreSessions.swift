@@ -19,12 +19,12 @@ public struct OrphanedAudioReferenceRecord {
 
 extension PersistenceGRDBStore {
     func saveChatSessions(_ sessions: [ChatSession]) {
-        let persistedSessions = sessions.filter { !$0.isTemporary }
+        let persistedSessions = sessions.filter { !$0.isTemporary && !$0.isEmbeddedSubagent }
         do {
             try dbPool.write { db in
                 let existingNonTemporaryCount = try Int.fetchOne(
                     db,
-                    sql: "SELECT COUNT(*) FROM sessions WHERE is_temporary = 0"
+                    sql: "SELECT COUNT(*) FROM sessions WHERE is_temporary = 0 AND container_session_id IS NULL"
                 ) ?? 0
                 if persistedSessions.isEmpty,
                    sessions.contains(where: \.isTemporary),
@@ -33,7 +33,10 @@ extension PersistenceGRDBStore {
                     return
                 }
 
-                let existingNonTemporaryIDs = try String.fetchAll(db, sql: "SELECT id FROM sessions WHERE is_temporary = 0")
+                let existingNonTemporaryIDs = try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM sessions WHERE is_temporary = 0 AND container_session_id IS NULL"
+                )
                 let targetIDs = Set(persistedSessions.map { $0.id.uuidString })
                 for id in existingNonTemporaryIDs where !targetIDs.contains(id) {
                     try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [id])
@@ -73,10 +76,10 @@ extension PersistenceGRDBStore {
                     db,
                     sql: """
                     SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
-                           preferred_model_identifier, folder_id,
+                           preferred_model_identifier, folder_id, container_session_id,
                            lorebook_ids_json, worldbook_context_isolation_enabled
                     FROM sessions
-                    WHERE is_temporary = 0
+                    WHERE is_temporary = 0 AND container_session_id IS NULL
                     ORDER BY sort_index ASC, updated_at DESC, id ASC
                     """
                 )
@@ -95,12 +98,68 @@ extension PersistenceGRDBStore {
                         tagIDs: tagAssignments[row["id"]] ?? [],
                         worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
                         folderID: uuid(from: row["folder_id"]),
+                        containerSessionID: uuid(from: row["container_session_id"]),
                         isTemporary: false
                     )
                 }
             }
         } catch {
             logger.error("读取会话列表失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func loadChatSession(id sessionID: UUID) -> ChatSession? {
+        do {
+            return try dbPool.read { db in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                    SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
+                           preferred_model_identifier, folder_id, container_session_id,
+                           lorebook_ids_json, worldbook_context_isolation_enabled, is_temporary
+                    FROM sessions
+                    WHERE id = ?
+                    """,
+                    arguments: [sessionID.uuidString]
+                ) else {
+                    return nil
+                }
+                let rawSessionID: String = row["id"]
+                let lorebookData: Data = row["lorebook_ids_json"]
+                let tagAssignments = try loadSessionTagAssignments(db)
+                return ChatSession(
+                    id: UUID(uuidString: rawSessionID) ?? sessionID,
+                    name: row["name"],
+                    systemPrompt: row["system_prompt"],
+                    topicPrompt: row["topic_prompt"],
+                    enhancedPrompt: row["enhanced_prompt"],
+                    preferredModelIdentifier: row["preferred_model_identifier"],
+                    lorebookIDs: decodeJSON([UUID].self, from: lorebookData) ?? [],
+                    tagIDs: tagAssignments[rawSessionID] ?? [],
+                    worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
+                    folderID: uuid(from: row["folder_id"]),
+                    containerSessionID: uuid(from: row["container_session_id"]),
+                    isTemporary: (row["is_temporary"] as Int) != 0
+                )
+            }
+        } catch {
+            logger.error("读取指定会话失败 \(sessionID.uuidString): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func loadEmbeddedSubagentSessionIDs(containerSessionID: UUID) -> [UUID] {
+        do {
+            return try dbPool.read { db in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM sessions WHERE container_session_id = ? ORDER BY updated_at DESC, id ASC",
+                    arguments: [containerSessionID.uuidString]
+                ).compactMap(UUID.init(uuidString:))
+            }
+        } catch {
+            logger.error("读取内嵌子代理会话失败 \(containerSessionID.uuidString): \(error.localizedDescription)")
             return []
         }
     }
@@ -597,6 +656,7 @@ extension PersistenceGRDBStore {
     }
 
     func deleteSessionArtifacts(sessionID: UUID) {
+        flushPendingMessageWrites()
         do {
             try dbPool.write { db in
                 try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [sessionID.uuidString])

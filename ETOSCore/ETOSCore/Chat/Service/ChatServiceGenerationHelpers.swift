@@ -38,7 +38,9 @@ extension ChatService {
     func scheduleConversationMemoryUpdateIfNeeded(for sessionID: UUID, enableMemory: Bool) {
         guard enableMemory else { return }
         guard isConversationMemoryEnabled() else { return }
-        guard let session = chatSessionsSubject.value.first(where: { $0.id == sessionID }), !session.isTemporary else {
+        guard let session = conversationSession(withID: sessionID),
+              !session.isTemporary,
+              !session.isEmbeddedSubagent else {
             return
         }
         guard !session.isWorldbookContextIsolationActive else { return }

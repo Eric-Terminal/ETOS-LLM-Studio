@@ -578,6 +578,8 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public var preferredModelIdentifier: String?
     /// 会话所属文件夹，nil 表示未分类。
     public var folderID: UUID?
+    /// 隐藏子代理归属的可见主会话；非 nil 时不会出现在普通会话列表中。
+    public var containerSessionID: UUID?
     public var lorebookIDs: [UUID]
     /// 绑定到当前会话的标签 ID，标签实体由 SessionTag 单独维护。
     public var tagIDs: [UUID]
@@ -589,6 +591,11 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         set { lorebookIDs = newValue }
     }
     public var isTemporary: Bool = false
+
+    /// 嵌入式子代理拥有独立上下文，但其生命周期和可见性都由主会话管理。
+    public var isEmbeddedSubagent: Bool {
+        containerSessionID != nil
+    }
 
     /// 当前会话是否启用了记忆与工具隔离。
     public var isWorldbookContextIsolationActive: Bool {
@@ -607,6 +614,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         tagIDs: [UUID] = [],
         worldbookContextIsolationEnabled: Bool = false,
         folderID: UUID? = nil,
+        containerSessionID: UUID? = nil,
         isTemporary: Bool = false
     ) {
         self.id = id
@@ -616,6 +624,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         self.enhancedPrompt = enhancedPrompt
         self.preferredModelIdentifier = preferredModelIdentifier
         self.folderID = folderID
+        self.containerSessionID = containerSessionID
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
         self.tagIDs = tagIDs
         self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
@@ -630,6 +639,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         case enhancedPrompt
         case preferredModelIdentifier
         case folderID
+        case containerSessionID
         case worldbookIDs
         case lorebookIDs
         case lorebookIds
@@ -647,6 +657,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         self.enhancedPrompt = try container.decodeIfPresent(String.self, forKey: .enhancedPrompt)
         self.preferredModelIdentifier = try container.decodeIfPresent(String.self, forKey: .preferredModelIdentifier)
         self.folderID = try container.decodeIfPresent(UUID.self, forKey: .folderID)
+        self.containerSessionID = try container.decodeIfPresent(UUID.self, forKey: .containerSessionID)
         if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIDs) {
             self.lorebookIDs = ids
         } else if let ids = try container.decodeIfPresent([UUID].self, forKey: .lorebookIds) {
@@ -676,6 +687,7 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         try container.encodeIfPresent(enhancedPrompt, forKey: .enhancedPrompt)
         try container.encodeIfPresent(preferredModelIdentifier, forKey: .preferredModelIdentifier)
         try container.encodeIfPresent(folderID, forKey: .folderID)
+        try container.encodeIfPresent(containerSessionID, forKey: .containerSessionID)
         if !lorebookIDs.isEmpty {
             try container.encode(lorebookIDs, forKey: .lorebookIDs)
             // 兼容旧版本持久化字段，避免多端混用时丢失绑定。

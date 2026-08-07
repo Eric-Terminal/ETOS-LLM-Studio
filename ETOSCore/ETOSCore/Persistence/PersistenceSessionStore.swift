@@ -89,6 +89,19 @@ extension Persistence {
         }
     }
 
+    /// 按 ID 读取会话；运行时可以借此访问不会进入常规列表的内嵌子代理。
+    public static func loadChatSession(id sessionID: UUID) -> ChatSession? {
+        if let store = activeGRDBStore() {
+            return store.loadChatSession(id: sessionID)
+        }
+        return loadChatSessions().first(where: { $0.id == sessionID })
+    }
+
+    /// 返回直接存放在指定主会话内的隐藏子代理 ID。
+    public static func loadEmbeddedSubagentSessionIDs(containerSessionID: UUID) -> [UUID] {
+        activeGRDBStore()?.loadEmbeddedSubagentSessionIDs(containerSessionID: containerSessionID) ?? []
+    }
+
     // MARK: - 会话文件夹持久化
 
     /// 保存会话文件夹列表。

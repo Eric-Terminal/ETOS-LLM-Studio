@@ -175,8 +175,8 @@ struct ConversationRuntimeTests {
         #expect(names.contains(ConversationToolName.listAvailableModels.rawValue))
     }
 
-    @Test("模型目录不进入创建工具 Schema，列表工具声明受限 max")
-    func keepsDynamicModelCatalogOutOfToolSchema() {
+    @Test("模型目录不进入创建工具 Schema，隐藏子代理默认开启且列表工具声明受限 max")
+    func keepsDynamicModelCatalogOutOfToolSchema() throws {
         let toolsByName = Dictionary(
             uniqueKeysWithValues: ConversationToolDefinitions.all.map { ($0.name, $0) }
         )
@@ -189,6 +189,23 @@ struct ConversationRuntimeTests {
         }
         #expect(modelIdentifierSchema["type"] == .string("string"))
         #expect(modelIdentifierSchema["enum"] == nil)
+        guard case .dictionary(let hiddenSchema)? = createProperties["hidden"] else {
+            Issue.record("创建会话工具应声明 hidden 参数。")
+            return
+        }
+        #expect(hiddenSchema["type"] == .string("boolean"))
+        #expect(hiddenSchema["default"] == .bool(true))
+
+        let defaultArguments = try JSONDecoder().decode(
+            CreateConversationToolArguments.self,
+            from: Data(#"{"initial_message":"任务","context_mode":"new","execution_mode":"background"}"#.utf8)
+        )
+        let visibleArguments = try JSONDecoder().decode(
+            CreateConversationToolArguments.self,
+            from: Data(#"{"initial_message":"任务","context_mode":"new","execution_mode":"background","hidden":false}"#.utf8)
+        )
+        #expect(defaultArguments.hidesConversation)
+        #expect(!visibleArguments.hidesConversation)
 
         for toolName in [ConversationToolName.listConversations, .listAvailableModels] {
             guard let tool = toolsByName[toolName.rawValue],
@@ -200,6 +217,110 @@ struct ConversationRuntimeTests {
             }
             #expect(maxSchema["minimum"] == .int(ConversationToolListLimit.minimum))
             #expect(maxSchema["maximum"] == .int(ConversationToolListLimit.maximum))
+        }
+    }
+
+    @Test("可见子代理与主会话会原子归入确定性文件夹")
+    func groupsVisibleSubagentConversationAtomically() throws {
+        try withStore { store in
+            let outerFolder = SessionFolder(name: "已有项目")
+            var parent = ChatSession(
+                id: UUID(),
+                name: "主任务",
+                folderID: outerFolder.id,
+                isTemporary: false
+            )
+            store.saveSessionFolders([outerFolder])
+            store.saveChatSessions([parent])
+
+            let groupFolder = SessionFolder(
+                id: parent.id,
+                name: parent.name,
+                parentID: outerFolder.id,
+                updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+            let child = ChatSession(
+                id: UUID(),
+                name: "可见子代理",
+                folderID: groupFolder.id,
+                isTemporary: false
+            )
+            try store.createConversationRuntimeBundle(
+                targetSession: child,
+                groupingFolder: groupFolder,
+                groupingRootSessionID: parent.id,
+                origin: nil,
+                capabilities: [],
+                targetRun: nil,
+                event: nil,
+                delegation: nil,
+                waits: [],
+                waitingRunID: nil
+            )
+
+            let sessionsByID = Dictionary(uniqueKeysWithValues: store.loadChatSessions().map { ($0.id, $0) })
+            #expect(sessionsByID[parent.id]?.folderID == groupFolder.id)
+            #expect(sessionsByID[child.id]?.folderID == groupFolder.id)
+            let persistedGroup = try #require(store.loadSessionFolders().first(where: { $0.id == groupFolder.id }))
+            #expect(persistedGroup.name == parent.name)
+            #expect(persistedGroup.parentID == outerFolder.id)
+
+            parent.folderID = groupFolder.id
+            store.saveChatSessions([parent, child])
+            #expect(store.loadChatSessions().count == 2)
+        }
+    }
+
+    @Test("隐藏子代理不进入普通列表并随主会话级联删除")
+    func embedsHiddenSubagentAndCascadesDeletion() throws {
+        try withStore { store in
+            let parent = ChatSession(id: UUID(), name: "主会话", isTemporary: false)
+            store.saveChatSessions([parent])
+            let hidden = ChatSession(
+                id: UUID(),
+                name: "隐藏子代理",
+                containerSessionID: parent.id,
+                isTemporary: false
+            )
+            let hiddenMessage = ChatMessage(role: .user, content: "内部任务记录")
+            let capability = ConversationCapability(
+                sourceSessionID: parent.id,
+                targetSessionID: hidden.id,
+                relation: .created,
+                canRead: true,
+                canSend: true,
+                canTriggerReply: true,
+                canInterrupt: true
+            )
+            try store.createConversationRuntimeBundle(
+                targetSession: hidden,
+                targetMessages: [hiddenMessage],
+                origin: ConversationOrigin(
+                    childSessionID: hidden.id,
+                    parentSessionID: parent.id,
+                    parentSessionNameSnapshot: parent.name,
+                    contextMode: .new
+                ),
+                capabilities: [capability],
+                targetRun: nil,
+                event: nil,
+                delegation: nil,
+                waits: [],
+                waitingRunID: nil
+            )
+
+            #expect(store.loadChatSessions().map(\.id) == [parent.id])
+            #expect(store.loadChatSession(id: hidden.id)?.containerSessionID == parent.id)
+            #expect(store.loadEmbeddedSubagentSessionIDs(containerSessionID: parent.id) == [hidden.id])
+            #expect(try store.loadLinkedConversationContacts(sourceSessionID: parent.id).first?.isEmbeddedSubagent == true)
+
+            // 普通列表快照保存不得把未包含在列表里的隐藏记录误删。
+            store.saveChatSessions([parent])
+            #expect(store.loadMessages(for: hidden.id).map(\.content) == ["内部任务记录"])
+
+            store.deleteSessionArtifacts(sessionID: parent.id)
+            #expect(store.loadChatSession(id: hidden.id) == nil)
+            #expect(store.loadMessages(for: hidden.id).isEmpty)
         }
     }
 

@@ -26,7 +26,7 @@ extension ChatService {
         guard let toolName = ConversationToolName(rawValue: toolCall.toolName) else {
             throw ConversationRuntimeError.malformedArguments
         }
-        guard let sourceSession = session(withID: sourceSessionID),
+        guard let sourceSession = conversationSession(withID: sourceSessionID),
               let sourceRun = activeConversationRun(for: sourceSessionID) else {
             throw ConversationRuntimeError.sessionNotFound
         }
@@ -139,6 +139,32 @@ extension ChatService {
         }
         let preferredModelIdentifier = requestedModelIdentifier ?? sourceModelIdentifier
 
+        let hidesConversation = arguments.hidesConversation
+        let containerSessionID = hidesConversation
+            ? (sourceSession.containerSessionID ?? sourceSession.id)
+            : nil
+        var groupingFolder: SessionFolder?
+        var groupingRootSessionID: UUID?
+        var targetFolderID: UUID?
+        if !hidesConversation {
+            let rootSessionID = sourceSession.containerSessionID ?? sourceSession.id
+            guard let rootSession = conversationSession(withID: rootSessionID) else {
+                throw ConversationRuntimeError.sessionNotFound
+            }
+            if sessionFoldersSubject.value.contains(where: { $0.id == rootSessionID }) {
+                targetFolderID = rootSessionID
+            } else {
+                let folder = SessionFolder(
+                    id: rootSessionID,
+                    name: rootSession.name,
+                    parentID: rootSession.folderID == rootSessionID ? nil : rootSession.folderID
+                )
+                groupingFolder = folder
+                groupingRootSessionID = rootSessionID
+                targetFolderID = folder.id
+            }
+        }
+
         let targetSession = ChatSession(
             id: UUID(),
             name: normalizedOptionalText(arguments.title) ?? String(initialMessageText.prefix(24)),
@@ -150,7 +176,8 @@ extension ChatService {
             worldbookContextIsolationEnabled: inheritsSessionConfiguration
                 ? sourceSession.worldbookContextIsolationEnabled
                 : false,
-            folderID: inheritsSessionConfiguration ? sourceSession.folderID : nil,
+            folderID: targetFolderID,
+            containerSessionID: containerSessionID,
             isTemporary: false
         )
 
@@ -242,6 +269,8 @@ extension ChatService {
         guard Persistence.createConversationRuntimeBundle(
             targetSession: targetSession,
             targetMessages: initialMessages,
+            groupingFolder: groupingFolder,
+            groupingRootSessionID: groupingRootSessionID,
             origin: origin,
             capabilities: capabilities,
             targetRun: targetRun,
@@ -252,21 +281,39 @@ extension ChatService {
         ) else {
             throw ConversationRuntimeError.persistenceUnavailable
         }
-        var updatedSessions = chatSessionsSubject.value
-        updatedSessions.removeAll { $0.id == targetSession.id }
-        updatedSessions.insert(targetSession, at: 0)
-        chatSessionsSubject.send(updatedSessions)
+        if let groupingFolder {
+            var folders = sessionFoldersSubject.value
+            if !folders.contains(where: { $0.id == groupingFolder.id }) {
+                folders.append(groupingFolder)
+                sessionFoldersSubject.send(folders)
+            }
+        }
+        if !targetSession.isEmbeddedSubagent {
+            var updatedSessions = chatSessionsSubject.value
+            if let groupingRootSessionID,
+               let rootIndex = updatedSessions.firstIndex(where: { $0.id == groupingRootSessionID }),
+               let groupingFolder {
+                updatedSessions[rootIndex].folderID = groupingFolder.id
+                if currentSessionSubject.value?.id == groupingRootSessionID {
+                    currentSessionSubject.send(updatedSessions[rootIndex])
+                }
+            }
+            updatedSessions.removeAll { $0.id == targetSession.id }
+            updatedSessions.insert(targetSession, at: 0)
+            chatSessionsSubject.send(updatedSessions)
+        }
         storeRuntimeMessagesSnapshot(initialMessages, for: targetSession.id)
         logger.info("已原子创建协作会话及其运行时关系：\(targetSession.name)")
         await ConversationRunCoordinator.shared.signal()
 
         return ConversationToolExecutionResult(
-            content: encodeConversationToolResult([
-                "conversation_id": targetSession.id.uuidString,
-                "title": targetSession.name,
-                "run_id": targetRun?.id.uuidString ?? "",
-                "status": executionMode == .createOnly ? "created" : "queued"
-            ]),
+            content: encodeConversationToolResult(JSONValue.dictionary([
+                "conversation_id": .string(targetSession.id.uuidString),
+                "title": .string(targetSession.name),
+                "run_id": .string(targetRun?.id.uuidString ?? ""),
+                "hidden": .bool(hidesConversation),
+                "status": .string(executionMode == .createOnly ? "created" : "queued")
+            ])),
             shouldPauseCurrentRun: executionMode == .awaitReply
         )
     }
@@ -278,7 +325,7 @@ extension ChatService {
         sourceRun: ConversationRun
     ) async throws -> ConversationToolExecutionResult {
         guard let targetSessionID = UUID(uuidString: arguments.conversationID),
-              session(withID: targetSessionID) != nil else {
+              conversationSession(withID: targetSessionID) != nil else {
             throw ConversationRuntimeError.sessionNotFound
         }
         let messageText = arguments.message.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -395,7 +442,7 @@ extension ChatService {
         sourceSessionID: UUID
     ) throws -> ConversationToolExecutionResult {
         guard let targetSessionID = UUID(uuidString: arguments.conversationID),
-              let targetSession = session(withID: targetSessionID) else {
+              let targetSession = conversationSession(withID: targetSessionID) else {
             throw ConversationRuntimeError.sessionNotFound
         }
         let capability = try requiredCapability(
@@ -448,6 +495,7 @@ extension ChatService {
             return .dictionary([
                 "conversation_id": .string(contact.sessionID.uuidString),
                 "title": .string(contact.title),
+                "hidden": .bool(contact.isEmbeddedSubagent),
                 "relation": .string(contact.relation.rawValue),
                 "status": contact.runStatus.map { .string($0.rawValue) } ?? .null,
                 "unread": .int(contact.unreadEventCount),
@@ -606,7 +654,7 @@ extension ChatService {
         sourceSessionID: UUID
     ) async throws -> ConversationToolExecutionResult {
         guard let targetSessionID = UUID(uuidString: arguments.conversationID),
-              session(withID: targetSessionID) != nil else {
+              conversationSession(withID: targetSessionID) != nil else {
             throw ConversationRuntimeError.sessionNotFound
         }
         let capability = try requiredCapability(sourceSessionID: sourceSessionID, targetSessionID: targetSessionID)
@@ -669,16 +717,10 @@ extension ChatService {
         inheriting sourceRun: ConversationRun
     ) -> ConversationRunRequestConfiguration {
         var configuration = sourceRun.requestConfiguration
-        if let target = session(withID: sessionID), let preferred = target.preferredModelIdentifier {
+        if let target = conversationSession(withID: sessionID), let preferred = target.preferredModelIdentifier {
             configuration.modelIdentifier = preferred
         }
         return configuration
-    }
-
-    private func session(withID sessionID: UUID) -> ChatSession? {
-        let current = currentSessionSubject.value
-        if current?.id == sessionID { return current }
-        return chatSessionsSubject.value.first(where: { $0.id == sessionID })
     }
 
     private func resolvedConversationPrompt(

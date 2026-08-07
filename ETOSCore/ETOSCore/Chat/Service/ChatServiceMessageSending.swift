@@ -46,7 +46,7 @@ extension ChatService {
         guard let resolvedTargetSessionID,
               var currentSession = currentSessionSnapshot?.id == resolvedTargetSessionID
                 ? currentSessionSnapshot
-                : chatSessionsSubject.value.first(where: { $0.id == resolvedTargetSessionID }) else {
+                : conversationSession(withID: resolvedTargetSessionID) else {
             addErrorMessage(
                 NSLocalizedString("错误: 没有目标会话。", comment: "No target session error"),
                 sessionID: resolvedTargetSessionID

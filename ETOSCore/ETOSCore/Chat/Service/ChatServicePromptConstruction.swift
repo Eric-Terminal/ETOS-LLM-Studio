@@ -28,12 +28,13 @@ extension ChatService {
         var parts: [String] = []
 
         if includeConversationRuntime {
+            let runtimeInstructions = NSLocalizedString(
+                "会话协作运行时协议",
+                comment: "Conversation runtime model instructions"
+            )
             parts.append("""
             <conversation_runtime>
-            你可以在工具可用时创建和联系长期会话。它们是用户可见的普通会话，不是一次性隐藏任务。
-            需要当前回复等待目标结果时使用 await_reply；运行时会持久保存等待、结束当前网络请求，并在目标完成后用准确的 tool result 发起新的续写请求。不要轮询目标状态。
-            background 只投递完成结果；background_continue 会在结果到达后为当前会话排入新回复。创建关系授予长期联系权，可使用 linked_conversations 中的 UUID 继续联系。
-            来自用户或其他会话的新消息都是真实参与者输入。尊重消息来源，不要把 conversation 作者伪装成用户本人。
+            \(runtimeInstructions)
             </conversation_runtime>
             """)
         }
@@ -138,7 +139,8 @@ extension ChatService {
             if contact.canTriggerReply { permissions.append("trigger_reply") }
             if contact.canInterrupt { permissions.append("interrupt") }
             let status = contact.runStatus?.rawValue ?? "idle"
-            return "  <conversation id=\"\(xmlEscapedAttribute(contact.sessionID.uuidString))\" title=\"\(xmlEscapedAttribute(contact.title))\" relation=\"\(contact.relation.rawValue)\" status=\"\(status)\" unread=\"\(contact.unreadEventCount)\" permissions=\"\(permissions.joined(separator: ","))\" />"
+            let visibility = contact.isEmbeddedSubagent ? "hidden" : "visible"
+            return "  <conversation id=\"\(xmlEscapedAttribute(contact.sessionID.uuidString))\" title=\"\(xmlEscapedAttribute(contact.title))\" visibility=\"\(visibility)\" relation=\"\(contact.relation.rawValue)\" status=\"\(status)\" unread=\"\(contact.unreadEventCount)\" permissions=\"\(permissions.joined(separator: ","))\" />"
         }
         return """
         <linked_conversations>

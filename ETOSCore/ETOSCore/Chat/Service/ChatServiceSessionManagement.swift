@@ -278,11 +278,22 @@ extension ChatService {
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
         let existingPermanentSessionIDs = Set(currentSessions.filter { !$0.isTemporary }.map(\.id))
-        let deletingSessionIDs = Set(sessionsToDelete.map(\.id))
+        let containedSessionIDs = Set(sessionsToDelete.flatMap { session in
+            Persistence.loadEmbeddedSubagentSessionIDs(containerSessionID: session.id)
+        })
+        let deletingSessionIDs = Set(sessionsToDelete.map(\.id)).union(containedSessionIDs)
         let isClearingAllConversationRecords = !existingPermanentSessionIDs.isEmpty
             && existingPermanentSessionIDs.isSubset(of: deletingSessionIDs)
         var deletedSessionMessages: [ChatMessage] = []
         for session in sessionsToDelete {
+            for containedSessionID in Persistence.loadEmbeddedSubagentSessionIDs(containerSessionID: session.id) {
+                cancelRequestForSessionDeletion(containedSessionID)
+                prepareConversationRuntimeForSessionDeletion(containedSessionID)
+                clearRuntimeMessagesSnapshot(for: containedSessionID)
+                clearLocalLLMKVCache(for: containedSessionID)
+                deletedSessionMessages.append(contentsOf: Persistence.loadMessages(for: containedSessionID))
+            }
+            cancelRequestForSessionDeletion(session.id)
             prepareConversationRuntimeForSessionDeletion(session.id)
             ephemeralSessionLock.lock()
             let removedTemporaryState = ephemeralSessionStates.removeValue(forKey: session.id)

@@ -364,7 +364,12 @@ extension Persistence {
     private static func loadMessagesReferencingStoredAttachments(excludingSessionIDs: Set<UUID>) -> [ChatMessage] {
         let remainingSessions = loadChatSessions()
             .filter { !excludingSessionIDs.contains($0.id) }
-        let regularMessages = remainingSessions.flatMap { loadMessages(for: $0.id) }
+        let embeddedSessionIDs = remainingSessions.flatMap {
+            loadEmbeddedSubagentSessionIDs(containerSessionID: $0.id)
+        }
+        let remainingSessionIDs = Set(remainingSessions.map(\.id) + embeddedSessionIDs)
+            .subtracting(excludingSessionIDs)
+        let regularMessages = remainingSessionIDs.flatMap { loadMessages(for: $0) }
         let continuationMessages = remainingSessions.compactMap {
             try? loadConversationContinuationContext(for: $0.id)
         }.flatMap(\.retainedMessages)

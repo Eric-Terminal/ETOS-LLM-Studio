@@ -36,8 +36,11 @@ public enum ConversationToolPresentationLoader {
         let targetIDs = targetSessionIDs(for: toolCall)
         guard !targetIDs.isEmpty else { return [] }
 
-        let sessionsByID = Dictionary(uniqueKeysWithValues: Persistence.loadChatSessions().map { ($0.id, $0) })
-        return targetIDs.map { sessionID in
+        return targetIDs.compactMap { sessionID in
+            guard let session = Persistence.loadChatSession(id: sessionID),
+                  !session.isEmbeddedSubagent else {
+                return nil
+            }
             let run = Persistence.loadLatestConversationRun(sessionID: sessionID)
             let replyPreview = Persistence.loadMessages(for: sessionID)
                 .last(where: { message in
@@ -49,7 +52,7 @@ public enum ConversationToolPresentationLoader {
                 }
             return ConversationToolTargetPresentation(
                 sessionID: sessionID,
-                title: sessionsByID[sessionID]?.name ?? String(sessionID.uuidString.prefix(8)),
+                title: session.name,
                 runStatus: run?.status,
                 replyPreview: replyPreview
             )
