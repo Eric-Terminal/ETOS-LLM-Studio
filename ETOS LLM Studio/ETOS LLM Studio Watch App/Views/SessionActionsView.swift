@@ -21,6 +21,34 @@ private struct WatchSessionRelationshipDetails: Sendable {
     let contacts: [LinkedConversationContact]
 }
 
+private struct WatchSessionExportDestination: View {
+    let session: ChatSession
+
+    @State private var messages: [ChatMessage]?
+
+    var body: some View {
+        Group {
+            if let messages {
+                ChatExportFormatsView(
+                    session: session,
+                    messages: messages,
+                    upToMessageID: nil
+                )
+            } else {
+                VStack {
+                    ProgressView()
+                    Text(NSLocalizedString("正在加载会话…", comment: "Watch session export loading status"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .task(id: session.id) {
+                    messages = await Persistence.loadMessagesAsync(for: session.id)
+                }
+            }
+        }
+    }
+}
+
 struct SessionActionsView: View {
 
     // MARK: - 属性与绑定
@@ -203,11 +231,7 @@ struct SessionActionsView: View {
 
             Section(NSLocalizedString("导出", comment: "")) {
                 NavigationLink {
-                    ChatExportFormatsView(
-                        session: session,
-                        messages: Persistence.loadMessages(for: session.id),
-                        upToMessageID: nil
-                    )
+                    WatchSessionExportDestination(session: session)
                 } label: {
                     Label(NSLocalizedString("导出整个会话", comment: ""), systemImage: "square.and.arrow.up")
                 }

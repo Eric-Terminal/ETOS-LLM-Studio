@@ -735,8 +735,9 @@ extension ChatView {
         showsBackground: Bool = true
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
+        let sessionMessages = viewModel.allMessagesForSession
         let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
-            in: viewModel.allMessagesForSession,
+            in: sessionMessages,
             isSending: viewModel.isSendingMessage
         )
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
@@ -828,6 +829,7 @@ extension ChatView {
                                 ChatBubble(
                                     messageState: state,
                                     roleplaySessionID: viewModel.currentSession?.id,
+                                    roleplayMessages: sessionMessages,
                                     layoutWidth: messageLayoutWidth,
                                     reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
                                     preparedMarkdownPayload: preparedMarkdownPayload,
@@ -1136,7 +1138,8 @@ extension ChatView {
                 RoleplaySessionScriptHost(
                     sessionID: viewModel.currentSession?.id,
                     messageID: displayedMessages.last?.message.id,
-                    versionIndex: displayedMessages.last?.message.getCurrentVersionIndex() ?? 0
+                    versionIndex: displayedMessages.last?.message.getCurrentVersionIndex() ?? 0,
+                    chatMessages: sessionMessages
                 )
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))

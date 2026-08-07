@@ -5712,3 +5712,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "保留用户设置的模型启用状态。" = "Conserver l’état d’activation des modèles défini par l’utilisateur.";
 "会按官方配置更新模型启用状态。" = "Mettre à jour l’activation des modèles depuis la configuration officielle.";
 "该版本已应用，本次不会重复修改本地数据。" = "Cette révision est déjà appliquée et ne modifiera pas à nouveau les données locales.";
+"正在加载会话…" = "Chargement de la conversation…";

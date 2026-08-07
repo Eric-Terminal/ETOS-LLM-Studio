@@ -59,7 +59,8 @@ extension ChatBubble {
                     extraction: extraction,
                     sessionID: roleplaySessionID,
                     messageID: message.id,
-                    versionIndex: message.getCurrentVersionIndex()
+                    versionIndex: message.getCurrentVersionIndex(),
+                    chatMessages: roleplayMessages
                 ) { item in
                     webHTMLPageItem = item
                 }

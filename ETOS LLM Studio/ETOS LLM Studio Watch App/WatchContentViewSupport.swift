@@ -27,7 +27,8 @@ extension ContentView {
                 WatchRoleplaySessionScriptHost(
                     sessionID: viewModel.currentSession?.id,
                     messageID: viewModel.displayMessages.last?.message.id,
-                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0
+                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0,
+                    chatMessages: viewModel.allMessagesForSession
                 )
 
                 if showScrollToBottomButton {
