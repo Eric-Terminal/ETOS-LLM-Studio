@@ -55,7 +55,7 @@ extension DailyPulseManager {
 
         do {
             let deliveryTimes = DailyPulseDeliveryCoordinator.shared.deliveryTimes
-            let requestedCardCount = deliveryTimes.reduce(0) { $0 + $1.cardCount }
+            let requestedCardCount = deliveryTimes.count
             let input = await buildGenerationInput(
                 for: generationDayKey,
                 sessionLimit: requestedCardCount
@@ -67,15 +67,16 @@ extension DailyPulseManager {
                 throw DailyPulseGenerationError.noModelSelected
             }
 
-            let scheduledDeliveries = deliveryTimes.compactMap { deliveryTime in
-                DailyPulseDeliveryCoordinator.deliveryDate(
+            let scheduledDeliveries = DailyPulseDeliveryCoordinator.groupedCardDeliveryTimes(deliveryTimes).compactMap { deliveryGroup in
+                guard let firstDeliveryTime = deliveryGroup.first else { return nil }
+                return DailyPulseDeliveryCoordinator.deliveryDate(
                     dayKey: generationDayKey,
-                    time: deliveryTime
-                ).map { (deliveryTime, $0) }
+                    time: firstDeliveryTime
+                ).map { (deliveryGroup, $0) }
             }
             let sessionGroups = Self.partitionedSessionExcerpts(
                 input.sessionExcerpts,
-                cardCounts: scheduledDeliveries.map { $0.0.cardCount },
+                cardCounts: scheduledDeliveries.map { $0.0.count },
                 scheduledDeliveryDates: scheduledDeliveries.map { $0.1 }
             )
             var generatedCards: [DailyPulseCard] = []
@@ -83,13 +84,14 @@ extension DailyPulseManager {
             var firstHeadline: String?
 
             for (index, scheduledDelivery) in scheduledDeliveries.enumerated() {
-                let (deliveryTime, scheduledAt) = scheduledDelivery
+                let (deliveryGroup, scheduledAt) = scheduledDelivery
+                let cardsAtTime = deliveryGroup.count
 
                 let userPrompt = Self.makeUserPrompt(
                     from: input,
                     sessionExcerpts: sessionGroups.indices.contains(index) ? sessionGroups[index] : [],
-                    cardsPerDelivery: deliveryTime.cardCount,
-                    candidateCardsPerDelivery: deliveryTime.cardCount * 2,
+                    cardsPerDelivery: cardsAtTime,
+                    candidateCardsPerDelivery: cardsAtTime * 2,
                     scheduledDeliveryDate: scheduledAt,
                     excludedTopics: generatedCards.map(\.title)
                 )
@@ -105,10 +107,10 @@ extension DailyPulseManager {
                     from: parsed.cards,
                     fallbackFocus: input.focusText,
                     profile: input.preferenceProfile,
-                    limit: deliveryTime.cardCount,
+                    limit: cardsAtTime,
                     excluding: generatedCards
                 )
-                guard cards.count == deliveryTime.cardCount else {
+                guard cards.count == cardsAtTime else {
                     throw DailyPulseGenerationError.invalidModelOutput
                 }
 
@@ -118,14 +120,14 @@ extension DailyPulseManager {
                 )
                 firstHeadline = firstHeadline ?? headline
                 generatedCards.append(contentsOf: cards)
-                deliveryBatches.append(
+                deliveryBatches.append(contentsOf: zip(deliveryGroup, cards).map { pair in
                     DailyPulseDeliveryBatch(
-                        deliveryTimeID: deliveryTime.id,
+                        deliveryTimeID: pair.0.id,
                         scheduledAt: scheduledAt,
                         headline: headline,
-                        cardIDs: cards.map(\.id)
+                        cardIDs: [pair.1.id]
                     )
-                )
+                })
             }
             guard !generatedCards.isEmpty, !deliveryBatches.isEmpty else {
                 throw DailyPulseGenerationError.invalidModelOutput

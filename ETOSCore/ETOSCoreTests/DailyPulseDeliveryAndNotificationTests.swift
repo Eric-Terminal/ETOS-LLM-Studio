@@ -25,7 +25,7 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(components.minute == 0)
     }
 
-    @Test("旧版提醒时间会迁移为首个送达时间并支持归一化更新")
+    @Test("旧版提醒时间会迁移为三张卡片并支持归一化更新")
     @MainActor
     func legacyReminderMigratesToDeliveryTime() {
         let suiteName = "DailyPulseDeliveryCoordinatorTests.\(UUID().uuidString)"
@@ -37,9 +37,8 @@ struct DailyPulseDeliveryAndNotificationTests {
         defaults.set(30, forKey: "dailyPulse.delivery.reminderMinute")
 
         let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
-        #expect(coordinator.deliveryTimes.count == 1)
-        #expect(coordinator.deliveryTimes.first?.timeText == "08:30")
-        #expect(coordinator.deliveryTimes.first?.cardCount == 3)
+        #expect(coordinator.deliveryTimes.count == 3)
+        #expect(coordinator.deliveryTimes.allSatisfy { $0.timeText == "08:30" })
 
         let id = coordinator.deliveryTimes[0].id
         #expect(coordinator.updateDeliveryTime(id: id, hour: 99, minute: -20))
@@ -67,38 +66,51 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(DailyPulseDeliveryCoordinator.reminderTimeComponents(from: "83000") == nil)
     }
 
-    @Test("送达时间默认只有一条并可独立设置卡片数量")
+    @Test("卡片通知会直接显示该卡片的标题和摘要")
+    func cardNotificationShowsCardContent() {
+        let card = DailyPulseCard(
+            title: "需要关注的进展",
+            whyRecommended: "与你最近的工作相关",
+            summary: "这里直接显示卡片回复，不需要先打开应用。",
+            detailsMarkdown: "详情",
+            suggestedPrompt: "继续"
+        )
+
+        let notificationText = DailyPulseDeliveryCoordinator.cardNotificationText(for: card)
+
+        #expect(notificationText.title == card.title)
+        #expect(notificationText.body == card.summary)
+    }
+
+    @Test("卡片默认有三张并允许多张卡片使用相同时间")
     @MainActor
-    func deliveryTimesCanBeAddedAndConfiguredIndependently() throws {
+    func cardsCanBeAddedAndShareDeliveryTime() {
         let suiteName = "DailyPulseDeliveryTimesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
-        #expect(coordinator.deliveryTimes.count == 1)
+        #expect(coordinator.deliveryTimes.count == 3)
         let firstID = coordinator.deliveryTimes[0].id
-        #expect(coordinator.updateCardCount(id: firstID, count: 5))
-        #expect(coordinator.deliveryTimes.first?.cardCount == 5)
 
-        let added = coordinator.addDeliveryTime()
-        #expect(added != nil)
-        #expect(coordinator.deliveryTimes.count == 2)
-        let duplicateTarget = try #require(added)
-        #expect(duplicateTarget.timeText == "12:30")
-        #expect(duplicateTarget.cardCount == 3)
-        #expect(!coordinator.updateDeliveryTime(
-            id: duplicateTarget.id,
+        coordinator.setCardCount(10)
+        #expect(coordinator.deliveryTimes.count == 10)
+        let added = coordinator.deliveryTimes[1]
+        #expect(coordinator.deliveryTimes.allSatisfy { $0.timeText == "08:30" })
+        #expect(coordinator.updateDeliveryTime(
+            id: added.id,
             hour: coordinator.deliveryTimes[0].hour,
             minute: coordinator.deliveryTimes[0].minute
         ))
-        #expect(coordinator.removeDeliveryTime(id: duplicateTarget.id))
-        #expect(coordinator.deliveryTimes.count == 1)
-        #expect(!coordinator.removeDeliveryTime(id: firstID))
+        #expect(coordinator.removeCard(id: added.id))
+        #expect(coordinator.deliveryTimes.count == 9)
+        coordinator.setCardCount(1)
+        #expect(!coordinator.removeCard(id: firstID))
     }
 
-    @Test("上一版自动扩出的多个时间会迁移回单时间三张卡片")
+    @Test("旧版每卡一个时间的配置会原样保留")
     @MainActor
-    func automaticLegacyTimesCollapseToSingleDelivery() {
+    func legacyPerCardTimesRemainIndependentCards() {
         let suiteName = "DailyPulseAutomaticTimesMigrationTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -115,9 +127,30 @@ struct DailyPulseDeliveryAndNotificationTests {
 
         let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
 
-        #expect(coordinator.deliveryTimes.count == 1)
-        #expect(coordinator.deliveryTimes.first?.timeText == "08:30")
-        #expect(coordinator.deliveryTimes.first?.cardCount == 3)
+        #expect(coordinator.deliveryTimes.map(\.timeText) == ["08:30", "12:30", "16:30"])
+    }
+
+    @Test("上一版每个时间的卡片数量会展开为独立卡片时间")
+    @MainActor
+    func legacyBatchCardCountsExpandToCardTimes() {
+        let suiteName = "DailyPulseBatchCardCountMigrationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(
+            """
+            [
+              {"id":"11111111-1111-1111-1111-111111111111","hour":8,"minute":30,"cardCount":3},
+              {"id":"22222222-2222-2222-2222-222222222222","hour":18,"minute":0,"cardCount":2}
+            ]
+            """,
+            forKey: "dailyPulse.delivery.times"
+        )
+
+        let coordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
+
+        #expect(coordinator.deliveryTimes.map(\.timeText) == ["08:30", "08:30", "08:30", "18:00", "18:00"])
+        let reloadedCoordinator = DailyPulseDeliveryCoordinator(defaults: defaults)
+        #expect(reloadedCoordinator.deliveryTimes.count == 5)
     }
 
     @Test("旧版无批次记录会按当前送达时间重新分配全部卡片")
@@ -138,10 +171,11 @@ struct DailyPulseDeliveryAndNotificationTests {
             cards: cards,
             sourceDigest: "legacy"
         )
-        let deliveryTimes = [
-            DailyPulseDeliveryTime(hour: 8, minute: 30, cardCount: 3),
-            DailyPulseDeliveryTime(hour: 18, minute: 0, cardCount: 3)
-        ]
+        let deliveryTimes = (0..<6).map { index in
+            index < 3
+                ? DailyPulseDeliveryTime(hour: 8, minute: 30)
+                : DailyPulseDeliveryTime(hour: 18, minute: 0)
+        }
 
         let batches = DailyPulseDeliveryCoordinator.effectiveDeliveryBatches(
             for: run,
@@ -149,7 +183,7 @@ struct DailyPulseDeliveryAndNotificationTests {
         )
 
         #expect(batches.map(\.deliveryTimeID) == deliveryTimes.map(\.id))
-        #expect(batches.map { $0.cardIDs.count } == [3, 3])
+        #expect(batches.allSatisfy { $0.cardIDs.count == 1 })
         #expect(batches.flatMap(\.cardIDs) == cards.map(\.id))
         #expect(DailyPulseDeliveryCoordinator.deliveryConfigurationRequiresRecovery(
             for: run,
@@ -401,11 +435,16 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(Set(retained.map(\.dayKey)) == ["2026-03-22", "2026-03-23"])
     }
 
-    @Test("单个送达批次卡片数量限制在一到六张")
-    func cardCountIsNormalized() {
-        #expect(DailyPulseDeliveryTime.normalizedCardCount(0) == 1)
-        #expect(DailyPulseDeliveryTime.normalizedCardCount(4) == 4)
-        #expect(DailyPulseDeliveryTime.normalizedCardCount(12) == 6)
+    @Test("相同时间的卡片会合并为一次生成分组")
+    func sameTimeCardsShareGenerationGroup() {
+        let groups = DailyPulseDeliveryCoordinator.groupedCardDeliveryTimes([
+            DailyPulseDeliveryTime(hour: 8, minute: 30),
+            DailyPulseDeliveryTime(hour: 18, minute: 0),
+            DailyPulseDeliveryTime(hour: 8, minute: 30)
+        ])
+
+        #expect(groups.map { $0.count } == [2, 1])
+        #expect(groups.map { $0.first?.timeText } == ["08:30", "18:00"])
     }
 
     @Test("准备状态会按当天开启和收口")

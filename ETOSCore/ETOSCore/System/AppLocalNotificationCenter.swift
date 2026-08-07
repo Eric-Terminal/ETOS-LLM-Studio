@@ -231,6 +231,21 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 
+    public func removePendingRequests(withIdentifierPrefixes prefixes: [String]) async {
+        guard !Self.isRunningUnitTests, !prefixes.isEmpty else { return }
+        let requests = await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
+        let identifiers = requests
+            .map(\.identifier)
+            .filter { identifier in
+                prefixes.contains { prefix in identifier.hasPrefix(prefix) }
+            }
+        removePendingRequests(withIdentifiers: identifiers)
+    }
+
     public func removeDeliveredRequests(withIdentifiers identifiers: [String]) {
         guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)

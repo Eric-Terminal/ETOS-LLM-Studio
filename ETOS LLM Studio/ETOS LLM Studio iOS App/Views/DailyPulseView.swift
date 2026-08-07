@@ -137,7 +137,7 @@ struct DailyPulseView: View {
         } footer: {
             Text(
                 String(
-                    format: NSLocalizedString("共生成 %d 张卡片；每个送达时间会单独准备对应内容，并使用不同的近期对话，减少各时段重复。", comment: "Daily Pulse generation footer with per-delivery card count"),
+                    format: NSLocalizedString("共生成 %d 张卡片；每张卡片都有独立送达时间，相同时间的卡片会一起生成但分别通知。", comment: "Daily Pulse generation footer with per-card delivery time"),
                     deliveryCoordinator.totalCardCount
                 )
             )
@@ -157,6 +157,15 @@ struct DailyPulseView: View {
             Toggle(NSLocalizedString("定时送达", comment: "Daily Pulse scheduled delivery toggle"), isOn: $deliveryCoordinator.reminderEnabled)
 
             if deliveryCoordinator.reminderEnabled {
+                Stepper(value: cardCountBinding, step: 1) {
+                    Text(
+                        String(
+                            format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse configured card count"),
+                            deliveryCoordinator.deliveryTimes.count
+                        )
+                    )
+                }
+
                 ForEach(Array(deliveryCoordinator.deliveryTimes.enumerated()), id: \.element.id) { index, deliveryTime in
                     NavigationLink {
                         DailyPulseDeliveryTimeEditor(deliveryTimeID: deliveryTime.id)
@@ -164,33 +173,16 @@ struct DailyPulseView: View {
                         HStack {
                             Text(
                                 String(
-                                    format: NSLocalizedString("第 %d 条送达时间", comment: "Daily Pulse delivery time row"),
+                                    format: NSLocalizedString("第 %d 张卡片", comment: "Daily Pulse card delivery row"),
                                     index + 1
                                 )
                             )
                             Spacer()
-                            VStack(alignment: .trailing) {
-                                Text(deliveryTime.timeText)
-                                    .monospacedDigit()
-                                Text(
-                                    String(
-                                        format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse cards per delivery summary"),
-                                        deliveryTime.cardCount
-                                    )
-                                )
-                                .etFont(.caption)
-                                .foregroundStyle(.secondary)
-                            }
+                            Text(deliveryTime.timeText)
+                                .monospacedDigit()
                         }
                     }
                 }
-
-                Button {
-                    deliveryCoordinator.addDeliveryTime()
-                } label: {
-                    Label(NSLocalizedString("添加送达时间", comment: "Daily Pulse add delivery time button"), systemImage: "plus.circle")
-                }
-                .disabled(deliveryCoordinator.deliveryTimes.count >= DailyPulseDeliveryCoordinator.maximumDeliveryTimes)
 
                 if notificationCenter.authorizationStatus == .denied {
                     Button(NSLocalizedString("打开系统通知设置", comment: "")) {
@@ -566,6 +558,13 @@ struct DailyPulseView: View {
         )
     }
 
+    private var cardCountBinding: Binding<Int> {
+        Binding(
+            get: { deliveryCoordinator.deliveryTimes.count },
+            set: { deliveryCoordinator.setCardCount($0) }
+        )
+    }
+
 }
 
 private struct DailyPulseDeliveryTimeEditor: View {
@@ -598,41 +597,25 @@ private struct DailyPulseDeliveryTimeEditor: View {
                 }
 
                 if isTimeInvalid {
-                    Text(NSLocalizedString("时间格式不正确或与其他时间重复，请输入 00:00-23:59。", comment: "Daily Pulse delivery time invalid input"))
+                    Text(NSLocalizedString("时间格式不正确，请输入 00:00-23:59。", comment: "Daily Pulse delivery time invalid input"))
                         .etFont(.caption)
                         .foregroundStyle(.red)
                 }
             }
 
-            Section {
-                Picker(
-                    NSLocalizedString("本次送达", comment: "Daily Pulse cards per delivery picker"),
-                    selection: cardCountBinding
-                ) {
-                    ForEach(DailyPulseDeliveryTime.minimumCardCount...DailyPulseDeliveryTime.maximumCardCount, id: \.self) { count in
-                        Text(String(format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse cards per delivery summary"), count))
-                            .tag(count)
-                    }
-                }
-            } header: {
-                Text(NSLocalizedString("卡片数量", comment: "Daily Pulse cards per delivery section"))
-            } footer: {
-                Text(NSLocalizedString("模型会为这个时间点单独生成这一批卡片，并把计划送达时间作为回答时的当前时间。", comment: "Daily Pulse delivery editor footer"))
-            }
-
             if deliveryCoordinator.deliveryTimes.count > 1 {
                 Section {
                     Button(role: .destructive) {
-                        if deliveryCoordinator.removeDeliveryTime(id: deliveryTimeID) {
+                        if deliveryCoordinator.removeCard(id: deliveryTimeID) {
                             dismiss()
                         }
                     } label: {
-                        Label(NSLocalizedString("删除送达时间", comment: "Daily Pulse delete delivery time button"), systemImage: "trash")
+                        Label(NSLocalizedString("删除卡片", comment: "Daily Pulse delete card button"), systemImage: "trash")
                     }
                 }
             }
         }
-        .navigationTitle(NSLocalizedString("编辑送达", comment: "Daily Pulse edit delivery title"))
+        .navigationTitle(NSLocalizedString("编辑卡片", comment: "Daily Pulse edit card title"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             timeDraft = deliveryTime?.timeText ?? ""
@@ -642,22 +625,9 @@ private struct DailyPulseDeliveryTimeEditor: View {
         }
     }
 
-    private var cardCountBinding: Binding<Int> {
-        Binding(
-            get: { deliveryTime?.cardCount ?? DailyPulseDeliveryTime.defaultCardCount },
-            set: { deliveryCoordinator.updateCardCount(id: deliveryTimeID, count: $0) }
-        )
-    }
-
     private func validateTimeDraft(_ input: String) {
-        guard let components = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: input) else {
-            isTimeInvalid = !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return
-        }
-        let totalMinutes = components.hour * 60 + components.minute
-        isTimeInvalid = deliveryCoordinator.deliveryTimes.contains {
-            $0.id != deliveryTimeID && $0.totalMinutes == totalMinutes
-        }
+        isTimeInvalid = DailyPulseDeliveryCoordinator.reminderTimeComponents(from: input) == nil
+            && !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func saveTimeDraft() {

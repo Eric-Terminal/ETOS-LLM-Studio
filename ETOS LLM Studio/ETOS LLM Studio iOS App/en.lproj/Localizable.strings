@@ -1827,6 +1827,12 @@
 "这张每日脉冲卡片暂时不可用。" = "This Daily Pulse card is temporarily unavailable.";
 "生成于 %@ · 可见卡片 %d/%d · 仅展示当天" = "Generated %@ · Visible Cards %d/%d · Today Only";
 "适用于 %@ · 生成于 %@ · 可见卡片 %d/%d · 仅展示当天" = "For %@ · Generated %@ · Visible cards %d/%d · Today only";
+"每张卡片会按各自设定的时间单独通知；多张卡片可以使用同一时间，并分别直接显示内容。" = "Each card is notified at its own scheduled time. Multiple cards may share a time and still show their content separately.";
+"每张卡片会按各自设定的时间单独通知；相同时间的卡片也会分别显示内容。" = "Each card is notified at its own scheduled time. Cards sharing a time still show their content separately.";
+"共生成 %d 张卡片；每张卡片都有独立送达时间，相同时间的卡片会一起生成但分别通知。" = "Generates %d cards. Each card has its own delivery time; cards sharing a time are generated together but notified separately.";
+"第 %d 张卡片" = "Card %d";
+"删除卡片" = "Delete Card";
+"编辑卡片" = "Edit Card";
 "明日已准备" = "Tomorrow Ready";
 "%d 个时间点" = "%d Delivery Times";
 "准备中" = "Preparing";

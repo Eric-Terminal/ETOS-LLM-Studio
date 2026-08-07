@@ -404,12 +404,10 @@ struct SettingsView: View {
             return NSLocalizedString("明日已准备", comment: "每日脉冲明日已准备状态")
         }
         if deliveryCoordinator.reminderEnabled {
-            return deliveryCoordinator.deliveryTimes.count == 1
-                ? deliveryCoordinator.reminderTimeText
-                : String(
-                    format: NSLocalizedString("%d 个时间点", comment: "Daily Pulse delivery time count"),
-                    deliveryCoordinator.deliveryTimes.count
-                )
+            return String(
+                format: NSLocalizedString("%d 张卡片", comment: "Daily Pulse configured card count"),
+                deliveryCoordinator.deliveryTimes.count
+            )
         }
         return nil
     }
