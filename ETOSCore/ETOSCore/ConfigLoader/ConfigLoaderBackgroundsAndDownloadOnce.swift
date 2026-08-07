@@ -76,7 +76,7 @@ extension ConfigLoader {
 
     // MARK: - Download-once 支持
 
-    private static func beginDownloadOnce() -> Bool {
+    static func beginDownloadOnce() -> Bool {
         downloadOnceStateQueue.sync {
             if downloadOnceInProgress {
                 return false
@@ -86,7 +86,7 @@ extension ConfigLoader {
         }
     }
 
-    private static func endDownloadOnce() {
+    static func endDownloadOnce() {
         downloadOnceStateQueue.sync {
             downloadOnceInProgress = false
         }
@@ -118,133 +118,40 @@ extension ConfigLoader {
         guard !isDownloadOnceCompleted() else { return }
 
         Task {
-            _ = await synchronizeOfficialData(overwriteExisting: false)
-        }
-    }
-
-    /// 从官方服务同步下发数据。手动触发时覆盖同名文件，自动初始化时保留已就绪文件。
-    public static func synchronizeOfficialData(
-        overwriteExisting: Bool = true
-    ) async -> OfficialDataSyncResult {
-        guard beginDownloadOnce() else {
-            return OfficialDataSyncResult(
-                downloadedCount: 0,
-                totalCount: 0,
-                isComplete: false,
-                isAlreadyRunning: true
-            )
-        }
-        defer { endDownloadOnce() }
-
-        guard let url = URL(string: officialDataManifestURLString) else {
-            logger.error("官方数据清单 URL 无效: \(officialDataManifestURLString)")
-            return OfficialDataSyncResult(
-                downloadedCount: 0,
-                totalCount: 0,
-                isComplete: false,
-                isAlreadyRunning: false
-            )
-        }
-
-        let result = await fetchAndStoreOfficialData(
-            from: url,
-            overwriteExisting: overwriteExisting
-        )
-        if result.isComplete {
-            setDownloadOnceCompleted(true)
-        }
-        if result.didWriteFiles {
-            await MainActor.run {
-                NotificationCenter.default.post(name: .officialDataDidUpdate, object: nil)
-            }
-        }
-        return result
-    }
-
-    private static func fetchAndStoreOfficialData(
-        from manifestURL: URL,
-        overwriteExisting: Bool
-    ) async -> OfficialDataSyncResult {
-        logger.info("正在获取官方数据清单...")
-
-        do {
-            var request = URLRequest(url: manifestURL)
-            request.timeoutInterval = officialDataTimeout
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-
-            let (data, response) = try await NetworkSessionConfiguration.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                logger.error("官方数据清单响应无效")
-                return OfficialDataSyncResult(
-                    downloadedCount: 0,
-                    totalCount: 0,
-                    isComplete: false,
-                    isAlreadyRunning: false
-                )
-            }
-
-            let decodedManifest = await Task.detached(priority: .utility) {
-                try? JSONDecoder().decode(OfficialDataManifest.self, from: data)
+            let providerDatabaseIsEmpty = await Task.detached(priority: .utility) {
+                ConfigLoader.loadProviders().isEmpty
             }.value
-            guard let manifest = decodedManifest,
-                  manifest.version == 1 else {
-                logger.error("官方数据清单格式或版本不受支持")
-                return OfficialDataSyncResult(
-                    downloadedCount: 0,
-                    totalCount: 0,
-                    isComplete: false,
-                    isAlreadyRunning: false
-                )
+            guard providerDatabaseIsEmpty else {
+                setDownloadOnceCompleted(true)
+                return
             }
+            _ = await synchronizeOfficialData(
+                overwriteExisting: false,
+                trigger: .initialSync
+            )
+        }
+    }
 
-            var downloadedCount = 0
-            var allEntriesReady = true
-
-            for entry in manifest.downloads {
-                guard let remoteURL = URL(string: entry.url, relativeTo: manifestURL)?.absoluteURL,
-                      remoteURL.scheme == manifestURL.scheme,
-                      remoteURL.host == manifestURL.host else {
-                    logger.error("下载地址无效: \(entry.url)")
-                    allEntriesReady = false
-                    continue
-                }
-
-                guard let destinationDir = resolveDownloadDestination(for: entry.path) else {
-                    logger.error("下载路径无效: \(entry.path)")
-                    allEntriesReady = false
-                    continue
-                }
-
-                switch await downloadOfficialDataFile(
-                    entry,
-                    from: remoteURL,
-                    to: destinationDir,
-                    overwriteExisting: overwriteExisting
-                ) {
-                case .downloaded:
-                    downloadedCount += 1
-                case .alreadyPresent:
-                    break
-                case .failed:
-                    allEntriesReady = false
-                }
-            }
-
-            return OfficialDataSyncResult(
-                downloadedCount: downloadedCount,
-                totalCount: manifest.downloads.count,
-                isComplete: allEntriesReady,
-                isAlreadyRunning: false
+    /// 直接完成一次官方数据同步。手动入口应先调用 `prepareOfficialDataSync` 展示预览。
+    public static func synchronizeOfficialData(
+        overwriteExisting: Bool = true,
+        trigger: OfficialDataSyncTrigger = .manualSync
+    ) async -> OfficialDataSyncResult {
+        do {
+            let preview = try await prepareOfficialDataSync(trigger: trigger)
+            return await applyOfficialDataSync(
+                preview,
+                overwriteExisting: overwriteExisting,
+                trigger: trigger
             )
         } catch {
-            logger.error("下载官方数据清单失败: \(error.localizedDescription)")
+            logger.error("准备官方数据同步失败: \(error.localizedDescription)")
             return OfficialDataSyncResult(
                 downloadedCount: 0,
                 totalCount: 0,
                 isComplete: false,
-                isAlreadyRunning: false
+                isAlreadyRunning: false,
+                failureMessages: [error.localizedDescription]
             )
         }
     }
@@ -299,7 +206,7 @@ extension ConfigLoader {
         return checksum.caseInsensitiveCompare(expectedSHA256) == .orderedSame
     }
 
-    private static func downloadOfficialDataFile(
+    static func downloadOfficialDataFile(
         _ entry: OfficialDataEntry,
         from remoteURL: URL,
         to directory: URL,

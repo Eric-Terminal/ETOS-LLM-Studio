@@ -35,94 +35,7 @@ extension ConfigLoader {
     @discardableResult
     static func saveProvidersToSQLite(_ providers: [Provider]) -> Bool {
         let didSave = Persistence.withConfigDatabaseWrite { db in
-            try clearProviderRelationalTables(db)
-
-            let now = Date().timeIntervalSince1970
-            for provider in providers {
-                let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
-                let proxy = provider.proxyConfiguration
-
-                var providerRecord = RelationalProviderRecord(
-                    id: provider.id.uuidString,
-                    name: provider.name,
-                    baseURL: provider.baseURL,
-                    chatEndpointPath: provider.normalizedChatEndpointPath,
-                    apiFormat: provider.apiFormat,
-                    proxyIsEnabled: proxy.map { $0.isEnabled ? 1 : 0 },
-                    proxyType: proxy?.type.rawValue,
-                    proxyHost: proxy?.host,
-                    proxyPort: proxy?.port,
-                    proxyUsername: proxy?.username,
-                    proxyPassword: proxy?.password,
-                    updatedAt: now
-                )
-                try providerRecord.insert(db)
-
-                for (index, apiKey) in normalizedAPIKeys.enumerated() {
-                    var apiKeyRecord = RelationalProviderAPIKeyRecord(
-                        providerID: provider.id.uuidString,
-                        keyIndex: index,
-                        apiKey: apiKey
-                    )
-                    try apiKeyRecord.insert(db)
-                }
-
-                for headerKey in provider.headerOverrides.keys.sorted() {
-                    let headerValue = provider.headerOverrides[headerKey] ?? ""
-                    var headerRecord = RelationalProviderHeaderOverrideRecord(
-                        providerID: provider.id.uuidString,
-                        headerKey: headerKey,
-                        headerValue: headerValue
-                    )
-                    try headerRecord.insert(db)
-                }
-
-                for (modelIndex, model) in provider.models.enumerated() {
-                    var modelRecord = RelationalProviderModelRecord(
-                        id: model.id.uuidString,
-                        providerID: provider.id.uuidString,
-                        modelName: model.modelName,
-                        displayName: model.displayName,
-                        pickerGroupName: model.pickerGroupName,
-                        apiFormatOverride: Model.normalizedAPIFormatOverride(model.apiFormatOverride),
-                        isActivated: model.isActivated ? 1 : 0,
-                        kind: model.kind.rawValue,
-                        inputModalitiesJSON: encodeRawValues(model.inputModalities),
-                        outputModalitiesJSON: encodeRawValues(model.outputModalities),
-                        requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
-                        rawRequestBodyJSON: model.rawRequestBodyJSON,
-                        requestBodyControlsJSON: encodeJSON(model.requestBodyControls),
-                        pricingJSON: model.pricing.flatMap { encodeJSON($0.normalized) },
-                        sortIndex: modelIndex,
-                        updatedAt: now
-                    )
-                    try modelRecord.insert(db)
-
-                    for (capabilityIndex, capability) in model.capabilities.enumerated() {
-                        var capabilityRecord = RelationalProviderModelCapabilityRecord(
-                            modelID: model.id.uuidString,
-                            capability: capability.rawValue,
-                            sortIndex: capabilityIndex
-                        )
-                        try capabilityRecord.insert(db)
-                    }
-
-                    for parameterKey in model.overrideParameters.keys.sorted() {
-                        let value = model.overrideParameters[parameterKey] ?? .null
-                        let encodedValue = RelationalJSONValueCodec.encode(value)
-                        var overrideRecord = RelationalProviderModelOverrideParameterRecord(
-                            modelID: model.id.uuidString,
-                            paramKey: parameterKey,
-                            valueType: encodedValue.type,
-                            stringValue: encodedValue.stringValue,
-                            numberValue: encodedValue.numberValue,
-                            boolValue: encodedValue.boolValue,
-                            jsonValueText: encodedValue.jsonValueText
-                        )
-                        try overrideRecord.insert(db)
-                    }
-                }
-            }
+            try replaceProvidersInRelationalStore(db, providers: providers)
             return true
         } ?? false
 
@@ -130,6 +43,97 @@ extension ConfigLoader {
             removeLegacyProviderBlobs()
         }
         return didSave
+    }
+
+    static func replaceProvidersInRelationalStore(_ db: Database, providers: [Provider]) throws {
+        try clearProviderRelationalTables(db)
+
+        let now = Date().timeIntervalSince1970
+        for provider in providers {
+            let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+            let proxy = provider.proxyConfiguration
+
+            var providerRecord = RelationalProviderRecord(
+                id: provider.id.uuidString,
+                name: provider.name,
+                baseURL: provider.baseURL,
+                chatEndpointPath: provider.normalizedChatEndpointPath,
+                apiFormat: provider.apiFormat,
+                proxyIsEnabled: proxy.map { $0.isEnabled ? 1 : 0 },
+                proxyType: proxy?.type.rawValue,
+                proxyHost: proxy?.host,
+                proxyPort: proxy?.port,
+                proxyUsername: proxy?.username,
+                proxyPassword: proxy?.password,
+                updatedAt: now
+            )
+            try providerRecord.insert(db)
+
+            for (index, apiKey) in normalizedAPIKeys.enumerated() {
+                var apiKeyRecord = RelationalProviderAPIKeyRecord(
+                    providerID: provider.id.uuidString,
+                    keyIndex: index,
+                    apiKey: apiKey
+                )
+                try apiKeyRecord.insert(db)
+            }
+
+            for headerKey in provider.headerOverrides.keys.sorted() {
+                let headerValue = provider.headerOverrides[headerKey] ?? ""
+                var headerRecord = RelationalProviderHeaderOverrideRecord(
+                    providerID: provider.id.uuidString,
+                    headerKey: headerKey,
+                    headerValue: headerValue
+                )
+                try headerRecord.insert(db)
+            }
+
+            for (modelIndex, model) in provider.models.enumerated() {
+                var modelRecord = RelationalProviderModelRecord(
+                    id: model.id.uuidString,
+                    providerID: provider.id.uuidString,
+                    modelName: model.modelName,
+                    displayName: model.displayName,
+                    pickerGroupName: model.pickerGroupName,
+                    apiFormatOverride: Model.normalizedAPIFormatOverride(model.apiFormatOverride),
+                    isActivated: model.isActivated ? 1 : 0,
+                    kind: model.kind.rawValue,
+                    inputModalitiesJSON: encodeRawValues(model.inputModalities),
+                    outputModalitiesJSON: encodeRawValues(model.outputModalities),
+                    requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
+                    rawRequestBodyJSON: model.rawRequestBodyJSON,
+                    requestBodyControlsJSON: encodeJSON(model.requestBodyControls),
+                    pricingJSON: model.pricing.flatMap { encodeJSON($0.normalized) },
+                    sortIndex: modelIndex,
+                    updatedAt: now
+                )
+                try modelRecord.insert(db)
+
+                for (capabilityIndex, capability) in model.capabilities.enumerated() {
+                    var capabilityRecord = RelationalProviderModelCapabilityRecord(
+                        modelID: model.id.uuidString,
+                        capability: capability.rawValue,
+                        sortIndex: capabilityIndex
+                    )
+                    try capabilityRecord.insert(db)
+                }
+
+                for parameterKey in model.overrideParameters.keys.sorted() {
+                    let value = model.overrideParameters[parameterKey] ?? .null
+                    let encodedValue = RelationalJSONValueCodec.encode(value)
+                    var overrideRecord = RelationalProviderModelOverrideParameterRecord(
+                        modelID: model.id.uuidString,
+                        paramKey: parameterKey,
+                        valueType: encodedValue.type,
+                        stringValue: encodedValue.stringValue,
+                        numberValue: encodedValue.numberValue,
+                        boolValue: encodedValue.boolValue,
+                        jsonValueText: encodedValue.jsonValueText
+                    )
+                    try overrideRecord.insert(db)
+                }
+            }
+        }
     }
 
     static func clearProviderRelationalTables(_ db: Database) throws {

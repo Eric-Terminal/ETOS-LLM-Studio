@@ -23,9 +23,31 @@ public struct OfficialDataSyncResult: Sendable {
     public let totalCount: Int
     public let isComplete: Bool
     public let isAlreadyRunning: Bool
+    public let actionSummary: OfficialDataActionSummary
+    public let failureMessages: [String]
+
+    public init(
+        downloadedCount: Int,
+        totalCount: Int,
+        isComplete: Bool,
+        isAlreadyRunning: Bool,
+        actionSummary: OfficialDataActionSummary = .empty,
+        failureMessages: [String] = []
+    ) {
+        self.downloadedCount = downloadedCount
+        self.totalCount = totalCount
+        self.isComplete = isComplete
+        self.isAlreadyRunning = isAlreadyRunning
+        self.actionSummary = actionSummary
+        self.failureMessages = failureMessages
+    }
 
     public var didWriteFiles: Bool {
         downloadedCount > 0
+    }
+
+    public var didChangeData: Bool {
+        didWriteFiles || actionSummary.changedCount > 0
     }
 }
 
@@ -55,6 +77,22 @@ public struct ConfigLoader {
     struct OfficialDataManifest: Decodable, Sendable {
         let version: Int
         let downloads: [OfficialDataEntry]
+        let actions: [OfficialDataActionEntry]
+
+        enum CodingKeys: String, CodingKey {
+            case version, downloads, actions
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decode(Int.self, forKey: .version)
+            downloads = try container.decodeIfPresent([OfficialDataEntry].self, forKey: .downloads) ?? []
+            let actionEnvelopes = try container.decodeIfPresent(
+                [OfficialDataActionEnvelope].self,
+                forKey: .actions
+            ) ?? []
+            actions = actionEnvelopes.compactMap(\.action)
+        }
     }
 
     enum DownloadFileResult {

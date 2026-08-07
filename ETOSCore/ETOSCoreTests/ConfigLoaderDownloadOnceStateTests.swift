@@ -72,4 +72,70 @@ struct ConfigLoaderDownloadOnceStateTests {
             ) == false
         )
     }
+
+    @Test("旧版 version 1 清单缺少 actions 时仍可解码")
+    func legacyManifestWithoutActionsStillDecodes() throws {
+        let data = Data(#"{"version":1,"downloads":[]}"#.utf8)
+        let manifest = try JSONDecoder().decode(ConfigLoader.OfficialDataManifest.self, from: data)
+
+        #expect(manifest.version == 1)
+        #expect(manifest.downloads.isEmpty)
+        #expect(manifest.actions.isEmpty)
+    }
+
+    @Test("操作清单携带执行范围与合并策略并按触发方式过滤")
+    func actionManifestDecodesPreviewMetadata() throws {
+        let data = Data(
+            #"""
+            {
+              "version": 1,
+              "downloads": [],
+              "actions": [
+                {
+                  "id": "official-provider.test",
+                  "revision": 1,
+                  "kind": "provider.upsert",
+                  "apply_on": ["manual_sync"],
+                  "payload_url": "/v1/distribution/files/checksum/provider-action.json",
+                  "payload_file_name": "provider-action.json",
+                  "payload_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "payload_size": 1,
+                  "merge_policy": {
+                    "provider_fields": "update_if_unmodified",
+                    "api_keys": "preserve_local_if_nonempty",
+                    "header_overrides": "update_if_unmodified",
+                    "proxy_configuration": "preserve_local",
+                    "models": {
+                      "fields": "update_if_unmodified",
+                      "is_activated": "preserve_local",
+                      "on_missing": "insert",
+                      "on_removed": "delete_if_unmodified",
+                      "user_models": "preserve"
+                    },
+                    "if_user_deleted": "restore_on_manual_sync"
+                  }
+                }
+              ]
+            }
+            """#.utf8
+        )
+        let manifest = try JSONDecoder().decode(ConfigLoader.OfficialDataManifest.self, from: data)
+        let action = try #require(manifest.actions.first)
+
+        #expect(action.applyOn == [.manualSync])
+        #expect(action.mergePolicy.apiKeys == .preserveLocalIfNonempty)
+        #expect(ConfigLoader.actionEntryApplies(action, trigger: .manualSync))
+        #expect(ConfigLoader.actionEntryApplies(action, trigger: .initialSync) == false)
+    }
+
+    @Test("未知操作不会阻断旧版文件清单解码")
+    func unknownActionDoesNotBreakDownloads() throws {
+        let data = Data(
+            #"{"version":1,"downloads":[{"name":"背景","path":"/Documents/Backgrounds","url":"/background.png","file_name":"background.png","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1}],"actions":[{"id":"future","revision":1,"kind":"future.operation"}]}"#.utf8
+        )
+        let manifest = try JSONDecoder().decode(ConfigLoader.OfficialDataManifest.self, from: data)
+
+        #expect(manifest.downloads.count == 1)
+        #expect(manifest.actions.isEmpty)
+    }
 }

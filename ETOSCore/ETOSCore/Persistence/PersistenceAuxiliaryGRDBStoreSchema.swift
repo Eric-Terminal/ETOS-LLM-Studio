@@ -920,6 +920,22 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE provider_models ADD COLUMN api_format_override TEXT")
                 }
             }
+
+            migrator.registerMigration("v17_create_official_data_action_state") { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS official_data_action_state (
+                        action_id TEXT PRIMARY KEY NOT NULL,
+                        revision INTEGER NOT NULL,
+                        payload_sha256 TEXT NOT NULL,
+                        provider_id TEXT NOT NULL,
+                        official_snapshot_json TEXT NOT NULL,
+                        applied_at REAL NOT NULL
+                    )
+                """)
+                try db.execute(
+                    sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_official_data_action_provider ON official_data_action_state(provider_id)"
+                )
+            }
         }
 
         if supportsMemoryRelationalSchema {

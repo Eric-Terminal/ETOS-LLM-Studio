@@ -108,6 +108,7 @@ struct AboutView: View {
     @State private var officialDataAlertTitle = ""
     @State private var officialDataAlertMessage = ""
     @State private var showOfficialDataAlert = false
+    @State private var officialDataPreview: OfficialDataSyncPreview?
     private let officialCommunities: [WatchOfficialCommunity]
 
     init(distributionChannel: UpdateTimelineChannel = UpdateTimelineManager.currentDistributionChannel()) {
@@ -237,7 +238,7 @@ struct AboutView: View {
                         .foregroundStyle(.secondary)
 
                     Button {
-                        synchronizeOfficialData()
+                        prepareOfficialDataSync()
                     } label: {
                         if isSynchronizingOfficialData {
                             HStack {
@@ -258,7 +259,7 @@ struct AboutView: View {
 
                     Text(
                         NSLocalizedString(
-                            "从官方服务重新下载配置与资源。已有同名文件会安全更新。",
+                            "同步前会列出文件和提供商操作，确认后才会执行。",
                             comment: "官方数据同步说明"
                         )
                     )
@@ -353,6 +354,20 @@ struct AboutView: View {
                 WatchAppLogsView()
             }
         }
+        .sheet(item: $officialDataPreview) { preview in
+            NavigationStack {
+                WatchOfficialDataSyncPreviewView(
+                    preview: preview,
+                    isApplying: isSynchronizingOfficialData,
+                    onCancel: {
+                        officialDataPreview = nil
+                    },
+                    onConfirm: {
+                        applyOfficialDataSync(preview)
+                    }
+                )
+            }
+        }
         .alert(officialDataAlertTitle, isPresented: $showOfficialDataAlert) {
             Button(NSLocalizedString("好", comment: "关闭提示按钮"), role: .cancel) {}
         } message: {
@@ -360,45 +375,69 @@ struct AboutView: View {
         }
     }
 
-    private func synchronizeOfficialData() {
+    private func prepareOfficialDataSync() {
         guard !isSynchronizingOfficialData else { return }
         isSynchronizingOfficialData = true
 
         Task {
-            let result = await ConfigLoader.synchronizeOfficialData(overwriteExisting: true)
-            isSynchronizingOfficialData = false
-
-            if result.isAlreadyRunning {
+            do {
+                officialDataPreview = try await ConfigLoader.prepareOfficialDataSync()
+            } catch {
                 officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
-                officialDataAlertMessage = NSLocalizedString(
-                    "官方数据正在同步，请稍后再试。",
-                    comment: "官方数据同步任务冲突提示"
-                )
+                officialDataAlertMessage = error.localizedDescription
+                showOfficialDataAlert = true
                 WKInterfaceDevice.current().play(.failure)
-            } else if !result.isComplete {
-                officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
-                officialDataAlertMessage = NSLocalizedString(
-                    "部分官方文件下载失败，请检查网络后重试。",
-                    comment: "官方数据同步失败说明"
-                )
-                WKInterfaceDevice.current().play(.failure)
-            } else if result.didWriteFiles {
-                officialDataAlertTitle = NSLocalizedString("官方数据已更新", comment: "官方数据同步成功标题")
-                officialDataAlertMessage = String(
-                    format: NSLocalizedString("已同步 %d 个官方文件。", comment: "官方数据同步成功数量"),
-                    result.downloadedCount
-                )
-                WKInterfaceDevice.current().play(.success)
-            } else {
-                officialDataAlertTitle = NSLocalizedString("官方数据已是最新", comment: "官方数据无需更新标题")
-                officialDataAlertMessage = NSLocalizedString(
-                    "没有需要更新的官方文件。",
-                    comment: "官方数据无需更新说明"
-                )
-                WKInterfaceDevice.current().play(.success)
             }
-            showOfficialDataAlert = true
+            isSynchronizingOfficialData = false
         }
+    }
+
+    private func applyOfficialDataSync(_ preview: OfficialDataSyncPreview) {
+        guard !isSynchronizingOfficialData else { return }
+        isSynchronizingOfficialData = true
+
+        Task {
+            let result = await ConfigLoader.applyOfficialDataSync(preview)
+            officialDataPreview = nil
+            isSynchronizingOfficialData = false
+            presentOfficialDataResult(result)
+        }
+    }
+
+    private func presentOfficialDataResult(_ result: OfficialDataSyncResult) {
+        if result.isAlreadyRunning {
+            officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
+            officialDataAlertMessage = NSLocalizedString(
+                "官方数据正在同步，请稍后再试。",
+                comment: "官方数据同步任务冲突提示"
+            )
+        } else if !result.isComplete {
+            officialDataAlertTitle = NSLocalizedString("同步未完成", comment: "官方数据同步失败标题")
+            officialDataAlertMessage = result.failureMessages.first ?? NSLocalizedString(
+                "部分官方数据处理失败，请检查网络后重试。",
+                comment: "官方数据同步失败说明"
+            )
+        } else if result.didChangeData {
+            officialDataAlertTitle = NSLocalizedString("官方数据已更新", comment: "官方数据同步成功标题")
+            officialDataAlertMessage = String(
+                format: NSLocalizedString(
+                    "已同步 %d 个文件，新增 %d 个、更新 %d 个、恢复 %d 个提供商。",
+                    comment: "官方数据同步结果"
+                ),
+                result.downloadedCount,
+                result.actionSummary.insertedCount,
+                result.actionSummary.updatedCount,
+                result.actionSummary.restoredCount
+            )
+        } else {
+            officialDataAlertTitle = NSLocalizedString("官方数据已是最新", comment: "官方数据无需更新标题")
+            officialDataAlertMessage = NSLocalizedString(
+                "没有需要更新的官方文件或提供商。",
+                comment: "官方数据无需更新说明"
+            )
+        }
+        WKInterfaceDevice.current().play(result.isComplete ? .success : .failure)
+        showOfficialDataAlert = true
     }
 
     private func handleVersionTap() {
