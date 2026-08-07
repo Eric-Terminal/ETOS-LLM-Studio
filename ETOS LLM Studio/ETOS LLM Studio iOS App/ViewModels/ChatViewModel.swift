@@ -392,6 +392,7 @@ final class ChatViewModel: ObservableObject {
         return cache
     }()
     var globalSystemPromptReloadTask: Task<Void, Never>?
+    var conversationMemoryReloadTask: Task<Void, Never>?
     var backgroundBlurTask: Task<Void, Never>?
     var isApplicationActive: Bool = true
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]

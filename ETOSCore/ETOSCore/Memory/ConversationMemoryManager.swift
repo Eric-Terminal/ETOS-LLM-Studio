@@ -144,6 +144,19 @@ public struct ConversationUserProfile: Codable, Hashable, Sendable {
     }
 }
 
+public struct ConversationMemoryStateSnapshot: Sendable {
+    public let sessionSummaries: [ConversationSessionSummary]
+    public let userProfile: ConversationUserProfile?
+
+    public init(
+        sessionSummaries: [ConversationSessionSummary],
+        userProfile: ConversationUserProfile?
+    ) {
+        self.sessionSummaries = sessionSummaries
+        self.userProfile = userProfile
+    }
+}
+
 public extension Notification.Name {
     static let conversationMemoryDidChange = Notification.Name("com.ETOS.LLM.Studio.conversationMemory.didChange")
 }
@@ -151,6 +164,10 @@ public extension Notification.Name {
 public enum ConversationMemoryManager {
     private static let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ConversationMemory")
     private static let profileStore = ConversationUserProfileStore()
+    private static let stateReadQueue = DispatchQueue(
+        label: "com.ETOS.LLM.Studio.conversation-memory.state-read",
+        qos: .utility
+    )
 
     public static func loadRecentSessionSummaries(limit: Int, excludingSessionID: UUID? = nil) -> [ConversationSessionSummary] {
         let safeLimit = max(0, limit)
@@ -160,6 +177,20 @@ public enum ConversationMemoryManager {
 
     public static func loadAllSessionSummaries() -> [ConversationSessionSummary] {
         Persistence.loadConversationSessionSummaries(limit: nil, excludingSessionID: nil)
+    }
+
+    public static func loadStateSnapshotAsync() async -> ConversationMemoryStateSnapshot {
+        await withCheckedContinuation { continuation in
+            // 启动期记忆不是交互前置条件，固定在 Utility 队列读取，避免主线程同步等待 GRDB reader。
+            stateReadQueue.async {
+                continuation.resume(
+                    returning: ConversationMemoryStateSnapshot(
+                        sessionSummaries: loadAllSessionSummaries(),
+                        userProfile: loadUserProfile()
+                    )
+                )
+            }
+        }
     }
 
     public static func loadSessionSummary(for sessionID: UUID) -> ConversationSessionSummary? {
