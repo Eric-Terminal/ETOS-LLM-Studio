@@ -120,6 +120,94 @@ struct DailyPulseDeliveryAndNotificationTests {
         #expect(coordinator.deliveryTimes.first?.cardCount == 3)
     }
 
+    @Test("旧版无批次记录会按当前送达时间重新分配全部卡片")
+    func legacyRunUsesCurrentDeliveryTimes() {
+        let cards = (1...6).map { index in
+            DailyPulseCard(
+                title: "卡片 \(index)",
+                whyRecommended: "原因 \(index)",
+                summary: "摘要 \(index)",
+                detailsMarkdown: "详情 \(index)",
+                suggestedPrompt: "继续 \(index)"
+            )
+        }
+        let run = DailyPulseRun(
+            dayKey: "2026-08-07",
+            generatedAt: Date(timeIntervalSince1970: 1_775_000_000),
+            headline: "今日脉冲",
+            cards: cards,
+            sourceDigest: "legacy"
+        )
+        let deliveryTimes = [
+            DailyPulseDeliveryTime(hour: 8, minute: 30, cardCount: 3),
+            DailyPulseDeliveryTime(hour: 18, minute: 0, cardCount: 3)
+        ]
+
+        let batches = DailyPulseDeliveryCoordinator.effectiveDeliveryBatches(
+            for: run,
+            deliveryTimes: deliveryTimes
+        )
+
+        #expect(batches.map(\.deliveryTimeID) == deliveryTimes.map(\.id))
+        #expect(batches.map { $0.cardIDs.count } == [3, 3])
+        #expect(batches.flatMap(\.cardIDs) == cards.map(\.id))
+        #expect(DailyPulseDeliveryCoordinator.deliveryConfigurationRequiresRecovery(
+            for: run,
+            deliveryTimes: deliveryTimes
+        ))
+    }
+
+    @Test("失配的旧送达时间标识会按当前顺序恢复且不丢卡")
+    func staleDeliveryTimeIdentifiersRecoverByPosition() {
+        let cards = (1...3).map { index in
+            DailyPulseCard(
+                title: "卡片 \(index)",
+                whyRecommended: "原因 \(index)",
+                summary: "摘要 \(index)",
+                detailsMarkdown: "详情 \(index)",
+                suggestedPrompt: "继续 \(index)"
+            )
+        }
+        let storedBatches = [
+            DailyPulseDeliveryBatch(
+                deliveryTimeID: UUID(),
+                scheduledAt: Date(timeIntervalSince1970: 1_775_010_000),
+                headline: "上午",
+                cardIDs: [cards[0].id]
+            ),
+            DailyPulseDeliveryBatch(
+                deliveryTimeID: UUID(),
+                scheduledAt: Date(timeIntervalSince1970: 1_775_020_000),
+                headline: "下午",
+                cardIDs: [cards[1].id, cards[2].id]
+            )
+        ]
+        let run = DailyPulseRun(
+            dayKey: "2026-08-07",
+            generatedAt: Date(timeIntervalSince1970: 1_775_000_000),
+            headline: "今日脉冲",
+            cards: cards,
+            sourceDigest: "stale",
+            deliveryBatches: storedBatches
+        )
+        let deliveryTimes = [
+            DailyPulseDeliveryTime(hour: 9, minute: 0),
+            DailyPulseDeliveryTime(hour: 17, minute: 30)
+        ]
+
+        let batches = DailyPulseDeliveryCoordinator.effectiveDeliveryBatches(
+            for: run,
+            deliveryTimes: deliveryTimes
+        )
+
+        #expect(batches.map(\.deliveryTimeID) == deliveryTimes.map(\.id))
+        #expect(batches.flatMap(\.cardIDs) == cards.map(\.id))
+        #expect(DailyPulseDeliveryCoordinator.deliveryConfigurationRequiresRecovery(
+            for: run,
+            deliveryTimes: deliveryTimes
+        ))
+    }
+
     @Test("卡片送达日期会绑定目标日期和具体时间")
     func deliveryDateBindsDayAndTime() {
         var calendar = Calendar(identifier: .gregorian)

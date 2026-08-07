@@ -187,7 +187,10 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
 
 #if canImport(UserNotifications)
     private func scheduleCardNotifications(for run: DailyPulseRun, referenceDate: Date) async {
-        for (index, batch) in effectiveDeliveryBatches(for: run).enumerated() {
+        for (index, batch) in Self.effectiveDeliveryBatches(
+            for: run,
+            deliveryTimes: deliveryTimes
+        ).enumerated() {
             guard let deliveryTime = deliveryTimes.first(where: { $0.id == batch.deliveryTimeID }),
                   let deliveryDate = Self.deliveryDate(dayKey: run.dayKey, time: deliveryTime),
                   deliveryDate > referenceDate else {
@@ -222,22 +225,6 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
             )
             _ = await AppLocalNotificationCenter.shared.addNotificationRequest(request)
         }
-    }
-
-    private func effectiveDeliveryBatches(for run: DailyPulseRun) -> [DailyPulseDeliveryBatch] {
-        if let storedBatches = run.deliveryBatches, !storedBatches.isEmpty {
-            return storedBatches
-        }
-
-        guard let firstTime = deliveryTimes.first else { return [] }
-        return [
-            DailyPulseDeliveryBatch(
-                deliveryTimeID: firstTime.id,
-                scheduledAt: Self.deliveryDate(dayKey: run.dayKey, time: firstTime) ?? run.generatedAt,
-                headline: run.headline,
-                cardIDs: run.cards.map(\.id)
-            )
-        ]
     }
 
     private nonisolated static func notificationBody(for cards: [DailyPulseCard]) -> String {
@@ -277,6 +264,75 @@ public final class DailyPulseDeliveryCoordinator: ObservableObject {
         }
     }
 #endif
+
+    /// 把旧版无批次记录或送达时间标识已变化的记录映射到当前配置，避免升级后静默丢失通知。
+    internal nonisolated static func effectiveDeliveryBatches(
+        for run: DailyPulseRun,
+        deliveryTimes: [DailyPulseDeliveryTime]
+    ) -> [DailyPulseDeliveryBatch] {
+        guard !deliveryTimes.isEmpty else { return [] }
+
+        if let storedBatches = run.deliveryBatches, !storedBatches.isEmpty {
+            var batchesByTimeID: [UUID: DailyPulseDeliveryBatch] = [:]
+
+            for (index, batch) in storedBatches.enumerated() {
+                let deliveryTime = deliveryTimes.first(where: { $0.id == batch.deliveryTimeID })
+                    ?? deliveryTimes[min(index, deliveryTimes.count - 1)]
+                let scheduledAt = deliveryDate(dayKey: run.dayKey, time: deliveryTime) ?? batch.scheduledAt
+
+                if var existing = batchesByTimeID[deliveryTime.id] {
+                    for cardID in batch.cardIDs where !existing.cardIDs.contains(cardID) {
+                        existing.cardIDs.append(cardID)
+                    }
+                    batchesByTimeID[deliveryTime.id] = existing
+                } else {
+                    var resolvedBatch = batch
+                    resolvedBatch.deliveryTimeID = deliveryTime.id
+                    resolvedBatch.scheduledAt = scheduledAt
+                    batchesByTimeID[deliveryTime.id] = resolvedBatch
+                }
+            }
+
+            return deliveryTimes.compactMap { batchesByTimeID[$0.id] }
+        }
+
+        let cardIDs = run.cards.map(\.id)
+        var nextCardIndex = 0
+        var batches: [DailyPulseDeliveryBatch] = []
+
+        for (index, deliveryTime) in deliveryTimes.enumerated() {
+            let remainingCardCount = cardIDs.count - nextCardIndex
+            guard remainingCardCount > 0 else { break }
+
+            // 最后一个时间接收剩余卡片，保证旧版记录不会因新版每批数量设置而丢卡。
+            let batchCardCount = index == deliveryTimes.count - 1
+                ? remainingCardCount
+                : min(deliveryTime.cardCount, remainingCardCount)
+            let nextIndex = nextCardIndex + batchCardCount
+            batches.append(
+                DailyPulseDeliveryBatch(
+                    deliveryTimeID: deliveryTime.id,
+                    scheduledAt: deliveryDate(dayKey: run.dayKey, time: deliveryTime) ?? run.generatedAt,
+                    headline: run.headline,
+                    cardIDs: Array(cardIDs[nextCardIndex..<nextIndex])
+                )
+            )
+            nextCardIndex = nextIndex
+        }
+
+        return batches
+    }
+
+    internal nonisolated static func deliveryConfigurationRequiresRecovery(
+        for run: DailyPulseRun,
+        deliveryTimes: [DailyPulseDeliveryTime]
+    ) -> Bool {
+        guard let storedBatches = run.deliveryBatches, !storedBatches.isEmpty else {
+            return true
+        }
+        let currentTimeIDs = Set(deliveryTimes.map(\.id))
+        return storedBatches.contains { !currentTimeIDs.contains($0.deliveryTimeID) }
+    }
 
     public func notifyReadyIfNeeded(for run: DailyPulseRun) async {
 #if canImport(UserNotifications)

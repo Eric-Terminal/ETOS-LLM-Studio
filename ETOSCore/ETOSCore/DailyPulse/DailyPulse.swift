@@ -574,8 +574,21 @@ public final class DailyPulseManager: ObservableObject {
             if Self.shouldUseExistingRunForScheduledDelivery(
                 todayRunDayKey: todayRun?.dayKey,
                 referenceDate: referenceDate
-            ) {
-                await DailyPulseDeliveryCoordinator.shared.refreshReminderSchedule(referenceDate: referenceDate)
+            ), let todayRun {
+                let coordinator = DailyPulseDeliveryCoordinator.shared
+                let requiresRecovery = DailyPulseDeliveryCoordinator.deliveryConfigurationRequiresRecovery(
+                    for: todayRun,
+                    deliveryTimes: deliveryTimes
+                )
+                await coordinator.refreshReminderSchedule(referenceDate: referenceDate)
+                if requiresRecovery,
+                   !DailyPulseDeliveryCoordinator.hasFutureDeliveryTime(
+                       dayKey: todayKey,
+                       deliveryTimes: deliveryTimes,
+                       referenceDate: referenceDate
+                   ) {
+                    await coordinator.notifyReadyIfNeeded(for: todayRun)
+                }
             } else {
                 let shouldNotifyReady = !DailyPulseDeliveryCoordinator.hasFutureDeliveryTime(
                     dayKey: todayKey,

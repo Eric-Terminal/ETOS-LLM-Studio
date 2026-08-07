@@ -2214,6 +2214,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "今天的每日脉冲尚未完成预先准备，打开应用后会继续尝试生成。" = "Le Pulse quotidien du jour n’a pas été préparé à l’avance. Ouvrez l’app pour poursuivre sa génération.";
 "这张每日脉冲卡片暂时不可用。" = "Cette carte du Pulse quotidien est temporairement indisponible.";
 "生成于 %@ · 可见卡片 %d/%d · 仅展示当天" = "Généré %@ · Cartes visibles %d/%d · Aujourd’hui uniquement";
+"适用于 %@ · 生成于 %@ · 可见卡片 %d/%d · 仅展示当天" = "Pour le %@ · Généré le %@ · Cartes visibles %d/%d · Aujourd’hui uniquement";
 "明日已准备" = "Demain prêt";
 "%d 个时间点" = "%d heures d’envoi";
 "每日脉冲 +%d" = "Daily Pulse +%d";

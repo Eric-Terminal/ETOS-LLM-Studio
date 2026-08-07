@@ -483,7 +483,13 @@ struct DailyPulseView: View {
 
     private func summaryText(for run: DailyPulseRun) -> String {
         let dateText = run.generatedAt.formatted(date: .abbreviated, time: .shortened)
-        return String(format: NSLocalizedString("生成于 %@ · 可见卡片 %d/%d · 仅展示当天", comment: ""), dateText, run.visibleCards.count, run.cards.count)
+        return String(
+            format: NSLocalizedString("适用于 %@ · 生成于 %@ · 可见卡片 %d/%d · 仅展示当天", comment: "Daily Pulse target day and generation time summary"),
+            run.dayKey,
+            dateText,
+            run.visibleCards.count,
+            run.cards.count
+        )
     }
 
     private var preparationStatusText: String {
