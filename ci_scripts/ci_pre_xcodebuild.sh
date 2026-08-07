@@ -35,6 +35,12 @@ write_commit_hash "$WATCH_PLIST_PATH"
 
 export CONFIGURATION="${CONFIGURATION:-Release}"
 
+echo "初始化 Git 子模块。"
+git -C "$ROOT_PATH" submodule update --init --recursive
+
+echo "预构建 iSHApple 公共静态库。"
+"$ROOT_PATH/scripts/build-ish-static-library.sh"
+
 build_llama_static_library() {
     sdk_name="$1"
     archs="$2"
