@@ -146,22 +146,23 @@ struct DeviceSyncSettingsView: View {
                 ))
             }
         }
-        .alert(cloudOverwriteConfirmationTitle, isPresented: $isCloudOverwriteConfirmationPresented) {
-            TextField(
-                NSLocalizedString("确认短语", comment: ""),
-                text: $cloudOverwriteConfirmationText.watchKeyboardNewlineBinding()
+        .sheet(
+            isPresented: $isCloudOverwriteConfirmationPresented,
+            onDismiss: handleCloudOverwriteConfirmationDismissed
+        ) {
+            WatchCloudOverwriteConfirmationView(
+                title: cloudOverwriteConfirmationTitle,
+                message: cloudOverwriteConfirmationMessage,
+                confirmationText: $cloudOverwriteConfirmationText,
+                isConfirmationValid: isCloudOverwriteConfirmationValid,
+                onCancel: {
+                    isCloudOverwriteConfirmationPresented = false
+                },
+                onConfirm: {
+                    executeCloudOverwrite()
+                    isCloudOverwriteConfirmationPresented = false
+                }
             )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            Button(NSLocalizedString("取消", comment: ""), role: .cancel) {
-                cancelCloudOverwriteConfirmation()
-            }
-            Button(NSLocalizedString("执行覆盖", comment: ""), role: .destructive) {
-                executeCloudOverwrite()
-            }
-            .disabled(!isCloudOverwriteConfirmationValid)
-        } message: {
-            Text(cloudOverwriteConfirmationMessage)
         }
         .confirmationDialog(
             NSLocalizedString("选择 Apple Watch 同步方式", comment: ""),
@@ -272,6 +273,11 @@ struct DeviceSyncSettingsView: View {
             await Task.yield()
             cloudSyncManager.restoreInitialConflictPrompt()
         }
+    }
+
+    private func handleCloudOverwriteConfirmationDismissed() {
+        guard pendingCloudOverwriteResolution != nil else { return }
+        cancelCloudOverwriteConfirmation()
     }
 
     private func executeCloudOverwrite() {
@@ -448,6 +454,49 @@ struct DeviceSyncSettingsView: View {
         }
         let separator = NSLocalizedString("，", comment: "")
         return parts.isEmpty ? NSLocalizedString("两端数据一致", comment: "") : parts.joined(separator: separator)
+    }
+}
+
+private struct WatchCloudOverwriteConfirmationView: View {
+    let title: String
+    let message: String
+    @Binding var confirmationText: String
+    let isConfirmationValid: Bool
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(message)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    TextField(
+                        NSLocalizedString("确认短语", comment: ""),
+                        text: $confirmationText.watchKeyboardNewlineBinding()
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                }
+
+                Section {
+                    Button(NSLocalizedString("执行覆盖", comment: ""), role: .destructive) {
+                        onConfirm()
+                    }
+                    .disabled(!isConfirmationValid)
+                }
+            }
+            .navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("取消", comment: ""), action: onCancel)
+                }
+            }
+        }
     }
 }
 
