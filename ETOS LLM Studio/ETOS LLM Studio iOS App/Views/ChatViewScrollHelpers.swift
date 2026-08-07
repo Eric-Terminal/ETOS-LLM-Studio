@@ -16,9 +16,14 @@ extension ChatView {
         phaseValue: CGFloat,
         configuredOffset: Double,
         isEnabled: Bool,
-        isConnectedToAdjacentBubble: Bool
+        isConnectedToAdjacentBubble: Bool,
+        isBottomPinnedStreamingBubble: Bool = false
     ) -> CGFloat {
-        guard isEnabled, !isConnectedToAdjacentBubble else { return 0 }
+        guard isEnabled,
+              !isConnectedToAdjacentBubble,
+              !isBottomPinnedStreamingBubble else {
+            return 0
+        }
         return phaseValue * CGFloat(configuredOffset)
     }
 

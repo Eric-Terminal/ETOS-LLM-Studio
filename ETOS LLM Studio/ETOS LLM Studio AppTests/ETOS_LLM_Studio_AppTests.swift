@@ -97,6 +97,15 @@ struct ETOS_LLM_Studio_AppTests {
             isConnectedToAdjacentBubble: false
         )
         #expect(disabledOffset == 0)
+
+        let bottomPinnedStreamingOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: true,
+            isConnectedToAdjacentBubble: false,
+            isBottomPinnedStreamingBubble: true
+        )
+        #expect(bottomPinnedStreamingOffset == 0)
     }
 
     @Test("消息版本切换会释放已经消失的滚动目标")

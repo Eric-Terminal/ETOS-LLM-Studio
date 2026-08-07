@@ -819,6 +819,8 @@ extension ChatView {
                                 let connectsTimelineFromPrevious = shouldConnectTimeline(previousMessage, with: message)
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
+                                // 贴底流式气泡只跟随真实滚动偏移，避免相位弹簧与吸底校正互相拉扯。
+                                let isBottomPinnedStreamingBubble = showsStreamingIndicators && shouldKeepBottomPinned
                                 let reportsSendFlightTarget = isSendFlightTarget(message.id)
                                 let sendFlightOpacity = sendFlightMessageOpacity(for: message)
                                 let preparedMarkdownPayload = viewModel.preparedMarkdownByMessageID[message.id]
@@ -946,7 +948,8 @@ extension ChatView {
                                                 phaseValue: phase.value,
                                                 configuredOffset: scrollAnimOffset,
                                                 isEnabled: scrollAnimEnabled,
-                                                isConnectedToAdjacentBubble: mergeWithPrevious || mergeWithNext
+                                                isConnectedToAdjacentBubble: mergeWithPrevious || mergeWithNext,
+                                                isBottomPinnedStreamingBubble: isBottomPinnedStreamingBubble
                                             )
                                         )
                                 }
