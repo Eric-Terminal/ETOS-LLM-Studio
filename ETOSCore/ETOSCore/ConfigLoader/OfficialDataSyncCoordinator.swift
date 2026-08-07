@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Foundation
+import os.log
 
 enum OfficialDataSyncError: LocalizedError {
     case invalidManifestURL
