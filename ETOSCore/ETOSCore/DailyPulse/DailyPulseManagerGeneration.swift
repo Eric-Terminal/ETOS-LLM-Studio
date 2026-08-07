@@ -67,24 +67,30 @@ extension DailyPulseManager {
                 throw DailyPulseGenerationError.noModelSelected
             }
 
-            let scheduledDeliveries = DailyPulseDeliveryCoordinator.groupedCardDeliveryTimes(deliveryTimes).compactMap { deliveryGroup in
-                guard let firstDeliveryTime = deliveryGroup.first else { return nil }
-                return DailyPulseDeliveryCoordinator.deliveryDate(
-                    dayKey: generationDayKey,
-                    time: firstDeliveryTime
-                ).map { (deliveryGroup, $0) }
-            }
+            let scheduledDeliveries = DailyPulseDeliveryCoordinator
+                .groupedCardDeliveryTimes(deliveryTimes)
+                .compactMap { deliveryGroup -> (deliveryTimes: [DailyPulseDeliveryTime], scheduledAt: Date)? in
+                    guard let firstDeliveryTime = deliveryGroup.first,
+                          let scheduledAt = DailyPulseDeliveryCoordinator.deliveryDate(
+                              dayKey: generationDayKey,
+                              time: firstDeliveryTime
+                          ) else {
+                        return nil
+                    }
+                    return (deliveryGroup, scheduledAt)
+                }
             let sessionGroups = Self.partitionedSessionExcerpts(
                 input.sessionExcerpts,
-                cardCounts: scheduledDeliveries.map { $0.0.count },
-                scheduledDeliveryDates: scheduledDeliveries.map { $0.1 }
+                cardCounts: scheduledDeliveries.map { $0.deliveryTimes.count },
+                scheduledDeliveryDates: scheduledDeliveries.map(\.scheduledAt)
             )
             var generatedCards: [DailyPulseCard] = []
             var deliveryBatches: [DailyPulseDeliveryBatch] = []
             var firstHeadline: String?
 
             for (index, scheduledDelivery) in scheduledDeliveries.enumerated() {
-                let (deliveryGroup, scheduledAt) = scheduledDelivery
+                let deliveryGroup = scheduledDelivery.deliveryTimes
+                let scheduledAt = scheduledDelivery.scheduledAt
                 let cardsAtTime = deliveryGroup.count
 
                 let userPrompt = Self.makeUserPrompt(
