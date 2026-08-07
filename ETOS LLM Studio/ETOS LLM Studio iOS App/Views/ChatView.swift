@@ -977,6 +977,11 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
+                // 吸底校正必须避开 contentSize KVO 的布局栈，因此可能晚一帧；
+                // 裁掉输入栏覆盖区，避免这一帧的新增气泡从输入栏下方闪出。
+                .mask {
+                    ChatScrollContentMask(bottomOcclusionHeight: chatInputBarHeight)
+                }
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { newHeight in
