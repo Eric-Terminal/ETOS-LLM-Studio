@@ -977,11 +977,11 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
-                // 吸底校正必须避开 contentSize KVO 的布局栈，因此可能晚一帧；
-                // 裁掉输入栏覆盖区，避免这一帧的新增气泡从输入栏下方闪出。
-                .mask {
-                    ChatScrollContentMask(bottomOcclusionHeight: chatInputBarHeight)
-                }
+                // 尺寸变化锚点在 SwiftUI 布局阶段生效，先于 UIKit 的异步兜底校正。
+                // 用户主动离底后传入 nil，保留其当前阅读位置。
+                .chatDefaultSizeChangeScrollAnchor(
+                    Self.chatSizeChangeScrollAnchor(keepsBottomPinned: shouldKeepBottomPinned)
+                )
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { newHeight in

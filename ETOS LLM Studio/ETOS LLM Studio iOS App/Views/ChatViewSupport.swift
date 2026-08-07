@@ -138,31 +138,15 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
     }
 }
 
-/// 输入栏通过安全区覆盖在滚动视图之上；只让消息绘制到输入栏上沿。
-/// 流式增长后的异步吸底即使晚一帧，也不会把新增气泡暴露在输入栏下面。
-struct ChatScrollContentMask: View {
-    let bottomOcclusionHeight: CGFloat
-
-    nonisolated static func visibleHeight(
-        viewportHeight: CGFloat,
-        bottomOcclusionHeight: CGFloat
-    ) -> CGFloat {
-        max(viewportHeight - max(bottomOcclusionHeight, 0), 0)
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            Color.white
-                .frame(
-                    height: Self.visibleHeight(
-                        viewportHeight: proxy.size.height,
-                        bottomOcclusionHeight: bottomOcclusionHeight
-                    )
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+extension View {
+    /// iOS 18 起由 SwiftUI 在同一轮布局中处理尺寸变化锚点；旧系统继续使用 UIKit 观察器兜底。
+    @ViewBuilder
+    func chatDefaultSizeChangeScrollAnchor(_ anchor: UnitPoint?) -> some View {
+        if #available(iOS 18.0, *) {
+            defaultScrollAnchor(anchor, for: .sizeChanges)
+        } else {
+            self
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

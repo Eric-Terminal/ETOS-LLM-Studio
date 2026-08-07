@@ -11,6 +11,13 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
+    /// 仅在当前仍有贴底意图时，让 SwiftUI 在同一轮布局内锚定内容底部。
+    nonisolated static func chatSizeChangeScrollAnchor(
+        keepsBottomPinned: Bool
+    ) -> UnitPoint? {
+        keepsBottomPinned ? .bottom : nil
+    }
+
     /// 相连气泡属于同一视觉组，不能被逐条滚动位移撕开连接处。
     nonisolated static func chatScrollTransitionOffset(
         phaseValue: CGFloat,

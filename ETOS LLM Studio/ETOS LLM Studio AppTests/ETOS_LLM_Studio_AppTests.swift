@@ -186,20 +186,10 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("聊天内容不会绘制到输入栏覆盖区")
-    func testChatScrollContentMaskExcludesComposerRegion() {
-        #expect(ChatScrollContentMask.visibleHeight(
-            viewportHeight: 844,
-            bottomOcclusionHeight: 96
-        ) == 748)
-        #expect(ChatScrollContentMask.visibleHeight(
-            viewportHeight: 844,
-            bottomOcclusionHeight: -20
-        ) == 844)
-        #expect(ChatScrollContentMask.visibleHeight(
-            viewportHeight: 80,
-            bottomOcclusionHeight: 96
-        ) == 0)
+    @Test("尺寸变化只在贴底状态下使用底部锚点")
+    func testChatSizeChangeAnchorFollowsBottomIntent() {
+        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: true) == .bottom)
+        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: false) == nil)
     }
 
     @Test("自动历史窗口只在真实滚到顶部时加载一次")
