@@ -169,6 +169,15 @@ struct ChatBubble: View {
         }
     }
 
+    /// 流式视图内部持有已经准备好的 Markdown Block。静态内容就绪前必须保留同一个
+    /// 视图实例，否则重建后的首帧会因 Block 缓存为空而短暂显示 Markdown 源码。
+    var isStaticMarkdownHandoffInProgress: Bool {
+        guard enableMarkdown, !showsStreamingIndicators else { return false }
+        let renderState = messageState.streamingMarkdownState
+        return renderState.isAwaitingStaticHandoff(channel: .content)
+            || renderState.isAwaitingStaticHandoff(channel: .reasoning)
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             // 用户消息靠右；关闭助手气泡后的助手消息用左右 Spacer 居中阅读列。
@@ -233,8 +242,9 @@ struct ChatBubble: View {
             // 促使 LazyVStack 重新测量真实高度，同时保留整行手势与预览状态。
             .id(ChatBubbleLayoutIdentity(
                 messageID: messageState.id,
-                structuralRevision: showsStreamingIndicators ? 0 : messageState.layoutRevision,
+                structuralRevision: messageState.layoutRevision,
                 isStreaming: showsStreamingIndicators,
+                isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
                 hasPreparedMarkdown: preparedMarkdownPayload != nil,
                 hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil
             ))

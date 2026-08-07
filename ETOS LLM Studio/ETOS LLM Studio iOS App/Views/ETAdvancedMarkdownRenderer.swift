@@ -45,10 +45,7 @@ struct ETAdvancedMarkdownRenderer: View {
               streamingState.snapshot(for: streamingChannel) != nil else {
             return false
         }
-        return streamingState.isAwaitingStaticHandoff(
-            sourceText: content,
-            channel: streamingChannel
-        )
+        return streamingState.isAwaitingStaticHandoff(channel: streamingChannel)
     }
 
     var body: some View {

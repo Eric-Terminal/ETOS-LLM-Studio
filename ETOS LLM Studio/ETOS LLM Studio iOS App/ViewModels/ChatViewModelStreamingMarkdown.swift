@@ -73,14 +73,8 @@ extension ChatViewModel {
         guard let messageID = latestAssistantMessageID,
               let state = messageStateByID[messageID] else { return }
         let message = state.message
-        state.streamingMarkdownState.beginStaticHandoff(
-            sourceText: message.content,
-            channel: .content
-        )
-        state.streamingMarkdownState.beginStaticHandoff(
-            sourceText: message.reasoningContent ?? "",
-            channel: .reasoning
-        )
+        state.streamingMarkdownState.beginStaticHandoff(channel: .content)
+        state.streamingMarkdownState.beginStaticHandoff(channel: .reasoning)
         scheduleStreamingMarkdownPreparation(
             for: state,
             sourceText: message.content,

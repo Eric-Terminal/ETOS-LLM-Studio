@@ -98,6 +98,23 @@ struct ChatBubbleLayoutIdentity: Hashable {
     let isStreaming: Bool
     let hasPreparedMarkdown: Bool
     let hasPreparedReasoningMarkdown: Bool
+
+    init(
+        messageID: UUID,
+        structuralRevision: UInt,
+        isStreaming: Bool,
+        isStaticMarkdownHandoffInProgress: Bool = false,
+        hasPreparedMarkdown: Bool,
+        hasPreparedReasoningMarkdown: Bool
+    ) {
+        let preservesStreamingView = isStreaming || isStaticMarkdownHandoffInProgress
+        self.messageID = messageID
+        self.structuralRevision = preservesStreamingView ? 0 : structuralRevision
+        self.isStreaming = preservesStreamingView
+        // 交接期间冻结完整身份，避免任一通道先完成时重建另一通道的流式子树。
+        self.hasPreparedMarkdown = preservesStreamingView ? false : hasPreparedMarkdown
+        self.hasPreparedReasoningMarkdown = preservesStreamingView ? false : hasPreparedReasoningMarkdown
+    }
 }
 
 enum ChatScrollTargetID: Hashable {

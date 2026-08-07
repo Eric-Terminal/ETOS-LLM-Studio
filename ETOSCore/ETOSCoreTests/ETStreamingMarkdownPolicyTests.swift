@@ -32,7 +32,7 @@ struct ETStreamingMarkdownPolicyTests {
 
     @Test("静态 Markdown 准备完成前保留本次流式交接状态")
     @MainActor
-    func staticMarkdownHandoffTracksFinalSource() {
+    func staticMarkdownHandoffTracksChannels() {
         let state = ETStreamingMarkdownRenderState()
         let messageID = UUID()
         state.apply(ETStreamingMarkdownSnapshot(
@@ -44,21 +44,30 @@ struct ETStreamingMarkdownPolicyTests {
             isFinal: false
         ))
 
-        state.beginStaticHandoff(sourceText: "# 标题完成", channel: .content)
+        state.beginStaticHandoff(channel: .content)
 
-        #expect(state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
-        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 其他内容", channel: .content))
+        #expect(state.isAwaitingStaticHandoff(channel: .content))
+        #expect(!state.isAwaitingStaticHandoff(channel: .reasoning))
         #expect(state.snapshot(for: .content)?.sourceText == "# 标题")
 
-        state.completeStaticHandoff(sourceText: "# 其他内容", channel: .content)
-        #expect(state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+        state.completeStaticHandoff(channel: .content)
+        #expect(!state.isAwaitingStaticHandoff(channel: .content))
 
-        state.completeStaticHandoff(sourceText: "# 标题完成", channel: .content)
-        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
-
-        state.beginStaticHandoff(sourceText: "# 标题完成", channel: .content)
+        state.beginStaticHandoff(channel: .content)
         state.clear(.content)
-        #expect(!state.isAwaitingStaticHandoff(sourceText: "# 标题完成", channel: .content))
+        #expect(!state.isAwaitingStaticHandoff(channel: .content))
+
+        state.beginStaticHandoff(channel: .reasoning)
+        state.apply(ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            channel: .reasoning,
+            sourceText: "继续思考",
+            revision: 2,
+            committedBlocks: [],
+            activeBlock: nil,
+            isFinal: false
+        ))
+        #expect(!state.isAwaitingStaticHandoff(channel: .reasoning))
     }
 
     @Test("连续正文和速度采样变化属于纯文本更新")

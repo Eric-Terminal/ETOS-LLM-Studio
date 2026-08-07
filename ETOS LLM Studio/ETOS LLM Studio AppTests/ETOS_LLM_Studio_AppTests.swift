@@ -42,6 +42,36 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("静态 Markdown 就绪前保持流式视图身份")
+    func testChatBubbleLayoutIdentityRemainsStableDuringMarkdownHandoff() {
+        let messageID = UUID()
+        let streaming = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 7,
+            isStreaming: true,
+            hasPreparedMarkdown: false,
+            hasPreparedReasoningMarkdown: false
+        )
+        let handingOff = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 8,
+            isStreaming: false,
+            isStaticMarkdownHandoffInProgress: true,
+            hasPreparedMarkdown: true,
+            hasPreparedReasoningMarkdown: false
+        )
+        let staticMarkdown = ChatBubbleLayoutIdentity(
+            messageID: messageID,
+            structuralRevision: 8,
+            isStreaming: false,
+            hasPreparedMarkdown: true,
+            hasPreparedReasoningMarkdown: true
+        )
+
+        #expect(streaming == handingOff)
+        #expect(handingOff != staticMarkdown)
+    }
+
     @Test("弹性滚动不会拉开同轮相连气泡")
     func testChatScrollTransitionKeepsConnectedBubblesTogether() {
         let standaloneOffset = ChatView.chatScrollTransitionOffset(

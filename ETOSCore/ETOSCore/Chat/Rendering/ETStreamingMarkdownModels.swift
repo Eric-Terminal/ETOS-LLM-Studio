@@ -137,7 +137,7 @@ public struct ETStreamingMarkdownSnapshot: Hashable, Sendable {
 public final class ETStreamingMarkdownRenderState: ObservableObject {
     @Published public private(set) var contentSnapshot: ETStreamingMarkdownSnapshot?
     @Published public private(set) var reasoningSnapshot: ETStreamingMarkdownSnapshot?
-    @Published private var staticHandoffSourceTexts: [ETStreamingMarkdownChannel: String] = [:]
+    @Published private var staticHandoffChannels: Set<ETStreamingMarkdownChannel> = []
 
     public init() {}
 
@@ -150,32 +150,23 @@ public final class ETStreamingMarkdownRenderState: ObservableObject {
         }
     }
 
-    /// 网络结束与静态 Markdown 准备完成并非同一时刻。记录本次交接的最终源码，
+    /// 网络结束与静态 Markdown 准备完成并非同一时刻。记录通道交接状态，
     /// 让界面继续沿用最后一帧流式视图，而不是短暂暴露 Markdown 标记。
-    public func beginStaticHandoff(sourceText: String, channel: ETStreamingMarkdownChannel) {
-        guard staticHandoffSourceTexts[channel] != sourceText else { return }
-        staticHandoffSourceTexts[channel] = sourceText
+    public func beginStaticHandoff(channel: ETStreamingMarkdownChannel) {
+        staticHandoffChannels.insert(channel)
     }
 
-    public func isAwaitingStaticHandoff(
-        sourceText: String,
-        channel: ETStreamingMarkdownChannel
-    ) -> Bool {
-        staticHandoffSourceTexts[channel] == sourceText
+    public func isAwaitingStaticHandoff(channel: ETStreamingMarkdownChannel) -> Bool {
+        staticHandoffChannels.contains(channel)
     }
 
-    /// 静态 Markdown 已发布后释放最终源码，避免历史消息长期重复持有整段文本。
-    public func completeStaticHandoff(
-        sourceText: String,
-        channel: ETStreamingMarkdownChannel
-    ) {
-        guard staticHandoffSourceTexts[channel] == sourceText else { return }
-        staticHandoffSourceTexts.removeValue(forKey: channel)
+    public func completeStaticHandoff(channel: ETStreamingMarkdownChannel) {
+        staticHandoffChannels.remove(channel)
     }
 
     public func apply(_ snapshot: ETStreamingMarkdownSnapshot) {
         if !snapshot.isFinal {
-            staticHandoffSourceTexts.removeValue(forKey: snapshot.channel)
+            staticHandoffChannels.remove(snapshot.channel)
         }
         switch snapshot.channel {
         case .content:
@@ -191,14 +182,14 @@ public final class ETStreamingMarkdownRenderState: ObservableObject {
         switch channel {
         case .content:
             contentSnapshot = nil
-            staticHandoffSourceTexts.removeValue(forKey: .content)
+            staticHandoffChannels.remove(.content)
         case .reasoning:
             reasoningSnapshot = nil
-            staticHandoffSourceTexts.removeValue(forKey: .reasoning)
+            staticHandoffChannels.remove(.reasoning)
         case nil:
             contentSnapshot = nil
             reasoningSnapshot = nil
-            staticHandoffSourceTexts.removeAll()
+            staticHandoffChannels.removeAll()
         }
     }
 }
