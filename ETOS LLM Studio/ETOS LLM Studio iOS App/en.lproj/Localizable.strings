@@ -6298,6 +6298,9 @@
 "当前 App 进程" = "Current App Process";
 "温度状态" = "Thermal State";
 "资源状态" = "Resource Status";
+"运行说明" = "Runtime Guide";
+"终端、Agent 与本地 MCP 共享系统环境；资源占用只用于查看，不会限制并发数量。" = "Terminals, Agent, and local MCP share the system environment. Resource usage is informational and does not limit concurrency.";
+"本地 Linux 运行说明正文" = "User terminals, Agent command sessions, and local MCP processes run independently while sharing the same Linux system and session workspace. The figures shown here are CPU, memory, and Metal usage for the current ETOS app process, intended only to help you assess device load. ETOS does not use these values to limit commands, terminals, models, subagents, or concurrency. The system may still terminate the app or background tasks when device resources run low.";
 "资源与温度信息只用于提示，不会替你限制命令、终端、模型或并发数量。" = "Resource and thermal information is informational only and does not limit commands, terminals, models, or concurrency.";
 "只提示资源与温度，不限制任务数量。" = "Resource and temperature information only; task count is not limited.";
 "命令：%@" = "Command: %@";

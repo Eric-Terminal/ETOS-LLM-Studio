@@ -19,14 +19,8 @@ struct LocalLinuxResourceStatusSection: View {
                 NSLocalizedString("当前 App 进程", comment: "Local Linux process resource usage"),
                 value: monitor.snapshot.displayText
             )
-            LabeledContent(
-                NSLocalizedString("温度状态", comment: "Local Linux thermal state"),
-                value: monitor.snapshot.thermalCondition.displayName
-            )
         } header: {
             Text(NSLocalizedString("资源状态", comment: "Local Linux resource status"))
-        } footer: {
-            Text(NSLocalizedString("资源与温度信息只用于提示，不会替你限制命令、终端、模型或并发数量。", comment: "Local Linux resource status footer"))
         }
         .task {
             while !Task.isCancelled {

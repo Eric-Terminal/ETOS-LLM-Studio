@@ -25,6 +25,7 @@ struct LocalLinuxFeatureView: View {
     @State private var errorMessage: String?
     @State private var deleteUserData = false
     @State private var showResetConfirmation = false
+    @State private var isShowingRuntimeIntro = false
 
     var body: some View {
         TabView {
@@ -192,6 +193,10 @@ struct LocalLinuxFeatureView: View {
     private var activityTab: some View {
         Form {
             Section {
+                runtimeIntroCard
+            }
+
+            Section {
                 NavigationLink {
                     LocalLinuxTerminalView(sessionID: sessionID)
                 } label: {
@@ -211,8 +216,6 @@ struct LocalLinuxFeatureView: View {
                     Label(NSLocalizedString("安装常用环境", comment: "Local Linux recipes entry"), systemImage: "shippingbox")
                 }
                 .disabled(sessionID == nil || !appConfig.localLinuxEnabled)
-            } footer: {
-                Text(NSLocalizedString("用户终端与 Agent 命令会话彼此独立，但共享系统和当前会话工作区。不会限制终端、子代理或并行任务数量。", comment: "Local Linux independent terminals footer"))
             }
 
             Section(NSLocalizedString("当前活动", comment: "Local Linux current activity section")) {
@@ -221,6 +224,36 @@ struct LocalLinuxFeatureView: View {
                 LabeledContent(NSLocalizedString("本地 MCP", comment: "Local MCP count"), value: "\(snapshot.activeMCPProcessCount)")
             }
             LocalLinuxResourceStatusSection()
+        }
+    }
+
+    private var runtimeIntroCard: some View {
+        VStack(alignment: .leading) {
+            Text(NSLocalizedString("运行说明", comment: "Local Linux runtime intro title"))
+                .etFont(.headline.weight(.semibold))
+            Text(NSLocalizedString("终端、Agent 与本地 MCP 共享系统环境；资源占用只用于查看，不会限制并发数量。", comment: "Local Linux runtime intro summary"))
+                .etFont(.subheadline)
+                .foregroundStyle(.secondary)
+            Button(NSLocalizedString("进一步了解…", comment: "Local Linux runtime intro details action")) {
+                isShowingRuntimeIntro = true
+            }
+            .buttonStyle(.plain)
+            .etFont(.footnote.weight(.medium))
+            .foregroundStyle(.blue)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .sheet(isPresented: $isShowingRuntimeIntro) {
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString("本地 Linux 运行说明正文", comment: "Local Linux runtime intro details"))
+                        .etFont(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString("运行说明", comment: "Local Linux runtime intro details title"))
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 

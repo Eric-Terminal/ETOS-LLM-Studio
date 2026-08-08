@@ -15,40 +15,19 @@ import Darwin
 import Metal
 #endif
 
-public enum LocalThermalCondition: String, Hashable, Sendable {
-    case nominal
-    case fair
-    case serious
-    case critical
-    case unknown
-
-    public var displayName: String {
-        switch self {
-        case .nominal: return NSLocalizedString("正常", comment: "Local resource nominal thermal state")
-        case .fair: return NSLocalizedString("温度升高", comment: "Local resource fair thermal state")
-        case .serious: return NSLocalizedString("温度严重", comment: "Local resource serious thermal state")
-        case .critical: return NSLocalizedString("温度过高", comment: "Local resource critical thermal state")
-        case .unknown: return NSLocalizedString("未知", comment: "Local resource unknown thermal state")
-        }
-    }
-}
-
 public struct LocalResourceUsageSnapshot: Hashable, Sendable {
     public var cpuPercent: Double?
     public var memoryBytes: UInt64?
     public var gpuAllocatedBytes: UInt64?
-    public var thermalCondition: LocalThermalCondition
 
     public init(
         cpuPercent: Double?,
         memoryBytes: UInt64?,
-        gpuAllocatedBytes: UInt64?,
-        thermalCondition: LocalThermalCondition = .unknown
+        gpuAllocatedBytes: UInt64?
     ) {
         self.cpuPercent = cpuPercent
         self.memoryBytes = memoryBytes
         self.gpuAllocatedBytes = gpuAllocatedBytes
-        self.thermalCondition = thermalCondition
     }
 
     public var displayText: String {
@@ -74,8 +53,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
     @Published public private(set) var snapshot = LocalResourceUsageSnapshot(
         cpuPercent: nil,
         memoryBytes: nil,
-        gpuAllocatedBytes: nil,
-        thermalCondition: .unknown
+        gpuAllocatedBytes: nil
     )
 
     private var lastCPUTime: Double?
@@ -89,7 +67,6 @@ public final class LocalResourceUsageMonitor: ObservableObject {
     private struct RawSample: Sendable {
         let cpuTime: Double?
         let memoryBytes: UInt64?
-        let thermalCondition: LocalThermalCondition
     }
 
     @MainActor
@@ -97,26 +74,14 @@ public final class LocalResourceUsageMonitor: ObservableObject {
         let raw = await Task.detached(priority: .utility) {
             RawSample(
                 cpuTime: Self.currentProcessCPUTime(),
-                memoryBytes: Self.currentMemoryFootprintBytes(),
-                thermalCondition: Self.currentThermalCondition()
+                memoryBytes: Self.currentMemoryFootprintBytes()
             )
         }.value
         snapshot = LocalResourceUsageSnapshot(
             cpuPercent: cpuPercent(for: raw.cpuTime),
             memoryBytes: raw.memoryBytes,
-            gpuAllocatedBytes: currentGPUAllocatedBytes(),
-            thermalCondition: raw.thermalCondition
+            gpuAllocatedBytes: currentGPUAllocatedBytes()
         )
-    }
-
-    private nonisolated static func currentThermalCondition() -> LocalThermalCondition {
-        switch ProcessInfo.processInfo.thermalState {
-        case .nominal: return .nominal
-        case .fair: return .fair
-        case .serious: return .serious
-        case .critical: return .critical
-        @unknown default: return .unknown
-        }
     }
 
     private func cpuPercent(for cpuTime: Double?) -> Double? {

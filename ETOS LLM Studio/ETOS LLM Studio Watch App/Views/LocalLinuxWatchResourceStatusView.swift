@@ -14,16 +14,8 @@ struct LocalLinuxWatchResourceStatusView: View {
         Section {
             Text(monitor.snapshot.displayText)
                 .font(.caption2)
-            LabeledContent(
-                NSLocalizedString("温度", comment: "Watch local Linux thermal state"),
-                value: monitor.snapshot.thermalCondition.displayName
-            )
         } header: {
             Text(NSLocalizedString("资源", comment: "Watch local Linux resources"))
-        } footer: {
-            Text(NSLocalizedString("只提示资源与温度，不限制任务数量。", comment: "Watch local Linux resources footer"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .task {
             while !Task.isCancelled {
