@@ -96,6 +96,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.allowsBackForwardNavigationGestures = true
         let tab = Tab(webView: webView)
         webView.navigationDelegate = self
         session.tabs[tab.id] = tab
@@ -370,6 +371,12 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
         sessions[sessionID]?.selectedTabID
     }
 
+    public func selectedWebView(sessionID: UUID) -> WKWebView? {
+        guard let session = sessions[sessionID],
+              let selectedTabID = session.selectedTabID else { return nil }
+        return session.tabs[selectedTabID]?.webView
+    }
+
     public func currentURL(sessionID: UUID, tabID: UUID?) throws -> URL? {
         try resolvedTab(sessionID: sessionID, tabID: tabID).webView.url
     }
@@ -495,6 +502,10 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
 }
 
 extension BrowserSessionManager: WKNavigationDelegate {
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        objectWillChange.send()
+    }
+
     public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,

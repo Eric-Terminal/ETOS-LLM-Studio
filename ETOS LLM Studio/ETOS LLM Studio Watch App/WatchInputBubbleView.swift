@@ -505,10 +505,9 @@ struct WatchInputBubbleView: View {
         switch action {
         case .requestControls:
             return viewModel.selectedModel?.model.requestBodyControls.contains(where: \.isEnabled) == true
-                || (appConfig.localLinuxEnabled && viewModel.selectedModel != nil)
+                || (viewModel.currentSession != nil && viewModel.selectedModel != nil)
         case .agentMode:
-            return appConfig.localLinuxEnabled
-                && viewModel.currentSession != nil
+            return viewModel.currentSession != nil
                 && viewModel.selectedModel != nil
         case .localTerminal:
             return appConfig.localLinuxEnabled && viewModel.currentSession != nil
@@ -534,7 +533,6 @@ struct WatchInputBubbleView: View {
             )
         case .agentMode:
             return viewModel.currentSession == nil
-                || !appConfig.localLinuxEnabled
         case .localTerminal:
             return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
         default:

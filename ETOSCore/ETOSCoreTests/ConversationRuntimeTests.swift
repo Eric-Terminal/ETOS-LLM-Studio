@@ -613,6 +613,7 @@ struct ConversationRuntimeTests {
         try withStore { store in
             let source = ChatSession(id: UUID(), name: "等待方", isTemporary: false)
             let target = ChatSession(id: UUID(), name: "执行方", isTemporary: false)
+            let selectedMCPServerID = UUID()
             store.saveChatSessions([source, target])
             let configuration = ConversationRunRequestConfiguration(
                 modelIdentifier: "provider/model-a",
@@ -620,7 +621,11 @@ struct ConversationRuntimeTests {
                 topP: 0.8,
                 systemPrompt: "固定系统提示词",
                 maxChatHistory: 12,
-                enableStreaming: false
+                enableStreaming: false,
+                browserDataProfile: .persistentShared,
+                agentToolsEnabled: true,
+                localLinuxToolsEnabled: false,
+                selectedAgentMCPServerIDs: [selectedMCPServerID]
             )
             let sourceRun = ConversationRun(
                 sessionID: source.id,
@@ -640,6 +645,10 @@ struct ConversationRuntimeTests {
             let persistedRun = try #require(try store.loadConversationRun(id: targetRun.id))
             #expect(persistedRun.requestConfiguration.modelIdentifier == "provider/model-a")
             #expect(persistedRun.requestConfiguration.temperature == 0.25)
+            #expect(persistedRun.requestConfiguration.browserDataProfile == .persistentShared)
+            #expect(persistedRun.requestConfiguration.agentToolsEnabled == true)
+            #expect(persistedRun.requestConfiguration.localLinuxToolsEnabled == false)
+            #expect(persistedRun.requestConfiguration.selectedAgentMCPServerIDs == [selectedMCPServerID])
             #expect(persistedRun.parentRunID == sourceRun.id)
 
             let waitGroupID = UUID()

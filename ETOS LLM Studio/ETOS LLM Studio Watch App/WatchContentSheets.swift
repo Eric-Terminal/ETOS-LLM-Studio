@@ -170,7 +170,7 @@ struct WatchQuickRequestControlsView: View {
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
         List {
-            if AppConfigStore.shared.localLinuxEnabled, let sessionID {
+            if let sessionID {
                 Section(NSLocalizedString("会话模式", comment: "Watch local Agent mode section")) {
                     Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: $localAgentMode) {
                         ForEach(LocalAgentMode.allCases) { mode in
@@ -181,7 +181,7 @@ struct WatchQuickRequestControlsView: View {
                     .onChange(of: localAgentMode) { _, mode in
                         _ = Persistence.saveLocalAgentMode(mode, sessionID: sessionID)
                     }
-                    Text(NSLocalizedString("Agent 才向模型暴露 Linux；用户终端不受此开关限制。", comment: "Watch local Agent mode footer"))
+                    Text(NSLocalizedString("Agent 会向模型提供浏览器等工具；Linux 工具只在启用本地 Linux 后提供。", comment: "Watch local Agent mode footer"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     if hasActiveRun {
@@ -192,7 +192,7 @@ struct WatchQuickRequestControlsView: View {
                 }
             }
 
-            if controls.isEmpty && !AppConfigStore.shared.localLinuxEnabled {
+            if controls.isEmpty && sessionID == nil {
                 Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {

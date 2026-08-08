@@ -241,17 +241,16 @@ extension TelegramMessageComposer {
                 }
 
                 if let selectedModel = viewModel.selectedModel {
-                    if appConfig.localLinuxEnabled,
-                       let sessionID = viewModel.currentSession?.id {
+                    if let sessionID = viewModel.currentSession?.id {
                         LocalAgentModePicker(sessionID: sessionID, isLocked: isSending)
                     }
 
-                    if adaptiveRequestControls.isEmpty && !appConfig.localLinuxEnabled {
+                    if adaptiveRequestControls.isEmpty && viewModel.currentSession == nil {
                         Text(NSLocalizedString("当前模型没有可用的请求控制。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
+                    } else if !adaptiveRequestControls.isEmpty {
                         VStack(spacing: 14) {
                             ChatRequestBodyControlRows(
                                 runnableModel: selectedModel,
@@ -274,7 +273,7 @@ extension TelegramMessageComposer {
 
     private var adaptiveRequestControlsPanelHeight: CGFloat {
         let maximumHeight = min(UIScreen.main.bounds.height * 0.38, 340)
-        let agentModeHeight: CGFloat = appConfig.localLinuxEnabled ? 150 : 0
+        let agentModeHeight: CGFloat = viewModel.currentSession == nil ? 0 : 150
         let estimatedContentHeight = 82 + agentModeHeight + CGFloat(adaptiveRequestControls.count) * 68
         return min(maximumHeight, max(124, estimatedContentHeight))
     }
@@ -348,7 +347,7 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveShowsRequestControlsButton: Bool {
-        (!adaptiveRequestControls.isEmpty || (appConfig.localLinuxEnabled && viewModel.selectedModel != nil))
+        (!adaptiveRequestControls.isEmpty || (viewModel.currentSession != nil && viewModel.selectedModel != nil))
             && adaptivePresentation != .expandedText
     }
 
@@ -705,7 +704,9 @@ extension TelegramMessageComposer {
     private func adaptiveRefreshRequestControls() {
         let controls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
         adaptiveRequestControls = controls
-        if controls.isEmpty, !appConfig.localLinuxEnabled, isRequestControlsExpanded {
+        if controls.isEmpty,
+           (viewModel.selectedModel == nil || viewModel.currentSession == nil),
+           isRequestControlsExpanded {
             withAnimation(adaptiveComposerAnimation) {
                 isRequestControlsExpanded = false
             }
@@ -722,6 +723,7 @@ extension TelegramMessageComposer {
 private struct LocalAgentModePicker: View {
     let sessionID: UUID
     let isLocked: Bool
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var mode = LocalAgentMode.chat
     @State private var runtimePhase: LocalLinuxRuntimePhase = .notInstalled
     @State private var executionBudget: ConversationExecutionBudget?
@@ -739,7 +741,7 @@ private struct LocalAgentModePicker: View {
             .onChange(of: mode) { _, value in
                 _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
             }
-            Text(NSLocalizedString("Agent 模式会向模型提供本地 Linux 工具；用户终端在两种模式下都可独立使用。", comment: "Local Agent mode footer"))
+            Text(NSLocalizedString("Agent 模式会向模型提供浏览器等 Agent 工具；启用本地 Linux 后还会提供命令与 Linux 文件能力。", comment: "Local Agent mode footer"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -749,17 +751,19 @@ private struct LocalAgentModePicker: View {
                     .foregroundStyle(.secondary)
             }
 
-            NavigationLink {
-                LocalLinuxFeatureView(sessionID: sessionID)
-            } label: {
-                HStack {
-                    Label(NSLocalizedString("运行状态", comment: "Local Linux runtime status link"), systemImage: "terminal")
-                    Spacer()
-                    Text(runtimePhase.displayName)
-                        .foregroundStyle(.secondary)
+            if appConfig.localLinuxEnabled {
+                NavigationLink {
+                    LocalLinuxFeatureView(sessionID: sessionID)
+                } label: {
+                    HStack {
+                        Label(NSLocalizedString("Linux 运行状态", comment: "Local Linux runtime status link"), systemImage: "terminal")
+                        Spacer()
+                        Text(runtimePhase.displayName)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             if mode == .agent, let executionBudget {
                 HStack {

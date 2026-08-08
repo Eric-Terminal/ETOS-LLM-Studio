@@ -3,12 +3,16 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 浏览器截图和下载只写入当前会话或调用方明确提供的工作区目录。
+// 浏览器截图和下载写入独立的 Documents/BrowserAgent 会话目录，不依赖 Linux 工作区。
 // ============================================================================
 
 import Foundation
 
 enum BrowserAgentStorage {
+    static func downloadDirectoryURI(sessionID: UUID) -> String {
+        "app://BrowserAgent/\(sessionID.uuidString)/Downloads/"
+    }
+
     static func destinationURL(
         sessionID: UUID,
         directoryName: String,
@@ -34,5 +38,20 @@ enum BrowserAgentStorage {
             .joined(separator: "_")
         let name = sanitized.isEmpty ? UUID().uuidString : sanitized
         return directory.appendingPathComponent(name, isDirectory: false)
+    }
+
+    static func appURI(for url: URL) throws -> String {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let rootPath = documents.standardizedFileURL.path
+        let resolvedPath = url.standardizedFileURL.path
+        guard resolvedPath == rootPath || resolvedPath.hasPrefix(rootPath + "/") else {
+            throw BrowserAgentError.unsupported(
+                NSLocalizedString("浏览器文件不在应用文档目录中。", comment: "Browser Agent file outside Documents")
+            )
+        }
+        let relativePath = String(resolvedPath.dropFirst(rootPath.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "app://" + relativePath
     }
 }

@@ -15,6 +15,74 @@ import Testing
 @Suite("本地 Agent Runtime 测试")
 struct LocalAgentRuntimeTests {
 
+    @Test("Browser Agent 不依赖本地 Linux 开关")
+    func browserAgentCapabilityIsIndependentFromLinux() {
+        let withoutLinux = AgentToolCapabilityPolicy.resolve(
+            mode: .agent,
+            isWorldbookContextIsolated: false,
+            localLinuxEnabled: false
+        )
+        #expect(withoutLinux.preparesAgentRun)
+        #expect(withoutLinux.includesConversationTools)
+        #expect(withoutLinux.includesBrowserTools)
+        #expect(!withoutLinux.includesLocalLinuxTools)
+
+        let chat = AgentToolCapabilityPolicy.resolve(
+            mode: .chat,
+            isWorldbookContextIsolated: false,
+            localLinuxEnabled: true
+        )
+        #expect(!chat.preparesAgentRun)
+        #expect(!chat.includesBrowserTools)
+        #expect(!chat.includesLocalLinuxTools)
+
+        let isolated = AgentToolCapabilityPolicy.resolve(
+            mode: .agent,
+            isWorldbookContextIsolated: true,
+            localLinuxEnabled: true
+        )
+        #expect(!isolated.preparesAgentRun)
+        #expect(!isolated.includesBrowserTools)
+        #expect(!isolated.includesLocalLinuxTools)
+    }
+
+    @Test("Browser 能力完整时不显示能力检查区域")
+    func completeBrowserCapabilitiesHaveNoMissingItems() {
+        let complete = BrowserAgentCapabilities(
+            platform: "watchOS",
+            isExperimental: true,
+            supportsNavigation: true,
+            supportsSnapshot: true,
+            supportsClick: true,
+            supportsTyping: true,
+            supportsScrolling: true,
+            supportsJavaScript: true,
+            supportsScreenshot: true,
+            supportsDownload: true,
+            supportsUserTakeover: true,
+            supportsIPhoneDelegation: true,
+            notes: []
+        )
+        #expect(complete.unavailableCapabilities.isEmpty)
+
+        let limited = BrowserAgentCapabilities(
+            platform: "watchOS",
+            isExperimental: true,
+            supportsNavigation: true,
+            supportsSnapshot: true,
+            supportsClick: true,
+            supportsTyping: true,
+            supportsScrolling: true,
+            supportsJavaScript: true,
+            supportsScreenshot: false,
+            supportsDownload: false,
+            supportsUserTakeover: true,
+            supportsIPhoneDelegation: true,
+            notes: []
+        )
+        #expect(limited.unavailableCapabilities == [.screenshot, .download])
+    }
+
     @Test("环境变量脱敏遵循长度、重叠和关闭规则")
     func redactEnvironmentValues() {
         let enabled = LocalLinuxProcessEnvironmentProvider.redactModelOutput(

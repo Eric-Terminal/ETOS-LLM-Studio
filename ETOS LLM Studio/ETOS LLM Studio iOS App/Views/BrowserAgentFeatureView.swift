@@ -3,137 +3,87 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// Browser Agent 的 iOS 管理与用户接管入口。该入口不受 Chat/Agent 模式限制；
-// 模式只决定是否向模型暴露 browser_control。
+// 浏览器入口直接承载当前会话的 WKWebView。用户打开页面即接管同一标签页，
+// Agent 暂停输入；离开页面后再把控制权交还。设置只保留为独立二级页面。
 // ============================================================================
 
+import ETOSCore
 import SwiftUI
 import WebKit
-import ETOSCore
 
 struct BrowserAgentFeatureView: View {
     let sessionID: UUID?
 
     @ObservedObject private var manager = BrowserSessionManager.shared
-    @State private var address = "https://"
+    @State private var address = ""
     @State private var persistentProfileEnabled = false
     @State private var isWorking = false
+    @State private var isShowingSettings = false
     @State private var errorMessage: String?
+    @State private var tabs: [BrowserAgentTabSummary] = []
+    @State private var selectedTabID: UUID?
+    @State private var selectedWebView: WKWebView?
+    @FocusState private var addressFocused: Bool
 
     var body: some View {
-        Form {
-            Section {
-                Label(
-                    NSLocalizedString("Agent 与用户共享标签页", comment: "Browser Agent shared tabs title"),
-                    systemImage: "hand.tap"
+        Group {
+            if sessionID == nil {
+                ContentUnavailableView(
+                    NSLocalizedString("请先打开一个聊天会话。", comment: "Browser Agent requires chat session"),
+                    systemImage: "safari"
                 )
-                Text(NSLocalizedString("Agent 模式下，模型可以操作当前会话的浏览器；你随时可以进入同一标签页接管。Chat 模式不会向模型提供浏览器工具，但手动浏览仍然可用。", comment: "Browser Agent behavior explanation"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                Toggle(
-                    NSLocalizedString("保留网站登录状态", comment: "Browser Agent persistent profile toggle"),
-                    isOn: $persistentProfileEnabled
-                )
-                .onChange(of: persistentProfileEnabled) { _, newValue in
-                    guard let sessionID else { return }
-                    let profile: BrowserAgentDataProfile = newValue ? .persistentShared : .sessionIsolated
-                    Task.detached(priority: .utility) {
-                        _ = Persistence.saveBrowserAgentDataProfile(profile, sessionID: sessionID)
-                    }
+            } else {
+                VStack(spacing: 0) {
+                    tabBar
+                    addressBar
+                    browserContent
+                    browserToolbar
                 }
-                .disabled(sessionID == nil)
-            } footer: {
-                Text(NSLocalizedString("这是当前聊天会话的选择。关闭时，新标签页使用临时网站数据；切换只影响之后创建的标签页和新的 Agent Run。", comment: "Browser Agent profile footer"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
-
-            Section {
-                TextField(NSLocalizedString("网页地址", comment: "Browser Agent address field"), text: $address)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                Button {
-                    openAddress()
-                } label: {
-                    Label(NSLocalizedString("打开网页", comment: "Browser Agent open page button"), systemImage: "safari")
-                }
-                .disabled(sessionID == nil || isWorking)
-
+        }
+        .navigationTitle(NSLocalizedString("浏览器", comment: "Browser Agent browser title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     openBlankTab()
                 } label: {
-                    Label(NSLocalizedString("新建空白标签页", comment: "Browser Agent new blank tab button"), systemImage: "plus.square.on.square")
+                    Image(systemName: "plus")
                 }
+                .accessibilityLabel(NSLocalizedString("新建标签页", comment: "Browser Agent new tab accessibility label"))
                 .disabled(sessionID == nil || isWorking)
-            } header: {
-                Text(NSLocalizedString("打开", comment: "Browser Agent open section"))
-            }
 
-            Section {
-                if let sessionID {
-                    let tabs = manager.tabs(sessionID: sessionID)
-                    if tabs.isEmpty {
-                        Text(NSLocalizedString("当前会话还没有浏览器标签页。", comment: "Browser Agent empty tabs"))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(tabs) { tab in
-                            NavigationLink {
-                                BrowserAgentTakeoverView(sessionID: sessionID, tabID: tab.id)
-                            } label: {
-                                VStack(alignment: .leading) {
-                                    Text(tab.title)
-                                    if let url = tab.url {
-                                        Text(url)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    close(tabID: tab.id)
-                                } label: {
-                                    Label(NSLocalizedString("关闭", comment: "Close browser tab"), systemImage: "xmark")
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Text(NSLocalizedString("请先打开一个聊天会话。", comment: "Browser Agent requires chat session"))
-                        .foregroundStyle(.secondary)
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
                 }
-            } header: {
-                Text(NSLocalizedString("当前会话的标签页", comment: "Browser Agent tabs section"))
-            } footer: {
-                Text(NSLocalizedString("不同聊天会话使用不同的标签页集合、截图和下载目录。", comment: "Browser Agent session isolation footer"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                let capabilities = manager.capabilities()
-                LabeledContent(NSLocalizedString("导航", comment: "Browser Agent navigation capability"), value: capabilityText(capabilities.supportsNavigation))
-                LabeledContent(NSLocalizedString("页面交互", comment: "Browser Agent interaction capability"), value: capabilityText(capabilities.supportsClick && capabilities.supportsTyping))
-                LabeledContent(NSLocalizedString("截图与下载", comment: "Browser Agent capture capability"), value: capabilityText(capabilities.supportsScreenshot && capabilities.supportsDownload))
-            } header: {
-                Text(NSLocalizedString("本机能力", comment: "Browser Agent local capabilities section"))
+                .accessibilityLabel(NSLocalizedString("浏览器设置", comment: "Browser Agent settings accessibility label"))
+                .disabled(sessionID == nil)
             }
         }
-        .navigationTitle(NSLocalizedString("Browser Agent", comment: "Browser Agent settings title"))
-        .task(id: sessionID) {
-            guard let sessionID else {
-                persistentProfileEnabled = false
-                return
+        .sheet(isPresented: $isShowingSettings) {
+            NavigationStack {
+                BrowserAgentSettingsView(
+                    persistentProfileEnabled: $persistentProfileEnabled,
+                    sessionID: sessionID
+                )
             }
-            let profile = await Task.detached(priority: .utility) {
-                Persistence.browserAgentDataProfile(sessionID: sessionID)
-            }.value
-            persistentProfileEnabled = profile == .persistentShared
+        }
+        .task(id: sessionID) {
+            await prepareSession()
+        }
+        .onReceive(manager.objectWillChange) { _ in
+            guard !addressFocused else { return }
+            Task { @MainActor in
+                await Task.yield()
+                refreshBrowserState()
+            }
+        }
+        .onDisappear {
+            if let sessionID {
+                manager.setUserControlling(false, sessionID: sessionID)
+            }
         }
         .alert(
             NSLocalizedString("浏览器操作失败", comment: "Browser Agent operation failed alert"),
@@ -148,11 +98,164 @@ struct BrowserAgentFeatureView: View {
         }
     }
 
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(tabs) { tab in
+                    let isSelected = tab.id == selectedTabID
+                    HStack(spacing: 4) {
+                        Button {
+                            select(tab.id)
+                        } label: {
+                            Text(tab.title)
+                                .font(.caption)
+                                .fontWeight(isSelected ? .semibold : .regular)
+                                .lineLimit(1)
+                                .frame(maxWidth: 140)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            close(tab.id)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(NSLocalizedString("关闭标签页", comment: "Browser Agent close tab accessibility label"))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.1))
+                    .clipShape(.capsule)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+        }
+        .background(.bar)
+    }
+
+    private var addressBar: some View {
+        HStack {
+            if selectedWebView?.isLoading == true {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: selectedWebView?.url?.scheme == "https" ? "lock.fill" : "globe")
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField(NSLocalizedString("搜索或输入网页地址", comment: "Browser Agent address field"), text: $address)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .submitLabel(.go)
+                .focused($addressFocused)
+                .onSubmit(openAddress)
+
+            if selectedWebView?.isLoading == true {
+                Button {
+                    selectedWebView?.stopLoading()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel(NSLocalizedString("停止载入", comment: "Browser Agent stop loading"))
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(uiColor: .secondarySystemBackground))
+    }
+
+    @ViewBuilder
+    private var browserContent: some View {
+        if let webView = selectedWebView, let selectedTabID {
+            BrowserAgentWebView(webView: webView)
+                .id(selectedTabID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if isWorking {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ContentUnavailableView(
+                NSLocalizedString("没有打开的标签页", comment: "Browser Agent no open tabs"),
+                systemImage: "safari"
+            )
+        }
+    }
+
+    private var browserToolbar: some View {
+        HStack(spacing: 0) {
+            browserToolbarButton(
+                NSLocalizedString("后退", comment: "Browser Agent back"),
+                systemImage: "chevron.left",
+                disabled: selectedWebView?.canGoBack != true
+            ) {
+                selectedWebView?.goBack()
+            }
+            browserToolbarButton(
+                NSLocalizedString("前进", comment: "Browser Agent forward"),
+                systemImage: "chevron.right",
+                disabled: selectedWebView?.canGoForward != true
+            ) {
+                selectedWebView?.goForward()
+            }
+            browserToolbarButton(
+                NSLocalizedString("重新载入", comment: "Browser Agent reload"),
+                systemImage: "arrow.clockwise",
+                disabled: selectedWebView == nil
+            ) {
+                selectedWebView?.reload()
+            }
+            browserToolbarButton(
+                NSLocalizedString("新建标签页", comment: "Browser Agent new tab"),
+                systemImage: "plus.square.on.square",
+                disabled: isWorking
+            ) {
+                openBlankTab()
+            }
+        }
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+
+    private func browserToolbarButton(
+        _ accessibilityLabel: String,
+        systemImage: String,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(maxWidth: .infinity)
+        }
+        .disabled(disabled)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func prepareSession() async {
+        guard let sessionID else { return }
+        persistentProfileEnabled = await Task.detached(priority: .utility) {
+            Persistence.browserAgentDataProfile(sessionID: sessionID) == .persistentShared
+        }.value
+        manager.setUserControlling(true, sessionID: sessionID)
+        if manager.tabs(sessionID: sessionID).isEmpty {
+            do {
+                _ = try await manager.openTab(sessionID: sessionID)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        refreshBrowserState()
+    }
+
     private func openAddress() {
         guard let sessionID else { return }
         let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = text.contains("://") ? text : "https://\(text)"
-        guard let url = URL(string: normalized) else {
+        guard !text.isEmpty else { return }
+        guard let url = resolvedAddress(text) else {
             errorMessage = NSLocalizedString("网页地址无效。", comment: "Browser Agent invalid address")
             return
         }
@@ -160,7 +263,12 @@ struct BrowserAgentFeatureView: View {
         Task {
             defer { isWorking = false }
             do {
-                _ = try await manager.openTab(sessionID: sessionID, url: url)
+                if let selectedTabID {
+                    _ = try await manager.navigate(sessionID: sessionID, tabID: selectedTabID, url: url)
+                } else {
+                    _ = try await manager.openTab(sessionID: sessionID, url: url)
+                }
+                refreshBrowserState()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -174,67 +282,113 @@ struct BrowserAgentFeatureView: View {
             defer { isWorking = false }
             do {
                 _ = try await manager.openTab(sessionID: sessionID)
+                address = ""
+                addressFocused = true
+                refreshBrowserState()
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
     }
 
-    private func close(tabID: UUID) {
+    private func select(_ tabID: UUID) {
         guard let sessionID else { return }
         do {
-            _ = try manager.closeTab(sessionID: sessionID, tabID: tabID)
+            try manager.selectTab(sessionID: sessionID, tabID: tabID)
+            refreshBrowserState()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func capabilityText(_ value: Bool) -> String {
-        value
-            ? NSLocalizedString("支持", comment: "Capability supported")
-            : NSLocalizedString("不支持", comment: "Capability unsupported")
+    private func close(_ tabID: UUID) {
+        guard let sessionID else { return }
+        do {
+            _ = try manager.closeTab(sessionID: sessionID, tabID: tabID)
+            refreshBrowserState()
+            if manager.tabs(sessionID: sessionID).isEmpty {
+                openBlankTab()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshAddress() {
+        guard let sessionID else {
+            address = ""
+            return
+        }
+        do {
+            address = try manager.currentURL(sessionID: sessionID, tabID: selectedTabID)?.absoluteString ?? ""
+        } catch {
+            address = ""
+        }
+    }
+
+    private func refreshBrowserState() {
+        guard let sessionID else {
+            tabs = []
+            selectedTabID = nil
+            selectedWebView = nil
+            address = ""
+            return
+        }
+        tabs = manager.tabs(sessionID: sessionID)
+        selectedTabID = manager.selectedTabID(sessionID: sessionID)
+        selectedWebView = manager.selectedWebView(sessionID: sessionID)
+        guard !addressFocused else { return }
+        refreshAddress()
+    }
+
+    private func resolvedAddress(_ text: String) -> URL? {
+        if text.contains("://") {
+            return URL(string: text)
+        }
+        if !text.contains(where: \.isWhitespace), text.contains(".") {
+            return URL(string: "https://\(text)")
+        }
+        var components = URLComponents(string: "https://www.google.com/search")
+        components?.queryItems = [URLQueryItem(name: "q", value: text)]
+        return components?.url
     }
 }
 
-private struct BrowserAgentTakeoverView: View {
-    let sessionID: UUID
-    let tabID: UUID
+private struct BrowserAgentSettingsView: View {
+    @Binding var persistentProfileEnabled: Bool
+    let sessionID: UUID?
 
-    @ObservedObject private var manager = BrowserSessionManager.shared
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Group {
-            if let webView = try? manager.webView(sessionID: sessionID, tabID: tabID) {
-                BrowserAgentWebView(webView: webView)
-                    .ignoresSafeArea(edges: .bottom)
-            } else {
-                ContentUnavailableView(
-                    NSLocalizedString("标签页已关闭", comment: "Browser Agent closed tab placeholder"),
-                    systemImage: "safari"
+        Form {
+            Section {
+                Toggle(
+                    NSLocalizedString("保留网站登录状态", comment: "Browser Agent persistent profile toggle"),
+                    isOn: $persistentProfileEnabled
                 )
-            }
-        }
-        .navigationTitle(NSLocalizedString("浏览器", comment: "Browser Agent takeover title"))
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top) {
-            if let domain = currentDomain {
-                Label(domain, systemImage: "lock.shield")
-                    .font(.caption)
+                .onChange(of: persistentProfileEnabled) { _, newValue in
+                    guard let sessionID else { return }
+                    let profile: BrowserAgentDataProfile = newValue ? .persistentShared : .sessionIsolated
+                    Task.detached(priority: .utility) {
+                        _ = Persistence.saveBrowserAgentDataProfile(profile, sessionID: sessionID)
+                    }
+                }
+            } footer: {
+                Text(NSLocalizedString("关闭时，新标签页使用当前会话的临时网站数据；切换只影响之后创建的标签页和新的 Agent Run。", comment: "Browser Agent profile footer"))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal)
             }
         }
-        .onAppear { manager.setUserControlling(true, sessionID: sessionID) }
-        .onDisappear { manager.setUserControlling(false, sessionID: sessionID) }
-    }
-
-    private var currentDomain: String? {
-        manager.tabs(sessionID: sessionID)
-            .first(where: { $0.id == tabID })?
-            .url
-            .flatMap(URL.init(string:))?
-            .host
+        .navigationTitle(NSLocalizedString("浏览器设置", comment: "Browser Agent settings title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("完成", comment: "Done")) {
+                    dismiss()
+                }
+            }
+        }
     }
 }
 

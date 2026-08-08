@@ -17,6 +17,8 @@ struct BrowserAgentWatchFeatureView: View {
     @State private var address = "https://"
     @State private var delegateToIPhone = AppConfigStore.boolValue(for: .browserAgentDelegateToIPhone)
     @State private var persistentProfileEnabled = false
+    @State private var unavailableCapabilities: [BrowserAgentCapability] = []
+    @State private var tabs: [BrowserAgentTabSummary] = []
     @State private var errorMessage: String?
 
     var body: some View {
@@ -71,7 +73,6 @@ struct BrowserAgentWatchFeatureView: View {
 
             Section {
                 if let sessionID {
-                    let tabs = manager.tabs(sessionID: sessionID)
                     if tabs.isEmpty {
                         Text(NSLocalizedString("还没有本机标签页。", comment: "Watch Browser Agent empty tabs"))
                             .foregroundStyle(.secondary)
@@ -100,21 +101,25 @@ struct BrowserAgentWatchFeatureView: View {
                 Text(NSLocalizedString("本机标签页", comment: "Watch Browser Agent local tabs section"))
             }
 
-            Section {
-                let capabilities = manager.capabilities()
-                Text(String(format: NSLocalizedString("导航：%@", comment: "Watch Browser Agent navigation capability"), capabilityText(capabilities.supportsNavigation)))
-                Text(String(format: NSLocalizedString("页面交互：%@", comment: "Watch Browser Agent interaction capability"), capabilityText(capabilities.supportsClick)))
-                Text(String(format: NSLocalizedString("截图：%@", comment: "Watch Browser Agent screenshot capability"), capabilityText(capabilities.supportsScreenshot)))
-            } header: {
-                Text(NSLocalizedString("实验性本机能力", comment: "Watch Browser Agent capabilities section"))
-            } footer: {
-                Text(NSLocalizedString("能力来自当前 watchOS 运行时探测；系统不提供公开 WebKit API。", comment: "Watch Browser Agent capability probe footer"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if !unavailableCapabilities.isEmpty {
+                Section {
+                    ForEach(unavailableCapabilities, id: \.self) { capability in
+                        Label(capabilityLabel(capability), systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text(NSLocalizedString("本机限制", comment: "Watch Browser Agent capability limitations section"))
+                } footer: {
+                    Text(NSLocalizedString("这里只显示当前 watchOS 运行时缺少的能力；没有缺口时不会显示此区域。可选择把模型操作委托给 iPhone。", comment: "Watch Browser Agent capability limitations footer"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle(NSLocalizedString("Browser Agent", comment: "Browser Agent settings title"))
         .task(id: sessionID) {
+            unavailableCapabilities = manager.capabilities().unavailableCapabilities
+            refreshTabs()
             guard let sessionID else {
                 persistentProfileEnabled = false
                 return
@@ -123,6 +128,12 @@ struct BrowserAgentWatchFeatureView: View {
                 Persistence.browserAgentDataProfile(sessionID: sessionID)
             }.value
             persistentProfileEnabled = profile == .persistentShared
+        }
+        .onReceive(manager.objectWillChange) { _ in
+            Task { @MainActor in
+                await Task.yield()
+                refreshTabs()
+            }
         }
         .alert(
             NSLocalizedString("浏览器操作失败", comment: "Browser Agent operation failed alert"),
@@ -148,16 +159,38 @@ struct BrowserAgentWatchFeatureView: View {
         Task {
             do {
                 _ = try await manager.openTab(sessionID: sessionID, url: url)
+                refreshTabs()
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
     }
 
-    private func capabilityText(_ value: Bool) -> String {
-        value
-            ? NSLocalizedString("支持", comment: "Capability supported")
-            : NSLocalizedString("不支持", comment: "Capability unsupported")
+    private func refreshTabs() {
+        tabs = sessionID.map { manager.tabs(sessionID: $0) } ?? []
+    }
+
+    private func capabilityLabel(_ capability: BrowserAgentCapability) -> String {
+        switch capability {
+        case .navigation:
+            return NSLocalizedString("导航不可用", comment: "Watch Browser Agent navigation unavailable")
+        case .snapshot:
+            return NSLocalizedString("页面快照不可用", comment: "Watch Browser Agent snapshot unavailable")
+        case .click:
+            return NSLocalizedString("点击不可用", comment: "Watch Browser Agent click unavailable")
+        case .typing:
+            return NSLocalizedString("文字输入不可用", comment: "Watch Browser Agent typing unavailable")
+        case .scrolling:
+            return NSLocalizedString("滚动不可用", comment: "Watch Browser Agent scrolling unavailable")
+        case .javaScript:
+            return NSLocalizedString("JavaScript 不可用", comment: "Watch Browser Agent JavaScript unavailable")
+        case .screenshot:
+            return NSLocalizedString("截图不可用", comment: "Watch Browser Agent screenshot unavailable")
+        case .download:
+            return NSLocalizedString("下载不可用", comment: "Watch Browser Agent download unavailable")
+        case .userTakeover:
+            return NSLocalizedString("用户接管不可用", comment: "Watch Browser Agent takeover unavailable")
+        }
     }
 }
 
@@ -166,6 +199,7 @@ private struct BrowserAgentWatchTakeoverView: View {
     let tabID: UUID
 
     @ObservedObject private var manager = BrowserSessionManager.shared
+    @State private var currentDomain: String?
 
     var body: some View {
         Group {
@@ -186,12 +220,21 @@ private struct BrowserAgentWatchTakeoverView: View {
             }
         }
         .navigationTitle(NSLocalizedString("浏览器", comment: "Browser Agent takeover title"))
-        .onAppear { manager.setUserControlling(true, sessionID: sessionID) }
+        .onAppear {
+            manager.setUserControlling(true, sessionID: sessionID)
+            refreshDomain()
+        }
+        .onReceive(manager.objectWillChange) { _ in
+            Task { @MainActor in
+                await Task.yield()
+                refreshDomain()
+            }
+        }
         .onDisappear { manager.setUserControlling(false, sessionID: sessionID) }
     }
 
-    private var currentDomain: String? {
-        manager.tabs(sessionID: sessionID)
+    private func refreshDomain() {
+        currentDomain = manager.tabs(sessionID: sessionID)
             .first(where: { $0.id == tabID })?
             .url
             .flatMap(URL.init(string:))?

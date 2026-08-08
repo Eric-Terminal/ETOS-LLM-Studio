@@ -76,7 +76,9 @@ extension ChatService {
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
-        localAgentContext: AgentRuntimeContext? = nil
+        localAgentContext: AgentRuntimeContext? = nil,
+        agentCapabilities: AgentToolCapabilityPolicy? = nil,
+        selectedAgentMCPServerIDs: Set<UUID>? = nil
     ) async -> (tools: [InternalToolDefinition]?, policy: AuxiliaryContextPolicy) {
         let policy = auxiliaryContextPolicy(
             for: session,
@@ -86,9 +88,14 @@ extension ChatService {
         )
 
         var resolvedTools: [InternalToolDefinition] = []
-        let includeAgentTools = localAgentContext?.mode == .agent
-            && session?.isWorldbookContextIsolationActive != true
-        let selectedServerIDs = localAgentContext.map { Set($0.selectedMCPServerIDs) }
+        let includeAgentTools = agentCapabilities?.preparesAgentRun
+            ?? (localAgentContext?.mode == .agent && session?.isWorldbookContextIsolationActive != true)
+        let includeConversationTools = agentCapabilities?.includesConversationTools ?? includeAgentTools
+        let includeBrowserTools = agentCapabilities?.includesBrowserTools ?? includeAgentTools
+        let includeLocalLinuxTools = agentCapabilities?.includesLocalLinuxTools
+            ?? includeAgentTools
+        let selectedServerIDs = selectedAgentMCPServerIDs
+            ?? localAgentContext.map { Set($0.selectedMCPServerIDs) }
         if policy.enableMemory && policy.enableMemoryWrite {
             resolvedTools.append(saveMemoryTool)
         }
@@ -102,9 +109,9 @@ extension ChatService {
         if policy.includeMCPTools {
             let mcpTools = await MainActor.run {
                 MCPManager.shared.chatToolsForLLM(
-                    includeConversationAgentTools: includeAgentTools,
-                    includeLocalLinuxTools: includeAgentTools,
-                    includeBrowserAgentTools: includeAgentTools,
+                    includeConversationAgentTools: includeConversationTools,
+                    includeLocalLinuxTools: includeLocalLinuxTools,
+                    includeBrowserAgentTools: includeBrowserTools,
                     selectedServerIDs: selectedServerIDs
                 )
             }

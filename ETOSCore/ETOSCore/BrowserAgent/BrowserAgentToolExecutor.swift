@@ -30,22 +30,16 @@ public actor BrowserAgentToolExecutor {
         let task: Task<String, Error>
     }
 
-    private let contextManager: LocalAgentRuntimeContextManager
     private let scheduler: LocalLinuxJobScheduler
-    private let storage: LocalLinuxStorageManager
     private let executorDeviceID: String
     private var activeJobs: [UUID: ActiveBrowserJob] = [:]
     private var suspensionInterruptedJobIDs: Set<UUID> = []
 
     public init(
-        contextManager: LocalAgentRuntimeContextManager = .shared,
         scheduler: LocalLinuxJobScheduler = .shared,
-        storage: LocalLinuxStorageManager = .shared,
         executorDeviceID: String = UsageAnalyticsRuntimeContext.currentDeviceIdentifier()
     ) {
-        self.contextManager = contextManager
         self.scheduler = scheduler
-        self.storage = storage
         self.executorDeviceID = executorDeviceID
     }
 
@@ -87,26 +81,21 @@ public actor BrowserAgentToolExecutor {
         }
         #endif
 
-        let frozen = try await contextManager.beginRun(
-            sessionID: sessionID,
-            triggeringMessageID: triggeringMessageID,
-            toolCallID: toolCallID,
-            runID: runID,
-            selectedMCPServerIDs: selectedMCPServerIDs,
-            browserSessionID: sessionID
-        )
+        let conversationRun = Persistence.loadConversationRun(id: runID)
+        let dataProfile = conversationRun?.requestConfiguration.browserDataProfile
+            ?? Persistence.browserAgentDataProfile(sessionID: sessionID)
         let requestID = await scheduler.reserveRequestID()
         var job = LocalLinuxJob(
             requestID: requestID,
             kind: .browser,
             sessionID: sessionID,
             runID: runID,
-            rootRunID: frozen.context.rootRunID,
-            parentRunID: frozen.context.parentRunID,
+            rootRunID: conversationRun?.rootRunID ?? runID,
+            parentRunID: conversationRun?.parentRunID,
             toolCallID: toolCallID,
-            workspaceID: frozen.workspace.id,
+            workspaceID: nil,
             executorDeviceID: executorDeviceID,
-            request: persistedRequest(for: arguments, workspace: frozen.workspace),
+            request: persistedRequest(for: arguments),
             state: .starting
         )
         job.startedAt = Date()
@@ -121,8 +110,7 @@ public actor BrowserAgentToolExecutor {
             return try await self.perform(
                 arguments,
                 sessionID: sessionID,
-                context: frozen.context,
-                workspace: frozen.workspace,
+                dataProfile: dataProfile,
                 toolCallID: toolCallID
             )
         }
@@ -139,7 +127,6 @@ public actor BrowserAgentToolExecutor {
             }
             guard !task.isCancelled else { throw CancellationError() }
             await finish(jobID: job.id, state: .completed, reason: .exited, exitCode: 0)
-            _ = try? await storage.refreshWorkspaceSize(frozen.workspace)
             return result
         } catch is CancellationError {
             let interrupted = suspensionInterruptedJobIDs.remove(job.id) != nil
@@ -186,8 +173,7 @@ public actor BrowserAgentToolExecutor {
     private func perform(
         _ arguments: Arguments,
         sessionID: UUID,
-        context: AgentRuntimeContext,
-        workspace: LocalAgentWorkspace,
+        dataProfile: BrowserAgentDataProfile,
         toolCallID: String
     ) async throws -> String {
         try Task.checkCancellation()
@@ -201,8 +187,7 @@ public actor BrowserAgentToolExecutor {
             arguments,
             sessionID: sessionID,
             toolCallID: toolCallID,
-            manager: manager,
-            workspace: workspace
+            manager: manager
         )
 
         switch arguments.action {
@@ -217,7 +202,7 @@ public actor BrowserAgentToolExecutor {
             let tab = try await manager.openTab(
                 sessionID: sessionID,
                 url: url,
-                dataProfile: context.browserDataProfile ?? .sessionIsolated,
+                dataProfile: dataProfile,
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )
             return encodeTab(tab)
@@ -296,15 +281,13 @@ public actor BrowserAgentToolExecutor {
         case .download:
             #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
             let url = try requiredURL(arguments.url)
-            let directory = try await storage.browserDownloadDirectory(for: workspace)
             let destination = try await manager.download(
                 sessionID: sessionID,
                 tabID: try tabID(arguments.tab_id),
                 url: url,
-                filename: arguments.filename,
-                destinationDirectory: directory
+                filename: arguments.filename
             )
-            return encode(["path": .string(try await storage.guestURI(forHostURL: destination, workspace: workspace))])
+            return encode(["path": .string(try BrowserAgentStorage.appURI(for: destination))])
             #else
             throw BrowserAgentError.unsupported(
                 NSLocalizedString("本机下载；可在设置中启用 iPhone 委托。", comment: "Browser Agent watch download unsupported")
@@ -320,8 +303,7 @@ public actor BrowserAgentToolExecutor {
         _ arguments: Arguments,
         sessionID: UUID,
         toolCallID: String,
-        manager: BrowserSessionManager,
-        workspace: LocalAgentWorkspace
+        manager: BrowserSessionManager
     ) async throws -> Set<String> {
         let selectedTabID = try tabID(arguments.tab_id)
         let currentURL = try? await manager.currentURL(sessionID: sessionID, tabID: selectedTabID)
@@ -408,7 +390,7 @@ public actor BrowserAgentToolExecutor {
                 sourceURL: currentURL ?? nil,
                 sessionID: sessionID,
                 toolCallID: toolCallID,
-                destination: workspace.guestPath + "/BrowserDownloads/"
+                destination: BrowserAgentStorage.downloadDirectoryURI(sessionID: sessionID)
             )
         case .capabilities, .listTabs, .snapshot, .scroll, .type, .closeTab:
             break
@@ -473,10 +455,7 @@ public actor BrowserAgentToolExecutor {
         }
     }
 
-    private func persistedRequest(
-        for arguments: Arguments,
-        workspace: LocalAgentWorkspace
-    ) -> LocalLinuxJobRequest {
+    private func persistedRequest(for arguments: Arguments) -> LocalLinuxJobRequest {
         var summary = [arguments.action.rawValue]
         if let rawURL = arguments.url,
            let url = URL(string: rawURL),
@@ -485,8 +464,7 @@ public actor BrowserAgentToolExecutor {
         }
         return LocalLinuxJobRequest(
             executable: BrowserAgentToolDefinitions.toolName,
-            arguments: summary,
-            workingDirectory: workspace.guestPath
+            arguments: summary
         )
     }
 

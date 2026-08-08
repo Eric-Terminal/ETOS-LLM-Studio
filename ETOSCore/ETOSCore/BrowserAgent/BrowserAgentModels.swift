@@ -86,6 +86,37 @@ public struct BrowserAgentCapabilities: Codable, Equatable, Sendable {
     }
 }
 
+public enum BrowserAgentCapability: String, CaseIterable, Hashable, Sendable {
+    case navigation
+    case snapshot
+    case click
+    case typing
+    case scrolling
+    case javaScript
+    case screenshot
+    case download
+    case userTakeover
+}
+
+public extension BrowserAgentCapabilities {
+    /// 只返回影响本机浏览与模型操作的缺口；iPhone 委托属于可选传输方式，不算缺口。
+    var unavailableCapabilities: [BrowserAgentCapability] {
+        [
+            (supportsNavigation, .navigation),
+            (supportsSnapshot, .snapshot),
+            (supportsClick, .click),
+            (supportsTyping, .typing),
+            (supportsScrolling, .scrolling),
+            (supportsJavaScript, .javaScript),
+            (supportsScreenshot, .screenshot),
+            (supportsDownload, .download),
+            (supportsUserTakeover, .userTakeover)
+        ].compactMap { isAvailable, capability in
+            isAvailable ? nil : capability
+        }
+    }
+}
+
 public struct BrowserAgentTabSummary: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let title: String

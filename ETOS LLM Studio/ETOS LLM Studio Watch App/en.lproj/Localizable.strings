@@ -6241,3 +6241,17 @@
 "RootFS 缺少安装收据，无法记录系统更新。" = "The RootFS installation receipt is missing, so the system update cannot be recorded.";
 "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。" = "The external folder is not ready on this device. Open it in the Files app, wait for iCloud or the file provider to finish downloading, then try again.";
 "RootFS 更新清单" = "RootFS Update Manifest";
+"Agent 会向模型提供浏览器等工具；Linux 工具只在启用本地 Linux 后提供。" = "Agent provides the model with browser and other tools. Linux tools are available only when Local Linux is enabled.";
+"Linux 运行时" = "Linux Runtime";
+"本机限制" = "On-device Limitations";
+"这里只显示当前 watchOS 运行时缺少的能力；没有缺口时不会显示此区域。可选择把模型操作委托给 iPhone。" = "Only capabilities missing from the current watchOS runtime appear here. This section stays hidden when none are missing. You can delegate model actions to iPhone.";
+"导航不可用" = "Navigation unavailable";
+"页面快照不可用" = "Page snapshots unavailable";
+"点击不可用" = "Click unavailable";
+"文字输入不可用" = "Text input unavailable";
+"滚动不可用" = "Scrolling unavailable";
+"JavaScript 不可用" = "JavaScript unavailable";
+"截图不可用" = "Screenshots unavailable";
+"下载不可用" = "Downloads unavailable";
+"用户接管不可用" = "User takeover unavailable";
+"浏览器文件不在应用文档目录中。" = "The browser file is outside the app’s Documents folder.";

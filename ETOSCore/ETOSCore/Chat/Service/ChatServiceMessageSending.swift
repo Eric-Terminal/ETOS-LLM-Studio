@@ -301,6 +301,14 @@ extension ChatService {
                 )
                 return
             }
+            let steeringCapabilities = AgentToolCapabilityPolicy.resolve(
+                mode: Persistence.localAgentMode(sessionID: currentSession.id),
+                isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+                localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
+            )
+            let steeringMCPServerIDs = steeringCapabilities.preparesAgentRun
+                ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
+                : []
             let steeringConfiguration = ConversationRunRequestConfiguration(
                 modelIdentifier: selectedModel?.id,
                 temperature: aiTemperature,
@@ -316,7 +324,11 @@ extension ChatService {
                 systemTimeInjectionPosition: systemTimeInjectionPosition,
                 enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
                 periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics
+                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+                browserDataProfile: Persistence.browserAgentDataProfile(sessionID: currentSession.id),
+                agentToolsEnabled: steeringCapabilities.preparesAgentRun,
+                localLinuxToolsEnabled: steeringCapabilities.includesLocalLinuxTools,
+                selectedAgentMCPServerIDs: steeringMCPServerIDs
             )
             let steeringRun = ConversationRun(
                 sessionID: currentSession.id,
@@ -459,6 +471,16 @@ extension ChatService {
 
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
 
+        let agentCapabilities = AgentToolCapabilityPolicy.resolve(
+            mode: Persistence.localAgentMode(sessionID: currentSession.id),
+            isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+            localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
+        )
+        let shouldPrepareAgentRun = agentCapabilities.preparesAgentRun
+        let includeLocalLinuxCapability = agentCapabilities.includesLocalLinuxTools
+        let selectedMCPServerIDs = shouldPrepareAgentRun
+            ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
+            : []
         let requestConfiguration = ConversationRunRequestConfiguration(
             modelIdentifier: selectedModel?.id,
             temperature: aiTemperature,
@@ -474,7 +496,11 @@ extension ChatService {
             systemTimeInjectionPosition: systemTimeInjectionPosition,
             enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
             periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-            enableResponseSpeedMetrics: enableResponseSpeedMetrics
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+            browserDataProfile: Persistence.browserAgentDataProfile(sessionID: currentSession.id),
+            agentToolsEnabled: shouldPrepareAgentRun,
+            localLinuxToolsEnabled: includeLocalLinuxCapability,
+            selectedAgentMCPServerIDs: selectedMCPServerIDs
         )
         let isNewRootRun = conversationRun == nil
         var runtimeRun = conversationRun ?? ConversationRun(
@@ -496,12 +522,6 @@ extension ChatService {
             )
         }
 
-        let shouldPrepareLocalAgentRun = AppConfigStore.boolValue(for: .localLinuxEnabled)
-            && Persistence.localAgentMode(sessionID: currentSession.id) == .agent
-            && !currentSession.isWorldbookContextIsolationActive
-        let selectedMCPServerIDs = shouldPrepareLocalAgentRun
-            ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
-            : []
         let runtimeRunID = runtimeRun.id
         let rootRuntimeRunID = runtimeRun.rootRunID
         let parentRuntimeRunID = runtimeRun.parentRunID
@@ -522,7 +542,7 @@ extension ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             var localAgentContext: AgentRuntimeContext?
-            if shouldPrepareLocalAgentRun {
+            if includeLocalLinuxCapability {
                 do {
                     let prepared = try await LocalAgentRuntimeContextManager.shared.beginRun(
                         sessionID: currentSession.id,
@@ -564,7 +584,9 @@ extension ChatService {
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                localAgentContext: localAgentContext
+                localAgentContext: localAgentContext,
+                agentCapabilities: agentCapabilities,
+                selectedAgentMCPServerIDs: Set(selectedMCPServerIDs)
             )
             await self.executeMessageRequest(
                 messages: messages,

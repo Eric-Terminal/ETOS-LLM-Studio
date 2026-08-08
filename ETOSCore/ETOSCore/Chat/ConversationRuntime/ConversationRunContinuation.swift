@@ -202,12 +202,26 @@ extension ChatService {
             let localAgentContext = localAgentRecord?.state == .running
                 ? localAgentRecord?.context
                 : nil
+            let agentToolsEnabled = configuration.agentToolsEnabled
+                ?? (localAgentContext?.mode == .agent)
+            let localLinuxToolsEnabled = configuration.localLinuxToolsEnabled
+                ?? (localAgentContext != nil)
+            let agentCapabilities = AgentToolCapabilityPolicy(
+                preparesAgentRun: agentToolsEnabled,
+                includesConversationTools: agentToolsEnabled,
+                includesBrowserTools: agentToolsEnabled,
+                includesLocalLinuxTools: agentToolsEnabled && localLinuxToolsEnabled
+            )
+            let selectedAgentMCPServerIDs = configuration.selectedAgentMCPServerIDs.map { Set($0) }
+                ?? localAgentContext.map { Set($0.selectedMCPServerIDs) }
             let requestTooling = await self.resolveRequestTooling(
                 for: session,
                 enableMemory: configuration.enableMemory,
                 enableMemoryWrite: configuration.enableMemoryWrite,
                 enableMemoryActiveRetrieval: configuration.enableMemoryActiveRetrieval,
-                localAgentContext: localAgentContext
+                localAgentContext: localAgentContext,
+                agentCapabilities: agentCapabilities,
+                selectedAgentMCPServerIDs: selectedAgentMCPServerIDs
             )
             await self.executeMessageRequest(
                 messages: requestMessages,

@@ -10,6 +10,7 @@ import SwiftUI
 struct LocalAgentModeWatchView: View {
     let sessionID: UUID
 
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var mode = LocalAgentMode.chat
     @State private var runtimePhase = LocalLinuxRuntimePhase.notInstalled
     @State private var activeRun: ConversationRun?
@@ -30,16 +31,18 @@ struct LocalAgentModeWatchView: View {
             } header: {
                 Text(NSLocalizedString("会话模式", comment: "Watch local Agent mode section"))
             } footer: {
-                Text(NSLocalizedString("Agent 才向模型暴露 Linux；用户终端不受此开关限制。", comment: "Watch local Agent mode footer"))
+                Text(NSLocalizedString("Agent 会向模型提供浏览器等工具；Linux 工具只在启用本地 Linux 后提供。", comment: "Watch local Agent mode footer"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             Section(NSLocalizedString("状态", comment: "Watch local Agent status section")) {
-                LabeledContent(
-                    NSLocalizedString("运行时", comment: "Watch Linux runtime"),
-                    value: runtimePhase.displayName
-                )
+                if appConfig.localLinuxEnabled {
+                    LabeledContent(
+                        NSLocalizedString("Linux 运行时", comment: "Watch Linux runtime"),
+                        value: runtimePhase.displayName
+                    )
+                }
                 if mode == .agent, let executionBudget {
                     LabeledContent(
                         NSLocalizedString("自动执行预算", comment: "Watch local Agent execution budget"),
@@ -54,8 +57,10 @@ struct LocalAgentModeWatchView: View {
             }
 
             Section {
-                NavigationLink(NSLocalizedString("本地 Agent 任务", comment: "Watch local Agent jobs title")) {
-                    LocalLinuxWatchJobsView(sessionID: sessionID)
+                if appConfig.localLinuxEnabled {
+                    NavigationLink(NSLocalizedString("本地 Agent 任务", comment: "Watch local Agent jobs title")) {
+                        LocalLinuxWatchJobsView(sessionID: sessionID)
+                    }
                 }
                 if let activeRun {
                     Button(NSLocalizedString("停止此 Agent", comment: "Watch stop Linux Agent run"), role: .destructive) {
