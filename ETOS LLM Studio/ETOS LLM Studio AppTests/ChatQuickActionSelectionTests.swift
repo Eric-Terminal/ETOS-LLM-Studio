@@ -33,12 +33,13 @@ struct ChatQuickActionSelectionTests {
     func multipleSelectionIsNormalized() {
         let encoded = ChatQuickActionSelection.encode([
             .agentSkills,
+            .browser,
             .usageAnalytics,
             .agentSkills
         ])
 
-        #expect(encoded == "usageAnalytics,agentSkills")
-        #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills])
+        #expect(encoded == "usageAnalytics,agentSkills,browser")
+        #expect(ChatQuickActionSelection.decode(encoded) == [.usageAnalytics, .agentSkills, .browser])
     }
 
     @Test("快捷文件夹按数量估算自适应网格")

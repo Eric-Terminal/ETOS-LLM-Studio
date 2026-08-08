@@ -509,6 +509,8 @@ struct WatchInputBubbleView: View {
         case .agentMode:
             return viewModel.currentSession != nil
                 && viewModel.selectedModel != nil
+        case .browser:
+            return viewModel.currentSession != nil
         case .localTerminal:
             return appConfig.localLinuxEnabled && viewModel.currentSession != nil
         case .roleplayScripts:
@@ -532,6 +534,8 @@ struct WatchInputBubbleView: View {
                 hasConversationStarted: !isTemporaryChatActivationAvailable
             )
         case .agentMode:
+            return viewModel.currentSession == nil
+        case .browser:
             return viewModel.currentSession == nil
         case .localTerminal:
             return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
@@ -571,6 +575,7 @@ struct WatchInputBubbleView: View {
              .roleplay,
              .worldbook,
              .extendedFeatures,
+             .browser,
              .localTerminal:
             onPerformQuickAction(action)
         }

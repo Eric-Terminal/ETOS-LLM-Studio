@@ -45,6 +45,7 @@ extension WatchInputQuickAction {
         .worldbook,
         .extendedFeatures,
         .agentMode,
+        .browser,
         .localTerminal
     ]
 
@@ -90,6 +91,8 @@ extension WatchInputQuickAction {
             return NSLocalizedString("拓展功能", comment: "Watch input quick action")
         case .agentMode:
             return NSLocalizedString("Chat / Agent", comment: "Watch input quick action")
+        case .browser:
+            return NSLocalizedString("浏览器", comment: "Watch input quick action")
         case .localTerminal:
             return NSLocalizedString("Linux 终端", comment: "Watch input quick action")
         }
@@ -117,6 +120,7 @@ extension WatchInputQuickAction {
         case .worldbook: return "book"
         case .extendedFeatures: return "ellipsis.circle"
         case .agentMode: return "person.crop.circle.badge.gearshape"
+        case .browser: return "safari"
         case .localTerminal: return "terminal"
         }
     }
@@ -136,7 +140,7 @@ extension WatchInputQuickAction {
         switch self {
         case .requestControls, .agentSkills, .roleplay, .agentMode:
             return .purple
-        case .sessionHistory, .addAttachment, .mcp, .localTerminal:
+        case .sessionHistory, .addAttachment, .mcp, .browser, .localTerminal:
             return .blue
         case .contextCompression, .roleplayScripts, .temporaryChat, .extendedFeatures:
             return .indigo
@@ -349,6 +353,7 @@ extension ContentView {
              .worldbook,
              .extendedFeatures,
              .agentMode,
+             .browser,
              .localTerminal:
             watchInputQuickActionDestination = action
         case .requestControls,
@@ -391,6 +396,8 @@ extension ContentView {
             } else {
                 EmptyView()
             }
+        case .browser:
+            BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
         case .localTerminal:
             LocalLinuxWatchTerminalView(sessionID: viewModel.currentSession?.id)
         case .requestControls,

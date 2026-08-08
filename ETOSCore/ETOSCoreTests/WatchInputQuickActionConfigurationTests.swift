@@ -40,7 +40,7 @@ struct WatchInputQuickActionConfigurationTests {
     @Test("配置编解码保留左右分组与用户顺序")
     func roundTripKeepsEdgesAndOrder() {
         let configuration = WatchInputQuickActionConfiguration(
-            leadingActions: [.dailyPulse, .sessionHistory, .settings],
+            leadingActions: [.dailyPulse, .sessionHistory, .settings, .browser],
             trailingActions: [.imageGallery, .contextCompression, .toolCenter]
         )
 

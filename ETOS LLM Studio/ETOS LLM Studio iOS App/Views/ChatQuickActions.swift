@@ -23,6 +23,7 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
     case roleplay
     case worldbook
     case extendedFeatures
+    case browser
     case localTerminal
 
     var id: String { rawValue }
@@ -55,6 +56,8 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
             return NSLocalizedString("世界书", comment: "聊天快捷功能标题")
         case .extendedFeatures:
             return NSLocalizedString("拓展功能", comment: "聊天快捷功能标题")
+        case .browser:
+            return NSLocalizedString("浏览器", comment: "聊天快捷功能标题")
         case .localTerminal:
             return NSLocalizedString("Linux 终端", comment: "聊天快捷功能标题")
         }
@@ -75,6 +78,7 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
         case .roleplay: return "theatermasks"
         case .worldbook: return "book"
         case .extendedFeatures: return "ellipsis.circle"
+        case .browser: return "safari"
         case .localTerminal: return "terminal"
         }
     }
@@ -347,7 +351,9 @@ extension ChatView {
     }
 
     func isQuickActionAvailable(_ action: ChatQuickAction) -> Bool {
-        if action == .localTerminal {
+        if action == .browser {
+            return viewModel.currentSession != nil
+        } else if action == .localTerminal {
             return appConfig.localLinuxEnabled && viewModel.currentSession != nil
         }
         guard action == .temporaryChat else { return true }
@@ -391,6 +397,8 @@ extension ChatView {
             WorldbookSettingsView().environmentObject(viewModel)
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
+        case .browser:
+            BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
         case .localTerminal:
             LocalLinuxTerminalView(sessionID: viewModel.currentSession?.id)
         }

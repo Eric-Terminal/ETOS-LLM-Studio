@@ -164,7 +164,7 @@ public struct ExtendedFeaturesView: View {
                 NavigationLink {
                     BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
                 } label: {
-                    Label(NSLocalizedString("Browser Agent", comment: "Browser Agent settings entry"), systemImage: "safari")
+                    settingsNavigationLabel("Browser Agent", icon: .browserAgent)
                         .etFont(.headline)
                         .padding(.vertical, 4)
                 }
