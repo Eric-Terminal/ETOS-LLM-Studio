@@ -55,6 +55,7 @@ extension ChatService {
         enableStreaming: Bool,
         enhancedPrompt: String?,
         tools: [InternalToolDefinition]?,
+        localAgentPrompt: String?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool,
@@ -288,7 +289,8 @@ extension ChatService {
             worldbookAfter: worldbookResult.after,
             worldbookANTop: worldbookResult.anTop,
             worldbookANBottom: worldbookResult.anBottom,
-            roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt)
+            roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt),
+            localAgentPrompt: localAgentPrompt
         )
         if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {
             finalSystemPrompt = await RoleplayMacroExpansionBridge.shared.expand(

@@ -18,7 +18,12 @@ extension ChatService {
     }
     
     /// 处理单个工具调用
-    func handleToolCall(_ toolCall: InternalToolCall, sessionID: UUID? = nil) async -> ToolCallOutcome {
+    func handleToolCall(
+        _ toolCall: InternalToolCall,
+        sessionID: UUID? = nil,
+        agentRunID: UUID? = nil,
+        triggeringMessageID: UUID? = nil
+    ) async -> ToolCallOutcome {
         logger.info("正在处理工具调用: \(toolCall.toolName)")
 
         var content = ""
@@ -152,8 +157,44 @@ extension ChatService {
             let isConversationTool = await MainActor.run {
                 MCPManager.shared.isConversationTool(toolCall.toolName)
             }
+            let localLinuxToolID = await MainActor.run {
+                MCPManager.shared.localLinuxToolID(for: toolCall.toolName)
+            }
+            let commandRuleMatch: LocalLinuxCommandRuleMatch?
+            if let localLinuxToolID {
+                commandRuleMatch = try? await LocalLinuxToolExecutor.shared.commandRuleMatch(
+                    toolName: localLinuxToolID,
+                    argumentsJSON: toolCall.arguments
+                )
+            } else {
+                commandRuleMatch = await MCPManager.shared.localStdioCommandRuleMatch(
+                    for: toolCall.toolName,
+                    sourceAgentRunID: agentRunID
+                )
+            }
+            let needsCommandRuleConfirmation = commandRuleMatch?.action == .confirm
+            let effectiveApprovalPolicy: MCPToolApprovalPolicy =
+                needsCommandRuleConfirmation && approvalPolicy == .alwaysAllow
+                ? .askEveryTime
+                : approvalPolicy
+            let approvalDisplayName: String
+            if let commandRuleMatch, needsCommandRuleConfirmation {
+                approvalDisplayName = String(
+                    format: NSLocalizedString("%@（命中命令规则：%@）", comment: "Linux tool approval label with matching command rule"),
+                    toolLabel,
+                    commandRuleMatch.ruleName
+                )
+            } else {
+                approvalDisplayName = toolLabel
+            }
+            let approvedCommandRuleIDs: Set<UUID>
+            if let commandRuleMatch, commandRuleMatch.action == .confirm {
+                approvedCommandRuleIDs = [commandRuleMatch.ruleID]
+            } else {
+                approvedCommandRuleIDs = []
+            }
 
-            switch approvalPolicy {
+            switch effectiveApprovalPolicy {
             case .alwaysDeny:
                 content = policyDeniedText(toolLabel)
                 displayResult = content
@@ -164,7 +205,10 @@ extension ChatService {
                         toolName: toolCall.toolName,
                         argumentsJSON: toolCall.arguments,
                         sourceSessionID: sessionID,
-                        sourceToolCallID: toolCall.id
+                        sourceToolCallID: toolCall.id,
+                        sourceAgentRunID: agentRunID,
+                        triggeringMessageID: triggeringMessageID,
+                        approvedLocalLinuxCommandRuleIDs: []
                     )
                     content = result
                     shouldPauseForConversation = isConversationTool
@@ -179,7 +223,7 @@ extension ChatService {
             case .askEveryTime:
                 let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                     toolName: toolCall.toolName,
-                    displayName: toolLabel,
+                    displayName: approvalDisplayName,
                     arguments: toolCall.arguments,
                     sourceSessionID: sessionID,
                     toolCallID: toolCall.id
@@ -200,7 +244,10 @@ extension ChatService {
                             toolName: toolCall.toolName,
                             argumentsJSON: toolCall.arguments,
                             sourceSessionID: sessionID,
-                            sourceToolCallID: toolCall.id
+                            sourceToolCallID: toolCall.id,
+                            sourceAgentRunID: agentRunID,
+                            triggeringMessageID: triggeringMessageID,
+                            approvedLocalLinuxCommandRuleIDs: approvedCommandRuleIDs
                         )
                         content = result
                         shouldPauseForConversation = isConversationTool

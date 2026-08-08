@@ -687,6 +687,10 @@ extension ChatService {
 
         guard let toolCalls = responseMessage.toolCalls, !toolCalls.isEmpty else {
             await updateMessage(with: responseMessage, for: loadingMessageID, in: currentSessionID)
+            if let runID = conversationRunIDs(for: currentSessionID)?.runID,
+               Persistence.loadLocalAgentRun(id: runID)?.state == .running {
+                await LocalAgentRuntimeContextManager.shared.finishRun(id: runID, state: .completed)
+            }
             scheduleReasoningSummaryIfNeeded(for: loadingMessageID, in: currentSessionID)
             scheduleConversationMemoryUpdateIfNeeded(for: currentSessionID, enableMemory: enableMemory)
             scheduleLongTermMemoryConsolidationIfNeeded(for: currentSessionID, enableMemory: enableMemory)
@@ -700,6 +704,7 @@ extension ChatService {
         await ensureToolCallsVisible(toolCalls, in: toolCallMessageID, sessionID: currentSessionID)
         let activeAttemptMetadata = responseAttemptMetadata(for: toolCallMessageID, in: currentSessionID)
             ?? responseAttemptMetadata(from: responseMessage)
+        let activeAgentRunID = conversationRunIDs(for: currentSessionID)?.runID
 
         let toolDefs = availableTools ?? []
         if toolDefs.isEmpty {
@@ -722,7 +727,12 @@ extension ChatService {
         if !blockingCalls.isEmpty {
             logger.info("正在执行 \(blockingCalls.count) 个阻塞式工具，即将进入二次调用流程...")
             for toolCall in blockingCalls {
-                let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                let outcome = await handleToolCall(
+                    toolCall,
+                    sessionID: currentSessionID,
+                    agentRunID: activeAgentRunID,
+                    triggeringMessageID: activeAttemptMetadata?.groupID
+                )
                 if let toolResult = outcome.toolResult {
                     await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                 }
@@ -768,7 +778,12 @@ extension ChatService {
                 logger.info("在后台启动 \(nonBlockingCalls.count) 个非阻塞式工具...")
                 Task {
                     for toolCall in nonBlockingCalls {
-                        let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                        let outcome = await handleToolCall(
+                            toolCall,
+                            sessionID: currentSessionID,
+                            agentRunID: activeAgentRunID,
+                            triggeringMessageID: activeAttemptMetadata?.groupID
+                        )
                         if let toolResult = outcome.toolResult {
                             await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                         }
@@ -785,7 +800,12 @@ extension ChatService {
             } else {
                 logger.info("非阻塞式工具返回但没有正文，将等待工具执行结果再发起二次调用。")
                 for toolCall in nonBlockingCalls {
-                    let outcome = await handleToolCall(toolCall, sessionID: currentSessionID)
+                    let outcome = await handleToolCall(
+                        toolCall,
+                        sessionID: currentSessionID,
+                        agentRunID: activeAgentRunID,
+                        triggeringMessageID: activeAttemptMetadata?.groupID
+                    )
                     if let toolResult = outcome.toolResult {
                         await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
                     }
@@ -842,7 +862,10 @@ extension ChatService {
                 messages: updatedMessages, loadingMessageID: followUpLoadingMessage.id, currentSessionID: currentSessionID,
                 userMessage: userMessage, wasTemporarySession: wasTemporarySession, aiTemperature: aiTemperature,
                 aiTopP: aiTopP, systemPrompt: systemPrompt, maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming, enhancedPrompt: nil, tools: availableTools, enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
+                enableStreaming: enableStreaming, enhancedPrompt: nil, tools: availableTools,
+                localAgentPrompt: conversationRunIDs(for: currentSessionID)
+                    .flatMap { Persistence.loadLocalAgentRun(id: $0.runID)?.context.promptContent },
+                enableMemory: enableMemory, enableMemoryWrite: enableMemoryWrite,
                 enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
                 includeSystemTime: includeSystemTime,
                 systemTimeInjectionPosition: systemTimeInjectionPosition,

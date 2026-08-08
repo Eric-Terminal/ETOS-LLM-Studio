@@ -9,7 +9,7 @@ import MCP
 
 private let mcpTokenPlaceholder = "{token}"
 
-public enum MCPOAuthGrantType: String, Codable, Hashable, CaseIterable {
+public enum MCPOAuthGrantType: String, Codable, Hashable, CaseIterable, Sendable {
     case clientCredentials = "client_credentials"
     case authorizationCode = "authorization_code"
 }
@@ -54,10 +54,11 @@ private func resolveAdditionalHeaders(_ headers: [String: String], token: String
     return resolved
 }
 
-public struct MCPServerConfiguration: Codable, Identifiable, Hashable {
-    public enum Transport: Codable, Hashable {
+public struct MCPServerConfiguration: Codable, Identifiable, Hashable, Sendable {
+    public enum Transport: Codable, Hashable, Sendable {
         case http(endpoint: URL, apiKey: String?, additionalHeaders: [String: String])
         case httpSSE(messageEndpoint: URL, sseEndpoint: URL, apiKey: String?, additionalHeaders: [String: String])
+        case localStdio(configuration: MCPLocalStdioConfiguration)
         case builtInSearch
         case builtInAppTool(category: AppToolCatalogCategory)
         case builtInPersonalData
@@ -179,6 +180,8 @@ public extension MCPServerConfiguration {
             return endpoint.absoluteString
         case .httpSSE(_, let sseEndpoint, _, _):
             return sseEndpoint.absoluteString
+        case .localStdio(let configuration):
+            return "stdio://" + configuration.commandLine
         case .builtInSearch:
             return MCPBuiltInSearchServer.endpoint
         case .builtInAppTool(let category):
@@ -196,6 +199,8 @@ public extension MCPServerConfiguration {
             return headers
         case .httpSSE(_, _, _, let headers):
             return headers
+        case .localStdio:
+            return [:]
         case .builtInSearch:
             return [:]
         case .builtInAppTool:
@@ -215,6 +220,8 @@ public extension MCPServerConfiguration {
         case .httpSSE(let messageEndpoint, let sseEndpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
             return MCPStreamingTransport(messageEndpoint: messageEndpoint, sseEndpoint: sseEndpoint, session: urlSession, headers: headers)
+        case .localStdio:
+            return MCPLocalStdioLegacyTransport()
         case .builtInSearch:
             return MCPBuiltInSearchLegacyTransport()
         case .builtInAppTool(let category):
@@ -237,7 +244,10 @@ public extension MCPServerConfiguration {
         }
     }
 
-    func makeSDKTransport(urlSession: URLSession = NetworkSessionConfiguration.shared) -> MCPSDKTransportBundle {
+    func makeSDKTransport(
+        urlSession: URLSession = NetworkSessionConfiguration.shared,
+        approvedLocalLinuxCommandRuleIDs: Set<UUID> = []
+    ) -> MCPSDKTransportBundle {
         switch transport {
         case .http(let endpoint, let apiKey, let additionalHeaders):
             let headers = resolveAdditionalHeaders(additionalHeaders, token: apiKey)
@@ -277,6 +287,16 @@ public extension MCPServerConfiguration {
                     sdkTransport: sdkTransport,
                     legacyTransport: legacyTransport
                 )
+            )
+        case .localStdio(let configuration):
+            let transport = MCPLocalStdioTransport(
+                serverID: id,
+                configuration: configuration,
+                approvedCommandRuleIDs: approvedLocalLinuxCommandRuleIDs
+            )
+            return MCPSDKTransportBundle(
+                transport: transport,
+                streamControl: MCPTransportControlBox(control: transport)
             )
         case .builtInSearch:
             let transport = MCPBuiltInSearchTransport()
@@ -399,6 +419,7 @@ public extension MCPServerConfiguration {
 extension MCPServerConfiguration.Transport {
     private enum CodingKeys: String, CodingKey {
         case kind
+        case type
         case endpoint
         case messageEndpoint
         case sseEndpoint
@@ -413,6 +434,17 @@ extension MCPServerConfiguration.Transport {
         case authorizationCode
         case redirectURI
         case codeVerifier
+        case command
+        case args
+        case env
+        case cwd
+        case environmentVariableIDs
+        case inheritLocalLinuxEnvironment
+        case workspaceID
+        case mountIDs
+        case startupTimeoutSeconds
+        case launchPolicy
+        case idlePolicy
     }
 
     private enum Kind: String, Codable {
@@ -429,13 +461,39 @@ extension MCPServerConfiguration.Transport {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(Kind.self, forKey: .kind)
+        let kind = try container.decodeIfPresent(Kind.self, forKey: .kind)
+            ?? container.decode(Kind.self, forKey: .type)
         switch kind {
         case .stdio:
-            throw DecodingError.dataCorruptedError(
-                forKey: .kind,
-                in: container,
-                debugDescription: "当前平台不支持 stdio 传输（iOS/watchOS 无法启动本地子进程）。请改用 streamable_http、sse 或 oauth。"
+            self = .localStdio(
+                configuration: MCPLocalStdioConfiguration(
+                    command: try container.decode(String.self, forKey: .command),
+                    arguments: try container.decodeIfPresent([String].self, forKey: .args) ?? [],
+                    environment: try container.decodeIfPresent([String: String].self, forKey: .env) ?? [:],
+                    environmentVariableIDs: try container.decodeIfPresent(
+                        [UUID].self,
+                        forKey: .environmentVariableIDs
+                    ) ?? [],
+                    inheritLocalLinuxEnvironment: try container.decodeIfPresent(
+                        Bool.self,
+                        forKey: .inheritLocalLinuxEnvironment
+                    ) ?? true,
+                    workingDirectory: try container.decodeIfPresent(String.self, forKey: .cwd) ?? "/home/etos",
+                    workspaceID: try container.decodeIfPresent(UUID.self, forKey: .workspaceID),
+                    mountIDs: try container.decodeIfPresent([UUID].self, forKey: .mountIDs) ?? [],
+                    startupTimeoutSeconds: try container.decodeIfPresent(
+                        TimeInterval.self,
+                        forKey: .startupTimeoutSeconds
+                    ) ?? 30,
+                    launchPolicy: try container.decodeIfPresent(
+                        MCPLocalStdioLaunchPolicy.self,
+                        forKey: .launchPolicy
+                    ) ?? .onDemand,
+                    idlePolicy: try container.decodeIfPresent(
+                        MCPLocalStdioIdlePolicy.self,
+                        forKey: .idlePolicy
+                    ) ?? .fiveMinutes
+                )
             )
         case .http, .streamableHTTP:
             let endpoint = try container.decode(URL.self, forKey: .endpoint)
@@ -488,6 +546,33 @@ extension MCPServerConfiguration.Transport {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .localStdio(let configuration):
+            try container.encode(Kind.stdio, forKey: .kind)
+            try container.encode(configuration.command, forKey: .command)
+            if !configuration.arguments.isEmpty { try container.encode(configuration.arguments, forKey: .args) }
+            if !configuration.environment.isEmpty { try container.encode(configuration.environment, forKey: .env) }
+            if !configuration.environmentVariableIDs.isEmpty {
+                try container.encode(configuration.environmentVariableIDs, forKey: .environmentVariableIDs)
+            }
+            if !configuration.inheritLocalLinuxEnvironment {
+                try container.encode(false, forKey: .inheritLocalLinuxEnvironment)
+            }
+            if configuration.workingDirectory != "/home/etos" {
+                try container.encode(configuration.workingDirectory, forKey: .cwd)
+            }
+            try container.encodeIfPresent(configuration.workspaceID, forKey: .workspaceID)
+            if !configuration.mountIDs.isEmpty {
+                try container.encode(configuration.mountIDs, forKey: .mountIDs)
+            }
+            if configuration.startupTimeoutSeconds != 30 {
+                try container.encode(configuration.startupTimeoutSeconds, forKey: .startupTimeoutSeconds)
+            }
+            if configuration.launchPolicy != .onDemand {
+                try container.encode(configuration.launchPolicy, forKey: .launchPolicy)
+            }
+            if configuration.idlePolicy != .fiveMinutes {
+                try container.encode(configuration.idlePolicy, forKey: .idlePolicy)
+            }
         case .http(let endpoint, let apiKey, let headers):
             try container.encode(Kind.streamableHTTP, forKey: .kind)
             try container.encode(endpoint, forKey: .endpoint)

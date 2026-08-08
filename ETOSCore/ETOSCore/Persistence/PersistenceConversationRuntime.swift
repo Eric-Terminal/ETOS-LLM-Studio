@@ -909,6 +909,28 @@ extension PersistenceGRDBStore {
         }
     }
 
+    func loadConversationExecutionBudget(rootRunID: UUID) throws -> ConversationExecutionBudget? {
+        try dbPool.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                SELECT maximum_executions, used_executions, updated_at
+                FROM conversation_execution_budgets
+                WHERE root_run_id = ?
+                """,
+                arguments: [rootRunID.uuidString]
+            ) else {
+                return nil
+            }
+            return ConversationExecutionBudget(
+                rootRunID: rootRunID,
+                maximumExecutions: row["maximum_executions"],
+                usedExecutions: row["used_executions"],
+                updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+            )
+        }
+    }
+
     func consumeConversationExecutionBudget(rootRunID: UUID, defaultMaximum: Int, at date: Date) throws -> ConversationExecutionBudget {
         try dbPool.write { db in
             let safeMaximum = max(1, defaultMaximum)
@@ -1856,6 +1878,10 @@ extension Persistence {
             logger.error("保存会话执行预算失败: \(error.localizedDescription)")
             return false
         }
+    }
+
+    public static func loadConversationExecutionBudget(rootRunID: UUID) -> ConversationExecutionBudget? {
+        try? activeGRDBStore()?.loadConversationExecutionBudget(rootRunID: rootRunID)
     }
 
     public static func consumeConversationExecutionBudget(

@@ -146,6 +146,7 @@ extension AppToolManager {
             let expected_behavior: String?
             let actual_behavior: String?
             let extra_context: String?
+            let linux_runtime_diagnostic_id: String?
         }
 
         guard let argsData = argumentsJSON.data(using: .utf8),
@@ -176,6 +177,42 @@ extension AppToolManager {
             )
         }
 
+        var extraContext = args.extra_context
+        if let rawDiagnosticID = args.linux_runtime_diagnostic_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rawDiagnosticID.isEmpty {
+            guard let diagnosticID = UUID(uuidString: rawDiagnosticID),
+                  let diagnostic = Persistence.loadLocalLinuxDiagnostic(id: diagnosticID) else {
+                throw AppToolExecutionError.invalidArguments(
+                    NSLocalizedString("错误：找不到指定的 Linux 运行时诊断。", comment: "Submit feedback ticket missing Linux diagnostic")
+                )
+            }
+            var safeDiagnostic: [String: Any] = [
+                "diagnostic_id": diagnostic.id.uuidString,
+                "category": diagnostic.category.rawValue,
+                "request_id": diagnostic.requestID,
+                "guest_architecture": diagnostic.guestArchitecture,
+                "backend": diagnostic.backend,
+                "build_identity": diagnostic.buildIdentity,
+                "occurrence_count": diagnostic.occurrenceCount,
+                "summary": diagnostic.redactedSummary
+            ]
+            safeDiagnostic["seed_version"] = diagnostic.seedVersion
+            safeDiagnostic["exit_code"] = diagnostic.exitCode
+            safeDiagnostic["signal"] = diagnostic.signal
+            safeDiagnostic["linux_errno"] = diagnostic.linuxError
+            safeDiagnostic["completion_reason"] = diagnostic.completionReason?.rawValue
+            safeDiagnostic["guest_pc"] = diagnostic.guestProgramCounter
+            safeDiagnostic["opcode"] = diagnostic.opcode
+            safeDiagnostic["syscall_number"] = diagnostic.systemCallNumber
+            safeDiagnostic["syscall_name"] = diagnostic.systemCallName
+            let serializedDiagnostic = prettyPrintedJSONString(from: safeDiagnostic)
+            let prefix = extraContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let diagnosticHeading = NSLocalizedString("Linux 运行时诊断：", comment: "Feedback Linux runtime diagnostic heading")
+            extraContext = prefix.isEmpty
+                ? "\(diagnosticHeading)\n\(serializedDiagnostic)"
+                : prefix + "\n\n\(diagnosticHeading)\n" + serializedDiagnostic
+        }
+
         let draft = FeedbackDraft(
             category: category,
             title: args.title,
@@ -183,7 +220,7 @@ extension AppToolManager {
             reproductionSteps: args.reproduction_steps,
             expectedBehavior: args.expected_behavior,
             actualBehavior: args.actual_behavior,
-            extraContext: args.extra_context
+            extraContext: extraContext
         )
         let ticket = try await FeedbackService.shared.submit(draft: draft)
         let formatter = ISO8601DateFormatter()

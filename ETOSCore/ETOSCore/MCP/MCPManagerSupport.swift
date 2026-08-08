@@ -283,9 +283,14 @@ extension MCPManager {
         serverID: UUID,
         toolId: String,
         inputs: [String: JSONValue],
-        options: MCPManagedToolCallOptions
+        options: MCPManagedToolCallOptions,
+        clientOverride: MCPClient? = nil
     ) async throws -> JSONValue {
-        let client = try await ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
+        let client = if let clientOverride {
+            clientOverride
+        } else {
+            try await ensureClientReady(serverID: serverID, refreshMetadataIfCacheMissing: false)
+        }
         let startedAt = Date()
         let resolvedProgressToken = options.progressToken ?? .string(UUID().uuidString)
         let tokenKey = resolvedProgressToken.canonicalValue
@@ -443,6 +448,8 @@ extension MCPManager {
             return "streamable_http"
         case .httpSSE:
             return "sse"
+        case .localStdio:
+            return "local_stdio"
         case .builtInSearch:
             return "built_in_search"
         case .builtInAppTool:

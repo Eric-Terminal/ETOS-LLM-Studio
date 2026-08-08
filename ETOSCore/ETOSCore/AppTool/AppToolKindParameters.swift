@@ -306,6 +306,10 @@ extension AppToolKind {
                     "extra_context": .dictionary([
                         "type": .string("string"),
                         "description": .string(NSLocalizedString("补充信息（可选）。", comment: "Submit feedback ticket extra context parameter description"))
+                    ]),
+                    "linux_runtime_diagnostic_id": .dictionary([
+                        "type": .string("string"),
+                        "description": .string(NSLocalizedString("可选的本机 Linux 诊断 UUID。只附带脱敏结构化摘要，不发送环境变量值或原始输出。", comment: "Submit feedback ticket Linux diagnostic parameter description"))
                     ])
                 ]),
                 "required": .array([.string("title"), .string("detail")])
@@ -316,7 +320,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要查看的相对路径，基于 Documents 根目录；留空表示根目录。", comment: "List sandbox directory tool path parameter description"))
+                        "description": .string(NSLocalizedString("要查看的路径。相对路径或 app:// 指向 Documents；Agent 模式还可使用 linux:// 和 mount://<挂载 ID>；留空表示 Documents 根目录。", comment: "List sandbox directory tool path parameter description"))
                     ])
                 ])
             ])
@@ -326,7 +330,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要读取的相对文件路径，基于 Documents 根目录。", comment: "Read sandbox file tool path parameter description"))
+                        "description": .string(NSLocalizedString("要读取的路径。相对路径或 app:// 指向 Documents；Agent 模式还可使用 linux:// 和 mount://<挂载 ID>。", comment: "Read sandbox file tool path parameter description"))
                     ])
                 ]),
                 "required": .array([.string("path")])
@@ -337,7 +341,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要写入的相对文件路径，基于 Documents 根目录。", comment: "Write sandbox file tool path parameter description"))
+                        "description": .string(NSLocalizedString("要写入的路径。相对路径或 app:// 指向 Documents；Agent 模式还可使用 linux:// 和 mount://<挂载 ID>。", comment: "Write sandbox file tool path parameter description"))
                     ]),
                     "content": .dictionary([
                         "type": .string("string"),
@@ -356,7 +360,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("搜索起点的相对路径，基于 Documents 根目录；留空表示根目录。", comment: "Search sandbox files path parameter description"))
+                        "description": .string(NSLocalizedString("搜索起点。相对路径或 app:// 指向 Documents；Agent 模式还可使用 linux:// 和 mount://<挂载 ID>；留空表示 Documents 根目录。", comment: "Search sandbox files path parameter description"))
                     ]),
                     "name_query": .dictionary([
                         "type": .string("string"),
@@ -386,7 +390,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要分块读取的相对文件路径，基于 Documents 根目录。", comment: "Read sandbox file chunk path parameter description"))
+                        "description": .string(NSLocalizedString("要分块读取的路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Read sandbox file chunk path parameter description"))
                     ]),
                     "start_line": .dictionary([
                         "type": .string("integer"),
@@ -405,11 +409,11 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "source_path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要移动的源相对路径，基于 Documents 根目录。", comment: "Move sandbox item source path parameter description"))
+                        "description": .string(NSLocalizedString("要移动的源路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Move sandbox item source path parameter description"))
                     ]),
                     "destination_path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("目标相对路径，基于 Documents 根目录。", comment: "Move sandbox item destination path parameter description"))
+                        "description": .string(NSLocalizedString("目标路径，必须与源路径使用相同后端。", comment: "Move sandbox item destination path parameter description"))
                     ]),
                     "overwrite": .dictionary([
                         "type": .string("boolean"),
@@ -428,11 +432,11 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "source_path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要复制的源相对路径，基于 Documents 根目录。", comment: "Copy sandbox item source path parameter description"))
+                        "description": .string(NSLocalizedString("要复制的源路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Copy sandbox item source path parameter description"))
                     ]),
                     "destination_path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("复制后的目标相对路径，基于 Documents 根目录。", comment: "Copy sandbox item destination path parameter description"))
+                        "description": .string(NSLocalizedString("复制后的目标路径，必须与源路径使用相同后端。", comment: "Copy sandbox item destination path parameter description"))
                     ]),
                     "overwrite": .dictionary([
                         "type": .string("boolean"),
@@ -451,7 +455,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要创建的目录相对路径，基于 Documents 根目录。", comment: "Create sandbox directory path parameter description"))
+                        "description": .string(NSLocalizedString("要创建的目录路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Create sandbox directory path parameter description"))
                     ]),
                     "create_parent_directories": .dictionary([
                         "type": .string("boolean"),
@@ -466,7 +470,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要批量编辑的相对文件路径，基于 Documents 根目录。", comment: "Batch edit sandbox file path parameter description"))
+                        "description": .string(NSLocalizedString("要批量编辑的文件路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Batch edit sandbox file path parameter description"))
                     ]),
                     "rules": .dictionary([
                         "type": .string("array"),
@@ -608,7 +612,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要比较的相对文件路径，基于 Documents 根目录。", comment: "Diff sandbox file tool path parameter description"))
+                        "description": .string(NSLocalizedString("要比较的文件路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Diff sandbox file tool path parameter description"))
                     ]),
                     "updated_content": .dictionary([
                         "type": .string("string"),
@@ -623,7 +627,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要编辑的相对文件路径，基于 Documents 根目录。", comment: "Edit sandbox file tool path parameter description"))
+                        "description": .string(NSLocalizedString("要编辑的文件路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。", comment: "Edit sandbox file tool path parameter description"))
                     ]),
                     "old_text": .dictionary([
                         "type": .string("string"),
@@ -646,7 +650,7 @@ extension AppToolKind {
                 "properties": .dictionary([
                     "path": .dictionary([
                         "type": .string("string"),
-                        "description": .string(NSLocalizedString("要删除的相对路径，基于 Documents 根目录。", comment: "Delete sandbox item tool path parameter description"))
+                        "description": .string(NSLocalizedString("要删除的路径，支持 app://；Agent 模式还支持 linux:// 和 mount://<挂载 ID>。Documents 与挂载根本身不会删除；linux:/// 会递归清空 guest 根目录。", comment: "Delete sandbox item tool path parameter description"))
                     ])
                 ]),
                 "required": .array([.string("path")])

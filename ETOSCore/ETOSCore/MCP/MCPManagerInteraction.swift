@@ -239,9 +239,41 @@ extension MCPManager {
         objectWillChange.send()
     }
 
-    public func chatToolsForLLM() -> [InternalToolDefinition] {
-        guard chatToolsEnabled else { return [] }
+    public func chatToolsForLLM(
+        includeConversationAgentTools: Bool = false,
+        includeLocalLinuxTools: Bool = false,
+        includeBrowserAgentTools: Bool = false,
+        selectedServerIDs: Set<UUID>? = nil
+    ) -> [InternalToolDefinition] {
+        let includesAgentBuiltIns = includeConversationAgentTools
+            || includeLocalLinuxTools
+            || includeBrowserAgentTools
+        guard chatToolsEnabled || includesAgentBuiltIns else { return [] }
         let chatTools: [InternalToolDefinition] = tools.compactMap { available -> InternalToolDefinition? in
+            if let selectedServerIDs,
+               !selectedServerIDs.contains(available.server.id) {
+                return nil
+            }
+            let builtInCategory = MCPBuiltInAppToolServer.category(for: available.server.id)
+            if !chatToolsEnabled {
+                let isIncludedAgentBuiltIn = (builtInCategory == .conversation && includeConversationAgentTools)
+                    || (builtInCategory == .linux && includeLocalLinuxTools)
+                    || (builtInCategory == .file && includeLocalLinuxTools)
+                    || (builtInCategory == .browser && includeBrowserAgentTools)
+                guard isIncludedAgentBuiltIn else { return nil }
+            }
+            if builtInCategory == .conversation,
+               !includeConversationAgentTools {
+                return nil
+            }
+            if builtInCategory == .linux,
+               !includeLocalLinuxTools {
+                return nil
+            }
+            if builtInCategory == .browser,
+               !includeBrowserAgentTools {
+                return nil
+            }
             if available.server.approvalPolicy(for: available.tool.toolId) == .alwaysDeny {
                 return nil
             }
@@ -268,23 +300,41 @@ extension MCPManager {
         toolName: String,
         argumentsJSON: String,
         sourceSessionID: UUID? = nil,
-        sourceToolCallID: String? = nil
+        sourceToolCallID: String? = nil,
+        sourceAgentRunID: UUID? = nil,
+        triggeringMessageID: UUID? = nil,
+        approvedLocalLinuxCommandRuleIDs: Set<UUID> = []
     ) async throws -> String {
-        guard chatToolsEnabled else {
+        guard let routed = routedTools[toolName] else {
+            throw MCPChatBridgeError.unknownTool
+        }
+        let builtInCategory = MCPBuiltInAppToolServer.category(for: routed.server.id)
+        let isAgentBuiltIn = sourceAgentRunID != nil
+            && (builtInCategory == .conversation
+                || builtInCategory == .linux
+                || builtInCategory == .file
+                || builtInCategory == .browser)
+        guard chatToolsEnabled || isAgentBuiltIn else {
             throw MCPChatBridgeError.toolGroupDisabled(
                 NSLocalizedString("MCP 工具", comment: "MCP tool group display name")
             )
         }
-        guard let routed = routedTools[toolName] else {
-            throw MCPChatBridgeError.unknownTool
-        }
         if routed.server.approvalPolicy(for: routed.tool.toolId) == .alwaysDeny {
             throw MCPChatBridgeError.toolDeniedByPolicy(displayName(for: routed))
+        }
+        if case .localStdio(let configuration) = routed.server.transport,
+           configuration.launchPolicy == .manual,
+           clients[routed.server.id] == nil {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("该本地 MCP 设置为仅手动连接，请先在 MCP 页面连接。", comment: "Manual local stdio MCP connection required")
+            )
         }
         let startedAt = Date()
         appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("开始执行聊天工具：%@", comment: "MCP governance chat tool started"), routed.tool.toolId))
         var inputs = try decodeJSONDictionary(from: argumentsJSON)
-        if MCPBuiltInAppToolServer.category(for: routed.server.id) == .conversation {
+        if builtInCategory == .conversation || builtInCategory == .linux || builtInCategory == .file || builtInCategory == .browser {
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument)
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument)
             guard let sourceSessionID,
                   let sourceToolCallID,
                   !sourceToolCallID.isEmpty else {
@@ -296,8 +346,78 @@ extension MCPManager {
             )
             inputs[MCPBuiltInAppToolServer.conversationToolCallIDArgument] = .string(sourceToolCallID)
         }
+        if builtInCategory == .linux
+            || builtInCategory == .browser
+            || builtInCategory == .file {
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentRunIDArgument)
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument)
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentSelectedMCPServerIDsArgument)
+            inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentApprovedCommandRuleIDsArgument)
+        }
+        if builtInCategory == .linux
+            || builtInCategory == .browser
+            || (builtInCategory == .file && sourceAgentRunID != nil) {
+            guard let sourceAgentRunID else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("本地 Agent 工具缺少 Run 标识。", comment: "Missing Agent run ID for local Agent tool")
+                )
+            }
+            inputs[MCPBuiltInAppToolServer.localAgentRunIDArgument] = .string(sourceAgentRunID.uuidString)
+            if let triggeringMessageID {
+                inputs[MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument] = .string(
+                    triggeringMessageID.uuidString
+                )
+            }
+            let selectedServerIDs = servers
+                .filter(\.isSelectedForChat)
+                .map { JSONValue.string($0.id.uuidString) }
+            inputs[MCPBuiltInAppToolServer.localAgentSelectedMCPServerIDsArgument] = .array(selectedServerIDs)
+            inputs[MCPBuiltInAppToolServer.localAgentApprovedCommandRuleIDsArgument] = .array(
+                approvedLocalLinuxCommandRuleIDs
+                    .sorted { $0.uuidString < $1.uuidString }
+                    .map { .string($0.uuidString) }
+            )
+        }
         let callID = UUID()
+        var localInstanceKey: MCPLocalStdioInstanceKey?
         do {
+            let clientOverride: MCPClient?
+            if case .localStdio(let configuration) = routed.server.transport,
+               configuration.launchPolicy == .onDemand,
+               let sourceAgentRunID {
+                guard let sourceSessionID else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("本地 MCP 缺少 Agent 会话标识。", comment: "Missing Agent session for local stdio MCP")
+                    )
+                }
+                let selectedServerIDs = servers.filter(\.isSelectedForChat).map(\.id)
+                _ = try await LocalAgentRuntimeContextManager.shared.beginRun(
+                    sessionID: sourceSessionID,
+                    triggeringMessageID: triggeringMessageID,
+                    toolCallID: sourceToolCallID,
+                    runID: sourceAgentRunID,
+                    selectedMCPServerIDs: selectedServerIDs
+                )
+                guard let run = Persistence.loadLocalAgentRun(id: sourceAgentRunID) else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("找不到本地 MCP 对应的 Agent Run。", comment: "Missing Agent run for local stdio MCP")
+                    )
+                }
+                let acquired = try await acquireLocalStdioClient(
+                    server: routed.server,
+                    context: run.context,
+                    approvedCommandRuleIDs: approvedLocalLinuxCommandRuleIDs
+                )
+                localInstanceKey = acquired.key
+                clientOverride = acquired.client
+            } else {
+                clientOverride = nil
+            }
+            defer {
+                if let localInstanceKey {
+                    releaseLocalStdioClient(key: localInstanceKey)
+                }
+            }
             let result = try await executeManagedToolCall(
                 callID: callID,
                 serverID: routed.server.id,
@@ -306,7 +426,8 @@ extension MCPManager {
                 options: defaultManagedToolCallOptions(
                     timeout: defaultChatToolCallTimeout,
                     reason: NSLocalizedString("聊天工具调用超时", comment: "MCP chat tool timeout reason")
-                )
+                ),
+                clientOverride: clientOverride
             )
             let elapsed = Date().timeIntervalSince(startedAt)
             appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("聊天工具执行成功：%@，耗时 %.2f 秒。", comment: "MCP governance chat tool succeeded"), routed.tool.toolId, elapsed))
@@ -333,6 +454,69 @@ extension MCPManager {
         guard let routed = routedTools[toolName] else { return false }
         return MCPBuiltInAppToolServer.category(for: routed.server.id) == .conversation
             && ConversationToolDefinitions.contains(routed.tool.toolId)
+    }
+
+    public func isLocalLinuxTool(_ toolName: String) -> Bool {
+        guard let routed = routedTools[toolName] else { return false }
+        return MCPBuiltInAppToolServer.category(for: routed.server.id) == .linux
+            && LocalLinuxToolDefinitions.contains(routed.tool.toolId)
+    }
+
+    public func localLinuxToolID(for toolName: String) -> String? {
+        guard let routed = routedTools[toolName],
+              MCPBuiltInAppToolServer.category(for: routed.server.id) == .linux,
+              LocalLinuxToolDefinitions.contains(routed.tool.toolId) else {
+            return nil
+        }
+        return routed.tool.toolId
+    }
+
+    public func localStdioCommandRuleMatch(
+        for toolName: String,
+        sourceAgentRunID: UUID?
+    ) async -> LocalLinuxCommandRuleMatch? {
+        guard AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled),
+              let routed = routedTools[toolName],
+              let sourceAgentRunID,
+              let run = Persistence.loadLocalAgentRun(id: sourceAgentRunID) else {
+            return nil
+        }
+        let frozenServer = run.context.selectedMCPServerConfigurations?
+            .first(where: { $0.id == routed.server.id }) ?? routed.server
+        guard case .localStdio(let configuration) = frozenServer.transport,
+              configuration.launchPolicy == .onDemand else { return nil }
+        guard let snapshot = try? await LocalLinuxProcessEnvironmentProvider.shared.snapshot(
+            referenceIDs: configuration.environmentVariableIDs,
+            inheritGlobalEnvironment: configuration.inheritLocalLinuxEnvironment,
+            additional: configuration.environment,
+            frozenGlobalValues: run.context.environmentValues,
+            frozenReferences: run.context.environmentReferenceSnapshots,
+            frozenRedactionValues: run.context.environmentRedactionValues
+        ) else { return nil }
+        let workspaceID = configuration.workspaceID ?? run.context.workspaceID
+        let key = MCPLocalStdioInstanceKey(
+            serverID: routed.server.id,
+            workspaceID: workspaceID,
+            environmentSnapshotHash: snapshot.hash,
+            configurationHash: configuration.hashValue
+        )
+        guard localStdioInstances[key] == nil, localStdioConnectionTasks[key] == nil else {
+            return nil
+        }
+        let command = configuration.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return nil }
+        let request = LocalLinuxJobRequest(
+            executable: command,
+            arguments: [command] + configuration.arguments,
+            workingDirectory: configuration.workingDirectory,
+            timeoutSeconds: 0,
+            outputLimitBytes: 0
+        )
+        return await LocalLinuxApprovalPolicy.shared.evaluate(
+            request: request,
+            kind: .localMCP,
+            isEnabled: true
+        )
     }
 
     public func isToolEnabled(serverID: UUID, toolId: String) -> Bool {

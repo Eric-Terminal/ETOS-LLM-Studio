@@ -568,6 +568,7 @@ extension Persistence {
 
     /// 删除会话相关的消息持久化文件（当前格式 + legacy）。
     public static func deleteSessionArtifacts(sessionID: UUID) {
+        LocalLinuxWorkspaceCleanupCoordinator.scheduleForDeletedSession(sessionID)
         if let store = activeGRDBStore() {
             store.deleteSessionArtifacts(sessionID: sessionID)
             return

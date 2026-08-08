@@ -82,20 +82,50 @@ extension ChatService {
     }
 
     public func stopConversationRuntime(for sessionID: UUID) async {
+        let activeRuns = Persistence.loadActiveConversationRuns().filter { $0.sessionID == sessionID }
+        for run in activeRuns {
+            await stopConversationRun(run.id)
+        }
         if hasActiveRequestContext(for: sessionID) {
             await cancelRequest(for: sessionID)
         }
-        if let run = Persistence.loadLatestConversationRun(sessionID: sessionID),
-           !run.status.isTerminal {
+        await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
+        for event in Persistence.loadPendingConversationEvents(destinationSessionID: sessionID) {
+            _ = Persistence.updateConversationEventState(id: event.id, state: .cancelled)
+        }
+        await ConversationRunCoordinator.shared.signal()
+    }
+
+    /// 停止指定 Agent Run 及其递归子 Run；同一根链路中的父级和兄弟 Run 不受影响。
+    public func stopConversationRun(_ runID: UUID) async {
+        let activeRuns = Persistence.loadActiveConversationRuns()
+        var affectedRunIDs: Set<UUID> = [runID]
+        var didExpand = true
+        while didExpand {
+            didExpand = false
+            for run in activeRuns where run.parentRunID.map(affectedRunIDs.contains) == true {
+                didExpand = affectedRunIDs.insert(run.id).inserted || didExpand
+            }
+        }
+
+        await LocalLinuxJobScheduler.shared.cancel(runID: runID)
+        for run in activeRuns where affectedRunIDs.contains(run.id) {
+            if hasActiveRequestContext(for: run.sessionID),
+               conversationRunIDs(for: run.sessionID)?.runID == run.id {
+                await cancelRequest(for: run.sessionID)
+            }
+            if run.id != runID {
+                await LocalLinuxJobScheduler.shared.cancel(runID: run.id)
+            }
             for var wait in Persistence.loadConversationWaits(waitingRunID: run.id)
                 where wait.status == .pending {
                 wait.status = .cancelled
                 _ = Persistence.saveConversationWait(wait)
             }
+            if let triggerEventID = run.triggerEventID {
+                _ = Persistence.updateConversationEventState(id: triggerEventID, state: .cancelled)
+            }
             _ = Persistence.updateConversationRunStatus(id: run.id, status: .cancelled)
-        }
-        for event in Persistence.loadPendingConversationEvents(destinationSessionID: sessionID) {
-            _ = Persistence.updateConversationEventState(id: event.id, state: .cancelled)
         }
         await ConversationRunCoordinator.shared.signal()
     }

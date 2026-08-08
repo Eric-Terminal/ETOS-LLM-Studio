@@ -75,7 +75,8 @@ extension ChatService {
         for session: ChatSession?,
         enableMemory: Bool,
         enableMemoryWrite: Bool,
-        enableMemoryActiveRetrieval: Bool
+        enableMemoryActiveRetrieval: Bool,
+        localAgentContext: AgentRuntimeContext? = nil
     ) async -> (tools: [InternalToolDefinition]?, policy: AuxiliaryContextPolicy) {
         let policy = auxiliaryContextPolicy(
             for: session,
@@ -85,6 +86,9 @@ extension ChatService {
         )
 
         var resolvedTools: [InternalToolDefinition] = []
+        let includeAgentTools = localAgentContext?.mode == .agent
+            && session?.isWorldbookContextIsolationActive != true
+        let selectedServerIDs = localAgentContext.map { Set($0.selectedMCPServerIDs) }
         if policy.enableMemory && policy.enableMemoryWrite {
             resolvedTools.append(saveMemoryTool)
         }
@@ -96,7 +100,14 @@ extension ChatService {
             resolvedTools.append(contentsOf: builtInAppTools)
         }
         if policy.includeMCPTools {
-            let mcpTools = await MainActor.run { MCPManager.shared.chatToolsForLLM() }
+            let mcpTools = await MainActor.run {
+                MCPManager.shared.chatToolsForLLM(
+                    includeConversationAgentTools: includeAgentTools,
+                    includeLocalLinuxTools: includeAgentTools,
+                    includeBrowserAgentTools: includeAgentTools,
+                    selectedServerIDs: selectedServerIDs
+                )
+            }
             resolvedTools.append(contentsOf: mcpTools)
         }
         if policy.includeShortcutTools {

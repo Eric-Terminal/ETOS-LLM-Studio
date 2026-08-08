@@ -496,6 +496,16 @@ extension ChatService {
             )
         }
 
+        let shouldPrepareLocalAgentRun = AppConfigStore.boolValue(for: .localLinuxEnabled)
+            && Persistence.localAgentMode(sessionID: currentSession.id) == .agent
+            && !currentSession.isWorldbookContextIsolationActive
+        let selectedMCPServerIDs = shouldPrepareLocalAgentRun
+            ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
+            : []
+        let runtimeRunID = runtimeRun.id
+        let rootRuntimeRunID = runtimeRun.rootRunID
+        let parentRuntimeRunID = runtimeRun.parentRunID
+
         let requestToken = UUID()
         setRequestContext(
             RequestExecutionContext(
@@ -511,11 +521,50 @@ extension ChatService {
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
+            var localAgentContext: AgentRuntimeContext?
+            if shouldPrepareLocalAgentRun {
+                do {
+                    let prepared = try await LocalAgentRuntimeContextManager.shared.beginRun(
+                        sessionID: currentSession.id,
+                        triggeringMessageID: responseAttempt.groupID,
+                        runID: runtimeRunID,
+                        rootRunID: rootRuntimeRunID,
+                        parentRunID: parentRuntimeRunID,
+                        selectedMCPServerIDs: selectedMCPServerIDs,
+                        browserSessionID: currentSession.id
+                    )
+                    localAgentContext = prepared.context
+                    _ = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .agentRequest)
+                    try Task.checkCancellation()
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(
+                        id: runtimeRunID,
+                        state: .failed
+                    )
+                    _ = Persistence.updateConversationRunStatus(
+                        id: runtimeRunID,
+                        status: .failed,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.addErrorMessage(
+                        String(
+                            format: NSLocalizedString("错误: 无法准备 Agent Run：%@", comment: "Prepare local Agent run failure"),
+                            error.localizedDescription
+                        ),
+                        sessionID: currentSession.id
+                    )
+                    self.emitSessionRequestStatus(.error, sessionID: currentSession.id)
+                    return
+                }
+            }
             let requestTooling = await self.resolveRequestTooling(
                 for: currentSession,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                localAgentContext: localAgentContext
             )
             await self.executeMessageRequest(
                 messages: messages,
@@ -530,6 +579,7 @@ extension ChatService {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
                 tools: requestTooling.tools,
+                localAgentPrompt: localAgentContext?.promptContent,
                 enableMemory: requestTooling.policy.enableMemory,
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,
