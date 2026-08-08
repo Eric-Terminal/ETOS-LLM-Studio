@@ -121,6 +121,31 @@ struct OfficialProviderActionTests {
         #expect(schema.1 == 1)
     }
 
+    @Test("官方操作在既有数据库事务中直接读取 Provider 顺序")
+    func providerOrderReadReusesCurrentDatabase() throws {
+        let database = try DatabaseQueue()
+        let expected = [providerID.uuidString, officialModelID.uuidString]
+        try database.write { db in
+            try db.create(table: "app_config") { table in
+                table.column("key", .text).primaryKey()
+                table.column("value_text", .text)
+            }
+            let encoded = String(
+                data: try JSONSerialization.data(withJSONObject: expected),
+                encoding: .utf8
+            )!
+            try db.execute(
+                sql: "INSERT INTO app_config (key, value_text) VALUES (?, ?)",
+                arguments: [AppConfigKey.providerOrderIDs.rawValue, encoded]
+            )
+        }
+
+        let loaded = try database.read { db in
+            try OfficialProviderActionApplier.providerOrderIDs(in: db)
+        }
+        #expect(loaded == expected)
+    }
+
     private var conservativePolicy: OfficialProviderMergePolicy {
         OfficialProviderMergePolicy(
             providerFields: .updateIfUnmodified,

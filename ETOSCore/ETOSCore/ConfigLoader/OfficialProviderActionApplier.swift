@@ -52,7 +52,7 @@ enum OfficialProviderActionApplier {
         guard let result = Persistence.withConfigDatabaseRead({ db in
             let providers = try ConfigLoader.loadProvidersFromRelationalStore(
                 db,
-                storedProviderOrderIDs: AppConfigStore.stringArrayValue(for: .providerOrderIDs, defaultValue: []) ?? []
+                storedProviderOrderIDs: try providerOrderIDs(in: db)
             )
             let states = try loadStates(db)
             return try mergeActions(
@@ -76,7 +76,7 @@ enum OfficialProviderActionApplier {
         let transactionResult = Persistence.withConfigDatabaseWrite { db in
             let providers = try ConfigLoader.loadProvidersFromRelationalStore(
                 db,
-                storedProviderOrderIDs: AppConfigStore.stringArrayValue(for: .providerOrderIDs, defaultValue: []) ?? []
+                storedProviderOrderIDs: try providerOrderIDs(in: db)
             )
             let states = try loadStates(db)
             let merged = try mergeActions(
@@ -130,6 +130,21 @@ enum OfficialProviderActionApplier {
         ConfigLoader.reconcileStoredProviderOrder(currentIDs: transactionResult.1)
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         return transactionResult.0
+    }
+
+    /// 调用方已经位于配置库事务中，必须复用同一个 Database，避免嵌套读取
+    /// DatabasePool 触发 GRDB 的不可重入保护。
+    static func providerOrderIDs(in db: Database) throws -> [String] {
+        guard let raw = try String.fetchOne(
+            db,
+            sql: "SELECT value_text FROM app_config WHERE key = ?",
+            arguments: [AppConfigKey.providerOrderIDs.rawValue]
+        ),
+        let data = raw.data(using: .utf8),
+        let identifiers = try JSONSerialization.jsonObject(with: data) as? [String] else {
+            return []
+        }
+        return identifiers
     }
 
     private struct AppliedState {
