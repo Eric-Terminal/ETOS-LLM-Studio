@@ -15,15 +15,40 @@ import Darwin
 import Metal
 #endif
 
+public enum LocalThermalCondition: String, Hashable, Sendable {
+    case nominal
+    case fair
+    case serious
+    case critical
+    case unknown
+
+    public var displayName: String {
+        switch self {
+        case .nominal: return NSLocalizedString("正常", comment: "Local resource nominal thermal state")
+        case .fair: return NSLocalizedString("温度升高", comment: "Local resource fair thermal state")
+        case .serious: return NSLocalizedString("温度严重", comment: "Local resource serious thermal state")
+        case .critical: return NSLocalizedString("温度过高", comment: "Local resource critical thermal state")
+        case .unknown: return NSLocalizedString("未知", comment: "Local resource unknown thermal state")
+        }
+    }
+}
+
 public struct LocalResourceUsageSnapshot: Hashable, Sendable {
     public var cpuPercent: Double?
     public var memoryBytes: UInt64?
     public var gpuAllocatedBytes: UInt64?
+    public var thermalCondition: LocalThermalCondition
 
-    public init(cpuPercent: Double?, memoryBytes: UInt64?, gpuAllocatedBytes: UInt64?) {
+    public init(
+        cpuPercent: Double?,
+        memoryBytes: UInt64?,
+        gpuAllocatedBytes: UInt64?,
+        thermalCondition: LocalThermalCondition = .unknown
+    ) {
         self.cpuPercent = cpuPercent
         self.memoryBytes = memoryBytes
         self.gpuAllocatedBytes = gpuAllocatedBytes
+        self.thermalCondition = thermalCondition
     }
 
     public var displayText: String {
@@ -49,7 +74,8 @@ public final class LocalResourceUsageMonitor: ObservableObject {
     @Published public private(set) var snapshot = LocalResourceUsageSnapshot(
         cpuPercent: nil,
         memoryBytes: nil,
-        gpuAllocatedBytes: nil
+        gpuAllocatedBytes: nil,
+        thermalCondition: .unknown
     )
 
     private var lastCPUTime: Double?
@@ -60,17 +86,41 @@ public final class LocalResourceUsageMonitor: ObservableObject {
 
     public init() {}
 
+    private struct RawSample: Sendable {
+        let cpuTime: Double?
+        let memoryBytes: UInt64?
+        let thermalCondition: LocalThermalCondition
+    }
+
     @MainActor
-    public func refresh() {
+    public func refresh() async {
+        let raw = await Task.detached(priority: .utility) {
+            RawSample(
+                cpuTime: Self.currentProcessCPUTime(),
+                memoryBytes: Self.currentMemoryFootprintBytes(),
+                thermalCondition: Self.currentThermalCondition()
+            )
+        }.value
         snapshot = LocalResourceUsageSnapshot(
-            cpuPercent: currentCPUPercent(),
-            memoryBytes: currentMemoryFootprintBytes(),
-            gpuAllocatedBytes: currentGPUAllocatedBytes()
+            cpuPercent: cpuPercent(for: raw.cpuTime),
+            memoryBytes: raw.memoryBytes,
+            gpuAllocatedBytes: currentGPUAllocatedBytes(),
+            thermalCondition: raw.thermalCondition
         )
     }
 
-    private func currentCPUPercent() -> Double? {
-        guard let cpuTime = currentProcessCPUTime() else { return nil }
+    private nonisolated static func currentThermalCondition() -> LocalThermalCondition {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: return .nominal
+        case .fair: return .fair
+        case .serious: return .serious
+        case .critical: return .critical
+        @unknown default: return .unknown
+        }
+    }
+
+    private func cpuPercent(for cpuTime: Double?) -> Double? {
+        guard let cpuTime else { return nil }
         let now = Date()
         defer {
             lastCPUTime = cpuTime
@@ -82,7 +132,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
         return max(0, (cpuTime - lastCPUTime) / elapsed * 100)
     }
 
-    private func currentProcessCPUTime() -> Double? {
+    private nonisolated static func currentProcessCPUTime() -> Double? {
         var info = task_thread_times_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_thread_times_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in
@@ -95,7 +145,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
             + Double(info.user_time.microseconds + info.system_time.microseconds) / 1_000_000
     }
 
-    private func currentMemoryFootprintBytes() -> UInt64? {
+    private nonisolated static func currentMemoryFootprintBytes() -> UInt64? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in

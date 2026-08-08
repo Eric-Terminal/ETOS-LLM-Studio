@@ -1,0 +1,22 @@
+ETOS 本地 Linux 对应源码说明 / Corresponding Source Information
+
+本 App 内置的最小 Alpine AArch64 RootFS 由固定上游归档生成，只在 iSH guest
+ABI/指令解释层内运行。它不作为 iOS 或 watchOS 原生可执行文件启动。
+
+Alpine 版本：3.24.1
+上游归档：https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.1-aarch64.tar.gz
+上游归档 SHA-256：f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259
+内置 seed SHA-256：8d3a9a735a53327db35545a2c43ef8091aac9c89507349efca81e51fff01ee31
+iSH 修改源码：https://github.com/Eric-Terminal/ish-multiarch
+iSH 精确提交：eb393544ee0a4e4a3b868da2eb4ef0a1f52360fb
+
+随本文件一同提供：
+- ETOSLocalLinuxRootFSMigrations.json：随 App 固定交付的 RootFS 更新路径与脚本摘要；
+- LocalLinuxRootFS-Packages.tsv：精确包版本、许可证和 aports 提交；
+- LocalLinuxRootFS-Source-Assets.tsv：对应源码 URL、大小和摘要；
+- LocalLinuxRootFS-Third-Party-Notices.txt：Alpine 包第三方声明；
+- iSH-PROJECT-LICENSES.txt：iSH 项目许可证与公开源码入口；
+- LocalLinuxRootFS-SBOM.spdx.json：SPDX 2.3 软件物料清单。
+
+若公开源码入口暂时不可访问，请通过 App 内反馈渠道联系开发者索取与该版本
+精确对应的源码。此说明不改变任何上游许可证授予的权利。

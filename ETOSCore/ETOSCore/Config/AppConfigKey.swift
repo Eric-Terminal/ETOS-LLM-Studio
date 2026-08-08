@@ -149,6 +149,16 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localModelPerformanceMonitorEnabled = "localModels.performanceMonitor.enabled"
     case localModelCacheEnabled = "localModels.cache.enabled"
     case localModelKVCacheEnabled = "localModels.kvCache.enabled"
+    case localLinuxEnabled = "localLinux.enabled"
+    case localLinuxEnvironmentPrivacyEnabled = "localLinux.environmentPrivacy.enabled"
+    case localLinuxCommandSafetyEnabled = "localLinux.commandSafety.enabled"
+    case localLinuxDefaultSessionMode = "localLinux.defaultSessionMode"
+    case localLinuxDefaultTimeoutSeconds = "localLinux.defaultTimeoutSeconds"
+    case localLinuxOutputPreviewBytes = "localLinux.outputPreviewBytes"
+    case localLinuxLocalMCPOnDemand = "localLinux.localMCP.onDemand"
+    case localLinuxActivePromptProfileID = "localLinux.activePromptProfileID"
+    case localLinuxWorkspaceCleanupPolicy = "localLinux.workspace.cleanupPolicy"
+    case browserAgentDelegateToIPhone = "browserAgent.delegateToIPhone"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
@@ -349,6 +359,24 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .localModelCacheEnabled:
             return .bool(true)
+        case .localLinuxEnabled:
+            return .bool(false)
+        case .localLinuxEnvironmentPrivacyEnabled,
+             .localLinuxCommandSafetyEnabled,
+             .localLinuxLocalMCPOnDemand:
+            return .bool(true)
+        case .localLinuxDefaultSessionMode:
+            return .text("chat")
+        case .localLinuxDefaultTimeoutSeconds:
+            return .integer(300)
+        case .localLinuxOutputPreviewBytes:
+            return .integer(65_536)
+        case .localLinuxActivePromptProfileID:
+            return .text("")
+        case .localLinuxWorkspaceCleanupPolicy:
+            return .text("manual")
+        case .browserAgentDelegateToIPhone:
+            return .bool(false)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,

@@ -936,6 +936,14 @@ extension PersistenceAuxiliaryGRDBStore {
                     sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_official_data_action_provider ON official_data_action_state(provider_id)"
                 )
             }
+
+            migrator.registerMigration("v18_create_local_linux_configuration") { db in
+                try Self.createLocalLinuxConfigurationTables(db)
+            }
+
+            migrator.registerMigration("v19_add_mcp_local_stdio_transport") { db in
+                try Self.migrateMCPServerLocalStdioTransport(db)
+            }
         }
 
         if supportsMemoryRelationalSchema {

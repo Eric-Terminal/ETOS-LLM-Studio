@@ -552,6 +552,14 @@ final class PersistenceGRDBStore {
             )
         }
 
+        migrator.registerMigration("v13_local_agent_runtime") { db in
+            try Self.createLocalAgentRuntimeTables(db)
+        }
+
+        migrator.registerMigration("v14_browser_agent_governance") { db in
+            try Self.migrateLocalAgentBrowserSchema(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -561,6 +569,7 @@ final class PersistenceGRDBStore {
             try createCoreTablesIfMissing(db)
             try Self.createConversationContinuationContextTable(db)
             try Self.createConversationRuntimeTables(db)
+            try Self.migrateLocalAgentBrowserSchema(db)
             try ensureColumn(
                 db,
                 table: "conversation_waits",
