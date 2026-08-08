@@ -90,30 +90,35 @@ actor VideoFrameDerivedCache {
             videoFrameCacheLogger.debug("复用内存中的视频派生帧: \(attachment.fileName)")
             return Self.normalizedFileNames(in: cached.result, sourceFileName: attachment.fileName)
         }
-        if let cached = await loadResult(forKey: cacheKey) {
-            remember(cached, forKey: cacheKey)
-            videoFrameCacheLogger.info("复用磁盘中的视频派生帧: \(attachment.fileName)")
-            return Self.normalizedFileNames(in: cached, sourceFileName: attachment.fileName)
-        }
         if let extraction = inFlightExtractions[cacheKey] {
-            let result = try await extraction.value
-            return Self.normalizedFileNames(in: result, sourceFileName: attachment.fileName)
+            return try await extraction.value
         }
 
-        let extraction = Task {
-            try await producer()
-        }
-        inFlightExtractions[cacheKey] = extraction
+        // 把磁盘查询也纳入共享任务，避免并发查询都未命中时重复抽帧。
+        let extraction = Task { [self] in
+            if let cached = await loadResult(forKey: cacheKey) {
+                remember(cached, forKey: cacheKey)
+                videoFrameCacheLogger.info("复用磁盘中的视频派生帧: \(attachment.fileName)")
+                return Self.normalizedFileNames(
+                    in: cached,
+                    sourceFileName: attachment.fileName
+                )
+            }
 
-        do {
-            let produced = try await extraction.value
-            inFlightExtractions.removeValue(forKey: cacheKey)
+            let produced = try await producer()
             let result = Self.normalizedFileNames(
                 in: produced,
                 sourceFileName: attachment.fileName
             )
             remember(result, forKey: cacheKey)
             await persist(result, forKey: cacheKey)
+            return result
+        }
+        inFlightExtractions[cacheKey] = extraction
+
+        do {
+            let result = try await extraction.value
+            inFlightExtractions.removeValue(forKey: cacheKey)
             return result
         } catch {
             inFlightExtractions.removeValue(forKey: cacheKey)
