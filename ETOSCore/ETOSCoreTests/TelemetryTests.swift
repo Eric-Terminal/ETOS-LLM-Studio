@@ -151,6 +151,33 @@ struct TelemetryTests {
         #expect(encoded.contains(#""signal":6"#))
     }
 
+    @Test("深层诊断调用栈会在编码前安全裁剪")
+    func deeplyNestedDiagnosticIsTruncatedBeforeEncoding() throws {
+        var nestedFrame = #"{"binaryName":"deepest-frame"}"#
+        for index in 0..<400 {
+            nestedFrame = #"{"binaryName":"frame-\#(index)","subFrames":[\#(nestedFrame)]}"#
+        }
+        let rawPayload = Data(
+            #"{"crashDiagnostics":[{"callStackTree":{"callStacks":[{"callStackRootFrames":[\#(nestedFrame)]}]}}]}"#.utf8
+        )
+
+        let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
+            kind: .diagnostic,
+            rawPayloadData: rawPayload,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let encoded = try TelemetryEnvelopeCodec.encode(envelope)
+        let text = String(decoding: encoded, as: UTF8.self)
+        let decoded = try TelemetryEnvelopeCodec.decode(encoded)
+
+        #expect(text.contains("frame-399"))
+        #expect(text.contains("deepest-frame") == false)
+        #expect(decoded == envelope)
+    }
+
     @Test("非对象 JSON 不会进入遥测队列")
     func nonObjectPayloadIsRejected() {
         #expect(throws: TelemetryEnvelopeError.self) {
