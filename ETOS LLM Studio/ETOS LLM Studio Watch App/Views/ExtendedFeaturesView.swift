@@ -148,6 +148,34 @@ public struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
+                    LocalLinuxWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    settingsNavigationLabel("本地 Linux", icon: .localLinux)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("按需准备 Linux 用户态环境、终端与本地 Agent 工具。", comment: "Watch local Linux entry footer"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    Label(NSLocalizedString("Browser Agent", comment: "Browser Agent settings entry"), systemImage: "safari")
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("使用本机实验性网页能力，或由你选择委托给 iPhone。", comment: "Watch Browser Agent settings entry footer"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
                     ShortcutIntegrationView()
                 } label: {
                     settingsNavigationLabel("快捷指令工具集成", icon: .shortcuts)

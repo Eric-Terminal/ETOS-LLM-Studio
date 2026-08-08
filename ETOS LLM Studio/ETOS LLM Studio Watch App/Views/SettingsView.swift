@@ -471,6 +471,7 @@ extension SettingsListIcon {
     static let speechInput = SettingsListIcon(systemName: "mic", backgroundColor: .red)
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo, legacySystemName: "puzzlepiece.extension")
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
+    static let localLinux = SettingsListIcon(systemName: "terminal", backgroundColor: .green)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple, legacySystemName: "photo.on.rectangle")
     static let keyboard = SettingsListIcon(systemName: "keyboard", backgroundColor: .gray)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green, legacySystemName: "arrow.triangle.2.circlepath")

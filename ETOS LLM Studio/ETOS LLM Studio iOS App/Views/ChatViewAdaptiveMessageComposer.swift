@@ -241,7 +241,12 @@ extension TelegramMessageComposer {
                 }
 
                 if let selectedModel = viewModel.selectedModel {
-                    if adaptiveRequestControls.isEmpty {
+                    if appConfig.localLinuxEnabled,
+                       let sessionID = viewModel.currentSession?.id {
+                        LocalAgentModePicker(sessionID: sessionID, isLocked: isSending)
+                    }
+
+                    if adaptiveRequestControls.isEmpty && !appConfig.localLinuxEnabled {
                         Text(NSLocalizedString("当前模型没有可用的请求控制。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
@@ -269,7 +274,8 @@ extension TelegramMessageComposer {
 
     private var adaptiveRequestControlsPanelHeight: CGFloat {
         let maximumHeight = min(UIScreen.main.bounds.height * 0.38, 340)
-        let estimatedContentHeight = 82 + CGFloat(adaptiveRequestControls.count) * 68
+        let agentModeHeight: CGFloat = appConfig.localLinuxEnabled ? 150 : 0
+        let estimatedContentHeight = 82 + agentModeHeight + CGFloat(adaptiveRequestControls.count) * 68
         return min(maximumHeight, max(124, estimatedContentHeight))
     }
 
@@ -342,7 +348,8 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveShowsRequestControlsButton: Bool {
-        !adaptiveRequestControls.isEmpty && adaptivePresentation != .expandedText
+        (!adaptiveRequestControls.isEmpty || (appConfig.localLinuxEnabled && viewModel.selectedModel != nil))
+            && adaptivePresentation != .expandedText
     }
 
     private var adaptiveShowsSpeechButton: Bool {
@@ -698,7 +705,7 @@ extension TelegramMessageComposer {
     private func adaptiveRefreshRequestControls() {
         let controls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
         adaptiveRequestControls = controls
-        if controls.isEmpty, isRequestControlsExpanded {
+        if controls.isEmpty, !appConfig.localLinuxEnabled, isRequestControlsExpanded {
             withAnimation(adaptiveComposerAnimation) {
                 isRequestControlsExpanded = false
             }
@@ -709,5 +716,92 @@ extension TelegramMessageComposer {
         adaptiveHasSendableText = !text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
+    }
+}
+
+private struct LocalAgentModePicker: View {
+    let sessionID: UUID
+    let isLocked: Bool
+    @State private var mode = LocalAgentMode.chat
+    @State private var runtimePhase: LocalLinuxRuntimePhase = .notInstalled
+    @State private var executionBudget: ConversationExecutionBudget?
+    @State private var hasActiveRun = false
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Picker(NSLocalizedString("会话模式", comment: "Chat or Agent session mode"), selection: $mode) {
+                ForEach(LocalAgentMode.allCases) { value in
+                    Text(value.displayName).tag(value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(isLocked || hasActiveRun)
+            .onChange(of: mode) { _, value in
+                _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
+            }
+            Text(NSLocalizedString("Agent 模式会向模型提供本地 Linux 工具；用户终端在两种模式下都可独立使用。", comment: "Local Agent mode footer"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if hasActiveRun {
+                Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            NavigationLink {
+                LocalLinuxFeatureView(sessionID: sessionID)
+            } label: {
+                HStack {
+                    Label(NSLocalizedString("运行状态", comment: "Local Linux runtime status link"), systemImage: "terminal")
+                    Spacer()
+                    Text(runtimePhase.displayName)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if mode == .agent, let executionBudget {
+                HStack {
+                    Text(NSLocalizedString("自动执行预算", comment: "Local Agent execution budget"))
+                    Spacer()
+                    Text("\(max(0, executionBudget.maximumExecutions - executionBudget.usedExecutions))/\(executionBudget.maximumExecutions)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            }
+        }
+        .task(id: sessionID) {
+            await reloadSessionState()
+            for await snapshot in await LocalLinuxRuntimeController.shared.updates() {
+                runtimePhase = snapshot.phase
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
+            Task { await reloadExecutionBudget() }
+        }
+    }
+
+    private func reloadSessionState() async {
+        mode = await Task.detached(priority: .userInitiated) {
+            Persistence.localAgentMode(sessionID: sessionID)
+        }.value
+        await reloadExecutionBudget()
+    }
+
+    private func reloadExecutionBudget() async {
+        let task = Task.detached(priority: .userInitiated) { () -> (budget: ConversationExecutionBudget?, isActive: Bool)? in
+            guard let run = Persistence.loadLatestConversationRun(sessionID: sessionID) else { return nil }
+            return (
+                budget: Persistence.loadConversationExecutionBudget(rootRunID: run.rootRunID),
+                isActive: !run.status.isTerminal
+            )
+        }
+        let state = await task.value
+        executionBudget = state?.budget
+        hasActiveRun = state?.isActive ?? false
+        let snapshot = await LocalLinuxRuntimeController.shared.snapshot()
+        runtimePhase = snapshot.phase
     }
 }

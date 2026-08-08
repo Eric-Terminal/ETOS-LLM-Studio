@@ -627,7 +627,7 @@ private struct LocalResourceUsageFloatingPanel: View {
         guard resourceUsageTask == nil else { return }
         resourceUsageTask = Task { @MainActor in
             while !Task.isCancelled {
-                resourceUsageMonitor.refresh()
+                await resourceUsageMonitor.refresh()
                 do {
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                 } catch {

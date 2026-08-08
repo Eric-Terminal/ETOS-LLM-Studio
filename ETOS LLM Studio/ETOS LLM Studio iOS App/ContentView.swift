@@ -67,6 +67,7 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidBecomeActive()
                     TTSManager.shared.setApplicationIsInBackground(false)
                     appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
@@ -76,6 +77,7 @@ struct ContentView: View {
                     }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidEnterBackground()
                     TTSManager.shared.setApplicationIsInBackground(true)
                     appLockManager.handleSceneDidEnterBackground()
                     ChatService.recordAppDidEnterBackground()

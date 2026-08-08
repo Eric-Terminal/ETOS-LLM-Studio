@@ -296,6 +296,9 @@ struct ContentView: View {
                 ChatService.recordAppDidEnterBackground()
                 didEnterBackgroundSinceLastActivation = true
                 Task {
+                    // watchOS 不提供 iOS 的通用后台收尾窗口；进入后台后立即把
+                    // 活跃 guest 任务标记为系统挂起，避免下次启动误认为仍在运行。
+                    await LocalLinuxJobScheduler.shared.interruptForSystemSuspension()
                     await AppConfigStore.shared.flushPendingWrites()
                 }
             default:

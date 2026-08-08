@@ -44,8 +44,14 @@ extension MCPIntegrationView {
 
     @ViewBuilder
     var moreSection: some View {
-        if !manager.restorableBuiltInServers.isEmpty {
-            Section(NSLocalizedString("更多", comment: "")) {
+        Section(NSLocalizedString("更多", comment: "")) {
+            NavigationLink {
+                MCPConfigurationTransferView()
+            } label: {
+                Label(NSLocalizedString("导入与导出配置", comment: "MCP configuration transfer link"), systemImage: "arrow.up.arrow.down.square")
+            }
+
+            if !manager.restorableBuiltInServers.isEmpty {
                 NavigationLink {
                     MCPBuiltInServerRestoreView()
                 } label: {
@@ -118,6 +124,8 @@ extension MCPIntegrationView {
             return (NSLocalizedString("HTTP", comment: "MCP server transport badge"), .blue)
         case .httpSSE:
             return (NSLocalizedString("SSE", comment: "MCP server transport badge"), .purple)
+        case .localStdio:
+            return (NSLocalizedString("本地", comment: "MCP server transport badge"), .green)
         case .oauth:
             return (NSLocalizedString("OAuth", comment: "MCP server transport badge"), .blue)
         }

@@ -1,0 +1,835 @@
+// ============================================================================
+// LocalLinuxRuntimeViews.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// iOS 用户终端、任务、recipe 与 guest 文件浏览器。
+// ============================================================================
+
+import ETOSCore
+import SwiftUI
+import UIKit
+
+struct LocalLinuxResourceStatusSection: View {
+    @ObservedObject private var monitor = LocalResourceUsageMonitor.shared
+
+    var body: some View {
+        Section {
+            LabeledContent(
+                NSLocalizedString("当前 App 进程", comment: "Local Linux process resource usage"),
+                value: monitor.snapshot.displayText
+            )
+            LabeledContent(
+                NSLocalizedString("温度状态", comment: "Local Linux thermal state"),
+                value: monitor.snapshot.thermalCondition.displayName
+            )
+        } header: {
+            Text(NSLocalizedString("资源状态", comment: "Local Linux resource status"))
+        } footer: {
+            Text(NSLocalizedString("资源与温度信息只用于提示，不会替你限制命令、终端、模型或并发数量。", comment: "Local Linux resource status footer"))
+        }
+        .task {
+            while !Task.isCancelled {
+                await monitor.refresh()
+                try? await Task<Never, Never>.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+}
+
+struct LocalLinuxTerminalView: View {
+    let sessionID: UUID?
+    let initialJobID: UUID?
+
+    @State private var job: LocalLinuxJob?
+    @State private var terminalJobs: [LocalLinuxJob] = []
+    @State private var inputOwner: LocalLinuxTerminalInputOwner?
+    @State private var output = ""
+    @State private var input = ""
+    @State private var errorMessage: String?
+    @State private var outputTask: Task<Void, Never>?
+
+    init(sessionID: UUID?, initialJobID: UUID? = nil) {
+        self.sessionID = sessionID
+        self.initialJobID = initialJobID
+    }
+
+    var body: some View {
+        VStack {
+            GeometryReader { proxy in
+                ScrollView {
+                    Text(output.isEmpty
+                         ? NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder")
+                         : output)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .defaultScrollAnchor(.bottom)
+                .onAppear { resize(for: proxy.size) }
+                .onChange(of: proxy.size) { _, size in resize(for: size) }
+            }
+
+            if let inputOwner {
+                Text(inputOwnerLabel(inputOwner))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    terminalKey(NSLocalizedString("Esc", comment: "Terminal escape key"), bytes: [0x1B])
+                    terminalKey(NSLocalizedString("Tab", comment: "Terminal tab key"), bytes: [0x09])
+                    terminalKey("↑", bytes: Array("\u{1B}[A".utf8))
+                    terminalKey("↓", bytes: Array("\u{1B}[B".utf8))
+                    terminalKey("←", bytes: Array("\u{1B}[D".utf8))
+                    terminalKey("→", bytes: Array("\u{1B}[C".utf8))
+                    terminalKey(NSLocalizedString("Ctrl-D", comment: "Terminal control D key"), bytes: [0x04])
+                }
+                .padding(.horizontal)
+            }
+
+            HStack {
+                TextField(NSLocalizedString("输入命令或终端内容", comment: "Linux terminal input"), text: $input)
+                    .font(.body.monospaced())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onSubmit(sendInput)
+                Button(action: sendInput) {
+                    Image(systemName: "return")
+                }
+                .accessibilityLabel(NSLocalizedString("发送到终端", comment: "Send terminal input"))
+                .disabled(job == nil)
+            }
+            .padding()
+        }
+        .navigationTitle(NSLocalizedString("终端", comment: "Linux terminal title"))
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    ForEach(terminalJobs) { terminal in
+                        Button(terminalLabel(terminal)) { attach(to: terminal) }
+                    }
+                    Divider()
+                    Button(NSLocalizedString("新建终端", comment: "Create Linux terminal")) {
+                        Task { await createTerminal() }
+                    }
+                } label: {
+                    Image(systemName: "terminal.fill")
+                }
+                .accessibilityLabel(NSLocalizedString("切换或新建终端", comment: "Switch or create Linux terminal"))
+
+                if inputOwner == .user, job?.runID != nil {
+                    Button(action: returnInputToAgent) {
+                        Image(systemName: "person.badge.clock")
+                    }
+                    .accessibilityLabel(NSLocalizedString("将输入交还 Agent", comment: "Return terminal input to Agent"))
+                }
+
+                Button {
+                    guard let job else { return }
+                    Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
+                } label: { Image(systemName: "exclamationmark") }
+                .accessibilityLabel(NSLocalizedString("中断前台程序", comment: "Interrupt terminal"))
+                .disabled(job == nil)
+
+                Button(role: .destructive) {
+                    guard let job else { return }
+                    Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
+                } label: { Image(systemName: "stop.fill") }
+                .accessibilityLabel(NSLocalizedString("结束终端", comment: "Cancel terminal"))
+                .disabled(job == nil)
+            }
+        }
+        .task { await openInitialTerminal() }
+        .onDisappear {
+            // 离开页面只停止界面订阅，终端本身继续运行。
+            outputTask?.cancel()
+        }
+        .alert(NSLocalizedString("终端错误", comment: "Linux terminal error"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private func openInitialTerminal() async {
+        guard job == nil, let sessionID else {
+            if sessionID == nil {
+                errorMessage = NSLocalizedString("请先打开一个会话。", comment: "Linux terminal needs session")
+            }
+            return
+        }
+        let active = await LocalLinuxJobScheduler.shared.activeJobs().filter {
+            $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
+        }
+        terminalJobs = active
+        if let initialJobID, let selected = active.first(where: { $0.id == initialJobID }) {
+            attach(to: selected)
+            return
+        }
+        for terminal in active {
+            if (try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: terminal.id)) == .user {
+                attach(to: terminal)
+                return
+            }
+        }
+        await createTerminal()
+    }
+
+    private func createTerminal() async {
+        guard let sessionID else { return }
+        do {
+            let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+            let started = try await LocalLinuxJobScheduler.shared.startTerminal(
+                context: nil,
+                workspace: workspace,
+                inputOwner: .user,
+                columns: 80,
+                rows: 24
+            )
+            terminalJobs.insert(started, at: 0)
+            attach(to: started)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func attach(to selected: LocalLinuxJob) {
+        job = selected
+        output = ""
+        outputTask?.cancel()
+        outputTask = Task {
+            inputOwner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
+            while !Task.isCancelled {
+                if let text = try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id) {
+                    output = text
+                }
+                if let current = await LocalLinuxJobScheduler.shared.job(id: selected.id) {
+                    job = current
+                    if current.state.isTerminal { break }
+                } else {
+                    break
+                }
+                try? await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
+            }
+            if let text = try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id) {
+                output = text
+            }
+            terminalJobs = await LocalLinuxJobScheduler.shared.activeJobs().filter {
+                $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
+            }
+        }
+    }
+
+    private func sendRaw(_ data: Data) {
+        guard let job, !data.isEmpty else { return }
+        Task {
+            do {
+                if inputOwner != .user {
+                    try await LocalLinuxJobScheduler.shared.claimTerminalInput(jobID: job.id, owner: .user)
+                    inputOwner = .user
+                }
+                try await LocalLinuxJobScheduler.shared.sendTerminalInput(
+                    jobID: job.id,
+                    owner: .user,
+                    data: data
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func terminalKey(_ title: String, bytes: [UInt8]) -> some View {
+        Button(title) { sendRaw(Data(bytes)) }
+            .buttonStyle(.bordered)
+            .disabled(job == nil)
+    }
+
+    private func resize(for size: CGSize) {
+        guard let job else { return }
+        let columns = UInt16(min(Int(UInt16.max), max(20, Int(size.width / 8))))
+        let rows = UInt16(min(Int(UInt16.max), max(5, Int(size.height / 19))))
+        Task { try? await LocalLinuxJobScheduler.shared.resizeTerminal(jobID: job.id, columns: columns, rows: rows) }
+    }
+
+    private func returnInputToAgent() {
+        guard let job, let runID = job.runID else { return }
+        Task {
+            do {
+                let owner = LocalLinuxTerminalInputOwner.agent(runID: runID)
+                try await LocalLinuxJobScheduler.shared.claimTerminalInput(jobID: job.id, owner: owner)
+                inputOwner = owner
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func inputOwnerLabel(_ owner: LocalLinuxTerminalInputOwner) -> String {
+        switch owner {
+        case .user:
+            return NSLocalizedString("输入由你控制", comment: "Terminal input controlled by user")
+        case .agent:
+            return NSLocalizedString("输入由 Agent 控制；开始输入即可接管", comment: "Terminal input controlled by Agent")
+        }
+    }
+
+    private func terminalLabel(_ terminal: LocalLinuxJob) -> String {
+        String(
+            format: NSLocalizedString("终端 %@", comment: "Linux terminal short label"),
+            String(terminal.id.uuidString.prefix(8))
+        )
+    }
+
+    private func sendInput() {
+        guard !input.isEmpty else { return }
+        let text = input + "\n"
+        input = ""
+        sendRaw(Data(text.utf8))
+    }
+}
+
+struct LocalLinuxJobsView: View {
+    private struct JobGroup: Identifiable, Sendable {
+        let sessionID: UUID?
+        let runID: UUID?
+        let jobs: [LocalLinuxJob]
+        var id: String { "\(sessionID?.uuidString ?? "device")/\(runID?.uuidString ?? "user")" }
+    }
+
+    let sessionID: UUID?
+    @State private var groups: [JobGroup] = []
+
+    var body: some View {
+        List {
+            if groups.isEmpty {
+                Text(NSLocalizedString("还没有本地 Agent 任务。", comment: "No local Agent jobs"))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.jobs) { job in
+                        NavigationLink {
+                            if job.kind == .terminal, !job.state.isTerminal {
+                                LocalLinuxTerminalView(sessionID: job.sessionID, initialJobID: job.id)
+                            } else {
+                                LocalLinuxJobDetailView(jobID: job.id)
+                            }
+                        } label: {
+                            VStack(alignment: .leading) {
+                                HStack {
+                                    Text(job.request.executable).font(.body.monospaced())
+                                    Spacer()
+                                    Text(job.state.displayName).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Text(job.kind.displayName).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .swipeActions {
+                            if !job.state.isTerminal {
+                                Button(NSLocalizedString("取消", comment: "Cancel"), role: .destructive) {
+                                    Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
+                                }
+                            }
+                        }
+                    }
+                    if let runID = group.runID,
+                       group.jobs.contains(where: { !$0.state.isTerminal }) {
+                        Button(NSLocalizedString("停止此 Agent", comment: "Stop this Linux Agent run"), role: .destructive) {
+                            Task { await ChatService.shared.stopConversationRun(runID) }
+                        }
+                    }
+                } header: {
+                    Text(groupTitle(group))
+                }
+            }
+
+            if groups.contains(where: { $0.jobs.contains(where: { !$0.state.isTerminal }) }) {
+                Section(NSLocalizedString("停止范围", comment: "Linux task cancellation scopes")) {
+                    if let sessionID {
+                        Button(NSLocalizedString("停止此会话的全部任务", comment: "Stop all Linux tasks in session"), role: .destructive) {
+                            Task { await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID) }
+                        }
+                    }
+                    Button(NSLocalizedString("停止全部本地任务", comment: "Stop all local Agent tasks"), role: .destructive) {
+                        Task { await LocalLinuxJobScheduler.shared.cancelAll() }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("任务与终端", comment: "Linux jobs title"))
+        .task {
+            while !Task.isCancelled {
+                await reload()
+                try? await Task<Never, Never>.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+
+    private func reload() async {
+        let jobs: [LocalLinuxJob]
+        if let sessionID {
+            jobs = await LocalLinuxJobScheduler.shared.jobs(sessionID: sessionID, limit: 100)
+        } else {
+            jobs = Persistence.loadLocalLinuxJobs()
+        }
+        groups = await Task.detached(priority: .utility) {
+            let grouped = Dictionary(grouping: jobs) { job in
+                "\(job.sessionID?.uuidString ?? "device")/\(job.runID?.uuidString ?? "user")"
+            }
+            return grouped.values.map { values in
+                JobGroup(
+                    sessionID: values.first?.sessionID,
+                    runID: values.first?.runID,
+                    jobs: values.sorted { $0.createdAt > $1.createdAt }
+                )
+            }.sorted { lhs, rhs in
+                (lhs.jobs.first?.createdAt ?? .distantPast) > (rhs.jobs.first?.createdAt ?? .distantPast)
+            }
+        }.value
+    }
+
+    private func groupTitle(_ group: JobGroup) -> String {
+        let sessionPrefix: String
+        if sessionID == nil, let groupSessionID = group.sessionID {
+            sessionPrefix = String(
+                format: NSLocalizedString("会话 %@ · ", comment: "Linux task session group prefix"),
+                String(groupSessionID.uuidString.prefix(8))
+            )
+        } else {
+            sessionPrefix = ""
+        }
+        if let runID = group.runID {
+            return sessionPrefix + String(
+                format: NSLocalizedString("Agent %@", comment: "Linux Agent run group title"),
+                String(runID.uuidString.prefix(8))
+            )
+        }
+        return sessionPrefix + NSLocalizedString("用户与长期进程", comment: "User and long-running Linux jobs group")
+    }
+}
+
+private struct LocalLinuxJobDetailView: View {
+    let jobID: UUID
+    @State private var job: LocalLinuxJob?
+    @State private var outputPage = LocalLinuxRawOutputPage(
+        cursor: LocalLinuxRawOutputCursor(),
+        text: "",
+        nextCursor: nil,
+        isComplete: true
+    )
+    @State private var cursorHistory: [LocalLinuxRawOutputCursor] = []
+
+    var body: some View {
+        Form {
+            if let job {
+                Section(NSLocalizedString("状态", comment: "Linux job status section")) {
+                    LabeledContent(NSLocalizedString("任务", comment: "Linux job ID"), value: job.id.uuidString)
+                    LabeledContent(NSLocalizedString("类型", comment: "Linux job kind"), value: job.kind.displayName)
+                    LabeledContent(NSLocalizedString("状态", comment: "Status"), value: job.state.displayName)
+                    LabeledContent(NSLocalizedString("工作目录", comment: "Linux working directory"), value: job.request.workingDirectory ?? "/")
+                    if let sessionID = job.sessionID {
+                        LabeledContent(NSLocalizedString("会话", comment: "Linux job session"), value: sessionID.uuidString)
+                    }
+                    if let runID = job.runID {
+                        LabeledContent(NSLocalizedString("Agent Run", comment: "Linux job Agent run"), value: runID.uuidString)
+                    }
+                    if let toolCallID = job.toolCallID {
+                        LabeledContent(NSLocalizedString("工具调用", comment: "Linux job tool call"), value: toolCallID)
+                    }
+                    if let completionReason = job.completionReason {
+                        LabeledContent(NSLocalizedString("完成原因", comment: "Linux job completion reason"), value: completionReason.displayName)
+                    }
+                    if let exitCode = job.exitCode {
+                        LabeledContent(NSLocalizedString("退出码", comment: "Linux exit code"), value: "\(exitCode)")
+                    }
+                    if let diagnosticID = job.diagnosticID {
+                        LabeledContent(NSLocalizedString("诊断编号", comment: "Linux diagnostic ID"), value: diagnosticID.uuidString)
+                    }
+                    if let match = job.request.commandRuleMatch {
+                        LabeledContent(NSLocalizedString("规则", comment: "Linux matched command rule"), value: match.ruleName)
+                        LabeledContent(NSLocalizedString("匹配内容", comment: "Linux matched command text"), value: match.matchedText)
+                        LabeledContent(NSLocalizedString("处理", comment: "Linux command rule action"), value: match.action.displayName)
+                    }
+                    LabeledContent(NSLocalizedString("stdout", comment: "Linux stdout bytes"), value: ByteCountFormatter.string(fromByteCount: Int64(clamping: job.stdoutBytes), countStyle: .file))
+                    LabeledContent(NSLocalizedString("stderr", comment: "Linux stderr bytes"), value: ByteCountFormatter.string(fromByteCount: Int64(clamping: job.stderrBytes), countStyle: .file))
+                }
+                Section(NSLocalizedString("原始输出", comment: "Linux raw output section")) {
+                    Text(outputPage.text.isEmpty ? NSLocalizedString("没有输出。", comment: "No Linux output") : outputPage.text)
+                        .font(.body.monospaced())
+                        .textSelection(.enabled)
+                    HStack {
+                        Button(NSLocalizedString("上一页", comment: "Previous Linux output page")) {
+                            guard let previous = cursorHistory.popLast() else { return }
+                            Task { await loadPage(cursor: previous) }
+                        }
+                        .disabled(cursorHistory.isEmpty)
+                        Spacer()
+                        Text(
+                            String(
+                                format: NSLocalizedString("第 %lld 页", comment: "Linux output page number"),
+                                Int64(cursorHistory.count + 1)
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(NSLocalizedString("下一页", comment: "Next Linux output page")) {
+                            guard let next = outputPage.nextCursor else { return }
+                            cursorHistory.append(outputPage.cursor)
+                            Task { await loadPage(cursor: next) }
+                        }
+                        .disabled(outputPage.nextCursor == nil)
+                    }
+                }
+            } else {
+                ProgressView()
+            }
+        }
+        .navigationTitle(NSLocalizedString("任务详情", comment: "Linux job detail title"))
+        .task {
+            while !Task.isCancelled {
+                await reload()
+                if job?.state.isTerminal == true { break }
+                try? await Task<Never, Never>.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+
+    private func reload() async {
+        job = await LocalLinuxJobScheduler.shared.job(id: jobID)
+        await loadPage(cursor: outputPage.cursor)
+    }
+
+    private func loadPage(cursor: LocalLinuxRawOutputCursor) async {
+        if let page = try? await LocalLinuxJobScheduler.shared.userVisibleOutputPage(
+            jobID: jobID,
+            cursor: cursor,
+            maximumBytes: 65_536
+        ) {
+            outputPage = page
+        }
+    }
+}
+
+struct LocalLinuxRecipesView: View {
+    let sessionID: UUID?
+    @State private var selectedRecipe: LocalLinuxEnvironmentRecipe?
+    @State private var result = ""
+    @State private var isRunning = false
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(LocalLinuxEnvironmentRecipes.all) { recipe in
+                    Button {
+                        selectedRecipe = recipe
+                    } label: {
+                        VStack(alignment: .leading) {
+                            Text(recipe.title).foregroundStyle(.primary)
+                            Text(recipe.detail).font(.caption).foregroundStyle(.secondary)
+                            Text(recipe.command).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRunning)
+                }
+            } footer: {
+                Text(NSLocalizedString("ETOS 默认不安装任何开发环境。点击后会先展示准确命令，由你确认后执行。", comment: "Linux recipes footer"))
+            }
+            if !result.isEmpty {
+                Section(NSLocalizedString("最近结果", comment: "Linux recipe result")) {
+                    Text(result).font(.caption.monospaced()).textSelection(.enabled)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("安装常用环境", comment: "Linux recipes title"))
+        .confirmationDialog(
+            selectedRecipe?.title ?? "",
+            isPresented: Binding(get: { selectedRecipe != nil }, set: { if !$0 { selectedRecipe = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let recipe = selectedRecipe {
+                Button(NSLocalizedString("复制命令", comment: "Copy Linux recipe command")) {
+                    UIPasteboard.general.string = recipe.command
+                }
+                Button(NSLocalizedString("执行此命令", comment: "Execute Linux recipe command")) {
+                    run(recipe)
+                }
+            }
+            Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(selectedRecipe?.confirmationDetail ?? "")
+        }
+    }
+
+    private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
+        selectedRecipe = nil
+        guard let sessionID else { return }
+        isRunning = true
+        Task {
+            defer { isRunning = false }
+            do {
+                let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+                let executable = "/bin/sh"
+                let request = LocalLinuxJobRequest(
+                    executable: executable,
+                    arguments: [executable, "-lc", recipe.command],
+                    workingDirectory: workspace.guestPath,
+                    timeoutSeconds: 0,
+                    outputLimitBytes: 0,
+                    shellScript: recipe.command
+                )
+                let match = await LocalLinuxApprovalPolicy.shared.evaluate(
+                    request: request,
+                    kind: .recipe,
+                    isEnabled: AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled)
+                )
+                let approvedRuleIDs: Set<UUID>
+                if let match, match.action == .confirm {
+                    approvedRuleIDs = [match.ruleID]
+                } else {
+                    approvedRuleIDs = []
+                }
+                let job = try await LocalLinuxJobScheduler.shared.runCommand(
+                    kind: .recipe,
+                    request: request,
+                    context: nil,
+                    workspace: workspace,
+                    approval: LocalLinuxCommandApproval(approvedRuleIDs: approvedRuleIDs)
+                )
+                result = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? job.state.rawValue
+            } catch {
+                result = error.localizedDescription
+            }
+        }
+    }
+}
+
+struct LocalLinuxFileBrowserView: View {
+    @State private var path = "/"
+    @State private var entries: [LocalLinuxGuestFileInfo] = []
+    @State private var selectedFilePath: String?
+    @State private var selectedFileContent = ""
+    @State private var selectedFileMode: UInt32 = 0o644
+    @State private var selectedFileIsEditable = false
+    @State private var pendingDelete: (path: String, isDirectory: Bool)?
+    @State private var errorMessage: String?
+    @State private var isLoading = false
+    @State private var nextCursor: UInt64 = 0
+    @State private var isDirectoryComplete = true
+
+    var body: some View {
+        List {
+            Section {
+                Text(path).font(.caption.monospaced()).textSelection(.enabled)
+                if path != "/" {
+                    Button {
+                        path = parentPath(path)
+                        Task { await reload() }
+                    } label: {
+                        Label(NSLocalizedString("上一级", comment: "Linux file browser parent"), systemImage: "arrow.up")
+                    }
+                }
+                Button(NSLocalizedString("删除当前目录…", comment: "Delete current Linux directory"), role: .destructive) {
+                    pendingDelete = (path, true)
+                }
+            }
+
+            Section {
+                if isLoading { ProgressView() }
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                    let name = entry.name ?? "?"
+                    Button {
+                        open(entry)
+                    } label: {
+                        HStack {
+                            Image(systemName: entry.isDirectory ? "folder" : "doc")
+                            VStack(alignment: .leading) {
+                                Text(name).foregroundStyle(.primary)
+                                if !entry.isDirectory {
+                                    Text(ByteCountFormatter.string(fromByteCount: Int64(clamping: entry.size), countStyle: .file))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) {
+                            pendingDelete = (childPath(path, name), entry.isDirectory)
+                        }
+                    }
+                }
+                if !isDirectoryComplete {
+                    Button(NSLocalizedString("加载更多", comment: "Load more Linux directory entries")) {
+                        Task { await loadDirectory(reset: false) }
+                    }
+                    .disabled(isLoading)
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("Linux 文件", comment: "Linux files title"))
+        .toolbar { Button(NSLocalizedString("刷新", comment: "Refresh")) { Task { await reload() } } }
+        .task { await reload() }
+        .sheet(isPresented: Binding(get: { selectedFilePath != nil }, set: { if !$0 { selectedFilePath = nil } })) {
+            NavigationStack {
+                Group {
+                    if selectedFileIsEditable {
+                        TextEditor(text: $selectedFileContent)
+                            .font(.body.monospaced())
+                            .padding()
+                    } else {
+                        ScrollView {
+                            Text(selectedFileContent)
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding()
+                        }
+                    }
+                }
+                .navigationTitle(URL(fileURLWithPath: selectedFilePath ?? "").lastPathComponent)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(NSLocalizedString("关闭", comment: "Close")) { selectedFilePath = nil }
+                    }
+                    if selectedFileIsEditable {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(NSLocalizedString("保存", comment: "Save"), action: saveSelectedFile)
+                        }
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            NSLocalizedString("删除 Linux 路径？", comment: "Delete Linux path confirmation"),
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive) { deletePending() }
+            Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("删除系统文件可能让 Linux 无法启动。此操作不会被硬拦截；需要时可回到设置重置系统。", comment: "Delete Linux file warning"))
+        }
+        .alert(NSLocalizedString("文件操作失败", comment: "Linux file operation failed"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private func reload() async {
+        await loadDirectory(reset: true)
+    }
+
+    private func loadDirectory(reset: Bool) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            _ = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .guestFileBrowser)
+            let page = try await iSHAppleBridgeAdapter.shared.listGuestDirectory(
+                path: path,
+                requestID: requestID(),
+                cursor: reset ? 0 : nextCursor,
+                maximumEntryCount: 512
+            )
+            let loaded = page.entries.filter { $0.name != "." && $0.name != ".." }
+            entries = reset ? loaded : entries + loaded
+            nextCursor = page.nextCursor
+            isDirectoryComplete = page.isComplete
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func open(_ entry: LocalLinuxGuestFileInfo) {
+        let target = childPath(path, entry.name ?? "")
+        if entry.isDirectory {
+            path = target
+            Task { await reload() }
+            return
+        }
+        Task {
+            do {
+                let result = try await iSHAppleBridgeAdapter.shared.readGuestFile(
+                    path: target,
+                    requestID: requestID(),
+                    offset: 0,
+                    maximumByteCount: 262_144
+                )
+                selectedFilePath = target
+                selectedFileMode = entry.mode & 0o777
+                selectedFileIsEditable = result.isComplete && !result.data.contains(0)
+                selectedFileContent = String(decoding: result.data, as: UTF8.self)
+                if !result.isComplete {
+                    selectedFileContent.append(NSLocalizedString("\n\n[文件较大，仅显示前 256 KiB；为避免覆盖未显示内容，当前预览不可编辑。]", comment: "Large Linux file preview notice"))
+                } else if result.data.contains(0) {
+                    selectedFileContent = String(
+                        format: NSLocalizedString("二进制文件，大小 %@。", comment: "Linux binary file preview"),
+                        ByteCountFormatter.string(fromByteCount: Int64(clamping: result.totalSize), countStyle: .file)
+                    )
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deletePending() {
+        guard let pendingDelete else { return }
+        self.pendingDelete = nil
+        Task {
+            do {
+                try await iSHAppleBridgeAdapter.shared.removeGuestFile(
+                    path: pendingDelete.path,
+                    requestID: requestID(),
+                    recursive: pendingDelete.isDirectory
+                )
+                if isCriticalSystemPath(pendingDelete.path) {
+                    try await LocalLinuxRuntimeController.shared.markSystemDamaged(
+                        reason: NSLocalizedString("用户删除了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。", comment: "Critical Linux system path deleted")
+                    )
+                }
+                await reload()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func childPath(_ parent: String, _ name: String) -> String {
+        parent == "/" ? "/\(name)" : "\(parent)/\(name)"
+    }
+
+    private func parentPath(_ path: String) -> String {
+        let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+        return parent.isEmpty ? "/" : parent
+    }
+
+    private func saveSelectedFile() {
+        guard let selectedFilePath, selectedFileIsEditable else { return }
+        let content = selectedFileContent
+        let mode = selectedFileMode
+        Task {
+            do {
+                try await iSHAppleBridgeAdapter.shared.writeGuestFile(
+                    path: selectedFilePath,
+                    requestID: requestID(),
+                    data: Data(content.utf8),
+                    mode: mode
+                )
+                self.selectedFilePath = nil
+                await reload()
+            } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func isCriticalSystemPath(_ path: String) -> Bool {
+        let critical = ["/", "/bin", "/etc", "/lib", "/sbin", "/usr"]
+        return critical.contains(path)
+    }
+
+    private func requestID() -> UInt64 {
+        max(1, UInt64(Date().timeIntervalSince1970 * 1_000_000))
+    }
+}

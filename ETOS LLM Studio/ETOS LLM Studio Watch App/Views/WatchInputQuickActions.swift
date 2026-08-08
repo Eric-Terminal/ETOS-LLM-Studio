@@ -43,7 +43,9 @@ extension WatchInputQuickAction {
         .shortcuts,
         .roleplay,
         .worldbook,
-        .extendedFeatures
+        .extendedFeatures,
+        .agentMode,
+        .localTerminal
     ]
 
     var title: String {
@@ -86,6 +88,10 @@ extension WatchInputQuickAction {
             return NSLocalizedString("世界书", comment: "Watch input quick action")
         case .extendedFeatures:
             return NSLocalizedString("拓展功能", comment: "Watch input quick action")
+        case .agentMode:
+            return NSLocalizedString("Chat / Agent", comment: "Watch input quick action")
+        case .localTerminal:
+            return NSLocalizedString("Linux 终端", comment: "Watch input quick action")
         }
     }
 
@@ -110,6 +116,8 @@ extension WatchInputQuickAction {
         case .roleplay: return "theatermasks"
         case .worldbook: return "book"
         case .extendedFeatures: return "ellipsis.circle"
+        case .agentMode: return "person.crop.circle.badge.gearshape"
+        case .localTerminal: return "terminal"
         }
     }
 
@@ -126,9 +134,9 @@ extension WatchInputQuickAction {
 
     var tint: Color {
         switch self {
-        case .requestControls, .agentSkills, .roleplay:
+        case .requestControls, .agentSkills, .roleplay, .agentMode:
             return .purple
-        case .sessionHistory, .addAttachment, .mcp:
+        case .sessionHistory, .addAttachment, .mcp, .localTerminal:
             return .blue
         case .contextCompression, .roleplayScripts, .temporaryChat, .extendedFeatures:
             return .indigo
@@ -339,7 +347,9 @@ extension ContentView {
              .shortcuts,
              .roleplay,
              .worldbook,
-             .extendedFeatures:
+             .extendedFeatures,
+             .agentMode,
+             .localTerminal:
             watchInputQuickActionDestination = action
         case .requestControls,
              .roleplayScripts,
@@ -375,6 +385,14 @@ extension ContentView {
             WorldbookSettingsView(viewModel: viewModel)
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
+        case .agentMode:
+            if let sessionID = viewModel.currentSession?.id {
+                LocalAgentModeWatchView(sessionID: sessionID)
+            } else {
+                EmptyView()
+            }
+        case .localTerminal:
+            LocalLinuxWatchTerminalView(sessionID: viewModel.currentSession?.id)
         case .requestControls,
              .sessionHistory,
              .contextCompression,

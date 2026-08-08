@@ -20,6 +20,9 @@ struct ThirdPartyImportView: View {
     @State private var conflictPreview: ConflictPreview = .empty
     @State private var includeProviders: Bool = true
     @State private var includeSessions: Bool = true
+    @State private var includeMCPServers: Bool = true
+    @State private var includeSkills: Bool = true
+    @State private var sensitiveCredentialsAcknowledged: Bool = false
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
     @State private var preparationRequestID: UUID?
@@ -86,6 +89,28 @@ struct ThirdPartyImportView: View {
                         title: NSLocalizedString("识别到会话", comment: "Parsed sessions row"),
                         value: "\(preparedResult.parsedSessionsCount)"
                     )
+                    if preparedResult.source == .openMinis {
+                        row(
+                            title: NSLocalizedString("识别到消息", comment: "Parsed OpenMinis messages row"),
+                            value: "\(preparedResult.parsedMessagesCount)"
+                        )
+                        row(
+                            title: NSLocalizedString("附件占位", comment: "OpenMinis attachment placeholders row"),
+                            value: "\(preparedResult.attachmentPlaceholderCount)"
+                        )
+                        row(
+                            title: NSLocalizedString("降级项", comment: "OpenMinis degraded items row"),
+                            value: "\(preparedResult.degradedItemCount)"
+                        )
+                        row(
+                            title: NSLocalizedString("识别到 MCP Server", comment: "Parsed MCP servers row"),
+                            value: "\(preparedResult.parsedMCPServersCount)"
+                        )
+                        row(
+                            title: NSLocalizedString("识别到 Skill", comment: "Recognized Skills row"),
+                            value: "\(preparedResult.parsedSkillsCount)"
+                        )
+                    }
                     if preparedResult.source != .etosBackup {
                         row(
                             title: NSLocalizedString("可能冲突提供商", comment: "Potential provider conflicts"),
@@ -123,6 +148,28 @@ struct ThirdPartyImportView: View {
                             Toggle(
                                 NSLocalizedString("导入会话记录", comment: "Import sessions toggle"),
                                 isOn: $includeSessions
+                            )
+                        }
+
+                        if preparedResult.parsedMCPServersCount > 0 {
+                            Toggle(
+                                NSLocalizedString("导入 MCP 配置", comment: "Import MCP configurations toggle"),
+                                isOn: $includeMCPServers
+                            )
+                        }
+
+                        if preparedResult.parsedSkillsCount > 0 {
+                            Toggle(
+                                NSLocalizedString("导入 Agent Skills", comment: "Import OpenMinis Skills toggle"),
+                                isOn: $includeSkills
+                            )
+                        }
+
+                        if preparedResult.containsSensitiveCredentials,
+                           (includeProviders || includeMCPServers) {
+                            Toggle(
+                                NSLocalizedString("我确认导入其中的敏感凭据", comment: "Confirm importing sensitive credentials toggle"),
+                                isOn: $sensitiveCredentialsAcknowledged
                             )
                         }
                     }
@@ -212,7 +259,7 @@ struct ThirdPartyImportView: View {
         .fileImporter(
             isPresented: $isFileImporterPresented,
             allowedContentTypes: allowedContentTypes,
-            allowsMultipleSelection: false
+            allowsMultipleSelection: selectedSource == .openMinis
         ) { result in
             handleFileSelection(result)
         }
@@ -232,7 +279,12 @@ struct ThirdPartyImportView: View {
         }
         let hasProviderSelection = includeProviders && preparedResult.parsedProvidersCount > 0
         let hasSessionSelection = includeSessions && preparedResult.parsedSessionsCount > 0
-        return hasProviderSelection || hasSessionSelection
+        let hasMCPSelection = includeMCPServers && preparedResult.parsedMCPServersCount > 0
+        let hasSkillSelection = includeSkills && preparedResult.parsedSkillsCount > 0
+        let hasSelection = hasProviderSelection || hasSessionSelection || hasMCPSelection || hasSkillSelection
+        let needsSensitiveConfirmation = preparedResult.containsSensitiveCredentials
+            && (hasProviderSelection || hasMCPSelection)
+        return hasSelection && (!needsSensitiveConfirmation || sensitiveCredentialsAcknowledged)
     }
 
     private var allowedContentTypes: [UTType] {
@@ -254,7 +306,7 @@ struct ThirdPartyImportView: View {
             append(snapshotType)
         }
 
-        if selectedSource == .cherryStudio || selectedSource == .rikkahub || selectedSource == .kelivo {
+        if selectedSource == .cherryStudio || selectedSource == .rikkahub || selectedSource == .kelivo || selectedSource == .openMinis {
             if let zipType = UTType(filenameExtension: "zip") {
                 append(zipType)
             }
@@ -280,22 +332,26 @@ struct ThirdPartyImportView: View {
             return NSLocalizedString("支持 ChatGPT 官方 conversations.json（可直接选文件或包含该文件的目录）。", comment: "ChatGPT source hint")
         case .chatbox:
             return NSLocalizedString("支持 ChatBox 导出的 chatbox-exported-data JSON，可导入提供商配置与会话记录。", comment: "ChatBox source hint")
+        case .openMinis:
+            return NSLocalizedString("支持 OpenMinis iOS/Android 会话 JSON/ZIP、Provider JSON、MCP JSON 与 Skill ZIP；Skill 需勾选后导入，且不会执行脚本或安装依赖。", comment: "OpenMinis source hint")
         }
     }
 
     private func handleFileSelection(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard let fileURL = urls.first else { return }
-            selectedFileName = fileURL.lastPathComponent
-            prepareImport(fileURL: fileURL, source: selectedSource)
+            guard !urls.isEmpty else { return }
+            selectedFileName = urls.count == 1
+                ? urls[0].lastPathComponent
+                : String(format: NSLocalizedString("已选择 %d 个文件", comment: "Selected migration files count"), urls.count)
+            prepareImport(fileURLs: urls, source: selectedSource)
 
         case .failure(let error):
             importError = error.localizedDescription
         }
     }
 
-    private func prepareImport(fileURL: URL, source: ThirdPartyImportSource) {
+    private func prepareImport(fileURLs: [URL], source: ThirdPartyImportSource) {
         isPreparing = true
         importError = nil
         importReport = nil
@@ -308,7 +364,7 @@ struct ThirdPartyImportView: View {
             do {
                 let prepared = try await ThirdPartyImportService.prepareImportInBackground(
                     source: source,
-                    fileURL: fileURL
+                    fileURLs: fileURLs
                 )
                 let preview = await Task.detached(priority: .userInitiated) {
                     ThirdPartyImportConflictPreviewBuilder.build(for: prepared.package)
@@ -318,6 +374,9 @@ struct ThirdPartyImportView: View {
                     preparedResult = prepared
                     includeProviders = prepared.package.options.contains(.providers)
                     includeSessions = prepared.package.options.contains(.sessions)
+                    includeMCPServers = prepared.package.options.contains(.mcpServers)
+                    includeSkills = prepared.package.options.contains(.skills)
+                    sensitiveCredentialsAcknowledged = false
                     conflictPreview = preview
                     isPreparing = false
                 }
@@ -371,6 +430,8 @@ struct ThirdPartyImportView: View {
         var options: SyncOptions = []
         let providers: [Provider]
         let sessions: [SyncedSession]
+        let mcpServers: [MCPServerConfiguration]
+        let skills: [SyncedSkillBundle]
 
         if includeProviders, preparedResult.parsedProvidersCount > 0 {
             options.insert(.providers)
@@ -384,6 +445,20 @@ struct ThirdPartyImportView: View {
             sessions = preparedResult.package.sessions
         } else {
             sessions = []
+        }
+
+        if includeMCPServers, preparedResult.parsedMCPServersCount > 0 {
+            options.insert(.mcpServers)
+            mcpServers = preparedResult.package.mcpServers
+        } else {
+            mcpServers = []
+        }
+
+        if includeSkills, preparedResult.parsedSkillsCount > 0 {
+            options.insert(.skills)
+            skills = preparedResult.package.skills
+        } else {
+            skills = []
         }
 
         guard !options.isEmpty else {
@@ -400,7 +475,9 @@ struct ThirdPartyImportView: View {
             let scopedPackage = SyncPackage(
                 options: options,
                 providers: providers,
-                sessions: sessions
+                sessions: sessions,
+                mcpServers: mcpServers,
+                skills: skills
             )
 
             let summary = await Task.detached(priority: .userInitiated) {
@@ -430,6 +507,9 @@ struct ThirdPartyImportView: View {
         conflictPreview = .empty
         includeProviders = true
         includeSessions = true
+        includeMCPServers = true
+        includeSkills = true
+        sensitiveCredentialsAcknowledged = false
     }
 
     private func syncOptionSummary(_ options: SyncOptions) -> String {
@@ -441,7 +521,7 @@ struct ThirdPartyImportView: View {
         if options.contains(.mcpServers) { items.append(NSLocalizedString("MCP 服务器", comment: "")) }
         if options.contains(.audioFiles) { items.append(NSLocalizedString("音频文件", comment: "")) }
         if options.contains(.imageFiles) { items.append(NSLocalizedString("图片文件", comment: "")) }
-        if options.contains(.skills) { items.append("Agent Skills") }
+        if options.contains(.skills) { items.append(NSLocalizedString("Agent Skills", comment: "Agent Skills sync option")) }
         if options.contains(.shortcutTools) { items.append(NSLocalizedString("快捷指令工具", comment: "")) }
         if options.contains(.worldbooks) { items.append(NSLocalizedString("世界书", comment: "")) }
         if options.contains(.feedbackTickets) { items.append(NSLocalizedString("反馈工单", comment: "")) }
@@ -456,7 +536,7 @@ struct ThirdPartyImportView: View {
     private func progressRow(text: String) -> some View {
         HStack(spacing: 8) {
             ProgressView()
-            Text(NSLocalizedString(text, comment: "导入进度文本"))
+            Text(text)
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -464,7 +544,7 @@ struct ThirdPartyImportView: View {
 
     private func row(title: String, value: String) -> some View {
         HStack {
-            Text(NSLocalizedString(title, comment: "导入信息行标题"))
+            Text(title)
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)

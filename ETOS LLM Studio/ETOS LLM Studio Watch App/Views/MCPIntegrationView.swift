@@ -228,8 +228,14 @@ struct MCPIntegrationView: View {
 
     @ViewBuilder
     private var moreSection: some View {
-        if !manager.restorableBuiltInServers.isEmpty {
-            Section(NSLocalizedString("更多", comment: "")) {
+        Section(NSLocalizedString("更多", comment: "")) {
+            NavigationLink {
+                MCPConfigurationTransferWatchView()
+            } label: {
+                Label(NSLocalizedString("导入与导出配置", comment: "MCP configuration transfer link"), systemImage: "arrow.up.arrow.down.square")
+            }
+
+            if !manager.restorableBuiltInServers.isEmpty {
                 NavigationLink {
                     MCPBuiltInServerRestoreView()
                 } label: {

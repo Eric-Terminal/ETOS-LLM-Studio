@@ -19,6 +19,9 @@ struct ThirdPartyImportWatchHintView: View {
     @State private var conflictPreview: ConflictPreview = .empty
     @State private var includeProviders: Bool = true
     @State private var includeSessions: Bool = true
+    @State private var includeMCPServers: Bool = true
+    @State private var includeSkills: Bool = true
+    @State private var sensitiveCredentialsAcknowledged: Bool = false
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
     @State private var preparationRequestID: UUID?
@@ -53,18 +56,21 @@ struct ThirdPartyImportWatchHintView: View {
                 .disabled(isBusy || importURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 if !selectedFileName.isEmpty {
-                    row(title: "最近解析", value: selectedFileName)
+                    row(title: NSLocalizedString("最近解析", comment: "Last parsed import row"), value: selectedFileName)
                 }
 
                 if isPreparing {
-                    progressRow(text: "正在下载并解析...", downloadProgress: preparationDownloadProgress)
+                    progressRow(
+                        text: NSLocalizedString("正在下载并解析...", comment: "Watch import download progress"),
+                        downloadProgress: preparationDownloadProgress
+                    )
                 }
 
                 if isImporting {
-                    progressRow(text: "正在导入并合并数据...")
+                    progressRow(text: NSLocalizedString("正在导入并合并数据...", comment: "Watch import progress"))
                 }
 
-                Text(NSLocalizedString("支持 http/https 的 .json 或 .elsbackup 链接。", comment: ""))
+                Text(linkFormatHint(for: selectedSource))
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -72,15 +78,22 @@ struct ThirdPartyImportWatchHintView: View {
             if let preparedResult {
                 Section(NSLocalizedString("解析预览", comment: "")) {
                     if preparedResult.source == .etosBackup {
-                        row(title: "导出同步项", value: syncOptionSummary(preparedResult.package.options))
+                        row(title: NSLocalizedString("导出同步项", comment: ""), value: syncOptionSummary(preparedResult.package.options))
                     }
-                    row(title: "识别到提供商", value: "\(preparedResult.parsedProvidersCount)")
-                    row(title: "识别到会话", value: "\(preparedResult.parsedSessionsCount)")
+                    row(title: NSLocalizedString("识别到提供商", comment: ""), value: "\(preparedResult.parsedProvidersCount)")
+                    row(title: NSLocalizedString("识别到会话", comment: ""), value: "\(preparedResult.parsedSessionsCount)")
+                    if preparedResult.source == .openMinis {
+                        row(title: NSLocalizedString("识别到消息", comment: "Parsed OpenMinis messages row"), value: "\(preparedResult.parsedMessagesCount)")
+                        row(title: NSLocalizedString("附件占位", comment: "OpenMinis attachment placeholders row"), value: "\(preparedResult.attachmentPlaceholderCount)")
+                        row(title: NSLocalizedString("降级项", comment: "OpenMinis degraded items row"), value: "\(preparedResult.degradedItemCount)")
+                        row(title: NSLocalizedString("识别到 MCP Server", comment: ""), value: "\(preparedResult.parsedMCPServersCount)")
+                        row(title: NSLocalizedString("识别到 Skill", comment: "Recognized Skills row"), value: "\(preparedResult.parsedSkillsCount)")
+                    }
                     if preparedResult.source != .etosBackup {
-                        row(title: "可能冲突提供商", value: "\(conflictPreview.providerConflicts)")
-                        row(title: "可能冲突会话", value: "\(conflictPreview.sessionConflicts)")
-                        row(title: "预计新增提供商", value: "\(conflictPreview.providerAdds)")
-                        row(title: "预计新增会话", value: "\(conflictPreview.sessionAdds)")
+                        row(title: NSLocalizedString("可能冲突提供商", comment: ""), value: "\(conflictPreview.providerConflicts)")
+                        row(title: NSLocalizedString("可能冲突会话", comment: ""), value: "\(conflictPreview.sessionConflicts)")
+                        row(title: NSLocalizedString("预计新增提供商", comment: ""), value: "\(conflictPreview.providerAdds)")
+                        row(title: NSLocalizedString("预计新增会话", comment: ""), value: "\(conflictPreview.sessionAdds)")
                     }
                 }
 
@@ -96,6 +109,19 @@ struct ThirdPartyImportWatchHintView: View {
 
                         if preparedResult.parsedSessionsCount > 0 {
                             Toggle(NSLocalizedString("导入会话记录", comment: ""), isOn: $includeSessions)
+                        }
+                        if preparedResult.parsedMCPServersCount > 0 {
+                            Toggle(NSLocalizedString("导入 MCP 配置", comment: ""), isOn: $includeMCPServers)
+                        }
+                        if preparedResult.parsedSkillsCount > 0 {
+                            Toggle(NSLocalizedString("导入 Agent Skills", comment: "Import OpenMinis Skills toggle"), isOn: $includeSkills)
+                        }
+                        if preparedResult.containsSensitiveCredentials,
+                           (includeProviders || includeMCPServers) {
+                            Toggle(
+                                NSLocalizedString("确认导入敏感凭据", comment: ""),
+                                isOn: $sensitiveCredentialsAcknowledged
+                            )
                         }
                     }
 
@@ -120,12 +146,12 @@ struct ThirdPartyImportWatchHintView: View {
 
             if let importReport {
                 Section(NSLocalizedString("最近导入结果", comment: "")) {
-                    row(title: "本次解析提供商", value: "\(importReport.parsedProvidersCount)")
-                    row(title: "本次解析会话", value: "\(importReport.parsedSessionsCount)")
-                    row(title: "新增提供商", value: "\(importReport.summary.importedProviders)")
-                    row(title: "跳过提供商", value: "\(importReport.summary.skippedProviders)")
-                    row(title: "新增会话", value: "\(importReport.summary.importedSessions)")
-                    row(title: "跳过会话", value: "\(importReport.summary.skippedSessions)")
+                    row(title: NSLocalizedString("本次解析提供商", comment: "Parsed providers in selected scope row"), value: "\(importReport.parsedProvidersCount)")
+                    row(title: NSLocalizedString("本次解析会话", comment: "Parsed sessions in selected scope row"), value: "\(importReport.parsedSessionsCount)")
+                    row(title: NSLocalizedString("新增提供商", comment: "Imported providers row"), value: "\(importReport.summary.importedProviders)")
+                    row(title: NSLocalizedString("跳过提供商", comment: "Skipped providers row"), value: "\(importReport.summary.skippedProviders)")
+                    row(title: NSLocalizedString("新增会话", comment: "Imported sessions row"), value: "\(importReport.summary.importedSessions)")
+                    row(title: NSLocalizedString("跳过会话", comment: "Skipped sessions row"), value: "\(importReport.summary.skippedSessions)")
                 }
 
                 if !importReport.warnings.isEmpty {
@@ -164,7 +190,12 @@ struct ThirdPartyImportWatchHintView: View {
         }
         let hasProviderSelection = includeProviders && preparedResult.parsedProvidersCount > 0
         let hasSessionSelection = includeSessions && preparedResult.parsedSessionsCount > 0
-        return hasProviderSelection || hasSessionSelection
+        let hasMCPSelection = includeMCPServers && preparedResult.parsedMCPServersCount > 0
+        let hasSkillSelection = includeSkills && preparedResult.parsedSkillsCount > 0
+        let hasSelection = hasProviderSelection || hasSessionSelection || hasMCPSelection || hasSkillSelection
+        let needsSensitiveConfirmation = preparedResult.containsSensitiveCredentials
+            && (hasProviderSelection || hasMCPSelection)
+        return hasSelection && (!needsSensitiveConfirmation || sensitiveCredentialsAcknowledged)
     }
 
     private func sourceHint(for source: ThirdPartyImportSource) -> String {
@@ -181,6 +212,19 @@ struct ThirdPartyImportWatchHintView: View {
             return NSLocalizedString("支持 ChatGPT 官方 conversations.json。", comment: "")
         case .chatbox:
             return NSLocalizedString("支持 ChatBox 导出的 chatbox-exported-data JSON，可导入提供商配置与会话记录。", comment: "")
+        case .openMinis:
+            return NSLocalizedString("支持 OpenMinis 会话、Provider、MCP 与 Skill 的 JSON/ZIP；Skill 不会自动执行。", comment: "OpenMinis Watch import hint")
+        }
+    }
+
+    private func linkFormatHint(for source: ThirdPartyImportSource) -> String {
+        switch source {
+        case .etosBackup:
+            return NSLocalizedString("支持 http/https 的 .json 或 .elsbackup 链接。", comment: "Watch ETOS import URL formats")
+        case .openMinis:
+            return NSLocalizedString("支持 http/https 的 .json 或 .zip 链接。", comment: "Watch OpenMinis import URL formats")
+        default:
+            return NSLocalizedString("支持 http/https 的 .json 链接。", comment: "Watch third-party import URL formats")
         }
     }
 
@@ -268,6 +312,9 @@ struct ThirdPartyImportWatchHintView: View {
                     preparedResult = prepared
                     includeProviders = prepared.package.options.contains(.providers)
                     includeSessions = prepared.package.options.contains(.sessions)
+                    includeMCPServers = prepared.package.options.contains(.mcpServers)
+                    includeSkills = prepared.package.options.contains(.skills)
+                    sensitiveCredentialsAcknowledged = false
                     conflictPreview = preview
                     isPreparing = false
                     preparationDownloadProgress = nil
@@ -323,6 +370,8 @@ struct ThirdPartyImportWatchHintView: View {
         var options: SyncOptions = []
         let providers: [Provider]
         let sessions: [SyncedSession]
+        let mcpServers: [MCPServerConfiguration]
+        let skills: [SyncedSkillBundle]
 
         if includeProviders, preparedResult.parsedProvidersCount > 0 {
             options.insert(.providers)
@@ -336,6 +385,20 @@ struct ThirdPartyImportWatchHintView: View {
             sessions = preparedResult.package.sessions
         } else {
             sessions = []
+        }
+
+        if includeMCPServers, preparedResult.parsedMCPServersCount > 0 {
+            options.insert(.mcpServers)
+            mcpServers = preparedResult.package.mcpServers
+        } else {
+            mcpServers = []
+        }
+
+        if includeSkills, preparedResult.parsedSkillsCount > 0 {
+            options.insert(.skills)
+            skills = preparedResult.package.skills
+        } else {
+            skills = []
         }
 
         guard !options.isEmpty else {
@@ -352,7 +415,9 @@ struct ThirdPartyImportWatchHintView: View {
             let scopedPackage = SyncPackage(
                 options: options,
                 providers: providers,
-                sessions: sessions
+                sessions: sessions,
+                mcpServers: mcpServers,
+                skills: skills
             )
 
             let summary = await Task.detached(priority: .userInitiated) {
@@ -384,6 +449,9 @@ struct ThirdPartyImportWatchHintView: View {
         conflictPreview = .empty
         includeProviders = true
         includeSessions = true
+        includeMCPServers = true
+        includeSkills = true
+        sensitiveCredentialsAcknowledged = false
     }
 
     @ViewBuilder
@@ -393,7 +461,7 @@ struct ThirdPartyImportWatchHintView: View {
                 if downloadProgress?.totalBytes ?? 0 <= 0 {
                     ProgressView()
                 }
-                Text(NSLocalizedString(text, comment: "导入进度文本"))
+                Text(text)
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -422,7 +490,7 @@ struct ThirdPartyImportWatchHintView: View {
 
     private func row(title: String, value: String) -> some View {
         HStack {
-            Text(NSLocalizedString(title, comment: "导入信息行标题"))
+            Text(title)
             Spacer()
             Text(value)
                 .foregroundStyle(.secondary)
@@ -439,7 +507,7 @@ struct ThirdPartyImportWatchHintView: View {
         if options.contains(.mcpServers) { items.append(NSLocalizedString("MCP 服务器", comment: "")) }
         if options.contains(.audioFiles) { items.append(NSLocalizedString("音频文件", comment: "")) }
         if options.contains(.imageFiles) { items.append(NSLocalizedString("图片文件", comment: "")) }
-        if options.contains(.skills) { items.append("Agent Skills") }
+        if options.contains(.skills) { items.append(NSLocalizedString("Agent Skills", comment: "Agent Skills sync option")) }
         if options.contains(.shortcutTools) { items.append(NSLocalizedString("快捷指令工具", comment: "")) }
         if options.contains(.worldbooks) { items.append(NSLocalizedString("世界书", comment: "")) }
         if options.contains(.feedbackTickets) { items.append(NSLocalizedString("反馈工单", comment: "")) }
