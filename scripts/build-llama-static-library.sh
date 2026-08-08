@@ -195,6 +195,7 @@ PRODUCT_STAMP="$PRODUCT_DIR/libetos-llama.stamp"
 DEPLOYMENT_TARGET="default"
 ISH_ENABLED=0
 ISH_REVISION="none"
+ISH_WORKTREE_FINGERPRINT="none"
 ISH_PRODUCT_LIBRARY=""
 # 默认只保留最终链接库，避免 CMake 中间目录和单架构临时库长期占盘。
 KEEP_CMAKE_BUILD="${ETOS_LLAMA_KEEP_CMAKE_BUILD:-0}"
@@ -224,10 +225,21 @@ case "$SDK_FAMILY" in
             exit 1
         fi
         ISH_REVISION="$(git -C "$ISH_SOURCE_PATH" rev-parse HEAD)"
+        ISH_WORKTREE_FINGERPRINT="$(
+            cd "$ISH_SOURCE_PATH"
+            {
+                git diff --binary HEAD --
+                git ls-files --others --exclude-standard | LC_ALL=C sort | while IFS= read -r source_file; do
+                    [ -f "$source_file" ] || continue
+                    printf 'untracked:%s\n' "$source_file"
+                    shasum -a 256 "$source_file"
+                done
+            } | shasum -a 256 | awk '{print $1}'
+        )"
         ;;
 esac
 
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION ish_worktree=$ISH_WORKTREE_FINGERPRINT"
 
 cleanup_intermediates() {
     if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
@@ -327,7 +339,7 @@ for arch in $REQUESTED_ARCHS; do
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION ish_worktree=$ISH_WORKTREE_FINGERPRINT"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||

@@ -26,8 +26,19 @@ if ! command -v ninja >/dev/null 2>&1; then
 fi
 
 ISH_REVISION=$(git -C "$ISH_SOURCE_PATH" rev-parse HEAD)
+ISH_WORKTREE_FINGERPRINT=$(
+    cd "$ISH_SOURCE_PATH"
+    {
+        git diff --binary HEAD --
+        git ls-files --others --exclude-standard | LC_ALL=C sort | while IFS= read -r source_file; do
+            [[ -f "$source_file" ]] || continue
+            printf 'untracked:%s\n' "$source_file"
+            shasum -a 256 "$source_file"
+        done
+    } | shasum -a 256 | awk '{print $1}'
+)
 XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')
-SIGNATURE="ish=$ISH_REVISION xcode=$XCODE_VERSION gate=apple-core-v1"
+SIGNATURE="ish=$ISH_REVISION worktree=$ISH_WORKTREE_FINGERPRINT xcode=$XCODE_VERSION gate=apple-core-v1"
 
 products_are_current() {
     [[ -f "$STAMP_PATH" && "$(<"$STAMP_PATH")" == "$SIGNATURE" ]] || return 1
