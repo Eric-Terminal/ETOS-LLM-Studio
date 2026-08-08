@@ -140,6 +140,22 @@ public extension Persistence {
         (try? activeGRDBStore()?.loadLocalLinuxJobs(activeOnly: activeOnly, sessionID: sessionID)) ?? []
     }
 
+    static func loadLocalLinuxJob(id: UUID) -> LocalLinuxJob? {
+        try? activeGRDBStore()?.loadLocalLinuxJob(id: id)
+    }
+
+    static func loadLocalLinuxJobHistoryPage(
+        sessionID: UUID? = nil,
+        cursor: LocalLinuxJobCursor? = nil,
+        limit: Int
+    ) -> (jobs: [LocalLinuxJob], nextCursor: LocalLinuxJobCursor?) {
+        (try? activeGRDBStore()?.loadLocalLinuxJobHistoryPage(
+            sessionID: sessionID,
+            cursor: cursor,
+            limit: limit
+        )) ?? ([], nil)
+    }
+
     @discardableResult
     static func saveLocalLinuxJob(_ job: LocalLinuxJob) -> Bool {
         do {

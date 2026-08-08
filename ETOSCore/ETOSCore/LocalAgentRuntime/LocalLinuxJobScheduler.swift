@@ -70,8 +70,34 @@ public actor LocalLinuxJobScheduler {
         let externalJobs = Persistence.loadLocalLinuxJobs(activeOnly: true).filter {
             ($0.kind == .localMCP || $0.kind == .browser) && activeCommands[$0.id] == nil
         }
-        return (activeCommands.values.map(\.job) + activeTerminals.values.map(\.job) + externalJobs)
-            .sorted { $0.createdAt > $1.createdAt }
+        return Self.orderedJobs(
+            activeCommands.values.map(\.job) + activeTerminals.values.map(\.job) + externalJobs
+        )
+    }
+
+    public static func orderedJobs(_ jobs: [LocalLinuxJob]) -> [LocalLinuxJob] {
+        jobs.sorted {
+            jobComesBefore($0, $1)
+        }
+    }
+
+    public static func orderedJobGroups(_ jobs: [LocalLinuxJob]) -> [[LocalLinuxJob]] {
+        Dictionary(grouping: jobs) {
+            "\($0.sessionID?.uuidString ?? "device")/\($0.runID?.uuidString ?? "user")"
+        }.values
+            .map { orderedJobs($0) }
+            .sorted { lhs, rhs in
+                guard let left = lhs.first else { return false }
+                guard let right = rhs.first else { return true }
+                return jobComesBefore(left, right)
+            }
+    }
+
+    private static func jobComesBefore(_ lhs: LocalLinuxJob, _ rhs: LocalLinuxJob) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt > rhs.createdAt
+        }
+        return lhs.id.uuidString > rhs.id.uuidString
     }
 
     public func hasActiveJobs() -> Bool {
@@ -85,11 +111,26 @@ public actor LocalLinuxJobScheduler {
     public func job(id: UUID) -> LocalLinuxJob? {
         if let command = activeCommands[id] { return command.job }
         if let terminal = activeTerminals[id] { return terminal.job }
-        return Persistence.loadLocalLinuxJobs().first(where: { $0.id == id })
+        return Persistence.loadLocalLinuxJob(id: id)
     }
 
-    public func jobs(sessionID: UUID, limit: Int = 50) -> [LocalLinuxJob] {
-        Array(Persistence.loadLocalLinuxJobs(sessionID: sessionID).prefix(max(1, limit)))
+    /// 活跃任务不分页；只给终态历史加 cursor，避免较早活跃任务被历史淹没。
+    public func jobsPage(
+        sessionID: UUID? = nil,
+        cursor: LocalLinuxJobCursor? = nil,
+        historyLimit: Int = 50
+    ) -> LocalLinuxJobPage {
+        let active = activeJobs().filter { sessionID == nil || $0.sessionID == sessionID }
+        let history = Persistence.loadLocalLinuxJobHistoryPage(
+            sessionID: sessionID,
+            cursor: cursor,
+            limit: historyLimit
+        )
+        return LocalLinuxJobPage(
+            activeJobs: active,
+            historyJobs: history.jobs,
+            nextCursor: history.nextCursor
+        )
     }
 
     public func modelOutput(jobID: UUID, maximumBytes: Int) async throws -> String {

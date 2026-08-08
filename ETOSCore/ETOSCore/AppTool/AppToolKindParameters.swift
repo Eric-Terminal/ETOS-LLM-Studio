@@ -399,6 +399,14 @@ extension AppToolKind {
                     "max_lines": .dictionary([
                         "type": .string("integer"),
                         "description": .string(NSLocalizedString("最多读取行数，默认 200，最大 1000。", comment: "Read sandbox file chunk max lines parameter description"))
+                    ]),
+                    "byte_offset": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("可选字节 cursor。传入上次返回的 nextByteOffset，可继续读取超长单行而不重复扫描前缀。", comment: "Read sandbox file chunk byte cursor parameter description"))
+                    ]),
+                    "max_bytes": .dictionary([
+                        "type": .string("integer"),
+                        "description": .string(NSLocalizedString("本页最多返回的文本字节数，默认 262144，最大 1048576。", comment: "Read sandbox file chunk byte budget parameter description"))
                     ])
                 ]),
                 "required": .array([.string("path")])

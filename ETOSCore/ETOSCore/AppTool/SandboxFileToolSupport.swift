@@ -128,7 +128,8 @@ public enum SandboxFileToolSupport {
                 let restoreData = previousData
                 pushUndoEntry(
                     rootDirectory: rootDirectory,
-                    operation: "write_sandbox_file"
+                    operation: "write_sandbox_file",
+                    rollbackURLs: [fileURL]
                 ) {
                     if let restoreData {
                         try restoreData.write(to: fileURL, options: [.atomic])
@@ -141,7 +142,8 @@ public enum SandboxFileToolSupport {
             } else {
                 pushUndoEntry(
                     rootDirectory: rootDirectory,
-                    operation: "write_sandbox_file"
+                    operation: "write_sandbox_file",
+                    rollbackURLs: [fileURL]
                 ) {
                     if FileManager.default.fileExists(atPath: fileURL.path) {
                         try FileManager.default.removeItem(at: fileURL)
@@ -246,6 +248,7 @@ public enum SandboxFileToolSupport {
         pushUndoEntry(
             rootDirectory: rootDirectory,
             operation: "delete_sandbox_item",
+            rollbackURLs: [targetURL],
             discard: { try? FileManager.default.removeItem(at: backupURL) }
         ) {
             guard !FileManager.default.fileExists(atPath: targetURL.path) else {
@@ -319,7 +322,8 @@ public enum SandboxFileToolSupport {
 
         pushUndoEntry(
             rootDirectory: rootDirectory,
-            operation: "create_sandbox_directory"
+            operation: "create_sandbox_directory",
+            rollbackURLs: [directoryURL]
         ) {
             if FileManager.default.fileExists(atPath: directoryURL.path) {
                 try FileManager.default.removeItem(at: directoryURL)
@@ -362,6 +366,9 @@ public enum SandboxFileToolSupport {
                 throw SandboxFileToolError.cannotCopyIntoSelf
             }
         }
+        if sourceURL.standardizedFileURL.path.hasPrefix(destinationURL.standardizedFileURL.path + "/") {
+            throw SandboxFileToolError.destinationContainsSource
+        }
 
         let destinationParent = destinationURL.deletingLastPathComponent()
         var parentIsDirectory: ObjCBool = false
@@ -394,17 +401,20 @@ public enum SandboxFileToolSupport {
             guard overwrite else {
                 throw SandboxFileToolError.destinationAlreadyExists(destinationDisplayPath)
             }
-            overwrittenBackupURL = try backupItem(at: destinationURL)
-            try FileManager.default.removeItem(at: destinationURL)
         }
-
-        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        overwrittenBackupURL = try copyItemThroughStaging(
+            from: sourceURL,
+            to: destinationURL,
+            destinationExists: destinationExists,
+            sourceIsDirectory: sourceIsDirectory.boolValue
+        )
         StorageUtility.notifyFilesystemMutation(at: destinationURL)
 
         let backupURLForUndo = overwrittenBackupURL
         pushUndoEntry(
             rootDirectory: rootDirectory,
             operation: "copy_sandbox_item",
+            rollbackURLs: [destinationURL],
             discard: {
                 if let backupURLForUndo {
                     try? FileManager.default.removeItem(at: backupURLForUndo)

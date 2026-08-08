@@ -134,6 +134,8 @@ extension AppToolManager {
             let path: String
             let start_line: Int?
             let max_lines: Int?
+            let byte_offset: UInt64?
+            let max_bytes: Int?
         }
 
         guard let argsData = argumentsJSON.data(using: .utf8),
@@ -147,16 +149,21 @@ extension AppToolManager {
             try SandboxFileToolSupport.readTextFileChunk(
                 relativePath: args.path,
                 startLine: args.start_line ?? 1,
-                maxLines: args.max_lines ?? 200
+                maxLines: args.max_lines ?? 200,
+                byteOffset: args.byte_offset,
+                maxBytes: args.max_bytes ?? 262_144
             )
         }
         let payload: [String: Any] = [
             "path": result.path,
             "startLine": result.startLine,
             "endLine": result.endLine,
-            "totalLines": result.totalLines,
+            "totalLines": result.totalLines.map { $0 as Any } ?? NSNull(),
             "hasMore": result.hasMore,
-            "content": result.content
+            "content": result.content,
+            "contentTruncated": result.contentTruncated,
+            "nextByteOffset": result.nextByteOffset.map { $0 as Any } ?? NSNull(),
+            "nextStartLine": result.nextStartLine.map { $0 as Any } ?? NSNull()
         ]
         return prettyPrintedJSONString(from: payload)
     }

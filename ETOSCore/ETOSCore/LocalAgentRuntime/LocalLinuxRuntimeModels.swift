@@ -377,6 +377,45 @@ public struct LocalLinuxJob: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// 按 `created_at DESC, id DESC` 稳定翻页；编码值只作为工具协议中的不透明 cursor。
+public struct LocalLinuxJobCursor: Codable, Equatable, Sendable {
+    public let createdAt: Date
+    public let id: UUID
+
+    public init(createdAt: Date, id: UUID) {
+        self.createdAt = createdAt
+        self.id = id
+    }
+
+    public init?(encoded: String) {
+        let parts = encoded.split(separator: ".", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let bits = UInt64(parts[0], radix: 16),
+              let id = UUID(uuidString: parts[1]) else { return nil }
+        self.init(createdAt: Date(timeIntervalSince1970: Double(bitPattern: bits)), id: id)
+    }
+
+    public var encoded: String {
+        String(createdAt.timeIntervalSince1970.bitPattern, radix: 16) + "." + id.uuidString
+    }
+}
+
+public struct LocalLinuxJobPage: Equatable, Sendable {
+    public let activeJobs: [LocalLinuxJob]
+    public let historyJobs: [LocalLinuxJob]
+    public let nextCursor: LocalLinuxJobCursor?
+
+    public init(
+        activeJobs: [LocalLinuxJob],
+        historyJobs: [LocalLinuxJob],
+        nextCursor: LocalLinuxJobCursor?
+    ) {
+        self.activeJobs = activeJobs
+        self.historyJobs = historyJobs
+        self.nextCursor = nextCursor
+    }
+}
+
 public struct AgentRuntimeContext: Codable, Equatable, Sendable {
     public let sessionID: UUID
     public let runID: UUID?

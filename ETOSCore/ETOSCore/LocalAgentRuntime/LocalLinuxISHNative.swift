@@ -236,6 +236,12 @@ func etosISHGuestFileWrite(
     _ bytes: UnsafeRawPointer?, _ length: UInt32, _ mode: UInt32
 ) -> Int32
 
+@_silgen_name("etos_ish_guest_file_copy")
+func etosISHGuestFileCopy(
+    _ requestID: UInt64, _ path: UnsafePointer<CChar>, _ flags: UInt32,
+    _ destination: UnsafePointer<CChar>
+) -> Int32
+
 @_silgen_name("etos_ish_guest_file_edit")
 func etosISHGuestFileEdit(
     _ requestID: UInt64, _ path: UnsafePointer<CChar>, _ flags: UInt32,

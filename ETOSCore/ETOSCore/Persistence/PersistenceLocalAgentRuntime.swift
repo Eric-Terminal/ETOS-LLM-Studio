@@ -375,6 +375,73 @@ extension PersistenceGRDBStore {
         }
     }
 
+    func loadLocalLinuxJob(id: UUID) throws -> LocalLinuxJob? {
+        try dbPool.read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT * FROM local_linux_jobs WHERE id = ? LIMIT 1",
+                arguments: [id.uuidString]
+            ) else { return nil }
+            return try Self.decodeLocalLinuxJob(row)
+        }
+    }
+
+    func loadLocalLinuxJobHistoryPage(
+        sessionID: UUID? = nil,
+        cursor: LocalLinuxJobCursor? = nil,
+        limit: Int
+    ) throws -> (jobs: [LocalLinuxJob], nextCursor: LocalLinuxJobCursor?) {
+        let resolvedLimit = min(200, max(1, limit))
+        return try dbPool.read { db in
+            let terminalPredicate = "state NOT IN ('queued', 'starting', 'running', 'waiting_for_input')"
+            let rows: [Row]
+            switch (sessionID, cursor) {
+            case (let sessionID?, let cursor?):
+                rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM local_linux_jobs WHERE \(terminalPredicate) AND session_id = ? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
+                    arguments: [
+                        sessionID.uuidString,
+                        cursor.createdAt.timeIntervalSince1970,
+                        cursor.createdAt.timeIntervalSince1970,
+                        cursor.id.uuidString,
+                        resolvedLimit + 1
+                    ]
+                )
+            case (let sessionID?, nil):
+                rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM local_linux_jobs WHERE \(terminalPredicate) AND session_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+                    arguments: [sessionID.uuidString, resolvedLimit + 1]
+                )
+            case (nil, let cursor?):
+                rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM local_linux_jobs WHERE \(terminalPredicate) AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
+                    arguments: [
+                        cursor.createdAt.timeIntervalSince1970,
+                        cursor.createdAt.timeIntervalSince1970,
+                        cursor.id.uuidString,
+                        resolvedLimit + 1
+                    ]
+                )
+            case (nil, nil):
+                rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM local_linux_jobs WHERE \(terminalPredicate) ORDER BY created_at DESC, id DESC LIMIT ?",
+                    arguments: [resolvedLimit + 1]
+                )
+            }
+            var jobs = try rows.compactMap(Self.decodeLocalLinuxJob)
+            let hasMore = jobs.count > resolvedLimit
+            if hasMore { jobs.removeLast(jobs.count - resolvedLimit) }
+            let nextCursor = hasMore ? jobs.last.map {
+                LocalLinuxJobCursor(createdAt: $0.createdAt, id: $0.id)
+            } : nil
+            return (jobs, nextCursor)
+        }
+    }
+
     private static func decodeLocalLinuxJob(_ row: Row) throws -> LocalLinuxJob? {
         guard let id = UUID(uuidString: row["id"]),
               let kind = LocalLinuxJobKind(rawValue: row["kind"]),

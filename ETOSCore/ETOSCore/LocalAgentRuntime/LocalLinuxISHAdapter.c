@@ -658,6 +658,17 @@ int32_t etos_ish_guest_file_write(uint64_t id, const char *path, uint32_t flags,
 #endif
 }
 
+int32_t etos_ish_guest_file_copy(uint64_t id, const char *path, uint32_t flags,
+        const char *destination) {
+#if ETOS_ISH_SUPPORTED
+    struct ish_apple_guest_file_request_v1 request = etos_guest_request(id, path, flags);
+    return ish_apple_guest_file_copy(&request, destination);
+#else
+    (void) id; (void) path; (void) flags; (void) destination;
+    return ETOS_ISH_ENOSYS;
+#endif
+}
+
 int32_t etos_ish_guest_file_edit(uint64_t id, const char *path, uint32_t flags,
         uint64_t offset, uint64_t removed, const void *replacement, uint32_t length) {
 #if ETOS_ISH_SUPPORTED

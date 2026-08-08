@@ -12,7 +12,7 @@ import Foundation
 public actor LocalAgentFileToolExecutor {
     public static let shared = LocalAgentFileToolExecutor()
 
-    private enum Backend: Equatable {
+    enum Backend: Equatable {
         case app
         case linux
         case mount(UUID)
@@ -25,13 +25,13 @@ public actor LocalAgentFileToolExecutor {
         }
     }
 
-    private struct RoutedPath: Equatable {
+    struct RoutedPath: Equatable {
         let backend: Backend
         let original: String
         let path: String
     }
 
-    private struct TrustedContext {
+    struct TrustedContext: Sendable {
         let sessionID: UUID
         let runID: UUID
         let triggeringMessageID: UUID?
@@ -39,45 +39,114 @@ public actor LocalAgentFileToolExecutor {
         let selectedMCPServerIDs: [UUID]
     }
 
-    private let bridge: iSHAppleBridgeAdapter
+    struct MountedTarget: Equatable, Sendable {
+        let id: UUID
+        let guestPaths: [String]
+    }
+
+    private enum MutationPayload: Sendable {
+        case app(mutationID: UUID)
+        case guest(preparation: LocalAgentGuestUndoPreparation, mounts: [MountedTarget])
+    }
+
+    private struct MutationEntry: Sendable {
+        let id: UUID
+        let operation: String
+        let payload: MutationPayload
+    }
+
+    let bridge: iSHAppleBridgeAdapter
     private let runtime: LocalLinuxRuntimeController
     private let contextManager: LocalAgentRuntimeContextManager
-    private var requestCounter = UInt64(Date().timeIntervalSince1970 * 1_000_000)
-    private var lastMutationBackendByRunID: [UUID: Backend] = [:]
+    private let mountManager: LocalLinuxMountManager
+    private let trustedRunValidator: @Sendable (UUID, UUID) throws -> Void
+    let guestFileSupport: LocalAgentGuestFileSupport
+    var requestCounter = UInt64(Date().timeIntervalSince1970 * 1_000_000)
+    private var mutationsByRunID: [UUID: [MutationEntry]] = [:]
+    private var activeRunOperations = Set<UUID>()
+    private var runOperationWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+    private let maximumUndoEntriesPerRun = 64
 
     public init(
         bridge: iSHAppleBridgeAdapter = .shared,
         runtime: LocalLinuxRuntimeController = .shared,
-        contextManager: LocalAgentRuntimeContextManager = .shared
+        contextManager: LocalAgentRuntimeContextManager = .shared,
+        mountManager: LocalLinuxMountManager = .shared
     ) {
         self.bridge = bridge
         self.runtime = runtime
         self.contextManager = contextManager
+        self.mountManager = mountManager
+        self.guestFileSupport = LocalAgentGuestFileSupport(fileSystem: bridge)
+        self.trustedRunValidator = { runID, sessionID in
+            try Self.validateTrustedConversationRun(
+                Persistence.loadConversationRun(id: runID),
+                sessionID: sessionID
+            )
+        }
+    }
+
+    init(
+        bridge: iSHAppleBridgeAdapter = .shared,
+        runtime: LocalLinuxRuntimeController = .shared,
+        contextManager: LocalAgentRuntimeContextManager = .shared,
+        mountManager: LocalLinuxMountManager = .shared,
+        guestFileSupport: LocalAgentGuestFileSupport? = nil,
+        trustedRunValidator: @escaping @Sendable (UUID, UUID) throws -> Void
+    ) {
+        self.bridge = bridge
+        self.runtime = runtime
+        self.contextManager = contextManager
+        self.mountManager = mountManager
+        self.guestFileSupport = guestFileSupport ?? LocalAgentGuestFileSupport(fileSystem: bridge)
+        self.trustedRunValidator = trustedRunValidator
     }
 
     public func execute(toolName: String, argumentsJSON: String) async throws -> String {
         var arguments = try decode(argumentsJSON)
         let trustedContext = removeTrustedContext(from: &arguments)
+        let acquiredRunID = trustedContext?.runID
+        if let acquiredRunID {
+            await acquireRunOperation(acquiredRunID)
+        }
+        defer {
+            if let acquiredRunID {
+                releaseRunOperation(acquiredRunID)
+            }
+        }
+        if let trustedContext {
+            try trustedRunValidator(trustedContext.runID, trustedContext.sessionID)
+        }
         let routedPaths = try pathArguments(in: arguments).map { key, value in
             (key, try route(value))
         }
 
-        if toolName == AppToolKind.undoSandboxMutation.toolName,
-           let runID = trustedContext?.runID,
-           let backend = lastMutationBackendByRunID[runID],
-           backend.requiresLinux {
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("最近一次文件修改发生在 Linux guest；该后端没有隐式全局撤销记录，请使用明确的反向编辑。", comment: "Linux file undo unavailable error")
-            )
+        if toolName == AppToolKind.undoSandboxMutation.toolName, let trustedContext {
+            return try await executeUndo(context: trustedContext)
         }
 
         guard routedPaths.contains(where: { $0.1.backend.requiresLinux }) else {
             for (key, routed) in routedPaths where routed.backend == .app {
                 arguments[key] = routed.path
             }
-            let result = try await executeAppTool(toolName: toolName, arguments: arguments)
-            if isMutatingFileTool(toolName), let runID = trustedContext?.runID {
-                lastMutationBackendByRunID[runID] = .app
+            guard isMutatingFileTool(toolName), let trustedContext else {
+                return try await executeAppTool(toolName: toolName, arguments: arguments)
+            }
+            let mutationID = UUID()
+            let result = try await executeAppTool(
+                toolName: toolName,
+                arguments: arguments,
+                undoContext: .init(runID: trustedContext.runID, mutationID: mutationID)
+            )
+            if SandboxFileToolSupport.hasUndoMutation(id: mutationID, runID: trustedContext.runID) {
+                await commitMutation(
+                    MutationEntry(
+                        id: mutationID,
+                        operation: toolName,
+                        payload: .app(mutationID: mutationID)
+                    ),
+                    runID: trustedContext.runID
+                )
             }
             return result
         }
@@ -104,127 +173,384 @@ public actor LocalAgentFileToolExecutor {
         let guestPaths = try Dictionary(uniqueKeysWithValues: routedPaths.map { key, routed in
             (key, try guestPath(for: routed, context: frozen))
         })
+        let nativeMounts = try await bridge.mounts()
+        let mountRecords = Persistence.loadLocalLinuxMounts()
+        var operationMounts = mountedTargets(
+            routedPaths: routedPaths,
+            guestPaths: guestPaths,
+            nativeMounts: nativeMounts,
+            records: mountRecords
+        )
+        if toolName == AppToolKind.deleteSandboxItem.toolName, guestPaths["path"] == "/" {
+            operationMounts = mergeMountedTargets(
+                operationMounts,
+                nativeMounts.map { MountedTarget(id: $0.id, guestPaths: [$0.guestDirectory]) }
+                    + [MountedTarget(
+                        id: LocalLinuxMountManager.sharedMountID,
+                        guestPaths: [LocalLinuxMountManager.sharedMountGuestPath]
+                    )]
+            )
+        }
+        try validateMountedTargets(
+            operationMounts,
+            context: frozen,
+            nativeMounts: nativeMounts,
+            records: mountRecords
+        )
+        let mutationMounts: [MountedTarget]
+        if isMutatingFileTool(toolName) {
+            if toolName == AppToolKind.deleteSandboxItem.toolName, guestPaths["path"] == "/" {
+                mutationMounts = operationMounts
+            } else {
+                mutationMounts = mountedTargets(
+                    routedPaths: routedPaths.filter { guestMutationArgumentKeys(toolName).contains($0.0) },
+                    guestPaths: guestPaths,
+                    nativeMounts: nativeMounts,
+                    records: mountRecords
+                )
+            }
+            try validateMountedTargets(
+                mutationMounts,
+                context: frozen,
+                nativeMounts: nativeMounts,
+                records: mountRecords,
+                requiresWrite: true
+            )
+        } else {
+            mutationMounts = []
+        }
+        let leases = try await mountManager.acquireLeases(ids: dynamicLeaseIDs(for: operationMounts))
         try await authorizeMountedWrites(
             toolName: toolName,
             arguments: arguments,
-            routedPaths: routedPaths,
+            mounts: mutationMounts,
             guestPaths: guestPaths,
             context: trustedContext
         )
-        let result = try await executeGuestTool(toolName: toolName, arguments: arguments, paths: guestPaths)
-        if toolName == AppToolKind.deleteSandboxItem.toolName,
-           let deletedPath = guestPaths["path"],
-           isCriticalSystemPath(deletedPath) {
-            try await runtime.markSystemDamaged(
-                reason: NSLocalizedString("Agent 删除了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。", comment: "Agent deleted critical Linux system path")
+        let undoPreparation: LocalAgentGuestUndoPreparation?
+        let undoMounts: [MountedTarget]
+        let damagesCriticalSystem: Bool
+        if isMutatingFileTool(toolName) {
+            try await validateGuestMutation(toolName: toolName, paths: guestPaths)
+            let undoPaths = guestMutationPaths(toolName: toolName, paths: guestPaths)
+            damagesCriticalSystem = undoPaths.contains(where: isCriticalSystemPath)
+            let unavailableReason = damagesCriticalSystem
+                ? NSLocalizedString(
+                    "最近一次修改涉及关键 Linux 系统路径，Runtime 已要求重新打开，不能在当前进程中自动撤销。",
+                    comment: "Critical Linux mutation undo unavailable"
+                )
+                : nil
+            undoPreparation = try await guestFileSupport.prepareUndo(
+                operation: toolName,
+                paths: undoPaths,
+                unavailableReason: unavailableReason
+            )
+            undoMounts = mutationMounts
+        } else {
+            undoPreparation = nil
+            undoMounts = []
+            damagesCriticalSystem = false
+        }
+
+        var result = try await performGuestMutation(
+            preparation: undoPreparation,
+            damagesCriticalSystem: damagesCriticalSystem
+        ) {
+            try await executeGuestTool(toolName: toolName, arguments: arguments, paths: guestPaths)
+        }
+        if let undoPreparation {
+            await commitMutation(
+                MutationEntry(
+                    id: UUID(),
+                    operation: toolName,
+                    payload: .guest(preparation: undoPreparation, mounts: undoMounts)
+                ),
+                runID: trustedContext.runID
+            )
+            result = try augmentResult(
+                result,
+                values: [
+                    "undoAvailable": undoPreparation.unavailableReason == nil,
+                    "undoUnavailableReason": undoPreparation.unavailableReason.map { $0 as Any } ?? NSNull()
+                ]
             )
         }
-        if isMutatingFileTool(toolName), let firstBackend = routedPaths.first?.1.backend {
-            lastMutationBackendByRunID[trustedContext.runID] = firstBackend
+        if damagesCriticalSystem {
+            let persisted = await markCriticalSystemDamaged()
+            result = try augmentResult(
+                result,
+                values: [
+                    "requiresRelaunch": true,
+                    "damageMarkerPersisted": persisted
+                ]
+            )
         }
+        withExtendedLifetime(leases) {}
         return result
     }
 
-    private func authorizeMountedWrites(
-        toolName: String,
-        arguments: [String: Any],
-        routedPaths: [(String, RoutedPath)],
-        guestPaths: [String: String],
-        context: TrustedContext
-    ) async throws {
-        let mutatingTools: Set<String> = [
-            AppToolKind.writeSandboxFile.toolName,
-            AppToolKind.moveSandboxItem.toolName,
-            AppToolKind.copySandboxItem.toolName,
-            AppToolKind.createSandboxDirectory.toolName,
-            AppToolKind.batchEditSandboxFile.toolName,
-            AppToolKind.editSandboxFile.toolName,
-            AppToolKind.deleteSandboxItem.toolName
-        ]
-        guard mutatingTools.contains(toolName) else { return }
-
-        let mountRecords = Dictionary(uniqueKeysWithValues: Persistence.loadLocalLinuxMounts().map { ($0.id, $0) })
-        var writableMounts = Set(routedPaths.compactMap { _, routed -> UUID? in
-            guard case .mount(let id) = routed.backend,
-                  ![LocalLinuxMountManager.homeMountID,
-                    LocalLinuxMountManager.workspaceMountID,
-                    LocalLinuxMountManager.iCloudMountID].contains(id),
-                  let record = mountRecords[id],
-                  record.access == .readWrite else {
-                return nil
-            }
-            return id
-        })
-        if toolName == AppToolKind.deleteSandboxItem.toolName,
-           guestPaths["path"] == "/" {
-            for record in mountRecords.values where
-                record.access == .readWrite &&
-                record.isEnabled &&
-                record.authorizationState == .available &&
-                ![LocalLinuxMountManager.homeMountID,
-                  LocalLinuxMountManager.workspaceMountID].contains(record.id) {
-                writableMounts.insert(record.id)
-            }
-        }
-        for mountID in writableMounts.sorted(by: { $0.uuidString < $1.uuidString }) {
-            guard let record = mountRecords[mountID] else { continue }
-            var affectedPaths = routedPaths.compactMap { key, routed -> String? in
-                guard routed.backend == .mount(mountID) else { return nil }
-                return guestPaths[key]
-            }
-            if affectedPaths.isEmpty, guestPaths["path"] == "/" {
-                affectedPaths = [record.guestPath]
-            }
-            let details = try encode([
-                "operation": toolName,
-                "mount_id": mountID.uuidString,
-                "mount_name": record.displayName,
-                "guest_paths": affectedPaths,
-                "change_preview": await mutationPreview(
-                    toolName: toolName,
-                    arguments: arguments,
-                    guestPaths: guestPaths
-                )
-            ])
-            let decision = await ToolPermissionCenter.shared.requestPermission(
-                toolName: "local_linux.mount.write.\(mountID.uuidString.lowercased())",
-                displayName: String(
-                    format: NSLocalizedString("写入外部挂载：%@", comment: "External Linux mount write approval title"),
-                    record.displayName
-                ),
-                arguments: details,
-                sourceSessionID: context.sessionID,
-                toolCallID: context.toolCallID
-            )
-            let wasDenied: Bool
-            switch decision {
-            case .deny, .supplement:
-                wasDenied = true
-            case .allowOnce, .allowForTool, .allowAll:
-                wasDenied = false
-            }
-            _ = Persistence.saveLocalLinuxAudit(
-                LocalLinuxAuditRecord(
-                    sessionID: context.sessionID,
-                    runID: context.runID,
-                    jobID: nil,
-                    action: toolName,
-                    decision: wasDenied ? "denied" : "user_approved",
-                    scope: "mount_write",
-                    matchedRuleID: nil,
-                    redactedSummary: "mount=\(mountID.uuidString), paths=\(affectedPaths.joined(separator: ", "))",
-                    executorDeviceID: UsageAnalyticsRuntimeContext.currentDeviceIdentifier()
-                )
-            )
-            if wasDenied {
+    /// guest mutation 与快照提交形成同一事务；这里也是故障注入测试的真实生产边界。
+    func performGuestMutation(
+        preparation: LocalAgentGuestUndoPreparation?,
+        damagesCriticalSystem: Bool,
+        operation: () async throws -> String
+    ) async throws -> String {
+        do {
+            return try await operation()
+        } catch {
+            guard let preparation else { throw error }
+            do {
+                _ = try await guestFileSupport.restore(preparation)
+                await guestFileSupport.discard(preparation)
+            } catch let rollbackError {
+                await guestFileSupport.discard(preparation)
+                if damagesCriticalSystem {
+                    _ = await markCriticalSystemDamaged()
+                }
                 throw LocalLinuxRuntimeError.runtimeUnavailable(
-                    NSLocalizedString("用户未允许写入这个外部 Linux 挂载。", comment: "External Linux mount write denied")
+                    String(
+                        format: NSLocalizedString("Linux 文件操作失败（%@），自动回滚也失败（%@）。", comment: "Linux file mutation and rollback failure"),
+                        error.localizedDescription,
+                        rollbackError.localizedDescription
+                    )
                 )
+            }
+            throw error
+        }
+    }
+
+    private func guestMutationPaths(toolName: String, paths: [String: String]) -> [String] {
+        switch toolName {
+        case AppToolKind.moveSandboxItem.toolName:
+            return [paths["source_path"], paths["destination_path"]].compactMap { $0 }
+        case AppToolKind.copySandboxItem.toolName:
+            return [paths["destination_path"]].compactMap { $0 }
+        default:
+            return [paths["path"]].compactMap { $0 }
+        }
+    }
+
+    private func guestMutationArgumentKeys(_ toolName: String) -> Set<String> {
+        switch toolName {
+        case AppToolKind.moveSandboxItem.toolName:
+            return ["source_path", "destination_path"]
+        case AppToolKind.copySandboxItem.toolName:
+            return ["destination_path"]
+        default:
+            return ["path"]
+        }
+    }
+
+    private func executeUndo(context: TrustedContext) async throws -> String {
+        guard var entries = mutationsByRunID[context.runID], let entry = entries.popLast() else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("当前 Agent Run 没有可撤销的文件修改。", comment: "Agent file undo history empty")
+            )
+        }
+        if entries.isEmpty {
+            mutationsByRunID.removeValue(forKey: context.runID)
+        } else {
+            mutationsByRunID[context.runID] = entries
+        }
+
+        var shouldRestoreHistory = true
+        do {
+            switch entry.payload {
+            case .app(let mutationID):
+                guard SandboxFileToolSupport.hasUndoMutation(id: mutationID, runID: context.runID) else {
+                    shouldRestoreHistory = false
+                    throw SandboxFileToolError.noUndoHistory
+                }
+                let result = try SandboxFileToolSupport.undoMutation(
+                    id: mutationID,
+                    runID: context.runID
+                )
+                return try encode([
+                    "operation": result.operation,
+                    "recordedAt": result.recordedAt
+                ])
+
+            case .guest(let preparation, let mounts):
+                if let reason = preparation.unavailableReason {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(reason)
+                }
+                let frozen = try await contextManager.beginRun(
+                    sessionID: context.sessionID,
+                    triggeringMessageID: context.triggeringMessageID,
+                    toolCallID: context.toolCallID,
+                    runID: context.runID,
+                    selectedMCPServerIDs: context.selectedMCPServerIDs
+                ).context
+                _ = try await runtime.ensureReady(trigger: .guestFileBrowser)
+                let nativeMounts = try await bridge.mounts()
+                try validateMountedTargets(
+                    mounts,
+                    context: frozen,
+                    nativeMounts: nativeMounts,
+                    records: Persistence.loadLocalLinuxMounts(),
+                    requiresWrite: true
+                )
+                let leases = try await mountManager.acquireLeases(ids: dynamicLeaseIDs(for: mounts))
+                try await authorizeUndoMountedWrites(
+                    operation: entry.operation,
+                    mounts: mounts,
+                    context: context
+                )
+                let result = try await guestFileSupport.restore(preparation)
+                await guestFileSupport.discard(preparation)
+                withExtendedLifetime(leases) {}
+                return try encode([
+                    "operation": result.operation,
+                    "recordedAt": ISO8601DateFormatter().string(from: result.recordedAt)
+                ])
+            }
+        } catch {
+            if shouldRestoreHistory {
+                var restored = mutationsByRunID[context.runID] ?? []
+                restored.append(entry)
+                mutationsByRunID[context.runID] = restored
+            }
+            throw error
+        }
+    }
+
+    private func commitMutation(_ entry: MutationEntry, runID: UUID) async {
+        var entries = mutationsByRunID[runID] ?? []
+        entries.append(entry)
+        let stale: MutationEntry?
+        if entries.count > maximumUndoEntriesPerRun {
+            stale = entries.removeFirst()
+        } else {
+            stale = nil
+        }
+        mutationsByRunID[runID] = entries
+        if let stale {
+            await discardMutation(stale, runID: runID)
+        }
+    }
+
+    private func discardMutation(_ entry: MutationEntry, runID: UUID) async {
+        switch entry.payload {
+        case .app(let mutationID):
+            SandboxFileToolSupport.discardUndoMutation(id: mutationID, runID: runID)
+        case .guest(let preparation, _):
+            await guestFileSupport.discard(preparation)
+        }
+    }
+
+    /// Run 结束后，撤销入口已不再可达，因此同步清理内存记录与 guest/app 快照。
+    public func finishRun(id runID: UUID) async {
+        await acquireRunOperation(runID)
+        defer { releaseRunOperation(runID) }
+        let entries = mutationsByRunID.removeValue(forKey: runID) ?? []
+        SandboxFileToolSupport.discardUndoMutations(runID: runID)
+        for entry in entries {
+            if case .guest(let preparation, _) = entry.payload {
+                await guestFileSupport.discard(preparation)
             }
         }
     }
 
-    private func isMutatingFileTool(_ toolName: String) -> Bool {
+    static func validateTrustedConversationRun(_ run: ConversationRun?, sessionID: UUID) throws {
+        guard let run, !run.status.isTerminal else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Agent Run 已经结束，不能再次执行迟到的工具调用。", comment: "Terminal Agent run cannot be resumed")
+            )
+        }
+        guard run.sessionID == sessionID else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Agent Run 标识不属于当前会话。", comment: "Agent run session mismatch")
+            )
+        }
+    }
+
+    private func acquireRunOperation(_ runID: UUID) async {
+        guard activeRunOperations.contains(runID) else {
+            activeRunOperations.insert(runID)
+            return
+        }
+        await withCheckedContinuation { continuation in
+            runOperationWaiters[runID, default: []].append(continuation)
+        }
+    }
+
+    private func releaseRunOperation(_ runID: UUID) {
+        if var waiters = runOperationWaiters[runID], !waiters.isEmpty {
+            let next = waiters.removeFirst()
+            if waiters.isEmpty {
+                runOperationWaiters.removeValue(forKey: runID)
+            } else {
+                runOperationWaiters[runID] = waiters
+            }
+            next.resume()
+            return
+        }
+        activeRunOperations.remove(runID)
+    }
+
+    private func validateGuestMutation(toolName: String, paths: [String: String]) async throws {
+        guard toolName == AppToolKind.moveSandboxItem.toolName ||
+                toolName == AppToolKind.copySandboxItem.toolName else { return }
+        let source = try requiredPath("source_path", paths: paths)
+        let destination = try requiredPath("destination_path", paths: paths)
+        let info = try await bridge.statGuestFile(path: source, requestID: nextRequestID(), noFollow: true)
+        try Self.validateGuestPathRelationship(
+            source: source,
+            destination: destination,
+            sourceIsDirectory: info.isDirectory
+        )
+    }
+
+    static func validateGuestPathRelationship(
+        source: String,
+        destination: String,
+        sourceIsDirectory: Bool
+    ) throws {
+        guard source != destination else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Linux 文件的源路径和目标路径不能相同。", comment: "Linux file source destination same")
+            )
+        }
+        if isDescendant(destination, of: source), sourceIsDirectory {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("不能把 Linux 目录移动或复制到自身内部。", comment: "Linux directory mutation into itself")
+            )
+        }
+        if isDescendant(source, of: destination) {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("目标路径是源路径的父目录，覆盖它会同时删除源项目。", comment: "Linux destination contains source")
+            )
+        }
+    }
+
+    private static func isDescendant(_ candidate: String, of parent: String) -> Bool {
+        if parent == "/" { return candidate != "/" && candidate.hasPrefix("/") }
+        return candidate.hasPrefix(parent + "/")
+    }
+
+    private func markCriticalSystemDamaged() async -> Bool {
+        let reason = NSLocalizedString(
+            "Agent 修改了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。",
+            comment: "Agent mutated critical Linux system path"
+        )
+        do {
+            try await runtime.markSystemDamaged(reason: reason)
+            return true
+        } catch {
+            await runtime.markRequiresRelaunch(reason: reason)
+            return false
+        }
+    }
+
+    private func augmentResult(_ result: String, values: [String: Any]) throws -> String {
+        var payload = try decode(result)
+        for (key, value) in values {
+            payload[key] = value
+        }
+        return try encode(payload)
+    }
+
+    func isMutatingFileTool(_ toolName: String) -> Bool {
         [
             AppToolKind.writeSandboxFile.toolName,
             AppToolKind.moveSandboxItem.toolName,
@@ -236,7 +562,7 @@ public actor LocalAgentFileToolExecutor {
         ].contains(toolName)
     }
 
-    private func mutationPreview(
+    func mutationPreview(
         toolName: String,
         arguments: [String: Any],
         guestPaths: [String: String]
@@ -336,191 +662,17 @@ public actor LocalAgentFileToolExecutor {
             + NSLocalizedString("\n[预览已截断]", comment: "External mount preview truncated")
     }
 
-    private func executeAppTool(toolName: String, arguments: [String: Any]) async throws -> String {
-        try await AppToolManager.shared.executeToolForBuiltInMCP(
-            toolName: toolName,
-            argumentsJSON: try encode(arguments)
-        )
-    }
-
-    private func executeGuestTool(
+    private func executeAppTool(
         toolName: String,
         arguments: [String: Any],
-        paths: [String: String]
+        undoContext: SandboxFileToolSupport.SandboxUndoContext? = nil
     ) async throws -> String {
-        switch toolName {
-        case AppToolKind.listSandboxDirectory.toolName:
-            let path = paths["path"] ?? "/"
-            let items = try await listDirectory(path)
-            return try encode([
-                "path": path,
-                "items": items.map(filePayload)
-            ])
-
-        case AppToolKind.readSandboxFile.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let data = try await readFile(path)
-            return try encode([
-                "path": path,
-                "characterCount": String(decoding: data, as: UTF8.self).count,
-                "content": String(decoding: data, as: UTF8.self)
-            ])
-
-        case AppToolKind.writeSandboxFile.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let content = try requiredString("content", arguments: arguments)
-            let createParents = arguments["create_parent_directories"] as? Bool ?? true
-            if createParents { try await createParentDirectory(of: path) }
-            try await bridge.writeGuestFile(path: path, requestID: nextRequestID(), data: Data(content.utf8))
-            return try encode([
-                "path": path,
-                "size": Data(content.utf8).count,
-                "createdParentDirectories": createParents
-            ])
-
-        case AppToolKind.searchSandboxFiles.toolName:
-            let path = paths["path"] ?? "/"
-            let results = try await search(
-                path: path,
-                nameQuery: arguments["name_query"] as? String,
-                contentQuery: arguments["content_query"] as? String,
-                maximumResults: min(200, max(1, arguments["max_results"] as? Int ?? 20)),
-                includeDirectories: arguments["include_directories"] as? Bool ?? false,
-                caseSensitive: arguments["case_sensitive"] as? Bool ?? false
+        let argumentsJSON = try encode(arguments)
+        return try await SandboxFileToolSupport.$undoContext.withValue(undoContext) {
+            try await AppToolManager.shared.executeToolForBuiltInMCP(
+                toolName: toolName,
+                argumentsJSON: argumentsJSON
             )
-            return try encode(["path": path, "count": results.count, "items": results])
-
-        case AppToolKind.readSandboxFileChunk.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let content = String(decoding: try await readFile(path), as: UTF8.self)
-            let lines = content.components(separatedBy: .newlines)
-            let startLine = max(1, arguments["start_line"] as? Int ?? 1)
-            let maximumLines = min(1_000, max(1, arguments["max_lines"] as? Int ?? 200))
-            let startIndex = min(lines.count, startLine - 1)
-            let endIndex = min(lines.count, startIndex + maximumLines)
-            return try encode([
-                "path": path,
-                "startLine": startLine,
-                "endLine": endIndex,
-                "totalLines": lines.count,
-                "hasMore": endIndex < lines.count,
-                "content": lines[startIndex ..< endIndex].joined(separator: "\n")
-            ])
-
-        case AppToolKind.moveSandboxItem.toolName:
-            let source = try requiredPath("source_path", paths: paths)
-            let destination = try requiredPath("destination_path", paths: paths)
-            try await prepareDestination(destination, arguments: arguments)
-            let info = try await bridge.statGuestFile(path: source, requestID: nextRequestID(), noFollow: true)
-            try await bridge.renameGuestFile(path: source, destination: destination, requestID: nextRequestID(), noFollow: true)
-            return try encode([
-                "sourcePath": source,
-                "destinationPath": destination,
-                "wasDirectory": info.isDirectory,
-                "createdParentDirectories": arguments["create_parent_directories"] as? Bool ?? true,
-                "overwroteDestination": arguments["overwrite"] as? Bool ?? false
-            ])
-
-        case AppToolKind.copySandboxItem.toolName:
-            let source = try requiredPath("source_path", paths: paths)
-            let destination = try requiredPath("destination_path", paths: paths)
-            try await prepareDestination(destination, arguments: arguments)
-            let info = try await bridge.statGuestFile(path: source, requestID: nextRequestID(), noFollow: true)
-            try await copyGuestItem(from: source, to: destination, info: info)
-            return try encode([
-                "sourcePath": source,
-                "destinationPath": destination,
-                "wasDirectory": info.isDirectory,
-                "createdParentDirectories": arguments["create_parent_directories"] as? Bool ?? true,
-                "overwroteDestination": arguments["overwrite"] as? Bool ?? false
-            ])
-
-        case AppToolKind.createSandboxDirectory.toolName:
-            let path = try requiredPath("path", paths: paths)
-            try await bridge.createGuestDirectory(
-                path: path,
-                requestID: nextRequestID(),
-                createParents: arguments["create_parent_directories"] as? Bool ?? true
-            )
-            return try encode(["path": path, "created": true])
-
-        case AppToolKind.batchEditSandboxFile.toolName:
-            let path = try requiredPath("path", paths: paths)
-            guard let rules = arguments["rules"] as? [[String: Any]], !rules.isEmpty else {
-                throw invalidArguments("rules")
-            }
-            let replaceAll = arguments["replace_all"] as? Bool ?? false
-            let ignoreMissing = arguments["ignore_missing"] as? Bool ?? false
-            var content = String(decoding: try await readFile(path), as: UTF8.self)
-            var replacements = 0
-            var applied = 0
-            for rule in rules {
-                guard let old = rule["old_text"] as? String, !old.isEmpty,
-                      let new = rule["new_text"] as? String else { throw invalidArguments("rules") }
-                let count = content.components(separatedBy: old).count - 1
-                if count == 0 {
-                    if ignoreMissing { continue }
-                    throw LocalLinuxRuntimeError.runtimeUnavailable(
-                        NSLocalizedString("Linux 文件中找不到要替换的文本。", comment: "Linux edit missing text error")
-                    )
-                }
-                if !replaceAll, count > 1 {
-                    throw LocalLinuxRuntimeError.runtimeUnavailable(
-                        NSLocalizedString("Linux 文件中的替换文本不唯一。", comment: "Linux edit ambiguous text error")
-                    )
-                }
-                content = replaceAll
-                    ? content.replacingOccurrences(of: old, with: new)
-                    : replacingFirst(old, with: new, in: content)
-                replacements += replaceAll ? count : 1
-                applied += 1
-            }
-            try await bridge.writeGuestFile(path: path, requestID: nextRequestID(), data: Data(content.utf8))
-            return try encode(["path": path, "replacements": replacements, "rulesApplied": applied, "size": Data(content.utf8).count])
-
-        case AppToolKind.diffSandboxFile.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let current = String(decoding: try await readFile(path), as: UTF8.self)
-            let updated = try requiredString("updated_content", arguments: arguments)
-            return simpleDiff(path: path, current: current, updated: updated)
-
-        case AppToolKind.editSandboxFile.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let old = try requiredString("old_text", arguments: arguments)
-            let new = try requiredString("new_text", arguments: arguments)
-            let replaceAll = arguments["replace_all"] as? Bool ?? false
-            var content = String(decoding: try await readFile(path), as: UTF8.self)
-            guard !old.isEmpty else { throw invalidArguments("old_text") }
-            let count = content.components(separatedBy: old).count - 1
-            guard count > 0 else {
-                throw LocalLinuxRuntimeError.runtimeUnavailable(
-                    NSLocalizedString("Linux 文件中找不到要替换的文本。", comment: "Linux edit missing text error")
-                )
-            }
-            guard replaceAll || count == 1 else {
-                throw LocalLinuxRuntimeError.runtimeUnavailable(
-                    NSLocalizedString("Linux 文件中的替换文本不唯一。", comment: "Linux edit ambiguous text error")
-                )
-            }
-            content = replaceAll
-                ? content.replacingOccurrences(of: old, with: new)
-                : replacingFirst(old, with: new, in: content)
-            try await bridge.writeGuestFile(path: path, requestID: nextRequestID(), data: Data(content.utf8))
-            return try encode(["path": path, "replacements": replaceAll ? count : 1, "size": Data(content.utf8).count])
-
-        case AppToolKind.deleteSandboxItem.toolName:
-            let path = try requiredPath("path", paths: paths)
-            let info = try await bridge.statGuestFile(path: path, requestID: nextRequestID(), noFollow: true)
-            try await bridge.removeGuestFile(path: path, requestID: nextRequestID(), recursive: info.isDirectory, noFollow: true)
-            return try encode(["path": path, "wasDirectory": info.isDirectory])
-
-        case AppToolKind.undoSandboxMutation.toolName:
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("Linux guest 修改没有隐式全局撤销记录；请使用明确的反向编辑，或在终端中恢复。", comment: "Linux file undo unavailable error")
-            )
-
-        default:
-            throw AppToolExecutionError.unknownTool
         }
     }
 
@@ -613,157 +765,33 @@ public actor LocalAgentFileToolExecutor {
         )
     }
 
-    private func listDirectory(_ path: String) async throws -> [LocalLinuxGuestFileInfo] {
-        var cursor: UInt64 = 0
-        var values: [LocalLinuxGuestFileInfo] = []
-        repeat {
-            let page = try await bridge.listGuestDirectory(
-                path: path,
-                requestID: nextRequestID(),
-                cursor: cursor,
-                maximumEntryCount: 256,
-                noFollow: true
-            )
-            values.append(contentsOf: page.entries.filter { $0.name != "." && $0.name != ".." })
-            cursor = page.isComplete ? 0 : page.nextCursor
-        } while cursor != 0 && values.count < 10_000
-        return values
-    }
-
-    private func readFile(_ path: String, maximumBytes: Int = 8 * 1_024 * 1_024) async throws -> Data {
-        var result = Data()
-        var offset: UInt64 = 0
-        while result.count < maximumBytes {
-            let read = try await bridge.readGuestFile(
-                path: path,
-                requestID: nextRequestID(),
-                offset: offset,
-                maximumByteCount: UInt32(min(256 * 1_024, maximumBytes - result.count)),
-                noFollow: true
-            )
-            result.append(read.data)
-            offset += UInt64(read.data.count)
-            if read.isComplete { return result }
-            guard !read.data.isEmpty else { break }
-        }
-        throw LocalLinuxRuntimeError.runtimeUnavailable(
-            NSLocalizedString("Linux 文件超过单次工具读取上限，请使用分块读取。", comment: "Linux file read limit error")
-        )
-    }
-
-    private func search(
-        path: String,
-        nameQuery: String?,
-        contentQuery: String?,
-        maximumResults: Int,
-        includeDirectories: Bool,
-        caseSensitive: Bool
-    ) async throws -> [[String: Any]] {
-        var pending = [path]
-        var results: [[String: Any]] = []
-        while let directory = pending.popLast(), results.count < maximumResults, pending.count < 10_000 {
-            for info in try await listDirectory(directory) {
-                guard let name = info.name else { continue }
-                let itemPath = directory == "/" ? "/\(name)" : "\(directory)/\(name)"
-                if info.isDirectory { pending.append(itemPath) }
-                let matchedName = matches(name, query: nameQuery, caseSensitive: caseSensitive)
-                var matchedContent = false
-                if info.isRegularFile, let contentQuery, !contentQuery.isEmpty, info.size <= 1_048_576,
-                   let data = try? await readFile(itemPath, maximumBytes: 1_048_577) {
-                    matchedContent = matches(String(decoding: data, as: UTF8.self), query: contentQuery, caseSensitive: caseSensitive)
-                }
-                if (info.isDirectory ? includeDirectories : true), matchedName || matchedContent {
-                    var payload = filePayload(info)
-                    payload["path"] = itemPath
-                    payload["matchedByName"] = matchedName
-                    payload["matchedByContent"] = matchedContent
-                    results.append(payload)
-                    if results.count == maximumResults { break }
-                }
-            }
-        }
-        return results
-    }
-
-    private func matches(_ value: String, query: String?, caseSensitive: Bool) -> Bool {
-        guard let query, !query.isEmpty else { return false }
-        if caseSensitive { return value.contains(query) }
-        return value.localizedCaseInsensitiveContains(query)
-    }
-
     private func isCriticalSystemPath(_ path: String) -> Bool {
         ["/", "/bin", "/etc", "/lib", "/sbin", "/usr"].contains(path)
     }
 
-    private func prepareDestination(_ path: String, arguments: [String: Any]) async throws {
-        if arguments["create_parent_directories"] as? Bool ?? true { try await createParentDirectory(of: path) }
-        if let _ = try? await bridge.statGuestFile(path: path, requestID: nextRequestID(), noFollow: true) {
-            guard arguments["overwrite"] as? Bool == true else {
-                throw LocalLinuxRuntimeError.runtimeUnavailable(
-                    NSLocalizedString("Linux 目标路径已经存在。", comment: "Linux destination exists error")
-                )
-            }
-            try await bridge.removeGuestFile(path: path, requestID: nextRequestID(), recursive: true, noFollow: true)
-        }
-    }
-
-    private func createParentDirectory(of path: String) async throws {
-        let parent = (path as NSString).deletingLastPathComponent
-        guard !parent.isEmpty, parent != "/" else { return }
-        try await bridge.createGuestDirectory(path: parent, requestID: nextRequestID(), createParents: true, noFollow: true)
-    }
-
-    private func copyGuestItem(from source: String, to destination: String, info: LocalLinuxGuestFileInfo) async throws {
-        if info.isDirectory {
-            try await bridge.createGuestDirectory(path: destination, requestID: nextRequestID(), createParents: true, noFollow: true)
-            for child in try await listDirectory(source) {
-                guard let name = child.name else { continue }
-                try await copyGuestItem(from: source + "/" + name, to: destination + "/" + name, info: child)
-            }
-            return
-        }
-        guard info.isRegularFile else {
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("文件工具暂不复制 Linux 符号链接或设备节点。", comment: "Linux special file copy error")
-            )
-        }
-        let data = try await readFile(source)
-        try await bridge.writeGuestFile(path: destination, requestID: nextRequestID(), data: data)
-    }
-
-    private func filePayload(_ info: LocalLinuxGuestFileInfo) -> [String: Any] {
-        [
-            "name": info.name ?? "",
-            "isDirectory": info.isDirectory,
-            "isSymbolicLink": info.isSymbolicLink,
-            "size": info.size,
-            "modifiedAt": ISO8601DateFormatter().string(from: info.modificationTime)
-        ]
-    }
-
-    private func simpleDiff(path: String, current: String, updated: String) -> String {
+    func simpleDiff(path: String, current: String, updated: String) -> String {
         if current == updated { return "--- \(path)\n+++ \(path)\n" }
         return "--- \(path)\n+++ \(path)\n@@ -1 +1 @@\n-\(current)\n+\(updated)"
     }
 
-    private func replacingFirst(_ old: String, with new: String, in content: String) -> String {
+    func replacingFirst(_ old: String, with new: String, in content: String) -> String {
         guard let range = content.range(of: old) else { return content }
         var result = content
         result.replaceSubrange(range, with: new)
         return result
     }
 
-    private func requiredPath(_ key: String, paths: [String: String]) throws -> String {
+    func requiredPath(_ key: String, paths: [String: String]) throws -> String {
         guard let value = paths[key], !value.isEmpty else { throw invalidArguments(key) }
         return value
     }
 
-    private func requiredString(_ key: String, arguments: [String: Any]) throws -> String {
+    func requiredString(_ key: String, arguments: [String: Any]) throws -> String {
         guard let value = arguments[key] as? String else { throw invalidArguments(key) }
         return value
     }
 
-    private func invalidArguments(_ key: String) -> AppToolExecutionError {
+    func invalidArguments(_ key: String) -> AppToolExecutionError {
         .invalidArguments(
             String(
                 format: NSLocalizedString("错误：文件工具缺少或无法解析参数 %@。", comment: "Local file tool invalid argument"),
@@ -780,14 +808,14 @@ public actor LocalAgentFileToolExecutor {
         return object
     }
 
-    private func encode(_ object: [String: Any]) throws -> String {
+    func encode(_ object: [String: Any]) throws -> String {
         guard JSONSerialization.isValidJSONObject(object) else { throw invalidArguments("JSON") }
         let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         guard let string = String(data: data, encoding: .utf8) else { throw invalidArguments("JSON") }
         return string
     }
 
-    private func nextRequestID() -> UInt64 {
+    func nextRequestID() -> UInt64 {
         requestCounter &+= 1
         if requestCounter == 0 { requestCounter = 1 }
         return requestCounter

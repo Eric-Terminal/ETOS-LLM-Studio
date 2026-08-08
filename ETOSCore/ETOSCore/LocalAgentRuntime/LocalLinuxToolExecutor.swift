@@ -53,6 +53,10 @@ public actor LocalLinuxToolExecutor {
         var columns: UInt16?
         var rows: UInt16?
         var maxBytes: Int?
+        var cursor: String?
+        var historyLimit: Int?
+        var activeCursor: String?
+        var activeLimit: Int?
 
         enum CodingKeys: String, CodingKey {
             case action
@@ -61,6 +65,10 @@ public actor LocalLinuxToolExecutor {
             case columns
             case rows
             case maxBytes = "max_bytes"
+            case cursor
+            case historyLimit = "history_limit"
+            case activeCursor = "active_cursor"
+            case activeLimit = "active_limit"
         }
     }
 
@@ -202,9 +210,51 @@ public actor LocalLinuxToolExecutor {
     ) async throws -> String {
         switch arguments.action {
         case "list":
-            let jobs = await scheduler.jobs(sessionID: run.context.sessionID)
+            let cursor: LocalLinuxJobCursor?
+            if let encoded = arguments.cursor {
+                guard let decoded = LocalLinuxJobCursor(encoded: encoded) else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("Linux 任务历史 cursor 无效。", comment: "Invalid Linux job history cursor")
+                    )
+                }
+                cursor = decoded
+            } else {
+                cursor = nil
+            }
+            let activeCursor: LocalLinuxJobCursor?
+            if let encoded = arguments.activeCursor {
+                guard let decoded = LocalLinuxJobCursor(encoded: encoded) else {
+                    throw LocalLinuxRuntimeError.runtimeUnavailable(
+                        NSLocalizedString("Linux 活跃任务 cursor 无效。", comment: "Invalid active Linux job cursor")
+                    )
+                }
+                activeCursor = decoded
+            } else {
+                activeCursor = nil
+            }
+            let page = await scheduler.jobsPage(
+                sessionID: run.context.sessionID,
+                cursor: cursor,
+                historyLimit: min(200, max(1, arguments.historyLimit ?? 50))
+            )
+            let activeLimit = min(200, max(1, arguments.activeLimit ?? 50))
+            let activeCandidates = page.activeJobs.filter { job in
+                guard let activeCursor else { return true }
+                if job.createdAt != activeCursor.createdAt {
+                    return job.createdAt < activeCursor.createdAt
+                }
+                return job.id.uuidString < activeCursor.id.uuidString
+            }
+            let activePage = Array(activeCandidates.prefix(activeLimit))
+            let nextActiveCursor = activeCandidates.count > activePage.count
+                ? activePage.last.map { LocalLinuxJobCursor(createdAt: $0.createdAt, id: $0.id) }
+                : nil
             return try encode([
-                "jobs": jobs.map(jobSummary)
+                "active_count": page.activeJobs.count,
+                "active_jobs": activePage.map(jobSummary),
+                "history_jobs": page.historyJobs.map(jobSummary),
+                "next_active_cursor": nextActiveCursor.map { $0.encoded as Any } ?? NSNull(),
+                "next_cursor": page.nextCursor.map { $0.encoded as Any } ?? NSNull()
             ])
 
         case "start_terminal":

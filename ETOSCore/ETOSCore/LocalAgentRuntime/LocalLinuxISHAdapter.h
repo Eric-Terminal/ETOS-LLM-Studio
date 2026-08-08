@@ -224,6 +224,11 @@ int32_t etos_ish_guest_file_write(
         const void *bytes,
         uint32_t length,
         uint32_t mode);
+int32_t etos_ish_guest_file_copy(
+        uint64_t request_id,
+        const char *path,
+        uint32_t flags,
+        const char *destination);
 int32_t etos_ish_guest_file_edit(
         uint64_t request_id,
         const char *path,

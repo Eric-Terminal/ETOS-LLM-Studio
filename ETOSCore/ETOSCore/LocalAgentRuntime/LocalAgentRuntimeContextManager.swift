@@ -36,12 +36,15 @@ public actor LocalAgentRuntimeContextManager {
         selectedMCPServerIDs: [UUID] = [],
         browserSessionID: UUID? = nil
     ) async throws -> (context: AgentRuntimeContext, workspace: LocalAgentWorkspace) {
-        if let existing = Persistence.loadLocalAgentRun(id: runID),
-           existing.context.sessionID == sessionID,
-           existing.state == .running,
-           let workspace = Persistence.loadLocalAgentWorkspaces().first(where: {
-               $0.id == existing.context.workspaceID
-           }) {
+        if let existing = Persistence.loadLocalAgentRun(id: runID) {
+            try Self.validateReusableRun(existing, sessionID: sessionID)
+            guard let workspace = Persistence.loadLocalAgentWorkspaces().first(where: {
+                $0.id == existing.context.workspaceID
+            }) else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("Agent Run 的工作区已经不存在。", comment: "Existing Agent run workspace missing")
+                )
+            }
             return (existing.context, workspace)
         }
 
@@ -107,12 +110,28 @@ public actor LocalAgentRuntimeContextManager {
         return (context, workspace)
     }
 
-    public func finishRun(id: UUID, state: LocalAgentRunState) {
-        guard var record = Persistence.loadLocalAgentRun(id: id) else { return }
-        guard !record.state.isTerminal else { return }
-        record.state = state
-        record.finishedAt = state.isTerminal ? Date() : nil
-        _ = Persistence.saveLocalAgentRun(record)
+    public func finishRun(id: UUID, state: LocalAgentRunState) async {
+        if var record = Persistence.loadLocalAgentRun(id: id), !record.state.isTerminal {
+            record.state = state
+            record.finishedAt = state.isTerminal ? Date() : nil
+            _ = Persistence.saveLocalAgentRun(record)
+        }
+        if state.isTerminal {
+            await LocalAgentFileToolExecutor.shared.finishRun(id: id)
+        }
+    }
+
+    static func validateReusableRun(_ record: LocalAgentRunRecord, sessionID: UUID) throws {
+        guard record.context.sessionID == sessionID else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Agent Run 标识不属于当前会话。", comment: "Agent run session mismatch")
+            )
+        }
+        guard !record.state.isTerminal else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("Agent Run 已经结束，不能再次执行迟到的工具调用。", comment: "Terminal Agent run cannot be resumed")
+            )
+        }
     }
 
     public func interruptPersistedRunsAfterLaunch() {

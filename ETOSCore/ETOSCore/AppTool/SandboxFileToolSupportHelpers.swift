@@ -7,12 +7,26 @@
 import Foundation
 
 extension SandboxFileToolSupport {
+    struct SandboxUndoContext: Sendable {
+        let runID: UUID
+        let mutationID: UUID
+    }
+
+    @TaskLocal internal static var undoContext: SandboxUndoContext?
+
     struct SandboxUndoEntry {
         let rootPath: String
+        let context: SandboxUndoContext?
         let operation: String
         let recordedAt: Date
+        let rollbackURLs: [URL]
         let undo: () throws -> Void
         let discard: () -> Void
+    }
+
+    private struct SandboxUndoRollbackSnapshot {
+        let targetURL: URL
+        let backupURL: URL?
     }
 
     private static let undoDateFormatter = ISO8601DateFormatter()
@@ -24,21 +38,72 @@ extension SandboxFileToolSupport {
         rootDirectory: URL = StorageUtility.documentsDirectory
     ) throws -> SandboxFileUndoResult {
         let rootPath = rootDirectory.standardizedFileURL.path
-        guard let entry = popUndoEntry(for: rootPath) else {
+        guard let reserved = reserveUndoEntry(for: rootPath, context: nil) else {
             throw SandboxFileToolError.noUndoHistory
         }
+        let entry = reserved.entry
 
         do {
-            try entry.undo()
+            try performTransactionalUndo(entry)
             entry.discard()
             return SandboxFileUndoResult(
                 operation: entry.operation,
                 recordedAt: undoDateFormatter.string(from: entry.recordedAt)
             )
         } catch {
-            restoreUndoEntry(entry)
+            restoreUndoEntry(entry, at: reserved.index)
             throw error
         }
+    }
+
+    /// Agent 文件工具使用精确 mutation ID，避免不同 Run 共用 Documents 撤销栈。
+    static func undoMutation(
+        id: UUID,
+        runID: UUID,
+        rootDirectory: URL = StorageUtility.documentsDirectory
+    ) throws -> SandboxFileUndoResult {
+        let context = SandboxUndoContext(runID: runID, mutationID: id)
+        let rootPath = rootDirectory.standardizedFileURL.path
+        guard let reserved = reserveUndoEntry(for: rootPath, context: context) else {
+            throw SandboxFileToolError.noUndoHistory
+        }
+        do {
+            try performTransactionalUndo(reserved.entry)
+            reserved.entry.discard()
+            return SandboxFileUndoResult(
+                operation: reserved.entry.operation,
+                recordedAt: undoDateFormatter.string(from: reserved.entry.recordedAt)
+            )
+        } catch {
+            restoreUndoEntry(reserved.entry, at: reserved.index)
+            throw error
+        }
+    }
+
+    static func hasUndoMutation(id: UUID, runID: UUID) -> Bool {
+        undoLock.lock()
+        defer { undoLock.unlock() }
+        return undoStack.contains {
+            $0.context?.runID == runID && $0.context?.mutationID == id
+        }
+    }
+
+    static func discardUndoMutations(runID: UUID) {
+        undoLock.lock()
+        let discarded = undoStack.filter { $0.context?.runID == runID }
+        undoStack.removeAll { $0.context?.runID == runID }
+        undoLock.unlock()
+        discarded.forEach { $0.discard() }
+    }
+
+    static func discardUndoMutation(id: UUID, runID: UUID) {
+        undoLock.lock()
+        let index = undoStack.lastIndex {
+            $0.context?.runID == runID && $0.context?.mutationID == id
+        }
+        let discarded = index.map { undoStack.remove(at: $0) }
+        undoLock.unlock()
+        discarded?.discard()
     }
 
     public static func searchItems(
@@ -135,47 +200,223 @@ extension SandboxFileToolSupport {
         relativePath: String,
         startLine: Int = 1,
         maxLines: Int = 200,
+        byteOffset: UInt64? = nil,
+        maxBytes: Int = 262_144,
         rootDirectory: URL = StorageUtility.documentsDirectory
     ) throws -> SandboxFileChunkReadResult {
         guard startLine >= 1, maxLines >= 1 else {
             throw SandboxFileToolError.invalidChunkRange
         }
-        let resolvedMaxLines = min(maxLines, 1000)
-        let content = try readTextFile(relativePath: relativePath, rootDirectory: rootDirectory)
-        let lines = normalizedTextLines(content)
-        let totalLines = lines.count
-        let displayPath = normalizedDisplayPath(
-            for: try resolveURL(relativePath: relativePath, rootDirectory: rootDirectory, allowRoot: false),
-            rootDirectory: rootDirectory
+        let resolvedMaxLines = min(maxLines, 1_000)
+        let resolvedMaxBytes = min(1_048_576, max(4, maxBytes))
+        let fileURL = try resolveURL(
+            relativePath: relativePath,
+            rootDirectory: rootDirectory,
+            allowRoot: false
         )
-
-        guard totalLines > 0 else {
-            return SandboxFileChunkReadResult(
-                path: displayPath,
-                startLine: 1,
-                endLine: 0,
-                totalLines: 0,
-                hasMore: false,
-                content: ""
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+            throw SandboxFileToolError.fileNotFound(
+                normalizedDisplayPath(for: fileURL, rootDirectory: rootDirectory)
             )
         }
-        guard startLine <= totalLines else {
-            throw SandboxFileToolError.invalidChunkRange
+        guard !isDirectory.boolValue else {
+            throw SandboxFileToolError.fileExpected(
+                normalizedDisplayPath(for: fileURL, rootDirectory: rootDirectory)
+            )
         }
-
-        let startIndex = startLine - 1
-        let endExclusive = min(startIndex + resolvedMaxLines, totalLines)
-        let selected = Array(lines[startIndex..<endExclusive])
-        let endLine = startLine + selected.count - 1
-
-        return SandboxFileChunkReadResult(
-            path: displayPath,
-            startLine: startLine,
-            endLine: endLine,
-            totalLines: totalLines,
-            hasMore: endExclusive < totalLines,
-            content: selected.joined(separator: "\n")
+        let displayPath = normalizedDisplayPath(
+            for: fileURL,
+            rootDirectory: rootDirectory
         )
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        var offset = byteOffset ?? 0
+        try handle.seek(toOffset: offset)
+        var currentLine = byteOffset == nil ? 1 : startLine
+        var completedSelectedLines = 0
+        var lastSelectedLine: Int?
+        var content = Data()
+        var previousWasCarriageReturn = false
+        var pendingStopAfterCarriageReturn = false
+        var pendingStopIsTruncated = false
+
+        while true {
+            let page = try handle.read(upToCount: 256 * 1_024) ?? Data()
+            var index = page.startIndex
+            while index < page.endIndex {
+                let byte = page[index]
+                let absoluteOffset = offset + UInt64(page.distance(from: page.startIndex, to: index))
+                if pendingStopAfterCarriageReturn {
+                    let nextOffset = byte == 0x0A ? absoluteOffset + 1 : absoluteOffset
+                    return try sandboxChunkResult(
+                        path: displayPath,
+                        startLine: startLine,
+                        currentLine: currentLine,
+                        lastSelectedLine: lastSelectedLine,
+                        content: content,
+                        totalLines: nil,
+                        contentTruncated: pendingStopIsTruncated,
+                        nextByteOffset: nextOffset,
+                        nextStartLine: currentLine
+                    )
+                }
+                if byte == 0x0A, previousWasCarriageReturn {
+                    previousWasCarriageReturn = false
+                    index = page.index(after: index)
+                    continue
+                }
+                previousWasCarriageReturn = false
+
+                if byte == 0x0A || byte == 0x0D {
+                    if currentLine >= startLine {
+                        lastSelectedLine = currentLine
+                        if completedSelectedLines < resolvedMaxLines {
+                            completedSelectedLines += 1
+                        }
+                    }
+                    if currentLine < Int.max {
+                        currentLine += 1
+                    }
+                    if completedSelectedLines >= resolvedMaxLines {
+                        if byte == 0x0D {
+                            pendingStopAfterCarriageReturn = true
+                            pendingStopIsTruncated = false
+                            previousWasCarriageReturn = true
+                            index = page.index(after: index)
+                            continue
+                        }
+                        return try sandboxChunkResult(
+                            path: displayPath,
+                            startLine: startLine,
+                            currentLine: currentLine,
+                            lastSelectedLine: lastSelectedLine,
+                            content: content,
+                            totalLines: nil,
+                            contentTruncated: false,
+                            nextByteOffset: absoluteOffset + 1,
+                            nextStartLine: currentLine
+                        )
+                    }
+                    if currentLine > startLine {
+                        if content.count == resolvedMaxBytes {
+                            if byte == 0x0D {
+                                pendingStopAfterCarriageReturn = true
+                                pendingStopIsTruncated = true
+                                previousWasCarriageReturn = true
+                                index = page.index(after: index)
+                                continue
+                            }
+                            return try sandboxChunkResult(
+                                path: displayPath,
+                                startLine: startLine,
+                                currentLine: currentLine,
+                                lastSelectedLine: lastSelectedLine,
+                                content: content,
+                                totalLines: nil,
+                                contentTruncated: true,
+                                nextByteOffset: absoluteOffset + 1,
+                                nextStartLine: currentLine
+                            )
+                        }
+                        content.append(0x0A)
+                    }
+                    previousWasCarriageReturn = byte == 0x0D
+                } else if currentLine >= startLine {
+                    if content.count == resolvedMaxBytes {
+                        return try sandboxChunkResult(
+                            path: displayPath,
+                            startLine: startLine,
+                            currentLine: currentLine,
+                            lastSelectedLine: currentLine,
+                            content: content,
+                            totalLines: nil,
+                            contentTruncated: true,
+                            nextByteOffset: absoluteOffset,
+                            nextStartLine: currentLine
+                        )
+                    }
+                    content.append(byte)
+                    lastSelectedLine = currentLine
+                }
+                index = page.index(after: index)
+            }
+            offset += UInt64(page.count)
+            if page.isEmpty {
+                if pendingStopAfterCarriageReturn {
+                    return try sandboxChunkResult(
+                        path: displayPath,
+                        startLine: startLine,
+                        currentLine: currentLine,
+                        lastSelectedLine: lastSelectedLine,
+                        content: content,
+                        totalLines: nil,
+                        contentTruncated: pendingStopIsTruncated,
+                        nextByteOffset: offset,
+                        nextStartLine: currentLine
+                    )
+                }
+                if currentLine >= startLine, completedSelectedLines < resolvedMaxLines {
+                    lastSelectedLine = currentLine
+                }
+                return try sandboxChunkResult(
+                    path: displayPath,
+                    startLine: startLine,
+                    currentLine: currentLine,
+                    lastSelectedLine: lastSelectedLine,
+                    content: content,
+                    totalLines: byteOffset == nil ? currentLine : nil,
+                    contentTruncated: false,
+                    nextByteOffset: nil,
+                    nextStartLine: nil
+                )
+            }
+        }
+    }
+
+    private static func sandboxChunkResult(
+        path: String,
+        startLine: Int,
+        currentLine: Int,
+        lastSelectedLine: Int?,
+        content: Data,
+        totalLines: Int?,
+        contentTruncated: Bool,
+        nextByteOffset: UInt64?,
+        nextStartLine: Int?
+    ) throws -> SandboxFileChunkReadResult {
+        let decoded = try decodeSandboxChunkContent(
+            content,
+            displayPath: path,
+            mayTrimIncompleteSuffix: contentTruncated
+        )
+        let adjustedNextOffset = nextByteOffset.map { $0 - UInt64(decoded.removedBytes) }
+        return SandboxFileChunkReadResult(
+            path: path,
+            startLine: startLine,
+            endLine: lastSelectedLine ?? min(currentLine, startLine - 1),
+            totalLines: totalLines,
+            hasMore: adjustedNextOffset != nil,
+            content: decoded.text,
+            contentTruncated: contentTruncated || decoded.removedBytes != 0,
+            nextByteOffset: adjustedNextOffset,
+            nextStartLine: nextStartLine
+        )
+    }
+
+    private static func decodeSandboxChunkContent(
+        _ data: Data,
+        displayPath: String,
+        mayTrimIncompleteSuffix: Bool
+    ) throws -> (text: String, removedBytes: Int) {
+        let maximumTrim = mayTrimIncompleteSuffix ? min(3, data.count) : 0
+        for removed in 0 ... maximumTrim {
+            let end = data.index(data.endIndex, offsetBy: -removed)
+            if let text = String(data: data[..<end], encoding: .utf8) {
+                return (text, removed)
+            }
+        }
+        throw SandboxFileToolError.unsupportedEncoding(displayPath)
     }
 
     public static func moveItem(
@@ -205,6 +446,9 @@ extension SandboxFileToolSupport {
             if destinationPath.hasPrefix(sourcePath + "/") {
                 throw SandboxFileToolError.cannotMoveIntoSelf
             }
+        }
+        if sourceURL.standardizedFileURL.path.hasPrefix(destinationURL.standardizedFileURL.path + "/") {
+            throw SandboxFileToolError.destinationContainsSource
         }
 
         let destinationParent = destinationURL.deletingLastPathComponent()
@@ -239,11 +483,13 @@ extension SandboxFileToolSupport {
             guard overwrite else {
                 throw SandboxFileToolError.destinationAlreadyExists(destinationDisplayPath)
             }
-            overwrittenBackupURL = try backupItem(at: destinationURL)
-            try FileManager.default.removeItem(at: destinationURL)
+            overwrittenBackupURL = try replaceItemKeepingBackup(
+                at: destinationURL,
+                with: sourceURL
+            )
+        } else {
+            try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
         }
-
-        try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
         StorageUtility.notifyFilesystemMutation(at: sourceURL)
         StorageUtility.notifyFilesystemMutation(at: destinationURL)
 
@@ -251,6 +497,7 @@ extension SandboxFileToolSupport {
         pushUndoEntry(
             rootDirectory: rootDirectory,
             operation: "move_sandbox_item",
+            rollbackURLs: [sourceURL, destinationURL],
             discard: {
                 if let backupURLForUndo {
                     try? FileManager.default.removeItem(at: backupURLForUndo)
@@ -357,39 +604,124 @@ extension SandboxFileToolSupport {
     internal static func pushUndoEntry(
         rootDirectory: URL,
         operation: String,
+        rollbackURLs: [URL],
         discard: @escaping () -> Void = {},
         undo: @escaping () throws -> Void
     ) {
         let entry = SandboxUndoEntry(
             rootPath: rootDirectory.standardizedFileURL.path,
+            context: undoContext,
             operation: operation,
             recordedAt: Date(),
+            rollbackURLs: rollbackURLs,
             undo: undo,
             discard: discard
         )
 
         undoLock.lock()
         undoStack.append(entry)
-        if undoStack.count > maxUndoEntries {
-            let stale = undoStack.removeFirst()
-            stale.discard()
+        let unscopedIndices = undoStack.indices.filter { undoStack[$0].context == nil }
+        let stale: SandboxUndoEntry?
+        if unscopedIndices.count > maxUndoEntries, let first = unscopedIndices.first {
+            stale = undoStack.remove(at: first)
+        } else {
+            stale = nil
         }
         undoLock.unlock()
+        stale?.discard()
     }
 
-    internal static func popUndoEntry(for rootPath: String) -> SandboxUndoEntry? {
+    private static func reserveUndoEntry(
+        for rootPath: String,
+        context: SandboxUndoContext?
+    ) -> (entry: SandboxUndoEntry, index: Int)? {
         undoLock.lock()
         defer { undoLock.unlock() }
-        guard let index = undoStack.lastIndex(where: { $0.rootPath == rootPath }) else {
+        guard let index = undoStack.lastIndex(where: {
+            $0.rootPath == rootPath && $0.context?.runID == context?.runID &&
+                $0.context?.mutationID == context?.mutationID
+        }) else {
             return nil
         }
-        return undoStack.remove(at: index)
+        return (undoStack.remove(at: index), index)
     }
 
-    internal static func restoreUndoEntry(_ entry: SandboxUndoEntry) {
+    private static func restoreUndoEntry(_ entry: SandboxUndoEntry, at index: Int) {
         undoLock.lock()
-        undoStack.append(entry)
+        undoStack.insert(entry, at: min(index, undoStack.count))
         undoLock.unlock()
+    }
+
+    private static func performTransactionalUndo(_ entry: SandboxUndoEntry) throws {
+        let rollback = try prepareRollbackSnapshots(entry.rollbackURLs)
+        do {
+            try entry.undo()
+            discardRollbackSnapshots(rollback)
+        } catch {
+            let undoError = error
+            do {
+                try restoreRollbackSnapshots(rollback)
+                discardRollbackSnapshots(rollback)
+            } catch let rollbackError {
+                discardRollbackSnapshots(rollback)
+                throw SandboxFileToolError.writeFailed(
+                    String(
+                        format: NSLocalizedString("撤销文件修改失败（%@），恢复撤销前状态也失败（%@）。", comment: "Sandbox undo and undo rollback failure"),
+                        undoError.localizedDescription,
+                        rollbackError.localizedDescription
+                    )
+                )
+            }
+            throw undoError
+        }
+    }
+
+    private static func prepareRollbackSnapshots(_ urls: [URL]) throws -> [SandboxUndoRollbackSnapshot] {
+        var snapshots: [SandboxUndoRollbackSnapshot] = []
+        do {
+            for url in urls {
+                let standardized = url.standardizedFileURL
+                guard !snapshots.contains(where: { $0.targetURL.path == standardized.path }) else { continue }
+                let backup: URL?
+                if FileManager.default.fileExists(atPath: standardized.path) {
+                    backup = try backupRollbackItem(at: standardized)
+                } else {
+                    backup = nil
+                }
+                snapshots.append(.init(targetURL: standardized, backupURL: backup))
+            }
+            return snapshots
+        } catch {
+            discardRollbackSnapshots(snapshots)
+            throw error
+        }
+    }
+
+    private static func restoreRollbackSnapshots(_ snapshots: [SandboxUndoRollbackSnapshot]) throws {
+        for snapshot in snapshots.sorted(by: { $0.targetURL.path.count > $1.targetURL.path.count })
+            where FileManager.default.fileExists(atPath: snapshot.targetURL.path) {
+            try FileManager.default.removeItem(at: snapshot.targetURL)
+        }
+        for snapshot in snapshots {
+            guard let backupURL = snapshot.backupURL else { continue }
+            try FileManager.default.copyItem(at: backupURL, to: snapshot.targetURL)
+            StorageUtility.notifyFilesystemMutation(at: snapshot.targetURL)
+        }
+    }
+
+    private static func discardRollbackSnapshots(_ snapshots: [SandboxUndoRollbackSnapshot]) {
+        for backupURL in snapshots.compactMap(\.backupURL) {
+            try? FileManager.default.removeItem(at: backupURL)
+        }
+    }
+
+    private static func backupRollbackItem(at url: URL) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("etos-sandbox-undo-rollback", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let backupURL = root.appendingPathComponent(UUID().uuidString, isDirectory: false)
+        try FileManager.default.copyItem(at: url, to: backupURL)
+        return backupURL
     }
 
     internal static func backupItem(at url: URL) throws -> URL {
@@ -397,6 +729,76 @@ extension SandboxFileToolSupport {
         let backupURL = backupRoot.appendingPathComponent(UUID().uuidString, isDirectory: false)
         try FileManager.default.copyItem(at: url, to: backupURL)
         return backupURL
+    }
+
+    internal static func replaceItemKeepingBackup(
+        at destinationURL: URL,
+        with replacementURL: URL,
+        replacementOperation: (URL, URL, String) throws -> Void = { destination, replacement, backupName in
+            _ = try FileManager.default.replaceItemAt(
+                destination,
+                withItemAt: replacement,
+                backupItemName: backupName,
+                options: [.withoutDeletingBackupItem]
+            )
+        }
+    ) throws -> URL {
+        let backupName = ".etos-replaced-\(UUID().uuidString)"
+        let backupURL = destinationURL.deletingLastPathComponent()
+            .appendingPathComponent(backupName, isDirectory: false)
+        do {
+            try replacementOperation(destinationURL, replacementURL, backupName)
+            return backupURL
+        } catch {
+            let replacementError = error
+            guard FileManager.default.fileExists(atPath: backupURL.path) else {
+                throw replacementError
+            }
+            do {
+                if !FileManager.default.fileExists(atPath: replacementURL.path),
+                   FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.moveItem(at: destinationURL, to: replacementURL)
+                } else if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.moveItem(at: backupURL, to: destinationURL)
+            } catch let restoreError {
+                throw SandboxFileToolError.writeFailed(
+                    String(
+                        format: NSLocalizedString("替换目标失败（%@），恢复旧目标也失败（%@）。", comment: "Sandbox replacement and restore failure"),
+                        replacementError.localizedDescription,
+                        restoreError.localizedDescription
+                    )
+                )
+            }
+            throw replacementError
+        }
+    }
+
+    internal static func copyItemThroughStaging(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        destinationExists: Bool,
+        sourceIsDirectory: Bool,
+        copyOperation: (URL, URL) throws -> Void = { source, destination in
+            try FileManager.default.copyItem(at: source, to: destination)
+        }
+    ) throws -> URL? {
+        let stagingURL = destinationURL.deletingLastPathComponent().appendingPathComponent(
+            ".etos-copy-staging-\(UUID().uuidString)",
+            isDirectory: sourceIsDirectory
+        )
+        defer {
+            if FileManager.default.fileExists(atPath: stagingURL.path) {
+                try? FileManager.default.removeItem(at: stagingURL)
+            }
+        }
+        try copyOperation(sourceURL, stagingURL)
+        if destinationExists {
+            return try replaceItemKeepingBackup(at: destinationURL, with: stagingURL)
+        }
+        try FileManager.default.moveItem(at: stagingURL, to: destinationURL)
+        return nil
     }
 
     internal static func backupRootDirectory() throws -> URL {

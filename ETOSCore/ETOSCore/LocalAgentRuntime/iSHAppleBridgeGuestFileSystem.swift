@@ -207,6 +207,30 @@ public extension iSHAppleBridgeAdapter {
         try requireSuccess(status, operation: "编辑 Linux 文件")
     }
 
+    /// 在 iSH guest 内以固定缓冲区复制，避免大文件进入 Swift `Data`。
+    func copyGuestFile(
+        path: String,
+        destination: String,
+        requestID: UInt64,
+        noFollow: Bool = false
+    ) throws {
+        try validateGuestFileRequest(path: path, requestID: requestID)
+        guard destination.hasPrefix("/") else {
+            throw LocalLinuxRuntimeError.invalidPath(destination)
+        }
+        let status = try withETOSCString(path) { path in
+            try withETOSCString(destination) { destination in
+                etosISHGuestFileCopy(
+                    requestID,
+                    path,
+                    noFollow ? 1 : 0,
+                    destination
+                )
+            }
+        }
+        try requireSuccess(status, operation: "复制 Linux 文件")
+    }
+
     func removeGuestFile(
         path: String,
         requestID: UInt64,

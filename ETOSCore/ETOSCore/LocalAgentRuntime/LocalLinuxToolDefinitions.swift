@@ -98,7 +98,11 @@ enum LocalLinuxToolDefinitions {
                     "input": stringProperty(NSLocalizedString("write_stdin 写入的 UTF-8 文本。", comment: "Linux terminal input")),
                     "columns": integerProperty(NSLocalizedString("PTY 列数。", comment: "Linux terminal columns")),
                     "rows": integerProperty(NSLocalizedString("PTY 行数。", comment: "Linux terminal rows")),
-                    "max_bytes": integerProperty(NSLocalizedString("读取模型输出时最多返回的字节数。", comment: "Linux process output maximum"))
+                    "max_bytes": integerProperty(NSLocalizedString("读取模型输出时最多返回的字节数。", comment: "Linux process output maximum")),
+                    "cursor": stringProperty(NSLocalizedString("list 返回的已结束任务分页 cursor；活跃任务使用 active_cursor 独立翻页。", comment: "Linux process history cursor")),
+                    "history_limit": integerProperty(NSLocalizedString("list 每页返回的已结束任务数，默认 50，最大 200。", comment: "Linux process history page size")),
+                    "active_cursor": stringProperty(NSLocalizedString("list 返回的活跃任务分页 cursor；继续翻页不会影响任务运行。", comment: "Linux process active cursor")),
+                    "active_limit": integerProperty(NSLocalizedString("list 每页返回的活跃任务数，默认 50，最大 200；这只是响应分页，不是调度上限。", comment: "Linux process active page size"))
                 ]),
                 "required": .array([.string("action")])
             ])

@@ -46,10 +46,14 @@ extension AppToolManager {
     static func runSandboxFileOperationOffMainThread<T>(
         _ operation: @escaping () throws -> T
     ) async throws -> T {
-        try await withCheckedThrowingContinuation { continuation in
+        let undoContext = SandboxFileToolSupport.undoContext
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    continuation.resume(returning: try operation())
+                    let result = try SandboxFileToolSupport.$undoContext.withValue(undoContext) {
+                        try operation()
+                    }
+                    continuation.resume(returning: result)
                 } catch {
                     continuation.resume(throwing: error)
                 }

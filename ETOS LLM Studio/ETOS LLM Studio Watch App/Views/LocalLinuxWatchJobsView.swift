@@ -20,6 +20,10 @@ struct LocalLinuxWatchJobsView: View {
 
     let sessionID: UUID?
     @State private var groups: [JobGroup] = []
+    @State private var activeJobs: [LocalLinuxJob] = []
+    @State private var historyJobs: [LocalLinuxJob] = []
+    @State private var nextHistoryCursor: LocalLinuxJobCursor?
+    @State private var isLoadingHistory = false
 
     var body: some View {
         List {
@@ -81,34 +85,82 @@ struct LocalLinuxWatchJobsView: View {
                     }
                 }
             }
+
+
+            if nextHistoryCursor != nil {
+                Section {
+                    Button(NSLocalizedString("加载更多历史任务", comment: "Watch load more Linux job history")) {
+                        Task { await loadMoreHistory() }
+                    }
+                    .disabled(isLoadingHistory)
+                } footer: {
+                    Text(NSLocalizedString("活跃任务始终显示；已结束任务按需加载。", comment: "Watch Linux jobs history pagination footer"))
+                }
+            }
         }
         .navigationTitle(NSLocalizedString("本地 Agent 任务", comment: "Watch local Agent jobs title"))
         .task {
+            await loadInitialPage()
             while !Task.isCancelled {
-                await reload()
-                try? await Task<Never, Never>.sleep(nanoseconds: 500_000_000)
+                await reloadActiveJobs()
+                try? await Task<Never, Never>.sleep(nanoseconds: 1_000_000_000)
             }
         }
     }
 
-    private func reload() async {
-        let jobs: [LocalLinuxJob]
-        if let sessionID {
-            jobs = await LocalLinuxJobScheduler.shared.jobs(sessionID: sessionID, limit: 100)
-        } else {
-            jobs = await LocalLinuxJobScheduler.shared.activeJobs()
+    private func loadInitialPage() async {
+        isLoadingHistory = true
+        let page = await LocalLinuxJobScheduler.shared.jobsPage(
+            sessionID: sessionID,
+            historyLimit: 30
+        )
+        activeJobs = page.activeJobs
+        historyJobs = page.historyJobs
+        nextHistoryCursor = page.nextCursor
+        isLoadingHistory = false
+        await rebuildGroups()
+    }
+
+    private func loadMoreHistory() async {
+        guard let cursor = nextHistoryCursor, !isLoadingHistory else { return }
+        isLoadingHistory = true
+        let page = await LocalLinuxJobScheduler.shared.jobsPage(
+            sessionID: sessionID,
+            cursor: cursor,
+            historyLimit: 30
+        )
+        let knownIDs = Set(historyJobs.map(\.id))
+        historyJobs.append(contentsOf: page.historyJobs.filter { !knownIDs.contains($0.id) })
+        nextHistoryCursor = page.nextCursor
+        isLoadingHistory = false
+        await rebuildGroups()
+    }
+
+    private func reloadActiveJobs() async {
+        let previousIDs = Set(activeJobs.map(\.id))
+        let current = (await LocalLinuxJobScheduler.shared.activeJobs())
+            .filter { sessionID == nil || $0.sessionID == sessionID }
+        let currentIDs = Set(current.map(\.id))
+        for id in previousIDs.subtracting(currentIDs) {
+            if let finished = await LocalLinuxJobScheduler.shared.job(id: id), finished.state.isTerminal {
+                historyJobs.removeAll { $0.id == id }
+                historyJobs.append(finished)
+            }
         }
+        activeJobs = current
+        await rebuildGroups()
+    }
+
+    private func rebuildGroups() async {
+        let activeIDs = Set(activeJobs.map(\.id))
+        let jobs = activeJobs + historyJobs.filter { !activeIDs.contains($0.id) }
         groups = await Task.detached(priority: .utility) {
-            Dictionary(grouping: jobs) {
-                "\($0.sessionID?.uuidString ?? "device")/\($0.runID?.uuidString ?? "user")"
-            }.values.map { values in
+            LocalLinuxJobScheduler.orderedJobGroups(jobs).map { values in
                 JobGroup(
                     sessionID: values.first?.sessionID,
                     runID: values.first?.runID,
-                    jobs: values.sorted { $0.createdAt > $1.createdAt }
+                    jobs: values
                 )
-            }.sorted {
-                ($0.jobs.first?.createdAt ?? .distantPast) > ($1.jobs.first?.createdAt ?? .distantPast)
             }
         }.value
     }
