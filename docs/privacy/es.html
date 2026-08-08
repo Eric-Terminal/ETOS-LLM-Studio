@@ -62,7 +62,7 @@
     </div>
 
     <h1>Política de Privacidad</h1>
-    <p class="last-updated">Última actualización: 26 de julio de 2026</p>
+    <p class="last-updated">Última actualización: 8 de agosto de 2026</p>
 
     <section>
         <h2>1. Introducción</h2>
@@ -79,6 +79,7 @@
     <li><strong>Configuración de proveedor API y claves API:</strong> la configuración de proveedor (como listas de modelos, cabeceras personalizadas y ajustes de proxy) y las claves API se guardan en una base de configuración local <strong>SQLite</strong>. Si una versión anterior guardó claves en Keychain, la migración combina y limpia ese almacenamiento heredado.</li>
     <li><strong>Registros locales de solicitudes y respuestas:</strong> la app puede guardar localmente los cuerpos HTTP completos de solicitudes y respuestas, junto con la duración, el estado, el uso de tokens y otros campos de diagnóstico. Esta función tiene su propio interruptor general y oculta el texto del chat de forma predeterminada. El texto solo se conserva si activas explícitamente el registro en texto claro; los datos Base64 de imágenes, audio y archivos siempre se ocultan. Estos registros nunca se suben automáticamente.</li>
     <li><strong>Caché de tickets de feedback:</strong> si usas el asistente de feedback, la app guarda localmente número de ticket, token del ticket, estado, hora de actualización y URL pública para que puedas seguir el progreso.</li>
+    <li><strong>Linux local:</strong> el RootFS AArch64 opcional incluido, los espacios de trabajo, registros de tareas y diagnósticos permanecen dentro del sandbox de la app. Las variables de entorno se guardan en la base SQLite compatible con cifrado y solo se inyectan al iniciar el proceso Linux seleccionado; no se añaden automáticamente al prompt del modelo.</li>
 </ul>
 
     </section>
@@ -89,6 +90,7 @@
     <li><strong>Chat de texto:</strong> tus mensajes se envían directamente a los proveedores de IA de terceros que configuras tú mismo (como OpenAI, Anthropic, Google, servicios compatibles con OpenAI o modelos autoalojados). No hacemos proxy ni almacenamos ese contenido en servidores del desarrollador.</li>
     <li><strong>Voz y audio:</strong> el acceso al micrófono solo se usa cuando grabas o activas la entrada por voz de forma explícita. El audio se envía únicamente al proveedor de modelo actual o al servicio de voz/transcripción que elijas.</li>
     <li><strong>Imágenes y archivos:</strong> la app solo accede a imágenes o archivos cuando tú los seleccionas. Esos adjuntos se envían al proveedor del modelo actual o a un endpoint local de depuración que conectes voluntariamente.</li>
+    <li><strong>Browser Agent y MCP local:</strong> las solicitudes de Browser Agent van directamente a los sitios abiertos en una vista WebKit de la app. Un servidor MCP stdio local se ejecuta dentro de Linux local. Las carpetas externas solo se exponen a Linux después de que las selecciones y autorices, y las cookies del navegador no se montan en Linux.</li>
 </ul>
 
     </section>

@@ -62,7 +62,7 @@
     </div>
 
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Last updated: July 26, 2026</p>
+    <p class="last-updated">Last updated: August 8, 2026</p>
 
     <section>
         <h2>1. Introduction</h2>
@@ -79,6 +79,7 @@
     <li><strong>API provider configuration and API keys:</strong> provider configuration (such as model lists, header overrides, and proxy settings) and API keys are stored in a local <strong>SQLite</strong> configuration database. If an older version wrote keys to Keychain, migration will merge and clean up the legacy credential storage.</li>
     <li><strong>Local request and response logs:</strong> the app can locally save complete HTTP request and response bodies plus diagnostic fields such as duration, status, and token usage. This feature has its own master switch and hides chat text by default. Text is retained only if you explicitly enable plaintext message logging; Base64 data for images, audio, and files is always hidden. These logs are never uploaded automatically.</li>
     <li><strong>Feedback ticket cache:</strong> if you use the feedback assistant, the app stores ticket numbers, ticket tokens, status, update timestamps, and public URLs locally so you can track progress later.</li>
+    <li><strong>Local Linux:</strong> the optional bundled AArch64 RootFS, workspaces, task logs, and diagnostics stay inside the app sandbox. Environment variables are stored in the encrypted-capable SQLite configuration database and injected only when a selected Linux process starts; they are not automatically added to model prompts.</li>
 </ul>
 
     </section>
@@ -89,6 +90,7 @@
     <li><strong>Text chat:</strong> your messages are sent directly to the third-party AI providers you configure yourself (such as OpenAI, Anthropic, Google, OpenAI-compatible services, or self-hosted models). We do not proxy or store that content on developer-controlled servers.</li>
     <li><strong>Voice and audio:</strong> microphone access is only used when you actively record or trigger voice input. Audio is sent only to your current model provider or the speech/transcription service you choose.</li>
     <li><strong>Images and files:</strong> the app only accesses images or files when you choose them. Those attachments are sent to your current model provider, or to a local debugging endpoint that you intentionally connect.</li>
+    <li><strong>Browser Agent and local MCP:</strong> Browser Agent requests go directly to websites opened in an app-owned WebKit view. A local stdio MCP server runs inside Local Linux. External folders are exposed to Linux only after you select and authorize them, and browser cookies are not mounted into Linux.</li>
 </ul>
 
     </section>
