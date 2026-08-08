@@ -254,6 +254,12 @@ extension MCPManager {
                !selectedServerIDs.contains(available.server.id) {
                 return nil
             }
+            // 本地 stdio MCP 与 Linux 用户态共享进程生命周期；Chat 模式或未启用
+            // 本地 Linux 的 Agent Run 不能只暴露工具、等到执行阶段才失败。
+            if case .localStdio = available.server.transport,
+               !includeLocalLinuxTools {
+                return nil
+            }
             let builtInCategory = MCPBuiltInAppToolServer.category(for: available.server.id)
             if !chatToolsEnabled {
                 let isIncludedAgentBuiltIn = (builtInCategory == .conversation && includeConversationAgentTools)
