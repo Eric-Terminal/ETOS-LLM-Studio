@@ -3,11 +3,9 @@
 
 import Foundation
 import Combine
-
 #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
 import WebKit
 import UIKit
-
 @MainActor
 public final class BrowserSessionManager: NSObject, ObservableObject {
     public static let shared = BrowserSessionManager()
@@ -319,7 +317,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             )
         }
         let tab = try resolvedTab(sessionID: sessionID, tabID: tabID)
-        let cookies = await tab.webView.configuration.websiteDataStore.httpCookieStore.allCookies()
+        let cookies = await tab.webView.configuration.websiteDataStore.httpCookieStore.browserAgentAllCookies()
             .filter { Self.cookieApplies($0, to: url) }
         var request = URLRequest(url: url)
         let fields = HTTPCookie.requestHeaderFields(with: cookies)
@@ -557,14 +555,6 @@ extension BrowserSessionManager: WKNavigationDelegate {
               let tab = sessions[location.sessionID]?.tabs[location.tabID] else { return }
         tab.lastNavigationError = error
         objectWillChange.send()
-    }
-}
-
-private extension WKHTTPCookieStore {
-    func allCookies() async -> [HTTPCookie] {
-        await withCheckedContinuation { continuation in
-            getAllCookies { continuation.resume(returning: $0) }
-        }
     }
 }
 
