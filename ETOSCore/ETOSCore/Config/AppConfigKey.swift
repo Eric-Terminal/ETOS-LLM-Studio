@@ -599,7 +599,23 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .modelPickerFolderPathsByProvider:
             return .text("{}")
         case .chatQuickActionIDs:
-            return .text("temporaryChat")
+            return .text([
+                "temporaryChat",
+                "contextCompression",
+                "settings",
+                "toolCenter",
+                "dailyPulse",
+                "usageAnalytics",
+                "memory",
+                "mcp",
+                "agentSkills",
+                "shortcuts",
+                "roleplay",
+                "worldbook",
+                "extendedFeatures",
+                "browser",
+                "localTerminal"
+            ].joined(separator: ","))
         case .restoreLastSessionOnLaunch,
              .restoreLastSessionOnlyIfRecent:
             return .bool(false)

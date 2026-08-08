@@ -23,10 +23,20 @@ struct ChatQuickActionSelectionTests {
         ) == "eye.slash.fill")
     }
 
-    @Test("空配置和未知配置回退到临时对话")
-    func invalidSelectionUsesTemporaryChatFallback() {
-        #expect(ChatQuickActionSelection.decode("") == [.temporaryChat])
-        #expect(ChatQuickActionSelection.decode("unknown") == [.temporaryChat])
+    @Test("空配置和未知配置回退到全部快捷功能")
+    func invalidSelectionUsesAllActionsFallback() {
+        #expect(ChatQuickActionSelection.decode("") == ChatQuickAction.allCases)
+        #expect(ChatQuickActionSelection.decode("unknown") == ChatQuickAction.allCases)
+    }
+
+    @Test("新用户数据库默认值选中全部快捷功能")
+    func newUserDefaultSelectsAllActions() {
+        guard case .text(let rawValue) = AppConfigKey.chatQuickActionIDs.defaultValue else {
+            Issue.record("聊天快捷功能默认值不是文本配置")
+            return
+        }
+
+        #expect(ChatQuickActionSelection.decode(rawValue) == ChatQuickAction.allCases)
     }
 
     @Test("多选配置去重并按界面顺序保存")

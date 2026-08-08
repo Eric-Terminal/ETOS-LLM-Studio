@@ -94,7 +94,7 @@ enum ChatQuickAction: String, CaseIterable, Identifiable {
 }
 
 enum ChatQuickActionSelection {
-    static let fallback: [ChatQuickAction] = [.temporaryChat]
+    static let fallback = ChatQuickAction.allCases
 
     static func decode(_ rawValue: String) -> [ChatQuickAction] {
         let selectedIDs = Set(rawValue.split(separator: ",").map(String.init))
