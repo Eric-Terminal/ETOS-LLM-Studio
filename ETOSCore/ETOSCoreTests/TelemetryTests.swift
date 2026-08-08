@@ -154,7 +154,9 @@ struct TelemetryTests {
     @Test("深层诊断调用栈会在编码前安全裁剪")
     func deeplyNestedDiagnosticIsTruncatedBeforeEncoding() throws {
         var nestedFrame = #"{"binaryName":"deepest-frame"}"#
-        for index in 0..<400 {
+        // 每个 frame 会引入字典与数组两层；80 层足以越过 64 层裁剪边界，
+        // 同时不会先触发 Foundation JSON 解码器自身的嵌套上限。
+        for index in 0..<80 {
             nestedFrame = #"{"binaryName":"frame-\#(index)","subFrames":[\#(nestedFrame)]}"#
         }
         let rawPayload = Data(
@@ -164,6 +166,7 @@ struct TelemetryTests {
         let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
             kind: .diagnostic,
             rawPayloadData: rawPayload,
+            capturedAt: Date(timeIntervalSince1970: 1_800_000_000),
             periodStart: nil,
             periodEnd: nil,
             app: app,
@@ -173,7 +176,7 @@ struct TelemetryTests {
         let text = String(decoding: encoded, as: UTF8.self)
         let decoded = try TelemetryEnvelopeCodec.decode(encoded)
 
-        #expect(text.contains("frame-399"))
+        #expect(text.contains("frame-79"))
         #expect(text.contains("deepest-frame") == false)
         #expect(decoded == envelope)
     }

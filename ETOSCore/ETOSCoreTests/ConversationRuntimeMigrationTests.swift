@@ -110,26 +110,31 @@ struct ConversationRuntimeMigrationTests {
                         current_version_index, author_kind, position, created_at
                     ) VALUES (?, ?, 'user', ?, X'5B5D', 0, 'user', 0, ?)
                 """,
-                arguments: [messageID, "legacyuniqueterm", Date().timeIntervalSince1970]
+                arguments: [messageID, sessionID, "legacyuniqueterm", Date().timeIntervalSince1970]
             )
         }
 
         let initialFTSRowID = try ftsRowID(queue: queue, messageID: messageID)
-        try queue.write { db in
+        let metadataChangeCount = try queue.write { db -> Int in
+            let before = try Int.fetchOne(db, sql: "SELECT total_changes()") ?? -1
             try db.execute(
                 sql: "UPDATE messages SET source_message_id = ? WHERE id = ?",
                 arguments: [UUID().uuidString, messageID]
             )
+            let after = try Int.fetchOne(db, sql: "SELECT total_changes()") ?? -1
+            return after - before
         }
         let metadataUpdateFTSRowID = try ftsRowID(queue: queue, messageID: messageID)
 
-        try queue.write { db in
+        let contentChangeCount = try queue.write { db -> Int in
+            let before = try Int.fetchOne(db, sql: "SELECT total_changes()") ?? -1
             try db.execute(
                 sql: "UPDATE messages SET content = ? WHERE id = ?",
                 arguments: ["upgradeduniqueterm", messageID]
             )
+            let after = try Int.fetchOne(db, sql: "SELECT total_changes()") ?? -1
+            return after - before
         }
-        let contentUpdateFTSRowID = try ftsRowID(queue: queue, messageID: messageID)
         let searchCounts = try queue.read { db -> (Int, Int) in
             let oldTermCount = try Int.fetchOne(
                 db,
@@ -143,7 +148,8 @@ struct ConversationRuntimeMigrationTests {
         }
 
         #expect(initialFTSRowID == metadataUpdateFTSRowID)
-        #expect(contentUpdateFTSRowID != metadataUpdateFTSRowID)
+        #expect(metadataChangeCount == 1)
+        #expect(contentChangeCount > metadataChangeCount)
         #expect(searchCounts.0 == 0)
         #expect(searchCounts.1 == 1)
     }

@@ -9,6 +9,7 @@
 
 import ETOSCore
 import SwiftUI
+import Combine
 import WebKit
 
 struct BrowserAgentFeatureView: View {

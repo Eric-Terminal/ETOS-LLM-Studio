@@ -8,6 +8,7 @@
 // ============================================================================
 
 import SwiftUI
+import Combine
 import ETOSCore
 
 struct BrowserAgentWatchFeatureView: View {
