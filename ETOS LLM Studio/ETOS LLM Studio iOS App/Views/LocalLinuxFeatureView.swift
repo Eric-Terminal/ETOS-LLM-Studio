@@ -25,7 +25,6 @@ struct LocalLinuxFeatureView: View {
     @State private var errorMessage: String?
     @State private var deleteUserData = false
     @State private var showResetConfirmation = false
-    @State private var isShowingRuntimeIntro = false
 
     var body: some View {
         TabView {
@@ -74,12 +73,16 @@ struct LocalLinuxFeatureView: View {
     private var systemTab: some View {
         Form {
             Section {
+                LocalLinuxGuideCard()
+            }
+
+            Section {
                 Toggle(
                     NSLocalizedString("启用本地 Linux", comment: "Enable local Linux toggle"),
                     isOn: $appConfig.localLinuxEnabled
                 )
             } footer: {
-                Text(NSLocalizedString("开启这里只允许使用功能，不会下载、安装或启动系统。首次打开终端、Linux 文件、recipe 或运行 Agent 工具时才会准备内置环境。", comment: "Local Linux lazy start footer"))
+                Text(NSLocalizedString("这里只启用入口；首次实际使用时才准备系统。", comment: "Local Linux lazy start footer"))
             }
 
             Section(NSLocalizedString("状态", comment: "Local Linux status section")) {
@@ -112,11 +115,6 @@ struct LocalLinuxFeatureView: View {
                 .disabled(!appConfig.localLinuxEnabled || snapshot.phase == .installing || snapshot.phase == .starting)
             }
 
-            Section(NSLocalizedString("兼容性", comment: "Local Linux compatibility section")) {
-                Text(NSLocalizedString("命令失败时会保留退出码、信号、errno 和 iSH 兼容性诊断。反馈助手可以引用诊断编号，不会把未打码的环境变量输出交给模型。", comment: "Local Linux diagnostics explanation"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -182,20 +180,13 @@ struct LocalLinuxFeatureView: View {
                     isOn: $appConfig.localLinuxEnvironmentPrivacyEnabled
                 )
             } footer: {
-                VStack(alignment: .leading) {
-                    Text(NSLocalizedString("环境变量在创建 Linux 进程时 export，不会改写 .profile 或 .zshrc。原始输出仍归用户所有；只有发给模型的副本按值匹配打码。", comment: "Local Linux environment behavior footer"))
-                    Text(NSLocalizedString("0 秒表示不限时；预览限制不截断用户原始日志。", comment: "Local Linux execution defaults footer"))
-                }
+                Text(NSLocalizedString("0 秒表示不限时；预览和打码只影响发送给模型的副本。", comment: "Local Linux execution defaults footer"))
             }
         }
     }
 
     private var activityTab: some View {
         Form {
-            Section {
-                runtimeIntroCard
-            }
-
             Section {
                 NavigationLink {
                     LocalLinuxTerminalView(sessionID: sessionID)
@@ -227,36 +218,6 @@ struct LocalLinuxFeatureView: View {
         }
     }
 
-    private var runtimeIntroCard: some View {
-        VStack(alignment: .leading) {
-            Text(NSLocalizedString("运行说明", comment: "Local Linux runtime intro title"))
-                .etFont(.headline.weight(.semibold))
-            Text(NSLocalizedString("终端、Agent 与本地 MCP 共享系统环境；资源占用只用于查看，不会限制并发数量。", comment: "Local Linux runtime intro summary"))
-                .etFont(.subheadline)
-                .foregroundStyle(.secondary)
-            Button(NSLocalizedString("进一步了解…", comment: "Local Linux runtime intro details action")) {
-                isShowingRuntimeIntro = true
-            }
-            .buttonStyle(.plain)
-            .etFont(.footnote.weight(.medium))
-            .foregroundStyle(.blue)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
-        .sheet(isPresented: $isShowingRuntimeIntro) {
-            NavigationStack {
-                ScrollView {
-                    Text(NSLocalizedString("本地 Linux 运行说明正文", comment: "Local Linux runtime intro details"))
-                        .etFont(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-                .navigationTitle(NSLocalizedString("运行说明", comment: "Local Linux runtime intro details title"))
-                .navigationBarTitleDisplayMode(.inline)
-            }
-        }
-    }
-
     private var dataTab: some View {
         Form {
             Section {
@@ -267,7 +228,7 @@ struct LocalLinuxFeatureView: View {
                 }
                 .disabled(!appConfig.localLinuxEnabled)
             } footer: {
-                Text(NSLocalizedString("这里通过 Linux 文件接口访问 RootFS 和挂载。删除系统文件可能让环境损坏，但不会被硬拦截。", comment: "Linux file browser warning"))
+                Text(NSLocalizedString("系统文件可自由修改；损坏后可通过重置重新准备。", comment: "Linux file browser warning"))
             }
 
             Section(NSLocalizedString("存储", comment: "Local Linux storage section")) {
