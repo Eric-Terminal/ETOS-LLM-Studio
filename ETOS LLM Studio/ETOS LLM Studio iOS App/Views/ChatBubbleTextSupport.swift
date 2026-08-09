@@ -80,7 +80,7 @@ struct TextHeightKey: PreferenceKey {
 /// 流式气泡以顶部对齐的完整前景作为内容源，只动画外层可见高度。
 /// 底部锚点会随每一帧高度变化上移，因此既能维持输入栏间距，也不会让气泡顶部与文字脱节。
 struct ETBottomPinnedStreamingBubble<Foreground: View, Background: View>: View {
-    let response: TimeInterval
+    let duration: TimeInterval
     private let foreground: Foreground
     private let background: Background
 
@@ -88,11 +88,11 @@ struct ETBottomPinnedStreamingBubble<Foreground: View, Background: View>: View {
     @State private var visibleHeight: CGFloat = 0
 
     init(
-        response: TimeInterval,
+        duration: TimeInterval,
         @ViewBuilder foreground: () -> Foreground,
         @ViewBuilder background: () -> Background
     ) {
-        self.response = response
+        self.duration = duration
         self.foreground = foreground()
         self.background = background()
     }
@@ -134,7 +134,8 @@ struct ETBottomPinnedStreamingBubble<Foreground: View, Background: View>: View {
             return
         }
 
-        withAnimation(.spring(response: response, dampingFraction: 1)) {
+        // 高度必须在下一批 UI 发布前准确落到终点，避免连续流式更新累积出固定的视觉偏差。
+        withAnimation(.linear(duration: duration)) {
             visibleHeight = newHeight
         }
     }
