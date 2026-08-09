@@ -175,12 +175,17 @@ struct LocalLinuxFeatureView: View {
                     format: .number
                 )
                 .keyboardType(.numberPad)
+            } footer: {
+                Text(NSLocalizedString("0 秒表示不限时；预览只影响发送给模型的副本。", comment: "Local Linux execution defaults footer"))
+            }
+
+            Section {
                 Toggle(
-                    NSLocalizedString("模型输出按环境变量值打码", comment: "Local Linux output privacy toggle"),
+                    NSLocalizedString("发送给模型前隐藏环境变量值", comment: "Local Linux output privacy toggle"),
                     isOn: $appConfig.localLinuxEnvironmentPrivacyEnabled
                 )
             } footer: {
-                Text(NSLocalizedString("0 秒表示不限时；预览和打码只影响发送给模型的副本。", comment: "Local Linux execution defaults footer"))
+                Text(NSLocalizedString("开启后，命令与本地 MCP 输出中出现已启用环境变量的值时，只会在发送给模型前替换；用户终端和原始日志保持不变。关闭后会原样发送。", comment: "Local Linux model copy redaction footer"))
             }
         }
     }
@@ -189,11 +194,11 @@ struct LocalLinuxFeatureView: View {
         Form {
             Section {
                 NavigationLink {
-                    LocalLinuxTerminalView(sessionID: sessionID)
+                    LocalLinuxTerminalView()
                 } label: {
                     Label(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"), systemImage: "terminal")
                 }
-                .disabled(sessionID == nil || !appConfig.localLinuxEnabled)
+                .disabled(!appConfig.localLinuxEnabled)
 
                 NavigationLink {
                     LocalLinuxJobsView(sessionID: sessionID)
@@ -202,11 +207,11 @@ struct LocalLinuxFeatureView: View {
                 }
 
                 NavigationLink {
-                    LocalLinuxRecipesView(sessionID: sessionID)
+                    LocalLinuxRecipesView()
                 } label: {
                     Label(NSLocalizedString("安装常用环境", comment: "Local Linux recipes entry"), systemImage: "shippingbox")
                 }
-                .disabled(sessionID == nil || !appConfig.localLinuxEnabled)
+                .disabled(!appConfig.localLinuxEnabled)
             }
 
             Section(NSLocalizedString("当前活动", comment: "Local Linux current activity section")) {
@@ -284,17 +289,11 @@ struct LocalLinuxFeatureView: View {
 }
 
 private struct LocalLinuxEnvironmentView: View {
-    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var variables: [LocalLinuxEnvironmentVariable] = []
-    @State private var showsValues = false
 
     var body: some View {
         Form {
             Section {
-                Toggle(
-                    NSLocalizedString("显示环境变量值", comment: "Show Linux environment values"),
-                    isOn: $showsValues
-                )
                 NavigationLink {
                     LocalLinuxEnvironmentEditorView(variable: nil)
                 } label: {
@@ -302,7 +301,7 @@ private struct LocalLinuxEnvironmentView: View {
                 }
             }
 
-            Section(NSLocalizedString("变量", comment: "Linux environment variables section")) {
+            Section {
                 if variables.isEmpty {
                     Text(NSLocalizedString("还没有环境变量。", comment: "No Linux environment variables"))
                         .foregroundStyle(.secondary)
@@ -320,7 +319,7 @@ private struct LocalLinuxEnvironmentView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            Text(showsValues ? variable.value : "••••••••")
+                            Text("••••••••")
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
                             if !variable.note.isEmpty {
@@ -329,15 +328,10 @@ private struct LocalLinuxEnvironmentView: View {
                         }
                     }
                 }
-            }
-
-            Section {
-                Toggle(
-                    NSLocalizedString("模型副本打码", comment: "Environment redaction toggle"),
-                    isOn: $appConfig.localLinuxEnvironmentPrivacyEnabled
-                )
+            } header: {
+                Text(NSLocalizedString("变量", comment: "Linux environment variables section"))
             } footer: {
-                Text(NSLocalizedString("这些值只在启动进程时注入。Agent 不能直接读取设置列表，但可以像普通 Linux 程序一样执行 echo 等命令查看进程环境。", comment: "Environment variable visibility footer"))
+                Text(NSLocalizedString("已启用的变量会自动注入新建的命令、终端与本地 MCP 进程。列表始终隐藏值；点进变量即可查看和编辑。", comment: "Environment variable visibility footer"))
             }
         }
         .navigationTitle(NSLocalizedString("环境变量", comment: "Linux environment title"))
@@ -354,7 +348,6 @@ private struct LocalLinuxEnvironmentEditorView: View {
     @Environment(\.dismiss) private var dismiss
     private let isNew: Bool
     @State private var draft: LocalLinuxEnvironmentVariable
-    @State private var showsValue = false
     @State private var errorMessage: String?
 
     init(variable: LocalLinuxEnvironmentVariable?) {
@@ -368,16 +361,9 @@ private struct LocalLinuxEnvironmentEditorView: View {
                 TextField(NSLocalizedString("名称", comment: "Environment variable name"), text: $draft.name)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                if showsValue {
-                    TextField(NSLocalizedString("值", comment: "Environment variable value"), text: $draft.value)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } else {
-                    SecureField(NSLocalizedString("值", comment: "Environment variable value"), text: $draft.value)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                Toggle(NSLocalizedString("显示值", comment: "Show environment variable value"), isOn: $showsValue)
+                TextField(NSLocalizedString("值", comment: "Environment variable value"), text: $draft.value)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                 TextField(NSLocalizedString("备注（可选）", comment: "Environment variable note"), text: $draft.note)
                 Toggle(NSLocalizedString("启用", comment: "Enable Linux environment variable"), isOn: $draft.isEnabled)
             } footer: {
@@ -419,105 +405,6 @@ private struct LocalLinuxEnvironmentEditorView: View {
                 try await LocalLinuxProcessEnvironmentProvider.shared.delete(id: draft.id)
                 dismiss()
             } catch { errorMessage = error.localizedDescription }
-        }
-    }
-}
-
-private struct LocalAgentPromptProfilesView: View {
-    @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var profiles: [LocalAgentPromptProfile] = []
-    @State private var selectedID = LocalAgentPromptStore.builtInProfileID
-    @State private var content = ""
-    @State private var newProfileTitle = ""
-
-    var body: some View {
-        Form {
-            Section {
-                Picker(NSLocalizedString("提示词", comment: "Agent prompt profile picker"), selection: $selectedID) {
-                    ForEach(profiles) { profile in
-                        Text(profile.title).tag(profile.id)
-                    }
-                }
-                .onChange(of: selectedID) { _, id in select(id) }
-                TextEditor(text: $content)
-                    .frame(minHeight: 260)
-                    .font(.body.monospaced())
-                Button(NSLocalizedString("保存", comment: "Save"), action: save)
-                Button(NSLocalizedString("清空当前提示词", comment: "Clear current Agent prompt"), role: .destructive) {
-                    content = ""
-                }
-                Button(NSLocalizedString("恢复默认提示词", comment: "Reset default Agent prompt")) {
-                    Task {
-                        _ = try? await LocalAgentPromptStore.shared.resetBuiltInProfile()
-                        appConfig.localLinuxActivePromptProfileID = LocalAgentPromptStore.builtInProfileID.uuidString
-                        selectedID = LocalAgentPromptStore.builtInProfileID
-                        await reload()
-                    }
-                }
-                if selectedID != LocalAgentPromptStore.builtInProfileID {
-                    Button(NSLocalizedString("删除当前提示词", comment: "Delete current Agent prompt"), role: .destructive) {
-                        deleteSelectedProfile()
-                    }
-                }
-            } footer: {
-                Text(NSLocalizedString("只有 Agent 模式会插入这里的提示词；Chat 模式继续使用普通聊天系统提示词。", comment: "Agent prompt scope footer"))
-            }
-
-            Section(NSLocalizedString("新建提示词", comment: "Create Agent prompt profile section")) {
-                TextField(NSLocalizedString("名称", comment: "Agent prompt profile name"), text: $newProfileTitle)
-                Button(NSLocalizedString("新建", comment: "Create Agent prompt profile"), action: createProfile)
-                    .disabled(newProfileTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .navigationTitle(NSLocalizedString("Agent 提示词", comment: "Agent prompt title"))
-        .task { await reload() }
-    }
-
-    private func reload() async {
-        profiles = await LocalAgentPromptStore.shared.profiles()
-        if let configured = UUID(uuidString: appConfig.localLinuxActivePromptProfileID),
-           profiles.contains(where: { $0.id == configured }) {
-            selectedID = configured
-        }
-        select(selectedID)
-    }
-
-    private func select(_ id: UUID) {
-        guard let profile = profiles.first(where: { $0.id == id }) else { return }
-        content = profile.content
-        appConfig.localLinuxActivePromptProfileID = id.uuidString
-    }
-
-    private func save() {
-        guard var profile = profiles.first(where: { $0.id == selectedID }) else { return }
-        profile.content = content
-        profile.updatedAt = Date()
-        Task {
-            try? await LocalAgentPromptStore.shared.save(profile)
-            await reload()
-        }
-    }
-
-    private func createProfile() {
-        let title = newProfileTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        let profile = LocalAgentPromptProfile(title: title, content: content)
-        newProfileTitle = ""
-        selectedID = profile.id
-        Task {
-            try? await LocalAgentPromptStore.shared.save(profile)
-            appConfig.localLinuxActivePromptProfileID = profile.id.uuidString
-            await reload()
-        }
-    }
-
-    private func deleteSelectedProfile() {
-        let id = selectedID
-        selectedID = LocalAgentPromptStore.builtInProfileID
-        Task {
-            try? await LocalAgentPromptStore.shared.delete(id: id)
-            appConfig.localLinuxActivePromptProfileID = LocalAgentPromptStore.builtInProfileID.uuidString
-            await reload()
         }
     }
 }
@@ -629,7 +516,7 @@ private struct LocalLinuxSafetyRuleEditorView: View {
         Form {
             Section {
                 TextField(NSLocalizedString("规则名称", comment: "Linux rule name"), text: $draft.name)
-                TextField(NSLocalizedString("命令前缀或正则", comment: "Linux rule pattern"), text: $draft.pattern)
+                TextField(NSLocalizedString("匹配内容", comment: "Linux rule pattern"), text: $draft.pattern)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 if let validationMessage {

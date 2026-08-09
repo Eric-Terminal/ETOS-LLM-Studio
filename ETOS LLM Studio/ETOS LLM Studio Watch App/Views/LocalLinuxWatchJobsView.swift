@@ -37,7 +37,6 @@ struct LocalLinuxWatchJobsView: View {
                         NavigationLink {
                             if job.kind == .terminal, !job.state.isTerminal {
                                 LocalLinuxWatchTerminalView(
-                                    sessionID: job.sessionID,
                                     initialJobID: job.id
                                 )
                             } else {

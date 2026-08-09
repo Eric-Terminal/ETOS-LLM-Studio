@@ -32,7 +32,6 @@ struct LocalLinuxResourceStatusSection: View {
 }
 
 struct LocalLinuxTerminalView: View {
-    let sessionID: UUID?
     let initialJobID: UUID?
 
     @State private var job: LocalLinuxJob?
@@ -43,8 +42,7 @@ struct LocalLinuxTerminalView: View {
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
 
-    init(sessionID: UUID?, initialJobID: UUID? = nil) {
-        self.sessionID = sessionID
+    init(initialJobID: UUID? = nil) {
         self.initialJobID = initialJobID
     }
 
@@ -147,21 +145,14 @@ struct LocalLinuxTerminalView: View {
     }
 
     private func openInitialTerminal() async {
-        guard job == nil, let sessionID else {
-            if sessionID == nil {
-                errorMessage = NSLocalizedString("请先打开一个会话。", comment: "Linux terminal needs session")
-            }
-            return
-        }
-        let active = await LocalLinuxJobScheduler.shared.activeJobs().filter {
-            $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
-        }
-        terminalJobs = active
+        guard job == nil else { return }
+        let active = await LocalLinuxJobScheduler.shared.activeJobs()
+        terminalJobs = visibleTerminalJobs(in: active)
         if let initialJobID, let selected = active.first(where: { $0.id == initialJobID }) {
             attach(to: selected)
             return
         }
-        for terminal in active {
+        for terminal in terminalJobs where terminal.runID == nil {
             if (try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: terminal.id)) == .user {
                 attach(to: terminal)
                 return
@@ -171,9 +162,8 @@ struct LocalLinuxTerminalView: View {
     }
 
     private func createTerminal() async {
-        guard let sessionID else { return }
         do {
-            let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+            let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
             let started = try await LocalLinuxJobScheduler.shared.startTerminal(
                 context: nil,
                 workspace: workspace,
@@ -209,9 +199,15 @@ struct LocalLinuxTerminalView: View {
             if let text = try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id) {
                 output = text
             }
-            terminalJobs = await LocalLinuxJobScheduler.shared.activeJobs().filter {
-                $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
-            }
+            terminalJobs = visibleTerminalJobs(in: await LocalLinuxJobScheduler.shared.activeJobs())
+        }
+    }
+
+    private func visibleTerminalJobs(in jobs: [LocalLinuxJob]) -> [LocalLinuxJob] {
+        jobs.filter { terminal in
+            guard terminal.kind == .terminal, !terminal.state.isTerminal else { return false }
+            let isStandaloneUserTerminal = terminal.sessionID == nil && terminal.runID == nil
+            return isStandaloneUserTerminal || terminal.id == initialJobID
         }
     }
 
@@ -308,7 +304,7 @@ struct LocalLinuxJobsView: View {
                     ForEach(group.jobs) { job in
                         NavigationLink {
                             if job.kind == .terminal, !job.state.isTerminal {
-                                LocalLinuxTerminalView(sessionID: job.sessionID, initialJobID: job.id)
+                                LocalLinuxTerminalView(initialJobID: job.id)
                             } else {
                                 LocalLinuxJobDetailView(jobID: job.id)
                             }
@@ -556,7 +552,6 @@ private struct LocalLinuxJobDetailView: View {
 }
 
 struct LocalLinuxRecipesView: View {
-    let sessionID: UUID?
     @State private var selectedRecipe: LocalLinuxEnvironmentRecipe?
     @State private var result = ""
     @State private var isRunning = false
@@ -608,12 +603,11 @@ struct LocalLinuxRecipesView: View {
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
         selectedRecipe = nil
-        guard let sessionID else { return }
         isRunning = true
         Task {
             defer { isRunning = false }
             do {
-                let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+                let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
                 let executable = "/bin/sh"
                 let request = LocalLinuxJobRequest(
                     executable: executable,

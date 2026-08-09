@@ -97,6 +97,9 @@ public struct LocalLinuxRawOutputPage: Equatable, Sendable {
 
 public actor LocalLinuxStorageManager {
     public static let shared = LocalLinuxStorageManager()
+    public static let interactiveUserWorkspaceID = UUID(
+        uuidString: "7AC179AE-1BEA-444A-B311-C322954DA4A5"
+    )!
 
     private static let receiptPrefix = "format=ish-rootfs-install-v1\nseed_archive_sha256="
     private static let damageMarkerName = "ETOS-System-Damaged.txt"
@@ -194,6 +197,41 @@ public actor LocalLinuxStorageManager {
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
                 NSLocalizedString("无法保存 Linux 工作区。", comment: "Save Linux workspace failure")
+            )
+        }
+        return workspace
+    }
+
+    /// 用户主动创建的终端与 recipe 属于设备上的 Linux 运行时，不归属于任何
+    /// 聊天会话。多个用户 PTY 共用这个持久工作区，但各自拥有独立终端状态。
+    public func interactiveUserWorkspace() throws -> LocalAgentWorkspace {
+        if var existing = Persistence.loadLocalAgentWorkspaces().first(where: {
+            $0.id == Self.interactiveUserWorkspaceID
+        }) {
+            let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            existing.lastUsedAt = Date()
+            guard Persistence.saveLocalAgentWorkspace(existing) else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("无法更新 Linux 工作区。", comment: "Update interactive user workspace failure")
+                )
+            }
+            return existing
+        }
+
+        let relativePath = "Workspaces/UserTerminal"
+        let directory = layout.root.appendingPathComponent(relativePath, isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let workspace = LocalAgentWorkspace(
+            id: Self.interactiveUserWorkspaceID,
+            sessionID: nil,
+            profileID: nil,
+            guestPath: "/workspace/user-terminal",
+            hostRelativePath: relativePath
+        )
+        guard Persistence.saveLocalAgentWorkspace(workspace) else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("无法保存 Linux 工作区。", comment: "Save interactive user workspace failure")
             )
         }
         return workspace

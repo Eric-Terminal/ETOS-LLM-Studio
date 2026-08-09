@@ -399,7 +399,7 @@ extension ContentView {
         case .browser:
             BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
         case .localTerminal:
-            LocalLinuxWatchTerminalView(sessionID: viewModel.currentSession?.id)
+            LocalLinuxWatchTerminalView()
         case .requestControls,
              .sessionHistory,
              .contextCompression,

@@ -400,7 +400,7 @@ extension ChatView {
         case .browser:
             BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
         case .localTerminal:
-            LocalLinuxTerminalView(sessionID: viewModel.currentSession?.id)
+            LocalLinuxTerminalView()
         }
     }
 }

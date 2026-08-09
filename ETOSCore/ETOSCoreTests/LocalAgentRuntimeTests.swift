@@ -201,13 +201,13 @@ struct LocalAgentRuntimeTests {
         #expect(joined == "\n[stdout]\n" + expected)
     }
 
-    @Test("命令规则按作用域匹配前缀与正则并可整体关闭")
+    @Test("命令规则逐段匹配前缀、后缀与正则并可整体关闭")
     func commandSafetyRules() {
         let prefix = LocalLinuxCommandRule(
             name: "删除提醒",
             pattern: "/bin/rm -rf",
             matchKind: .prefix,
-            scope: .run,
+            scope: .all,
             action: .confirm,
             sortIndex: 0
         )
@@ -219,6 +219,30 @@ struct LocalAgentRuntimeTests {
             action: .warn,
             sortIndex: 1
         )
+        let suffix = LocalLinuxCommandRule(
+            name: "强制参数",
+            pattern: "--force",
+            matchKind: .suffix,
+            scope: .shell,
+            action: .confirm,
+            sortIndex: 2
+        )
+        let earlyWarning = LocalLinuxCommandRule(
+            name: "输出提醒",
+            pattern: "echo",
+            matchKind: .prefix,
+            scope: .shell,
+            action: .warn,
+            sortIndex: 0
+        )
+        let laterDenial = LocalLinuxCommandRule(
+            name: "拒绝删除",
+            pattern: "/bin/rm",
+            matchKind: .prefix,
+            scope: .shell,
+            action: .deny,
+            sortIndex: 1
+        )
         let runRequest = LocalLinuxJobRequest(
             executable: "/bin/rm",
             arguments: ["/bin/rm", "-rf", "/tmp/demo"]
@@ -227,6 +251,25 @@ struct LocalAgentRuntimeTests {
             executable: "/bin/sh",
             arguments: ["/bin/sh", "-lc", "apk add bash"],
             shellScript: "echo ready; apk add bash"
+        )
+        let compoundRequest = LocalLinuxJobRequest(
+            executable: "/bin/sh",
+            arguments: ["/bin/sh", "-lc", "echo ready && /bin/rm -rf /tmp/demo"],
+            shellScript: "echo ready && /bin/rm -rf /tmp/demo"
+        )
+        let suffixRequest = LocalLinuxJobRequest(
+            executable: "/bin/sh",
+            arguments: ["/bin/sh", "-lc", "deploy --force && echo done"],
+            shellScript: "deploy --force && echo done"
+        )
+        let quotedConnectorRequest = LocalLinuxJobRequest(
+            executable: "/bin/sh",
+            arguments: ["/bin/sh", "-lc", "echo '/bin/rm -rf /tmp && still text'"],
+            shellScript: "echo '/bin/rm -rf /tmp && still text'"
+        )
+        let structuredArgumentRequest = LocalLinuxJobRequest(
+            executable: "/bin/echo",
+            arguments: ["/bin/echo", "text && /bin/rm -rf /tmp"]
         )
 
         let runMatch = LocalLinuxApprovalPolicy.evaluate(
@@ -247,10 +290,64 @@ struct LocalAgentRuntimeTests {
             kind: .run,
             isEnabled: false
         )
+        let compoundMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [prefix],
+            request: compoundRequest,
+            kind: .shell,
+            isEnabled: true
+        )
+        let suffixMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [suffix],
+            request: suffixRequest,
+            kind: .shell,
+            isEnabled: true
+        )
+        let quotedConnectorMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [prefix],
+            request: quotedConnectorRequest,
+            kind: .shell,
+            isEnabled: true
+        )
+        let recipeMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [prefix],
+            request: compoundRequest,
+            kind: .recipe,
+            isEnabled: true
+        )
+        let structuredArgumentMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [prefix],
+            request: structuredArgumentRequest,
+            kind: .run,
+            isEnabled: true
+        )
+        let mostRestrictiveMatch = LocalLinuxApprovalPolicy.evaluate(
+            rules: [earlyWarning, laterDenial],
+            request: compoundRequest,
+            kind: .shell,
+            isEnabled: true
+        )
 
         #expect(runMatch?.ruleID == prefix.id)
         #expect(shellMatch?.ruleID == expression.id)
+        #expect(compoundMatch?.ruleID == prefix.id)
+        #expect(suffixMatch?.ruleID == suffix.id)
+        #expect(quotedConnectorMatch == nil)
+        #expect(recipeMatch?.ruleID == prefix.id)
+        #expect(structuredArgumentMatch == nil)
+        #expect(mostRestrictiveMatch?.ruleID == laterDenial.id)
         #expect(disabled == nil)
+        #expect(
+            LocalLinuxApprovalPolicy.shellCommandFragments(
+                "echo \"a && b\" && /bin/rm -rf /tmp || deploy --force; printf 'x|y' | sed s/x/y/\ncleanup"
+            ) == [
+                "echo \"a && b\"",
+                "/bin/rm -rf /tmp",
+                "deploy --force",
+                "printf 'x|y'",
+                "sed s/x/y/",
+                "cleanup"
+            ]
+        )
     }
 
     @Test("命令超时支持关闭和桥接可表示的长任务")
@@ -316,6 +413,68 @@ struct LocalAgentRuntimeTests {
             Issue.record("无效 RootFS 收据没有被标记为损坏")
             return
         }
+    }
+
+    @Test("RootFS 版本标识与 iSH 安装收据保持一致")
+    func rootFSVersionUsesInstallationReceiptDigest() {
+        let metadata = LocalLinuxSeedMetadata(
+            archiveBytes: 1,
+            archiveFile: "seed.tar.gz",
+            archiveSHA256: String(repeating: "a", count: 64),
+            alpineVersion: "test",
+            compression: "gzip",
+            entryCount: 1,
+            format: "ish-rootfs-seed-archive-v1",
+            guestArchitecture: "aarch64",
+            seedManifestSHA256: String(repeating: "b", count: 64),
+            seedPackager: "test",
+            sourceKind: "official",
+            sourceURL: "https://example.invalid/seed.tar.gz",
+            uncompressedBytes: 1,
+            upstreamArchiveSHA256: String(repeating: "c", count: 64)
+        )
+
+        #expect(metadata.installationReceiptSHA256 == String(repeating: "c", count: 64))
+        #expect(metadata.installationReceiptSHA256 != metadata.archiveSHA256)
+    }
+
+    @Test("Agent 工作区可为未落库临时会话补建父记录")
+    func agentWorkspaceCreatesMissingTemporarySession() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try PersistenceGRDBStore(chatsDirectory: directory)
+        let sessionID = UUID()
+        let workspace = LocalAgentWorkspace(
+            sessionID: sessionID,
+            guestPath: "/workspace/test",
+            hostRelativePath: "Workspaces/test"
+        )
+
+        try store.saveLocalAgentWorkspace(workspace)
+
+        #expect(store.loadChatSession(id: sessionID)?.isTemporary == true)
+        #expect(try store.loadLocalAgentWorkspaces(sessionID: sessionID) == [workspace])
+    }
+
+    @Test("用户终端工作区不属于任何聊天会话")
+    func interactiveUserWorkspaceIsSessionIndependent() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try PersistenceGRDBStore(chatsDirectory: directory)
+        let workspace = LocalAgentWorkspace(
+            id: LocalLinuxStorageManager.interactiveUserWorkspaceID,
+            sessionID: nil,
+            profileID: nil,
+            guestPath: "/workspace/user-terminal",
+            hostRelativePath: "Workspaces/UserTerminal"
+        )
+
+        try store.saveLocalAgentWorkspace(workspace)
+
+        let saved = try #require(store.loadLocalAgentWorkspaces().first)
+        #expect(saved.id == LocalLinuxStorageManager.interactiveUserWorkspaceID)
+        #expect(saved.sessionID == nil)
+        #expect(saved.profileID == nil)
     }
 
     @Test("内置环境 recipe 不会隐式包含执行器且可按命令匹配")
@@ -666,6 +825,58 @@ struct LocalAgentRuntimeTests {
             #expect(try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM mcp_servers WHERE transport_kind = 'local_stdio'"
+            ) == 1)
+        }
+    }
+
+    @Test("命令规则迁移保留旧记录并接受后缀匹配")
+    func commandRuleSuffixMigration() throws {
+        let queue = try DatabaseQueue()
+        let existingID = UUID().uuidString
+        try queue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE local_linux_command_rules (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    pattern TEXT NOT NULL,
+                    match_kind TEXT NOT NULL CHECK(match_kind IN ('prefix', 'regular_expression')),
+                    scope TEXT NOT NULL CHECK(scope IN ('run', 'shell', 'all')),
+                    action TEXT NOT NULL CHECK(action IN ('warn', 'confirm', 'deny')),
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    sort_index INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+            try db.execute(
+                sql: """
+                    INSERT INTO local_linux_command_rules (
+                        id, name, pattern, match_kind, scope, action,
+                        is_enabled, sort_index, created_at, updated_at
+                    ) VALUES (?, '旧前缀规则', 'rm ', 'prefix', 'shell', 'confirm', 1, 0, 1, 1)
+                """,
+                arguments: [existingID]
+            )
+
+            try PersistenceAuxiliaryGRDBStore.migrateLocalLinuxCommandRuleSuffix(db)
+
+            #expect(try String.fetchOne(
+                db,
+                sql: "SELECT name FROM local_linux_command_rules WHERE id = ?",
+                arguments: [existingID]
+            ) == "旧前缀规则")
+            try db.execute(
+                sql: """
+                    INSERT INTO local_linux_command_rules (
+                        id, name, pattern, match_kind, scope, action,
+                        is_enabled, sort_index, created_at, updated_at
+                    ) VALUES (?, '后缀规则', '--force', 'suffix', 'shell', 'warn', 1, 1, 2, 2)
+                """,
+                arguments: [UUID().uuidString]
+            )
+            #expect(try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM local_linux_command_rules WHERE match_kind = 'suffix'"
             ) == 1)
         }
     }

@@ -944,6 +944,10 @@ extension PersistenceAuxiliaryGRDBStore {
             migrator.registerMigration("v19_add_mcp_local_stdio_transport") { db in
                 try Self.migrateMCPServerLocalStdioTransport(db)
             }
+
+            migrator.registerMigration("v20_add_local_linux_command_rule_suffix") { db in
+                try Self.migrateLocalLinuxCommandRuleSuffix(db)
+            }
         }
 
         if supportsMemoryRelationalSchema {

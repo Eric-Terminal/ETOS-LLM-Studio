@@ -111,7 +111,7 @@ public actor LocalLinuxRuntimeController {
             let resource = try LocalLinuxSeedResource.load(from: seedBundle)
             _ = try LocalLinuxRootFSMigrationResource.load(
                 from: seedBundle,
-                targetSeedSHA256: resource.metadata.archiveSHA256
+                targetSeedSHA256: resource.metadata.installationReceiptSHA256
             )
             let integrity = await storage.systemIntegrity()
             switch integrity {
@@ -265,7 +265,7 @@ public actor LocalLinuxRuntimeController {
         let resource = try LocalLinuxSeedResource.load(from: seedBundle)
         let migrationResource = try LocalLinuxRootFSMigrationResource.load(
             from: seedBundle,
-            targetSeedSHA256: resource.metadata.archiveSHA256
+            targetSeedSHA256: resource.metadata.installationReceiptSHA256
         )
         let integrity = await storage.systemIntegrity()
         var pendingMigrations: [LocalLinuxRootFSMigrationDefinition] = []
@@ -366,7 +366,7 @@ public actor LocalLinuxRuntimeController {
         snapshotValue.installProgress = progress
         if let resource {
             snapshotValue.seedVersion = resource.metadata.alpineVersion
-            snapshotValue.seedSHA256 = installedSeedSHA256 ?? resource.metadata.archiveSHA256
+            snapshotValue.seedSHA256 = installedSeedSHA256 ?? resource.metadata.installationReceiptSHA256
         }
         snapshotValue.lastError = error
         snapshotValue.updatedAt = Date()

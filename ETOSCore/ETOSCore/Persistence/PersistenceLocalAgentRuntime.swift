@@ -30,6 +30,7 @@ extension PersistenceGRDBStore {
 
     func saveLocalAgentMode(_ mode: LocalAgentMode, sessionID: UUID, at date: Date) throws {
         try dbPool.write { db in
+            try ensureSessionExists(db, sessionID: sessionID)
             try db.execute(
                 sql: """
                 INSERT INTO local_agent_session_modes (session_id, mode, updated_at)
@@ -60,6 +61,7 @@ extension PersistenceGRDBStore {
         at date: Date
     ) throws {
         try dbPool.write { db in
+            try ensureSessionExists(db, sessionID: sessionID)
             try db.execute(
                 sql: """
                 INSERT INTO browser_agent_session_preferences (session_id, data_profile, updated_at)
@@ -82,6 +84,7 @@ extension PersistenceGRDBStore {
         }
         let contextData = try LocalAgentPersistenceCoding.encoder.encode(context)
         try dbPool.write { db in
+            try ensureSessionExists(db, sessionID: context.sessionID)
             try db.execute(
                 sql: """
                 INSERT INTO local_agent_runs (
@@ -218,6 +221,9 @@ extension PersistenceGRDBStore {
 
     func saveLocalAgentWorkspace(_ workspace: LocalAgentWorkspace) throws {
         try dbPool.write { db in
+            if let sessionID = workspace.sessionID {
+                try ensureSessionExists(db, sessionID: sessionID)
+            }
             try db.execute(
                 sql: """
                 INSERT INTO local_agent_workspaces (
@@ -293,6 +299,9 @@ extension PersistenceGRDBStore {
     func saveLocalLinuxJob(_ job: LocalLinuxJob) throws {
         let requestData = try LocalAgentPersistenceCoding.encoder.encode(job.request)
         try dbPool.write { db in
+            if let sessionID = job.sessionID {
+                try ensureSessionExists(db, sessionID: sessionID)
+            }
             try db.execute(
                 sql: """
                 INSERT INTO local_linux_jobs (
@@ -543,6 +552,9 @@ extension PersistenceGRDBStore {
 
     func saveLocalLinuxAudit(_ audit: LocalLinuxAuditRecord) throws {
         try dbPool.write { db in
+            if let sessionID = audit.sessionID {
+                try ensureSessionExists(db, sessionID: sessionID)
+            }
             try db.execute(
                 sql: """
                 INSERT INTO local_linux_audit (

@@ -40,7 +40,7 @@ extension PersistenceAuxiliaryGRDBStore {
                 id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
                 pattern TEXT NOT NULL,
-                match_kind TEXT NOT NULL CHECK(match_kind IN ('prefix', 'regular_expression')),
+                match_kind TEXT NOT NULL CHECK(match_kind IN ('prefix', 'suffix', 'regular_expression')),
                 scope TEXT NOT NULL CHECK(scope IN ('run', 'shell', 'all')),
                 action TEXT NOT NULL CHECK(action IN ('warn', 'confirm', 'deny')),
                 is_enabled INTEGER NOT NULL DEFAULT 1,
@@ -71,5 +71,42 @@ extension PersistenceAuxiliaryGRDBStore {
         try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_local_agent_prompts_updated ON local_agent_prompt_profiles(updated_at DESC)")
         try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_local_linux_rules_order ON local_linux_command_rules(is_enabled, sort_index ASC, updated_at DESC)")
         try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_local_linux_mounts_enabled ON local_linux_mounts(is_enabled, updated_at DESC)")
+    }
+
+    static func migrateLocalLinuxCommandRuleSuffix(_ db: Database) throws {
+        let tableExists = (try Int.fetchOne(
+            db,
+            sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'local_linux_command_rules'"
+        ) ?? 0) > 0
+        guard tableExists else { return }
+
+        try db.execute(sql: "DROP TABLE IF EXISTS local_linux_command_rules_new")
+        try db.execute(sql: """
+            CREATE TABLE local_linux_command_rules_new (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                pattern TEXT NOT NULL,
+                match_kind TEXT NOT NULL CHECK(match_kind IN ('prefix', 'suffix', 'regular_expression')),
+                scope TEXT NOT NULL CHECK(scope IN ('run', 'shell', 'all')),
+                action TEXT NOT NULL CHECK(action IN ('warn', 'confirm', 'deny')),
+                is_enabled INTEGER NOT NULL DEFAULT 1,
+                sort_index INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            INSERT INTO local_linux_command_rules_new (
+                id, name, pattern, match_kind, scope, action,
+                is_enabled, sort_index, created_at, updated_at
+            )
+            SELECT
+                id, name, pattern, match_kind, scope, action,
+                is_enabled, sort_index, created_at, updated_at
+            FROM local_linux_command_rules
+        """)
+        try db.execute(sql: "DROP TABLE local_linux_command_rules")
+        try db.execute(sql: "ALTER TABLE local_linux_command_rules_new RENAME TO local_linux_command_rules")
+        try db.execute(sql: "CREATE INDEX idx_local_linux_rules_order ON local_linux_command_rules(is_enabled, sort_index ASC, updated_at DESC)")
     }
 }

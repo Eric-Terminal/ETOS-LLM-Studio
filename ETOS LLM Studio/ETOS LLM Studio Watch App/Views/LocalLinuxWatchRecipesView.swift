@@ -3,7 +3,6 @@ import ETOSCore
 import SwiftUI
 
 struct LocalLinuxWatchRecipesView: View {
-    let sessionID: UUID?
     @State private var selectedRecipe: LocalLinuxEnvironmentRecipe?
     @State private var result = ""
 
@@ -40,10 +39,9 @@ struct LocalLinuxWatchRecipesView: View {
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
         selectedRecipe = nil
-        guard let sessionID else { return }
         Task {
             do {
-                let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+                let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
                 let executable = "/bin/sh"
                 let request = LocalLinuxJobRequest(
                     executable: executable,

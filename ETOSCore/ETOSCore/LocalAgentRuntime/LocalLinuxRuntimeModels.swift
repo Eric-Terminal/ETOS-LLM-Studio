@@ -186,6 +186,14 @@ public struct LocalLinuxSeedMetadata: Codable, Equatable, Sendable {
     public let upstreamArchiveSHA256: String
 }
 
+public extension LocalLinuxSeedMetadata {
+    /// iSH 安装收据记录的是 seed 内部清单中的上游归档摘要；外层 archiveSHA256
+    /// 只负责校验 App 内置压缩包，不能拿来判断已经安装的 RootFS 版本。
+    var installationReceiptSHA256: String {
+        upstreamArchiveSHA256.lowercased()
+    }
+}
+
 public enum LocalLinuxJobKind: String, Codable, CaseIterable, Sendable {
     case run
     case shell
@@ -692,6 +700,7 @@ public struct LocalAgentPromptProfile: Codable, Equatable, Identifiable, Sendabl
 
 public enum LocalLinuxCommandRuleMatchKind: String, Codable, CaseIterable, Sendable {
     case prefix
+    case suffix
     case regularExpression = "regular_expression"
 }
 
@@ -699,6 +708,7 @@ public extension LocalLinuxCommandRuleMatchKind {
     var displayName: String {
         switch self {
         case .prefix: return NSLocalizedString("命令前缀", comment: "Linux command prefix rule")
+        case .suffix: return NSLocalizedString("命令后缀", comment: "Linux command suffix rule")
         case .regularExpression: return NSLocalizedString("正则表达式", comment: "Linux command regex rule")
         }
     }

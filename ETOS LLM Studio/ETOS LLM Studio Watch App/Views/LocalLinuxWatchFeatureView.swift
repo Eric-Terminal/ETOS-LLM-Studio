@@ -34,11 +34,11 @@ struct LocalLinuxWatchFeatureView: View {
             LocalLinuxWatchResourceStatusView()
             Section(NSLocalizedString("使用", comment: "Watch Linux use section")) {
                 NavigationLink {
-                    LocalLinuxWatchTerminalView(sessionID: sessionID)
+                    LocalLinuxWatchTerminalView()
                 } label: {
                     Label(NSLocalizedString("用户终端", comment: "Watch Linux terminal entry"), systemImage: "terminal")
                 }
-                .disabled(sessionID == nil || !appConfig.localLinuxEnabled)
+                .disabled(!appConfig.localLinuxEnabled)
 
                 NavigationLink {
                     LocalLinuxWatchFileBrowserView()
@@ -54,11 +54,11 @@ struct LocalLinuxWatchFeatureView: View {
                 }
 
                 NavigationLink {
-                    LocalLinuxWatchRecipesView(sessionID: sessionID)
+                    LocalLinuxWatchRecipesView()
                 } label: {
                     Label(NSLocalizedString("安装常用环境", comment: "Watch Linux recipes entry"), systemImage: "shippingbox")
                 }
-                .disabled(sessionID == nil || !appConfig.localLinuxEnabled)
+                .disabled(!appConfig.localLinuxEnabled)
             }
 
             Section {
@@ -88,11 +88,21 @@ struct LocalLinuxWatchFeatureView: View {
                     value: outputPreviewBinding,
                     formatter: Self.integerFormatter
                 )
-                Toggle(NSLocalizedString("模型输出打码", comment: "Watch Linux redaction"), isOn: $appConfig.localLinuxEnvironmentPrivacyEnabled)
             } header: {
                 Text(NSLocalizedString("配置", comment: "Watch Linux configuration section"))
             } footer: {
-                Text(NSLocalizedString("0 秒表示不限时；预览限制不截断用户原始日志。", comment: "Watch Linux execution defaults footer"))
+                Text(NSLocalizedString("0 秒表示不限时；预览只影响发送给模型的副本。", comment: "Watch Linux execution defaults footer"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(
+                    NSLocalizedString("发送给模型前隐藏环境变量值", comment: "Watch Linux output privacy toggle"),
+                    isOn: $appConfig.localLinuxEnvironmentPrivacyEnabled
+                )
+            } footer: {
+                Text(NSLocalizedString("开启后，命令与本地 MCP 输出中出现已启用环境变量的值时，只会在发送给模型前替换；用户终端和原始日志保持不变。关闭后会原样发送。", comment: "Watch Linux model copy redaction footer"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -156,7 +166,6 @@ struct LocalLinuxWatchFeatureView: View {
 }
 
 struct LocalLinuxWatchTerminalView: View {
-    let sessionID: UUID?
     let initialJobID: UUID?
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
@@ -166,8 +175,7 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
 
-    init(sessionID: UUID?, initialJobID: UUID? = nil) {
-        self.sessionID = sessionID
+    init(initialJobID: UUID? = nil) {
         self.initialJobID = initialJobID
     }
 
@@ -217,16 +225,14 @@ struct LocalLinuxWatchTerminalView: View {
     }
 
     private func openInitialTerminal() async {
-        guard job == nil, let sessionID else { return }
-        let active = await LocalLinuxJobScheduler.shared.activeJobs().filter {
-            $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
-        }
-        terminalJobs = active
+        guard job == nil else { return }
+        let active = await LocalLinuxJobScheduler.shared.activeJobs()
+        terminalJobs = visibleTerminalJobs(in: active)
         if let initialJobID, let selected = active.first(where: { $0.id == initialJobID }) {
             attach(to: selected)
             return
         }
-        for terminal in active {
+        for terminal in terminalJobs where terminal.runID == nil {
             if (try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: terminal.id)) == .user {
                 attach(to: terminal)
                 return
@@ -236,9 +242,8 @@ struct LocalLinuxWatchTerminalView: View {
     }
 
     private func createTerminal() async {
-        guard let sessionID else { return }
         do {
-            let workspace = try await LocalLinuxStorageManager.shared.workspace(sessionID: sessionID)
+            let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
             let started = try await LocalLinuxJobScheduler.shared.startTerminal(
                 context: nil,
                 workspace: workspace,
@@ -264,9 +269,15 @@ struct LocalLinuxWatchTerminalView: View {
                 if current?.state.isTerminal == true { break }
                 try? await Task<Never, Never>.sleep(nanoseconds: 500_000_000)
             }
-            terminalJobs = await LocalLinuxJobScheduler.shared.activeJobs().filter {
-                $0.sessionID == sessionID && $0.kind == .terminal && !$0.state.isTerminal
-            }
+            terminalJobs = visibleTerminalJobs(in: await LocalLinuxJobScheduler.shared.activeJobs())
+        }
+    }
+
+    private func visibleTerminalJobs(in jobs: [LocalLinuxJob]) -> [LocalLinuxJob] {
+        jobs.filter { terminal in
+            guard terminal.kind == .terminal, !terminal.state.isTerminal else { return false }
+            let isStandaloneUserTerminal = terminal.sessionID == nil && terminal.runID == nil
+            return isStandaloneUserTerminal || terminal.id == initialJobID
         }
     }
 
@@ -313,12 +324,10 @@ struct LocalLinuxWatchTerminalView: View {
 
 private struct LocalLinuxWatchEnvironmentView: View {
     @State private var variables: [LocalLinuxEnvironmentVariable] = []
-    @State private var showsValues = false
 
     var body: some View {
         List {
             Section {
-                Toggle(NSLocalizedString("显示值", comment: "Watch show environment values"), isOn: $showsValues)
                 NavigationLink(NSLocalizedString("添加变量", comment: "Watch add environment variable")) {
                     LocalLinuxWatchEnvironmentEditorView(variable: nil)
                 }
@@ -334,7 +343,7 @@ private struct LocalLinuxWatchEnvironmentView: View {
                     } label: {
                         VStack(alignment: .leading) {
                             Text(variable.name).font(.caption.monospaced())
-                            Text(showsValues ? variable.value : "••••••••")
+                            Text("••••••••")
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
                             if !variable.isEnabled {
@@ -346,7 +355,7 @@ private struct LocalLinuxWatchEnvironmentView: View {
                     }
                 }
             }
-            Text(NSLocalizedString("变量只在进程启动时注入，不会写入 .profile，也不会自动发送给模型。", comment: "Watch Linux environment footer"))
+            Text(NSLocalizedString("已启用的变量会自动注入新建的命令、终端与本地 MCP 进程。列表始终隐藏值；点进变量即可查看和编辑。", comment: "Watch Linux environment footer"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -362,7 +371,6 @@ private struct LocalLinuxWatchEnvironmentEditorView: View {
     @Environment(\.dismiss) private var dismiss
     private let isNew: Bool
     @State private var draft: LocalLinuxEnvironmentVariable
-    @State private var showsValue = false
     @State private var errorMessage: String?
 
     init(variable: LocalLinuxEnvironmentVariable?) {
@@ -373,12 +381,7 @@ private struct LocalLinuxWatchEnvironmentEditorView: View {
     var body: some View {
         List {
             TextField(NSLocalizedString("名称", comment: "Environment name"), text: $draft.name)
-            if showsValue {
-                TextField(NSLocalizedString("值", comment: "Environment value"), text: $draft.value)
-            } else {
-                SecureField(NSLocalizedString("值", comment: "Environment value"), text: $draft.value)
-            }
-            Toggle(NSLocalizedString("显示值", comment: "Watch show environment value"), isOn: $showsValue)
+            TextField(NSLocalizedString("值", comment: "Environment value"), text: $draft.value)
             TextField(NSLocalizedString("备注", comment: "Environment note"), text: $draft.note)
             Toggle(NSLocalizedString("启用", comment: "Enable"), isOn: $draft.isEnabled)
             Button(NSLocalizedString("保存", comment: "Save"), action: save)
@@ -414,100 +417,6 @@ private struct LocalLinuxWatchEnvironmentEditorView: View {
                 try await LocalLinuxProcessEnvironmentProvider.shared.delete(id: draft.id)
                 dismiss()
             } catch { errorMessage = error.localizedDescription }
-        }
-    }
-}
-
-private struct LocalLinuxWatchPromptView: View {
-    @ObservedObject private var appConfig = AppConfigStore.shared
-    @State private var profiles: [LocalAgentPromptProfile] = []
-    @State private var profile: LocalAgentPromptProfile?
-    @State private var content = ""
-    @State private var newProfileTitle = ""
-
-    var body: some View {
-        List {
-            Picker(NSLocalizedString("提示词", comment: "Watch Agent prompt picker"), selection: selectedProfileID) {
-                ForEach(profiles) { item in
-                    Text(item.title).tag(item.id)
-                }
-            }
-            TextField(
-                NSLocalizedString("提示词", comment: "Watch Agent prompt editor"),
-                text: $content.watchKeyboardNewlineBinding(),
-                axis: .vertical
-            )
-            .lineLimit(6...16)
-            Button(NSLocalizedString("保存", comment: "Save")) {
-                guard var profile else { return }
-                profile.content = content
-                profile.updatedAt = Date()
-                Task { try? await LocalAgentPromptStore.shared.save(profile) }
-            }
-            Button(NSLocalizedString("清空", comment: "Clear Agent prompt"), role: .destructive) {
-                content = ""
-            }
-            Button(NSLocalizedString("恢复默认", comment: "Reset default")) {
-                Task {
-                    profile = try? await LocalAgentPromptStore.shared.resetBuiltInProfile()
-                    appConfig.localLinuxActivePromptProfileID = LocalAgentPromptStore.builtInProfileID.uuidString
-                    content = profile?.content ?? ""
-                    await reload()
-                }
-            }
-            if profile?.isBuiltIn == false {
-                Button(NSLocalizedString("删除当前提示词", comment: "Watch delete current Agent prompt"), role: .destructive) {
-                    guard let id = profile?.id else { return }
-                    Task {
-                        try? await LocalAgentPromptStore.shared.delete(id: id)
-                        appConfig.localLinuxActivePromptProfileID = LocalAgentPromptStore.builtInProfileID.uuidString
-                        await reload()
-                    }
-                }
-            }
-            Section(NSLocalizedString("新建", comment: "Watch create Agent prompt section")) {
-                TextField(NSLocalizedString("名称", comment: "Agent prompt profile name"), text: $newProfileTitle)
-                Button(NSLocalizedString("新建提示词", comment: "Watch create Agent prompt")) {
-                    createProfile()
-                }
-                .disabled(newProfileTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            Text(NSLocalizedString("只在 Agent 模式插入。", comment: "Watch Agent prompt footer"))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .navigationTitle(NSLocalizedString("Agent 提示词", comment: "Watch Agent prompt title"))
-        .task { await reload() }
-    }
-
-    private var selectedProfileID: Binding<UUID> {
-        Binding(
-            get: { profile?.id ?? LocalAgentPromptStore.builtInProfileID },
-            set: { id in
-                guard let selected = profiles.first(where: { $0.id == id }) else { return }
-                profile = selected
-                content = selected.content
-                appConfig.localLinuxActivePromptProfileID = id.uuidString
-            }
-        )
-    }
-
-    private func reload() async {
-        profiles = await LocalAgentPromptStore.shared.profiles()
-        let active = await LocalAgentPromptStore.shared.activeProfile()
-        profile = active
-        content = active.content
-    }
-
-    private func createProfile() {
-        let title = newProfileTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        let created = LocalAgentPromptProfile(title: title, content: content)
-        newProfileTitle = ""
-        Task {
-            try? await LocalAgentPromptStore.shared.save(created)
-            appConfig.localLinuxActivePromptProfileID = created.id.uuidString
-            await reload()
         }
     }
 }

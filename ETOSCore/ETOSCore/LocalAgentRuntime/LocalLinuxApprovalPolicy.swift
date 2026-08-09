@@ -64,29 +64,47 @@ public actor LocalLinuxApprovalPolicy {
         switch kind {
         case .run, .recipe, .localMCP:
             scope = .run
-            candidates = [Self.commandText(executable: request.executable, arguments: request.arguments)]
+            let command = Self.commandText(executable: request.executable, arguments: request.arguments)
+            if let script = request.shellScript, !script.isEmpty {
+                candidates = [script] + Self.shellCommandFragments(script) + [command]
+            } else {
+                candidates = [command]
+            }
         case .shell:
             scope = .shell
-            candidates = [request.shellScript ?? "", Self.commandText(executable: request.executable, arguments: request.arguments)]
+            let script = request.shellScript ?? ""
+            candidates = [script]
+                + Self.shellCommandFragments(script)
+                + [Self.commandText(executable: request.executable, arguments: request.arguments)]
         case .terminal, .browser:
             return nil
         }
 
+        var effectiveMatch: LocalLinuxCommandRuleMatch?
         for compiled in compiledRules(rules) where
             compiled.rule.isEnabled &&
             (compiled.rule.scope == .all || compiled.rule.scope == scope) {
             for candidate in candidates where !candidate.isEmpty {
                 if let matchedText = Self.match(compiled, in: candidate) {
-                    return LocalLinuxCommandRuleMatch(
+                    let match = LocalLinuxCommandRuleMatch(
                         ruleID: compiled.rule.id,
                         ruleName: compiled.rule.name,
                         action: compiled.rule.action,
                         matchedText: matchedText
                     )
+                    // 整段脚本只弹出一次治理结果，但必须扫描全部命令片段；拒绝不能
+                    // 被前一段命令命中的提醒规则遮住。同级动作仍保留用户排序。
+                    if let current = effectiveMatch {
+                        if Self.actionPriority(match.action) > Self.actionPriority(current.action) {
+                            effectiveMatch = match
+                        }
+                    } else {
+                        effectiveMatch = match
+                    }
                 }
             }
         }
-        return nil
+        return effectiveMatch
     }
 
     private nonisolated static func compiledRules(_ rules: [LocalLinuxCommandRule]) -> [CompiledRule] {
@@ -105,6 +123,9 @@ public actor LocalLinuxApprovalPolicy {
         case .prefix:
             guard candidate.hasPrefix(compiled.rule.pattern) else { return nil }
             return compiled.rule.pattern
+        case .suffix:
+            guard candidate.hasSuffix(compiled.rule.pattern) else { return nil }
+            return compiled.rule.pattern
         case .regularExpression:
             guard let expression = compiled.expression else { return nil }
             let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
@@ -118,5 +139,81 @@ public actor LocalLinuxApprovalPolicy {
 
     private nonisolated static func commandText(executable: String, arguments: [String]) -> String {
         ([executable] + Array(arguments.dropFirst())).joined(separator: " ")
+    }
+
+    private nonisolated static func actionPriority(_ action: LocalLinuxCommandRuleAction) -> Int {
+        switch action {
+        case .warn: return 0
+        case .confirm: return 1
+        case .deny: return 2
+        }
+    }
+
+    /// Shell 规则逐条检查组合脚本，避免 `safe && dangerous` 绕过第二条命令的前后缀规则。
+    /// 这里只识别 shell 控制运算符；引号内文字和反斜杠转义不会被误当成命令边界。
+    nonisolated static func shellCommandFragments(_ script: String) -> [String] {
+        enum Quote: Equatable {
+            case single
+            case double
+        }
+
+        var fragments: [String] = []
+        var fragmentStart = script.startIndex
+        var index = script.startIndex
+        var quote: Quote?
+        var isEscaped = false
+
+        func appendFragment(endingAt end: String.Index) {
+            let fragment = script[fragmentStart..<end]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !fragment.isEmpty {
+                fragments.append(fragment)
+            }
+        }
+
+        while index < script.endIndex {
+            let character = script[index]
+            let next = script.index(after: index)
+
+            if isEscaped {
+                isEscaped = false
+                index = next
+                continue
+            }
+            if character == "\\", quote != .single {
+                isEscaped = true
+                index = next
+                continue
+            }
+            if character == "'", quote != .double {
+                quote = quote == .single ? nil : .single
+                index = next
+                continue
+            }
+            if character == "\"", quote != .single {
+                quote = quote == .double ? nil : .double
+                index = next
+                continue
+            }
+
+            guard quote == nil,
+                  character == ";" || character == "&" || character == "|" || character == "\n" else {
+                index = next
+                continue
+            }
+
+            appendFragment(endingAt: index)
+            var boundaryEnd = next
+            if (character == "&" || character == "|"),
+               boundaryEnd < script.endIndex,
+               script[boundaryEnd] == character {
+                boundaryEnd = script.index(after: boundaryEnd)
+            }
+            fragmentStart = boundaryEnd
+            index = boundaryEnd
+        }
+
+        appendFragment(endingAt: script.endIndex)
+        return fragments
     }
 }

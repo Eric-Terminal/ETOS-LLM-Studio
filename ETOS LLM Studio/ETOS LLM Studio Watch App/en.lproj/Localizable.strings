@@ -5854,6 +5854,7 @@
 "命令" = "command";
 "命令与浏览器任务" = "Commands and browser tasks";
 "命令前缀" = "command prefix";
+"命令后缀" = "command suffix";
 "命令前缀或正则" = "Command prefix or regular expression";
 "命令命中“%@”，需要确认后才能运行。" = "The command hits \"%@\" and requires confirmation before it can be run.";
 "命令失败时会保留退出码、信号、errno 和 iSH 兼容性诊断。反馈助手可以引用诊断编号，不会把未打码的环境变量输出交给模型。" = "Exit codes, signals, errno, and iSH compatibility diagnostics are preserved on command failure. The feedback assistant can quote the diagnostic number and will not pass uncoded environment variable output to the model.";
@@ -6289,3 +6290,8 @@
 "Agent Run 标识不属于当前会话。" = "This Agent Run ID does not belong to the current conversation.";
 "Agent Run 已经结束，不能再次执行迟到的工具调用。" = "The Agent Run has ended and cannot execute a late tool call.";
 "替换目标失败（%@），恢复旧目标也失败（%@）。" = "Replacing the destination failed (%@), and restoring the old destination also failed (%@).";
+"发送给模型前隐藏环境变量值" = "Hide environment variable values before sending to the model";
+"0 秒表示不限时；预览只影响发送给模型的副本。" = "0 seconds means no timeout; the preview only affects the copy sent to the model.";
+"开启后，命令与本地 MCP 输出中出现已启用环境变量的值时，只会在发送给模型前替换；用户终端和原始日志保持不变。关闭后会原样发送。" = "When enabled, enabled environment variable values found in command and local MCP output are replaced only before sending to the model; the user terminal and raw logs remain unchanged. When disabled, values are sent unchanged.";
+"已启用的变量会自动注入新建的命令、终端与本地 MCP 进程。列表始终隐藏值；点进变量即可查看和编辑。" = "Enabled variables are automatically injected into new commands, terminals, and local MCP processes. Values are always hidden in the list; tap a variable to view and edit it.";
+"点按可选为当前提示词，向左滑可删除自定义提示词，向右滑可编辑。只有 Agent 模式会插入这里选中的提示词。" = "Tap to select the current prompt, swipe left to delete a custom prompt, or swipe right to edit. Only Agent mode inserts the selected prompt.";
