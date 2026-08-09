@@ -221,6 +221,18 @@ struct ETOS_LLM_Studio_AppTests {
             contentHeightDelta: -20,
             maximumLag: 44
         ) == 0)
+        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
+            presentationTranslation: 12,
+            modelTranslation: 0
+        ) == 12)
+        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
+            presentationTranslation: nil,
+            modelTranslation: 20
+        ) == 20)
+        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
+            presentationTranslation: 8,
+            modelTranslation: 20
+        ) == 20)
         #expect(ChatScrollMetricsObserver.streamingViewportMaskHeight(
             boundsHeight: 844,
             bottomInset: 96
