@@ -570,9 +570,9 @@ extension ChatBubble {
 
         if showsStreamingIndicators && !isOutgoing {
             ETBottomPinnedStreamingBubble(
-                response: ChatStreamingDisplayMode.normalized(
+                duration: ChatStreamingDisplayMode.normalized(
                     appConfig.chatStreamingDisplayMode
-                ).textRevealDuration
+                ).uiPublishInterval
             ) {
                 foreground
             } background: {
