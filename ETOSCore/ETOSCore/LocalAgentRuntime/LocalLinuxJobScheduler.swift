@@ -339,7 +339,8 @@ public actor LocalLinuxJobScheduler {
         let terminalRequest = LocalLinuxBridgeTerminalRequest(
             terminalID: requestID,
             environment: environment.values,
-            workingDirectory: workspace.guestPath,
+            // 独立用户终端从 HOME 开始，避免把内部工作区路径暴露成默认操作目录。
+            workingDirectory: environment.values["HOME"] ?? "/home/etos",
             columns: columns,
             rows: rows
         )
@@ -374,7 +375,9 @@ public actor LocalLinuxJobScheduler {
                 modelURL: urls.model,
                 redactionValues: environment.redactionValues,
                 privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
-                modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes))
+                modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
+                terminalColumns: Int(columns),
+                terminalRows: Int(rows)
             )
             let mountIDs = context?.mountIDs ?? Persistence.loadLocalLinuxMounts()
                 .filter { $0.isEnabled && $0.authorizationState == .available }
@@ -462,6 +465,7 @@ public actor LocalLinuxJobScheduler {
     public func resizeTerminal(jobID: UUID, columns: UInt16, rows: UInt16) throws {
         guard let terminal = activeTerminals[jobID] else { throw LocalLinuxRuntimeError.jobNotFound(jobID) }
         try terminal.session.resize(columns: columns, rows: rows)
+        terminal.collector.resizeTerminalPreview(columns: Int(columns), rows: Int(rows))
     }
 
     public func finishTerminalInput(jobID: UUID, owner: LocalLinuxTerminalInputOwner) throws {

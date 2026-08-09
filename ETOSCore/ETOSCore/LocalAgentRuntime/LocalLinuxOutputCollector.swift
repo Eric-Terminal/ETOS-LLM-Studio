@@ -45,13 +45,16 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var userPreview = Data()
     private var lastUserPreviewStream: LocalLinuxOutputStream?
     private let userPreviewLimit = 262_144
+    private var terminalScreen: LocalLinuxTerminalScreen?
 
     public init(
         rawURL: URL,
         modelURL: URL,
         redactionValues: [String],
         privacyEnabled: Bool,
-        modelByteLimit: UInt64
+        modelByteLimit: UInt64,
+        terminalColumns: Int? = nil,
+        terminalRows: Int? = nil
     ) throws {
         let fileManager = FileManager.default
         fileManager.createFile(atPath: rawURL.path, contents: nil)
@@ -71,6 +74,12 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         }.sorted { $0.value.count > $1.value.count }
         self.privacyEnabled = privacyEnabled
         self.modelByteLimit = modelByteLimit
+        if let terminalColumns, let terminalRows {
+            terminalScreen = LocalLinuxTerminalScreen(
+                columns: terminalColumns,
+                rows: terminalRows
+            )
+        }
     }
 
     deinit {
@@ -160,6 +169,13 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         return String(decoding: userPreview, as: UTF8.self)
     }
 
+    public func resizeTerminalPreview(columns: Int, rows: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        terminalScreen?.resize(columns: columns, rows: rows)
+        replaceUserPreviewWithTerminalSnapshot()
+    }
+
     private func writeRawFrame(stream: LocalLinuxOutputStream, data: Data) throws {
         let marker: UInt8
         switch stream {
@@ -175,12 +191,26 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     }
 
     private func appendUserPreview(stream: LocalLinuxOutputStream, data: Data) {
+        if stream == .terminal, let terminalScreen {
+            terminalScreen.append(data)
+            replaceUserPreviewWithTerminalSnapshot()
+            lastUserPreviewStream = stream
+            return
+        }
         if stream != .terminal, lastUserPreviewStream != stream {
             let label = stream == .stdout ? "\n[stdout]\n" : "\n[stderr]\n"
             userPreview.append(contentsOf: label.utf8)
         }
         userPreview.append(data)
         lastUserPreviewStream = stream
+        if userPreview.count > userPreviewLimit {
+            userPreview.removeFirst(userPreview.count - userPreviewLimit)
+        }
+    }
+
+    private func replaceUserPreviewWithTerminalSnapshot() {
+        guard let terminalScreen else { return }
+        userPreview = Data(terminalScreen.renderedText().utf8)
         if userPreview.count > userPreviewLimit {
             userPreview.removeFirst(userPreview.count - userPreviewLimit)
         }
