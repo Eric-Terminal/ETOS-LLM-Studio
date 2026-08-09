@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 使用与全局系统提示词一致的列表交互管理本地 Agent 提示词。
+// 使用与全局系统提示词一致的当前内容编辑器与列表管理本地 Agent 提示词。
 // ============================================================================
 
 import SwiftUI
@@ -13,11 +13,27 @@ struct LocalAgentPromptProfilesView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var profiles: [LocalAgentPromptProfile] = []
     @State private var selectedID = LocalAgentPromptStore.builtInProfileID
+    @State private var selectedProfile: LocalAgentPromptProfile?
+    @State private var selectedPromptDraft = ""
     @State private var editingProfile: LocalAgentPromptProfile?
     @State private var errorMessage: String?
 
     var body: some View {
         List {
+            Section {
+                FullscreenMultilineTextInput(
+                    identity: selectedID,
+                    placeholder: NSLocalizedString("提示词内容", comment: "Agent prompt content"),
+                    fullScreenTitle: NSLocalizedString("编辑提示词", comment: "Edit Agent prompt"),
+                    text: $selectedPromptDraft,
+                    lineLimit: 4...10,
+                    isEnabled: selectedProfile != nil,
+                    onDebouncedSave: updateSelectedPromptContent
+                )
+            } header: {
+                Text(NSLocalizedString("Agent 提示词", comment: "Agent prompt editor section"))
+            }
+
             Section {
                 Button {
                     editingProfile = LocalAgentPromptProfile(title: "", content: "")
@@ -83,7 +99,7 @@ struct LocalAgentPromptProfilesView: View {
                     }
                 }
             } header: {
-                Text(NSLocalizedString("Agent 提示词", comment: "Agent prompt profiles section"))
+                Text(NSLocalizedString("提示词列表", comment: "Agent prompt profiles section"))
             } footer: {
                 Text(NSLocalizedString("点按可选为当前提示词，向左滑可删除自定义提示词，向右滑可编辑。只有 Agent 模式会插入这里选中的提示词。", comment: "Agent prompt profiles footer"))
             }
@@ -132,11 +148,35 @@ struct LocalAgentPromptProfilesView: View {
             selectedID = LocalAgentPromptStore.builtInProfileID
             appConfig.localLinuxActivePromptProfileID = selectedID.uuidString
         }
+        selectedProfile = profiles.first(where: { $0.id == selectedID })
+        selectedPromptDraft = selectedProfile?.content ?? ""
     }
 
     private func select(_ profile: LocalAgentPromptProfile) {
+        if selectedProfile?.content != selectedPromptDraft {
+            updateSelectedPromptContent(selectedPromptDraft)
+        }
         selectedID = profile.id
+        selectedProfile = profile
+        selectedPromptDraft = profile.content
         appConfig.localLinuxActivePromptProfileID = profile.id.uuidString
+    }
+
+    private func updateSelectedPromptContent(_ content: String) {
+        guard var profile = selectedProfile else { return }
+        profile.content = content
+        profile.updatedAt = Date()
+        selectedProfile = profile
+        Task {
+            do {
+                try await LocalAgentPromptStore.shared.save(profile)
+                if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+                    profiles[index] = profile
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func save(_ profile: LocalAgentPromptProfile) async throws {

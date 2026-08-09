@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch
 //
-// 在手表端以扁平列表管理本地 Agent 提示词。
+// 在手表端以扁平列表直接编辑当前内容，并管理本地 Agent 提示词。
 // ============================================================================
 
 import SwiftUI
@@ -13,11 +13,33 @@ struct LocalLinuxWatchPromptView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var profiles: [LocalAgentPromptProfile] = []
     @State private var selectedID = LocalAgentPromptStore.builtInProfileID
+    @State private var selectedProfile: LocalAgentPromptProfile?
+    @State private var selectedPromptDraft = ""
+    @State private var isSavingSelectedPrompt = false
     @State private var editingProfile: LocalAgentPromptProfile?
     @State private var errorMessage: String?
 
     var body: some View {
         List {
+            Section(NSLocalizedString("Agent 提示词", comment: "Watch Agent prompt editor section")) {
+                TextField(
+                    NSLocalizedString("提示词内容", comment: "Watch Agent prompt content"),
+                    text: $selectedPromptDraft.watchKeyboardNewlineBinding(),
+                    axis: .vertical
+                )
+                .lineLimit(4...10)
+                .disabled(selectedProfile == nil || isSavingSelectedPrompt)
+
+                Button(NSLocalizedString("保存修改", comment: "Watch save Agent prompt")) {
+                    saveSelectedPrompt()
+                }
+                .disabled(
+                    selectedProfile == nil
+                        || selectedProfile?.content == selectedPromptDraft
+                        || isSavingSelectedPrompt
+                )
+            }
+
             Section {
                 Button {
                     editingProfile = LocalAgentPromptProfile(title: "", content: "")
@@ -26,7 +48,7 @@ struct LocalLinuxWatchPromptView: View {
                 }
             }
 
-            Section(NSLocalizedString("Agent 提示词", comment: "Watch Agent prompt profiles section")) {
+            Section(NSLocalizedString("提示词列表", comment: "Watch Agent prompt profiles section")) {
                 ForEach(profiles) { profile in
                     Button {
                         select(profile)
@@ -116,11 +138,37 @@ struct LocalLinuxWatchPromptView: View {
             selectedID = LocalAgentPromptStore.builtInProfileID
             appConfig.localLinuxActivePromptProfileID = selectedID.uuidString
         }
+        selectedProfile = profiles.first(where: { $0.id == selectedID })
+        selectedPromptDraft = selectedProfile?.content ?? ""
     }
 
     private func select(_ profile: LocalAgentPromptProfile) {
+        if selectedProfile?.content != selectedPromptDraft {
+            saveSelectedPrompt()
+        }
         selectedID = profile.id
+        selectedProfile = profile
+        selectedPromptDraft = profile.content
         appConfig.localLinuxActivePromptProfileID = profile.id.uuidString
+    }
+
+    private func saveSelectedPrompt() {
+        guard var profile = selectedProfile else { return }
+        profile.content = selectedPromptDraft
+        profile.updatedAt = Date()
+        isSavingSelectedPrompt = true
+        Task {
+            do {
+                try await LocalAgentPromptStore.shared.save(profile)
+                if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+                    profiles[index] = profile
+                }
+                isSavingSelectedPrompt = false
+            } catch {
+                errorMessage = error.localizedDescription
+                isSavingSelectedPrompt = false
+            }
+        }
     }
 
     private func save(_ profile: LocalAgentPromptProfile) async throws {
