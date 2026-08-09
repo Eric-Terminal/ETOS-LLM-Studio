@@ -8,6 +8,7 @@
 
 import Foundation
 import Testing
+import UIKit
 import ETOSCore
 @testable import ETOS_LLM_Studio_App
 
@@ -184,6 +185,98 @@ struct ETOS_LLM_Studio_AppTests {
             keepsBottomPinned: true,
             isUserInteracting: true
         ))
+    }
+
+    @Test("原生尺寸锚点生效时 UIKit 不会重复校正偏移")
+    func testNativeSizeChangeAnchorOwnsContinuousBottomPinning() {
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: true,
+            isUserInteracting: false,
+            usesNativeSizeChangeAnchor: true
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: CGSize(width: 390, height: 248),
+            to: CGSize(width: 390, height: 446),
+            keepsBottomPinned: true,
+            isUserInteracting: false,
+            usesNativeSizeChangeAnchor: true
+        ))
+    }
+
+    @Test("拖动立即解除吸底且松手后仅在底部重新接管")
+    func testBottomPinIntentPrioritizesUserInteraction() {
+        #expect(!ChatView.resolvedBottomPinIntent(
+            currentIntent: true,
+            distanceToBottom: 0,
+            threshold: 24,
+            isUserInteracting: true,
+            isLayoutSettling: false
+        ))
+        #expect(ChatView.resolvedBottomPinIntent(
+            currentIntent: true,
+            distanceToBottom: 80,
+            threshold: 24,
+            isUserInteracting: false,
+            isLayoutSettling: false
+        ))
+        #expect(ChatView.resolvedBottomPinIntent(
+            currentIntent: false,
+            distanceToBottom: 12,
+            threshold: 24,
+            isUserInteracting: false,
+            isLayoutSettling: false
+        ))
+        #expect(!ChatView.resolvedBottomPinIntent(
+            currentIntent: false,
+            distanceToBottom: 48,
+            threshold: 24,
+            isUserInteracting: false,
+            isLayoutSettling: false
+        ))
+        #expect(!ChatView.resolvedBottomPinIntent(
+            currentIntent: false,
+            distanceToBottom: 0,
+            threshold: 24,
+            isUserInteracting: false,
+            isLayoutSettling: true
+        ))
+    }
+
+    @MainActor
+    @Test("高速流式追加不会交叉淡化整段文字")
+    func testStreamingMarkdownAppendDoesNotAnimateWholeTextLayer() {
+        let messageID = UUID()
+        let blockID = ETStreamingMarkdownBlockID(messageID: messageID, ordinal: 0)
+        let paragraphStyle = NSMutableParagraphStyle()
+        let style = ETStreamingMarkdownTextView.Style(
+            font: .systemFont(ofSize: 17),
+            color: .label,
+            paragraphStyle: paragraphStyle
+        )
+        let textView = UITextView(usingTextLayoutManager: true)
+        let coordinator = ETStreamingMarkdownTextView.Coordinator()
+        let initialBlock = ETStreamingMarkdownActiveBlock(
+            id: blockID,
+            source: "Hello",
+            displayText: "Hello",
+            presentation: .markdownSource,
+            updateKind: .reset,
+            leadingSpacingEm: 0
+        )
+        coordinator.apply(initialBlock, style: style, to: textView)
+
+        let appendedBlock = ETStreamingMarkdownActiveBlock(
+            id: blockID,
+            source: "Hello world",
+            displayText: "Hello world",
+            presentation: .markdownSource,
+            updateKind: .append(previousUTF16Length: 5),
+            leadingSpacingEm: 0
+        )
+        coordinator.apply(appendedBlock, style: style, to: textView)
+
+        #expect(textView.text == "Hello world")
+        #expect(textView.layer.animationKeys()?.isEmpty ?? true)
     }
 
     @Test("尺寸变化只在贴底状态下使用底部锚点")
