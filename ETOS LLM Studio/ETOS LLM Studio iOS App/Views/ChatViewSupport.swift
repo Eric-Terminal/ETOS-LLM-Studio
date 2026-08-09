@@ -139,16 +139,6 @@ struct ChatInputBarHeightPreferenceKey: PreferenceKey {
 }
 
 extension View {
-    /// iOS 18 起由 SwiftUI 在同一轮布局中处理尺寸变化锚点；旧系统继续使用 UIKit 观察器兜底。
-    @ViewBuilder
-    func chatDefaultSizeChangeScrollAnchor(_ anchor: UnitPoint?) -> some View {
-        if #available(iOS 18.0, *) {
-            defaultScrollAnchor(anchor, for: .sizeChanges)
-        } else {
-            self
-        }
-    }
-
     /// 现代系统直接使用滚动阶段中断吸底，避免等到偏移量变化后才发现用户已经接管。
     @ViewBuilder
     func chatOnUserScrollPhaseChange(
@@ -179,21 +169,26 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     @Binding var keepsBottomPinned: Bool
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
-    /// iOS 18 起尺寸变化锚点与布局同帧生效，UIKit 观察器只能上报位置，不能再次改写偏移。
-    nonisolated static var usesNativeSizeChangeAnchor: Bool {
-        if #available(iOS 18.0, *) {
-            return true
-        }
-        return false
-    }
-
     /// 内容增长前已经锁定底部时，不能用增长后的距离反过来取消本次吸底。
     nonisolated static func shouldRestoreBottomAfterContentSizeChange(
         keepsBottomPinned: Bool,
-        isUserInteracting: Bool,
-        usesNativeSizeChangeAnchor: Bool = false
+        isUserInteracting: Bool
     ) -> Bool {
-        !usesNativeSizeChangeAnchor && keepsBottomPinned && !isUserInteracting
+        keepsBottomPinned && !isUserInteracting
+    }
+
+    /// 只有增长需要在当前布局轮次立即追底；收缩留到下一轮统一校正，过滤中间排版高度。
+    nonisolated static func shouldPinSynchronouslyAfterContentSizeChange(
+        from oldSize: CGSize?,
+        to newSize: CGSize,
+        keepsBottomPinned: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        guard let oldSize, newSize.height - oldSize.height > 0.5 else { return false }
+        return shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: keepsBottomPinned,
+            isUserInteracting: isUserInteracting
+        )
     }
 
     /// 输入栏或键盘改变可视区域时，底部锁定必须跟着新的视口重新落位。
@@ -201,22 +196,19 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         from oldSize: CGSize,
         to newSize: CGSize,
         keepsBottomPinned: Bool,
-        isUserInteracting: Bool,
-        usesNativeSizeChangeAnchor: Bool = false
+        isUserInteracting: Bool
     ) -> Bool {
         let sizeChanged = abs(oldSize.width - newSize.width) > 0.5
             || abs(oldSize.height - newSize.height) > 0.5
         return sizeChanged && shouldRestoreBottomAfterContentSizeChange(
             keepsBottomPinned: keepsBottomPinned,
-            isUserInteracting: isUserInteracting,
-            usesNativeSizeChangeAnchor: usesNativeSizeChangeAnchor
+            isUserInteracting: isUserInteracting
         )
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
-            usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
             onMetricsChange: onMetricsChange
         )
     }
@@ -247,7 +239,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     final class Coordinator {
         var onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
         var keepsBottomPinned: Binding<Bool>
-        let usesNativeSizeChangeAnchor: Bool
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
@@ -264,11 +255,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
 
         init(
             keepsBottomPinned: Binding<Bool>,
-            usesNativeSizeChangeAnchor: Bool,
             onMetricsChange: @escaping (CGFloat, CGFloat, Bool) -> Void
         ) {
             self.keepsBottomPinned = keepsBottomPinned
-            self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
             self.onMetricsChange = onMetricsChange
         }
 
@@ -296,8 +285,14 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
                 self?.scheduleDistanceChangeNotification()
             }
-            contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
-                self?.handleContentSizeChange()
+            contentSizeObservation = scrollView.observe(
+                \.contentSize,
+                options: [.initial, .old, .new]
+            ) { [weak self] scrollView, change in
+                self?.handleContentSizeChange(
+                    from: change.oldValue,
+                    to: change.newValue ?? scrollView.contentSize
+                )
             }
             boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] scrollView, _ in
                 self?.handleBoundsChange(scrollView.bounds.size)
@@ -318,18 +313,25 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             scrollView = nil
         }
 
-        private func handleContentSizeChange() {
+        private func handleContentSizeChange(from oldSize: CGSize?, to newSize: CGSize) {
             let isUserInteracting = scrollView?.isDragging == true
                 || scrollView?.isTracking == true
                 || scrollView?.isDecelerating == true
             if ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
                 keepsBottomPinned: keepsBottomPinned.wrappedValue,
-                isUserInteracting: isUserInteracting,
-                usesNativeSizeChangeAnchor: usesNativeSizeChangeAnchor
+                isUserInteracting: isUserInteracting
             ) {
                 restoresBottomAfterContentSizeChange = true
             }
-            if !usesNativeSizeChangeAnchor {
+
+            if ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
+                from: oldSize,
+                to: newSize,
+                keepsBottomPinned: keepsBottomPinned.wrappedValue,
+                isUserInteracting: isUserInteracting
+            ) {
+                pinToBottomImmediately(contentHeight: newSize.height)
+            } else {
                 scheduleBottomPin()
             }
             scheduleDistanceChangeNotification()
@@ -349,8 +351,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 from: lastBoundsSize,
                 to: newSize,
                 keepsBottomPinned: keepsBottomPinned.wrappedValue,
-                isUserInteracting: isUserInteracting,
-                usesNativeSizeChangeAnchor: usesNativeSizeChangeAnchor
+                isUserInteracting: isUserInteracting
             ) else {
                 return
             }
@@ -360,8 +361,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             scheduleBottomPin()
         }
 
-        /// contentSize 的 KVO 正处在 UIKit/SwiftUI 布局栈内，不能同步改 contentOffset。
-        /// 合并到下一轮主循环可避免删除高气泡时发生重入布局。
+        /// 收缩和视口变化合并到下一轮主循环，避免删除高气泡时发生重入布局。
         private func scheduleBottomPin() {
             guard pendingBottomPin == nil else { return }
             let workItem = DispatchWorkItem { [weak self] in
@@ -374,7 +374,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         private func pinToBottomIfNeeded() {
-            guard !usesNativeSizeChangeAnchor, let scrollView else { return }
+            guard let scrollView else { return }
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
@@ -402,13 +402,32 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                         + scrollView.adjustedContentInset.bottom
                 )
                 if abs(scrollView.contentOffset.y - maximumOffsetY) > 0.5 {
-                    scrollView.setContentOffset(
-                        CGPoint(x: scrollView.contentOffset.x, y: maximumOffsetY),
-                        animated: false
-                    )
+                    UIView.performWithoutAnimation {
+                        scrollView.setContentOffset(
+                            CGPoint(x: scrollView.contentOffset.x, y: maximumOffsetY),
+                            animated: false
+                        )
+                    }
                 }
             }
             scheduleDistanceChangeNotification()
+        }
+
+        /// 增长时 contentSize 已经是本轮布局的真实高度；立即贴底可避免新内容先越过输入栏再被追回。
+        private func pinToBottomImmediately(contentHeight: CGFloat) {
+            guard let scrollView else { return }
+            restoresBottomAfterContentSizeChange = false
+            let maximumOffsetY = max(
+                -scrollView.adjustedContentInset.top,
+                contentHeight - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+            )
+            guard abs(scrollView.contentOffset.y - maximumOffsetY) > 0.5 else { return }
+            UIView.performWithoutAnimation {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: maximumOffsetY),
+                    animated: false
+                )
+            }
         }
 
         private func scheduleDistanceChangeNotification() {
