@@ -188,32 +188,84 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("内容增长同帧追底而收缩延后校正")
-    func testContentGrowthPinsSynchronously() {
-        #expect(ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
-            from: CGSize(width: 390, height: 700),
-            to: CGSize(width: 390, height: 724),
+    @Test("原生尺寸锚点生效时 UIKit 不会重复校正偏移")
+    func testNativeSizeChangeAnchorOwnsContinuousBottomPinning() {
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
             keepsBottomPinned: true,
-            isUserInteracting: false
+            isUserInteracting: false,
+            usesNativeSizeChangeAnchor: true
         ))
-        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
-            from: CGSize(width: 390, height: 724),
-            to: CGSize(width: 390, height: 700),
+        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
+            from: CGSize(width: 390, height: 248),
+            to: CGSize(width: 390, height: 446),
             keepsBottomPinned: true,
-            isUserInteracting: false
+            isUserInteracting: false,
+            usesNativeSizeChangeAnchor: true
         ))
-        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
-            from: CGSize(width: 390, height: 700),
-            to: CGSize(width: 390, height: 724),
-            keepsBottomPinned: false,
-            isUserInteracting: false
+    }
+
+    @Test("流式滚动只向增长后的新底部推进")
+    func testStreamingOffsetAdvancesMonotonically() {
+        #expect(ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
+            from: 800,
+            to: 824,
+            contentOverflowsViewport: true,
+            currentOffsetY: 52,
+            targetOffsetY: 76
         ))
-        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
-            from: CGSize(width: 390, height: 700),
-            to: CGSize(width: 390, height: 724),
-            keepsBottomPinned: true,
-            isUserInteracting: true
+        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
+            from: 824,
+            to: 800,
+            contentOverflowsViewport: true,
+            currentOffsetY: 76,
+            targetOffsetY: 52
         ))
+        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
+            from: 800,
+            to: 824,
+            contentOverflowsViewport: true,
+            currentOffsetY: 80,
+            targetOffsetY: 76
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
+            from: 700,
+            to: 724,
+            contentOverflowsViewport: false,
+            currentOffsetY: 0,
+            targetOffsetY: 0
+        ))
+    }
+
+    @Test("流式滚动只在内容超出视口后追随底部")
+    func testStreamingOffsetRequiresScrollableContent() {
+        #expect(!ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 748,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+        #expect(!ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 748.5,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+        #expect(ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 770,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+
+        #expect(ChatScrollMetricsObserver.maximumContentOffsetY(
+            contentHeight: 700,
+            boundsHeight: 748,
+            topInset: 0,
+            bottomInset: 0
+        ) == 0)
+        #expect(ChatScrollMetricsObserver.maximumContentOffsetY(
+            contentHeight: 800,
+            boundsHeight: 748,
+            topInset: 0,
+            bottomInset: 0
+        ) == 52)
     }
 
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")
@@ -349,6 +401,22 @@ struct ETOS_LLM_Studio_AppTests {
             effectiveRange: nil
         ) as? UIColor
         #expect(appendedColor?.cgColor.alpha == 1)
+    }
+
+    @Test("尺寸变化只在贴底状态下使用底部锚点")
+    func testChatSizeChangeAnchorFollowsBottomIntent() {
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: true,
+            isStreaming: false
+        ) == .bottom)
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: false,
+            isStreaming: false
+        ) == nil)
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: true,
+            isStreaming: true
+        ) == nil)
     }
 
     @Test("自动历史窗口只在真实滚到顶部时加载一次")

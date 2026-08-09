@@ -11,6 +11,14 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
+    /// 非流式尺寸变化交给 SwiftUI；流式期间由 UIKit 单独动画真实滚动偏移，避免双重吸底。
+    nonisolated static func chatSizeChangeScrollAnchor(
+        keepsBottomPinned: Bool,
+        isStreaming: Bool
+    ) -> UnitPoint? {
+        keepsBottomPinned && !isStreaming ? .bottom : nil
+    }
+
     /// 用户手势永远优先于自动吸底；非交互状态下只有真正回到底部才重新接管。
     nonisolated static func resolvedBottomPinIntent(
         currentIntent: Bool,
@@ -403,7 +411,7 @@ extension ChatView {
     }
 
     /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
-    /// 后续流式增长统一交给底层滚动观察器，避免两个目标长期互相校正。
+    /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
     func resolveActiveBottomScrollCommand(
         distanceToBottom: CGFloat,
         isUserInteracting: Bool
