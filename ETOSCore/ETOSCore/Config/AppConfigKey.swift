@@ -109,12 +109,12 @@ public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendab
         #if os(watchOS)
         switch self {
         case .immediate: return 0.080
-        case .gentle: return 0.200
+        case .gentle: return 0.160
         }
         #else
         switch self {
         case .immediate: return 0.060
-        case .gentle: return 0.200
+        case .gentle: return 0.120
         }
         #endif
     }
