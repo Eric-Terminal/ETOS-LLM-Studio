@@ -72,6 +72,7 @@ struct ETIOSStreamingMarkdownLiveView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var preparedBlocks: [ETStreamingMarkdownBlockID: ETIOSPreparedStreamingMarkdownBlock] = [:]
+    @State private var displayedSnapshot: ETStreamingMarkdownSnapshot?
 
     private var snapshot: ETStreamingMarkdownSnapshot? {
         state.snapshot(for: channel)
@@ -79,6 +80,41 @@ struct ETIOSStreamingMarkdownLiveView: View {
 
     private var preparationID: ETStreamingMarkdownBlockID? {
         snapshot?.committedBlocks.last?.id
+    }
+
+    private var renderSnapshot: ETStreamingMarkdownSnapshot? {
+        guard let snapshot else { return displayedSnapshot }
+        if Self.canDisplayImmediately(
+            enableMarkdown: enableMarkdown,
+            displayedSnapshot: displayedSnapshot,
+            incomingSnapshot: snapshot
+        ) {
+            return snapshot
+        }
+        return displayedSnapshot
+    }
+
+    /// 活动 Block 可立即逐字更新；新增 committed Block 必须等 Markdown 准备完成后再交给布局。
+    nonisolated static func canDisplayImmediately(
+        enableMarkdown: Bool,
+        displayedSnapshot: ETStreamingMarkdownSnapshot?,
+        incomingSnapshot: ETStreamingMarkdownSnapshot
+    ) -> Bool {
+        guard enableMarkdown, !incomingSnapshot.committedBlocks.isEmpty else {
+            return true
+        }
+        guard let displayedSnapshot else { return false }
+        return hasSameCommittedStructure(displayedSnapshot, incomingSnapshot)
+    }
+
+    nonisolated private static func hasSameCommittedStructure(
+        _ lhs: ETStreamingMarkdownSnapshot,
+        _ rhs: ETStreamingMarkdownSnapshot
+    ) -> Bool {
+        lhs.messageID == rhs.messageID
+            && lhs.channel == rhs.channel
+            && lhs.committedBlocks.count == rhs.committedBlocks.count
+            && lhs.committedBlocks.last?.id == rhs.committedBlocks.last?.id
     }
 
     private func interBlockSpacing(_ multiplier: Double) -> CGFloat {
@@ -89,23 +125,18 @@ struct ETIOSStreamingMarkdownLiveView: View {
 
     var body: some View {
         Group {
-            if let snapshot {
+            if let snapshot = renderSnapshot {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(snapshot.committedBlocks) { block in
                         committedBlockView(block)
                             .padding(.top, interBlockSpacing(block.leadingSpacingEm))
                     }
                     if let activeBlock = snapshot.activeBlock {
-                        ETStreamingMarkdownTextView(
-                            activeBlock: activeBlock,
-                            textColor: textColor,
-                            fontScale: fontScale,
-                            lineSpacing: lineSpacing,
-                            streamingDisplayMode: streamingDisplayMode
-                        )
-                        .padding(.top, interBlockSpacing(activeBlock.leadingSpacingEm))
+                        activeBlockView(activeBlock)
                     }
                 }
+            } else if let activeBlock = snapshot?.activeBlock {
+                activeBlockView(activeBlock)
             } else {
                 Text(fallbackText)
                     .etFont(.body, sampleText: fallbackText)
@@ -113,21 +144,81 @@ struct ETIOSStreamingMarkdownLiveView: View {
                     .foregroundStyle(textColor)
             }
         }
+        .onChange(of: snapshot?.revision, initial: true) { _, _ in
+            guard let snapshot else { return }
+            let canDisplayImmediately = Self.canDisplayImmediately(
+                enableMarkdown: enableMarkdown,
+                displayedSnapshot: displayedSnapshot,
+                incomingSnapshot: snapshot
+            )
+            #if DEBUG
+            if !canDisplayImmediately {
+                print(
+                    "[StreamMarkdownHandoff] freeze channel=\(channel.rawValue) "
+                        + "revision=\(snapshot.revision) displayedRevision=\(displayedSnapshot?.revision ?? -1) "
+                        + "displayedBlocks=\(displayedSnapshot?.committedBlocks.count ?? 0) "
+                        + "incomingBlocks=\(snapshot.committedBlocks.count)"
+                )
+            }
+            #endif
+            guard canDisplayImmediately else { return }
+            displayedSnapshot = snapshot
+        }
         .task(id: enableMarkdown ? preparationID : nil) {
             guard enableMarkdown,
-                  let blocks = snapshot?.committedBlocks,
-                  !blocks.isEmpty else {
-                preparedBlocks = [:]
+                  let targetSnapshot = snapshot,
+                  !targetSnapshot.committedBlocks.isEmpty else {
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    preparedBlocks = [:]
+                    displayedSnapshot = snapshot
+                }
                 return
             }
+            let blocks = targetSnapshot.committedBlocks
+            #if DEBUG
+            print(
+                "[StreamMarkdownHandoff] prepare channel=\(channel.rawValue) "
+                    + "revision=\(targetSnapshot.revision) blocks=\(blocks.count)"
+            )
+            #endif
             let prepared = await ETIOSStreamingMarkdownBlockWorker.shared.prepare(blocks)
-            guard !Task.isCancelled else { return }
-            preparedBlocks = prepared
+            guard !Task.isCancelled,
+                  let latestSnapshot = state.snapshot(for: channel),
+                  Self.hasSameCommittedStructure(targetSnapshot, latestSnapshot) else {
+                return
+            }
+
+            // 同一事务中同时发布准备结果与快照，布局不会看见纯文本占位的中间帧。
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                preparedBlocks = prepared
+                displayedSnapshot = latestSnapshot
+            }
+            #if DEBUG
+            print(
+                "[StreamMarkdownHandoff] publish channel=\(channel.rawValue) "
+                    + "revision=\(latestSnapshot.revision) blocks=\(latestSnapshot.committedBlocks.count)"
+            )
+            #endif
         }
         // 网络分块只改变文字与高度，不继承气泡入场等外层动画，避免高速重排横向漂移。
         .transaction { transaction in
             transaction.animation = nil
         }
+    }
+
+    private func activeBlockView(_ activeBlock: ETStreamingMarkdownActiveBlock) -> some View {
+        ETStreamingMarkdownTextView(
+            activeBlock: activeBlock,
+            textColor: textColor,
+            fontScale: fontScale,
+            lineSpacing: lineSpacing,
+            streamingDisplayMode: streamingDisplayMode
+        )
+        .padding(.top, interBlockSpacing(activeBlock.leadingSpacingEm))
     }
 
     @ViewBuilder
@@ -170,7 +261,7 @@ struct ETIOSStreamingMarkdownLiveView: View {
                         codeHighlightLimit: 4_096
                     )
             }
-        } else {
+        } else if !enableMarkdown {
             Text(block.source)
                 .etFont(.body, sampleText: block.source)
                 .lineSpacing(lineSpacing)

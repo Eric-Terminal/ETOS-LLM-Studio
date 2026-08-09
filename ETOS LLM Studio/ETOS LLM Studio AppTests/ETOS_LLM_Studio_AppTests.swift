@@ -203,59 +203,133 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("流式滚动只向增长后的新底部推进")
-    func testStreamingOffsetAdvancesMonotonically() {
-        #expect(ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
-            from: 800,
-            to: 824,
+    @Test("流式滚动只从屏幕实际位置向最终底部推进")
+    func testStreamingFollowUsesVisibleOffset() {
+        #expect(ChatScrollMetricsObserver.shouldAnimateStreamingFollow(
             contentOverflowsViewport: true,
-            currentOffsetY: 52,
+            visibleOffsetY: 52,
+            targetOffsetY: 76,
+            reduceMotion: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldAnimateStreamingFollow(
+            contentOverflowsViewport: true,
+            visibleOffsetY: 76,
+            targetOffsetY: 52,
+            reduceMotion: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldAnimateStreamingFollow(
+            contentOverflowsViewport: true,
+            visibleOffsetY: 52,
+            targetOffsetY: 76,
+            reduceMotion: true
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldAnimateStreamingFollow(
+            contentOverflowsViewport: false,
+            visibleOffsetY: 52,
+            targetOffsetY: 76,
+            reduceMotion: false
+        ))
+
+        #expect(ChatScrollMetricsObserver.shouldApplyStreamingFollow(
+            visibleOffsetY: 52,
             targetOffsetY: 76
         ))
-        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
-            from: 824,
-            to: 800,
-            contentOverflowsViewport: true,
-            currentOffsetY: 76,
+        #expect(!ChatScrollMetricsObserver.shouldApplyStreamingFollow(
+            visibleOffsetY: 76,
             targetOffsetY: 52
         ))
-        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
-            from: 800,
-            to: 824,
-            contentOverflowsViewport: true,
-            currentOffsetY: 80,
-            targetOffsetY: 76
-        ))
-        #expect(!ChatScrollMetricsObserver.shouldAdvanceStreamingOffset(
-            from: 700,
-            to: 724,
-            contentOverflowsViewport: false,
-            currentOffsetY: 0,
-            targetOffsetY: 0
-        ))
+
+        #expect(ChatScrollMetricsObserver.requiresStreamingLayoutSettle(heightDelta: 640))
+        #expect(ChatScrollMetricsObserver.requiresStreamingLayoutSettle(heightDelta: -458))
+        #expect(!ChatScrollMetricsObserver.requiresStreamingLayoutSettle(heightDelta: 48))
+
+        #expect(ChatScrollMetricsObserver.streamingFollowStartOffset(
+            visibleOffsetY: 52,
+            targetOffsetY: 76,
+            minimumOffsetY: 0
+        ) == 64)
+        #expect(ChatScrollMetricsObserver.streamingFollowStartOffset(
+            visibleOffsetY: 72,
+            targetOffsetY: 76,
+            minimumOffsetY: 0
+        ) == 72)
     }
 
-    @MainActor
-    @Test("滚动位置只接受应用发出的命令")
-    func testScrollPositionIgnoresVisibleItemWriteback() {
-        let commandedMessageID = UUID()
-        var command: ChatScrollTargetID? = .message(commandedMessageID)
-        let source = Binding<ChatScrollTargetID?>(
-            get: { command },
-            set: { command = $0 }
+    @Test("流式 Markdown 只在 Block 准备完成前冻结结构变化")
+    func testStreamingMarkdownDefersOnlyNewCommittedStructure() {
+        let messageID = UUID()
+        let firstID = ETStreamingMarkdownBlockID(messageID: messageID, ordinal: 0)
+        let secondID = ETStreamingMarkdownBlockID(messageID: messageID, ordinal: 1)
+        let firstBlock = ETStreamingMarkdownBlock(
+            id: firstID,
+            source: "第一段\n\n",
+            kind: .markdown,
+            leadingSpacingEm: 0
         )
-        let commandOnly = ChatView.commandOnlyScrollPositionBinding(source)
+        let secondBlock = ETStreamingMarkdownBlock(
+            id: secondID,
+            source: "第二段\n\n",
+            kind: .markdown,
+            leadingSpacingEm: 1
+        )
+        let displayed = ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            sourceText: "第一段\n\n",
+            revision: 1,
+            committedBlocks: [firstBlock],
+            activeBlock: nil,
+            isFinal: false
+        )
+        let activeOnlyUpdate = ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            sourceText: "第一段\n\n更新",
+            revision: 2,
+            committedBlocks: [firstBlock],
+            activeBlock: nil,
+            isFinal: false
+        )
+        let appendedStructure = ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            sourceText: "第一段\n\n第二段\n\n",
+            revision: 3,
+            committedBlocks: [firstBlock, secondBlock],
+            activeBlock: nil,
+            isFinal: false
+        )
+        let emptyStructure = ETStreamingMarkdownSnapshot(
+            messageID: messageID,
+            sourceText: "",
+            revision: 4,
+            committedBlocks: [],
+            activeBlock: nil,
+            isFinal: false
+        )
 
-        commandOnly.wrappedValue = .message(UUID())
-
-        #expect(commandOnly.wrappedValue == .message(commandedMessageID))
-        #expect(command == .message(commandedMessageID))
-
-        commandOnly.wrappedValue = nil
-        #expect(command == .message(commandedMessageID))
-
-        command = nil
-        #expect(commandOnly.wrappedValue == nil)
+        #expect(ETIOSStreamingMarkdownLiveView.canDisplayImmediately(
+            enableMarkdown: true,
+            displayedSnapshot: displayed,
+            incomingSnapshot: activeOnlyUpdate
+        ))
+        #expect(!ETIOSStreamingMarkdownLiveView.canDisplayImmediately(
+            enableMarkdown: true,
+            displayedSnapshot: displayed,
+            incomingSnapshot: appendedStructure
+        ))
+        #expect(!ETIOSStreamingMarkdownLiveView.canDisplayImmediately(
+            enableMarkdown: true,
+            displayedSnapshot: nil,
+            incomingSnapshot: appendedStructure
+        ))
+        #expect(ETIOSStreamingMarkdownLiveView.canDisplayImmediately(
+            enableMarkdown: false,
+            displayedSnapshot: displayed,
+            incomingSnapshot: appendedStructure
+        ))
+        #expect(ETIOSStreamingMarkdownLiveView.canDisplayImmediately(
+            enableMarkdown: true,
+            displayedSnapshot: displayed,
+            incomingSnapshot: emptyStructure
+        ))
     }
 
     @Test("流式滚动只在内容超出视口后追随底部")
