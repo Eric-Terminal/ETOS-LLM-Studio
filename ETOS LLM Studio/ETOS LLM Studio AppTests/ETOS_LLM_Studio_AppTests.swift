@@ -203,6 +203,22 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("流式文字只补偿尚未完成的上抬距离")
+    func testStreamingTextRiseUsesRemainingHeightDelta() {
+        #expect(ETStreamingTextRiseEffect.translationY(
+            targetHeight: 420,
+            animatedHeight: 380
+        ) == 40)
+        #expect(ETStreamingTextRiseEffect.translationY(
+            targetHeight: 420,
+            animatedHeight: 420
+        ) == 0)
+        #expect(ETStreamingTextRiseEffect.translationY(
+            targetHeight: 380,
+            animatedHeight: 420
+        ) == 0)
+    }
+
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")
     func testBottomPinIntentPrioritizesUserInteraction() {
         #expect(!ChatView.resolvedBottomPinIntent(
