@@ -981,11 +981,6 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
-                // 尺寸变化锚点在 SwiftUI 布局阶段生效，UIKit 观察器不再追逐中间 contentSize。
-                // 用户主动离底后传入 nil，保留其当前阅读位置。
-                .chatDefaultSizeChangeScrollAnchor(
-                    Self.chatSizeChangeScrollAnchor(keepsBottomPinned: shouldKeepBottomPinned)
-                )
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { newHeight in

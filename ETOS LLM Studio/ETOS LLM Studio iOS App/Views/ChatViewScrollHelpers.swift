@@ -11,13 +11,6 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
-    /// 仅在当前仍有贴底意图时，让 SwiftUI 在同一轮布局内锚定内容底部。
-    nonisolated static func chatSizeChangeScrollAnchor(
-        keepsBottomPinned: Bool
-    ) -> UnitPoint? {
-        keepsBottomPinned ? .bottom : nil
-    }
-
     /// 用户手势永远优先于自动吸底；非交互状态下只有真正回到底部才重新接管。
     nonisolated static func resolvedBottomPinIntent(
         currentIntent: Bool,
@@ -410,7 +403,7 @@ extension ChatView {
     }
 
     /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
-    /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
+    /// 后续流式增长统一交给底层滚动观察器，避免两个目标长期互相校正。
     func resolveActiveBottomScrollCommand(
         distanceToBottom: CGFloat,
         isUserInteracting: Bool

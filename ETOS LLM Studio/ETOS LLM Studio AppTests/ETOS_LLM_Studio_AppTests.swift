@@ -188,19 +188,31 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("原生尺寸锚点生效时 UIKit 不会重复校正偏移")
-    func testNativeSizeChangeAnchorOwnsContinuousBottomPinning() {
-        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+    @Test("内容增长同帧追底而收缩延后校正")
+    func testContentGrowthPinsSynchronously() {
+        #expect(ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
+            from: CGSize(width: 390, height: 700),
+            to: CGSize(width: 390, height: 724),
             keepsBottomPinned: true,
-            isUserInteracting: false,
-            usesNativeSizeChangeAnchor: true
+            isUserInteracting: false
         ))
-        #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterViewportResize(
-            from: CGSize(width: 390, height: 248),
-            to: CGSize(width: 390, height: 446),
+        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
+            from: CGSize(width: 390, height: 724),
+            to: CGSize(width: 390, height: 700),
             keepsBottomPinned: true,
-            isUserInteracting: false,
-            usesNativeSizeChangeAnchor: true
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
+            from: CGSize(width: 390, height: 700),
+            to: CGSize(width: 390, height: 724),
+            keepsBottomPinned: false,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldPinSynchronouslyAfterContentSizeChange(
+            from: CGSize(width: 390, height: 700),
+            to: CGSize(width: 390, height: 724),
+            keepsBottomPinned: true,
+            isUserInteracting: true
         ))
     }
 
@@ -337,12 +349,6 @@ struct ETOS_LLM_Studio_AppTests {
             effectiveRange: nil
         ) as? UIColor
         #expect(appendedColor?.cgColor.alpha == 1)
-    }
-
-    @Test("尺寸变化只在贴底状态下使用底部锚点")
-    func testChatSizeChangeAnchorFollowsBottomIntent() {
-        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: true) == .bottom)
-        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: false) == nil)
     }
 
     @Test("自动历史窗口只在真实滚到顶部时加载一次")
