@@ -251,6 +251,20 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             && offsetDelta > 0.5
     }
 
+    /// 自动吸底期间视口只能继续向底部移动；任何反向写入都会暴露较早消息并随后弹回。
+    nonisolated static func shouldRejectBackwardStreamingOffset(
+        visibleOffsetY: CGFloat,
+        proposedOffsetY: CGFloat,
+        keepsBottomPinned: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        keepsBottomPinned
+            && !isUserInteracting
+            && visibleOffsetY.isFinite
+            && proposedOffsetY.isFinite
+            && proposedOffsetY < visibleOffsetY - 0.5
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
@@ -301,6 +315,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var boundsObservation: NSKeyValueObservation?
         private var pendingBottomPin: DispatchWorkItem?
         private var pendingDistanceNotification: DispatchWorkItem?
+        private var offsetBeforeContentOffsetChange: CGPoint?
+        private var isRestoringStreamingOffset = false
         private var lastBoundsSize: CGSize?
         private var restoresBottomAfterContentSizeChange = false
         private var restoresBottomAfterViewportResize = false
@@ -342,6 +358,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingBottomPin = nil
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
+            offsetBeforeContentOffsetChange = nil
+            isRestoringStreamingOffset = false
             lastBoundsSize = scrollView.bounds.size
             restoresBottomAfterContentSizeChange = false
             restoresBottomAfterViewportResize = false
@@ -350,8 +368,15 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             lastDistanceToTop = 0
             lastReportedInteractionState = false
             self.scrollView = scrollView
-            contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
-                self?.scheduleDistanceChangeNotification()
+            contentOffsetObservation = scrollView.observe(
+                \.contentOffset,
+                options: [.initial, .new, .prior]
+            ) { [weak self] scrollView, change in
+                if change.isPrior {
+                    self?.captureOffsetBeforeContentOffsetChange(in: scrollView)
+                    return
+                }
+                self?.handleContentOffsetChange(in: scrollView)
             }
             contentSizeObservation = scrollView.observe(
                 \.contentSize,
@@ -378,7 +403,56 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingBottomPin = nil
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
+            offsetBeforeContentOffsetChange = nil
+            isRestoringStreamingOffset = false
             scrollView = nil
+        }
+
+        /// 在 offset 改写前读取呈现层位置；动画进行中时模型层已经是终点，不能拿它判断方向。
+        private func captureOffsetBeforeContentOffsetChange(in scrollView: UIScrollView) {
+            let isUserInteracting = scrollView.isDragging
+                || scrollView.isTracking
+                || scrollView.isDecelerating
+            guard !isRestoringStreamingOffset,
+                  isStreaming,
+                  keepsBottomPinned.wrappedValue,
+                  !isUserInteracting else {
+                offsetBeforeContentOffsetChange = nil
+                return
+            }
+
+            let presentationOrigin = scrollView.layer.presentation()?.bounds.origin
+            let visibleOffset = presentationOrigin ?? scrollView.bounds.origin
+            guard visibleOffset.x.isFinite, visibleOffset.y.isFinite else {
+                offsetBeforeContentOffsetChange = nil
+                return
+            }
+            offsetBeforeContentOffsetChange = visibleOffset
+        }
+
+        private func handleContentOffsetChange(in scrollView: UIScrollView) {
+            defer { offsetBeforeContentOffsetChange = nil }
+            let isUserInteracting = scrollView.isDragging
+                || scrollView.isTracking
+                || scrollView.isDecelerating
+            if !isRestoringStreamingOffset,
+               isStreaming,
+               let visibleOffset = offsetBeforeContentOffsetChange,
+               ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
+                   visibleOffsetY: visibleOffset.y,
+                   proposedOffsetY: scrollView.contentOffset.y,
+                   keepsBottomPinned: keepsBottomPinned.wrappedValue,
+                   isUserInteracting: isUserInteracting
+               ) {
+                // 只拒绝这一笔反向写入；正向 contentOffset 动画的代码与时序完全不变。
+                isRestoringStreamingOffset = true
+                scrollView.layer.removeAnimation(forKey: "bounds")
+                UIView.performWithoutAnimation {
+                    scrollView.setContentOffset(visibleOffset, animated: false)
+                }
+                isRestoringStreamingOffset = false
+            }
+            scheduleDistanceChangeNotification()
         }
 
         private func handleContentSizeChange(from oldSize: CGSize?, to newSize: CGSize) {
