@@ -561,37 +561,19 @@ extension ChatBubble {
         showMergedSeparator: Bool,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        let foreground = VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             content()
         }
         .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
         .padding(.vertical, bubbleContentVerticalPadding)
         .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
-
-        if showsStreamingIndicators && !isOutgoing {
-            ETBottomPinnedStreamingBubble(
-                duration: ChatStreamingDisplayMode.normalized(
-                    appConfig.chatStreamingDisplayMode
-                ).uiPublishInterval
-            ) {
-                foreground
-            } background: {
-                bubbleDecoratedBackground(
-                    shape: shape,
-                    showMergedSeparator: showMergedSeparator
-                )
-            }
-            .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
-        } else {
-            foreground
-                .background(
-                    bubbleDecoratedBackground(
-                        shape: shape,
-                        showMergedSeparator: showMergedSeparator
-                    )
-                )
-                .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
-        }
+        .background(
+            bubbleDecoratedBackground(
+                shape: shape,
+                showMergedSeparator: showMergedSeparator
+            )
+        )
+        .shadow(color: bubbleShadow.color, radius: bubbleShadow.radius, y: bubbleShadow.y)
     }
 
     @ViewBuilder
