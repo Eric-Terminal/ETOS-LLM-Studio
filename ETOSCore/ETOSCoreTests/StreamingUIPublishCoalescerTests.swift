@@ -15,10 +15,10 @@ struct StreamingUIPublishCoalescerTests {
     func testStreamingDisplayModePolicies() {
         #if os(watchOS)
         #expect(ChatStreamingDisplayMode.immediate.uiPublishInterval == 0.080)
-        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.200)
+        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.160)
         #else
         #expect(ChatStreamingDisplayMode.immediate.uiPublishInterval == 0.060)
-        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.200)
+        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.120)
         #endif
         #expect(ChatStreamingDisplayMode.immediate.textRevealDuration == 0.28)
         #expect(ChatStreamingDisplayMode.gentle.textRevealDuration == 0.45)
