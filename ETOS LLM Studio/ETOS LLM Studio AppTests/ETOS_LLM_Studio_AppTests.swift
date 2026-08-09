@@ -204,43 +204,36 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("流式呈现补偿限制尾随距离并裁剪输入栏区域")
-    func testStreamingPresentationBounds() {
-        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
-            currentTranslation: 12,
-            contentHeightDelta: 20,
-            maximumLag: 44
-        ) == 32)
-        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
-            currentTranslation: 30,
-            contentHeightDelta: 20,
-            maximumLag: 44
-        ) == 44)
-        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
-            currentTranslation: 10,
-            contentHeightDelta: -20,
-            maximumLag: 44
+    @Test("流式滚动只在内容超出视口后追随底部")
+    func testStreamingOffsetRequiresScrollableContent() {
+        #expect(!ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 748,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+        #expect(!ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 748.5,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+        #expect(ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+            contentHeight: 770,
+            boundsHeight: 748,
+            bottomInset: 0
+        ))
+
+        #expect(ChatScrollMetricsObserver.maximumContentOffsetY(
+            contentHeight: 700,
+            boundsHeight: 748,
+            topInset: 0,
+            bottomInset: 0
         ) == 0)
-        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
-            presentationTranslation: 12,
-            modelTranslation: 0
-        ) == 12)
-        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
-            presentationTranslation: nil,
-            modelTranslation: 20
-        ) == 20)
-        #expect(ChatScrollMetricsObserver.streamingPresentationBaseTranslation(
-            presentationTranslation: 8,
-            modelTranslation: 20
-        ) == 20)
-        #expect(ChatScrollMetricsObserver.streamingViewportMaskHeight(
-            boundsHeight: 844,
-            bottomInset: 96
-        ) == 748)
-        #expect(ChatScrollMetricsObserver.streamingViewportMaskHeight(
-            boundsHeight: 80,
-            bottomInset: 120
-        ) == 0)
+        #expect(ChatScrollMetricsObserver.maximumContentOffsetY(
+            contentHeight: 800,
+            boundsHeight: 748,
+            topInset: 0,
+            bottomInset: 0
+        ) == 52)
     }
 
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")
@@ -380,8 +373,18 @@ struct ETOS_LLM_Studio_AppTests {
 
     @Test("尺寸变化只在贴底状态下使用底部锚点")
     func testChatSizeChangeAnchorFollowsBottomIntent() {
-        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: true) == .bottom)
-        #expect(ChatView.chatSizeChangeScrollAnchor(keepsBottomPinned: false) == nil)
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: true,
+            isStreaming: false
+        ) == .bottom)
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: false,
+            isStreaming: false
+        ) == nil)
+        #expect(ChatView.chatSizeChangeScrollAnchor(
+            keepsBottomPinned: true,
+            isStreaming: true
+        ) == nil)
     }
 
     @Test("自动历史窗口只在真实滚到顶部时加载一次")
