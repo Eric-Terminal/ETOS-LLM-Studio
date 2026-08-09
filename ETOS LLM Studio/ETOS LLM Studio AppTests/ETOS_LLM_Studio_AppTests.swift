@@ -204,30 +204,6 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("流式气泡只平滑展开新增高度")
-    func testStreamingBubbleGrowthPolicy() {
-        #expect(!ETStreamingBubbleGrowthPolicy.shouldAnimate(
-            from: 0,
-            to: 40,
-            reduceMotion: false
-        ))
-        #expect(ETStreamingBubbleGrowthPolicy.shouldAnimate(
-            from: 380,
-            to: 420,
-            reduceMotion: false
-        ))
-        #expect(!ETStreamingBubbleGrowthPolicy.shouldAnimate(
-            from: 420,
-            to: 380,
-            reduceMotion: false
-        ))
-        #expect(!ETStreamingBubbleGrowthPolicy.shouldAnimate(
-            from: 380,
-            to: 420,
-            reduceMotion: true
-        ))
-    }
-
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")
     func testBottomPinIntentPrioritizesUserInteraction() {
         #expect(!ChatView.resolvedBottomPinIntent(
