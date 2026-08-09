@@ -395,6 +395,16 @@ struct LocalAgentRuntimeTests {
         #expect(layout.home.path.hasSuffix("Linux/Home"))
         #expect(layout.shared.path.hasSuffix("Linux/Shared"))
         #expect(layout.workspaces.path.hasSuffix("Linux/Workspaces"))
+        #expect(
+            LocalLinuxStorageManager.guestWorkspacePath(
+                forHostRelativePath: "Workspaces/UserTerminal"
+            ) == "/mnt/workspaces/UserTerminal"
+        )
+        #expect(
+            LocalLinuxStorageManager.guestWorkspacePath(
+                forHostRelativePath: "Workspaces/agent/demo"
+            ) == "/mnt/workspaces/agent/demo"
+        )
         let startupMounts = try await LocalLinuxMountManager(storage: manager).prepareStartupMounts().mounts
         #expect(startupMounts.contains { $0.id == LocalLinuxMountManager.homeMountID })
         #expect(startupMounts.contains { $0.id == LocalLinuxMountManager.workspaceMountID })
@@ -446,14 +456,23 @@ struct LocalAgentRuntimeTests {
         let sessionID = UUID()
         let workspace = LocalAgentWorkspace(
             sessionID: sessionID,
-            guestPath: "/workspace/test",
+            guestPath: LocalLinuxStorageManager.guestWorkspacePath(
+                forHostRelativePath: "Workspaces/test"
+            ),
             hostRelativePath: "Workspaces/test"
         )
 
         try store.saveLocalAgentWorkspace(workspace)
 
         #expect(store.loadChatSession(id: sessionID)?.isTemporary == true)
-        #expect(try store.loadLocalAgentWorkspaces(sessionID: sessionID) == [workspace])
+        let savedWorkspaces = try store.loadLocalAgentWorkspaces(sessionID: sessionID)
+        let saved = try #require(savedWorkspaces.first)
+        #expect(savedWorkspaces.count == 1)
+        #expect(saved.id == workspace.id)
+        #expect(saved.sessionID == sessionID)
+        #expect(saved.profileID == nil)
+        #expect(saved.guestPath == "/mnt/workspaces/test")
+        #expect(saved.hostRelativePath == "Workspaces/test")
     }
 
     @Test("用户终端工作区不属于任何聊天会话")
@@ -465,7 +484,9 @@ struct LocalAgentRuntimeTests {
             id: LocalLinuxStorageManager.interactiveUserWorkspaceID,
             sessionID: nil,
             profileID: nil,
-            guestPath: "/workspace/user-terminal",
+            guestPath: LocalLinuxStorageManager.guestWorkspacePath(
+                forHostRelativePath: "Workspaces/UserTerminal"
+            ),
             hostRelativePath: "Workspaces/UserTerminal"
         )
 
@@ -475,6 +496,7 @@ struct LocalAgentRuntimeTests {
         #expect(saved.id == LocalLinuxStorageManager.interactiveUserWorkspaceID)
         #expect(saved.sessionID == nil)
         #expect(saved.profileID == nil)
+        #expect(saved.guestPath == "/mnt/workspaces/UserTerminal")
     }
 
     @Test("内置环境 recipe 不会隐式包含执行器且可按命令匹配")

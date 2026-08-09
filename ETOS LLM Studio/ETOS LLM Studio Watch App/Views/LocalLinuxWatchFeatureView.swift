@@ -7,6 +7,7 @@ struct LocalLinuxWatchFeatureView: View {
     @State private var snapshot = LocalLinuxRuntimeSnapshot(phase: .disabled)
     @State private var errorMessage: String?
     @State private var showResetConfirmation = false
+    @State private var isPreparingRuntime = false
     var body: some View {
         List {
             Section {
@@ -16,20 +17,48 @@ struct LocalLinuxWatchFeatureView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Section(NSLocalizedString("状态", comment: "Watch Linux status")) {
+            Section {
                 LabeledContent(NSLocalizedString("运行时", comment: "Watch Linux runtime"), value: snapshot.phase.displayName)
                 if let progress = snapshot.installProgress,
                    let fraction = progress.fractionCompleted {
                     ProgressView(value: fraction)
                 }
-                Button(NSLocalizedString("准备系统", comment: "Watch prepare Linux")) {
-                    Task {
-                        do {
-                            snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
-                        } catch { errorMessage = error.localizedDescription }
+                if snapshot.phase == .ready, !isPreparingRuntime {
+                    Label(
+                        NSLocalizedString("系统已就绪", comment: "Watch local Linux ready action state"),
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
+                } else {
+                    Button {
+                        Task {
+                            guard canPrepareRuntime else { return }
+                            isPreparingRuntime = true
+                            defer { isPreparingRuntime = false }
+                            do {
+                                snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
+                            } catch { errorMessage = error.localizedDescription }
+                        }
+                    } label: {
+                        HStack {
+                            if isPreparingRuntime || snapshot.phase == .installing || snapshot.phase == .starting {
+                                ProgressView()
+                            } else {
+                                Image(systemName: runtimePreparationSymbol)
+                            }
+                            Text(runtimePreparationTitle)
+                        }
                     }
+                    .disabled(!canPrepareRuntime)
                 }
-                .disabled(!appConfig.localLinuxEnabled || snapshot.phase == .installing || snapshot.phase == .starting)
+            } header: {
+                Text(NSLocalizedString("状态", comment: "Watch Linux status"))
+            } footer: {
+                if snapshot.phase == .ready {
+                    Text(NSLocalizedString("系统已经启动，无需重复准备。终端、Agent 与本地 MCP 会复用当前运行时。", comment: "Watch local Linux ready footer"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             LocalLinuxWatchResourceStatusView()
             Section(NSLocalizedString("使用", comment: "Watch Linux use section")) {
@@ -149,6 +178,39 @@ struct LocalLinuxWatchFeatureView: View {
         formatter.maximumFractionDigits = 0
         return formatter
     }()
+
+    private var canPrepareRuntime: Bool {
+        guard appConfig.localLinuxEnabled, !isPreparingRuntime else { return false }
+        switch snapshot.phase {
+        case .installing, .starting, .ready, .requiresRelaunch:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private var runtimePreparationTitle: String {
+        if isPreparingRuntime,
+           snapshot.phase != .installing,
+           snapshot.phase != .starting {
+            return LocalLinuxRuntimePhase.installing.displayName
+        }
+        switch snapshot.phase {
+        case .installing, .starting, .requiresRelaunch:
+            return snapshot.phase.displayName
+        default:
+            return NSLocalizedString("准备系统", comment: "Watch prepare Linux")
+        }
+    }
+
+    private var runtimePreparationSymbol: String {
+        switch snapshot.phase {
+        case .degraded, .failed:
+            return "arrow.clockwise.circle"
+        default:
+            return "play.circle"
+        }
+    }
 
     private var defaultTimeoutBinding: Binding<Int> {
         Binding(

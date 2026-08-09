@@ -101,6 +101,21 @@ public actor LocalLinuxStorageManager {
         uuidString: "7AC179AE-1BEA-444A-B311-C322954DA4A5"
     )!
 
+    /// 工作区必须直接使用启动时同步完成的内部挂载路径，不能依赖 PID 1
+    /// 稍后创建的 `/workspace` 软链接，否则刚显示“可用”时启动 PTY 会遇到 ENOENT。
+    static func guestWorkspacePath(forHostRelativePath hostRelativePath: String) -> String {
+        let prefix = "Workspaces/"
+        guard hostRelativePath.hasPrefix(prefix) else {
+            return LocalLinuxMountManager.workspaceMountGuestPath
+        }
+        let component = String(hostRelativePath.dropFirst(prefix.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !component.isEmpty else {
+            return LocalLinuxMountManager.workspaceMountGuestPath
+        }
+        return LocalLinuxMountManager.workspaceMountGuestPath + "/" + component
+    }
+
     private static let receiptPrefix = "format=ish-rootfs-install-v1\nseed_archive_sha256="
     private static let damageMarkerName = "ETOS-System-Damaged.txt"
     private let fileManager: FileManager
@@ -177,6 +192,7 @@ public actor LocalLinuxStorageManager {
         if var existing = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID).first {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -191,7 +207,7 @@ public actor LocalLinuxStorageManager {
             id: id,
             sessionID: sessionID,
             profileID: profileID,
-            guestPath: "/workspace/\(component)",
+            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -210,6 +226,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
             existing.lastUsedAt = Date()
             guard Persistence.saveLocalAgentWorkspace(existing) else {
                 throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -226,7 +243,7 @@ public actor LocalLinuxStorageManager {
             id: Self.interactiveUserWorkspaceID,
             sessionID: nil,
             profileID: nil,
-            guestPath: "/workspace/user-terminal",
+            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
@@ -245,6 +262,7 @@ public actor LocalLinuxStorageManager {
         }
         let directory = layout.root.appendingPathComponent(workspace.hostRelativePath, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        workspace.guestPath = Self.guestWorkspacePath(forHostRelativePath: workspace.hostRelativePath)
         workspace.lastUsedAt = Date()
         guard Persistence.saveLocalAgentWorkspace(workspace) else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -266,6 +284,7 @@ public actor LocalLinuxStorageManager {
         }) {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            existing.guestPath = Self.guestWorkspacePath(forHostRelativePath: existing.hostRelativePath)
             existing.lastUsedAt = Date()
             _ = Persistence.saveLocalAgentWorkspace(existing)
             return existing
@@ -280,7 +299,7 @@ public actor LocalLinuxStorageManager {
         let workspace = LocalAgentWorkspace(
             sessionID: nil,
             profileID: serverID,
-            guestPath: "/workspace/\(component)",
+            guestPath: Self.guestWorkspacePath(forHostRelativePath: relativePath),
             hostRelativePath: relativePath
         )
         guard Persistence.saveLocalAgentWorkspace(workspace) else {

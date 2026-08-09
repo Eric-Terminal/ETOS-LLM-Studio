@@ -25,6 +25,7 @@ struct LocalLinuxFeatureView: View {
     @State private var errorMessage: String?
     @State private var deleteUserData = false
     @State private var showResetConfirmation = false
+    @State private var isPreparingRuntime = false
 
     var body: some View {
         TabView {
@@ -85,7 +86,7 @@ struct LocalLinuxFeatureView: View {
                 Text(NSLocalizedString("这里只启用入口；首次实际使用时才准备系统。", comment: "Local Linux lazy start footer"))
             }
 
-            Section(NSLocalizedString("状态", comment: "Local Linux status section")) {
+            Section {
                 LabeledContent(
                     NSLocalizedString("运行时", comment: "Local Linux runtime label"),
                     value: snapshot.phase.displayName
@@ -109,10 +110,34 @@ struct LocalLinuxFeatureView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
-                Button(NSLocalizedString("准备并启动系统", comment: "Prepare local Linux action")) {
-                    prepareRuntime()
+                if snapshot.phase == .ready, !isPreparingRuntime {
+                    Label(
+                        NSLocalizedString("系统已就绪", comment: "Local Linux ready action state"),
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
+                } else {
+                    Button {
+                        prepareRuntime()
+                    } label: {
+                        HStack {
+                            if isPreparingRuntime || snapshot.phase == .installing || snapshot.phase == .starting {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: runtimePreparationSymbol)
+                            }
+                            Text(runtimePreparationTitle)
+                        }
+                    }
+                    .disabled(!canPrepareRuntime)
                 }
-                .disabled(!appConfig.localLinuxEnabled || snapshot.phase == .installing || snapshot.phase == .starting)
+            } header: {
+                Text(NSLocalizedString("状态", comment: "Local Linux status section"))
+            } footer: {
+                if snapshot.phase == .ready {
+                    Text(NSLocalizedString("系统已经启动，无需重复准备。终端、Agent 与本地 MCP 会复用当前运行时。", comment: "Local Linux ready footer"))
+                }
             }
 
         }
@@ -267,12 +292,48 @@ struct LocalLinuxFeatureView: View {
     }
 
     private func prepareRuntime() {
+        guard canPrepareRuntime else { return }
+        isPreparingRuntime = true
         Task {
+            defer { isPreparingRuntime = false }
             do {
                 snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private var canPrepareRuntime: Bool {
+        guard appConfig.localLinuxEnabled, !isPreparingRuntime else { return false }
+        switch snapshot.phase {
+        case .installing, .starting, .ready, .requiresRelaunch:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private var runtimePreparationTitle: String {
+        if isPreparingRuntime,
+           snapshot.phase != .installing,
+           snapshot.phase != .starting {
+            return LocalLinuxRuntimePhase.installing.displayName
+        }
+        switch snapshot.phase {
+        case .installing, .starting, .requiresRelaunch:
+            return snapshot.phase.displayName
+        default:
+            return NSLocalizedString("准备并启动系统", comment: "Prepare local Linux action")
+        }
+    }
+
+    private var runtimePreparationSymbol: String {
+        switch snapshot.phase {
+        case .degraded, .failed:
+            return "arrow.clockwise.circle"
+        default:
+            return "play.circle"
         }
     }
 

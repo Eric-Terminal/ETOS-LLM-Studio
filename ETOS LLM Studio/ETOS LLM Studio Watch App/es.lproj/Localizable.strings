@@ -6372,3 +6372,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "开启后，命令与本地 MCP 输出中出现已启用环境变量的值时，只会在发送给模型前替换；用户终端和原始日志保持不变。关闭后会原样发送。" = "Al activarlo, los valores de las variables de entorno habilitadas que aparezcan en la salida de comandos y MCP local solo se sustituyen antes de enviarse al modelo; el terminal del usuario y los registros originales no cambian. Al desactivarlo, se envían sin cambios.";
 "已启用的变量会自动注入新建的命令、终端与本地 MCP 进程。列表始终隐藏值；点进变量即可查看和编辑。" = "Las variables habilitadas se inyectan automáticamente en nuevos comandos, terminales y procesos MCP locales. La lista siempre oculta los valores; toca una variable para verla y editarla.";
 "点按可选为当前提示词，向左滑可删除自定义提示词，向右滑可编辑。只有 Agent 模式会插入这里选中的提示词。" = "Toca para seleccionar el prompt actual, desliza a la izquierda para eliminar uno personalizado o a la derecha para editarlo. Solo el modo Agent inserta el prompt seleccionado.";
+"系统已就绪" = "El sistema está listo";
+"系统已经启动，无需重复准备。终端、Agent 与本地 MCP 会复用当前运行时。" = "El sistema ya está en ejecución y no es necesario volver a prepararlo. Los terminales, Agent y MCP local reutilizarán el entorno de ejecución actual.";
+"无法启动终端：Linux 系统中找不到 Shell“%@”。请重置本地 Linux 后重试。" = "No se puede iniciar el terminal: no se encontró el shell «%@» en el sistema Linux. Restablece Linux local e inténtalo de nuevo.";
+"无法启动终端：工作目录“%@”尚不可用。请重试；如果问题持续，请重置本地 Linux。" = "No se puede iniciar el terminal: el directorio de trabajo «%@» aún no está disponible. Inténtalo de nuevo; si el problema persiste, restablece Linux local.";

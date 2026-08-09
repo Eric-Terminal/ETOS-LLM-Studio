@@ -880,6 +880,8 @@ public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
     case commandDenied(ruleName: String, matchedText: String)
     case jobNotFound(UUID)
     case terminalInputOwned
+    case terminalShellUnavailable(String)
+    case terminalWorkingDirectoryUnavailable(String)
     case bridgeFailure(operation: String, linuxError: Int32)
 
     public var errorDescription: String? {
@@ -923,6 +925,16 @@ public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
             return NSLocalizedString("找不到对应的 Linux 任务。", comment: "Linux job missing error")
         case .terminalInputOwned:
             return NSLocalizedString("此终端的输入当前由另一方控制，请先接管输入。", comment: "Linux terminal input ownership error")
+        case .terminalShellUnavailable(let path):
+            return String(
+                format: NSLocalizedString("无法启动终端：Linux 系统中找不到 Shell“%@”。请重置本地 Linux 后重试。", comment: "Linux terminal shell missing error"),
+                path
+            )
+        case .terminalWorkingDirectoryUnavailable(let path):
+            return String(
+                format: NSLocalizedString("无法启动终端：工作目录“%@”尚不可用。请重试；如果问题持续，请重置本地 Linux。", comment: "Linux terminal working directory missing error"),
+                path
+            )
         case .bridgeFailure(let operation, let linuxError):
             return String(
                 format: NSLocalizedString("Linux 操作失败（%@，错误码 %d）。", comment: "Local Linux bridge error"),

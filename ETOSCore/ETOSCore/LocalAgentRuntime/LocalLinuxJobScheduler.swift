@@ -343,6 +343,7 @@ public actor LocalLinuxJobScheduler {
             columns: columns,
             rows: rows
         )
+        try await validateTerminalLaunchPaths(terminalRequest, requestID: requestID)
         let jobRequest = LocalLinuxJobRequest(
             executable: terminalRequest.executable,
             arguments: terminalRequest.arguments,
@@ -794,6 +795,46 @@ public actor LocalLinuxJobScheduler {
         guard let runtimeError = error as? LocalLinuxRuntimeError,
               case .bridgeFailure(_, let code) = runtimeError else { return nil }
         return code
+    }
+
+    /// 在创建任务记录前分别确认 Shell 与 cwd，避免把同一个 ENOENT 裸错误码
+    /// 同时用于两种故障，也防止无效启动在任务列表里留下失败占位。
+    private func validateTerminalLaunchPaths(
+        _ request: LocalLinuxBridgeTerminalRequest,
+        requestID: UInt64
+    ) async throws {
+        do {
+            let shell = try await bridge.statGuestFile(
+                path: request.executable,
+                requestID: requestID,
+                noFollow: false
+            )
+            guard shell.isRegularFile, shell.mode & 0o111 != 0 else {
+                throw LocalLinuxRuntimeError.terminalShellUnavailable(request.executable)
+            }
+        } catch let error as LocalLinuxRuntimeError {
+            if case .bridgeFailure(_, let code) = error, code == -2 || code == -20 {
+                throw LocalLinuxRuntimeError.terminalShellUnavailable(request.executable)
+            }
+            throw error
+        }
+
+        guard let workingDirectory = request.workingDirectory else { return }
+        do {
+            let directory = try await bridge.statGuestFile(
+                path: workingDirectory,
+                requestID: requestID,
+                noFollow: false
+            )
+            guard directory.isDirectory else {
+                throw LocalLinuxRuntimeError.terminalWorkingDirectoryUnavailable(workingDirectory)
+            }
+        } catch let error as LocalLinuxRuntimeError {
+            if case .bridgeFailure(_, let code) = error, code == -2 || code == -20 {
+                throw LocalLinuxRuntimeError.terminalWorkingDirectoryUnavailable(workingDirectory)
+            }
+            throw error
+        }
     }
 
     /// 公共 CommandSession 接收 execve 风格路径，不替调用方搜索 PATH。
