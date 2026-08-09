@@ -232,7 +232,7 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
-    @State private var output = ""
+    @State private var output = LocalLinuxTerminalPresentation.empty
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
@@ -244,8 +244,16 @@ struct LocalLinuxWatchTerminalView: View {
     var body: some View {
         List {
             Section {
-                Text(output.isEmpty ? NSLocalizedString("正在启动…", comment: "Watch Linux terminal starting") : output)
+                Group {
+                    if output.plainText.isEmpty {
+                        Text(NSLocalizedString("正在启动…", comment: "Watch Linux terminal starting"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(output.attributedText)
+                    }
+                }
                     .font(.caption2.monospaced())
+                    .listRowBackground(Color.black)
                 if let inputOwner {
                     Text(inputOwnerLabel(inputOwner))
                         .font(.caption2)
@@ -320,12 +328,12 @@ struct LocalLinuxWatchTerminalView: View {
 
     private func attach(to selected: LocalLinuxJob) {
         job = selected
-        output = ""
+        output = .empty
         outputTask?.cancel()
         outputTask = Task {
             inputOwner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
             while !Task.isCancelled {
-                output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id)) ?? output
+                output = (try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(jobID: selected.id)) ?? output
                 let current = await LocalLinuxJobScheduler.shared.job(id: selected.id)
                 job = current
                 if current?.state.isTerminal == true { break }

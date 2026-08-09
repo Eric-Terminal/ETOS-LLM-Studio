@@ -30,14 +30,19 @@ public struct LocalLinuxRedactionResult: Equatable, Sendable {
 public actor LocalLinuxProcessEnvironmentProvider {
     public static let shared = LocalLinuxProcessEnvironmentProvider()
 
-    private static let baseEnvironment: [String: String] = [
+    static let baseEnvironment: [String: String] = [
         "HOME": "/home/etos",
         "USER": "etos",
         "LOGNAME": "etos",
         "SHELL": "/bin/sh",
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "LANG": "C.UTF-8",
-        "TERM": "xterm-256color"
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor",
+        "TERM_PROGRAM": LocalLinuxTerminalIdentity.programName,
+        "TERM_PROGRAM_VERSION": LocalLinuxTerminalIdentity.programVersion,
+        "LC_TERMINAL": LocalLinuxTerminalIdentity.programName,
+        "LC_TERMINAL_VERSION": LocalLinuxTerminalIdentity.programVersion
     ]
 
     public func variables() -> [LocalLinuxEnvironmentVariable] {

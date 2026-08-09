@@ -31,6 +31,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private let patterns: [RedactionPattern]
     private let privacyEnabled: Bool
     private let modelByteLimit: UInt64
+    private let terminalResponseHandler: (@Sendable (Data) -> Void)?
 
     private var pendingByStream: [LocalLinuxOutputStream: Data] = [:]
     private var stdoutBytes: UInt64 = 0
@@ -46,6 +47,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var lastUserPreviewStream: LocalLinuxOutputStream?
     private let userPreviewLimit = 262_144
     private var terminalScreen: LocalLinuxTerminalScreen?
+    private var terminalPresentation: LocalLinuxTerminalPresentation?
+    private var terminalPresentationNeedsRefresh = false
 
     public init(
         rawURL: URL,
@@ -54,7 +57,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         privacyEnabled: Bool,
         modelByteLimit: UInt64,
         terminalColumns: Int? = nil,
-        terminalRows: Int? = nil
+        terminalRows: Int? = nil,
+        terminalResponseHandler: (@Sendable (Data) -> Void)? = nil
     ) throws {
         let fileManager = FileManager.default
         fileManager.createFile(atPath: rawURL.path, contents: nil)
@@ -74,11 +78,13 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         }.sorted { $0.value.count > $1.value.count }
         self.privacyEnabled = privacyEnabled
         self.modelByteLimit = modelByteLimit
+        self.terminalResponseHandler = terminalResponseHandler
         if let terminalColumns, let terminalRows {
             terminalScreen = LocalLinuxTerminalScreen(
                 columns: terminalColumns,
                 rows: terminalRows
             )
+            terminalPresentation = .empty
         }
     }
 
@@ -169,6 +175,16 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         return String(decoding: userPreview, as: UTF8.self)
     }
 
+    public func userVisibleTerminalPresentation() -> LocalLinuxTerminalPresentation? {
+        lock.lock()
+        defer { lock.unlock() }
+        if terminalPresentationNeedsRefresh, let terminalScreen {
+            terminalPresentation = terminalScreen.renderedPresentation()
+            terminalPresentationNeedsRefresh = false
+        }
+        return terminalPresentation
+    }
+
     public func resizeTerminalPreview(columns: Int, rows: Int) {
         lock.lock()
         defer { lock.unlock() }
@@ -194,6 +210,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         if stream == .terminal, let terminalScreen {
             terminalScreen.append(data)
             replaceUserPreviewWithTerminalSnapshot()
+            let responses = terminalScreen.drainResponses()
+            if !responses.isEmpty { terminalResponseHandler?(responses) }
             lastUserPreviewStream = stream
             return
         }
@@ -210,6 +228,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
 
     private func replaceUserPreviewWithTerminalSnapshot() {
         guard let terminalScreen else { return }
+        terminalPresentationNeedsRefresh = true
         userPreview = Data(terminalScreen.renderedText().utf8)
         if userPreview.count > userPreviewLimit {
             userPreview.removeFirst(userPreview.count - userPreviewLimit)

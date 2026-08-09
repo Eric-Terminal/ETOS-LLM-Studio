@@ -147,6 +147,13 @@ public actor LocalLinuxJobScheduler {
         return try await storage.readRawOutput(relativePath: relativePath, maximumBytes: 262_144)
     }
 
+    public func userVisibleTerminalPresentation(jobID: UUID) throws -> LocalLinuxTerminalPresentation {
+        guard let terminal = activeTerminals[jobID] else {
+            throw LocalLinuxRuntimeError.jobNotFound(jobID)
+        }
+        return terminal.collector.userVisibleTerminalPresentation() ?? .empty
+    }
+
     public func userVisibleOutputPage(
         jobID: UUID,
         cursor: LocalLinuxRawOutputCursor,
@@ -369,6 +376,7 @@ public actor LocalLinuxJobScheduler {
         _ = Persistence.saveLocalLinuxJob(job)
         let collector: LocalLinuxOutputCollector
         let leases: [LocalLinuxMountLease]
+        let terminalResponseRelay = LocalLinuxTerminalResponseRelay()
         do {
             collector = try LocalLinuxOutputCollector(
                 rawURL: urls.raw,
@@ -377,7 +385,8 @@ public actor LocalLinuxJobScheduler {
                 privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
                 modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes)),
                 terminalColumns: Int(columns),
-                terminalRows: Int(rows)
+                terminalRows: Int(rows),
+                terminalResponseHandler: { terminalResponseRelay.enqueue($0) }
             )
             let mountIDs = context?.mountIDs ?? Persistence.loadLocalLinuxMounts()
                 .filter { $0.isEnabled && $0.authorizationState == .available }
@@ -404,6 +413,7 @@ public actor LocalLinuxJobScheduler {
                     )
                 }
             }
+            terminalResponseRelay.bind(to: session)
             job.state = .running
             _ = Persistence.saveLocalLinuxJob(job)
             let diagnosticTask = diagnosticDrainTask(scope: 3, requestID: requestID, jobID: job.id)

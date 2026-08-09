@@ -14,6 +14,22 @@ import Testing
 
 @Suite("本地 Agent Runtime 测试")
 struct LocalAgentRuntimeTests {
+    private final class TerminalResponseCapture: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage = Data()
+
+        func append(_ data: Data) {
+            lock.lock()
+            storage.append(data)
+            lock.unlock()
+        }
+
+        var data: Data {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+    }
 
     @Test("Browser Agent 不依赖本地 Linux 开关")
     func browserAgentCapabilityIsIndependentFromLinux() {
@@ -157,6 +173,31 @@ struct LocalAgentRuntimeTests {
         #expect(snapshot.stderrBytes == 128)
         #expect(collector.userVisiblePreview().contains(content))
         #expect(modelOutput.contains("模型输出已截断"))
+    }
+
+    @Test("终端收集器生成富文本并转发协议查询响应")
+    func outputCollectorBuildsTerminalPresentationAndForwardsResponses() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let responseCapture = TerminalResponseCapture()
+        let collector = try LocalLinuxOutputCollector(
+            rawURL: directory.appendingPathComponent("raw.log"),
+            modelURL: directory.appendingPathComponent("model.log"),
+            redactionValues: [],
+            privacyEnabled: false,
+            modelByteLimit: 4_096,
+            terminalColumns: 80,
+            terminalRows: 24,
+            terminalResponseHandler: { responseCapture.append($0) }
+        )
+
+        collector.append(stream: .terminal, data: Data("\u{1B}[31m红色\u{1B}[0m\u{1B}[6n".utf8))
+        collector.finish()
+
+        let presentation = try #require(collector.userVisibleTerminalPresentation())
+        #expect(presentation.plainText == "红色")
+        #expect(presentation.attributedText != AttributedString("红色"))
+        #expect(String(decoding: responseCapture.data, as: UTF8.self) == "\u{1B}[1;5R")
     }
 
     @Test("原始输出分页跨越大帧时不会丢失内容")

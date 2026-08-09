@@ -37,7 +37,7 @@ struct LocalLinuxTerminalView: View {
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
-    @State private var output = ""
+    @State private var output = LocalLinuxTerminalPresentation.empty
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
@@ -50,14 +50,20 @@ struct LocalLinuxTerminalView: View {
         VStack {
             GeometryReader { proxy in
                 ScrollView {
-                    Text(output.isEmpty
-                         ? NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder")
-                         : output)
+                    Group {
+                        if output.plainText.isEmpty {
+                            Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(output.attributedText)
+                        }
+                    }
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
+                .background(Color.black)
                 .defaultScrollAnchor(.bottom)
                 .onAppear { resize(for: proxy.size) }
                 .onChange(of: proxy.size) { _, size in resize(for: size) }
@@ -180,13 +186,13 @@ struct LocalLinuxTerminalView: View {
 
     private func attach(to selected: LocalLinuxJob) {
         job = selected
-        output = ""
+        output = .empty
         outputTask?.cancel()
         outputTask = Task {
             inputOwner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
             while !Task.isCancelled {
-                if let text = try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id) {
-                    output = text
+                if let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(jobID: selected.id) {
+                    output = presentation
                 }
                 if let current = await LocalLinuxJobScheduler.shared.job(id: selected.id) {
                     job = current
@@ -195,9 +201,6 @@ struct LocalLinuxTerminalView: View {
                     break
                 }
                 try? await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
-            }
-            if let text = try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: selected.id) {
-                output = text
             }
             terminalJobs = visibleTerminalJobs(in: await LocalLinuxJobScheduler.shared.activeJobs())
         }
