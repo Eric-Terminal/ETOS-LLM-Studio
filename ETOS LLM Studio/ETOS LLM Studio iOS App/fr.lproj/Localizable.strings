@@ -6494,3 +6494,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "系统已经启动，无需重复准备。终端、Agent 与本地 MCP 会复用当前运行时。" = "Le système est déjà en cours d’exécution et n’a pas besoin d’être préparé de nouveau. Les terminaux, Agent et MCP local réutiliseront l’environnement actuel.";
 "无法启动终端：Linux 系统中找不到 Shell“%@”。请重置本地 Linux 后重试。" = "Impossible de démarrer le terminal : le shell « %@ » est introuvable dans le système Linux. Réinitialisez Linux local, puis réessayez.";
 "无法启动终端：工作目录“%@”尚不可用。请重试；如果问题持续，请重置本地 Linux。" = "Impossible de démarrer le terminal : le répertoire de travail « %@ » n’est pas encore disponible. Réessayez ; si le problème persiste, réinitialisez Linux local.";
+"流式显示" = "Affichage en continu";
+"即时" = "Immédiat";
+"柔和" = "Doux";
+"即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。" = "Le mode immédiat privilégie la réactivité et fait apparaître rapidement le nouveau texte. Le mode doux regroupe davantage de fragments et affiche le nouveau texte à un rythme plus calme.";

@@ -244,8 +244,8 @@ struct ETOS_LLM_Studio_AppTests {
     }
 
     @MainActor
-    @Test("高速流式追加不会交叉淡化整段文字")
-    func testStreamingMarkdownAppendDoesNotAnimateWholeTextLayer() {
+    @Test("高速流式追加只淡入新增文字且不动画整层")
+    func testStreamingMarkdownAppendFadesOnlyNewText() {
         let messageID = UUID()
         let blockID = ETStreamingMarkdownBlockID(messageID: messageID, ordinal: 0)
         let paragraphStyle = NSMutableParagraphStyle()
@@ -264,7 +264,7 @@ struct ETOS_LLM_Studio_AppTests {
             updateKind: .reset,
             leadingSpacingEm: 0
         )
-        coordinator.apply(initialBlock, style: style, to: textView)
+        coordinator.apply(initialBlock, style: style, reduceMotion: true, to: textView)
 
         let appendedBlock = ETStreamingMarkdownActiveBlock(
             id: blockID,
@@ -278,6 +278,65 @@ struct ETOS_LLM_Studio_AppTests {
 
         #expect(textView.text == "Hello world")
         #expect(textView.layer.animationKeys()?.isEmpty ?? true)
+        let originalColor = textView.textStorage.attribute(
+            .foregroundColor,
+            at: 0,
+            effectiveRange: nil
+        ) as? UIColor
+        let appendedColor = textView.textStorage.attribute(
+            .foregroundColor,
+            at: 5,
+            effectiveRange: nil
+        ) as? UIColor
+        #expect(originalColor?.cgColor.alpha == 1)
+        #expect(appendedColor?.cgColor.alpha == 0)
+    }
+
+    @MainActor
+    @Test("减少动态效果时新增文字立即完整显示")
+    func testStreamingMarkdownAppendRespectsReduceMotion() {
+        let messageID = UUID()
+        let blockID = ETStreamingMarkdownBlockID(messageID: messageID, ordinal: 0)
+        let style = ETStreamingMarkdownTextView.Style(
+            font: .systemFont(ofSize: 17),
+            color: .systemBlue,
+            paragraphStyle: NSMutableParagraphStyle()
+        )
+        let textView = UITextView(usingTextLayoutManager: true)
+        let coordinator = ETStreamingMarkdownTextView.Coordinator()
+        coordinator.apply(
+            ETStreamingMarkdownActiveBlock(
+                id: blockID,
+                source: "A",
+                displayText: "A",
+                presentation: .markdownSource,
+                updateKind: .reset,
+                leadingSpacingEm: 0
+            ),
+            style: style,
+            reduceMotion: true,
+            to: textView
+        )
+        coordinator.apply(
+            ETStreamingMarkdownActiveBlock(
+                id: blockID,
+                source: "AB",
+                displayText: "AB",
+                presentation: .markdownSource,
+                updateKind: .append(previousUTF16Length: 1),
+                leadingSpacingEm: 0
+            ),
+            style: style,
+            reduceMotion: true,
+            to: textView
+        )
+
+        let appendedColor = textView.textStorage.attribute(
+            .foregroundColor,
+            at: 1,
+            effectiveRange: nil
+        ) as? UIColor
+        #expect(appendedColor?.cgColor.alpha == 1)
     }
 
     @Test("尺寸变化只在贴底状态下使用底部锚点")

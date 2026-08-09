@@ -277,6 +277,16 @@ public final class AppConfigStore: ObservableObject {
     @Published public var chatSendAnimationEnabled: Bool { didSet { write(.chatSendAnimationEnabled, chatSendAnimationEnabled) } }
     @Published public var chatSendAnimationSpringResponse: Double { didSet { write(.chatSendAnimationSpringResponse, chatSendAnimationSpringResponse) } }
     @Published public var chatSendAnimationSpringDamping: Double { didSet { write(.chatSendAnimationSpringDamping, chatSendAnimationSpringDamping) } }
+    @Published public var chatStreamingDisplayMode: String {
+        didSet {
+            let normalizedValue = ChatStreamingDisplayMode.normalized(chatStreamingDisplayMode).rawValue
+            guard normalizedValue == chatStreamingDisplayMode else {
+                chatStreamingDisplayMode = normalizedValue
+                return
+            }
+            write(.chatStreamingDisplayMode, chatStreamingDisplayMode)
+        }
+    }
     @Published public var messageActionBarConfiguration: String {
         didSet {
             write(.messageActionBarConfiguration, messageActionBarConfiguration)
@@ -644,6 +654,7 @@ public final class AppConfigStore: ObservableObject {
         chatSendAnimationEnabled = Self.boolValue(.chatSendAnimationEnabled, userDefaults: userDefaults)
         chatSendAnimationSpringResponse = Self.realValue(.chatSendAnimationSpringResponse, userDefaults: userDefaults)
         chatSendAnimationSpringDamping = Self.realValue(.chatSendAnimationSpringDamping, userDefaults: userDefaults)
+        chatStreamingDisplayMode = Self.textValue(.chatStreamingDisplayMode, userDefaults: userDefaults)
         let initialMessageActionBarConfiguration = Self.textValue(.messageActionBarConfiguration, userDefaults: userDefaults)
         messageActionBarConfiguration = initialMessageActionBarConfiguration
         messageActionBarSettings = MessageActionBarConfiguration.decoded(from: initialMessageActionBarConfiguration)
@@ -1187,6 +1198,7 @@ public final class AppConfigStore: ObservableObject {
         case .chatSendAnimationEnabled: return .bool(chatSendAnimationEnabled)
         case .chatSendAnimationSpringResponse: return .real(chatSendAnimationSpringResponse)
         case .chatSendAnimationSpringDamping: return .real(chatSendAnimationSpringDamping)
+        case .chatStreamingDisplayMode: return .text(chatStreamingDisplayMode)
         case .messageActionBarConfiguration: return .text(messageActionBarConfiguration)
 
         case .fontUseCustomFonts: return .bool(fontUseCustomFonts)
@@ -1460,6 +1472,8 @@ public final class AppConfigStore: ObservableObject {
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
             videoFrameExtractionMode = VideoFrameExtractionMode.normalized(value).rawValue
+        case .chatStreamingDisplayMode:
+            chatStreamingDisplayMode = ChatStreamingDisplayMode.normalized(value).rawValue
         case .videoAnalysisModelIdentifier: videoAnalysisModelIdentifier = value
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
@@ -1819,6 +1833,8 @@ public final class AppConfigStore: ObservableObject {
             return ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
             return VideoFrameExtractionMode.normalized(value).rawValue
+        case .chatStreamingDisplayMode:
+            return ChatStreamingDisplayMode.normalized(value).rawValue
         case .localLinuxDefaultSessionMode:
             return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
         case .localLinuxWorkspaceCleanupPolicy:

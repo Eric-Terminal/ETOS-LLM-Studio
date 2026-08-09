@@ -148,7 +148,12 @@ extension ChatService {
         }
 
         var messages = messagesSnapshot(for: currentSessionID)
-        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
+        let streamingDisplayMode = await MainActor.run {
+            ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
+        }
+        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault(
+            displayMode: streamingDisplayMode
+        )
 
         do {
             let overrides = runnableModel.effectiveOverrideParameters

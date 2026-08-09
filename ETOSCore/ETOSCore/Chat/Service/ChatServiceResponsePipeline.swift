@@ -39,7 +39,12 @@ extension ChatService {
         var trailingUnparsedResponseBody = ""
         var trailingUnparsedHTTPStatusCode: Int?
         var messages = messagesSnapshot(for: currentSessionID)
-        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault()
+        let streamingDisplayMode = await MainActor.run {
+            ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
+        }
+        var streamingPublishCoalescer = StreamingUIPublishCoalescer.platformDefault(
+            displayMode: streamingDisplayMode
+        )
         let shouldRecordRequestLog = AppConfigStore.boolValue(for: .requestLogEnabled)
         let shouldCaptureRawStreamingResponse = RequestLogCapturePolicy.shouldCaptureStreamingBody(
             requestLogEnabled: shouldRecordRequestLog,

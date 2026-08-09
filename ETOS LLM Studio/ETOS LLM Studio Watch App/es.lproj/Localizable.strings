@@ -6376,3 +6376,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "系统已经启动，无需重复准备。终端、Agent 与本地 MCP 会复用当前运行时。" = "El sistema ya está en ejecución y no es necesario volver a prepararlo. Los terminales, Agent y MCP local reutilizarán el entorno de ejecución actual.";
 "无法启动终端：Linux 系统中找不到 Shell“%@”。请重置本地 Linux 后重试。" = "No se puede iniciar el terminal: no se encontró el shell «%@» en el sistema Linux. Restablece Linux local e inténtalo de nuevo.";
 "无法启动终端：工作目录“%@”尚不可用。请重试；如果问题持续，请重置本地 Linux。" = "No se puede iniciar el terminal: el directorio de trabajo «%@» aún no está disponible. Inténtalo de nuevo; si el problema persiste, restablece Linux local.";
+"流式显示" = "Visualización en streaming";
+"即时" = "Inmediato";
+"柔和" = "Suave";
+"即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。" = "El modo inmediato prioriza la respuesta y hace aparecer rápidamente el texto nuevo. El modo suave agrupa más fragmentos y muestra el texto nuevo a un ritmo más calmado.";

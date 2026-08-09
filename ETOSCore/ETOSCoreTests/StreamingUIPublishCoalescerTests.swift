@@ -11,6 +11,26 @@ import Testing
 @testable import ETOSCore
 
 struct StreamingUIPublishCoalescerTests {
+    @Test("流式显示模式提供不同刷新与淡入节奏")
+    func testStreamingDisplayModePolicies() {
+        #if os(watchOS)
+        #expect(ChatStreamingDisplayMode.immediate.uiPublishInterval == 0.080)
+        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.160)
+        #else
+        #expect(ChatStreamingDisplayMode.immediate.uiPublishInterval == 0.060)
+        #expect(ChatStreamingDisplayMode.gentle.uiPublishInterval == 0.120)
+        #endif
+        #expect(ChatStreamingDisplayMode.immediate.textRevealDuration == 0.20)
+        #expect(ChatStreamingDisplayMode.gentle.textRevealDuration == 0.45)
+        #expect(ChatStreamingDisplayMode.normalized("unknown") == .immediate)
+        #expect(AppConfigKey.chatStreamingDisplayMode.defaultValue == .text("immediate"))
+        #expect(AppConfigKey.chatStreamingDisplayMode.participatesInSync)
+        #expect(
+            StreamingUIPublishCoalescer.platformDefault(displayMode: .gentle).interval
+                == ChatStreamingDisplayMode.gentle.uiPublishInterval
+        )
+    }
+
     @Test("流式 UI 发布在间隔内合并并在到点后放行")
     func testCoalescerThrottlesUntilIntervalElapses() {
         let start = Date(timeIntervalSince1970: 1_000)

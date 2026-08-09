@@ -15,6 +15,9 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
     let textColor: Color
     let fontScale: Double
     let lineSpacing: CGFloat
+    let streamingDisplayMode: ChatStreamingDisplayMode
+
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -40,6 +43,8 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
         context.coordinator.apply(
             activeBlock,
             style: style,
+            revealDuration: streamingDisplayMode.textRevealDuration,
+            reduceMotion: accessibilityReduceMotion,
             to: textView
         )
     }
@@ -115,18 +120,25 @@ extension ETStreamingMarkdownTextView {
         }
     }
 
+    @MainActor
     final class Coordinator {
         var lastBlockID: ETStreamingMarkdownBlockID?
         var lastText = ""
         var lastPresentation: ETStreamingMarkdownActivePresentation?
         var lastStyleSignature = ""
         var lastMeasuredHeight: CGFloat = 0
+        private let textFadeAnimator = TextFadeAnimator()
 
         func apply(
             _ block: ETStreamingMarkdownActiveBlock,
             style: Style,
+            revealDuration: TimeInterval = ChatStreamingDisplayMode.immediate.textRevealDuration,
+            reduceMotion: Bool = false,
             to textView: UITextView
         ) {
+            if reduceMotion {
+                textFadeAnimator.finishImmediately(in: textView.textStorage)
+            }
             guard lastBlockID != block.id || lastText != block.displayText
                     || lastStyleSignature != style.signature else {
                 return
@@ -149,6 +161,7 @@ extension ETStreamingMarkdownTextView {
             case .reset:
                 canAppend = false
             }
+            let revealsNewBlock = !reduceMotion && lastBlockID != block.id
 
             if canAppend {
                 let fullText = block.displayText as NSString
@@ -163,10 +176,28 @@ extension ETStreamingMarkdownTextView {
                     NSAttributedString(string: appended, attributes: style.attributes)
                 )
                 textView.textStorage.endEditing()
+
+                if !reduceMotion {
+                    textFadeAnimator.reveal(
+                        range: NSRange(location: previousLength, length: (appended as NSString).length),
+                        color: style.color,
+                        duration: revealDuration,
+                        in: textView
+                    )
+                }
             } else {
+                textFadeAnimator.finishImmediately(in: textView.textStorage)
                 textView.textStorage.setAttributedString(
                     NSAttributedString(string: block.displayText, attributes: style.attributes)
                 )
+                if revealsNewBlock {
+                    textFadeAnimator.reveal(
+                        range: NSRange(location: 0, length: textView.textStorage.length),
+                        color: style.color,
+                        duration: revealDuration,
+                        in: textView
+                    )
+                }
             }
 
             remember(block, style: style)
@@ -192,6 +223,107 @@ extension ETStreamingMarkdownTextView {
             guard abs(lastMeasuredHeight - measured) > 0.5 else { return }
             lastMeasuredHeight = measured
             textView.invalidateIntrinsicContentSize()
+        }
+    }
+
+    /// 仅修改新增字符的前景色透明度，避免触发布局重算或整层交叉叠影。
+    @MainActor
+    final class TextFadeAnimator: NSObject {
+        private struct Run {
+            let range: NSRange
+            let color: UIColor
+            let startedAt: CFTimeInterval
+            let duration: TimeInterval
+        }
+
+        private weak var textView: UITextView?
+        private var displayLink: CADisplayLink?
+        private var runs: [Run] = []
+
+        func reveal(
+            range: NSRange,
+            color: UIColor,
+            duration: TimeInterval,
+            in textView: UITextView
+        ) {
+            guard range.length > 0, duration > 0 else { return }
+            self.textView = textView
+            textView.textStorage.addAttribute(
+                .foregroundColor,
+                value: color.withAlphaComponent(0),
+                range: range
+            )
+            runs.append(
+                Run(
+                    range: range,
+                    color: color,
+                    startedAt: CACurrentMediaTime(),
+                    duration: duration
+                )
+            )
+            startDisplayLinkIfNeeded()
+            textView.setNeedsDisplay()
+        }
+
+        func finishImmediately(in textStorage: NSTextStorage) {
+            guard !runs.isEmpty else { return }
+            textStorage.beginEditing()
+            for run in runs where NSMaxRange(run.range) <= textStorage.length {
+                textStorage.addAttribute(.foregroundColor, value: run.color, range: run.range)
+            }
+            textStorage.endEditing()
+            runs.removeAll(keepingCapacity: true)
+            stopDisplayLink()
+            textView?.setNeedsDisplay()
+        }
+
+        private func startDisplayLinkIfNeeded() {
+            guard displayLink == nil else { return }
+            let link = CADisplayLink(target: self, selector: #selector(updateFade(_:)))
+            link.preferredFramesPerSecond = 60
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+
+        private func stopDisplayLink() {
+            displayLink?.invalidate()
+            displayLink = nil
+        }
+
+        @objc private func updateFade(_ link: CADisplayLink) {
+            guard let textView else {
+                runs.removeAll(keepingCapacity: false)
+                stopDisplayLink()
+                return
+            }
+
+            let now = link.timestamp
+            var remainingRuns: [Run] = []
+            remainingRuns.reserveCapacity(runs.count)
+            textView.textStorage.beginEditing()
+            for run in runs {
+                guard NSMaxRange(run.range) <= textView.textStorage.length else { continue }
+                let progress = min(max((now - run.startedAt) / run.duration, 0), 1)
+                // easeOutCubic 让字形先快速可读，再平缓落到完整不透明度。
+                let easedProgress = 1 - pow(1 - progress, 3)
+                textView.textStorage.addAttribute(
+                    .foregroundColor,
+                    value: run.color.withAlphaComponent(
+                        run.color.cgColor.alpha * CGFloat(easedProgress)
+                    ),
+                    range: run.range
+                )
+                if progress < 1 {
+                    remainingRuns.append(run)
+                }
+            }
+            textView.textStorage.endEditing()
+            runs = remainingRuns
+            textView.setNeedsDisplay()
+
+            if runs.isEmpty {
+                stopDisplayLink()
+            }
         }
     }
 }
