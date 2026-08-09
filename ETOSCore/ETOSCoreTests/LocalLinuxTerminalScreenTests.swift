@@ -79,7 +79,7 @@ struct LocalLinuxTerminalScreenTests {
         #expect(response.contains("\u{1B}[?1;2c"))
         #expect(response.contains("\u{1B}[>0;1;0c"))
         #expect(response.contains("\u{1B}[8;24;80t"))
-        #expect(response.contains("\u{1B}P>|ETOS("))
+        #expect(response.contains("\u{1B}P>|ETOS-LLM-Studio("))
     }
 
     @Test("OSC 调色板查询返回 xterm 颜色值")
@@ -98,7 +98,8 @@ struct LocalLinuxTerminalScreenTests {
 
         #expect(environment["TERM"] == "xterm-256color")
         #expect(environment["COLORTERM"] == "truecolor")
-        #expect(environment["TERM_PROGRAM"] == "ETOS")
+        #expect(environment["TERM_PROGRAM"] == "ETOS-LLM-Studio")
+        #expect(environment["LC_TERMINAL"] == "ETOS-LLM-Studio")
         #expect(environment["TERM_PROGRAM_VERSION"] == LocalLinuxTerminalIdentity.programVersion)
     }
 }

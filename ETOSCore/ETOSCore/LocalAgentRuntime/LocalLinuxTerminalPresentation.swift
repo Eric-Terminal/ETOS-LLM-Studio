@@ -26,7 +26,7 @@ public struct LocalLinuxTerminalPresentation: Equatable, Sendable {
 }
 
 enum LocalLinuxTerminalIdentity {
-    static let programName = "ETOS"
+    static let programName = "ETOS-LLM-Studio"
     static let programVersion: String = {
         let bundle = Bundle.main
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
