@@ -235,32 +235,27 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("流式吸底会拒绝跳向较早消息的反向偏移")
-    func testStreamingBottomPinRejectsBackwardOffset() {
-        #expect(ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
-            visibleOffsetY: 1_640,
-            proposedOffsetY: 820,
-            keepsBottomPinned: true,
-            isUserInteracting: false
-        ))
-        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
-            visibleOffsetY: 820,
-            proposedOffsetY: 1_640,
-            keepsBottomPinned: true,
-            isUserInteracting: false
-        ))
-        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
-            visibleOffsetY: 1_640,
-            proposedOffsetY: 820,
-            keepsBottomPinned: false,
-            isUserInteracting: false
-        ))
-        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
-            visibleOffsetY: 1_640,
-            proposedOffsetY: 820,
-            keepsBottomPinned: true,
-            isUserInteracting: true
-        ))
+    @MainActor
+    @Test("滚动位置只接受应用发出的命令")
+    func testScrollPositionIgnoresVisibleItemWriteback() {
+        let commandedMessageID = UUID()
+        var command: ChatScrollTargetID? = .message(commandedMessageID)
+        let source = Binding<ChatScrollTargetID?>(
+            get: { command },
+            set: { command = $0 }
+        )
+        let commandOnly = ChatView.commandOnlyScrollPositionBinding(source)
+
+        commandOnly.wrappedValue = .message(UUID())
+
+        #expect(commandOnly.wrappedValue == .message(commandedMessageID))
+        #expect(command == .message(commandedMessageID))
+
+        commandOnly.wrappedValue = nil
+        #expect(command == .message(commandedMessageID))
+
+        command = nil
+        #expect(commandOnly.wrappedValue == nil)
     }
 
     @Test("流式滚动只在内容超出视口后追随底部")

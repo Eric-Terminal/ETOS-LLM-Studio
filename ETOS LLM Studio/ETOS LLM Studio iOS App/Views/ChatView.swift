@@ -997,7 +997,10 @@ extension ChatView {
                 } action: { newHeight in
                     chatScrollViewportHeight = newHeight
                 }
-                .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
+                .scrollPosition(
+                    id: Self.commandOnlyScrollPositionBinding($chatScrollTarget),
+                    anchor: chatScrollTargetAnchor
+                )
                 .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in
                     updateScrollToBottomVisibility(
                         distanceToBottom: distanceToBottom,
