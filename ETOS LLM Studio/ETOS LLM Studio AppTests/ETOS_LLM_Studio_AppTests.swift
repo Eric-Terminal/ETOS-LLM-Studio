@@ -236,6 +236,34 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("流式吸底会拒绝跳向较早消息的反向偏移")
+    func testStreamingBottomPinRejectsBackwardOffset() {
+        #expect(ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
+            visibleOffsetY: 1_640,
+            proposedOffsetY: 820,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
+            visibleOffsetY: 820,
+            proposedOffsetY: 1_640,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
+            visibleOffsetY: 1_640,
+            proposedOffsetY: 820,
+            keepsBottomPinned: false,
+            isUserInteracting: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldRejectBackwardStreamingOffset(
+            visibleOffsetY: 1_640,
+            proposedOffsetY: 820,
+            keepsBottomPinned: true,
+            isUserInteracting: true
+        ))
+    }
+
     @Test("流式滚动只在内容超出视口后追随底部")
     func testStreamingOffsetRequiresScrollableContent() {
         #expect(!ChatScrollMetricsObserver.streamingContentOverflowsViewport(
