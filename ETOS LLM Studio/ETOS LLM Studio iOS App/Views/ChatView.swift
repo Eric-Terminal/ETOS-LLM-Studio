@@ -754,12 +754,7 @@ extension ChatView {
                 ScrollView {
                     VStack(spacing: 0) {
                         ChatScrollMetricsObserver(
-                            keepsBottomPinned: $shouldKeepBottomPinned,
-                            isStreaming: viewModel.isSendingMessage,
-                            streamingDisplayMode: ChatStreamingDisplayMode.normalized(
-                                appConfig.chatStreamingDisplayMode
-                            ),
-                            reduceMotion: accessibilityReduceMotion
+                            keepsBottomPinned: $shouldKeepBottomPinned
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
                                 distanceToBottom: distanceToBottom,
@@ -984,13 +979,10 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
-                // 静态尺寸变化由 SwiftUI 锚定；流式增长改由 UIKit 只动画 contentOffset。
-                // 两套机制不会同时接管，用户主动离底后也不会抢回阅读位置。
+                // 尺寸变化锚点在 SwiftUI 布局阶段生效，UIKit 观察器不再追逐中间 contentSize。
+                // 用户主动离底后传入 nil，保留其当前阅读位置。
                 .chatDefaultSizeChangeScrollAnchor(
-                    Self.chatSizeChangeScrollAnchor(
-                        keepsBottomPinned: shouldKeepBottomPinned,
-                        isStreaming: viewModel.isSendingMessage
-                    )
+                    Self.chatSizeChangeScrollAnchor(keepsBottomPinned: shouldKeepBottomPinned)
                 )
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height

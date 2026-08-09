@@ -177,12 +177,9 @@ extension View {
 
 struct ChatScrollMetricsObserver: UIViewRepresentable {
     @Binding var keepsBottomPinned: Bool
-    let isStreaming: Bool
-    let streamingDisplayMode: ChatStreamingDisplayMode
-    let reduceMotion: Bool
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
-    /// iOS 18 起静态尺寸变化使用原生锚点；流式期间会暂时交由 UIKit 单独接管偏移。
+    /// iOS 18 起尺寸变化锚点与布局同帧生效，UIKit 观察器只能上报位置，不能再次改写偏移。
     nonisolated static var usesNativeSizeChangeAnchor: Bool {
         if #available(iOS 18.0, *) {
             return true
@@ -216,30 +213,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         )
     }
 
-    /// 内容没有超出视口时不存在可滚动距离，不能启动偏移动画与 UIScrollView 的零点回弹竞争。
-    nonisolated static func streamingContentOverflowsViewport(
-        contentHeight: CGFloat,
-        boundsHeight: CGFloat,
-        bottomInset: CGFloat
-    ) -> Bool {
-        contentHeight - boundsHeight + bottomInset > 1
-    }
-
-    nonisolated static func maximumContentOffsetY(
-        contentHeight: CGFloat,
-        boundsHeight: CGFloat,
-        topInset: CGFloat,
-        bottomInset: CGFloat
-    ) -> CGFloat {
-        max(-topInset, contentHeight - boundsHeight + bottomInset)
-    }
-
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
-            isStreaming: isStreaming,
-            streamingDisplayMode: streamingDisplayMode,
-            reduceMotion: reduceMotion,
             usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
             onMetricsChange: onMetricsChange
         )
@@ -257,9 +233,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onMetricsChange = onMetricsChange
         coordinator.keepsBottomPinned = $keepsBottomPinned
-        coordinator.isStreaming = isStreaming
-        coordinator.streamingDisplayMode = streamingDisplayMode
-        coordinator.reduceMotion = reduceMotion
         uiView.coordinator = coordinator
         DispatchQueue.main.async {
             uiView.attachToScrollViewIfNeeded()
@@ -274,9 +247,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     final class Coordinator {
         var onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
         var keepsBottomPinned: Binding<Bool>
-        var isStreaming: Bool
-        var streamingDisplayMode: ChatStreamingDisplayMode
-        var reduceMotion: Bool
         let usesNativeSizeChangeAnchor: Bool
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
@@ -294,22 +264,12 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
 
         init(
             keepsBottomPinned: Binding<Bool>,
-            isStreaming: Bool,
-            streamingDisplayMode: ChatStreamingDisplayMode,
-            reduceMotion: Bool,
             usesNativeSizeChangeAnchor: Bool,
             onMetricsChange: @escaping (CGFloat, CGFloat, Bool) -> Void
         ) {
             self.keepsBottomPinned = keepsBottomPinned
-            self.isStreaming = isStreaming
-            self.streamingDisplayMode = streamingDisplayMode
-            self.reduceMotion = reduceMotion
             self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
             self.onMetricsChange = onMetricsChange
-        }
-
-        private var reliesOnNativeSizeChangeAnchor: Bool {
-            usesNativeSizeChangeAnchor && !isStreaming
         }
 
         func attach(to scrollView: UIScrollView) {
@@ -336,14 +296,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
                 self?.scheduleDistanceChangeNotification()
             }
-            contentSizeObservation = scrollView.observe(
-                \.contentSize,
-                options: [.initial, .old, .new]
-            ) { [weak self] scrollView, change in
-                self?.handleContentSizeChange(
-                    from: change.oldValue,
-                    to: change.newValue ?? scrollView.contentSize
-                )
+            contentSizeObservation = scrollView.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, _ in
+                self?.handleContentSizeChange()
             }
             boundsObservation = scrollView.observe(\.bounds, options: [.initial, .new]) { [weak self] scrollView, _ in
                 self?.handleBoundsChange(scrollView.bounds.size)
@@ -364,28 +318,18 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             scrollView = nil
         }
 
-        private func handleContentSizeChange(from oldSize: CGSize?, to newSize: CGSize) {
+        private func handleContentSizeChange() {
             let isUserInteracting = scrollView?.isDragging == true
                 || scrollView?.isTracking == true
                 || scrollView?.isDecelerating == true
-            let didHandleStreamingChange: Bool
-            if let oldSize {
-                didHandleStreamingChange = followStreamingContentSizeChange(
-                    from: oldSize.height,
-                    to: newSize.height
-                )
-            } else {
-                didHandleStreamingChange = false
-            }
-            if !didHandleStreamingChange,
-               ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
-                   keepsBottomPinned: keepsBottomPinned.wrappedValue,
-                   isUserInteracting: isUserInteracting,
-                   usesNativeSizeChangeAnchor: reliesOnNativeSizeChangeAnchor
-               ) {
+            if ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+                keepsBottomPinned: keepsBottomPinned.wrappedValue,
+                isUserInteracting: isUserInteracting,
+                usesNativeSizeChangeAnchor: usesNativeSizeChangeAnchor
+            ) {
                 restoresBottomAfterContentSizeChange = true
             }
-            if !reliesOnNativeSizeChangeAnchor && !didHandleStreamingChange {
+            if !usesNativeSizeChangeAnchor {
                 scheduleBottomPin()
             }
             scheduleDistanceChangeNotification()
@@ -406,7 +350,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 to: newSize,
                 keepsBottomPinned: keepsBottomPinned.wrappedValue,
                 isUserInteracting: isUserInteracting,
-                usesNativeSizeChangeAnchor: reliesOnNativeSizeChangeAnchor
+                usesNativeSizeChangeAnchor: usesNativeSizeChangeAnchor
             ) else {
                 return
             }
@@ -430,7 +374,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         private func pinToBottomIfNeeded() {
-            guard !reliesOnNativeSizeChangeAnchor, let scrollView else { return }
+            guard !usesNativeSizeChangeAnchor, let scrollView else { return }
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
@@ -451,11 +395,11 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                     || wasPinnedBeforeLayoutChange)
 
             if shouldPin {
-                let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
-                    contentHeight: scrollView.contentSize.height,
-                    boundsHeight: scrollView.bounds.height,
-                    topInset: scrollView.adjustedContentInset.top,
-                    bottomInset: scrollView.adjustedContentInset.bottom
+                let maximumOffsetY = max(
+                    -scrollView.adjustedContentInset.top,
+                    scrollView.contentSize.height
+                        - scrollView.bounds.height
+                        + scrollView.adjustedContentInset.bottom
                 )
                 if abs(scrollView.contentOffset.y - maximumOffsetY) > 0.5 {
                     scrollView.setContentOffset(
@@ -465,60 +409,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 }
             }
             scheduleDistanceChangeNotification()
-        }
-
-        /// 流式期间只有 contentOffset 参与动画；内容布局、气泡尺寸和裁剪区域都立即保持真实值。
-        @discardableResult
-        private func followStreamingContentSizeChange(
-            from oldContentHeight: CGFloat,
-            to newContentHeight: CGFloat
-        ) -> Bool {
-            guard isStreaming, let scrollView else { return false }
-            let isUserInteracting = scrollView.isDragging
-                || scrollView.isTracking
-                || scrollView.isDecelerating
-            guard keepsBottomPinned.wrappedValue, !isUserInteracting else {
-                return true
-            }
-
-            let contentHeightDelta = newContentHeight - oldContentHeight
-            guard abs(contentHeightDelta) > 0.5 else { return true }
-            let targetOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
-                contentHeight: newContentHeight,
-                boundsHeight: scrollView.bounds.height,
-                topInset: scrollView.adjustedContentInset.top,
-                bottomInset: scrollView.adjustedContentInset.bottom
-            )
-            let targetOffset = CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY)
-            let offsetDelta = targetOffsetY - scrollView.contentOffset.y
-            guard offsetDelta.isFinite, targetOffsetY.isFinite, abs(offsetDelta) > 0.5 else {
-                return true
-            }
-
-            let contentOverflowsViewport = ChatScrollMetricsObserver.streamingContentOverflowsViewport(
-                contentHeight: newContentHeight,
-                boundsHeight: scrollView.bounds.height,
-                bottomInset: scrollView.adjustedContentInset.bottom
-            )
-            if contentHeightDelta > 0,
-               contentOverflowsViewport,
-               !reduceMotion,
-               offsetDelta > 0 {
-                // 与 OpenMinis 相同：布局先落到真实尺寸，只让视口从当前呈现位置继续滑向新底部。
-                UIView.animate(
-                    withDuration: streamingDisplayMode.viewportFollowDuration,
-                    delay: 0,
-                    options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
-                ) {
-                    scrollView.setContentOffset(targetOffset, animated: false)
-                }
-            } else {
-                // 短内容、收缩与“减少动态效果”均直接落位，避免在零滚动范围附近来回回弹。
-                UIView.performWithoutAnimation {
-                    scrollView.setContentOffset(targetOffset, animated: false)
-                }
-            }
-            return true
         }
 
         private func scheduleDistanceChangeNotification() {
