@@ -11,6 +11,16 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
+    /// scrollPosition 在滚动时会回写可见项；这里只允许应用主动写入的一次性跳转命令。
+    static func commandOnlyScrollPositionBinding(
+        _ command: Binding<ChatScrollTargetID?>
+    ) -> Binding<ChatScrollTargetID?> {
+        Binding(
+            get: { command.wrappedValue },
+            set: { _ in }
+        )
+    }
+
     /// 非流式尺寸变化交给 SwiftUI；流式期间由 UIKit 单独动画真实滚动偏移，避免双重吸底。
     nonisolated static func chatSizeChangeScrollAnchor(
         keepsBottomPinned: Bool,
