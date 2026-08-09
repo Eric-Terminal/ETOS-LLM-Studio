@@ -755,7 +755,12 @@ extension ChatView {
                 ScrollView {
                     VStack(spacing: 0) {
                         ChatScrollMetricsObserver(
-                            keepsBottomPinned: $shouldKeepBottomPinned
+                            keepsBottomPinned: $shouldKeepBottomPinned,
+                            isStreaming: viewModel.isSendingMessage,
+                            streamingDisplayMode: ChatStreamingDisplayMode.normalized(
+                                appConfig.chatStreamingDisplayMode
+                            ),
+                            reduceMotion: accessibilityReduceMotion
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
                                 distanceToBottom: distanceToBottom,

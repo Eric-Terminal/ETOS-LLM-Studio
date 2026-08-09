@@ -204,6 +204,33 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("流式呈现补偿限制尾随距离并裁剪输入栏区域")
+    func testStreamingPresentationBounds() {
+        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
+            currentTranslation: 12,
+            contentHeightDelta: 20,
+            maximumLag: 44
+        ) == 32)
+        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
+            currentTranslation: 30,
+            contentHeightDelta: 20,
+            maximumLag: 44
+        ) == 44)
+        #expect(ChatScrollMetricsObserver.streamingPresentationStartTranslation(
+            currentTranslation: 10,
+            contentHeightDelta: -20,
+            maximumLag: 44
+        ) == 0)
+        #expect(ChatScrollMetricsObserver.streamingViewportMaskHeight(
+            boundsHeight: 844,
+            bottomInset: 96
+        ) == 748)
+        #expect(ChatScrollMetricsObserver.streamingViewportMaskHeight(
+            boundsHeight: 80,
+            bottomInset: 120
+        ) == 0)
+    }
+
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")
     func testBottomPinIntentPrioritizesUserInteraction() {
         #expect(!ChatView.resolvedBottomPinIntent(
