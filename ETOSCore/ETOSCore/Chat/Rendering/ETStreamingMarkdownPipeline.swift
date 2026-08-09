@@ -58,10 +58,8 @@ public actor ETStreamingMarkdownPipeline {
         }
 
         let workingSource = state.activeSource + appendedText
-        let signpost = TelemetrySignpost.begin(
-            TelemetrySignpost.markdownInterval(characterCount: workingSource.count)
-        )
-        defer { TelemetrySignpost.end(signpost) }
+        // 流式增量可能每个 Token 都进入这里；不要为高频热路径逐次写 MetricKit Signpost。
+        // 整次响应与最终 Markdown 预计算仍有低频区间，足以定位实际性能瓶颈。
         let split = ETStreamingMarkdownASTParser.split(workingSource)
         let didReset = !isStrictAppend
         let committedCountBeforeUpdate = state.committedBlocks.count

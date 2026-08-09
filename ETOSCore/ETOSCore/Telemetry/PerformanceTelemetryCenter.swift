@@ -19,6 +19,13 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         case clearPending
     }
 
+    private struct ReceivedPayload: Sendable {
+        let kind: TelemetryPayloadKind
+        let data: Data
+        let periodStart: Date?
+        let periodEnd: Date?
+    }
+
     public static let shared = PerformanceTelemetryCenter()
 
     @Published public private(set) var isEnabled = false
@@ -264,22 +271,21 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
         isEnabled && uploadGeneration == generation && !Task.isCancelled
     }
 
-    private func receivePayload(
-        kind: TelemetryPayloadKind,
-        data: Data,
-        periodStart: Date?,
-        periodEnd: Date?
-    ) async {
-        guard isEnabled else { return }
-        _ = await store.save(
-            kind: kind,
-            rawPayloadData: data,
-            capturedAt: Date(),
-            periodStart: periodStart,
-            periodEnd: periodEnd,
-            app: appMetadata,
-            platform: platformMetadata
-        )
+    private func receivePayloads(_ payloads: [ReceivedPayload]) async {
+        guard isEnabled, !payloads.isEmpty else { return }
+        let capturedAt = Date()
+        for payload in payloads {
+            _ = await store.save(
+                kind: payload.kind,
+                rawPayloadData: payload.data,
+                capturedAt: capturedAt,
+                periodStart: payload.periodStart,
+                periodEnd: payload.periodEnd,
+                app: appMetadata,
+                platform: platformMetadata
+            )
+        }
+        // MetricKit 可能一次回调多个 Payload，全部落盘后只刷新一次可见快照。
         await refreshVisibleRecords()
     }
 
@@ -296,34 +302,30 @@ public final class PerformanceTelemetryCenter: NSObject, ObservableObject {
 
 extension PerformanceTelemetryCenter: MXMetricManagerSubscriber {
     public nonisolated func didReceive(_ payloads: [MXMetricPayload]) {
-        for payload in payloads {
-            let data = payload.jsonRepresentation()
-            let periodStart = payload.timeStampBegin
-            let periodEnd = payload.timeStampEnd
-            Task { @MainActor [weak self] in
-                await self?.receivePayload(
-                    kind: .metric,
-                    data: data,
-                    periodStart: periodStart,
-                    periodEnd: periodEnd
-                )
-            }
+        let received = payloads.map {
+            ReceivedPayload(
+                kind: .metric,
+                data: $0.jsonRepresentation(),
+                periodStart: $0.timeStampBegin,
+                periodEnd: $0.timeStampEnd
+            )
+        }
+        Task { @MainActor [weak self] in
+            await self?.receivePayloads(received)
         }
     }
 
     public nonisolated func didReceive(_ payloads: [MXDiagnosticPayload]) {
-        for payload in payloads {
-            let data = payload.jsonRepresentation()
-            let periodStart = payload.timeStampBegin
-            let periodEnd = payload.timeStampEnd
-            Task { @MainActor [weak self] in
-                await self?.receivePayload(
-                    kind: .diagnostic,
-                    data: data,
-                    periodStart: periodStart,
-                    periodEnd: periodEnd
-                )
-            }
+        let received = payloads.map {
+            ReceivedPayload(
+                kind: .diagnostic,
+                data: $0.jsonRepresentation(),
+                periodStart: $0.timeStampBegin,
+                periodEnd: $0.timeStampEnd
+            )
+        }
+        Task { @MainActor [weak self] in
+            await self?.receivePayloads(received)
         }
     }
 }
