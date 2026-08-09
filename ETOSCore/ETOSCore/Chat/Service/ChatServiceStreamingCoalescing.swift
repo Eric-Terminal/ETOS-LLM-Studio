@@ -14,15 +14,13 @@ struct StreamingUIPublishCoalescer {
     private(set) var hasPendingUpdate = false
 
     static var platformDefaultInterval: TimeInterval {
-        #if os(watchOS)
-        return 0.080
-        #else
-        return 0.060
-        #endif
+        ChatStreamingDisplayMode.defaultMode.uiPublishInterval
     }
 
-    static func platformDefault() -> StreamingUIPublishCoalescer {
-        StreamingUIPublishCoalescer(interval: platformDefaultInterval)
+    static func platformDefault(
+        displayMode: ChatStreamingDisplayMode = .defaultMode
+    ) -> StreamingUIPublishCoalescer {
+        StreamingUIPublishCoalescer(interval: displayMode.uiPublishInterval)
     }
 
     init(interval: TimeInterval) {

@@ -5804,3 +5804,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "保留用户设置的模型启用状态。" = "Conservar los estados de activación de modelos definidos por el usuario.";
 "会按官方配置更新模型启用状态。" = "Actualizar los estados de activación desde la configuración oficial.";
 "该版本已应用，本次不会重复修改本地数据。" = "Esta revisión ya está aplicada y no volverá a modificar los datos locales.";
+"流式显示" = "Visualización en streaming";
+"即时" = "Inmediato";
+"柔和" = "Suave";
+"即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。" = "El modo inmediato prioriza la respuesta y hace aparecer rápidamente el texto nuevo. El modo suave agrupa más fragmentos y muestra el texto nuevo a un ritmo más calmado.";

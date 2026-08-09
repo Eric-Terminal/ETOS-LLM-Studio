@@ -88,6 +88,50 @@ public enum VideoFrameExtractionMode: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendable {
+    case immediate
+    case gentle
+
+    public static let defaultMode: ChatStreamingDisplayMode = .immediate
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .immediate:
+            return NSLocalizedString("即时", comment: "Immediate streaming display mode")
+        case .gentle:
+            return NSLocalizedString("柔和", comment: "Gentle streaming display mode")
+        }
+    }
+
+    public var uiPublishInterval: TimeInterval {
+        #if os(watchOS)
+        switch self {
+        case .immediate: return 0.080
+        case .gentle: return 0.160
+        }
+        #else
+        switch self {
+        case .immediate: return 0.060
+        case .gentle: return 0.120
+        }
+        #endif
+    }
+
+    /// 淡入只改变新增字形的透明度，不参与文字测量或气泡布局。
+    public var textRevealDuration: TimeInterval {
+        switch self {
+        case .immediate: return 0.20
+        case .gentle: return 0.45
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> ChatStreamingDisplayMode {
+        ChatStreamingDisplayMode(rawValue: rawValue) ?? defaultMode
+    }
+}
+
 public enum LiquidGlassTintSetting {
     public static let minimumOpacity = 0.0
     public static let maximumOpacity = 0.6
@@ -244,6 +288,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case chatSendAnimationEnabled = "chat.sendAnimation.enabled"
     case chatSendAnimationSpringResponse = "chat.sendAnimation.springResponse"
     case chatSendAnimationSpringDamping = "chat.sendAnimation.springDamping"
+    case chatStreamingDisplayMode = "chat.streamingDisplay.mode"
     case messageActionBarConfiguration = "chat.messageActionBar.configuration"
 
     case fontUseCustomFonts = "font.useCustomFonts"
@@ -516,6 +561,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .real(0.45)
         case .chatSendAnimationSpringDamping:
             return .real(0.6)
+        case .chatStreamingDisplayMode:
+            return .text(ChatStreamingDisplayMode.defaultMode.rawValue)
         case .backgroundBlur:
             return .real(10.0)
         case .backgroundOpacity:

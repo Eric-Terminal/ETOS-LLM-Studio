@@ -5804,3 +5804,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "保留用户设置的模型启用状态。" = "Conserver l’état d’activation des modèles défini par l’utilisateur.";
 "会按官方配置更新模型启用状态。" = "Mettre à jour l’activation des modèles depuis la configuration officielle.";
 "该版本已应用，本次不会重复修改本地数据。" = "Cette révision est déjà appliquée et ne modifiera pas à nouveau les données locales.";
+"流式显示" = "Affichage en continu";
+"即时" = "Immédiat";
+"柔和" = "Doux";
+"即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。" = "Le mode immédiat privilégie la réactivité et fait apparaître rapidement le nouveau texte. Le mode doux regroupe davantage de fragments et affiche le nouveau texte à un rythme plus calme.";

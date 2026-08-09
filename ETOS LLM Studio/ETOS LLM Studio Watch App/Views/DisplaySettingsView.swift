@@ -104,6 +104,20 @@ struct DisplaySettingsView: View {
                 }
             }
 
+            Section(
+                header: Text(NSLocalizedString("流式显示", comment: "Streaming response display section")),
+                footer: Text(NSLocalizedString("即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。", comment: "Streaming response display mode description"))
+            ) {
+                Picker(
+                    NSLocalizedString("流式显示", comment: "Streaming response display mode"),
+                    selection: $appConfig.chatStreamingDisplayMode
+                ) {
+                    ForEach(ChatStreamingDisplayMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+            }
+
             // MARK: Section 3：气泡功能栏
             Section(
                 header: Text(NSLocalizedString("气泡功能栏", comment: "")),

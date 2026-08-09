@@ -94,6 +94,9 @@ struct ETAdvancedMarkdownRenderer: View {
                 fallbackLineSpacingEm: FontLibrary.defaultWatchLineSpacingEm
             )
         )
+        let streamingDisplayMode = ChatStreamingDisplayMode.normalized(
+            appConfig.chatStreamingDisplayMode
+        )
         Group {
             if preparedRuleRequest == ruleRenderRequest,
                let ruleAttributedText {
@@ -112,6 +115,7 @@ struct ETAdvancedMarkdownRenderer: View {
                     customTextStyleColors: customTextStyleColors,
                     fontScale: fontScale,
                     lineSpacing: lineSpacing,
+                    streamingDisplayMode: streamingDisplayMode,
                     onCodeBlockHeaderTap: onCodeBlockHeaderTap
                 )
             } else if enableMarkdown {

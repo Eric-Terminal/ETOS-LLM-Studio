@@ -64,6 +64,7 @@ struct ETWatchStreamingMarkdownLiveView: View {
     let customTextStyleColors: ChatAppearanceTextStyleColors?
     let fontScale: Double
     let lineSpacing: CGFloat
+    let streamingDisplayMode: ChatStreamingDisplayMode
     let onCodeBlockHeaderTap: ((String) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -169,7 +170,10 @@ struct ETWatchStreamingMarkdownLiveView: View {
         }
         .lineSpacing(lineSpacing)
         .contentTransition(reduceMotion ? .identity : .opacity)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: revision)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: streamingDisplayMode.textRevealDuration),
+            value: revision
+        )
     }
 
     private func resolvedStyleColor(_ slot: ChatAppearanceColorSlot?) -> Color {

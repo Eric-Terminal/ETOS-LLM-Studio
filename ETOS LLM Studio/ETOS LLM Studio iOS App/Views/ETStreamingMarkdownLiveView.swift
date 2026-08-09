@@ -68,6 +68,7 @@ struct ETIOSStreamingMarkdownLiveView: View {
     let fontScale: Double
     let lineSpacingEm: Double
     let lineSpacing: CGFloat
+    let streamingDisplayMode: ChatStreamingDisplayMode
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var preparedBlocks: [ETStreamingMarkdownBlockID: ETIOSPreparedStreamingMarkdownBlock] = [:]
@@ -99,7 +100,8 @@ struct ETIOSStreamingMarkdownLiveView: View {
                             activeBlock: activeBlock,
                             textColor: textColor,
                             fontScale: fontScale,
-                            lineSpacing: lineSpacing
+                            lineSpacing: lineSpacing,
+                            streamingDisplayMode: streamingDisplayMode
                         )
                         .padding(.top, interBlockSpacing(activeBlock.leadingSpacingEm))
                     }
