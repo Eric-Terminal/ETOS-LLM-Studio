@@ -16,8 +16,6 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
     let fontScale: Double
     let lineSpacing: CGFloat
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
@@ -42,8 +40,7 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
         context.coordinator.apply(
             activeBlock,
             style: style,
-            to: textView,
-            reduceMotion: reduceMotion
+            to: textView
         )
     }
 
@@ -128,13 +125,18 @@ extension ETStreamingMarkdownTextView {
         func apply(
             _ block: ETStreamingMarkdownActiveBlock,
             style: Style,
-            to textView: UITextView,
-            reduceMotion: Bool
+            to textView: UITextView
         ) {
             guard lastBlockID != block.id || lastText != block.displayText
                     || lastStyleSignature != style.signature else {
                 return
             }
+
+            // 整层交叉淡化会把换行前后的两份文字叠在一起；高速流式更新时表现为横向重影。
+            // 文字排版立即落位，纵向连续性由外层滚动锚点负责。
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            defer { CATransaction.commit() }
 
             let canAppend: Bool
             switch block.updateKind {
@@ -156,14 +158,12 @@ extension ETStreamingMarkdownTextView {
                     remember(block, style: style)
                     return
                 }
-                addFadeIfNeeded(to: textView, reduceMotion: reduceMotion)
                 textView.textStorage.beginEditing()
                 textView.textStorage.append(
                     NSAttributedString(string: appended, attributes: style.attributes)
                 )
                 textView.textStorage.endEditing()
             } else {
-                textView.layer.removeAnimation(forKey: "ETStreamingMarkdownFade")
                 textView.textStorage.setAttributedString(
                     NSAttributedString(string: block.displayText, attributes: style.attributes)
                 )
@@ -171,18 +171,6 @@ extension ETStreamingMarkdownTextView {
 
             remember(block, style: style)
             invalidateHeightIfNeeded(for: textView)
-        }
-
-        private func addFadeIfNeeded(to textView: UITextView, reduceMotion: Bool) {
-            guard !reduceMotion else {
-                textView.layer.removeAnimation(forKey: "ETStreamingMarkdownFade")
-                return
-            }
-            let transition = CATransition()
-            transition.type = .fade
-            transition.duration = 0.22
-            transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            textView.layer.add(transition, forKey: "ETStreamingMarkdownFade")
         }
 
         private func remember(_ block: ETStreamingMarkdownActiveBlock, style: Style) {

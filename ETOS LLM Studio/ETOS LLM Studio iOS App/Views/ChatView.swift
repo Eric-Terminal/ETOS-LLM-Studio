@@ -103,6 +103,7 @@ struct ChatView: View {
     @State var lastAutomaticHistoryLoadAnchorID: UUID?
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
+    @State var activeBottomScrollCommandTarget: ChatScrollTargetID?
     @State var needsImmediateBottomSnap: Bool = true
     @State var isChatLayoutSettling: Bool = false
     @State var isComposerRequestControlsExpanded = false
@@ -141,6 +142,7 @@ struct ChatView: View {
     let chatPickerAnimation = Animation.spring(response: 0.42, dampingFraction: 0.82)
     let scrollToBottomButtonAnimation = Animation.timingCurve(0.22, 1.0, 0.36, 1.0, duration: 0.52)
     let bottomPinnedDistanceThreshold: CGFloat = 24
+    let bottomScrollCommandArrivalTolerance: CGFloat = 1
     let scrollToBottomButtonRevealDistance: CGFloat = 48
     let automaticHistoryLoadTriggerDistance: CGFloat = 240
     let scrollToBottomButtonSize: CGFloat = 40
@@ -990,6 +992,16 @@ extension ChatView {
                     chatScrollViewportHeight = newHeight
                 }
                 .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
+                .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in
+                    updateScrollToBottomVisibility(
+                        distanceToBottom: distanceToBottom,
+                        isUserInteracting: isUserInteracting
+                    )
+                    resolveActiveBottomScrollCommand(
+                        distanceToBottom: distanceToBottom,
+                        isUserInteracting: isUserInteracting
+                    )
+                }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
                 .simultaneousGesture(

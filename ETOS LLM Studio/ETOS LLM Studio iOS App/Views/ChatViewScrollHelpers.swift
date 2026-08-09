@@ -18,6 +18,23 @@ extension ChatView {
         keepsBottomPinned ? .bottom : nil
     }
 
+    /// 用户手势永远优先于自动吸底；非交互状态下只有真正回到底部才重新接管。
+    nonisolated static func resolvedBottomPinIntent(
+        currentIntent: Bool,
+        distanceToBottom: CGFloat,
+        threshold: CGFloat,
+        isUserInteracting: Bool,
+        isLayoutSettling: Bool
+    ) -> Bool {
+        if isUserInteracting {
+            return false
+        }
+        if currentIntent {
+            return true
+        }
+        return !isLayoutSettling && distanceToBottom < threshold
+    }
+
     /// 相连气泡属于同一视觉组，不能被逐条滚动位移撕开连接处。
     nonisolated static func chatScrollTransitionOffset(
         phaseValue: CGFloat,
@@ -204,7 +221,13 @@ extension ChatView {
         animation: Animation = .easeOut(duration: 0.25)
     ) {
         shouldKeepBottomPinned = true
-        setScrollTarget(bottomScrollTarget, anchor: .bottom, animated: animated, animation: animation)
+        setScrollTarget(
+            bottomScrollTarget,
+            anchor: .bottom,
+            animated: animated,
+            animation: animation,
+            releasesAtBottom: true
+        )
     }
 
     func handleScrollToBottomButtonTap() {
@@ -266,6 +289,10 @@ extension ChatView {
         isUserInteracting: Bool
     ) {
         updateScrollToBottomVisibility(
+            distanceToBottom: distanceToBottom,
+            isUserInteracting: isUserInteracting
+        )
+        resolveActiveBottomScrollCommand(
             distanceToBottom: distanceToBottom,
             isUserInteracting: isUserInteracting
         )
@@ -360,11 +387,13 @@ extension ChatView {
             }
             return
         }
-        if normalizedDistance < bottomPinnedDistanceThreshold {
-            shouldKeepBottomPinned = true
-        } else if isUserInteracting, !isChatLayoutSettling {
-            shouldKeepBottomPinned = false
-        }
+        shouldKeepBottomPinned = Self.resolvedBottomPinIntent(
+            currentIntent: shouldKeepBottomPinned,
+            distanceToBottom: normalizedDistance,
+            threshold: bottomPinnedDistanceThreshold,
+            isUserInteracting: isUserInteracting,
+            isLayoutSettling: isChatLayoutSettling
+        )
 
         let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
         if showScrollToBottom != shouldShow {
@@ -377,6 +406,30 @@ extension ChatView {
            viewModel.resetAutomaticHistoryWindowIfNeeded() {
             lastAutomaticHistoryLoadAnchorID = nil
             scheduleDeferredBottomSnap()
+        }
+    }
+
+    /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
+    /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
+    func resolveActiveBottomScrollCommand(
+        distanceToBottom: CGFloat,
+        isUserInteracting: Bool
+    ) {
+        guard activeBottomScrollCommandTarget != nil else { return }
+        guard isUserInteracting || distanceToBottom <= bottomScrollCommandArrivalTolerance else { return }
+        releaseActiveBottomScrollCommand()
+    }
+
+    func releaseActiveBottomScrollCommand() {
+        guard let target = activeBottomScrollCommandTarget else { return }
+        activeBottomScrollCommandTarget = nil
+        guard chatScrollTarget == target else { return }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            chatScrollTarget = nil
         }
     }
 
@@ -411,7 +464,8 @@ extension ChatView {
             try? await Task.sleep(nanoseconds: 450_000_000)
             guard !Task.isCancelled else { return }
             isChatLayoutSettling = false
-            if keepBottomPinned {
+            // 等待期间用户可能已经拖动列表；此时不能用旧的贴底意图把阅读位置抢回来。
+            if keepBottomPinned, shouldKeepBottomPinned {
                 scrollToBottom(animated: false)
             }
             chatLayoutSettleTask = nil
@@ -422,6 +476,7 @@ extension ChatView {
         scrollTargetGeneration &+= 1
         pendingScrollTargetTask?.cancel()
         pendingScrollTargetTask = nil
+        releaseActiveBottomScrollCommand()
         isAutomaticHistoryLoadInFlight = false
         awaitsAutomaticHistoryAnchorMetrics = false
     }
@@ -517,7 +572,8 @@ extension ChatView {
         anchor: UnitPoint,
         animated: Bool,
         animation: Animation,
-        deferred: Bool = false
+        deferred: Bool = false,
+        releasesAtBottom: Bool = false
     ) {
         let shouldDefer = deferred || chatScrollTarget == target
         cancelPendingScrollTargetCommand()
@@ -526,6 +582,9 @@ extension ChatView {
 
         guard shouldDefer else {
             guard canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else { return }
+            if releasesAtBottom {
+                activeBottomScrollCommandTarget = target
+            }
             applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
             return
         }
@@ -543,6 +602,9 @@ extension ChatView {
             guard !Task.isCancelled,
                   canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else {
                 return
+            }
+            if releasesAtBottom {
+                activeBottomScrollCommandTarget = target
             }
             applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
         }

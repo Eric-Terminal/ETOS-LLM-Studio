@@ -122,6 +122,10 @@ struct ETIOSStreamingMarkdownLiveView: View {
             guard !Task.isCancelled else { return }
             preparedBlocks = prepared
         }
+        // 网络分块只改变文字与高度，不继承气泡入场等外层动画，避免高速重排横向漂移。
+        .transaction { transaction in
+            transaction.animation = nil
+        }
     }
 
     @ViewBuilder
