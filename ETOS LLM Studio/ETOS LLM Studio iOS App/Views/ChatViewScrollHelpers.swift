@@ -11,16 +11,6 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
-    /// scrollPosition 在滚动时会回写可见项；这里只允许应用主动写入的一次性跳转命令。
-    static func commandOnlyScrollPositionBinding(
-        _ command: Binding<ChatScrollTargetID?>
-    ) -> Binding<ChatScrollTargetID?> {
-        Binding(
-            get: { command.wrappedValue },
-            set: { _ in }
-        )
-    }
-
     /// 非流式尺寸变化交给 SwiftUI；流式期间由 UIKit 单独动画真实滚动偏移，避免双重吸底。
     nonisolated static func chatSizeChangeScrollAnchor(
         keepsBottomPinned: Bool,
@@ -150,6 +140,9 @@ extension ChatView {
         pendingJumpRequest = nil
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
+        #if DEBUG
+        NSLog("[BottomPinTrace] release source=message-jump")
+        #endif
         shouldKeepBottomPinned = false
     }
 
@@ -282,6 +275,9 @@ extension ChatView {
         }
         lastAutomaticHistoryLoadAnchorID = anchorMessageID
         suppressAutoScrollOnce = true
+        #if DEBUG
+        NSLog("[BottomPinTrace] release source=automatic-history")
+        #endif
         shouldKeepBottomPinned = false
         isAutomaticHistoryLoadInFlight = true
         awaitsAutomaticHistoryAnchorMetrics = false
@@ -398,13 +394,27 @@ extension ChatView {
             }
             return
         }
-        shouldKeepBottomPinned = Self.resolvedBottomPinIntent(
+        let resolvedBottomPinIntent = Self.resolvedBottomPinIntent(
             currentIntent: shouldKeepBottomPinned,
             distanceToBottom: normalizedDistance,
             threshold: bottomPinnedDistanceThreshold,
             isUserInteracting: isUserInteracting,
             isLayoutSettling: isChatLayoutSettling
         )
+        #if DEBUG
+        if resolvedBottomPinIntent != shouldKeepBottomPinned {
+            NSLog(
+                "[BottomPinTrace] pin=%d->%d source=metrics distance=%.1f user=%d settling=%d streaming=%d",
+                shouldKeepBottomPinned ? 1 : 0,
+                resolvedBottomPinIntent ? 1 : 0,
+                normalizedDistance,
+                isUserInteracting ? 1 : 0,
+                isChatLayoutSettling ? 1 : 0,
+                viewModel.isSendingMessage ? 1 : 0
+            )
+        }
+        #endif
+        shouldKeepBottomPinned = resolvedBottomPinIntent
 
         let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !shouldKeepBottomPinned
         if showScrollToBottom != shouldShow {
@@ -447,6 +457,9 @@ extension ChatView {
     func handleContinuationExpansionStateChange(_ state: ConversationContinuationExpansionState) {
         guard state.isExpanded else { return }
         // 主动展开会改变滚动内容高度，不应继续把当前位置视为“锁定底部”。
+        #if DEBUG
+        NSLog("[BottomPinTrace] release source=continuation-expansion")
+        #endif
         shouldKeepBottomPinned = false
     }
 

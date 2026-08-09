@@ -847,6 +847,9 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.setReasoningExpanded(isExpanded, for: message.id)
                                             if isExpanded {
+                                                #if DEBUG
+                                                NSLog("[BottomPinTrace] release source=reasoning-expansion")
+                                                #endif
                                                 shouldKeepBottomPinned = false
                                             }
                                         }
@@ -857,6 +860,9 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.toolCallsExpandedState[message.id] = isExpanded
                                             if isExpanded {
+                                                #if DEBUG
+                                                NSLog("[BottomPinTrace] release source=tool-expansion")
+                                                #endif
                                                 shouldKeepBottomPinned = false
                                             }
                                         }
@@ -999,10 +1005,7 @@ extension ChatView {
                 } action: { newHeight in
                     chatScrollViewportHeight = newHeight
                 }
-                .scrollPosition(
-                    id: Self.commandOnlyScrollPositionBinding($chatScrollTarget),
-                    anchor: chatScrollTargetAnchor
-                )
+                .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
                 .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in
                     updateScrollToBottomVisibility(
                         distanceToBottom: distanceToBottom,
@@ -1047,6 +1050,25 @@ extension ChatView {
                 .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
                     handleDisplayedMessageIdentityChange()
                 }
+                #if DEBUG
+                .onChange(of: shouldKeepBottomPinned) { oldValue, newValue in
+                    NSLog(
+                        "[BottomPinTrace] observed-pin=%d->%d distance=%.1f streaming=%d",
+                        oldValue ? 1 : 0,
+                        newValue ? 1 : 0,
+                        scrollDistanceToBottom,
+                        viewModel.isSendingMessage ? 1 : 0
+                    )
+                }
+                .onChange(of: chatScrollTarget) { oldValue, newValue in
+                    NSLog(
+                        "[BottomPinTrace] target=%@->%@ streaming=%d",
+                        String(describing: oldValue),
+                        String(describing: newValue),
+                        viewModel.isSendingMessage ? 1 : 0
+                    )
+                }
+                #endif
                 .onAppear {
                     if shouldRestorePendingJumpOnAppear {
                         shouldRestorePendingJumpOnAppear = false
