@@ -44,6 +44,7 @@ struct ETStreamingMarkdownTextView: UIViewRepresentable {
             activeBlock,
             style: style,
             revealDuration: streamingDisplayMode.textRevealDuration,
+            revealStaggerWindow: streamingDisplayMode.textRevealStaggerWindow,
             reduceMotion: accessibilityReduceMotion,
             to: textView
         )
@@ -133,6 +134,7 @@ extension ETStreamingMarkdownTextView {
             _ block: ETStreamingMarkdownActiveBlock,
             style: Style,
             revealDuration: TimeInterval = ChatStreamingDisplayMode.immediate.textRevealDuration,
+            revealStaggerWindow: TimeInterval = ChatStreamingDisplayMode.immediate.textRevealStaggerWindow,
             reduceMotion: Bool = false,
             to textView: UITextView
         ) {
@@ -182,6 +184,7 @@ extension ETStreamingMarkdownTextView {
                         range: NSRange(location: previousLength, length: (appended as NSString).length),
                         color: style.color,
                         duration: revealDuration,
+                        staggerWindow: revealStaggerWindow,
                         in: textView
                     )
                 }
@@ -195,6 +198,7 @@ extension ETStreamingMarkdownTextView {
                         range: NSRange(location: 0, length: textView.textStorage.length),
                         color: style.color,
                         duration: revealDuration,
+                        staggerWindow: revealStaggerWindow,
                         in: textView
                     )
                 }
@@ -229,6 +233,8 @@ extension ETStreamingMarkdownTextView {
     /// 仅修改新增字符的前景色透明度，避免触发布局重算或整层交叉叠影。
     @MainActor
     final class TextFadeAnimator: NSObject {
+        private static let maximumAnimatedRevealUnits = 160
+
         private struct Run {
             let range: NSRange
             let color: UIColor
@@ -244,23 +250,37 @@ extension ETStreamingMarkdownTextView {
             range: NSRange,
             color: UIColor,
             duration: TimeInterval,
+            staggerWindow: TimeInterval,
             in textView: UITextView
         ) {
             guard range.length > 0, duration > 0 else { return }
+            let revealUnits = Self.revealUnits(
+                in: textView.textStorage.string as NSString,
+                within: range,
+                cap: Self.maximumAnimatedRevealUnits
+            )
+            guard !revealUnits.isEmpty else { return }
+
             self.textView = textView
-            textView.textStorage.addAttribute(
-                .foregroundColor,
-                value: color.withAlphaComponent(0),
-                range: range
-            )
-            runs.append(
-                Run(
-                    range: range,
-                    color: color,
-                    startedAt: CACurrentMediaTime(),
-                    duration: duration
+            let baseStart = CACurrentMediaTime()
+            let stagger = max(0, staggerWindow) / TimeInterval(revealUnits.count)
+            textView.textStorage.beginEditing()
+            for (index, unit) in revealUnits.enumerated() {
+                textView.textStorage.addAttribute(
+                    .foregroundColor,
+                    value: color.withAlphaComponent(0),
+                    range: unit
                 )
-            )
+                runs.append(
+                    Run(
+                        range: unit,
+                        color: color,
+                        startedAt: baseStart + TimeInterval(index) * stagger,
+                        duration: duration
+                    )
+                )
+            }
+            textView.textStorage.endEditing()
             startDisplayLinkIfNeeded()
             textView.setNeedsDisplay()
         }
@@ -280,7 +300,11 @@ extension ETStreamingMarkdownTextView {
         private func startDisplayLinkIfNeeded() {
             guard displayLink == nil else { return }
             let link = CADisplayLink(target: self, selector: #selector(updateFade(_:)))
-            link.preferredFramesPerSecond = 60
+            link.preferredFrameRateRange = CAFrameRateRange(
+                minimum: 30,
+                maximum: 120,
+                preferred: 60
+            )
             link.add(to: .main, forMode: .common)
             displayLink = link
         }
@@ -324,6 +348,45 @@ extension ETStreamingMarkdownTextView {
             if runs.isEmpty {
                 stopDisplayLink()
             }
+        }
+
+        /// 把词语与其间的空白、标点拆成连续区间，确保新字符不会有一部分突然跳出。
+        private static func revealUnits(
+            in string: NSString,
+            within range: NSRange,
+            cap: Int
+        ) -> [NSRange] {
+            guard range.location >= 0,
+                  range.length > 0,
+                  NSMaxRange(range) <= string.length else {
+                return []
+            }
+
+            var units: [NSRange] = []
+            var exceedsCap = false
+            let appendGap = { (start: Int, end: Int) in
+                if end > start {
+                    units.append(NSRange(location: start, length: end - start))
+                }
+            }
+            string.enumerateSubstrings(
+                in: range,
+                options: [.byWords, .localized, .substringNotRequired]
+            ) { _, wordRange, _, stop in
+                let gapStart = units.last.map { NSMaxRange($0) } ?? range.location
+                appendGap(gapStart, wordRange.location)
+                units.append(wordRange)
+                if units.count > cap {
+                    exceedsCap = true
+                    stop.pointee = true
+                }
+            }
+            guard !exceedsCap else { return [] }
+
+            let trailingStart = units.last.map { NSMaxRange($0) } ?? range.location
+            appendGap(trailingStart, NSMaxRange(range))
+            guard units.count <= cap else { return [] }
+            return units
         }
     }
 }
