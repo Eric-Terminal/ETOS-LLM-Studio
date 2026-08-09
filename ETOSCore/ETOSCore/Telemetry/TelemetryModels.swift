@@ -161,7 +161,8 @@ public struct TelemetryPrivacyDeclaration: Codable, Hashable, Sendable {
 }
 
 public struct TelemetryEnvelope: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
+    public static let supportedSchemaVersions = 1...currentSchemaVersion
 
     public let schemaVersion: Int
     public let payloadID: String
@@ -236,9 +237,7 @@ public enum TelemetryEnvelopeCodec {
         app: TelemetryAppMetadata = .current,
         platform: TelemetryPlatformMetadata = .currentIOS
     ) throws -> TelemetryEnvelope {
-        let payload = TelemetryPayloadSanitizer.sanitize(
-            try decodePayload(rawPayloadData)
-        )
+        let payload = try TelemetryPayloadFlattener.flatten(rawPayloadData)
         let payloadID = SHA256.hash(data: try canonicalPayloadData(payload))
             .map { String(format: "%02x", $0) }
             .joined()
@@ -271,9 +270,22 @@ public enum TelemetryEnvelopeCodec {
     }
 
     public static func decode(_ data: Data) throws -> TelemetryEnvelope {
+        guard TelemetryPayloadFlattener.isWithinDecodingLimits(data) else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: [],
+                debugDescription: "遥测信封超过安全解码边界。"
+            ))
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(TelemetryEnvelope.self, from: data)
+        let envelope = try decoder.decode(TelemetryEnvelope.self, from: data)
+        guard TelemetryEnvelope.supportedSchemaVersions.contains(envelope.schemaVersion) else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: [],
+                debugDescription: "不支持的遥测信封版本。"
+            ))
+        }
+        return envelope
     }
 
     public static func canonicalPayloadData(_ payload: JSONValue) throws -> Data {
@@ -283,83 +295,6 @@ public enum TelemetryEnvelopeCodec {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(payload)
-    }
-
-    private static func decodePayload(_ data: Data) throws -> JSONValue {
-        let payload = try JSONDecoder().decode(JSONValue.self, from: data)
-        guard case .dictionary = payload else {
-            throw TelemetryEnvelopeError.payloadIsNotJSONObject
-        }
-        return payload
-    }
-}
-
-enum TelemetryPayloadSanitizer {
-    // MetricKit 的调用栈以 subFrames 递归嵌套；限制落盘深度，避免异常诊断耗尽协程线程栈。
-    static let maximumNestingDepth = 64
-    private static let exceptionReasonKey = "exceptionReason"
-    private static let allowedExceptionReasonFields: Set<String> = [
-        "exceptionType",
-        "className"
-    ]
-
-    static func sanitize(_ value: JSONValue) -> JSONValue {
-        sanitize(value, depth: 0)
-    }
-
-    private static func sanitize(_ value: JSONValue, depth: Int) -> JSONValue {
-        guard depth < maximumNestingDepth else {
-            return truncatedValuePreservingContainerType(value)
-        }
-
-        switch value {
-        case .dictionary(let values):
-            var sanitized: [String: JSONValue] = [:]
-            sanitized.reserveCapacity(values.count)
-
-            for (key, child) in values {
-                if key.caseInsensitiveCompare(exceptionReasonKey) == .orderedSame {
-                    if let safeReason = sanitizeExceptionReason(child, depth: depth + 1) {
-                        sanitized[key] = safeReason
-                    }
-                    continue
-                }
-                sanitized[key] = sanitize(child, depth: depth + 1)
-            }
-            return .dictionary(sanitized)
-        case .array(let values):
-            return .array(values.map { sanitize($0, depth: depth + 1) })
-        case .string, .int, .double, .bool, .null:
-            return value
-        }
-    }
-
-    private static func truncatedValuePreservingContainerType(_ value: JSONValue) -> JSONValue {
-        switch value {
-        case .dictionary:
-            return .dictionary([:])
-        case .array:
-            return .array([])
-        case .string, .int, .double, .bool, .null:
-            return value
-        }
-    }
-
-    private static func sanitizeExceptionReason(_ value: JSONValue, depth: Int) -> JSONValue? {
-        guard depth < maximumNestingDepth else { return nil }
-        guard case .dictionary(let fields) = value else { return nil }
-
-        var retained: [String: JSONValue] = [:]
-        for (key, child) in fields {
-            let isAllowed = allowedExceptionReasonFields.contains { allowed in
-                key.caseInsensitiveCompare(allowed) == .orderedSame
-            }
-            if isAllowed {
-                retained[key] = sanitize(child, depth: depth + 1)
-            }
-        }
-        guard !retained.isEmpty else { return nil }
-        return .dictionary(retained)
     }
 }
 

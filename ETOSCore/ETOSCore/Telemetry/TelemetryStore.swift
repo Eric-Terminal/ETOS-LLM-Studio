@@ -289,7 +289,7 @@ actor TelemetryStore {
     private func loadStoredFile(at fileURL: URL) throws -> TelemetryStoredFile? {
         let data = try Data(contentsOf: fileURL)
         let envelope = try TelemetryEnvelopeCodec.decode(data)
-        guard envelope.schemaVersion == TelemetryEnvelope.currentSchemaVersion,
+        guard TelemetryEnvelope.supportedSchemaVersions.contains(envelope.schemaVersion),
               envelope.privacy.isSafeForUpload,
               fileURL.lastPathComponent.contains(envelope.payloadID) else {
             return nil

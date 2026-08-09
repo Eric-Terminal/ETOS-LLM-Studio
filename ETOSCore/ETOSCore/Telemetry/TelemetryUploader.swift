@@ -150,6 +150,16 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
         errorDescription: String?
     ) {
         let payloadIDs = Set(files.map(\.envelope.payloadID))
+        guard let schemaVersion = files.first?.envelope.schemaVersion,
+              files.allSatisfy({ $0.envelope.schemaVersion == schemaVersion }) else {
+            return (
+                [],
+                NSLocalizedString(
+                    "性能数据服务返回了不兼容的响应。",
+                    comment: "Telemetry incompatible response"
+                )
+            )
+        }
         do {
             let body = try encode(files)
             var request = URLRequest(url: endpoint)
@@ -173,7 +183,7 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
             }
 
             let decoded = try JSONDecoder().decode(TelemetryUploadResponse.self, from: data)
-            guard decoded.schemaVersion == TelemetryEnvelope.currentSchemaVersion else {
+            guard decoded.schemaVersion == schemaVersion else {
                 return (
                     [],
                     NSLocalizedString(
@@ -205,25 +215,32 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
     private func makeBatches(_ files: [TelemetryStoredFile]) -> [[TelemetryStoredFile]] {
         var result: [[TelemetryStoredFile]] = []
         var current: [TelemetryStoredFile] = []
+        var estimatedBytes = 64
 
         for file in files {
-            let candidate = current + [file]
-            let candidateFits = candidate.count <= batchLimit &&
-                ((try? encode(candidate).count) ?? Int.max) <= requestBodyLimit
+            let candidateBytes = estimatedBytes + file.data.count + 1
+            let hasMatchingSchema = current.isEmpty ||
+                current.first?.envelope.schemaVersion == file.envelope.schemaVersion
+            let candidateFits = current.count < batchLimit &&
+                hasMatchingSchema &&
+                candidateBytes <= requestBodyLimit
 
             if candidateFits {
-                current = candidate
+                current.append(file)
+                estimatedBytes = candidateBytes
                 continue
             }
 
             if !current.isEmpty {
                 result.append(current)
                 current = []
+                estimatedBytes = 64
             }
 
-            let singleFits = ((try? encode([file]).count) ?? Int.max) <= requestBodyLimit
+            let singleFits = estimatedBytes + file.data.count + 1 <= requestBodyLimit
             if singleFits {
                 current = [file]
+                estimatedBytes += file.data.count + 1
             }
         }
 
@@ -234,8 +251,15 @@ final class TelemetryUploader: TelemetryUploading, @unchecked Sendable {
     }
 
     private func encode(_ files: [TelemetryStoredFile]) throws -> Data {
+        guard let schemaVersion = files.first?.envelope.schemaVersion,
+              files.allSatisfy({ $0.envelope.schemaVersion == schemaVersion }) else {
+            throw EncodingError.invalidValue(
+                files.map(\.envelope.schemaVersion),
+                .init(codingPath: [], debugDescription: "遥测上传批次包含多个协议版本。")
+            )
+        }
         let request = TelemetryUploadRequest(
-            schemaVersion: TelemetryEnvelope.currentSchemaVersion,
+            schemaVersion: schemaVersion,
             envelopes: files.map(\.envelope)
         )
         let encoder = JSONEncoder()

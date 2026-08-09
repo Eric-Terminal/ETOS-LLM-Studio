@@ -60,9 +60,10 @@ struct TelemetryTests {
         let text = String(decoding: data, as: UTF8.self)
         let decoded = try TelemetryEnvelopeCodec.decode(data)
 
-        #expect(text.contains(#""schema_version":1"#))
+        #expect(text.contains(#""schema_version":2"#))
         #expect(text.contains(#""contains_chat_content":false"#))
         #expect(text.contains(#""marker":"hang""#))
+        #expect(text.contains(#""format":"metric-kit-flat-v1""#))
         #expect(decoded == envelope)
     }
 
@@ -151,10 +152,10 @@ struct TelemetryTests {
         #expect(encoded.contains(#""signal":6"#))
     }
 
-    @Test("深层诊断调用栈会在编码前安全裁剪")
-    func deeplyNestedDiagnosticIsTruncatedBeforeEncoding() throws {
+    @Test("MetricKit 调用栈会在编码前迭代压平")
+    func deeplyNestedDiagnosticIsFlattenedBeforeEncoding() throws {
         var nestedFrame = #"{"binaryName":"deepest-frame"}"#
-        for index in 0..<400 {
+        for index in 0..<80 {
             nestedFrame = #"{"binaryName":"frame-\#(index)","subFrames":[\#(nestedFrame)]}"#
         }
         let rawPayload = Data(
@@ -173,9 +174,39 @@ struct TelemetryTests {
         let text = String(decoding: encoded, as: UTF8.self)
         let decoded = try TelemetryEnvelopeCodec.decode(encoded)
 
-        #expect(text.contains("frame-399"))
-        #expect(text.contains("deepest-frame") == false)
+        #expect(text.contains("frame-79"))
+        #expect(text.contains("deepest-frame"))
+        #expect(text.contains(#""format":"flat-v1""#))
+        #expect(text.contains("callStackFrames"))
+        #expect(text.contains("parentFrameID"))
+        #expect(text.contains("callStackRootFrames") == false)
+        #expect(text.contains("subFrames") == false)
         #expect(decoded == envelope)
+    }
+
+    @Test("超过安全嵌套边界的原始诊断会省略而不会递归解码")
+    func pathologicalDiagnosticIsOmittedBeforeDecoding() throws {
+        var nestedFrame = #"{"binaryName":"deepest-frame"}"#
+        for index in 0..<400 {
+            nestedFrame = #"{"binaryName":"frame-\#(index)","subFrames":[\#(nestedFrame)]}"#
+        }
+        let rawPayload = Data(
+            #"{"crashDiagnostics":[{"callStackTree":{"callStacks":[{"callStackRootFrames":[\#(nestedFrame)]}]}}]}"#.utf8
+        )
+
+        let envelope = try TelemetryEnvelopeCodec.makeEnvelope(
+            kind: .diagnostic,
+            rawPayloadData: rawPayload,
+            periodStart: nil,
+            periodEnd: nil,
+            app: app,
+            platform: platform
+        )
+        let text = String(decoding: try TelemetryEnvelopeCodec.encode(envelope), as: UTF8.self)
+
+        #expect(text.contains(#""source_omitted":"source_nesting_limit""#))
+        #expect(text.contains(#""truncated":true"#))
+        #expect(text.contains("deepest-frame") == false)
     }
 
     @Test("非对象 JSON 不会进入遥测队列")
@@ -338,8 +369,8 @@ struct TelemetryTests {
         #expect(snapshot.files.first?.envelope.kind == .diagnostic)
     }
 
-    @Test("损坏或不兼容的遥测文件会立即清理")
-    func storeRemovesInvalidFiles() async throws {
+    @Test("队列保留 v1 遥测并清理损坏或不兼容文件")
+    func storeKeepsLegacyAndRemovesInvalidFiles() async throws {
         let fixture = try makeTemporaryDirectory(prefix: "telemetry-invalid")
         defer { try? FileManager.default.removeItem(at: fixture) }
         let store = TelemetryStore(baseDirectory: fixture)
@@ -377,12 +408,38 @@ struct TelemetryTests {
         )
         try incompatibleData.write(to: incompatibleURL)
 
+        let currentLegacyEnvelope = try makeEnvelope(
+            kind: .diagnostic,
+            marker: "legacy-compatible",
+            capturedAt: Date()
+        )
+        let legacyEnvelope = TelemetryEnvelope(
+            schemaVersion: 1,
+            payloadID: currentLegacyEnvelope.payloadID,
+            kind: currentLegacyEnvelope.kind,
+            capturedAt: currentLegacyEnvelope.capturedAt,
+            periodStart: currentLegacyEnvelope.periodStart,
+            periodEnd: currentLegacyEnvelope.periodEnd,
+            app: currentLegacyEnvelope.app,
+            platform: currentLegacyEnvelope.platform,
+            privacy: currentLegacyEnvelope.privacy,
+            payload: currentLegacyEnvelope.payload
+        )
+        let legacyURL = pendingDirectory.appendingPathComponent(
+            "diagnostic_\(legacyEnvelope.payloadID).json",
+            isDirectory: false
+        )
+        let legacyData = try TelemetryEnvelopeCodec.encode(legacyEnvelope)
+        try legacyData.write(to: legacyURL)
+
         let snapshot = await store.loadCurrentSnapshot()
 
-        #expect(snapshot.files.isEmpty)
-        #expect(snapshot.totalBytes == 0)
+        #expect(snapshot.files.count == 1)
+        #expect(snapshot.files.first?.envelope.schemaVersion == 1)
+        #expect(snapshot.totalBytes > 0)
         #expect(FileManager.default.fileExists(atPath: corruptURL.path) == false)
         #expect(FileManager.default.fileExists(atPath: incompatibleURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: legacyURL.path))
     }
 
     @Test("同 ID 无效文件不会阻止新遥测落盘")
@@ -456,6 +513,30 @@ struct TelemetryTests {
         #expect(requests.allSatisfy { $0.url?.path == "/v1/telemetry" })
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Content-Type") == "application/json" })
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Content-Encoding") == nil })
+    }
+
+    @Test("上传器按协议版本拆分旧队列与新队列")
+    func uploaderSeparatesLegacyAndCurrentSchemas() async throws {
+        TelemetryURLProtocol.reset()
+        defer { TelemetryURLProtocol.reset() }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TelemetryURLProtocol.self]
+        let uploader = TelemetryUploader(
+            session: URLSession(configuration: configuration),
+            endpoint: URL(string: "https://feedback.example/v1/telemetry")!
+        )
+        let files = try [
+            makeStoredFile(marker: "legacy", index: 0, schemaVersion: 1),
+            makeStoredFile(marker: "current", index: 1, schemaVersion: 2)
+        ]
+
+        let outcome = await uploader.upload(files)
+        let requestSchemas = TelemetryURLProtocol.capturedSchemaVersions()
+
+        #expect(outcome.errorDescription == nil)
+        #expect(outcome.confirmedPayloadIDs.count == 2)
+        #expect(requestSchemas == [1, 2])
     }
 
     @Test("上传器只进行一次受限重试并在恢复后确认")
@@ -808,11 +889,27 @@ struct TelemetryTests {
         )
     }
 
-    private func makeStoredFile(marker: String, index: Int) throws -> TelemetryStoredFile {
-        let envelope = try makeEnvelope(
+    private func makeStoredFile(
+        marker: String,
+        index: Int,
+        schemaVersion: Int = TelemetryEnvelope.currentSchemaVersion
+    ) throws -> TelemetryStoredFile {
+        let currentEnvelope = try makeEnvelope(
             kind: index.isMultiple(of: 2) ? .metric : .diagnostic,
             marker: marker,
             capturedAt: Date(timeIntervalSince1970: 1_800_000_000 + Double(index))
+        )
+        let envelope = TelemetryEnvelope(
+            schemaVersion: schemaVersion,
+            payloadID: currentEnvelope.payloadID,
+            kind: currentEnvelope.kind,
+            capturedAt: currentEnvelope.capturedAt,
+            periodStart: currentEnvelope.periodStart,
+            periodEnd: currentEnvelope.periodEnd,
+            app: currentEnvelope.app,
+            platform: currentEnvelope.platform,
+            privacy: currentEnvelope.privacy,
+            payload: currentEnvelope.payload
         )
         let data = try TelemetryEnvelopeCodec.encode(envelope)
         return TelemetryStoredFile(
@@ -899,12 +996,14 @@ private actor SuspendedTelemetryUploader: TelemetryUploading {
 private final class TelemetryURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var requests: [URLRequest] = []
+    private nonisolated(unsafe) static var schemaVersions: [Int] = []
     private nonisolated(unsafe) static var remainingFailures = 0
     private nonisolated(unsafe) static var omitLastResult = false
 
     static func reset() {
         lock.lock()
         requests = []
+        schemaVersions = []
         remainingFailures = 0
         omitLastResult = false
         lock.unlock()
@@ -926,6 +1025,12 @@ private final class TelemetryURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return requests
+    }
+
+    static func capturedSchemaVersions() -> [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        return schemaVersions
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
@@ -961,6 +1066,10 @@ private final class TelemetryURLProtocol: URLProtocol {
 
         let body = request.httpBody ?? Self.readBodyStream(request.httpBodyStream)
         let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        let schemaVersion = root?["schema_version"] as? Int ?? -1
+        Self.lock.lock()
+        Self.schemaVersions.append(schemaVersion)
+        Self.lock.unlock()
         let envelopes = root?["envelopes"] as? [[String: Any]] ?? []
         var results: [[String: Any]] = envelopes.enumerated().compactMap { index, envelope in
             guard let payloadID = envelope["payload_id"] as? String else { return nil }
@@ -974,7 +1083,7 @@ private final class TelemetryURLProtocol: URLProtocol {
         }
         let responseBody = try! JSONSerialization.data(
             withJSONObject: [
-                "schema_version": 1,
+                "schema_version": schemaVersion,
                 "results": results
             ],
             options: [.sortedKeys]
