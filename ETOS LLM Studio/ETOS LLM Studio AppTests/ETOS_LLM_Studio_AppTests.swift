@@ -187,7 +187,7 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("原生尺寸锚点生效时 UIKit 不会重复校正偏移")
+    @Test("非流式由原生尺寸锚点接管，流式改由 UIKit 连续追随")
     func testNativeSizeChangeAnchorOwnsContinuousBottomPinning() {
         #expect(!ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
             keepsBottomPinned: true,
@@ -201,6 +201,52 @@ struct ETOS_LLM_Studio_AppTests {
             isUserInteracting: false,
             usesNativeSizeChangeAnchor: true
         ))
+        #expect(ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+            keepsBottomPinned: true,
+            isUserInteracting: false,
+            isStreaming: true,
+            usesNativeSizeChangeAnchor: true
+        ))
+    }
+
+    @Test("流式贴底时只平滑移动视口到新底部")
+    func testStreamingViewportTransitionFollowsNewBottom() {
+        let transition = ChatScrollMetricsObserver.streamingViewportTransition(
+            oldContentHeight: 1_000,
+            newContentHeight: 1_040,
+            viewportHeight: 800,
+            topInset: 0,
+            bottomInset: 34,
+            keepsBottomPinned: true,
+            isStreaming: true,
+            isUserInteracting: false,
+            reduceMotion: false
+        )
+        #expect(transition?.startOffsetY == 234)
+        #expect(transition?.targetOffsetY == 274)
+
+        #expect(ChatScrollMetricsObserver.streamingViewportTransition(
+            oldContentHeight: 1_000,
+            newContentHeight: 1_040,
+            viewportHeight: 800,
+            topInset: 0,
+            bottomInset: 34,
+            keepsBottomPinned: true,
+            isStreaming: true,
+            isUserInteracting: true,
+            reduceMotion: false
+        ) == nil)
+        #expect(ChatScrollMetricsObserver.streamingViewportTransition(
+            oldContentHeight: 1_000,
+            newContentHeight: 1_040,
+            viewportHeight: 800,
+            topInset: 0,
+            bottomInset: 34,
+            keepsBottomPinned: true,
+            isStreaming: true,
+            isUserInteracting: false,
+            reduceMotion: true
+        ) == nil)
     }
 
     @Test("拖动立即解除吸底且松手后仅在底部重新接管")

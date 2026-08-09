@@ -387,7 +387,12 @@ extension ContentView {
         }
         .onChange(of: viewModel.streamingScrollAnchorVersion) { _, _ in
             guard viewModel.isSendingMessage, shouldKeepBottomPinned else { return }
-            scrollToBottom(proxy: proxy, animated: false)
+            let mode = ChatStreamingDisplayMode.normalized(appConfig.chatStreamingDisplayMode)
+            scrollToBottom(
+                proxy: proxy,
+                animated: !accessibilityReduceMotion,
+                animation: .easeOut(duration: mode.viewportFollowDuration)
+            )
         }
         .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
             guard newValue != nil, isAtBottom, shouldKeepBottomPinned else { return }
@@ -535,14 +540,24 @@ extension ContentView {
         }
     }
 
-    func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+    func scrollToBottom(
+        proxy: ScrollViewProxy,
+        animated: Bool,
+        animation: Animation? = nil
+    ) {
         shouldKeepBottomPinned = true
         let action = {
             proxy.scrollTo(bottomAnchorID, anchor: .bottom)
         }
         if animated {
-            withAnimation {
-                action()
+            if let animation {
+                withAnimation(animation) {
+                    action()
+                }
+            } else {
+                withAnimation {
+                    action()
+                }
             }
         } else {
             action()

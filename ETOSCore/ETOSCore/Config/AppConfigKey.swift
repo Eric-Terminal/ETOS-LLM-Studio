@@ -109,12 +109,12 @@ public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendab
         #if os(watchOS)
         switch self {
         case .immediate: return 0.080
-        case .gentle: return 0.160
+        case .gentle: return 0.200
         }
         #else
         switch self {
         case .immediate: return 0.060
-        case .gentle: return 0.120
+        case .gentle: return 0.200
         }
         #endif
     }
@@ -122,8 +122,24 @@ public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendab
     /// 淡入只改变新增字形的透明度，不参与文字测量或气泡布局。
     public var textRevealDuration: TimeInterval {
         switch self {
-        case .immediate: return 0.20
+        case .immediate: return 0.28
         case .gentle: return 0.45
+        }
+    }
+
+    /// 同一批内容内的错峰窗口；批次之间允许重叠，避免高速输出累积成长队列。
+    public var textRevealStaggerWindow: TimeInterval {
+        switch self {
+        case .immediate: return 0.04
+        case .gentle: return 0.10
+        }
+    }
+
+    /// 视口只追随新的底部位置，不动画消息气泡自身的布局。
+    public var viewportFollowDuration: TimeInterval {
+        switch self {
+        case .immediate: return 0.12
+        case .gentle: return 0.20
         }
     }
 
