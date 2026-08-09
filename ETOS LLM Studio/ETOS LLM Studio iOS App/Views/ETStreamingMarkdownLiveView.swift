@@ -71,7 +71,9 @@ struct ETIOSStreamingMarkdownLiveView: View {
     let streamingDisplayMode: ChatStreamingDisplayMode
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var preparedBlocks: [ETStreamingMarkdownBlockID: ETIOSPreparedStreamingMarkdownBlock] = [:]
+    @State private var animatedContentHeight: CGFloat = 0
 
     private var snapshot: ETStreamingMarkdownSnapshot? {
         state.snapshot(for: channel)
@@ -88,6 +90,37 @@ struct ETIOSStreamingMarkdownLiveView: View {
     }
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            streamingContent
+                .modifier(
+                    ETStreamingTextRiseEffect(
+                        animatedHeight: animatedContentHeight,
+                        targetHeight: animatedContentHeight
+                    )
+                )
+        }
+        // 文字层只在自己的布局区域内上抬；新行从底部显现，绝不会越过气泡与输入栏边界。
+        .clipped()
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { newHeight in
+            updateAnimatedContentHeight(newHeight)
+        }
+        .task(id: enableMarkdown ? preparationID : nil) {
+            guard enableMarkdown,
+                  let blocks = snapshot?.committedBlocks,
+                  !blocks.isEmpty else {
+                preparedBlocks = [:]
+                return
+            }
+            let prepared = await ETIOSStreamingMarkdownBlockWorker.shared.prepare(blocks)
+            guard !Task.isCancelled else { return }
+            preparedBlocks = prepared
+        }
+    }
+
+    @ViewBuilder
+    private var streamingContent: some View {
         Group {
             if let snapshot {
                 VStack(alignment: .leading, spacing: 0) {
@@ -113,20 +146,38 @@ struct ETIOSStreamingMarkdownLiveView: View {
                     .foregroundStyle(textColor)
             }
         }
-        .task(id: enableMarkdown ? preparationID : nil) {
-            guard enableMarkdown,
-                  let blocks = snapshot?.committedBlocks,
-                  !blocks.isEmpty else {
-                preparedBlocks = [:]
-                return
-            }
-            let prepared = await ETIOSStreamingMarkdownBlockWorker.shared.prepare(blocks)
-            guard !Task.isCancelled else { return }
-            preparedBlocks = prepared
-        }
         // 网络分块只改变文字与高度，不继承气泡入场等外层动画，避免高速重排横向漂移。
         .transaction { transaction in
             transaction.animation = nil
+        }
+    }
+
+    private func updateAnimatedContentHeight(_ newHeight: CGFloat) {
+        guard newHeight.isFinite,
+              newHeight > 0,
+              abs(newHeight - animatedContentHeight) > 0.5 else {
+            return
+        }
+
+        guard animatedContentHeight > 0,
+              newHeight > animatedContentHeight,
+              !reduceMotion else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                animatedContentHeight = newHeight
+            }
+            return
+        }
+
+        // 高度是实际布局位置，动画值从当前呈现进度继续追赶；连续 token 不会重置运动轨迹。
+        withAnimation(
+            .spring(
+                response: streamingDisplayMode.textRevealDuration,
+                dampingFraction: 1
+            )
+        ) {
+            animatedContentHeight = newHeight
         }
     }
 
@@ -199,5 +250,35 @@ struct ETIOSStreamingMarkdownLiveView: View {
             return payload.markdownContent
         }
         return native
+    }
+}
+
+/// 实际布局已经贴底时，用尚未完成的高度差补偿文字位置，只改变绘制层而不参与测量。
+struct ETStreamingTextRiseEffect: GeometryEffect {
+    var animatedHeight: CGFloat
+    let targetHeight: CGFloat
+
+    var animatableData: CGFloat {
+        get { animatedHeight }
+        set { animatedHeight = newValue }
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(
+            CGAffineTransform(
+                translationX: 0,
+                y: Self.translationY(
+                    targetHeight: targetHeight,
+                    animatedHeight: animatedHeight
+                )
+            )
+        )
+    }
+
+    nonisolated static func translationY(
+        targetHeight: CGFloat,
+        animatedHeight: CGFloat
+    ) -> CGFloat {
+        max(targetHeight - animatedHeight, 0)
     }
 }
