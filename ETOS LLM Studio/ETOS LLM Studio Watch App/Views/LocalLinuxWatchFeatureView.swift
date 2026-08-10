@@ -229,6 +229,7 @@ struct LocalLinuxWatchFeatureView: View {
 
 struct LocalLinuxWatchTerminalView: View {
     let initialJobID: UUID?
+    let isPresentationActive: Bool
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
@@ -237,8 +238,9 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
 
-    init(initialJobID: UUID? = nil) {
+    init(initialJobID: UUID? = nil, isPresentationActive: Bool = true) {
         self.initialJobID = initialJobID
+        self.isPresentationActive = isPresentationActive
     }
 
     var body: some View {
@@ -287,7 +289,17 @@ struct LocalLinuxWatchTerminalView: View {
             }
         }
         .navigationTitle(NSLocalizedString("终端", comment: "Watch Linux terminal title"))
-        .task { await openInitialTerminal() }
+        .task(id: isPresentationActive) {
+            guard isPresentationActive else {
+                outputTask?.cancel()
+                return
+            }
+            if let job {
+                attach(to: job)
+            } else {
+                await openInitialTerminal()
+            }
+        }
         .onDisappear { outputTask?.cancel() }
         .alert(NSLocalizedString("终端错误", comment: "Watch Linux terminal error"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}

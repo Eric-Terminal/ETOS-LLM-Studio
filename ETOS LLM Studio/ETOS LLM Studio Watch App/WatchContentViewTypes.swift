@@ -9,6 +9,11 @@
 import Foundation
 import ETOSCore
 
+enum WatchChatPage: Hashable {
+    case chat
+    case terminal
+}
+
 enum WatchChatInputActionState: Equatable {
     case stop
     case send

@@ -253,6 +253,9 @@ extension ChatView {
                   !viewModel.allMessagesForSession.isEmpty || continuationContext != nil else { return }
             contextCompressionSourceSession = session
         } else {
+            if action == .localTerminal {
+                localTerminalInitialJobID = nil
+            }
             navigationDestination = action
         }
     }
@@ -400,7 +403,7 @@ extension ChatView {
         case .browser:
             BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
         case .localTerminal:
-            LocalLinuxTerminalView()
+            LocalLinuxTerminalView(initialJobID: localTerminalInitialJobID)
         }
     }
 }

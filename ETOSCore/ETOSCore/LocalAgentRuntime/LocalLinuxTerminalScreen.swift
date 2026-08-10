@@ -107,11 +107,14 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         return values.joined(separator: "\n")
     }
 
-    func renderedPresentation() -> LocalLinuxTerminalPresentation {
+    func renderedPresentation(maximumLines: Int? = nil) -> LocalLinuxTerminalPresentation {
         var values = usesAlternateScreen ? [] : scrollback
         values.append(contentsOf: activeBuffer.lines.map(renderedLine))
         while values.last?.isEmpty == true {
             values.removeLast()
+        }
+        if let maximumLines {
+            values = Array(values.suffix(max(1, maximumLines)))
         }
         var plainText = ""
         var attributedText = AttributedString()

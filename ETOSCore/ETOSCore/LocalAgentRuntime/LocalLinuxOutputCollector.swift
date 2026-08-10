@@ -49,6 +49,9 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var terminalScreen: LocalLinuxTerminalScreen?
     private var terminalPresentation: LocalLinuxTerminalPresentation?
     private var terminalPresentationNeedsRefresh = false
+    private var terminalPreviewPresentation: LocalLinuxTerminalPresentation?
+    private var terminalPreviewMaximumLines = 0
+    private var terminalPreviewNeedsRefresh = false
 
     public init(
         rawURL: URL,
@@ -85,6 +88,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
                 rows: terminalRows
             )
             terminalPresentation = .empty
+            terminalPreviewPresentation = .empty
         }
     }
 
@@ -185,6 +189,25 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         return terminalPresentation
     }
 
+    /// 浮窗只需要末尾少量屏幕行，避免每次刷新都复制完整回滚缓冲区。
+    public func userVisibleTerminalPreviewPresentation(
+        maximumLines: Int
+    ) -> LocalLinuxTerminalPresentation? {
+        lock.lock()
+        defer { lock.unlock() }
+        let normalizedMaximumLines = max(1, maximumLines)
+        if terminalPreviewNeedsRefresh
+            || terminalPreviewMaximumLines != normalizedMaximumLines,
+           let terminalScreen {
+            terminalPreviewPresentation = terminalScreen.renderedPresentation(
+                maximumLines: normalizedMaximumLines
+            )
+            terminalPreviewMaximumLines = normalizedMaximumLines
+            terminalPreviewNeedsRefresh = false
+        }
+        return terminalPreviewPresentation
+    }
+
     public func resizeTerminalPreview(columns: Int, rows: Int) {
         lock.lock()
         defer { lock.unlock() }
@@ -229,6 +252,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private func replaceUserPreviewWithTerminalSnapshot() {
         guard let terminalScreen else { return }
         terminalPresentationNeedsRefresh = true
+        terminalPreviewNeedsRefresh = true
         userPreview = Data(terminalScreen.renderedText().utf8)
         if userPreview.count > userPreviewLimit {
             userPreview.removeFirst(userPreview.count - userPreviewLimit)

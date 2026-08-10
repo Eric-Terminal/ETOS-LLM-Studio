@@ -110,6 +110,8 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
+    @State var localTerminalPreviewOffset: CGSize = .zero
+    @State var localTerminalInitialJobID: UUID?
     // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
@@ -1147,6 +1149,20 @@ extension ChatView {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     .zIndex(24)
                 }
+
+                LocalLinuxTerminalFloatingPreview(
+                    isEnabled: appConfig.localLinuxEnabled,
+                    containerSize: chatViewportSize,
+                    topPadding: navBarHeight + 12,
+                    bottomPadding: max(16, chatInputBarHeight + 16),
+                    offset: $localTerminalPreviewOffset,
+                    isLiquidGlassEnabled: isLiquidGlassEnabled,
+                    onOpen: { jobID in
+                        localTerminalInitialJobID = jobID
+                        navigationDestination = .localTerminal
+                    }
+                )
+                .zIndex(25)
 
                 VStack {
                     Spacer()

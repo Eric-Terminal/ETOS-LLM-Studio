@@ -75,6 +75,19 @@ public actor LocalLinuxJobScheduler {
         )
     }
 
+    /// 聊天页缩略窗只观察独立用户终端，不把 Agent PTY 冒充成用户正在操作的终端。
+    public func activeStandaloneUserTerminals() -> [LocalLinuxJob] {
+        Self.orderedJobs(
+            activeTerminals.values.compactMap { terminal in
+                let job = terminal.job
+                guard job.sessionID == nil, job.runID == nil, !job.state.isTerminal else {
+                    return nil
+                }
+                return job
+            }
+        )
+    }
+
     public static func orderedJobs(_ jobs: [LocalLinuxJob]) -> [LocalLinuxJob] {
         jobs.sorted {
             jobComesBefore($0, $1)
@@ -152,6 +165,18 @@ public actor LocalLinuxJobScheduler {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
         return terminal.collector.userVisibleTerminalPresentation() ?? .empty
+    }
+
+    public func userVisibleTerminalPreviewPresentation(
+        jobID: UUID,
+        maximumLines: Int
+    ) throws -> LocalLinuxTerminalPresentation {
+        guard let terminal = activeTerminals[jobID] else {
+            throw LocalLinuxRuntimeError.jobNotFound(jobID)
+        }
+        return terminal.collector.userVisibleTerminalPreviewPresentation(
+            maximumLines: maximumLines
+        ) ?? .empty
     }
 
     public func userVisibleOutputPage(

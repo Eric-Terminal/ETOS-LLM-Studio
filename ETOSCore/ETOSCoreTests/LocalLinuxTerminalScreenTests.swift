@@ -69,6 +69,17 @@ struct LocalLinuxTerminalScreenTests {
         #expect(runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
     }
 
+    @Test("终端缩略图只生成末尾行并保留 ANSI 样式")
+    func previewPresentationKeepsTailAndANSIStyles() {
+        let screen = LocalLinuxTerminalScreen(columns: 40, rows: 4)
+        screen.append(Data("第一行\r\n第二行\r\n\u{1B}[32m第三行\u{1B}[0m".utf8))
+
+        let presentation = screen.renderedPresentation(maximumLines: 2)
+
+        #expect(presentation.plainText == "第二行\n第三行")
+        #expect(presentation.attributedText != AttributedString(presentation.plainText))
+    }
+
     @Test("光标、设备属性和窗口尺寸查询返回 PTY 协议响应")
     func terminalQueriesProduceResponses() {
         let screen = LocalLinuxTerminalScreen(columns: 80, rows: 24)
