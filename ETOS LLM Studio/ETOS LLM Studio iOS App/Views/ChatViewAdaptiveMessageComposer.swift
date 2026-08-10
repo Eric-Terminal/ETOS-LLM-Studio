@@ -723,10 +723,7 @@ extension TelegramMessageComposer {
 private struct LocalAgentModePicker: View {
     let sessionID: UUID
     let isLocked: Bool
-    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var mode = LocalAgentMode.chat
-    @State private var runtimePhase: LocalLinuxRuntimePhase = .notInstalled
-    @State private var executionBudget: ConversationExecutionBudget?
     @State private var hasActiveRun = false
 
     var body: some View {
@@ -741,49 +738,17 @@ private struct LocalAgentModePicker: View {
             .onChange(of: mode) { _, value in
                 _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
             }
-            Text(NSLocalizedString("Agent 模式会向模型提供浏览器等 Agent 工具；启用本地 Linux 后还会提供命令与 Linux 文件能力。", comment: "Local Agent mode footer"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             if hasActiveRun {
                 Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            if appConfig.localLinuxEnabled {
-                NavigationLink {
-                    LocalLinuxFeatureView(sessionID: sessionID)
-                } label: {
-                    HStack {
-                        Label(NSLocalizedString("Linux 运行状态", comment: "Local Linux runtime status link"), systemImage: "terminal")
-                        Spacer()
-                        Text(runtimePhase.displayName)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-
-            if mode == .agent, let executionBudget {
-                HStack {
-                    Text(NSLocalizedString("自动执行预算", comment: "Local Agent execution budget"))
-                    Spacer()
-                    Text("\(max(0, executionBudget.maximumExecutions - executionBudget.usedExecutions))/\(executionBudget.maximumExecutions)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption)
-            }
         }
         .task(id: sessionID) {
             await reloadSessionState()
-            for await snapshot in await LocalLinuxRuntimeController.shared.updates() {
-                runtimePhase = snapshot.phase
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
-            Task { await reloadExecutionBudget() }
+            Task { await reloadRunState() }
         }
     }
 
@@ -791,21 +756,15 @@ private struct LocalAgentModePicker: View {
         mode = await Task.detached(priority: .userInitiated) {
             Persistence.localAgentMode(sessionID: sessionID)
         }.value
-        await reloadExecutionBudget()
+        await reloadRunState()
     }
 
-    private func reloadExecutionBudget() async {
-        let task = Task.detached(priority: .userInitiated) { () -> (budget: ConversationExecutionBudget?, isActive: Bool)? in
-            guard let run = Persistence.loadLatestConversationRun(sessionID: sessionID) else { return nil }
-            return (
-                budget: Persistence.loadConversationExecutionBudget(rootRunID: run.rootRunID),
-                isActive: !run.status.isTerminal
-            )
-        }
-        let state = await task.value
-        executionBudget = state?.budget
-        hasActiveRun = state?.isActive ?? false
-        let snapshot = await LocalLinuxRuntimeController.shared.snapshot()
-        runtimePhase = snapshot.phase
+    private func reloadRunState() async {
+        hasActiveRun = await Task.detached(priority: .userInitiated) {
+            guard let run = Persistence.loadLatestConversationRun(sessionID: sessionID) else {
+                return false
+            }
+            return !run.status.isTerminal
+        }.value
     }
 }
