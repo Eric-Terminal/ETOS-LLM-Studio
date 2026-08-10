@@ -218,6 +218,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localLinuxLocalMCPOnDemand = "localLinux.localMCP.onDemand"
     case localLinuxActivePromptProfileID = "localLinux.activePromptProfileID"
     case localLinuxWorkspaceCleanupPolicy = "localLinux.workspace.cleanupPolicy"
+    case localLinuxTerminalShortcutIDs = "localLinux.terminal.shortcutIDs"
     case browserAgentDelegateToIPhone = "browserAgent.delegateToIPhone"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
@@ -436,6 +437,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("")
         case .localLinuxWorkspaceCleanupPolicy:
             return .text("manual")
+        case .localLinuxTerminalShortcutIDs:
+            return .text(LocalLinuxTerminalShortcutConfiguration.defaultEncodedValue)
         case .browserAgentDelegateToIPhone:
             return .bool(false)
         case .appToolsChatToolsEnabled,

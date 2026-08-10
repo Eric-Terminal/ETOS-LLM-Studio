@@ -100,6 +100,9 @@ struct LocalLinuxWatchFeatureView: View {
                 NavigationLink(NSLocalizedString("安全策略", comment: "Watch Linux safety entry")) {
                     LocalLinuxWatchSafetyView()
                 }
+                NavigationLink(NSLocalizedString("终端快捷键", comment: "Watch terminal shortcut settings entry")) {
+                    LocalLinuxTerminalShortcutWatchSettingsView()
+                }
                 NavigationLink(NSLocalizedString("挂载目录", comment: "Watch Linux mounts entry")) {
                     LocalLinuxWatchMountsView()
                 }
@@ -230,9 +233,11 @@ struct LocalLinuxWatchFeatureView: View {
 struct LocalLinuxWatchTerminalView: View {
     let initialJobID: UUID?
     let isPresentationActive: Bool
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
+    @State private var terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.defaults
     @State private var output = LocalLinuxTerminalPresentation.empty
     @State private var input = ""
     @State private var errorMessage: String?
@@ -256,10 +261,25 @@ struct LocalLinuxWatchTerminalView: View {
                 }
                     .font(.caption2.monospaced())
                     .listRowBackground(Color.black)
-                if let inputOwner {
-                    Text(inputOwnerLabel(inputOwner))
+                if isInputControlledByAgent {
+                    Text(NSLocalizedString("输入由 Agent 控制；发送内容即可接管", comment: "Watch terminal Agent input owner"))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
+            }
+            if !terminalShortcuts.isEmpty {
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(terminalShortcuts) { shortcut in
+                                Button(shortcut.title) {
+                                    sendRaw(shortcut.inputData)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(job == nil)
+                            }
+                        }
+                    }
                 }
             }
             Section {
@@ -300,6 +320,10 @@ struct LocalLinuxWatchTerminalView: View {
             } else {
                 await openInitialTerminal()
             }
+        }
+        .onAppear(perform: reloadTerminalShortcuts)
+        .onChange(of: appConfig.localLinuxTerminalShortcutIDs) { _, _ in
+            reloadTerminalShortcuts()
         }
         .onDisappear { outputTask?.cancel() }
         .alert(NSLocalizedString("终端错误", comment: "Watch Linux terminal error"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -365,16 +389,21 @@ struct LocalLinuxWatchTerminalView: View {
     }
 
     private func send() {
-        guard let job, !input.isEmpty else { return }
+        guard !input.isEmpty else { return }
         let text = input + "\n"
         input = ""
+        sendRaw(Data(text.utf8))
+    }
+
+    private func sendRaw(_ data: Data) {
+        guard let job, !data.isEmpty else { return }
         Task {
             do {
                 if inputOwner != .user {
                     try await LocalLinuxJobScheduler.shared.claimTerminalInput(jobID: job.id, owner: .user)
                     inputOwner = .user
                 }
-                try await LocalLinuxJobScheduler.shared.sendTerminalInput(jobID: job.id, owner: .user, data: Data(text.utf8))
+                try await LocalLinuxJobScheduler.shared.sendTerminalInput(jobID: job.id, owner: .user, data: data)
             } catch { errorMessage = error.localizedDescription }
         }
     }
@@ -390,11 +419,14 @@ struct LocalLinuxWatchTerminalView: View {
         }
     }
 
-    private func inputOwnerLabel(_ owner: LocalLinuxTerminalInputOwner) -> String {
-        switch owner {
-        case .user: return NSLocalizedString("输入由你控制", comment: "Watch terminal user input owner")
-        case .agent: return NSLocalizedString("输入由 Agent 控制；发送内容即可接管", comment: "Watch terminal Agent input owner")
-        }
+    private var isInputControlledByAgent: Bool {
+        guard let inputOwner else { return false }
+        if case .agent = inputOwner { return true }
+        return false
+    }
+
+    private func reloadTerminalShortcuts() {
+        terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.decode(appConfig.localLinuxTerminalShortcutIDs)
     }
 
     private func terminalLabel(_ terminal: LocalLinuxJob) -> String {

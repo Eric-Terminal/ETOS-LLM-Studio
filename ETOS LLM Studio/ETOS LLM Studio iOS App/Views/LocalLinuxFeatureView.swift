@@ -162,6 +162,11 @@ struct LocalLinuxFeatureView: View {
                     Label(NSLocalizedString("命令安全策略", comment: "Local Linux safety entry"), systemImage: "checkmark.shield")
                 }
                 NavigationLink {
+                    LocalLinuxTerminalShortcutSettingsView()
+                } label: {
+                    Label(NSLocalizedString("终端快捷键", comment: "Local Linux terminal shortcut settings entry"), systemImage: "keyboard")
+                }
+                NavigationLink {
                     LocalLinuxMountsView()
                 } label: {
                     Label(NSLocalizedString("工作区与挂载", comment: "Local Linux mounts entry"), systemImage: "externaldrive.connected.to.line.below")

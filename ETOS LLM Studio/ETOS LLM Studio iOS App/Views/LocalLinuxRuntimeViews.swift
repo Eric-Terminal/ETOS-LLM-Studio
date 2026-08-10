@@ -34,9 +34,11 @@ struct LocalLinuxResourceStatusSection: View {
 struct LocalLinuxTerminalView: View {
     let initialJobID: UUID?
 
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
     @State private var inputOwner: LocalLinuxTerminalInputOwner?
+    @State private var terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.defaults
     @State private var output = LocalLinuxTerminalPresentation.empty
     @State private var input = ""
     @State private var errorMessage: String?
@@ -69,23 +71,21 @@ struct LocalLinuxTerminalView: View {
                 .onChange(of: proxy.size) { _, size in resize(for: size) }
             }
 
-            if let inputOwner {
-                Text(inputOwnerLabel(inputOwner))
+            if isInputControlledByAgent {
+                Text(NSLocalizedString("输入由 Agent 控制；发送内容即可接管", comment: "Terminal input controlled by Agent"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    terminalKey(NSLocalizedString("Esc", comment: "Terminal escape key"), bytes: [0x1B])
-                    terminalKey(NSLocalizedString("Tab", comment: "Terminal tab key"), bytes: [0x09])
-                    terminalKey("↑", bytes: Array("\u{1B}[A".utf8))
-                    terminalKey("↓", bytes: Array("\u{1B}[B".utf8))
-                    terminalKey("←", bytes: Array("\u{1B}[D".utf8))
-                    terminalKey("→", bytes: Array("\u{1B}[C".utf8))
-                    terminalKey(NSLocalizedString("Ctrl-D", comment: "Terminal control D key"), bytes: [0x04])
+            if !terminalShortcuts.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(terminalShortcuts) { shortcut in
+                            terminalKey(shortcut)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
 
             HStack {
@@ -143,6 +143,10 @@ struct LocalLinuxTerminalView: View {
             }
         }
         .task { await openInitialTerminal() }
+        .onAppear(perform: reloadTerminalShortcuts)
+        .onChange(of: appConfig.localLinuxTerminalShortcutIDs) { _, _ in
+            reloadTerminalShortcuts()
+        }
         .onDisappear {
             // 离开页面只停止界面订阅，终端本身继续运行。
             outputTask?.cancel()
@@ -235,8 +239,8 @@ struct LocalLinuxTerminalView: View {
         }
     }
 
-    private func terminalKey(_ title: String, bytes: [UInt8]) -> some View {
-        Button(title) { sendRaw(Data(bytes)) }
+    private func terminalKey(_ shortcut: LocalLinuxTerminalShortcut) -> some View {
+        Button(shortcut.title) { sendRaw(shortcut.inputData) }
             .buttonStyle(.bordered)
             .disabled(job == nil)
     }
@@ -259,13 +263,14 @@ struct LocalLinuxTerminalView: View {
         }
     }
 
-    private func inputOwnerLabel(_ owner: LocalLinuxTerminalInputOwner) -> String {
-        switch owner {
-        case .user:
-            return NSLocalizedString("输入由你控制", comment: "Terminal input controlled by user")
-        case .agent:
-            return NSLocalizedString("输入由 Agent 控制；开始输入即可接管", comment: "Terminal input controlled by Agent")
-        }
+    private var isInputControlledByAgent: Bool {
+        guard let inputOwner else { return false }
+        if case .agent = inputOwner { return true }
+        return false
+    }
+
+    private func reloadTerminalShortcuts() {
+        terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.decode(appConfig.localLinuxTerminalShortcutIDs)
     }
 
     private func terminalLabel(_ terminal: LocalLinuxJob) -> String {

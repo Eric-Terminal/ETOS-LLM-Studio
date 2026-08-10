@@ -185,6 +185,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localLinuxLocalMCPOnDemand: Bool { didSet { write(.localLinuxLocalMCPOnDemand, localLinuxLocalMCPOnDemand) } }
     @Published public var localLinuxActivePromptProfileID: String { didSet { write(.localLinuxActivePromptProfileID, localLinuxActivePromptProfileID) } }
     @Published public var localLinuxWorkspaceCleanupPolicy: String { didSet { write(.localLinuxWorkspaceCleanupPolicy, localLinuxWorkspaceCleanupPolicy) } }
+    @Published public var localLinuxTerminalShortcutIDs: String { didSet { write(.localLinuxTerminalShortcutIDs, localLinuxTerminalShortcutIDs) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -573,6 +574,7 @@ public final class AppConfigStore: ObservableObject {
         localLinuxLocalMCPOnDemand = Self.boolValue(.localLinuxLocalMCPOnDemand, userDefaults: userDefaults)
         localLinuxActivePromptProfileID = Self.textValue(.localLinuxActivePromptProfileID, userDefaults: userDefaults)
         localLinuxWorkspaceCleanupPolicy = Self.textValue(.localLinuxWorkspaceCleanupPolicy, userDefaults: userDefaults)
+        localLinuxTerminalShortcutIDs = Self.textValue(.localLinuxTerminalShortcutIDs, userDefaults: userDefaults)
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -1123,6 +1125,7 @@ public final class AppConfigStore: ObservableObject {
         case .localLinuxLocalMCPOnDemand: return .bool(localLinuxLocalMCPOnDemand)
         case .localLinuxActivePromptProfileID: return .text(localLinuxActivePromptProfileID)
         case .localLinuxWorkspaceCleanupPolicy: return .text(localLinuxWorkspaceCleanupPolicy)
+        case .localLinuxTerminalShortcutIDs: return .text(localLinuxTerminalShortcutIDs)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -1468,6 +1471,8 @@ public final class AppConfigStore: ObservableObject {
             localLinuxActivePromptProfileID = value
         case .localLinuxWorkspaceCleanupPolicy:
             localLinuxWorkspaceCleanupPolicy = value == "automatic" ? "automatic" : "manual"
+        case .localLinuxTerminalShortcutIDs:
+            localLinuxTerminalShortcutIDs = value
         case .reasoningContentEchoMode:
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
