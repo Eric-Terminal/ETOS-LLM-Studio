@@ -110,20 +110,24 @@ struct LocalLinuxWatchFeatureView: View {
                     MCPIntegrationView()
                 }
                 NavigationLink(NSLocalizedString("许可与源码", comment: "Watch Linux compliance entry")) { LocalLinuxComplianceWatchView() }
-                TextField(
-                    NSLocalizedString("默认超时（秒，0 表示不限）", comment: "Watch default Linux timeout"),
-                    value: defaultTimeoutBinding,
-                    formatter: Self.integerFormatter
-                )
-                TextField(
-                    NSLocalizedString("模型输出预览（字节）", comment: "Watch Linux model output preview bytes"),
-                    value: outputPreviewBinding,
-                    formatter: Self.integerFormatter
-                )
+                HStack {
+                    Text(NSLocalizedString("默认命令超时（秒）", comment: "Watch default Linux timeout label"))
+                    Spacer()
+                    TextField("", value: defaultTimeoutBinding, formatter: Self.integerFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 64)
+                }
+                HStack {
+                    Text(NSLocalizedString("模型输出预览（KiB）", comment: "Watch Linux model output preview KiB label"))
+                    Spacer()
+                    TextField("", value: outputPreviewBinding, formatter: Self.integerFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 64)
+                }
             } header: {
                 Text(NSLocalizedString("配置", comment: "Watch Linux configuration section"))
             } footer: {
-                Text(NSLocalizedString("0 秒表示不限时；预览只影响发送给模型的副本。", comment: "Watch Linux execution defaults footer"))
+                Text(NSLocalizedString("0 表示命令不限时；输出预览只限制发送给模型的副本。", comment: "Watch Linux execution defaults footer"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -224,8 +228,8 @@ struct LocalLinuxWatchFeatureView: View {
 
     private var outputPreviewBinding: Binding<Int> {
         Binding(
-            get: { appConfig.localLinuxOutputPreviewBytes },
-            set: { appConfig.localLinuxOutputPreviewBytes = max(4_096, $0) }
+            get: { max(4, appConfig.localLinuxOutputPreviewBytes / 1_024) },
+            set: { appConfig.localLinuxOutputPreviewBytes = min(max(4, $0), 4_194_303) * 1_024 }
         )
     }
 }

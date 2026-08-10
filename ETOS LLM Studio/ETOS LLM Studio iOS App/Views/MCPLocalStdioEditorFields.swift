@@ -43,12 +43,12 @@ struct MCPLocalStdioEditorFields: View {
                         Text(policy.displayName).tag(policy)
                     }
                 }
-                TextField(
-                    NSLocalizedString("启动超时（秒，0 为不限制）", comment: "Local stdio MCP startup timeout"),
-                    value: $startupTimeoutSeconds,
-                    format: .number
-                )
-                .keyboardType(.decimalPad)
+                LabeledContent(NSLocalizedString("启动超时（秒）", comment: "Local stdio MCP startup timeout label")) {
+                    TextField("", value: $startupTimeoutSeconds, format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 120)
+                }
             }
 
             Section {

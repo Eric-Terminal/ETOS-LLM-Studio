@@ -44,11 +44,13 @@ struct MCPLocalStdioWatchEditorFields: View {
                         Text(policy.displayName).tag(policy)
                     }
                 }
-                TextField(
-                    NSLocalizedString("启动超时（秒，0 为不限制）", comment: "Local stdio MCP startup timeout"),
-                    value: $startupTimeoutSeconds,
-                    formatter: startupTimeoutFormatter
-                )
+                HStack {
+                    Text(NSLocalizedString("启动超时（秒）", comment: "Watch local stdio MCP startup timeout label"))
+                    Spacer()
+                    TextField("", value: $startupTimeoutSeconds, formatter: startupTimeoutFormatter)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 64)
+                }
             }
 
             Section {

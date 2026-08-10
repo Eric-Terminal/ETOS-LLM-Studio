@@ -187,26 +187,34 @@ struct LocalLinuxFeatureView: View {
                         Text(mode.displayName).tag(mode.rawValue)
                     }
                 }
-                TextField(
-                    NSLocalizedString("默认超时（秒，0 表示不限）", comment: "Default Linux command timeout"),
-                    value: Binding(
-                        get: { appConfig.localLinuxDefaultTimeoutSeconds },
-                        set: { appConfig.localLinuxDefaultTimeoutSeconds = min(max(0, $0), 4_294_967) }
-                    ),
-                    format: .number
-                )
-                .keyboardType(.numberPad)
-                TextField(
-                    NSLocalizedString("模型输出预览（字节）", comment: "Linux model output preview bytes"),
-                    value: Binding(
-                        get: { appConfig.localLinuxOutputPreviewBytes },
-                        set: { appConfig.localLinuxOutputPreviewBytes = max(4_096, $0) }
-                    ),
-                    format: .number
-                )
-                .keyboardType(.numberPad)
+                LabeledContent(NSLocalizedString("默认命令超时（秒）", comment: "Default Linux command timeout label")) {
+                    TextField(
+                        "",
+                        value: Binding(
+                            get: { appConfig.localLinuxDefaultTimeoutSeconds },
+                            set: { appConfig.localLinuxDefaultTimeoutSeconds = min(max(0, $0), 4_294_967) }
+                        ),
+                        format: .number
+                    )
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
+                }
+                LabeledContent(NSLocalizedString("模型输出预览（KiB）", comment: "Linux model output preview KiB label")) {
+                    TextField(
+                        "",
+                        value: Binding(
+                            get: { max(4, appConfig.localLinuxOutputPreviewBytes / 1_024) },
+                            set: { appConfig.localLinuxOutputPreviewBytes = min(max(4, $0), 4_194_303) * 1_024 }
+                        ),
+                        format: .number
+                    )
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
+                }
             } footer: {
-                Text(NSLocalizedString("0 秒表示不限时；预览只影响发送给模型的副本。", comment: "Local Linux execution defaults footer"))
+                Text(NSLocalizedString("0 表示命令不限时；输出预览只限制发送给模型的副本。", comment: "Local Linux execution defaults footer"))
             }
 
             Section {
