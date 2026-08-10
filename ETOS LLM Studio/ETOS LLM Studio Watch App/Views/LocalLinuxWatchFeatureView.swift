@@ -288,6 +288,7 @@ struct LocalLinuxWatchTerminalView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
         .navigationTitle(NSLocalizedString("终端", comment: "Watch Linux terminal title"))
         .task(id: isPresentationActive) {
             guard isPresentationActive else {

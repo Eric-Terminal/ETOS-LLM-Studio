@@ -102,6 +102,8 @@ struct LocalLinuxTerminalView: View {
             }
             .padding()
         }
+        .background(Color.black.ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .navigationTitle(NSLocalizedString("终端", comment: "Linux terminal title"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
