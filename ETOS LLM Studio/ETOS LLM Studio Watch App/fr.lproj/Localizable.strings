@@ -6423,3 +6423,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "模型输出预览（KiB）" = "Aperçu de sortie du modèle (Kio)";
 "0 表示命令不限时；输出预览只限制发送给模型的副本。" = "0 signifie sans limite ; l’aperçu limite uniquement la copie envoyée au modèle.";
 "启动超时（秒）" = "Délai de démarrage (secondes)";
+"发送给模型的输出上限" = "Limite de sortie envoyée au modèle";
+"模型输出上限" = "Limite de sortie du modèle";
+"KB" = "Ko";
+"0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。" = "0 signifie sans limite. Si la sortie dépasse cette taille, seule la copie envoyée au modèle est tronquée ; le terminal conserve la sortie complète.";
+"终端操作" = "Actions du terminal";

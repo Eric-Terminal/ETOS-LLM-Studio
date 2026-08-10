@@ -6464,3 +6464,8 @@
 "模型输出预览（KiB）" = "Model Output Preview (KiB)";
 "0 表示命令不限时；输出预览只限制发送给模型的副本。" = "0 means no timeout; output preview only limits the copy sent to the model.";
 "启动超时（秒）" = "Startup Timeout (Seconds)";
+"发送给模型的输出上限" = "Output Limit Sent to Model";
+"模型输出上限" = "Model Output Limit";
+"KB" = "KB";
+"0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。" = "0 means no command timeout. When output exceeds this size, only the copy sent to the model is truncated; the full output remains in the user terminal.";
+"终端操作" = "Terminal Actions";

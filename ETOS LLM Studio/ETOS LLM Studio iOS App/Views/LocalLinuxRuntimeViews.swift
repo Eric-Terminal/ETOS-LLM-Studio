@@ -106,40 +106,58 @@ struct LocalLinuxTerminalView: View {
         .preferredColorScheme(.dark)
         .navigationTitle(NSLocalizedString("终端", comment: "Linux terminal title"))
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    ForEach(terminalJobs) { terminal in
-                        Button(terminalLabel(terminal)) { attach(to: terminal) }
+                    Menu {
+                        ForEach(terminalJobs) { terminal in
+                            Button(terminalLabel(terminal)) { attach(to: terminal) }
+                        }
+                        Divider()
+                        Button(NSLocalizedString("新建终端", comment: "Create Linux terminal")) {
+                            Task { await createTerminal() }
+                        }
+                    } label: {
+                        Label(
+                            NSLocalizedString("切换或新建终端", comment: "Switch or create Linux terminal"),
+                            systemImage: "rectangle.stack"
+                        )
                     }
+
+                    if inputOwner == .user, job?.runID != nil {
+                        Button(action: returnInputToAgent) {
+                            Label(
+                                NSLocalizedString("将输入交还 Agent", comment: "Return terminal input to Agent"),
+                                systemImage: "person.badge.clock"
+                            )
+                        }
+                    }
+
                     Divider()
-                    Button(NSLocalizedString("新建终端", comment: "Create Linux terminal")) {
-                        Task { await createTerminal() }
+                    Button {
+                        guard let job else { return }
+                        Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
+                    } label: {
+                        Label(
+                            NSLocalizedString("中断前台程序", comment: "Interrupt terminal"),
+                            systemImage: "exclamationmark"
+                        )
                     }
+                    .disabled(job == nil)
+
+                    Button(role: .destructive) {
+                        guard let job else { return }
+                        Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
+                    } label: {
+                        Label(
+                            NSLocalizedString("结束终端", comment: "Cancel terminal"),
+                            systemImage: "stop.fill"
+                        )
+                    }
+                    .disabled(job == nil)
                 } label: {
-                    Image(systemName: "terminal.fill")
+                    Image(systemName: "ellipsis")
                 }
-                .accessibilityLabel(NSLocalizedString("切换或新建终端", comment: "Switch or create Linux terminal"))
-
-                if inputOwner == .user, job?.runID != nil {
-                    Button(action: returnInputToAgent) {
-                        Image(systemName: "person.badge.clock")
-                    }
-                    .accessibilityLabel(NSLocalizedString("将输入交还 Agent", comment: "Return terminal input to Agent"))
-                }
-
-                Button {
-                    guard let job else { return }
-                    Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
-                } label: { Image(systemName: "exclamationmark") }
-                .accessibilityLabel(NSLocalizedString("中断前台程序", comment: "Interrupt terminal"))
-                .disabled(job == nil)
-
-                Button(role: .destructive) {
-                    guard let job else { return }
-                    Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
-                } label: { Image(systemName: "stop.fill") }
-                .accessibilityLabel(NSLocalizedString("结束终端", comment: "Cancel terminal"))
-                .disabled(job == nil)
+                .accessibilityLabel(NSLocalizedString("终端操作", comment: "Terminal actions menu"))
             }
         }
         .task { await openInitialTerminal() }

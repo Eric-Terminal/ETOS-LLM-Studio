@@ -118,16 +118,20 @@ struct LocalLinuxWatchFeatureView: View {
                         .frame(maxWidth: 64)
                 }
                 HStack {
-                    Text(NSLocalizedString("模型输出预览（KiB）", comment: "Watch Linux model output preview KiB label"))
+                    Text(NSLocalizedString("模型输出上限", comment: "Watch Linux model output limit label"))
                     Spacer()
-                    TextField("", value: outputPreviewBinding, formatter: Self.integerFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 64)
+                    HStack {
+                        TextField("", value: outputPreviewBinding, formatter: Self.integerFormatter)
+                            .multilineTextAlignment(.trailing)
+                        Text(NSLocalizedString("KB", comment: "Kilobyte unit"))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 72)
                 }
             } header: {
                 Text(NSLocalizedString("配置", comment: "Watch Linux configuration section"))
             } footer: {
-                Text(NSLocalizedString("0 表示命令不限时；输出预览只限制发送给模型的副本。", comment: "Watch Linux execution defaults footer"))
+                Text(NSLocalizedString("0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。", comment: "Watch Linux execution defaults footer"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

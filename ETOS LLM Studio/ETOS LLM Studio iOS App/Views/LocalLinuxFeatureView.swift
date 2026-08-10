@@ -200,21 +200,25 @@ struct LocalLinuxFeatureView: View {
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 120)
                 }
-                LabeledContent(NSLocalizedString("模型输出预览（KiB）", comment: "Linux model output preview KiB label")) {
-                    TextField(
-                        "",
-                        value: Binding(
-                            get: { max(4, appConfig.localLinuxOutputPreviewBytes / 1_024) },
-                            set: { appConfig.localLinuxOutputPreviewBytes = min(max(4, $0), 4_194_303) * 1_024 }
-                        ),
-                        format: .number
-                    )
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
+                LabeledContent(NSLocalizedString("发送给模型的输出上限", comment: "Linux model output limit label")) {
+                    HStack {
+                        TextField(
+                            "",
+                            value: Binding(
+                                get: { max(4, appConfig.localLinuxOutputPreviewBytes / 1_024) },
+                                set: { appConfig.localLinuxOutputPreviewBytes = min(max(4, $0), 4_194_303) * 1_024 }
+                            ),
+                            format: .number
+                        )
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        Text(NSLocalizedString("KB", comment: "Kilobyte unit"))
+                            .foregroundStyle(.secondary)
+                    }
                     .frame(maxWidth: 120)
                 }
             } footer: {
-                Text(NSLocalizedString("0 表示命令不限时；输出预览只限制发送给模型的副本。", comment: "Local Linux execution defaults footer"))
+                Text(NSLocalizedString("0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。", comment: "Local Linux execution defaults footer"))
             }
 
             Section {
