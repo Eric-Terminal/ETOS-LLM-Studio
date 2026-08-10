@@ -6519,3 +6519,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "↓" = "↓";
 "←" = "←";
 "→" = "→";
+"stdio JSON" = "JSON stdio";
+"stdio 配置必须包含非空的 command；type 只能是 stdio，args、env 与 cwd 必须使用对应的 JSON 类型。" = "يتطلب إعداد stdio قيمة command غير فارغة؛ ويجب أن يكون type هو stdio، وأن تستخدم args وenv وcwd أنواع JSON المتوقعة.";

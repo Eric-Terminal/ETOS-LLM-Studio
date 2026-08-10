@@ -27,10 +27,8 @@ struct MCPServerEditor: View {
     @State private var oauthAuthorizationCode: String
     @State private var oauthRedirectURI: String
     @State private var oauthCodeVerifier: String
-    @State private var localCommand: String
-    @State private var localArgumentsText: String
+    @State private var localConfigurationJSON: String
     @State private var localEnvironmentVariableIDs: Set<UUID>
-    @State private var localWorkingDirectory: String
     @State private var localWorkspaceID: UUID?
     @State private var localMountIDs: Set<UUID>
     @State private var localStartupTimeoutSeconds: Double
@@ -46,10 +44,8 @@ struct MCPServerEditor: View {
     init(existingServer: MCPServerConfiguration?, onSave: @escaping (MCPServerConfiguration) -> Void) {
         self.existingServer = existingServer
         self.onSave = onSave
-        _localCommand = State(initialValue: "")
-        _localArgumentsText = State(initialValue: "")
+        _localConfigurationJSON = State(initialValue: MCPLocalStdioConfigurationJSON.example)
         _localEnvironmentVariableIDs = State(initialValue: [])
-        _localWorkingDirectory = State(initialValue: "/home/etos")
         _localWorkspaceID = State(initialValue: nil)
         _localMountIDs = State(initialValue: [])
         _localStartupTimeoutSeconds = State(initialValue: 30)
@@ -75,10 +71,10 @@ struct MCPServerEditor: View {
                 _oauthCodeVerifier = State(initialValue: "")
                 _transportOption = State(initialValue: .localStdio)
                 _headerOverrideEntries = State(initialValue: [HeaderOverrideEntry(text: "")])
-                _localCommand = State(initialValue: configuration.command)
-                _localArgumentsText = State(initialValue: configuration.arguments.joined(separator: "\n"))
+                _localConfigurationJSON = State(
+                    initialValue: MCPLocalStdioConfigurationJSON.encode(configuration)
+                )
                 _localEnvironmentVariableIDs = State(initialValue: Set(configuration.environmentVariableIDs))
-                _localWorkingDirectory = State(initialValue: configuration.workingDirectory)
                 _localWorkspaceID = State(initialValue: configuration.workspaceID)
                 _localMountIDs = State(initialValue: Set(configuration.mountIDs))
                 _localStartupTimeoutSeconds = State(initialValue: configuration.startupTimeoutSeconds)
@@ -292,9 +288,7 @@ struct MCPServerEditor: View {
 
             if transportOption == .localStdio {
                 MCPLocalStdioEditorFields(
-                    command: $localCommand,
-                    argumentsText: $localArgumentsText,
-                    workingDirectory: $localWorkingDirectory,
+                    configurationJSON: $localConfigurationJSON,
                     environmentVariableIDs: $localEnvironmentVariableIDs,
                     inheritEnvironment: $localInheritEnvironment,
                     workspaceID: $localWorkspaceID,
@@ -389,22 +383,22 @@ struct MCPServerEditor: View {
         let transport: MCPServerConfiguration.Transport
         switch transportOption {
         case .localStdio:
-            transport = .localStdio(
-                configuration: MCPLocalStdioConfiguration(
-                    command: localCommand.trimmingCharacters(in: .whitespacesAndNewlines),
-                    arguments: localArgumentsText.components(separatedBy: .newlines).filter { !$0.isEmpty },
-                    environmentVariableIDs: localEnvironmentVariableIDs.sorted {
-                        $0.uuidString < $1.uuidString
-                    },
-                    inheritLocalLinuxEnvironment: localInheritEnvironment,
-                    workingDirectory: localWorkingDirectory.trimmingCharacters(in: .whitespacesAndNewlines),
-                    workspaceID: localWorkspaceID,
-                    mountIDs: localMountIDs.sorted { $0.uuidString < $1.uuidString },
-                    startupTimeoutSeconds: max(0, localStartupTimeoutSeconds),
-                    launchPolicy: localLaunchPolicy,
-                    idlePolicy: localIdlePolicy
-                )
-            )
+            do {
+                var configuration = try MCPLocalStdioConfigurationJSON.decode(localConfigurationJSON)
+                configuration.environmentVariableIDs = localEnvironmentVariableIDs.sorted {
+                    $0.uuidString < $1.uuidString
+                }
+                configuration.inheritLocalLinuxEnvironment = localInheritEnvironment
+                configuration.workspaceID = localWorkspaceID
+                configuration.mountIDs = localMountIDs.sorted { $0.uuidString < $1.uuidString }
+                configuration.startupTimeoutSeconds = max(0, localStartupTimeoutSeconds)
+                configuration.launchPolicy = localLaunchPolicy
+                configuration.idlePolicy = localIdlePolicy
+                transport = .localStdio(configuration: configuration)
+            } catch {
+                validationMessage = error.localizedDescription
+                return
+            }
         case .http:
             let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let url = URL(string: trimmedEndpoint),
@@ -512,10 +506,8 @@ struct MCPServerEditor: View {
             oauthAuthorizationCode: oauthAuthorizationCode,
             oauthRedirectURI: oauthRedirectURI,
             oauthCodeVerifier: oauthCodeVerifier,
-            localCommand: localCommand,
-            localArgumentsText: localArgumentsText,
+            localConfigurationJSON: localConfigurationJSON,
             localEnvironmentVariableIDs: localEnvironmentVariableIDs,
-            localWorkingDirectory: localWorkingDirectory,
             localWorkspaceID: localWorkspaceID,
             localMountIDs: localMountIDs,
             localStartupTimeoutSeconds: localStartupTimeoutSeconds,
@@ -551,10 +543,8 @@ struct MCPServerEditor: View {
                 oauthAuthorizationCode: "",
                 oauthRedirectURI: "",
                 oauthCodeVerifier: "",
-                localCommand: "",
-                localArgumentsText: "",
+                localConfigurationJSON: MCPLocalStdioConfigurationJSON.example,
                 localEnvironmentVariableIDs: [],
-                localWorkingDirectory: "/home/etos",
                 localWorkspaceID: nil,
                 localMountIDs: [],
                 localStartupTimeoutSeconds: 30,
@@ -583,10 +573,8 @@ struct MCPServerEditor: View {
                 oauthAuthorizationCode: "",
                 oauthRedirectURI: "",
                 oauthCodeVerifier: "",
-                localCommand: configuration.command,
-                localArgumentsText: configuration.arguments.joined(separator: "\n"),
+                localConfigurationJSON: MCPLocalStdioConfigurationJSON.encode(configuration),
                 localEnvironmentVariableIDs: Set(configuration.environmentVariableIDs),
-                localWorkingDirectory: configuration.workingDirectory,
                 localWorkspaceID: configuration.workspaceID,
                 localMountIDs: Set(configuration.mountIDs),
                 localStartupTimeoutSeconds: configuration.startupTimeoutSeconds,
@@ -757,8 +745,7 @@ struct MCPServerEditor: View {
             return false
         }
         if transportOption == .localStdio {
-            return localCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                !localWorkingDirectory.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
+            return localConfigurationJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         return (transportOption == .sse
                 ? sseEndpoint.trimmingCharacters(in: .whitespaces).isEmpty
@@ -927,10 +914,8 @@ struct MCPServerEditor: View {
         var oauthAuthorizationCode: String
         var oauthRedirectURI: String
         var oauthCodeVerifier: String
-        var localCommand: String = ""
-        var localArgumentsText: String = ""
+        var localConfigurationJSON: String = MCPLocalStdioConfigurationJSON.example
         var localEnvironmentVariableIDs: Set<UUID> = []
-        var localWorkingDirectory: String = "/home/etos"
         var localWorkspaceID: UUID?
         var localMountIDs: Set<UUID> = []
         var localStartupTimeoutSeconds: Double = 30

@@ -6519,3 +6519,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "↓" = "↓";
 "←" = "←";
 "→" = "→";
+"stdio JSON" = "JSON stdio";
+"stdio 配置必须包含非空的 command；type 只能是 stdio，args、env 与 cwd 必须使用对应的 JSON 类型。" = "La configuration stdio requiert une commande non vide ; type doit être stdio, et args, env et cwd doivent utiliser les types JSON attendus.";

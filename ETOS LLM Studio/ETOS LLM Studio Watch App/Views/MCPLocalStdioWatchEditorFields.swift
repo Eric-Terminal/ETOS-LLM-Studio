@@ -8,9 +8,7 @@ import ETOSCore
 import SwiftUI
 
 struct MCPLocalStdioWatchEditorFields: View {
-    @Binding var command: String
-    @Binding var argumentsText: String
-    @Binding var workingDirectory: String
+    @Binding var configurationJSON: String
     @Binding var environmentVariableIDs: Set<UUID>
     @Binding var inheritEnvironment: Bool
     @Binding var workspaceID: UUID?
@@ -25,15 +23,17 @@ struct MCPLocalStdioWatchEditorFields: View {
 
     var body: some View {
         Group {
-            Section {
+            Section(NSLocalizedString("stdio JSON", comment: "Watch local stdio MCP JSON section")) {
                 TextField(
-                    NSLocalizedString("Command", comment: "Local stdio MCP command field"),
-                    text: $command.watchKeyboardNewlineBinding()
+                    NSLocalizedString("stdio JSON", comment: "Watch local stdio MCP JSON editor"),
+                    text: $configurationJSON,
+                    axis: .vertical
                 )
-                TextField(
-                    NSLocalizedString("工作目录", comment: "Local stdio MCP working directory field"),
-                    text: $workingDirectory.watchKeyboardNewlineBinding()
-                )
+                .font(.caption2.monospaced())
+                .lineLimit(8...18)
+            }
+
+            Section(NSLocalizedString("运行设置", comment: "Watch local stdio MCP runtime settings")) {
                 Picker(NSLocalizedString("启动方式", comment: "Local stdio MCP launch policy"), selection: $launchPolicy) {
                     ForEach(MCPLocalStdioLaunchPolicy.allCases, id: \.self) { policy in
                         Text(policy.displayName).tag(policy)
@@ -49,21 +49,6 @@ struct MCPLocalStdioWatchEditorFields: View {
                     value: $startupTimeoutSeconds,
                     formatter: startupTimeoutFormatter
                 )
-            } header: {
-                Text(NSLocalizedString("本地 stdio", comment: "Local stdio MCP section"))
-            } footer: {
-                Text(NSLocalizedString("stdout 只传 JSON-RPC，普通日志写入 stderr；ETOS 不会自动安装依赖。", comment: "Watch local stdio MCP footer"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(NSLocalizedString("参数（每行一个）", comment: "Local stdio MCP arguments section")) {
-                TextField(
-                    NSLocalizedString("参数（每行一个）", comment: "Local stdio MCP arguments editor"),
-                    text: $argumentsText.watchKeyboardNewlineBinding(),
-                    axis: .vertical
-                )
-                .lineLimit(4...12)
             }
 
             Section {
@@ -85,10 +70,6 @@ struct MCPLocalStdioWatchEditorFields: View {
                 }
             } header: {
                 Text(NSLocalizedString("环境变量引用", comment: "Local stdio MCP environment references"))
-            } footer: {
-                Text(NSLocalizedString("变量值仍在本地 Linux 设置中统一编辑。", comment: "Watch MCP environment references footer"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -111,10 +92,6 @@ struct MCPLocalStdioWatchEditorFields: View {
                 }
             } header: {
                 Text(NSLocalizedString("工作区与挂载", comment: "Watch local stdio MCP workspace and mounts"))
-            } footer: {
-                Text(NSLocalizedString("目录授权失效时，需在支持系统目录选择器的设备上重新授权。", comment: "Watch MCP mount authorization footer"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
         }
         .task { await reloadReferences() }

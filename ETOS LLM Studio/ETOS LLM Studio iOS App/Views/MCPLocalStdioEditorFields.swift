@@ -9,9 +9,7 @@ import ETOSCore
 import SwiftUI
 
 struct MCPLocalStdioEditorFields: View {
-    @Binding var command: String
-    @Binding var argumentsText: String
-    @Binding var workingDirectory: String
+    @Binding var configurationJSON: String
     @Binding var environmentVariableIDs: Set<UUID>
     @Binding var inheritEnvironment: Bool
     @Binding var workspaceID: UUID?
@@ -26,13 +24,15 @@ struct MCPLocalStdioEditorFields: View {
 
     var body: some View {
         Group {
-            Section {
-                TextField(NSLocalizedString("Command", comment: "Local stdio MCP command field"), text: $command)
+            Section(NSLocalizedString("stdio JSON", comment: "Local stdio MCP JSON section")) {
+                TextEditor(text: $configurationJSON)
+                    .frame(minHeight: 180)
+                    .font(.body.monospaced())
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField(NSLocalizedString("工作目录", comment: "Local stdio MCP working directory field"), text: $workingDirectory)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+            }
+
+            Section(NSLocalizedString("运行设置", comment: "Local stdio MCP runtime settings")) {
                 Picker(NSLocalizedString("启动方式", comment: "Local stdio MCP launch policy"), selection: $launchPolicy) {
                     ForEach(MCPLocalStdioLaunchPolicy.allCases, id: \.self) { policy in
                         Text(policy.displayName).tag(policy)
@@ -49,17 +49,6 @@ struct MCPLocalStdioEditorFields: View {
                     format: .number
                 )
                 .keyboardType(.decimalPad)
-            } header: {
-                Text(NSLocalizedString("本地 stdio", comment: "Local stdio MCP section"))
-            } footer: {
-                Text(NSLocalizedString("进程在内置 Linux 中运行；stdout 仅用于逐行 JSON-RPC，日志必须写入 stderr。ETOS 不会自动安装命令或依赖。", comment: "Local stdio MCP footer"))
-            }
-
-            Section(NSLocalizedString("参数（每行一个）", comment: "Local stdio MCP arguments section")) {
-                TextEditor(text: $argumentsText)
-                    .frame(minHeight: 100)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
             }
 
             Section {
@@ -84,8 +73,6 @@ struct MCPLocalStdioEditorFields: View {
                 }
             } header: {
                 Text(NSLocalizedString("环境变量引用", comment: "Local stdio MCP environment references"))
-            } footer: {
-                Text(NSLocalizedString("这里只保存本地 Linux 环境变量的记录 ID；变量值仍在加密配置数据库中统一编辑和同步。", comment: "Local stdio MCP environment references footer"))
             }
 
             Section {
@@ -108,8 +95,6 @@ struct MCPLocalStdioEditorFields: View {
                 }
             } header: {
                 Text(NSLocalizedString("工作区与外部挂载", comment: "Local stdio MCP workspace and mounts"))
-            } footer: {
-                Text(NSLocalizedString("MCP 只取得这里选择的外部挂载租约；不可用或失效的授权会在启动时明确报错。", comment: "Local stdio MCP mounts footer"))
             }
         }
         .task { await reloadReferences() }

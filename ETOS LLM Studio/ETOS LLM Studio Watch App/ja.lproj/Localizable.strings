@@ -6317,3 +6317,5 @@
 "↓" = "↓";
 "←" = "←";
 "→" = "→";
+"stdio JSON" = "stdio JSON";
+"stdio 配置必须包含非空的 command；type 只能是 stdio，args、env 与 cwd 必须使用对应的 JSON 类型。" = "stdio 設定には空でない command が必要です。type は stdio、args・env・cwd は対応する JSON 型で指定してください。";
