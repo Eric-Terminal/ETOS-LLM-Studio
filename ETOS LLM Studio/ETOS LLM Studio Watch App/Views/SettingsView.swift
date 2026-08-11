@@ -449,6 +449,7 @@ extension SettingsListIcon {
     static let currentModel = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green, legacySystemName: "plus.message")
     static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
+    static let backgroundGeneration = SettingsListIcon(systemName: "location", backgroundColor: .green)
     static let providerManagement = SettingsListIcon(
         systemName: "cube",
         backgroundColor: .orange,
