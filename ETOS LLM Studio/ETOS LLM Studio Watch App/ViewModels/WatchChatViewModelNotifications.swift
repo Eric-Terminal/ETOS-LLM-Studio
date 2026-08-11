@@ -209,42 +209,12 @@ extension ChatViewModel {
 
 #if canImport(UserNotifications)
     private func postBackgroundReplyLocalNotification(sessionID: UUID, sessionName: String?, snippet: String, messageID: UUID) async {
-        let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
-        if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            content.body = String(
-                format: NSLocalizedString("会话“%@”已收到新回复：%@", comment: "Background reply notification body with session name"),
-                sessionName,
-                snippet
-            )
-        } else {
-            content.body = String(
-                format: NSLocalizedString("已收到新回复：%@", comment: "Background reply notification body without session name"),
-                snippet
-            )
-        }
-        content.sound = .default
-        content.threadIdentifier = "chat.reply.finished"
-        content.userInfo = [
-            "route": AppLocalNotificationRoute.chatSession.rawValue,
-            "session_id": sessionID.uuidString
-        ]
-        if #available(watchOS 8.0, *) {
-            content.interruptionLevel = .timeSensitive
-            content.relevanceScore = 1.0
-        }
-
-        let request = UNNotificationRequest(
-            identifier: "chat.reply.finished.\(messageID.uuidString)",
-            content: content,
-            trigger: nil
+        _ = await AppLocalNotificationCenter.shared.postChatReplyFinishedNotification(
+            sessionID: sessionID,
+            sessionName: sessionName,
+            snippet: snippet,
+            messageID: messageID
         )
-
-        await withCheckedContinuation { continuation in
-            UNUserNotificationCenter.current().add(request) { _ in
-                continuation.resume(returning: ())
-            }
-        }
     }
 #endif
 
@@ -276,24 +246,7 @@ extension ChatViewModel {
     }
 
     func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        let settings = await withCheckedContinuation { continuation in
-            center.getNotificationSettings { continuation.resume(returning: $0) }
-        }
-        switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            return true
-        case .denied:
-            return false
-        case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                    continuation.resume(returning: granted)
-                }
-            }
-        @unknown default:
-            return false
-        }
+        await AppLocalNotificationCenter.shared.requestAuthorizationIfNeeded()
     }
 #endif
 }

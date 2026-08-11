@@ -638,6 +638,8 @@ public class ChatService {
             }
         }
 
+        // 终态事件对外可见时，会话必须已经离开运行集合；实时活动和通知订阅者
+        // 会在收到事件后持有各自的短后台任务，完成快照与通知收尾。
         switch status {
         case .started:
             break

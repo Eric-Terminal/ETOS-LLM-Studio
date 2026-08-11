@@ -183,6 +183,14 @@ extension ChatViewModel {
         isApplicationActive = true
         BackgroundGenerationKeepAliveManager.shared.refreshStatus()
         chatService.reloadLocalModelsAndProvidersIfNeeded()
+        clearCurrentSessionReplyNotifications()
+    }
+
+    private func clearCurrentSessionReplyNotifications() {
+        guard let sessionID = currentSession?.id else { return }
+        Task {
+            await AppLocalNotificationCenter.shared.removeChatReplyNotifications(sessionID: sessionID)
+        }
     }
 
     func shouldPresentMemoryEmbeddingErrorAlert(message: String) -> Bool {
@@ -291,6 +299,11 @@ extension ChatViewModel {
                 currentSession = session
                 imageGenerationFeedback = .idle
                 refreshCurrentSessionSendingState()
+#if canImport(UIKit)
+                if UIApplication.shared.applicationState == .active {
+                    clearCurrentSessionReplyNotifications()
+                }
+#endif
             }
             .store(in: &cancellables)
 

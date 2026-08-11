@@ -15,6 +15,9 @@ final class SystemEntrySnapshotPublisher {
 
     private var cancellables: Set<AnyCancellable> = []
     private var refreshTask: Task<Void, Never>?
+    private var refreshBackgroundLease: ApplicationBackgroundTaskLease?
+    private var replyRunTracker = ReplyActivityRunTracker()
+    private let replySnapshotStore = ReplyActivitySnapshotStore()
 
     private init() {}
 
@@ -22,21 +25,64 @@ final class SystemEntrySnapshotPublisher {
         guard cancellables.isEmpty else { return }
         let service = ChatService.shared
         service.chatSessionsSubject
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRefresh() }
             .store(in: &cancellables)
         service.sessionRequestStatusSubject
-            .sink { [weak self] _ in self?.scheduleRefresh() }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in self?.handleSessionRequestStatus(event) }
             .store(in: &cancellables)
         service.conversationRuntimeStatesSubject
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.scheduleRefresh() }
             .store(in: &cancellables)
+        Task { [weak self] in
+            guard let self else { return }
+            let snapshots = await replySnapshotStore.load()
+            replyRunTracker.mergePersisted(
+                snapshots,
+                runningSessionIDs: ChatService.shared.runningSessionIDsSubject.value
+            )
+            await persistReplyRuns()
+            scheduleRefresh()
+        }
         scheduleRefresh()
     }
 
-    private func scheduleRefresh() {
+    private func handleSessionRequestStatus(_ event: ChatService.SessionRequestStatusEvent) {
+        let title = ChatService.shared.chatSessionsSubject.value
+            .first(where: { $0.id == event.sessionID })?
+            .name ?? NSLocalizedString("新的对话", comment: "Fallback session title for reply Live Activity")
+        replyRunTracker.record(
+            status: event.status,
+            sessionID: event.sessionID,
+            title: title
+        )
+        Task { [weak self] in
+            await self?.persistReplyRuns()
+        }
+        let isTerminal = event.status != .started
+        scheduleRefresh(immediately: isTerminal, protectBackgroundWork: isTerminal)
+    }
+
+    private func scheduleRefresh(
+        immediately: Bool = false,
+        protectBackgroundWork: Bool = false
+    ) {
+        if protectBackgroundWork, refreshBackgroundLease == nil {
+            refreshBackgroundLease = ApplicationBackgroundTaskLease(name: "chat.reply.live-activity")
+        }
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(250))
+            defer {
+                if !Task.isCancelled {
+                    self?.refreshBackgroundLease?.end()
+                    self?.refreshBackgroundLease = nil
+                }
+            }
+            if !immediately {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
             guard !Task.isCancelled else { return }
             await self?.publish()
         }
@@ -45,11 +91,16 @@ final class SystemEntrySnapshotPublisher {
     private func publish() async {
         let runningIDs = ChatService.shared.runningSessionIDsSubject.value
         let dailyPulseTitle = DailyPulseManager.shared.todayRun?.headline
-        let runs = await Task.detached(priority: .utility) {
+        let replyRuns = replyRunTracker.recentSnapshots
+        let result = await Task.detached(priority: .utility) {
             let sessions = Array(Persistence.loadChatSessions().prefix(20))
-            let runs = sessions.compactMap { session -> ETOSRunSnapshot? in
-                guard Persistence.localAgentMode(sessionID: session.id) == .agent,
-                      let run = Persistence.loadLatestConversationRun(sessionID: session.id) else {
+            var agentSessionIDs: Set<UUID> = []
+            let agentRuns = sessions.compactMap { session -> ETOSRunSnapshot? in
+                guard Persistence.localAgentMode(sessionID: session.id) == .agent else {
+                    return nil
+                }
+                agentSessionIDs.insert(session.id)
+                guard let run = Persistence.loadLatestConversationRun(sessionID: session.id) else {
                     return nil
                 }
                 return ETOSRunSnapshot(
@@ -62,6 +113,7 @@ final class SystemEntrySnapshotPublisher {
                     requiresApp: run.status == .waitingUser || run.status == .pausedByBudget
                 )
             }
+            let runs = (agentRuns + replyRuns.filter { !agentSessionIDs.contains($0.sessionID) })
             .sorted { $0.updatedAt > $1.updatedAt }
             let snapshot = ETOSWidgetSnapshot(
                 recentRuns: Array(runs.prefix(5)),
@@ -76,12 +128,19 @@ final class SystemEntrySnapshotPublisher {
                     fileProtection: .completeFileProtectionUntilFirstUserAuthentication
                 )
             }
-            return runs
+            return (runs: runs, agentSessionIDs: agentSessionIDs)
         }.value
+        if replyRunTracker.remove(sessionIDs: result.agentSessionIDs) {
+            await persistReplyRuns()
+        }
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSRecentTasksWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "ETOSDailyPulseWidget")
         SystemFileProviderDomainManager.signalChanges()
-        await updateLiveActivities(with: runs)
+        await updateLiveActivities(with: result.runs)
+    }
+
+    private func persistReplyRuns() async {
+        await replySnapshotStore.save(replyRunTracker.recentSnapshots)
     }
 
     private func updateLiveActivities(with runs: [ETOSRunSnapshot]) async {

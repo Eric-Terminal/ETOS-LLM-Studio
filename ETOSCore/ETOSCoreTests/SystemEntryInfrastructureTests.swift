@@ -8,6 +8,16 @@ import Testing
 
 @Suite("系统入口基础设施测试", .serialized)
 struct SystemEntryInfrastructureTests {
+    @Test("回复完成通知在前台静默且保留会话路由")
+    func chatReplyNotificationForegroundPolicy() {
+        let sessionID = UUID()
+        let userInfo = AppLocalNotificationCenter.chatReplyFinishedUserInfo(sessionID: sessionID)
+
+        #expect(AppLocalNotificationCenter.notificationTargetsChatSession(userInfo: userInfo))
+        #expect(!AppLocalNotificationCenter.notificationShouldPresentWhileForeground(userInfo: userInfo))
+        #expect(AppLocalNotificationCenter.notificationShouldPresentWhileForeground(userInfo: [:]))
+    }
+
     @Test("工作区路径拒绝越界与保留目录")
     func workspacePathBoundary() throws {
         #expect(try ETOSSharedWorkspacePathValidator.components(for: "Shared/项目/资料.txt") == ["Shared", "项目", "资料.txt"])

@@ -49,52 +49,50 @@ extension ChatViewModel {
     }
 
     func notifyIfAssistantReplyFinishedInBackground(for sessionID: UUID) {
-        enforceBackgroundReplyNotificationEnabled()
-        guard isApplicationInBackground else {
-            pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID)
-            return
-        }
-        guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
-
-        let messages = sessionID == currentSession?.id
-            ? allMessagesForSession
-            : Persistence.loadMessages(for: sessionID)
-        guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
-        guard latestMarker != context.baselineMarker else { return }
-        guard latestMarker != lastNotifiedAssistantMarker else { return }
-        lastNotifiedAssistantMarker = latestMarker
-
-        let snippet = notificationSnippet(for: latestMarker)
-#if canImport(UserNotifications)
-        Task {
-            guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
-            await postBackgroundReplyLocalNotification(
-                sessionID: sessionID,
-                sessionName: context.sessionName,
-                snippet: snippet,
-                messageID: latestMarker.id
-            )
-        }
-#endif
+        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID)
     }
 
     func notifyIfAssistantReplyFinishedFromOffscreenSession(_ sessionID: UUID) {
+        scheduleBackgroundReplyNotificationIfNeeded(for: sessionID)
+    }
+
+    private func scheduleBackgroundReplyNotificationIfNeeded(for sessionID: UUID) {
         enforceBackgroundReplyNotificationEnabled()
         guard let context = pendingReplyNotificationContextBySessionID.removeValue(forKey: sessionID) else { return }
-        let messages = Persistence.loadMessages(for: sessionID)
-        guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
-        guard latestMarker != context.baselineMarker else { return }
-        guard latestMarker != lastNotifiedAssistantMarker else { return }
-        lastNotifiedAssistantMarker = latestMarker
-
-        let snippet = notificationSnippet(for: latestMarker)
 #if canImport(UserNotifications)
-        Task {
-            guard await requestBackgroundReplyNotificationAuthorizationIfNeeded() else { return }
-            await postBackgroundReplyLocalNotification(
+        let action = BackgroundReplyNotificationPolicy.action(for: applicationVisibility)
+        guard action != .suppress else { return }
+        let backgroundTaskLease = ApplicationBackgroundTaskLease(name: "chat.reply.notification")
+        Task { @MainActor [weak self, backgroundTaskLease] in
+            defer { backgroundTaskLease.end() }
+            guard let self else { return }
+            if action == .resolveTransition {
+                try? await Task.sleep(for: .milliseconds(350))
+            }
+            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else {
+                return
+            }
+
+            let messages: [ChatMessage]
+            if sessionID == currentSession?.id {
+                messages = allMessagesForSession
+            } else {
+                messages = await Task.detached(priority: .utility) {
+                    Persistence.loadMessages(for: sessionID)
+                }.value
+            }
+            guard BackgroundReplyNotificationPolicy.action(for: applicationVisibility) == .deliver else {
+                return
+            }
+            guard let latestMarker = latestAssistantReplyMarker(from: messages) else { return }
+            guard latestMarker != context.baselineMarker else { return }
+            guard latestMarker != lastNotifiedAssistantMarker else { return }
+            lastNotifiedAssistantMarker = latestMarker
+
+            _ = await AppLocalNotificationCenter.shared.postChatReplyFinishedNotification(
                 sessionID: sessionID,
                 sessionName: context.sessionName,
-                snippet: snippet,
+                snippet: notificationSnippet(for: latestMarker),
                 messageID: latestMarker.id
             )
         }
@@ -140,11 +138,16 @@ extension ChatViewModel {
         return true
     }
 
-    var isApplicationInBackground: Bool {
+    private var applicationVisibility: BackgroundReplyNotificationPolicy.ApplicationVisibility {
 #if canImport(UIKit)
-        return UIApplication.shared.applicationState != .active || !isApplicationActive
+        switch UIApplication.shared.applicationState {
+        case .active: return .active
+        case .inactive: return .inactive
+        case .background: return .background
+        @unknown default: return .inactive
+        }
 #else
-        return false
+        return .active
 #endif
     }
 
@@ -228,63 +231,7 @@ extension ChatViewModel {
     }
 
     func requestBackgroundReplyNotificationAuthorizationIfNeeded() async -> Bool {
-        let center = UNUserNotificationCenter.current()
-        let settings = await withCheckedContinuation { continuation in
-            center.getNotificationSettings { continuation.resume(returning: $0) }
-        }
-        switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            return true
-        case .denied:
-            return false
-        case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                    continuation.resume(returning: granted)
-                }
-            }
-        @unknown default:
-            return false
-        }
-    }
-
-    func postBackgroundReplyLocalNotification(sessionID: UUID, sessionName: String?, snippet: String, messageID: UUID) async {
-        let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
-        if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            content.body = String(
-                format: NSLocalizedString("会话“%@”已收到新回复：%@", comment: "Background reply notification body with session name"),
-                sessionName,
-                snippet
-            )
-        } else {
-            content.body = String(
-                format: NSLocalizedString("已收到新回复：%@", comment: "Background reply notification body without session name"),
-                snippet
-            )
-        }
-        content.sound = .default
-        content.threadIdentifier = "chat.reply.finished"
-        content.userInfo = [
-            "route": AppLocalNotificationRoute.chatSession.rawValue,
-            "session_id": sessionID.uuidString
-        ]
-        if #available(iOS 15.0, *) {
-            content.interruptionLevel = .timeSensitive
-            content.relevanceScore = 1.0
-        }
-
-        let request = UNNotificationRequest(
-            identifier: "chat.reply.finished.\(messageID.uuidString)",
-            content: content,
-            trigger: nil
-        )
-
-        await withCheckedContinuation { continuation in
-            UNUserNotificationCenter.current().add(request) { _ in
-                continuation.resume(returning: ())
-            }
-        }
+        await AppLocalNotificationCenter.shared.requestAuthorizationIfNeeded()
     }
 #endif
 }

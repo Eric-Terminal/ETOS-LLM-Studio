@@ -137,6 +137,14 @@ extension ChatViewModel {
     @objc func handleDidBecomeActive() {
         logger.info("App became active, checking for interrupted state.")
         chatService.reloadLocalModelsAndProvidersIfNeeded()
+        clearCurrentSessionReplyNotifications()
+    }
+
+    private func clearCurrentSessionReplyNotifications() {
+        guard let sessionID = currentSession?.id else { return }
+        Task {
+            await AppLocalNotificationCenter.shared.removeChatReplyNotifications(sessionID: sessionID)
+        }
     }
 
     func setupSubscriptions() {
@@ -208,6 +216,9 @@ extension ChatViewModel {
                 currentSession = session
                 imageGenerationFeedback = .idle
                 refreshCurrentSessionSendingState()
+                if WKExtension.shared().applicationState == .active {
+                    clearCurrentSessionReplyNotifications()
+                }
             }
             .store(in: &cancellables)
 
