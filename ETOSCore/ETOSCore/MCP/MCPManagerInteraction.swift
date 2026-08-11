@@ -346,7 +346,7 @@ extension MCPManager {
         let startedAt = Date()
         appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("开始执行聊天工具：%@", comment: "MCP governance chat tool started"), routed.tool.toolId))
         var inputs = try decodeJSONDictionary(from: argumentsJSON)
-        if builtInCategory == .conversation || builtInCategory == .linux || builtInCategory == .file || builtInCategory == .browser {
+        if builtInCategory == .conversation || builtInCategory == .linux || builtInCategory == .file || builtInCategory == .browser || builtInCategory == .mediaEnvironment {
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument)
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument)
             guard let sourceSessionID,
@@ -362,6 +362,7 @@ extension MCPManager {
         }
         if builtInCategory == .linux
             || builtInCategory == .browser
+            || builtInCategory == .mediaEnvironment
             || builtInCategory == .file {
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentRunIDArgument)
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument)
@@ -391,6 +392,14 @@ extension MCPManager {
                     .sorted { $0.uuidString < $1.uuidString }
                     .map { .string($0.uuidString) }
             )
+        }
+        if builtInCategory == .mediaEnvironment, let sourceAgentRunID {
+            inputs[MCPBuiltInAppToolServer.localAgentRunIDArgument] = .string(sourceAgentRunID.uuidString)
+            if let triggeringMessageID {
+                inputs[MCPBuiltInAppToolServer.localAgentTriggeringMessageIDArgument] = .string(
+                    triggeringMessageID.uuidString
+                )
+            }
         }
         let callID = UUID()
         var localInstanceKey: MCPLocalStdioInstanceKey?

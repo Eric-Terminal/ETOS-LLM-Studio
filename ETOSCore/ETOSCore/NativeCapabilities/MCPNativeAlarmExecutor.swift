@@ -15,7 +15,7 @@ import SwiftUI
 actor MCPNativeAlarmExecutor {
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
         #if os(watchOS)
-        return try await MCPNativeDeviceCompanionRelay.shared.execute(
+        return try await MCPNativeCapabilityCompanionRelay.shared.execute(
             toolName: toolName,
             arguments: arguments
         )

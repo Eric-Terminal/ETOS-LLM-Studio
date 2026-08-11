@@ -1402,6 +1402,9 @@ extension WatchSyncManager: WCSessionDelegate {
         _ session: WCSession,
         didReceive file: WCSessionFile
     ) {
+        if MCPNativeCapabilityCompanionRelay.handleIncomingFile(file, session: session) {
+            return
+        }
         if VideoFrameExtractionRelay.handleIncomingFile(file, session: session) {
             return
         }
@@ -1488,6 +1491,12 @@ extension WatchSyncManager: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            if await MCPNativeCapabilityCompanionRelay.shared.handleFinishedTransfer(
+                fileTransfer,
+                error: error
+            ) {
+                return
+            }
             if await VideoFrameExtractionRelay.shared.handleFinishedTransfer(
                 fileTransfer,
                 error: error
@@ -1539,7 +1548,7 @@ extension WatchSyncManager: WCSessionDelegate {
             if BrowserAgentCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
                 return
             }
-            if MCPNativeDeviceCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
+            if MCPNativeCapabilityCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
                 return
             }
             // 保留消息处理以兼容旧版本

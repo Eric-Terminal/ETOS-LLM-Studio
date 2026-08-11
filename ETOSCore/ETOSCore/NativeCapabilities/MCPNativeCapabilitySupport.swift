@@ -64,6 +64,7 @@ enum MCPNativeCapabilityPolicy {
         "bluetooth.connect",
         "bluetooth.write_characteristic",
         "bluetooth.subscribe",
+        "bluetooth.disconnect",
         "nfc.scan",
         "nfc.read_ndef",
         "nfc.write_ndef"

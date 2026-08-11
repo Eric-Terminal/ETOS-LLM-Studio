@@ -118,6 +118,7 @@ public actor LocalAgentRuntimeContextManager {
         }
         if state.isTerminal {
             await LocalAgentFileToolExecutor.shared.finishRun(id: id)
+            await MCPNativeMediaExecutor.shared.finishRun(id: id)
         }
     }
 
