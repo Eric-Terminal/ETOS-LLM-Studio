@@ -475,6 +475,14 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(WatchChatInputSubmission.shouldUseBoundEditor(for: "继续写"))
     }
 
+    @Test("手表聊天分页为每个终端保留独立标识")
+    func testWatchChatTerminalPageKeepsTerminalIdentity() {
+        let terminalID = UUID()
+
+        #expect(WatchChatPage.chat.terminalID == nil)
+        #expect(WatchChatPage.terminal(terminalID).terminalID == terminalID)
+    }
+
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")
     func testMarkdownFenceNormalizationForRepeatedLanguageClosing() async {
         let source = """

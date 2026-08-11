@@ -241,6 +241,7 @@ struct LocalLinuxWatchFeatureView: View {
 struct LocalLinuxWatchTerminalView: View {
     let initialJobID: UUID?
     let isPresentationActive: Bool
+    let showsTerminalManagement: Bool
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
@@ -251,9 +252,14 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
 
-    init(initialJobID: UUID? = nil, isPresentationActive: Bool = true) {
+    init(
+        initialJobID: UUID? = nil,
+        isPresentationActive: Bool = true,
+        showsTerminalManagement: Bool = true
+    ) {
         self.initialJobID = initialJobID
         self.isPresentationActive = isPresentationActive
+        self.showsTerminalManagement = showsTerminalManagement
     }
 
     var body: some View {
@@ -292,7 +298,7 @@ struct LocalLinuxWatchTerminalView: View {
             }
             Section {
                 TextField(NSLocalizedString("输入", comment: "Watch Linux terminal input"), text: $input)
-                    .onSubmit(send)
+                    .submitLabel(.done)
                 Button(NSLocalizedString("发送", comment: "Send"), action: send)
                     .disabled(job == nil || input.isEmpty)
                 Button(NSLocalizedString("中断", comment: "Interrupt")) {
@@ -304,20 +310,22 @@ struct LocalLinuxWatchTerminalView: View {
                     Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
                 }
             }
-            Section(NSLocalizedString("终端", comment: "Watch terminal sessions section")) {
-                Button(NSLocalizedString("新建终端", comment: "Watch create Linux terminal")) {
-                    Task { await createTerminal() }
-                }
-                ForEach(terminalJobs) { terminal in
-                    Button(terminalLabel(terminal)) { attach(to: terminal) }
-                }
-                if inputOwner == .user, job?.runID != nil {
-                    Button(NSLocalizedString("将输入交还 Agent", comment: "Watch return terminal input to Agent"), action: returnInputToAgent)
+            if showsTerminalManagement {
+                Section(NSLocalizedString("终端", comment: "Watch terminal sessions section")) {
+                    Button(NSLocalizedString("新建终端", comment: "Watch create Linux terminal")) {
+                        Task { await createTerminal() }
+                    }
+                    ForEach(terminalJobs) { terminal in
+                        Button(terminalLabel(terminal)) { attach(to: terminal) }
+                    }
+                    if inputOwner == .user, job?.runID != nil {
+                        Button(NSLocalizedString("将输入交还 Agent", comment: "Watch return terminal input to Agent"), action: returnInputToAgent)
+                    }
                 }
             }
         }
         .preferredColorScheme(.dark)
-        .navigationTitle(NSLocalizedString("终端", comment: "Watch Linux terminal title"))
+        .navigationTitle(terminalNavigationTitle)
         .task(id: isPresentationActive) {
             guard isPresentationActive else {
                 outputTask?.cancel()
@@ -431,6 +439,16 @@ struct LocalLinuxWatchTerminalView: View {
         guard let inputOwner else { return false }
         if case .agent = inputOwner { return true }
         return false
+    }
+
+    private var terminalNavigationTitle: String {
+        guard !showsTerminalManagement, let initialJobID else {
+            return NSLocalizedString("终端", comment: "Watch Linux terminal title")
+        }
+        return String(
+            format: NSLocalizedString("终端 %@", comment: "Watch Linux terminal page title"),
+            String(initialJobID.uuidString.prefix(4))
+        )
     }
 
     private func reloadTerminalShortcuts() {

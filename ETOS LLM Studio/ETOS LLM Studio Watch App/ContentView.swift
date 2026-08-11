@@ -70,7 +70,7 @@ struct ContentView: View {
     @State var chatTransientNotice: WatchChatTransientNotice?
     @State var chatTransientNoticeDismissTask: Task<Void, Never>?
     @State var watchChatPage: WatchChatPage = .chat
-    @State var activeUserTerminalJobID: UUID?
+    @State var activeUserTerminalJobIDs: [UUID] = []
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))

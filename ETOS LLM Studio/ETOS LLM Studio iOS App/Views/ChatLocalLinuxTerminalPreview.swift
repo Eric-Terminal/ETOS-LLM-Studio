@@ -21,6 +21,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
     let onOpen: (UUID) -> Void
 
     @State private var activeTerminalID: UUID?
+    @State private var activeTerminalCount = 0
     @State private var presentation = LocalLinuxTerminalPresentation.empty
     @State private var dragStartOffset: CGSize?
 
@@ -67,9 +68,16 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
                 Spacer(minLength: 4)
 
-                Text(String(jobID.uuidString.prefix(4)))
-                    .etFont(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                if activeTerminalCount > 1 {
+                    Label("\(activeTerminalCount)", systemImage: "rectangle.stack")
+                        .labelStyle(.titleAndIcon)
+                        .etFont(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(String(jobID.uuidString.prefix(4)))
+                        .etFont(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
 
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .etFont(.system(size: 9, weight: .semibold))
@@ -100,6 +108,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
     private func observeTerminalActivity() async {
         guard isEnabled else {
             activeTerminalID = nil
+            activeTerminalCount = 0
             presentation = .empty
             return
         }
@@ -109,11 +118,15 @@ struct LocalLinuxTerminalFloatingPreview: View {
             guard !Task.isCancelled else { return }
             if snapshot.activeTerminalCount == 0 {
                 activeTerminalID = nil
+                activeTerminalCount = 0
                 presentation = .empty
                 continue
             }
             let terminals = await LocalLinuxJobScheduler.shared.activeStandaloneUserTerminals()
-            let nextID = terminals.first?.id
+            let terminalIDs = terminals.map(\.id)
+            activeTerminalCount = terminalIDs.count
+            let nextID = activeTerminalID.flatMap { terminalIDs.contains($0) ? $0 : nil }
+                ?? terminalIDs.first
             if activeTerminalID != nextID {
                 activeTerminalID = nextID
                 presentation = .empty
