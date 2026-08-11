@@ -1,0 +1,131 @@
+// ============================================================================
+// MCPNativeCapabilitySupport.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// 原生系统工具共用的安全策略、受控文件 URI 和 JSON 输出辅助。
+// ============================================================================
+
+import Foundation
+
+enum MCPNativeCapabilityPolicy {
+    private static let perCallApprovalToolIDs: Set<String> = [
+        "health.write_quantity",
+        "health.write_category",
+        "calendar.create_event",
+        "calendar.update_event",
+        "calendar.delete_event",
+        "reminder.create_reminder",
+        "reminder.update_reminder",
+        "reminder.delete_reminder",
+        "contacts.create",
+        "contacts.update",
+        "contacts.delete",
+        "photos.export_asset",
+        "photos.save_asset",
+        "photos.create_album",
+        "photos.add_to_album",
+        "clipboard.write",
+        "clipboard.clear",
+        "notifications.schedule",
+        "notifications.cancel",
+        "notifications.remove_delivered",
+        "alarms.schedule",
+        "alarms.cancel",
+        "maps.open",
+        "device.open_url",
+        "speech.speak",
+        "speech.stop",
+        "media.play_file",
+        "media.pause",
+        "media.resume",
+        "media.stop",
+        "home.write_characteristic",
+        "home.execute_scene",
+        "bluetooth.connect",
+        "bluetooth.write_characteristic",
+        "bluetooth.subscribe",
+        "nfc.scan",
+        "nfc.read_ndef",
+        "nfc.write_ndef"
+    ]
+
+    static func requiresPerCallApproval(_ toolID: String) -> Bool {
+        perCallApprovalToolIDs.contains(toolID)
+    }
+}
+
+enum MCPNativeFileAccess {
+    static func readableURL(for appURI: String) throws -> URL {
+        let url = try controlledURL(for: appURI, allowMissingLeaf: false)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            throw MCPBuiltInPersonalDataError.invalidArgument(
+                NSLocalizedString("指定的 app:// 文件不存在或不是普通文件。", comment: "Native tool input file missing")
+            )
+        }
+        return url
+    }
+
+    static func writableURL(for appURI: String, createParentDirectories: Bool = true) throws -> URL {
+        let url = try controlledURL(for: appURI, allowMissingLeaf: true)
+        let parent = url.deletingLastPathComponent()
+        if createParentDirectories {
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        }
+        try validateResolvedURL(parent)
+        return url
+    }
+
+    static func appURI(for url: URL) -> String {
+        let root = StorageUtility.documentsDirectory.standardizedFileURL
+        let relative = String(url.standardizedFileURL.path.dropFirst(root.path.count))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "app://" + relative
+    }
+
+    private static func controlledURL(for appURI: String, allowMissingLeaf: Bool) throws -> URL {
+        let trimmed = appURI.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("app://") else {
+            throw MCPBuiltInPersonalDataError.invalidArgument(
+                NSLocalizedString("文件参数必须使用 app:// Documents 受控 URI。", comment: "Native tool requires app URI")
+            )
+        }
+        let relativePath = String(trimmed.dropFirst("app://".count))
+        let url = try SandboxFileToolSupport.resolveURL(
+            relativePath: relativePath,
+            rootDirectory: StorageUtility.documentsDirectory,
+            allowRoot: false
+        )
+        if allowMissingLeaf {
+            try validateResolvedURL(url.deletingLastPathComponent())
+        } else {
+            try validateResolvedURL(url)
+        }
+        return url
+    }
+
+    private static func validateResolvedURL(_ url: URL) throws {
+        let root = StorageUtility.documentsDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let target = url.resolvingSymlinksInPath().standardizedFileURL
+        guard target.path == root.path || target.path.hasPrefix(root.path + "/") else {
+            throw MCPBuiltInPersonalDataError.invalidArgument(
+                NSLocalizedString("app:// 路径不能通过符号链接离开 Documents。", comment: "Native tool app URI escaped through symlink")
+            )
+        }
+    }
+}
+
+enum MCPNativeJSON {
+    static func text(_ object: [String: Any]) throws -> String {
+        guard JSONSerialization.isValidJSONObject(object) else {
+            throw MCPClientError.invalidResponse
+        }
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        guard let value = String(data: data, encoding: .utf8) else {
+            throw MCPClientError.invalidResponse
+        }
+        return value
+    }
+}

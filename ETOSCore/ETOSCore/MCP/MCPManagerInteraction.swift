@@ -551,6 +551,9 @@ extension MCPManager {
     }
 
     public func approvalPolicy(serverID: UUID, toolId: String) -> MCPToolApprovalPolicy {
+        if MCPNativeCapabilityPolicy.requiresPerCallApproval(toolId) {
+            return .askEveryTime
+        }
         guard let server = servers.first(where: { $0.id == serverID }) else {
             return .askEveryTime
         }
@@ -560,13 +563,19 @@ extension MCPManager {
     public func approvalPolicy(for toolName: String) -> MCPToolApprovalPolicy? {
         guard chatToolsEnabled else { return .alwaysDeny }
         guard let routed = routedTools[toolName] else { return nil }
+        if MCPNativeCapabilityPolicy.requiresPerCallApproval(routed.tool.toolId) {
+            return .askEveryTime
+        }
         return routed.server.approvalPolicy(for: routed.tool.toolId)
     }
 
     public func setToolApprovalPolicy(serverID: UUID, toolId: String, policy: MCPToolApprovalPolicy) {
         guard var server = servers.first(where: { $0.id == serverID }) else { return }
-        server.setApprovalPolicy(policy, for: toolId)
-        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: String(format: NSLocalizedString("工具 %@ 审批策略已更新为 %@。", comment: "MCP governance tool approval policy changed"), toolId, policy.rawValue))
+        let effectivePolicy = MCPNativeCapabilityPolicy.requiresPerCallApproval(toolId)
+            ? MCPToolApprovalPolicy.askEveryTime
+            : policy
+        server.setApprovalPolicy(effectivePolicy, for: toolId)
+        appendGovernanceLog(level: .info, category: .routing, serverID: serverID, message: String(format: NSLocalizedString("工具 %@ 审批策略已更新为 %@。", comment: "MCP governance tool approval policy changed"), toolId, effectivePolicy.rawValue))
         save(server: server)
     }
 

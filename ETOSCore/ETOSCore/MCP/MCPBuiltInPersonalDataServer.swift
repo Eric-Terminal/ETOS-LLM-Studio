@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 将 HealthKit 与 EventKit 能力包装为内建 MCP Server。
+// 将健康、日历、提醒事项、联系人、照片与位置能力包装为内建 MCP Server。
 // 这里只公布工具清单；真正读取或写入数据时才触发系统权限请求。
 // ============================================================================
 
@@ -14,8 +14,9 @@ import MCP
 public enum MCPBuiltInPersonalDataServer {
     public static let serverID = UUID(uuidString: "45544F53-0000-0000-0000-504452534E4C")!
     public static let endpoint = "builtin://personal-data"
+    private static let nativeToolsMigrationFlagKey = "mcp.personalDataNativeToolsDisabled.v1"
 
-    public static let toolIDs = [
+    private static let legacyToolIDs = [
         "health.list_types",
         "health.query_samples",
         "health.query_statistics",
@@ -31,6 +32,10 @@ public enum MCPBuiltInPersonalDataServer {
         "reminder.delete_reminder"
     ]
 
+    public static var toolIDs: [String] {
+        legacyToolIDs + MCPNativePersonalDataToolDefinitions.toolIDs
+    }
+
     public static func isBuiltInPersonalDataServer(_ server: MCPServerConfiguration) -> Bool {
         server.id == serverID || server.transport == .builtInPersonalData
     }
@@ -39,9 +44,10 @@ public enum MCPBuiltInPersonalDataServer {
         MCPServerConfiguration(
             id: serverID,
             displayName: NSLocalizedString("内建个人数据", comment: "Built-in personal data MCP server name"),
-            notes: NSLocalizedString("提供 HealthKit 健康数据与 EventKit 日历/提醒事项工具。仅在工具正式调用时申请系统权限。", comment: "Built-in personal data MCP server notes"),
+            notes: NSLocalizedString("提供健康、日历、提醒事项、联系人、照片与位置工具。仅在工具正式调用时申请对应系统权限；新加入的工具默认关闭。", comment: "Built-in personal data MCP server notes"),
             transport: .builtInPersonalData,
             isSelectedForChat: true,
+            disabledToolIds: MCPNativePersonalDataToolDefinitions.toolIDs,
             sortIndex: 100
         )
     }
@@ -60,6 +66,7 @@ public enum MCPBuiltInPersonalDataServer {
                 return (servers, nil)
             }
             servers.append(defaultServer)
+            Persistence.writeAppConfig(key: nativeToolsMigrationFlagKey, integer: 1, typeHint: "integer")
             return (servers, defaultServer)
         }
 
@@ -71,6 +78,13 @@ public enum MCPBuiltInPersonalDataServer {
         }
         if server.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             server.displayName = defaultServer.displayName
+            shouldPersist = true
+        }
+        if Persistence.readAppConfigInteger(key: nativeToolsMigrationFlagKey) != 1 {
+            server.disabledToolIds = Array(
+                Set(server.disabledToolIds).union(MCPNativePersonalDataToolDefinitions.toolIDs)
+            ).sorted()
+            Persistence.writeAppConfig(key: nativeToolsMigrationFlagKey, integer: 1, typeHint: "integer")
             shouldPersist = true
         }
         servers[index] = server
@@ -207,7 +221,7 @@ public enum MCPBuiltInPersonalDataServer {
                     required: ["reminder_id"]
                 )
             )
-        ]
+        ] + MCPNativePersonalDataToolDefinitions.descriptions
     }
 
     static func objectSchema(
@@ -382,6 +396,9 @@ actor MCPBuiltInPersonalDataServerEngine {
     private let jsonrpcVersion = "2.0"
     private let healthExecutor = MCPBuiltInPersonalDataHealthExecutor()
     private let eventExecutor = MCPBuiltInPersonalDataEventKitExecutor()
+    private let contactsExecutor = MCPNativeContactsExecutor()
+    private let photosExecutor = MCPNativePhotosExecutor()
+    private let locationExecutor = MCPNativeLocationExecutor()
 
     func handleNotification(_ payload: Data) async throws {
         _ = try requestObject(from: payload)
@@ -457,8 +474,14 @@ actor MCPBuiltInPersonalDataServerEngine {
             let structuredContent: [String: Any]
             if name.hasPrefix("health.") {
                 structuredContent = try await healthExecutor.execute(toolName: name, arguments: arguments)
-            } else {
+            } else if name.hasPrefix("calendar.") || name.hasPrefix("reminder.") {
                 structuredContent = try await eventExecutor.execute(toolName: name, arguments: arguments)
+            } else if name.hasPrefix("contacts.") {
+                structuredContent = try await contactsExecutor.execute(toolName: name, arguments: arguments)
+            } else if name.hasPrefix("photos.") {
+                structuredContent = try await photosExecutor.execute(toolName: name, arguments: arguments)
+            } else {
+                structuredContent = try await locationExecutor.execute(toolName: name, arguments: arguments)
             }
             return successToolResult(structuredContent)
         } catch {
