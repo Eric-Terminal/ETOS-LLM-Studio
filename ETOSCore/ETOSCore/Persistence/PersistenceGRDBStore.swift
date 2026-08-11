@@ -571,6 +571,10 @@ final class PersistenceGRDBStore {
             try Self.createSkillExecutionGovernanceTables(db)
         }
 
+        migrator.registerMigration("v16_system_entry_receipts") { db in
+            try Self.createSystemEntryReceiptTable(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -582,6 +586,7 @@ final class PersistenceGRDBStore {
             try Self.createConversationRuntimeTables(db)
             try Self.migrateLocalAgentBrowserSchema(db)
             try Self.createSkillExecutionGovernanceTables(db)
+            try Self.createSystemEntryReceiptTable(db)
             try ensureColumn(
                 db,
                 table: "conversation_waits",
@@ -705,6 +710,21 @@ final class PersistenceGRDBStore {
             try Self.createSessionTagTables(db)
             try ensureMessagesFTSObjects(db)
         }
+    }
+
+    static func createSystemEntryReceiptTable(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS system_entry_receipts (
+                id TEXT PRIMARY KEY NOT NULL,
+                kind TEXT NOT NULL,
+                session_id TEXT,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_system_entry_receipts_created_at
+            ON system_entry_receipts(created_at DESC)
+        """)
     }
 
     private func createCoreTablesIfMissing(_ db: Database) throws {

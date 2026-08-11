@@ -56,6 +56,9 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                             _ = try? await NewAPIProviderImportURLHandler.importProvider(from: url)
                             return
                         }
+                        if await WatchSystemEntryURLRouter.handle(url) {
+                            return
+                        }
                         _ = await ShortcutURLRouter.shared.handleIncomingURL(url)
                     }
                 }
@@ -65,6 +68,7 @@ struct ETOS_LLM_Studio_Watch_AppApp: App {
                     dailyPulseDeliveryCoordinator.activate()
                     updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
+                    WatchSystemEntrySnapshotPublisher.shared.activate()
                 }
                 .task {
                     launchStateMachine.startIfNeeded()

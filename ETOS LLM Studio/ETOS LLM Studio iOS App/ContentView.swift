@@ -37,6 +37,8 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
+    @State private var systemEntryInboxPayload: SystemEntryInboxPayload?
+    @State private var systemEntryRoute: SystemEntryRoute?
     @State private var newAPIProviderImportNoticeMessage: String?
     @State private var newAPIProviderImportErrorMessage: String?
     @State private var didEnterBackgroundSinceLastActivation = false
@@ -152,6 +154,29 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(item: $systemEntryInboxPayload) { payload in
+            SystemEntryInboxPreviewView(payload: payload) { sessionID in
+                systemEntryInboxPayload = nil
+                if let sessionID { openChatSession(sessionID: sessionID) }
+            }
+        }
+        .sheet(item: $systemEntryRoute) { route in
+            NavigationStack {
+                switch route {
+                case .browser:
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                case .terminal:
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                case .memory(let memory):
+                    if let memory {
+                        MemoryEditView(memory: memory)
+                            .environmentObject(viewModel)
+                    } else {
+                        LongTermMemoryFeatureView()
+                    }
+                }
+            }
+        }
     }
 
     private var notificationAwareContent: some View {
@@ -211,6 +236,12 @@ struct ContentView: View {
             NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore),
             perform: handleIncomingSnapshotRestore
         )
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryInboxPreview)) { notification in
+            systemEntryInboxPayload = notification.object as? SystemEntryInboxPayload
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryRoute)) { notification in
+            systemEntryRoute = notification.object as? SystemEntryRoute
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
             Task { @MainActor in
                 openDailyPulseContinuationIfNeeded()

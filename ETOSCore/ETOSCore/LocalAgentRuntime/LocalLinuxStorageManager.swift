@@ -3,8 +3,8 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// Linux 的宿主目录全部收拢在 Documents/Linux。System 可由内置 seed 重建，
-// 因而排除系统备份；Home、Shared、Workspaces 与 Exports 保留为用户数据。
+// Linux 系统、Home 与工作区保留在 Documents/Linux；Shared 与 Exports 进入
+// App Group，供主 App、扩展和 Files 中的 File Provider 使用同一份内容。
 // ============================================================================
 
 import Foundation
@@ -21,16 +21,25 @@ public struct LocalLinuxStorageLayout: Equatable, Sendable {
     public let workspaces: URL
     public let exports: URL
 
-    public init(documentsDirectory: URL) {
+    public let legacyShared: URL
+    public let legacyExports: URL
+
+    public init(
+        documentsDirectory: URL,
+        sharedDirectory: URL? = nil,
+        exportsDirectory: URL? = nil
+    ) {
         root = documentsDirectory.appendingPathComponent("Linux", isDirectory: true)
         system = root.appendingPathComponent("System", isDirectory: true)
         rootFS = system.appendingPathComponent("RootFS", isDirectory: true)
         rootFSData = rootFS.appendingPathComponent("data", isDirectory: true)
         diagnostics = system.appendingPathComponent("Diagnostics", isDirectory: true)
         home = root.appendingPathComponent("Home", isDirectory: true)
-        shared = root.appendingPathComponent("Shared", isDirectory: true)
+        legacyShared = root.appendingPathComponent("Shared", isDirectory: true)
+        legacyExports = root.appendingPathComponent("Exports", isDirectory: true)
+        shared = sharedDirectory ?? legacyShared
         workspaces = root.appendingPathComponent("Workspaces", isDirectory: true)
-        exports = root.appendingPathComponent("Exports", isDirectory: true)
+        exports = exportsDirectory ?? legacyExports
     }
 }
 
@@ -123,10 +132,15 @@ public actor LocalLinuxStorageManager {
 
     public init(
         fileManager: FileManager = .default,
-        documentsDirectory: URL = StorageUtility.documentsDirectory
+        documentsDirectory: URL = StorageUtility.documentsDirectory,
+        appGroupLayout: ETOSSharedStorageLayout? = .resolve()
     ) {
         self.fileManager = fileManager
-        layout = LocalLinuxStorageLayout(documentsDirectory: documentsDirectory)
+        layout = LocalLinuxStorageLayout(
+            documentsDirectory: documentsDirectory,
+            sharedDirectory: appGroupLayout?.shared,
+            exportsDirectory: appGroupLayout?.exports
+        )
     }
 
     @discardableResult
@@ -146,6 +160,15 @@ public actor LocalLinuxStorageManager {
         values.isExcludedFromBackup = true
         var systemURL = layout.system
         try systemURL.setResourceValues(values)
+        if layout.shared != layout.legacyShared || layout.exports != layout.legacyExports {
+            try ETOSAppGroupStorageMigrator.migrateLegacyLinuxDirectories(
+                layout: layout,
+                sharedLayout: ETOSSharedStorageLayout(
+                    container: layout.shared.deletingLastPathComponent()
+                ),
+                fileManager: fileManager
+            )
+        }
         return layout
     }
 
