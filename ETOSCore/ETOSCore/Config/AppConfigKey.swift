@@ -148,6 +148,31 @@ public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+public enum LocalLinuxChatPreviewMode: String, CaseIterable, Identifiable, Sendable {
+    case off
+    case agentTools = "agent_tools"
+    case userTerminal = "user_terminal"
+
+    public static let defaultMode: LocalLinuxChatPreviewMode = .agentTools
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .off:
+            return NSLocalizedString("关闭", comment: "Local Linux chat preview disabled")
+        case .agentTools:
+            return NSLocalizedString("Agent 工具预览", comment: "Agent tool execution chat preview")
+        case .userTerminal:
+            return NSLocalizedString("用户终端预览", comment: "User terminal chat preview")
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> LocalLinuxChatPreviewMode {
+        LocalLinuxChatPreviewMode(rawValue: rawValue) ?? defaultMode
+    }
+}
+
 public enum LiquidGlassTintSetting {
     public static let minimumOpacity = 0.0
     public static let maximumOpacity = 0.6
@@ -219,6 +244,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localLinuxActivePromptProfileID = "localLinux.activePromptProfileID"
     case localLinuxWorkspaceCleanupPolicy = "localLinux.workspace.cleanupPolicy"
     case localLinuxTerminalShortcutIDs = "localLinux.terminal.shortcutIDs"
+    case localLinuxChatPreviewMode = "localLinux.chat.previewMode"
     case browserAgentDelegateToIPhone = "browserAgent.delegateToIPhone"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
@@ -439,6 +465,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("manual")
         case .localLinuxTerminalShortcutIDs:
             return .text(LocalLinuxTerminalShortcutConfiguration.defaultEncodedValue)
+        case .localLinuxChatPreviewMode:
+            return .text(LocalLinuxChatPreviewMode.defaultMode.rawValue)
         case .browserAgentDelegateToIPhone:
             return .bool(false)
         case .appToolsChatToolsEnabled,

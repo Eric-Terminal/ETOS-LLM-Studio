@@ -17,6 +17,34 @@ struct LocalLinuxWatchFeatureView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            Section(NSLocalizedString("使用", comment: "Watch Linux use section")) {
+                NavigationLink {
+                    LocalLinuxWatchTerminalView()
+                } label: {
+                    Label(NSLocalizedString("用户终端", comment: "Watch Linux terminal entry"), systemImage: "terminal")
+                }
+                .disabled(!appConfig.localLinuxEnabled)
+
+                NavigationLink {
+                    LocalLinuxWatchFileBrowserView()
+                } label: {
+                    Label(NSLocalizedString("Linux 文件", comment: "Watch Linux files entry"), systemImage: "folder")
+                }
+                .disabled(!appConfig.localLinuxEnabled)
+
+                NavigationLink {
+                    LocalLinuxWatchJobsView(sessionID: sessionID)
+                } label: {
+                    Label(NSLocalizedString("任务", comment: "Watch Linux jobs entry"), systemImage: "list.bullet.rectangle")
+                }
+
+                NavigationLink {
+                    LocalLinuxWatchRecipesView()
+                } label: {
+                    Label(NSLocalizedString("安装常用环境", comment: "Watch Linux recipes entry"), systemImage: "shippingbox")
+                }
+                .disabled(!appConfig.localLinuxEnabled)
+            }
             Section {
                 LabeledContent(NSLocalizedString("运行时", comment: "Watch Linux runtime"), value: snapshot.phase.displayName)
                 if let progress = snapshot.installProgress,
@@ -61,34 +89,6 @@ struct LocalLinuxWatchFeatureView: View {
                 }
             }
             LocalLinuxWatchResourceStatusView()
-            Section(NSLocalizedString("使用", comment: "Watch Linux use section")) {
-                NavigationLink {
-                    LocalLinuxWatchTerminalView()
-                } label: {
-                    Label(NSLocalizedString("用户终端", comment: "Watch Linux terminal entry"), systemImage: "terminal")
-                }
-                .disabled(!appConfig.localLinuxEnabled)
-
-                NavigationLink {
-                    LocalLinuxWatchFileBrowserView()
-                } label: {
-                    Label(NSLocalizedString("Linux 文件", comment: "Watch Linux files entry"), systemImage: "folder")
-                }
-                .disabled(!appConfig.localLinuxEnabled)
-
-                NavigationLink {
-                    LocalLinuxWatchJobsView(sessionID: sessionID)
-                } label: {
-                    Label(NSLocalizedString("任务", comment: "Watch Linux jobs entry"), systemImage: "list.bullet.rectangle")
-                }
-
-                NavigationLink {
-                    LocalLinuxWatchRecipesView()
-                } label: {
-                    Label(NSLocalizedString("安装常用环境", comment: "Watch Linux recipes entry"), systemImage: "shippingbox")
-                }
-                .disabled(!appConfig.localLinuxEnabled)
-            }
 
             Section {
                 NavigationLink(NSLocalizedString("环境变量", comment: "Watch Linux environment entry")) {

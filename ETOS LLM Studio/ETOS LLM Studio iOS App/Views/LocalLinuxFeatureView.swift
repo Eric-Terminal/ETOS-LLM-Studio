@@ -29,12 +29,12 @@ struct LocalLinuxFeatureView: View {
 
     var body: some View {
         TabView {
+            activityTab
+                .tabItem { Label(NSLocalizedString("运行", comment: "Local Linux activity tab"), systemImage: "terminal") }
             systemTab
                 .tabItem { Label(NSLocalizedString("系统", comment: "Local Linux system tab"), systemImage: "cpu") }
             configurationTab
                 .tabItem { Label(NSLocalizedString("配置", comment: "Local Linux configuration tab"), systemImage: "slider.horizontal.3") }
-            activityTab
-                .tabItem { Label(NSLocalizedString("运行", comment: "Local Linux activity tab"), systemImage: "terminal") }
             dataTab
                 .tabItem { Label(NSLocalizedString("数据", comment: "Local Linux data tab"), systemImage: "internaldrive") }
         }
@@ -73,19 +73,6 @@ struct LocalLinuxFeatureView: View {
 
     private var systemTab: some View {
         Form {
-            Section {
-                LocalLinuxGuideCard()
-            }
-
-            Section {
-                Toggle(
-                    NSLocalizedString("启用本地 Linux", comment: "Enable local Linux toggle"),
-                    isOn: $appConfig.localLinuxEnabled
-                )
-            } footer: {
-                Text(NSLocalizedString("这里只启用入口；首次实际使用时才准备系统。", comment: "Local Linux lazy start footer"))
-            }
-
             Section {
                 LabeledContent(
                     NSLocalizedString("运行时", comment: "Local Linux runtime label"),
@@ -145,6 +132,18 @@ struct LocalLinuxFeatureView: View {
 
     private var configurationTab: some View {
         Form {
+            Section {
+                Picker(
+                    NSLocalizedString("聊天缩略图", comment: "Local Linux chat preview setting"),
+                    selection: $appConfig.localLinuxChatPreviewMode
+                ) {
+                    ForEach(LocalLinuxChatPreviewMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+            }
+
             Section {
                 NavigationLink {
                     LocalLinuxEnvironmentView()
@@ -234,6 +233,19 @@ struct LocalLinuxFeatureView: View {
 
     private var activityTab: some View {
         Form {
+            Section {
+                Toggle(
+                    NSLocalizedString("启用本地 Linux", comment: "Enable local Linux toggle"),
+                    isOn: $appConfig.localLinuxEnabled
+                )
+            } footer: {
+                Text(NSLocalizedString("开启后可使用终端、Agent Linux 工具与本地 MCP；系统仍会在首次使用时按需准备。", comment: "Local Linux run tab enable footer"))
+            }
+
+            Section {
+                LocalLinuxGuideCard()
+            }
+
             Section {
                 NavigationLink {
                     LocalLinuxTerminalView()

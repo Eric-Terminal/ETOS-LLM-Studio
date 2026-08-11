@@ -113,6 +113,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedSpeechModel: RunnableModel?
     @Published var latestAssistantMessageID: UUID?
     @Published var toolCallResultIDs: Set<String> = []
+    @Published var latestAgentToolExecutionPreview: AgentToolExecutionPreviewSnapshot?
     @Published var runningSessionIDs: Set<UUID> = []
     @Published var conversationRuntimeStates: [UUID: ConversationRuntimeSessionState] = [:]
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?

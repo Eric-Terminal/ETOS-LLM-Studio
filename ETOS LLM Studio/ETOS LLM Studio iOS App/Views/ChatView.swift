@@ -1125,16 +1125,22 @@ extension ChatView {
                     .zIndex(24)
                 }
 
-                LocalLinuxTerminalFloatingPreview(
-                    isEnabled: appConfig.localLinuxEnabled,
+                LocalLinuxChatFloatingPreview(
+                    mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                    isLocalLinuxEnabled: appConfig.localLinuxEnabled,
+                    agentToolPreview: viewModel.latestAgentToolExecutionPreview,
+                    sessionID: viewModel.currentSession?.id,
                     containerSize: chatViewportSize,
                     topPadding: navBarHeight + 12,
                     bottomPadding: max(16, chatInputBarHeight + 16),
                     offset: $localTerminalPreviewOffset,
                     isLiquidGlassEnabled: isLiquidGlassEnabled,
-                    onOpen: { jobID in
+                    onOpenTerminal: { jobID in
                         localTerminalInitialJobID = jobID
                         navigationDestination = .localTerminal
+                    },
+                    onOpenBrowser: {
+                        navigationDestination = .browser
                     }
                 )
                 .zIndex(25)

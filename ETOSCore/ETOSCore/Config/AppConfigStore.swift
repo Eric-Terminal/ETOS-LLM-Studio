@@ -186,6 +186,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localLinuxActivePromptProfileID: String { didSet { write(.localLinuxActivePromptProfileID, localLinuxActivePromptProfileID) } }
     @Published public var localLinuxWorkspaceCleanupPolicy: String { didSet { write(.localLinuxWorkspaceCleanupPolicy, localLinuxWorkspaceCleanupPolicy) } }
     @Published public var localLinuxTerminalShortcutIDs: String { didSet { write(.localLinuxTerminalShortcutIDs, localLinuxTerminalShortcutIDs) } }
+    @Published public var localLinuxChatPreviewMode: String { didSet { write(.localLinuxChatPreviewMode, localLinuxChatPreviewMode) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -575,6 +576,9 @@ public final class AppConfigStore: ObservableObject {
         localLinuxActivePromptProfileID = Self.textValue(.localLinuxActivePromptProfileID, userDefaults: userDefaults)
         localLinuxWorkspaceCleanupPolicy = Self.textValue(.localLinuxWorkspaceCleanupPolicy, userDefaults: userDefaults)
         localLinuxTerminalShortcutIDs = Self.textValue(.localLinuxTerminalShortcutIDs, userDefaults: userDefaults)
+        localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(
+            Self.textValue(.localLinuxChatPreviewMode, userDefaults: userDefaults)
+        ).rawValue
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -1126,6 +1130,7 @@ public final class AppConfigStore: ObservableObject {
         case .localLinuxActivePromptProfileID: return .text(localLinuxActivePromptProfileID)
         case .localLinuxWorkspaceCleanupPolicy: return .text(localLinuxWorkspaceCleanupPolicy)
         case .localLinuxTerminalShortcutIDs: return .text(localLinuxTerminalShortcutIDs)
+        case .localLinuxChatPreviewMode: return .text(localLinuxChatPreviewMode)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -1473,6 +1478,8 @@ public final class AppConfigStore: ObservableObject {
             localLinuxWorkspaceCleanupPolicy = value == "automatic" ? "automatic" : "manual"
         case .localLinuxTerminalShortcutIDs:
             localLinuxTerminalShortcutIDs = value
+        case .localLinuxChatPreviewMode:
+            localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(value).rawValue
         case .reasoningContentEchoMode:
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
@@ -1844,6 +1851,8 @@ public final class AppConfigStore: ObservableObject {
             return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
         case .localLinuxWorkspaceCleanupPolicy:
             return value == "automatic" ? "automatic" : "manual"
+        case .localLinuxChatPreviewMode:
+            return LocalLinuxChatPreviewMode.normalized(value).rawValue
         default:
             return value
         }

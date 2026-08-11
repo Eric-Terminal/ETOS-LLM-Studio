@@ -135,6 +135,9 @@ extension ChatViewModel {
         if latestAssistantMessageID != metadata.latestAssistantID {
             latestAssistantMessageID = metadata.latestAssistantID
         }
+        if latestAgentToolExecutionPreview != metadata.agentToolPreview {
+            latestAgentToolExecutionPreview = metadata.agentToolPreview
+        }
 
         updateDisplayedMessages()
     }
@@ -400,6 +403,9 @@ extension ChatViewModel {
             if latestAssistantMessageID != metadata.latestAssistantID {
                 latestAssistantMessageID = metadata.latestAssistantID
             }
+            if latestAgentToolExecutionPreview != metadata.agentToolPreview {
+                latestAgentToolExecutionPreview = metadata.agentToolPreview
+            }
             updateDisplayedMessages()
             return
         }
@@ -407,6 +413,7 @@ extension ChatViewModel {
         let visibleIDs = Set(messages.map(\.id))
         var updatedToolCallResultIDs = toolCallResultIDs
         var updatedLatestAssistantID = latestAssistantMessageID
+        var needsAgentToolPreviewRefresh = false
         var needsDisplayRefilter = false
         var needsFullDisplayRefresh = false
 
@@ -449,6 +456,9 @@ extension ChatViewModel {
                 updatedToolCallResultIDs.formUnion(newResultIDs)
                 needsDisplayRefilter = true
             }
+            if oldMessage.toolCalls != newMessage.toolCalls {
+                needsAgentToolPreviewRefresh = true
+            }
 
             if updatedLatestAssistantID == oldMessage.id {
                 if newMessage.role != .assistant {
@@ -467,7 +477,19 @@ extension ChatViewModel {
         if latestAssistantMessageID != updatedLatestAssistantID {
             latestAssistantMessageID = updatedLatestAssistantID
         }
+        if needsAgentToolPreviewRefresh {
+            let preview = collectAgentToolExecutionPreview(from: incomingMessages)
+            if latestAgentToolExecutionPreview != preview {
+                latestAgentToolExecutionPreview = preview
+            }
+        }
         if needsFullDisplayRefresh {
+            if !needsAgentToolPreviewRefresh {
+                let preview = collectAgentToolExecutionPreview(from: incomingMessages)
+                if latestAgentToolExecutionPreview != preview {
+                    latestAgentToolExecutionPreview = preview
+                }
+            }
             updateDisplayedMessages()
             return
         }
@@ -481,18 +503,36 @@ extension ChatViewModel {
         return zip(lhs, rhs).allSatisfy { $0.id == $1.id }
     }
 
-    func collectMessageMetadata(from messages: [ChatMessage]) -> (toolCallResultIDs: Set<String>, latestAssistantID: UUID?) {
+    func collectMessageMetadata(
+        from messages: [ChatMessage]
+    ) -> (
+        toolCallResultIDs: Set<String>,
+        latestAssistantID: UUID?,
+        agentToolPreview: AgentToolExecutionPreviewSnapshot?
+    ) {
         var resultIDs = Set<String>()
         var latestAssistantID: UUID?
+        var toolPreviewAccumulator = AgentToolExecutionPreviewAccumulator()
 
         for message in ChatResponseAttemptSupport.visibleMessages(from: messages) {
             resultIDs.formUnion(toolCallResultIDs(for: message))
+            toolPreviewAccumulator.append(message)
             if message.role == .assistant {
                 latestAssistantID = message.id
             }
         }
 
-        return (resultIDs, latestAssistantID)
+        return (resultIDs, latestAssistantID, toolPreviewAccumulator.preferred)
+    }
+
+    func collectAgentToolExecutionPreview(
+        from messages: [ChatMessage]
+    ) -> AgentToolExecutionPreviewSnapshot? {
+        var accumulator = AgentToolExecutionPreviewAccumulator()
+        for message in ChatResponseAttemptSupport.visibleMessages(from: messages) {
+            accumulator.append(message)
+        }
+        return accumulator.preferred
     }
 
     func toolCallResultIDs(for message: ChatMessage) -> Set<String> {

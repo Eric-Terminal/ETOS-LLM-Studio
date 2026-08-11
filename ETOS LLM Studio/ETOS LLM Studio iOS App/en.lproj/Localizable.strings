@@ -6472,3 +6472,12 @@
 "KB" = "KB";
 "0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。" = "0 means no command timeout. When output exceeds this size, only the copy sent to the model is truncated; the full output remains in the user terminal.";
 "终端操作" = "Terminal Actions";
+"Agent 工具预览" = "Agent Tool Preview";
+"用户终端预览" = "User Terminal Preview";
+"聊天缩略图" = "Chat Preview";
+"开启后可使用终端、Agent Linux 工具与本地 MCP；系统仍会在首次使用时按需准备。" = "Enable terminals, Agent Linux tools, and local MCP. The system is still prepared on first use.";
+"展开 Agent 工具预览" = "Expand Agent tool preview";
+"等待工具输出…" = "Waiting for tool output…";
+"Linux" = "Linux";
+"打开浏览器" = "Open Browser";
+"预览已截断" = "Preview truncated";
