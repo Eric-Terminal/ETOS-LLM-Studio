@@ -9,6 +9,12 @@
 
 import Foundation
 
+/// watchOS 的动态 WebKit bridge 通过 Objective-C 回调返回未标注并发安全性的值；
+/// 值只在主 Actor 内解包和读取，不会跨线程保留原始对象。
+struct BrowserAgentUncheckedJavaScriptResult: @unchecked Sendable {
+    let value: Any?
+}
+
 func browserAgentJavaScriptLiteral(_ text: String) throws -> String {
     let data = try JSONEncoder().encode(text)
     guard let literal = String(data: data, encoding: .utf8) else {

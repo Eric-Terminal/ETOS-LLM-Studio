@@ -17,12 +17,27 @@ public actor BrowserAgentToolExecutor {
         let tab_id: String?
         let url: String?
         let element_index: Int?
+        let element_id: String?
+        let dom_revision: Int?
+        let selector: String?
         let text: String?
         let submit: Bool?
         let delta_x: Double?
         let delta_y: Double?
         let script: String?
         let filename: String?
+        let full_page: Bool?
+        let user_agent: BrowserAgentUserAgentProfile?
+        let viewport_width: Int?
+        let viewport_height: Int?
+        let reset: Bool?
+        let max_depth: Int?
+        let max_nodes: Int?
+        let scroll_count: Int?
+        let item_selector: String?
+        let dedupe_key: String?
+        let timeout_seconds: Double?
+        let quiet_period_seconds: Double?
     }
 
     private struct ActiveBrowserJob {
@@ -183,120 +198,302 @@ public actor BrowserAgentToolExecutor {
            await manager.isUserControlling(sessionID: sessionID) {
             throw BrowserAgentError.userTakeover
         }
-        let allowedNavigationHosts = try await authorizeSensitiveBoundary(
-            arguments,
-            sessionID: sessionID,
-            toolCallID: toolCallID,
-            manager: manager
-        )
+        let selectedTabID = try tabID(arguments.tab_id)
+        let tracksControl = arguments.action != .capabilities && arguments.action != .listTabs
+        if tracksControl {
+            await manager.beginAgentAction(
+                sessionID: sessionID,
+                tabID: selectedTabID,
+                action: arguments.action
+            )
+        }
+        do {
+            let allowedNavigationHosts = try await authorizeSensitiveBoundary(
+                arguments,
+                sessionID: sessionID,
+                toolCallID: toolCallID,
+                manager: manager
+            )
+            let result = try await performAction(
+                arguments,
+                sessionID: sessionID,
+                tabID: selectedTabID,
+                dataProfile: dataProfile,
+                allowedNavigationHosts: allowedNavigationHosts,
+                manager: manager
+            )
+            if tracksControl {
+                await manager.finishAgentAction(
+                    sessionID: sessionID,
+                    action: arguments.action,
+                    status: .completed,
+                    detail: NSLocalizedString("浏览器操作已完成", comment: "Browser Agent action completed")
+                )
+            }
+            return result
+        } catch {
+            if tracksControl {
+                await manager.finishAgentAction(
+                    sessionID: sessionID,
+                    action: arguments.action,
+                    status: error is CancellationError ? .interrupted : .failed,
+                    detail: error.localizedDescription
+                )
+            }
+            throw error
+        }
+    }
 
+    private func performAction(
+        _ arguments: Arguments,
+        sessionID: UUID,
+        tabID: UUID?,
+        dataProfile: BrowserAgentDataProfile,
+        allowedNavigationHosts: Set<String>,
+        manager: BrowserSessionManager
+    ) async throws -> String {
         switch arguments.action {
         case .capabilities:
-            let capabilities = await manager.capabilities()
-            return encode(["capabilities": .dictionary(jsonObject(capabilities))])
+            return encode(["capabilities": .dictionary(jsonObject(await manager.capabilities()))])
         case .listTabs:
-            let tabs = await manager.tabs(sessionID: sessionID)
-            return encodeTabs(tabs)
+            return encodeTabs(await manager.tabs(sessionID: sessionID))
         case .openTab:
-            let url = try arguments.url.map(validatedURL)
             let tab = try await manager.openTab(
                 sessionID: sessionID,
-                url: url,
+                url: try arguments.url.map(validatedURL),
                 dataProfile: dataProfile,
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )
             return encodeTab(tab)
         case .navigate:
-            let url = try requiredURL(arguments.url)
             let tab = try await manager.navigate(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
-                url: url,
+                tabID: tabID,
+                url: try requiredURL(arguments.url),
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )
             return encodeTab(tab)
         case .snapshot:
-            let snapshot = try await manager.snapshot(sessionID: sessionID, tabID: try tabID(arguments.tab_id))
-            return encode(["snapshot": .dictionary(jsonObject(snapshot))])
+            return encode(["snapshot": .dictionary(jsonObject(
+                try await manager.snapshot(sessionID: sessionID, tabID: tabID)
+            ))])
+        case .getText:
+            return encode(["result": try await manager.getText(
+                sessionID: sessionID,
+                tabID: tabID,
+                selector: arguments.selector
+            )])
+        case .getPageInfo:
+            return encode(["page_info": .dictionary(jsonObject(
+                try await manager.getPageInfo(sessionID: sessionID, tabID: tabID)
+            ))])
+        case .findElements:
+            let result = try await manager.findElements(
+                sessionID: sessionID,
+                tabID: tabID,
+                selector: arguments.selector,
+                maximumElements: min(max(arguments.max_nodes ?? 300, 1), 1_000)
+            )
+            return encode(["result": .dictionary(jsonObject(result))])
         case .click:
-            guard let index = arguments.element_index, index >= 0 else {
-                throw BrowserAgentError.invalidArguments(
-                    NSLocalizedString("click 需要非负的 element_index。", comment: "Browser Agent click missing element index")
-                )
-            }
+            let target = try interactionTarget(arguments, action: "click")
             try await manager.click(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
-                elementIndex: index,
+                tabID: tabID,
+                elementID: target.id,
+                elementIndex: target.index,
+                domRevision: target.revision,
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )
-            return encode(["clicked": .bool(true), "element_index": .int(index)])
+            return encode(["clicked": .bool(true), "element_id": target.id.map(JSONValue.string) ?? .null])
         case .type:
-            guard let index = arguments.element_index, index >= 0, let text = arguments.text else {
+            let target = try interactionTarget(arguments, action: "type")
+            guard let text = arguments.text else {
                 throw BrowserAgentError.invalidArguments(
-                    NSLocalizedString("type 需要 element_index 和 text。", comment: "Browser Agent type missing arguments")
+                    NSLocalizedString("type 需要 text。", comment: "Browser Agent type missing text")
                 )
             }
             try await manager.type(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
-                elementIndex: index,
+                tabID: tabID,
+                elementID: target.id,
+                elementIndex: target.index,
+                domRevision: target.revision,
                 text: text,
                 submit: arguments.submit ?? false,
                 allowedAgentNavigationHosts: allowedNavigationHosts
             )
-            return encode(["typed": .bool(true), "element_index": .int(index), "submitted": .bool(arguments.submit ?? false)])
+            return encode(["typed": .bool(true), "submitted": .bool(arguments.submit ?? false)])
+        case .hover:
+            let target = try interactionTarget(arguments, action: "hover")
+            try await manager.hover(
+                sessionID: sessionID,
+                tabID: tabID,
+                elementID: target.id,
+                elementIndex: target.index,
+                domRevision: target.revision,
+                allowedAgentNavigationHosts: allowedNavigationHosts
+            )
+            return encode(["hovered": .bool(true)])
         case .scroll:
             let deltaX = arguments.delta_x ?? 0
             let deltaY = arguments.delta_y ?? 0
             try await manager.scroll(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
+                tabID: tabID,
                 deltaX: deltaX,
-                deltaY: deltaY
+                deltaY: deltaY,
+                allowedAgentNavigationHosts: allowedNavigationHosts
             )
             return encode(["scrolled": .bool(true), "delta_x": .double(deltaX), "delta_y": .double(deltaY)])
+        case .scrollAndCollect:
+            guard let selector = arguments.item_selector?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !selector.isEmpty else {
+                throw BrowserAgentError.invalidArguments(
+                    NSLocalizedString("scroll_and_collect 需要 item_selector。", comment: "Browser Agent collection selector missing")
+                )
+            }
+            return encode(["result": try await manager.scrollAndCollect(
+                sessionID: sessionID,
+                tabID: tabID,
+                deltaY: arguments.delta_y ?? 600,
+                scrollCount: min(max(arguments.scroll_count ?? 5, 1), 20),
+                itemSelector: selector,
+                dedupeKey: arguments.dedupe_key,
+                allowedAgentNavigationHosts: allowedNavigationHosts
+            )])
+        case .waitForDOMStable:
+            let timeout = min(max(arguments.timeout_seconds ?? 10, 0.2), 30)
+            let quiet = min(max(arguments.quiet_period_seconds ?? 0.5, 0.1), min(timeout, 5))
+            return encode(["result": try await manager.waitForDOMStable(
+                sessionID: sessionID,
+                tabID: tabID,
+                timeoutSeconds: timeout,
+                quietPeriodSeconds: quiet
+            )])
+        case .getReadable:
+            return encode(["readable": .dictionary(jsonObject(
+                try await manager.getReadable(sessionID: sessionID, tabID: tabID)
+            ))])
+        case .getBackbone:
+            return encode(["backbone": try await manager.getBackbone(
+                sessionID: sessionID,
+                tabID: tabID,
+                selector: arguments.selector,
+                maximumDepth: min(max(arguments.max_depth ?? 5, 1), 12),
+                maximumNodes: min(max(arguments.max_nodes ?? 300, 1), 1_000)
+            )])
+        case .setUserAgent:
+            guard let profile = arguments.user_agent else {
+                throw BrowserAgentError.invalidArguments(
+                    NSLocalizedString("set_user_agent 需要 user_agent。", comment: "Browser Agent user agent missing")
+                )
+            }
+            return encodeTab(try await manager.setUserAgent(
+                sessionID: sessionID,
+                tabID: tabID,
+                profile: profile
+            ))
+        case .setViewport:
+            let reset = arguments.reset == true
+            if !reset {
+                guard let width = arguments.viewport_width,
+                      let height = arguments.viewport_height,
+                      (320...1_920).contains(width),
+                      (320...2_160).contains(height) else {
+                    throw BrowserAgentError.invalidArguments(
+                        NSLocalizedString("视口宽高必须成对提供，范围分别为 320...1920 与 320...2160。", comment: "Browser Agent viewport invalid")
+                    )
+                }
+            }
+            return encodeTab(try await manager.setViewport(
+                sessionID: sessionID,
+                tabID: tabID,
+                width: arguments.viewport_width,
+                height: arguments.viewport_height,
+                reset: reset
+            ))
         case .evaluateJavaScript:
             guard let script = arguments.script, !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw BrowserAgentError.invalidArguments(
                     NSLocalizedString("evaluate_javascript 需要 script。", comment: "Browser Agent JavaScript missing script")
                 )
             }
-            let result = try await manager.evaluateJavaScript(
+            return encode(["result": try await manager.evaluateJavaScript(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
+                tabID: tabID,
                 script: script,
                 allowedAgentNavigationHosts: allowedNavigationHosts
-            )
-            return encode(["result": result])
+            )])
         case .screenshot:
             #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
-            let url = try await manager.screenshot(sessionID: sessionID, tabID: try tabID(arguments.tab_id))
-            return encode(["path": .string(appPath(for: url))])
+            return encode(["screenshot": .dictionary(jsonObject(
+                try await manager.screenshot(
+                    sessionID: sessionID,
+                    tabID: tabID,
+                    fullPage: arguments.full_page ?? false
+                )
+            ))])
             #else
             throw BrowserAgentError.unsupported(
                 NSLocalizedString("本机截图；可在设置中启用 iPhone 委托。", comment: "Browser Agent watch screenshot unsupported")
             )
             #endif
-        case .download:
+        case .fetch:
             #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
-            let url = try requiredURL(arguments.url)
-            let destination = try await manager.download(
+            let result = try await manager.fetch(
                 sessionID: sessionID,
-                tabID: try tabID(arguments.tab_id),
-                url: url,
+                tabID: tabID,
+                url: try requiredURL(arguments.url),
                 filename: arguments.filename
             )
-            return encode(["path": .string(try BrowserAgentStorage.appURI(for: destination))])
+            return encode(["fetch": .dictionary(jsonObject(result))])
             #else
             throw BrowserAgentError.unsupported(
-                NSLocalizedString("本机下载；可在设置中启用 iPhone 委托。", comment: "Browser Agent watch download unsupported")
+                NSLocalizedString("本机会话获取；可在设置中启用 iPhone 委托。", comment: "Browser Agent watch fetch unsupported")
+            )
+            #endif
+        case .download:
+            #if canImport(WebKit) && canImport(UIKit) && !os(watchOS)
+            let result = try await manager.download(
+                sessionID: sessionID,
+                tabID: tabID,
+                url: try requiredURL(arguments.url),
+                filename: arguments.filename
+            )
+            return encode(["download": .dictionary(jsonObject(result))])
+            #else
+            throw BrowserAgentError.unsupported(
+                NSLocalizedString("本机直接下载；可在设置中启用 iPhone 委托。", comment: "Browser Agent watch download unsupported")
             )
             #endif
         case .closeTab:
-            let tab = try await manager.closeTab(sessionID: sessionID, tabID: try tabID(arguments.tab_id))
-            return encode(["closed_tab": .dictionary(jsonObject(tab))])
+            return encode(["closed_tab": .dictionary(jsonObject(
+                try await manager.closeTab(sessionID: sessionID, tabID: tabID)
+            ))])
         }
+    }
+
+    private func interactionTarget(
+        _ arguments: Arguments,
+        action: String
+    ) throws -> (id: String?, index: Int?, revision: Int?) {
+        let id = arguments.element_id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let index = arguments.element_index
+        guard id?.isEmpty == false || (index.map { $0 >= 0 } == true) else {
+            throw BrowserAgentError.invalidArguments(
+                String(
+                    format: NSLocalizedString("%@ 需要 element_id，或为已有会话兼容提供非负 element_index。", comment: "Browser Agent interaction target missing"),
+                    action
+                )
+            )
+        }
+        if id?.isEmpty == false, arguments.dom_revision == nil {
+            throw BrowserAgentError.invalidArguments(
+                NSLocalizedString("使用 element_id 时必须同时提供 dom_revision。", comment: "Browser Agent DOM revision missing")
+            )
+        }
+        return (id?.isEmpty == false ? id : nil, index, arguments.dom_revision)
     }
 
     private func authorizeSensitiveBoundary(
@@ -334,11 +531,13 @@ public actor BrowserAgentToolExecutor {
             }
             if let host = host(of: target) { allowedHosts.insert(host) }
         case .click:
-            if let index = arguments.element_index,
-               let target = try await manager.interactionDestination(
+            let interaction = try interactionTarget(arguments, action: "click")
+            if let target = try await manager.interactionDestination(
                     sessionID: sessionID,
                     tabID: selectedTabID,
-                    elementIndex: index,
+                    elementID: interaction.id,
+                    elementIndex: interaction.index,
+                    domRevision: interaction.revision,
                     submittingForm: false
                ), host(of: currentURL ?? nil) != host(of: target) {
                 try await requestPermission(
@@ -351,11 +550,13 @@ public actor BrowserAgentToolExecutor {
                 if let host = host(of: target) { allowedHosts.insert(host) }
             }
         case .type where arguments.submit == true:
-            if let index = arguments.element_index,
-               let target = try await manager.interactionDestination(
+            let interaction = try interactionTarget(arguments, action: "type")
+            if let target = try await manager.interactionDestination(
                     sessionID: sessionID,
                     tabID: selectedTabID,
-                    elementIndex: index,
+                    elementID: interaction.id,
+                    elementIndex: interaction.index,
+                    domRevision: interaction.revision,
                     submittingForm: true
                ), host(of: currentURL ?? nil) != host(of: target) {
                 try await requestPermission(
@@ -383,16 +584,19 @@ public actor BrowserAgentToolExecutor {
                 sessionID: sessionID,
                 toolCallID: toolCallID
             )
-        case .download:
+        case .fetch, .download:
             try await requestPermission(
-                kind: "download",
+                kind: arguments.action.rawValue,
                 targetURL: try requiredURL(arguments.url),
                 sourceURL: currentURL ?? nil,
                 sessionID: sessionID,
                 toolCallID: toolCallID,
                 destination: BrowserAgentStorage.downloadDirectoryURI(sessionID: sessionID)
             )
-        case .capabilities, .listTabs, .snapshot, .scroll, .type, .closeTab:
+        case .capabilities, .listTabs, .snapshot, .getText, .getPageInfo,
+             .findElements, .hover, .scroll, .scrollAndCollect,
+             .waitForDOMStable, .getReadable, .getBackbone,
+             .setUserAgent, .setViewport, .type, .closeTab:
             break
         }
         return allowedHosts
@@ -419,7 +623,7 @@ public actor BrowserAgentToolExecutor {
                 format: NSLocalizedString("Browser Agent：截取 %@", comment: "Browser Agent screenshot approval title"),
                 targetHost
             )
-        case "download":
+        case "fetch", "download":
             displayName = String(
                 format: NSLocalizedString("Browser Agent：从 %@ 下载到 %@", comment: "Browser Agent download approval title"),
                 targetHost,
@@ -541,10 +745,4 @@ public actor BrowserAgentToolExecutor {
         return object
     }
 
-    private func appPath(for url: URL) -> String {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        guard let documents,
-              url.path.hasPrefix(documents.path + "/") else { return url.path }
-        return "app://" + String(url.path.dropFirst(documents.path.count + 1))
-    }
 }

@@ -36,6 +36,15 @@ public final class BrowserSessionManager: ObservableObject {
     public func tabs(sessionID: UUID) -> [BrowserAgentTabSummary] { [] }
     public func isUserControlling(sessionID: UUID) -> Bool { false }
     public func setUserControlling(_ isControlling: Bool, sessionID: UUID) {}
+    public func beginUserTakeover(sessionID: UUID) {}
+    public func controlState(sessionID: UUID) -> BrowserAgentControlState { .idle }
+    public func beginAgentAction(sessionID: UUID, tabID: UUID?, action: BrowserAgentAction) {}
+    public func finishAgentAction(
+        sessionID: UUID,
+        action: BrowserAgentAction,
+        status: BrowserAgentControlStatus,
+        detail: String?
+    ) {}
 
     public func openTab(
         sessionID: UUID,
@@ -66,7 +75,9 @@ public final class BrowserSessionManager: ObservableObject {
     public func click(
         sessionID: UUID,
         tabID: UUID?,
-        elementIndex: Int,
+        elementID: String?,
+        elementIndex: Int?,
+        domRevision: Int?,
         allowedAgentNavigationHosts: Set<String>? = nil
     ) async throws {
         throw BrowserAgentError.unsupported("WKWebView")
@@ -75,7 +86,9 @@ public final class BrowserSessionManager: ObservableObject {
     public func type(
         sessionID: UUID,
         tabID: UUID?,
-        elementIndex: Int,
+        elementID: String?,
+        elementIndex: Int?,
+        domRevision: Int?,
         text: String,
         submit: Bool,
         allowedAgentNavigationHosts: Set<String>? = nil
@@ -83,7 +96,7 @@ public final class BrowserSessionManager: ObservableObject {
         throw BrowserAgentError.unsupported("WKWebView")
     }
 
-    public func scroll(sessionID: UUID, tabID: UUID?, deltaX: Double, deltaY: Double) async throws {
+    public func scroll(sessionID: UUID, tabID: UUID?, deltaX: Double, deltaY: Double, allowedAgentNavigationHosts: Set<String>? = nil) async throws {
         throw BrowserAgentError.unsupported("WKWebView")
     }
 
@@ -103,7 +116,9 @@ public final class BrowserSessionManager: ObservableObject {
     public func interactionDestination(
         sessionID: UUID,
         tabID: UUID?,
-        elementIndex: Int,
+        elementID: String?,
+        elementIndex: Int?,
+        domRevision: Int?,
         submittingForm: Bool
     ) async throws -> URL? {
         throw BrowserAgentError.unsupported("WKWebView")

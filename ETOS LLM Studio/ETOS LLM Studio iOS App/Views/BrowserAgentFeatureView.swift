@@ -11,6 +11,7 @@ import ETOSCore
 import SwiftUI
 import Combine
 import WebKit
+import UIKit
 
 struct BrowserAgentFeatureView: View {
     let sessionID: UUID?
@@ -24,7 +25,12 @@ struct BrowserAgentFeatureView: View {
     @State private var tabs: [BrowserAgentTabSummary] = []
     @State private var selectedTabID: UUID?
     @State private var selectedWebView: WKWebView?
+    @State private var controlState = BrowserAgentControlState.idle
+    @State private var isUserTakingOver = false
+    @State private var isViewActive = false
     @FocusState private var addressFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Group {
@@ -36,9 +42,12 @@ struct BrowserAgentFeatureView: View {
             } else {
                 VStack(spacing: 0) {
                     tabBar
+                        .disabled(!canInteract)
                     addressBar
+                        .disabled(!canInteract)
                     browserContent
                     browserToolbar
+                        .disabled(!canInteract)
                 }
             }
         }
@@ -52,7 +61,7 @@ struct BrowserAgentFeatureView: View {
                     Image(systemName: "plus")
                 }
                 .accessibilityLabel(NSLocalizedString("新建标签页", comment: "Browser Agent new tab accessibility label"))
-                .disabled(sessionID == nil || isWorking)
+                .disabled(sessionID == nil || isWorking || !canInteract)
 
                 Button {
                     isShowingSettings = true
@@ -74,6 +83,7 @@ struct BrowserAgentFeatureView: View {
         .task(id: sessionID) {
             await prepareSession()
         }
+        .onAppear { isViewActive = true }
         .onReceive(manager.objectWillChange) { _ in
             guard !addressFocused else { return }
             Task { @MainActor in
@@ -82,9 +92,14 @@ struct BrowserAgentFeatureView: View {
             }
         }
         .onDisappear {
-            if let sessionID {
+            isViewActive = false
+            if let sessionID, isUserTakingOver {
+                isUserTakingOver = false
                 manager.setUserControlling(false, sessionID: sessionID)
             }
+        }
+        .onChange(of: controlState) { _, newValue in
+            announceControlState(newValue)
         }
         .alert(
             NSLocalizedString("浏览器操作失败", comment: "Browser Agent operation failed alert"),
@@ -172,19 +187,92 @@ struct BrowserAgentFeatureView: View {
 
     @ViewBuilder
     private var browserContent: some View {
-        if let webView = selectedWebView, let selectedTabID {
-            BrowserAgentWebView(webView: webView)
-                .id(selectedTabID)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if isWorking {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ContentUnavailableView(
-                NSLocalizedString("没有打开的标签页", comment: "Browser Agent no open tabs"),
-                systemImage: "safari"
-            )
+        ZStack(alignment: .bottom) {
+            Group {
+                if let webView = selectedWebView, let selectedTabID {
+                    BrowserAgentWebView(webView: webView)
+                        .id(selectedTabID)
+                        .allowsHitTesting(canInteract)
+                } else if isWorking {
+                    ProgressView()
+                } else {
+                    ContentUnavailableView(
+                        NSLocalizedString("没有打开的标签页", comment: "Browser Agent no open tabs"),
+                        systemImage: "safari"
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if showsAgentOverlay {
+                agentStatusOverlay
+                    .padding()
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(
+            reduceMotion ? .linear(duration: 0.16) : .spring(response: 0.38, dampingFraction: 0.82),
+            value: showsAgentOverlay
+        )
+    }
+
+    private var agentStatusOverlay: some View {
+        HStack {
+            ProgressView()
+                .controlSize(.small)
+
+            VStack(alignment: .leading) {
+                Text(controlStatusTitle)
+                    .font(.subheadline.weight(.semibold))
+                if let domain = controlState.domain, !domain.isEmpty {
+                    Text(domain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            if controlState.controller == .agent {
+                Button(NSLocalizedString("接管", comment: "Browser Agent take over button")) {
+                    takeOverBrowser()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .background {
+            if reduceTransparency {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground))
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.regularMaterial)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var canInteract: Bool {
+        isUserTakingOver && controlState.controller == .user
+    }
+
+    private var showsAgentOverlay: Bool {
+        controlState.controller == .agent || controlState.controller == .returningToAgent
+    }
+
+    private var controlStatusTitle: String {
+        if controlState.controller == .returningToAgent {
+            return NSLocalizedString("正在把页面交还给 Agent", comment: "Browser Agent returning control status")
+        }
+        guard let action = controlState.action else {
+            return NSLocalizedString("Agent 正在操作网页", comment: "Browser Agent generic running status")
+        }
+        return String(
+            format: NSLocalizedString("Agent 正在%@", comment: "Browser Agent action running status"),
+            actionDisplayName(action)
+        )
     }
 
     private var browserToolbar: some View {
@@ -241,7 +329,15 @@ struct BrowserAgentFeatureView: View {
         persistentProfileEnabled = await Task.detached(priority: .utility) {
             Persistence.browserAgentDataProfile(sessionID: sessionID) == .persistentShared
         }.value
-        manager.setUserControlling(true, sessionID: sessionID)
+        let currentControl = manager.controlState(sessionID: sessionID)
+        controlState = currentControl
+        if currentControl.controller == .agent || currentControl.controller == .returningToAgent {
+            isUserTakingOver = false
+        } else {
+            manager.beginUserTakeover(sessionID: sessionID)
+            isUserTakingOver = true
+            controlState = manager.controlState(sessionID: sessionID)
+        }
         if manager.tabs(sessionID: sessionID).isEmpty {
             do {
                 _ = try await manager.openTab(sessionID: sessionID)
@@ -333,13 +429,80 @@ struct BrowserAgentFeatureView: View {
             selectedTabID = nil
             selectedWebView = nil
             address = ""
+            controlState = .idle
+            isUserTakingOver = false
             return
         }
         tabs = manager.tabs(sessionID: sessionID)
         selectedTabID = manager.selectedTabID(sessionID: sessionID)
         selectedWebView = manager.selectedWebView(sessionID: sessionID)
+        let latestControl = manager.controlState(sessionID: sessionID)
+        controlState = latestControl
+        if latestControl.controller == .user {
+            isUserTakingOver = true
+        } else if latestControl.controller == .agent || latestControl.controller == .returningToAgent {
+            isUserTakingOver = false
+        } else if isViewActive, !isUserTakingOver {
+            takeOverBrowser()
+        }
         guard !addressFocused else { return }
         refreshAddress()
+    }
+
+    private func takeOverBrowser() {
+        guard let sessionID else { return }
+        isUserTakingOver = true
+        manager.beginUserTakeover(sessionID: sessionID)
+        controlState = manager.controlState(sessionID: sessionID)
+    }
+
+    private func announceControlState(_ state: BrowserAgentControlState) {
+        let announcement: String?
+        if state.controller == .agent {
+            announcement = controlStatusTitle
+        } else {
+            switch state.status {
+            case .completed:
+                announcement = NSLocalizedString("Agent 已完成浏览器操作", comment: "Browser Agent VoiceOver completed announcement")
+            case .failed:
+                announcement = NSLocalizedString("Agent 浏览器操作失败", comment: "Browser Agent VoiceOver failed announcement")
+            case .interrupted:
+                announcement = NSLocalizedString("Agent 浏览器操作已中断", comment: "Browser Agent VoiceOver interrupted announcement")
+            case .idle, .running, .waiting:
+                announcement = nil
+            }
+        }
+        if let announcement {
+            UIAccessibility.post(notification: .announcement, argument: announcement)
+        }
+    }
+
+    private func actionDisplayName(_ action: BrowserAgentAction) -> String {
+        switch action {
+        case .capabilities: return NSLocalizedString("检查浏览器能力", comment: "Browser Agent action label")
+        case .listTabs: return NSLocalizedString("读取标签页", comment: "Browser Agent action label")
+        case .openTab: return NSLocalizedString("打开标签页", comment: "Browser Agent action label")
+        case .navigate: return NSLocalizedString("载入网页", comment: "Browser Agent action label")
+        case .snapshot: return NSLocalizedString("读取页面快照", comment: "Browser Agent action label")
+        case .getText: return NSLocalizedString("读取页面文字", comment: "Browser Agent action label")
+        case .getPageInfo: return NSLocalizedString("读取页面信息", comment: "Browser Agent action label")
+        case .findElements: return NSLocalizedString("查找页面元素", comment: "Browser Agent action label")
+        case .click: return NSLocalizedString("点击页面元素", comment: "Browser Agent action label")
+        case .type: return NSLocalizedString("输入文字", comment: "Browser Agent action label")
+        case .hover: return NSLocalizedString("悬停页面元素", comment: "Browser Agent action label")
+        case .scroll: return NSLocalizedString("滚动页面", comment: "Browser Agent action label")
+        case .scrollAndCollect: return NSLocalizedString("滚动并收集内容", comment: "Browser Agent action label")
+        case .waitForDOMStable: return NSLocalizedString("等待页面稳定", comment: "Browser Agent action label")
+        case .getReadable: return NSLocalizedString("提取页面正文", comment: "Browser Agent action label")
+        case .getBackbone: return NSLocalizedString("读取页面结构", comment: "Browser Agent action label")
+        case .setUserAgent: return NSLocalizedString("切换浏览模式", comment: "Browser Agent action label")
+        case .setViewport: return NSLocalizedString("调整页面视口", comment: "Browser Agent action label")
+        case .evaluateJavaScript: return NSLocalizedString("执行页面脚本", comment: "Browser Agent action label")
+        case .screenshot: return NSLocalizedString("截取页面", comment: "Browser Agent action label")
+        case .fetch: return NSLocalizedString("获取网页资源", comment: "Browser Agent action label")
+        case .download: return NSLocalizedString("下载网页资源", comment: "Browser Agent action label")
+        case .closeTab: return NSLocalizedString("关闭标签页", comment: "Browser Agent action label")
+        }
     }
 
     private func resolvedAddress(_ text: String) -> URL? {
