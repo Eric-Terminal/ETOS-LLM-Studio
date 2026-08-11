@@ -67,17 +67,22 @@ struct StartWatchETOSAgentTaskIntent: AppIntent {
         requestID = UUID().uuidString
     }
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<WatchETOSSessionEntity> {
         let result = try await SystemEntryCoordinator.shared.startTask(
             prompt: prompt,
             mode: .agent,
             title: taskTitle,
             requestID: UUID(uuidString: requestID ?? "") ?? UUID()
         )
+        let sessionID = result.sessionID
+        let sessionName = await Task.detached(priority: .userInitiated) {
+            Persistence.loadChatSession(id: sessionID)?.name
+        }.value ?? NSLocalizedString("新的 Agent 任务", comment: "Fallback watch Agent intent session name")
+        let entity = WatchETOSSessionEntity(id: sessionID, name: String(sessionName.prefix(80)))
         let message = result.wasAlreadyHandled
             ? NSLocalizedString("该任务已经接收，将继续使用原会话。", comment: "Idempotent watch Agent intent result")
             : NSLocalizedString("任务已交给 ETOS Agent。", comment: "Watch Agent intent success")
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        return .result(value: entity, dialog: IntentDialog(stringLiteral: message))
     }
 }
 
@@ -93,13 +98,16 @@ struct ContinueWatchETOSSessionIntent: AppIntent {
         requestID = UUID().uuidString
     }
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<WatchETOSSessionEntity> {
         _ = try await SystemEntryCoordinator.shared.continueTask(
             sessionID: session.id,
             prompt: prompt,
             requestID: UUID(uuidString: requestID ?? "") ?? UUID()
         )
-        return .result(dialog: IntentDialog(stringLiteral: NSLocalizedString("消息已发送。", comment: "Watch continue session intent result")))
+        return .result(
+            value: session,
+            dialog: IntentDialog(stringLiteral: NSLocalizedString("消息已发送。", comment: "Watch continue session intent result"))
+        )
     }
 }
 

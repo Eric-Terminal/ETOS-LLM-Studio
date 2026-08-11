@@ -108,17 +108,22 @@ struct StartETOSAgentTaskIntent: AppIntent {
         requestID = UUID().uuidString
     }
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<ETOSSessionEntity> {
         let result = try await SystemEntryCoordinator.shared.startTask(
             prompt: prompt,
             mode: .agent,
             title: taskTitle,
             requestID: UUID(uuidString: requestID ?? "") ?? UUID()
         )
+        let sessionID = result.sessionID
+        let sessionName = await Task.detached(priority: .userInitiated) {
+            Persistence.loadChatSession(id: sessionID)?.name
+        }.value ?? NSLocalizedString("新的 Agent 任务", comment: "Fallback Agent intent session name")
+        let entity = ETOSSessionEntity(id: sessionID, name: String(sessionName.prefix(80)))
         let message = result.wasAlreadyHandled
             ? NSLocalizedString("该任务已经接收，将继续使用原会话。", comment: "Idempotent Agent intent result")
             : NSLocalizedString("任务已交给 ETOS Agent。", comment: "Agent intent success")
-        return .result(dialog: IntentDialog(stringLiteral: message))
+        return .result(value: entity, dialog: IntentDialog(stringLiteral: message))
     }
 }
 
@@ -134,13 +139,16 @@ struct ContinueETOSSessionIntent: AppIntent {
         requestID = UUID().uuidString
     }
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<ETOSSessionEntity> {
         _ = try await SystemEntryCoordinator.shared.continueTask(
             sessionID: session.id,
             prompt: prompt,
             requestID: UUID(uuidString: requestID ?? "") ?? UUID()
         )
-        return .result(dialog: IntentDialog(stringLiteral: NSLocalizedString("消息已发送。", comment: "Continue session intent result")))
+        return .result(
+            value: session,
+            dialog: IntentDialog(stringLiteral: NSLocalizedString("消息已发送。", comment: "Continue session intent result"))
+        )
     }
 }
 
@@ -192,12 +200,15 @@ struct SaveETOSMemoryIntent: AppIntent {
 
     @Parameter(title: "内容") var content: String
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        _ = try await SystemEntryCoordinator.shared.saveMemory(
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<ETOSMemoryEntity> {
+        let item = try await SystemEntryCoordinator.shared.saveMemory(
             content,
             shortcutName: NSLocalizedString("保存到 ETOS 记忆", comment: "Memory shortcut source")
         )
-        return .result(dialog: IntentDialog(stringLiteral: NSLocalizedString("记忆已保存。", comment: "Save memory intent result")))
+        return .result(
+            value: ETOSMemoryEntity(id: item.id, content: item.content),
+            dialog: IntentDialog(stringLiteral: NSLocalizedString("记忆已保存。", comment: "Save memory intent result"))
+        )
     }
 }
 
