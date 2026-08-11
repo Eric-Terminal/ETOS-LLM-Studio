@@ -56,7 +56,19 @@ public struct ExtendedFeaturesView: View {
                     .foregroundStyle(.secondary)
             }
 
-            WatchBackgroundGenerationSettingsRows()
+            Section {
+                NavigationLink {
+                    WatchBackgroundGenerationSettingsView()
+                } label: {
+                    settingsNavigationLabel("后台生成", icon: .backgroundGeneration)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("减少切换 App 后长回复中断。", comment: "watchOS 后台生成入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Section {
                 NavigationLink {

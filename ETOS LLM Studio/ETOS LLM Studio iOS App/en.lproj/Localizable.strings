@@ -5627,6 +5627,9 @@
 "两种保活方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；位置追踪则创建系统定位后台活动。" = "Both keep-alive methods are off by default and can be combined. Audio Keep-Alive loops an audible gentle waiting sound while generating; Location Tracking creates a system location background activity.";
 "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。音频保活从任务开始播放，并在回复朗读时自动暂停。后台能力仍受系统调度影响，且会增加耗电。" = "While Location Tracking runs, iOS shows a blue location indicator; ETOS doesn't read, save, or upload coordinates. Audio Keep-Alive starts with the task and pauses automatically during reply speech. Background execution remains subject to system scheduling and uses additional power.";
 
+"两种方式可单独开启，也可组合使用。" = "Either method can be enabled on its own, or both can be used together.";
+"后台能力受系统调度影响，并会增加耗电。" = "Background operation remains subject to system scheduling and uses additional power.";
+
 /* 视频解析 */
 "视频解析模型" = "Video Analysis Model";
 "用于先理解非原生视频并把解析文字交给当前对话模型。" = "Used to understand non-native videos first and pass the analysis text to the current chat model.";

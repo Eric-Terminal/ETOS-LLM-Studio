@@ -5620,6 +5620,13 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "朗读期间已暂停" = "Pausado durante la lectura";
 "两种保活方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在朗读时暂停；位置活动不读取、保存或上传坐标。" = "Los dos métodos de mantenimiento están desactivados de forma predeterminada y pueden combinarse. El mantenimiento por audio reproduce en bucle un sonido de espera audible y se pausa durante la lectura. La actividad de ubicación no lee, guarda ni sube coordenadas.";
 
+"减少切换 App 后长回复中断。" = "Reduce las interrupciones de respuestas largas al cambiar de app.";
+"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "Sigue recibiendo una respuesta activa de la IA al cambiar a otra app.";
+"后台生成说明正文" = "ETOS ofrece dos métodos opcionales para reducir la posibilidad de que watchOS pause la conexión de una respuesta al cambiar de app. El seguimiento de ubicación crea una actividad de ubicación del sistema solo mientras se genera una respuesta. watchOS puede mostrar un indicador de ubicación, pero ETOS no solicita actualizaciones de ubicación ni lee, guarda o sube coordenadas. El mantenimiento por audio reproduce en bucle un sonido de espera suave y audible desde el inicio de la tarea y se pausa automáticamente durante la lectura. Ambos métodos se detienen cuando la respuesta termina, falla o se cancela, consumen más energía y no garantizan que todas las conexiones permanezcan activas.";
+"保活方式" = "Métodos de mantenimiento";
+"两种方式可单独开启，也可组合使用。" = "Cada método puede activarse por separado o usarse junto con el otro.";
+"后台能力受系统调度影响，并会增加耗电。" = "El funcionamiento en segundo plano sigue sujeto a la programación del sistema y aumenta el consumo de energía.";
+
 /* 视频解析 */
 "视频解析模型" = "Modelo de análisis de vídeo";
 "用于先理解非原生视频并把解析文字交给当前对话模型。" = "Se usa primero para comprender vídeos no nativos y pasar el texto analizado al modelo de chat actual.";

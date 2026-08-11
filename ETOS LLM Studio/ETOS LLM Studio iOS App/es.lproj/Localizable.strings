@@ -5704,6 +5704,9 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "两种保活方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；位置追踪则创建系统定位后台活动。" = "Los dos métodos de mantenimiento están desactivados de forma predeterminada y pueden combinarse. El mantenimiento por audio reproduce en bucle un sonido de espera suave y audible durante la generación; el seguimiento de ubicación crea una actividad de ubicación del sistema en segundo plano.";
 "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。音频保活从任务开始播放，并在回复朗读时自动暂停。后台能力仍受系统调度影响，且会增加耗电。" = "Durante el seguimiento de ubicación, iOS muestra un indicador azul; ETOS no lee, guarda ni sube coordenadas. El mantenimiento por audio comienza con la tarea y se pausa automáticamente durante la lectura de la respuesta. La ejecución en segundo plano sigue sujeta a la programación del sistema y consume más energía.";
 
+"两种方式可单独开启，也可组合使用。" = "Cada método puede activarse por separado o usarse junto con el otro.";
+"后台能力受系统调度影响，并会增加耗电。" = "El funcionamiento en segundo plano sigue sujeto a la programación del sistema y aumenta el consumo de energía.";
+
 /* 视频解析 */
 "视频解析模型" = "Modelo de análisis de vídeo";
 "用于先理解非原生视频并把解析文字交给当前对话模型。" = "Se usa primero para comprender vídeos no nativos y pasar el texto analizado al modelo de chat actual.";

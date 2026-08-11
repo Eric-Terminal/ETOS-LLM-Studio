@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 管理 watchOS 回复生成期间的定位后台活动、音频保活及其设置行。
+// 管理 watchOS 回复生成期间的定位后台活动、音频保活及其设置页面。
 // 本功能不请求位置更新，也不读取、保存或上传位置坐标。
 // ============================================================================
 
@@ -89,99 +89,150 @@ extension WatchBackgroundGenerationKeepAliveManager: CLLocationManagerDelegate {
     }
 }
 
-struct WatchBackgroundGenerationSettingsRows: View {
+struct WatchBackgroundGenerationSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var keepAliveManager = WatchBackgroundGenerationKeepAliveManager.shared
     @ObservedObject private var audioKeepAliveManager = BackgroundGenerationAudioKeepAliveManager.shared
     @ObservedObject private var ttsManager = TTSManager.shared
+    @State private var isShowingIntroDetails = false
 
     var body: some View {
-        Section {
-            Toggle(
-                NSLocalizedString("位置追踪", comment: "watchOS 后台生成位置追踪开关"),
-                isOn: keepAliveBinding
-            )
+        List {
+            Section {
+                settingsIntroCard
+            }
 
-            Toggle(
-                NSLocalizedString("音频保活", comment: "watchOS 后台生成音频保活开关"),
-                isOn: audioKeepAliveBinding
-            )
+            Section {
+                Toggle(
+                    NSLocalizedString("位置追踪", comment: "watchOS 后台生成位置追踪开关"),
+                    isOn: keepAliveBinding
+                )
 
-            if appConfig.backgroundGenerationAudioKeepAliveEnabled {
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text(NSLocalizedString("等待音量", comment: "watchOS 后台生成等待音量"))
-                        Spacer()
-                        Text(
-                            appConfig.backgroundGenerationAudioKeepAliveVolume,
-                            format: .percent.precision(.fractionLength(0))
+                Toggle(
+                    NSLocalizedString("音频保活", comment: "watchOS 后台生成音频保活开关"),
+                    isOn: audioKeepAliveBinding
+                )
+
+                if appConfig.backgroundGenerationAudioKeepAliveEnabled {
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text(NSLocalizedString("等待音量", comment: "watchOS 后台生成等待音量"))
+                            Spacer()
+                            Text(
+                                appConfig.backgroundGenerationAudioKeepAliveVolume,
+                                format: .percent.precision(.fractionLength(0))
+                            )
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(
+                            value: audioVolumeBinding,
+                            in: BackgroundGenerationAudioKeepAliveSettings.minimumVolume
+                                ... BackgroundGenerationAudioKeepAliveSettings.maximumVolume,
+                            step: 0.05
                         )
-                            .foregroundStyle(.secondary)
                     }
-                    Slider(
-                        value: audioVolumeBinding,
-                        in: BackgroundGenerationAudioKeepAliveSettings.minimumVolume
-                            ... BackgroundGenerationAudioKeepAliveSettings.maximumVolume,
-                        step: 0.05
-                    )
-                }
 
-                Button {
-                    audioKeepAliveManager.togglePreview()
-                } label: {
-                    Label(
-                        audioKeepAliveManager.isPreviewing
-                            ? NSLocalizedString("停止试听", comment: "watchOS 停止试听等待音")
-                            : NSLocalizedString("试听等待音", comment: "watchOS 试听等待音"),
-                        systemImage: audioKeepAliveManager.isPreviewing
-                            ? "stop.circle"
-                            : "play.circle"
-                    )
+                    Button {
+                        audioKeepAliveManager.togglePreview()
+                    } label: {
+                        Label(
+                            audioKeepAliveManager.isPreviewing
+                                ? NSLocalizedString("停止试听", comment: "watchOS 停止试听等待音")
+                                : NSLocalizedString("试听等待音", comment: "watchOS 试听等待音"),
+                            systemImage: audioKeepAliveManager.isPreviewing
+                                ? "stop.circle"
+                                : "play.circle"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(audioKeepAliveManager.isGenerationActive || ttsManager.isSpeaking)
                 }
-                .buttonStyle(.plain)
-                .disabled(audioKeepAliveManager.isGenerationActive || ttsManager.isSpeaking)
+            } header: {
+                Text(NSLocalizedString("保活方式", comment: "watchOS 后台生成保活方式分组"))
+            } footer: {
+                Text(NSLocalizedString(
+                    "两种方式可单独开启，也可组合使用。",
+                    comment: "watchOS 后台生成保活方式说明"
+                ))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
             }
 
-            statusRow(
-                title: NSLocalizedString("位置活动", comment: "watchOS 后台生成位置活动状态"),
-                value: runningStatusText,
-                color: runningStatusColor
-            )
+            Section {
+                statusRow(
+                    title: NSLocalizedString("位置活动", comment: "watchOS 后台生成位置活动状态"),
+                    value: runningStatusText,
+                    color: runningStatusColor
+                )
 
-            statusRow(
-                title: NSLocalizedString("音频保活", comment: "watchOS 后台生成音频保活状态"),
-                value: audioKeepAliveStatusText,
-                color: audioKeepAliveStatusColor
-            )
+                statusRow(
+                    title: NSLocalizedString("音频保活", comment: "watchOS 后台生成音频保活状态"),
+                    value: audioKeepAliveStatusText,
+                    color: audioKeepAliveStatusColor
+                )
 
-            statusRow(
-                title: NSLocalizedString("定位权限", comment: "watchOS 后台持续生成定位权限"),
-                value: authorizationStatusText,
-                color: hasUsableAuthorization ? .green : .secondary
-            )
+                statusRow(
+                    title: NSLocalizedString("定位权限", comment: "watchOS 后台持续生成定位权限"),
+                    value: authorizationStatusText,
+                    color: hasUsableAuthorization ? .green : .secondary
+                )
 
-            if appConfig.backgroundGenerationKeepAliveEnabled,
-               keepAliveManager.authorizationStatus == .notDetermined {
-                Button(NSLocalizedString("请求定位权限", comment: "watchOS 请求后台持续生成定位权限")) {
-                    keepAliveManager.requestAuthorizationIfNeeded()
+                if appConfig.backgroundGenerationKeepAliveEnabled,
+                   keepAliveManager.authorizationStatus == .notDetermined {
+                    Button(NSLocalizedString("请求定位权限", comment: "watchOS 请求后台持续生成定位权限")) {
+                        keepAliveManager.requestAuthorizationIfNeeded()
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+            } header: {
+                Text(NSLocalizedString("运行状态", comment: "watchOS 后台生成状态分组"))
+            } footer: {
+                Text(NSLocalizedString(
+                    "后台能力受系统调度影响，并会增加耗电。",
+                    comment: "watchOS 后台生成状态说明"
+                ))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
             }
-        } header: {
-            Text(NSLocalizedString("后台生成", comment: "watchOS 后台生成设置分组"))
-        } footer: {
-            Text(NSLocalizedString(
-                "两种保活方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在朗读时暂停；位置活动不读取、保存或上传坐标。",
-                comment: "watchOS 后台持续生成说明"
-            ))
-            .etFont(.footnote)
-            .foregroundStyle(.secondary)
         }
+        .navigationTitle(NSLocalizedString("后台生成", comment: "watchOS 后台生成设置页标题"))
         .onAppear {
             keepAliveManager.refreshStatus()
         }
         .onDisappear {
             audioKeepAliveManager.stopPreview()
+        }
+    }
+
+    private var settingsIntroCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("后台生成", comment: "watchOS 后台生成介绍标题"))
+                .etFont(.footnote.weight(.semibold))
+            Text(NSLocalizedString(
+                "切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。",
+                comment: "watchOS 后台生成介绍摘要"
+            ))
+            .etFont(.caption2)
+            .foregroundStyle(.secondary)
+            Button {
+                isShowingIntroDetails = true
+            } label: {
+                Text(NSLocalizedString("进一步了解…", comment: "watchOS 后台生成介绍展开按钮"))
+                    .etFont(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .sheet(isPresented: $isShowingIntroDetails) {
+            ScrollView {
+                Text(NSLocalizedString("后台生成说明正文", comment: "watchOS 后台生成详细说明"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
     }
 

@@ -5543,6 +5543,13 @@
 "朗读期间已暂停" = "Paused During Speech";
 "两种保活方式均默认关闭，可按需组合。音频保活会循环播放可听的等待音，并在朗读时暂停；位置活动不读取、保存或上传坐标。" = "Both keep-alive methods are off by default and can be combined. Audio Keep-Alive loops an audible waiting sound and pauses during speech. Location Activity doesn't read, save, or upload coordinates.";
 
+"减少切换 App 后长回复中断。" = "Reduce interruptions to long responses after switching apps.";
+"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "Keep receiving an active AI response when you switch to another app.";
+"后台生成说明正文" = "ETOS provides two optional keep-alive methods to reduce the chance that watchOS pauses a response connection after you switch apps. Location Tracking creates a system location background activity only while a response is generating; watchOS may show a location indicator, but ETOS doesn't request location updates or read, save, or upload coordinates. Audio Keep-Alive loops an audible gentle waiting sound from the start of the task and pauses automatically during speech. Both methods stop when the response completes, fails, or is canceled, use additional power, and can't guarantee that every connection remains active.";
+"保活方式" = "Background Methods";
+"两种方式可单独开启，也可组合使用。" = "Either method can be enabled on its own, or both can be used together.";
+"后台能力受系统调度影响，并会增加耗电。" = "Background operation remains subject to system scheduling and uses additional power.";
+
 /* 视频解析 */
 "视频解析模型" = "Video Analysis Model";
 "用于先理解非原生视频并把解析文字交给当前对话模型。" = "Used to understand non-native videos first and pass the analysis text to the current chat model.";
