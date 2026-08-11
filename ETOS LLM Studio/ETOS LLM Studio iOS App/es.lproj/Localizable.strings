@@ -6558,3 +6558,5 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Linux" = "Linux";
 "打开浏览器" = "Abrir navegador";
 "预览已截断" = "Vista previa truncada";
+"正在安装" = "Instalando";
+"命令已成功执行。" = "El comando se ejecutó correctamente.";

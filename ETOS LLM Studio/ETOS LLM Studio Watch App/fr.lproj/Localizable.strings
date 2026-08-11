@@ -6434,3 +6434,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "KB" = "Ko";
 "0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。" = "0 signifie sans limite. Si la sortie dépasse cette taille, seule la copie envoyée au modèle est tronquée ; le terminal conserve la sortie complète.";
 "终端操作" = "Actions du terminal";
+"正在安装" = "Installation en cours";
+"命令已成功执行。" = "La commande s’est exécutée correctement.";

@@ -596,9 +596,17 @@ private struct LocalLinuxJobDetailView: View {
 }
 
 struct LocalLinuxRecipesView: View {
+    private enum RecipeStatus {
+        case running
+        case installed
+        case failed
+    }
+
     @State private var selectedRecipe: LocalLinuxEnvironmentRecipe?
-    @State private var result = ""
-    @State private var isRunning = false
+    @State private var recipeStatuses: [String: RecipeStatus] = [:]
+    @State private var activeRecipe: LocalLinuxEnvironmentRecipe?
+    @State private var result: LocalLinuxEnvironmentInstallationResult?
+    @State private var errorMessage: String?
 
     var body: some View {
         List {
@@ -607,23 +615,23 @@ struct LocalLinuxRecipesView: View {
                     Button {
                         selectedRecipe = recipe
                     } label: {
-                        VStack(alignment: .leading) {
-                            Text(recipe.title).foregroundStyle(.primary)
-                            Text(recipe.detail).font(.caption).foregroundStyle(.secondary)
-                            Text(recipe.command).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(recipe.title).foregroundStyle(.primary)
+                                Text(recipe.detail).font(.caption).foregroundStyle(.secondary)
+                                Text(recipe.command).font(.caption.monospaced()).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            statusView(for: recipe)
                         }
                     }
                     .buttonStyle(.plain)
-                    .disabled(isRunning)
+                    .disabled(activeRecipe != nil)
                 }
             } footer: {
                 Text(NSLocalizedString("ETOS 默认不安装任何开发环境。点击后会先展示准确命令，由你确认后执行。", comment: "Linux recipes footer"))
             }
-            if !result.isEmpty {
-                Section(NSLocalizedString("最近结果", comment: "Linux recipe result")) {
-                    Text(result).font(.caption.monospaced()).textSelection(.enabled)
-                }
-            }
+            installationResultSection
         }
         .navigationTitle(NSLocalizedString("安装常用环境", comment: "Linux recipes title"))
         .confirmationDialog(
@@ -647,41 +655,84 @@ struct LocalLinuxRecipesView: View {
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
         selectedRecipe = nil
-        isRunning = true
+        activeRecipe = recipe
+        result = nil
+        errorMessage = nil
+        recipeStatuses[recipe.id] = .running
         Task {
-            defer { isRunning = false }
             do {
-                let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
-                let executable = "/bin/sh"
-                let request = LocalLinuxJobRequest(
-                    executable: executable,
-                    arguments: [executable, "-lc", recipe.command],
-                    workingDirectory: workspace.guestPath,
-                    timeoutSeconds: 0,
-                    outputLimitBytes: 0,
-                    shellScript: recipe.command
-                )
-                let match = await LocalLinuxApprovalPolicy.shared.evaluate(
-                    request: request,
-                    kind: .recipe,
-                    isEnabled: AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled)
-                )
-                let approvedRuleIDs: Set<UUID>
-                if let match, match.action == .confirm {
-                    approvedRuleIDs = [match.ruleID]
-                } else {
-                    approvedRuleIDs = []
-                }
-                let job = try await LocalLinuxJobScheduler.shared.runCommand(
-                    kind: .recipe,
-                    request: request,
-                    context: nil,
-                    workspace: workspace,
-                    approval: LocalLinuxCommandApproval(approvedRuleIDs: approvedRuleIDs)
-                )
-                result = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? job.state.rawValue
+                let installation = try await LocalLinuxEnvironmentInstaller.install(recipe)
+                result = installation
+                recipeStatuses[recipe.id] = installation.succeeded ? .installed : .failed
             } catch {
-                result = error.localizedDescription
+                errorMessage = error.localizedDescription
+                recipeStatuses[recipe.id] = .failed
+            }
+            activeRecipe = nil
+        }
+    }
+
+    @ViewBuilder
+    private func statusView(for recipe: LocalLinuxEnvironmentRecipe) -> some View {
+        switch recipeStatuses[recipe.id] {
+        case .running:
+            ProgressView()
+        case .installed:
+            Label(NSLocalizedString("已安装", comment: "Linux recipe installed status"), systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .failed:
+            Label(NSLocalizedString("失败", comment: "Linux recipe failed status"), systemImage: "exclamationmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+                .labelStyle(.titleAndIcon)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var installationResultSection: some View {
+        if let activeRecipe {
+            Section(activeRecipe.title) {
+                HStack {
+                    ProgressView()
+                    Text(NSLocalizedString("正在安装", comment: "Linux recipe installing status"))
+                }
+                Text(activeRecipe.command)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        } else if let result {
+            Section(NSLocalizedString("最近结果", comment: "Linux recipe result")) {
+                Label(
+                    result.succeeded
+                        ? NSLocalizedString("已安装", comment: "Linux recipe installed status")
+                        : NSLocalizedString("失败", comment: "Linux recipe failed status"),
+                    systemImage: result.succeeded ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+                )
+                .foregroundStyle(result.succeeded ? .green : .red)
+                if let exitCode = result.job.exitCode {
+                    LabeledContent(NSLocalizedString("退出码", comment: "Linux recipe exit code"), value: "\(exitCode)")
+                }
+                Text(
+                    result.output.isEmpty
+                        ? (result.succeeded
+                            ? NSLocalizedString("命令已成功执行。", comment: "Linux recipe succeeded without output")
+                            : result.job.state.displayName)
+                        : result.output
+                )
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+            }
+        } else if let errorMessage {
+            Section(NSLocalizedString("最近结果", comment: "Linux recipe result")) {
+                Label(NSLocalizedString("失败", comment: "Linux recipe failed status"), systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+                Text(errorMessage)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
             }
         }
     }

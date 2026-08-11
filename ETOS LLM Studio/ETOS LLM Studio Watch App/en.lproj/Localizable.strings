@@ -6357,3 +6357,5 @@
 "KB" = "KB";
 "0 表示命令不限时。命令输出超过设置大小时，只会截断发送给模型的副本；用户终端仍保留完整输出。" = "0 means no command timeout. When output exceeds this size, only the copy sent to the model is truncated; the full output remains in the user terminal.";
 "终端操作" = "Terminal Actions";
+"正在安装" = "Installing";
+"命令已成功执行。" = "Command completed successfully.";

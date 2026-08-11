@@ -562,6 +562,24 @@ struct LocalAgentRuntimeTests {
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "uvx")?.id == "uvx")
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "unknown-tool") == nil)
         #expect(LocalLinuxEnvironmentRecipes.all.allSatisfy { $0.command.hasPrefix("apk add ") })
+
+        var job = LocalLinuxJob(
+            requestID: 1,
+            kind: .recipe,
+            sessionID: nil,
+            runID: nil,
+            rootRunID: nil,
+            parentRunID: nil,
+            toolCallID: nil,
+            workspaceID: nil,
+            executorDeviceID: "test",
+            request: LocalLinuxJobRequest(executable: "/bin/sh", arguments: ["/bin/sh", "-lc", "apk add bash"]),
+            state: .completed
+        )
+        job.exitCode = 0
+        #expect(LocalLinuxEnvironmentInstallationResult(job: job, output: "OK").succeeded)
+        job.exitCode = 1
+        #expect(!LocalLinuxEnvironmentInstallationResult(job: job, output: "ERROR").succeeded)
     }
 
     @Test("Linux、Browser 与反馈工具协议暴露完整动作")

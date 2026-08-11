@@ -6558,3 +6558,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "Linux" = "Linux";
 "打开浏览器" = "Ouvrir le navigateur";
 "预览已截断" = "Aperçu tronqué";
+"正在安装" = "Installation en cours";
+"命令已成功执行。" = "La commande s’est exécutée correctement.";

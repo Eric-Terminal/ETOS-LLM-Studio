@@ -49,6 +49,56 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Equatable, Sendable {
     }
 }
 
+public struct LocalLinuxEnvironmentInstallationResult: Equatable, Sendable {
+    public let job: LocalLinuxJob
+    public let output: String
+
+    public init(job: LocalLinuxJob, output: String) {
+        self.job = job
+        self.output = output
+    }
+
+    /// `apk` 的退出码才是安装是否完成的依据，不能把“命令已结束”误报成安装成功。
+    public var succeeded: Bool {
+        job.state == .completed && job.exitCode == 0
+    }
+}
+
+public enum LocalLinuxEnvironmentInstaller {
+    public static func install(_ recipe: LocalLinuxEnvironmentRecipe) async throws -> LocalLinuxEnvironmentInstallationResult {
+        let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
+        let executable = "/bin/sh"
+        let request = LocalLinuxJobRequest(
+            executable: executable,
+            arguments: [executable, "-lc", recipe.command],
+            workingDirectory: workspace.guestPath,
+            timeoutSeconds: 0,
+            outputLimitBytes: 0,
+            shellScript: recipe.command
+        )
+        let match = await LocalLinuxApprovalPolicy.shared.evaluate(
+            request: request,
+            kind: .recipe,
+            isEnabled: AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled)
+        )
+        let approvedRuleIDs: Set<UUID>
+        if let match, match.action == .confirm {
+            approvedRuleIDs = [match.ruleID]
+        } else {
+            approvedRuleIDs = []
+        }
+        let job = try await LocalLinuxJobScheduler.shared.runCommand(
+            kind: .recipe,
+            request: request,
+            context: nil,
+            workspace: workspace,
+            approval: LocalLinuxCommandApproval(approvedRuleIDs: approvedRuleIDs)
+        )
+        let output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? ""
+        return LocalLinuxEnvironmentInstallationResult(job: job, output: output)
+    }
+}
+
 public enum LocalLinuxEnvironmentRecipes {
     public static var all: [LocalLinuxEnvironmentRecipe] {
         [
