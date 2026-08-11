@@ -156,6 +156,7 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
     public let arguments: String
     public let sourceSessionID: UUID?
     public let toolCallID: String?
+    public let forcePrompt: Bool
     
     public init(
         id: UUID = UUID(),
@@ -163,7 +164,8 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
         displayName: String?,
         arguments: String,
         sourceSessionID: UUID? = nil,
-        toolCallID: String? = nil
+        toolCallID: String? = nil,
+        forcePrompt: Bool = false
     ) {
         self.id = id
         self.toolName = toolName
@@ -171,6 +173,7 @@ public struct ToolPermissionRequest: Identifiable, Equatable {
         self.arguments = arguments
         self.sourceSessionID = sourceSessionID
         self.toolCallID = toolCallID
+        self.forcePrompt = forcePrompt
     }
 }
 
@@ -237,9 +240,10 @@ public final class ToolPermissionCenter: ObservableObject {
         displayName: String?,
         arguments: String,
         sourceSessionID: UUID? = nil,
-        toolCallID: String? = nil
+        toolCallID: String? = nil,
+        forcePrompt: Bool = false
     ) async -> ToolPermissionDecision {
-        if allowAll || allowedTools.contains(toolName) {
+        if !forcePrompt, allowAll || allowedTools.contains(toolName) {
             return .allowOnce
         }
         
@@ -249,7 +253,8 @@ public final class ToolPermissionCenter: ObservableObject {
                 displayName: displayName,
                 arguments: arguments,
                 sourceSessionID: sourceSessionID,
-                toolCallID: toolCallID
+                toolCallID: toolCallID,
+                forcePrompt: forcePrompt
             )
             if activeRequest == nil {
                 activeRequest = request
@@ -266,11 +271,11 @@ public final class ToolPermissionCenter: ObservableObject {
         cancelAutoApproveCountdown()
         
         switch decision {
-        case .allowAll:
+        case .allowAll where !activeRequest.forcePrompt:
             allowAll = true
-        case .allowForTool:
+        case .allowForTool where !activeRequest.forcePrompt:
             allowedTools.insert(activeRequest.toolName)
-        case .deny, .allowOnce, .supplement:
+        case .deny, .allowOnce, .allowForTool, .allowAll, .supplement:
             break
         }
         
@@ -360,7 +365,8 @@ public final class ToolPermissionCenter: ObservableObject {
         guard self.activeRequest == nil, !queuedRequests.isEmpty else { return }
         while !queuedRequests.isEmpty {
             let next = queuedRequests.removeFirst()
-            if allowAll || allowedTools.contains(next.request.toolName) {
+            if !next.request.forcePrompt,
+               allowAll || allowedTools.contains(next.request.toolName) {
                 next.continuation.resume(returning: .allowOnce)
                 continue
             }
@@ -376,7 +382,8 @@ public final class ToolPermissionCenter: ObservableObject {
 
     private func scheduleAutoApproveIfNeeded(for request: ToolPermissionRequest) {
         cancelAutoApproveCountdown()
-        guard autoApproveEnabled,
+        guard !request.forcePrompt,
+              autoApproveEnabled,
               !isAutoApproveDisabled(for: request.toolName),
               autoApproveCountdownSeconds > 0 else {
             return

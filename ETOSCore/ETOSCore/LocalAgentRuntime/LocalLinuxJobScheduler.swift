@@ -210,6 +210,35 @@ public actor LocalLinuxJobScheduler {
         nextRequestID()
     }
 
+    /// Skill 在建立动态只读挂载前先启动 runtime，避免把挂载注册发送给未启动的 bridge。
+    public func prepareForAgentExecution() async throws {
+        await registerRuntimeCancellationIfNeeded()
+        _ = try await runtime.ensureReady(trigger: .agentRequest)
+    }
+
+    public func availableExecutablePath(
+        _ command: String,
+        environment: [String: String],
+        workingDirectory: String?
+    ) async throws -> String? {
+        try await prepareForAgentExecution()
+        let requestID = nextRequestID()
+        let resolved = await resolveExecutableFromPATH(
+            command,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            requestID: requestID
+        )
+        guard let info = try? await bridge.statGuestFile(
+            path: resolved,
+            requestID: requestID,
+            noFollow: false
+        ), info.isRegularFile, info.mode & 0o111 != 0 else {
+            return nil
+        }
+        return resolved
+    }
+
     public func runCommand(
         kind: LocalLinuxJobKind,
         request: LocalLinuxJobRequest,

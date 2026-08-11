@@ -319,7 +319,11 @@ extension ChatService {
             do {
                 let result = try await SkillManager.shared.executeToolFromChat(
                     toolName: toolCall.toolName,
-                    argumentsJSON: toolCall.arguments
+                    argumentsJSON: toolCall.arguments,
+                    sourceSessionID: sessionID,
+                    sourceAgentRunID: agentRunID,
+                    triggeringMessageID: triggeringMessageID,
+                    sourceToolCallID: toolCall.id
                 )
                 content = result
                 displayResult = result
@@ -327,6 +331,10 @@ extension ChatService {
             } catch {
                 content = callFailedText(toolLabel, error.localizedDescription)
                 displayResult = content
+                if let skillError = error as? SkillExecutionError,
+                   case .userSupplementRequested = skillError {
+                    shouldAwaitUserSupplement = true
+                }
                 logger.error("  - Agent Skills 调用失败: \(error.localizedDescription)")
             }
 

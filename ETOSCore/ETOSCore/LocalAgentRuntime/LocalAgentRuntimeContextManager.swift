@@ -79,6 +79,18 @@ public actor LocalAgentRuntimeContextManager {
         let resolvedRootRunID = rootRunID ?? conversationRun?.rootRunID ?? runID
         let resolvedParentRunID = parentRunID ?? conversationRun?.parentRunID
         let promptProfile = await LocalAgentPromptStore.shared.activeProfile()
+        let skillState = await MainActor.run {
+            (
+                names: SkillManager.shared.enabledSkillNames,
+                skills: SkillManager.shared.skills
+            )
+        }
+        let skillSnapshots = await Task.detached(priority: .utility) {
+            SkillRunSnapshotBuilder.buildEnabled(
+                skillNames: skillState.names,
+                skills: skillState.skills
+            )
+        }.value
         let context = AgentRuntimeContext(
             sessionID: sessionID,
             runID: runID,
@@ -99,6 +111,7 @@ public actor LocalAgentRuntimeContextManager {
             browserDataProfile: Persistence.browserAgentDataProfile(sessionID: sessionID),
             promptProfileID: promptProfile.id,
             promptContent: promptProfile.content,
+            skillSnapshots: skillSnapshots,
             executorDeviceID: executorDeviceID,
             mode: mode
         )

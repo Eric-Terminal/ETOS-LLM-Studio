@@ -449,6 +449,8 @@ public struct AgentRuntimeContext: Codable, Equatable, Sendable {
     /// Agent 专用提示词与其他运行配置一起冻结，避免运行中编辑影响后续工具续写。
     public let promptProfileID: UUID?
     public let promptContent: String?
+    /// Skill 包摘要与脚本哈希在 Run 开始时冻结，读取或执行都不能借更新后的包扩权。
+    public let skillSnapshots: [SkillRunSnapshot]?
     public let executorDeviceID: String
     public let mode: LocalAgentMode
     public let createdAt: Date
@@ -473,6 +475,7 @@ public struct AgentRuntimeContext: Codable, Equatable, Sendable {
         browserDataProfile: BrowserAgentDataProfile? = nil,
         promptProfileID: UUID? = nil,
         promptContent: String? = nil,
+        skillSnapshots: [SkillRunSnapshot]? = nil,
         executorDeviceID: String,
         mode: LocalAgentMode,
         createdAt: Date = Date()
@@ -496,6 +499,7 @@ public struct AgentRuntimeContext: Codable, Equatable, Sendable {
         self.browserDataProfile = browserDataProfile
         self.promptProfileID = promptProfileID
         self.promptContent = promptContent
+        self.skillSnapshots = skillSnapshots
         self.executorDeviceID = executorDeviceID
         self.mode = mode
         self.createdAt = createdAt

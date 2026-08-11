@@ -567,6 +567,10 @@ final class PersistenceGRDBStore {
             try Self.migrateLocalAgentBrowserSchema(db)
         }
 
+        migrator.registerMigration("v15_skill_execution_governance") { db in
+            try Self.createSkillExecutionGovernanceTables(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -577,6 +581,7 @@ final class PersistenceGRDBStore {
             try Self.createConversationContinuationContextTable(db)
             try Self.createConversationRuntimeTables(db)
             try Self.migrateLocalAgentBrowserSchema(db)
+            try Self.createSkillExecutionGovernanceTables(db)
             try ensureColumn(
                 db,
                 table: "conversation_waits",

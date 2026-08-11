@@ -51,11 +51,12 @@ public final class LocalLinuxMountLease: @unchecked Sendable {
             return
         }
         didRelease = true
-        let lease = bridgeLease
+        var lease = bridgeLease
         bridgeLease = nil
         lock.unlock()
+        // native lease 必须先归还，随后才能安全尝试移除临时挂载。
+        lease = nil
         releaseHandler(mountID)
-        _ = lease
     }
 }
 
@@ -88,6 +89,12 @@ public actor LocalLinuxMountManager {
     private let storage: LocalLinuxStorageManager
     private let bridge: iSHAppleBridgeAdapter
     private var scopedResources: [UUID: LocalLinuxSecurityScopedResource] = [:]
+    private struct TransientSkillMount {
+        let id: UUID
+        let canonicalHostPath: String
+        var leaseCount: Int
+    }
+    private var transientSkillMounts: [String: TransientSkillMount] = [:]
 
     public init(
         storage: LocalLinuxStorageManager = .shared,
@@ -331,6 +338,66 @@ public actor LocalLinuxMountManager {
         }
     }
 
+    /// Skill 包只在一次或并发的执行存续期间挂载，且 guest 永远只能只读访问。
+    public func acquireReadOnlySkillMount(
+        skillID: String,
+        hostDirectory: URL
+    ) async throws -> LocalLinuxMountLease {
+        guard SkillPaths.isValidSkillName(skillID) else {
+            throw SkillExecutionError.invalidScriptPath
+        }
+        let canonicalDirectory = hostDirectory.resolvingSymlinksInPath().standardizedFileURL
+        let guestPath = "/mnt/etos/skills/\(skillID)"
+        if var existing = transientSkillMounts[guestPath] {
+            guard existing.canonicalHostPath == canonicalDirectory.path else {
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("同名 Skill 的只读挂载指向不同目录。", comment: "Conflicting transient Skill mount")
+                )
+            }
+            let bridgeLease = try await bridge.acquireMountLease(id: existing.id)
+            existing.leaseCount += 1
+            transientSkillMounts[guestPath] = existing
+            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] _ in
+                Task { await self?.releaseTransientSkillMount(guestPath: guestPath) }
+            }
+        }
+
+        let descriptor = canonicalDirectory.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        }
+        guard descriptor >= 0 else {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("无法打开 Skill 目录用于只读挂载。", comment: "Open Skill directory for read-only mount failure")
+            )
+        }
+        defer { close(descriptor) }
+
+        let id = UUID()
+        do {
+            try await bridge.addMount(
+                LocalLinuxBridgeMount(
+                    id: id,
+                    hostDirectoryDescriptor: descriptor,
+                    guestDirectory: guestPath,
+                    access: .readOnly
+                )
+            )
+            let bridgeLease = try await bridge.acquireMountLease(id: id)
+            transientSkillMounts[guestPath] = TransientSkillMount(
+                id: id,
+                canonicalHostPath: canonicalDirectory.path,
+                leaseCount: 1
+            )
+            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] _ in
+                Task { await self?.releaseTransientSkillMount(guestPath: guestPath) }
+            }
+        } catch {
+            try? await bridge.removeMount(id: id, force: false)
+            throw error
+        }
+    }
+
     public func releaseAuthorization(id: UUID) {
         scopedResources[id] = nil
     }
@@ -349,6 +416,23 @@ public actor LocalLinuxMountManager {
 
     private func decrementPersistedLeaseCount(id: UUID) {
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: -1)
+    }
+
+    private func releaseTransientSkillMount(guestPath: String) async {
+        guard var mount = transientSkillMounts[guestPath] else { return }
+        mount.leaseCount -= 1
+        if mount.leaseCount > 0 {
+            transientSkillMounts[guestPath] = mount
+            return
+        }
+        do {
+            try await bridge.removeMount(id: mount.id, force: false)
+            transientSkillMounts[guestPath] = nil
+        } catch {
+            // 仍有 bridge 引用时保留记录；下一次释放或取得时不会覆盖同一路径。
+            mount.leaseCount = 0
+            transientSkillMounts[guestPath] = mount
+        }
     }
 
     private func appendInternalMount(
