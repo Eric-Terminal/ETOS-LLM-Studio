@@ -75,6 +75,7 @@ public class MemoryManager {
     let internalDimensionMismatchPublisher = PassthroughSubject<(query: Int, index: Int), Never>()
     let internalEmbeddingProgressPublisher = PassthroughSubject<MemoryEmbeddingProgress, Never>()
     let persistenceQueue = DispatchQueue(label: "com.etos.memory.persistence.queue")
+    let mutationQueue = DispatchQueue(label: "com.etos.memory.mutation.queue")
     let persistenceQueueSpecificKey = DispatchSpecificKey<UInt8>()
     var initializationTask: Task<Void, Never>!
     var cachedMemories: [MemoryItem] = []
@@ -262,7 +263,15 @@ public class MemoryManager {
             validUntil: request.validUntil,
             sourceSessionID: request.sourceSessionID
         )
-        cacheMemory(memory)
+        guard commitMemoryMutation(
+            before: nil,
+            after: memory,
+            operation: .created,
+            context: request.mutationContext
+        ) else {
+            logger.error("保存新记忆及其审计记录失败。")
+            return
+        }
         
         // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
@@ -293,13 +302,17 @@ public class MemoryManager {
                 embedding: [],
                 createdAt: createdAt,
                 source: .imported
-            )
+            ),
+            context: MemoryMutationContext(origin: .sync)
         )
     }
 
     /// 从同步或备份中恢复完整记忆元数据。
     @discardableResult
-    public func restoreMemory(_ restoredMemory: MemoryItem) async -> Bool {
+    public func restoreMemory(
+        _ restoredMemory: MemoryItem,
+        context: MemoryMutationContext = MemoryMutationContext(origin: .sync)
+    ) async -> Bool {
         await initializationTask.value
         let trimmed = restoredMemory.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
@@ -309,7 +322,16 @@ public class MemoryManager {
         var memory = restoredMemory
         memory.content = trimmed
         memory.embedding = []
-        cacheMemory(memory)
+        let existingMemory = cachedMemories.first { $0.id == memory.id }
+        guard commitMemoryMutation(
+            before: existingMemory,
+            after: memory,
+            operation: context.origin == .imported ? .imported : (existingMemory == nil ? .created : .edited),
+            context: context
+        ) else {
+            logger.error("恢复记忆及其审计记录失败。")
+            return false
+        }
         
         // 如果没有选择嵌入模型，只保存原文，跳过嵌入生成
         guard hasConfiguredEmbeddingModel() else {
@@ -328,16 +350,20 @@ public class MemoryManager {
             if shouldScheduleAutoRetry(for: memory.id, error: error) {
                 scheduleConsistencyCheck(after: consistencyCheckDefaultDelay)
             }
-            return false
+            // 正文和审计已原子落盘；嵌入失败由补偿任务处理，不把成功恢复误报为失败。
+            return true
         }
     }
 
     /// 更新一条现有的记忆。
-    public func updateMemory(item: MemoryItem) async {
+    public func updateMemory(
+        item: MemoryItem,
+        context: MemoryMutationContext = MemoryMutationContext()
+    ) async {
         await initializationTask.value
         let trimmed = item.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            await deleteMemories([item])
+            await deleteMemories([item], context: context)
             return
         }
         let chunkTexts = chunker.chunk(text: trimmed)
@@ -364,7 +390,15 @@ public class MemoryManager {
             accessCount: item.accessCount,
             lastAccessedAt: item.lastAccessedAt
         )
-        cacheMemory(updatedMemory)
+        guard commitMemoryMutation(
+            before: existingMemory,
+            after: updatedMemory,
+            operation: .edited,
+            context: context
+        ) else {
+            logger.error("更新记忆及其审计记录失败。")
+            return
+        }
 
         // 仅修改分类、重要度或有效期时，已有文本向量仍然有效。
         guard contentChanged else {
@@ -393,12 +427,32 @@ public class MemoryManager {
     }
 
     /// 删除一条或多条记忆。
-    public func deleteMemories(_ items: [MemoryItem]) async {
+    public func deleteMemories(
+        _ items: [MemoryItem],
+        context: MemoryMutationContext = MemoryMutationContext()
+    ) async {
         await initializationTask.value
         let idsToDelete = Set(items.map { $0.id })
-        cachedMemories.removeAll { idsToDelete.contains($0.id) }
-        internalMemoriesPublisher.send(cachedMemories)
-        persistRawMemories()
+        let existingItems = cachedMemories.filter { idsToDelete.contains($0.id) }
+        guard !existingItems.isEmpty else { return }
+        let operation = resolvedMutationOperation(.deleted, context: context)
+        let mutations = existingItems.map { memory in
+            MemoryPendingMutation(
+                before: memory,
+                after: nil,
+                record: MemoryMutationRecord(
+                    memoryID: memory.id,
+                    operation: operation,
+                    context: context,
+                    before: MemoryVersionSnapshot(memory: memory),
+                    after: nil
+                )
+            )
+        }
+        guard commitMemoryMutations(mutations) else {
+            logger.error("删除记忆及其审计记录失败。")
+            return
+        }
         resetAutoRetryState(for: idsToDelete)
         
         removeVectorEntries(for: idsToDelete)
@@ -407,24 +461,36 @@ public class MemoryManager {
     }
     
     /// 归档记忆（被遗忘），不再参与检索，但保留原文和向量。
-    public func archiveMemory(_ item: MemoryItem) async {
+    public func archiveMemory(
+        _ item: MemoryItem,
+        context: MemoryMutationContext = MemoryMutationContext()
+    ) async {
         await initializationTask.value
-        guard let index = cachedMemories.firstIndex(where: { $0.id == item.id }) else { return }
-        cachedMemories[index].isArchived = true
-        cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
-        internalMemoriesPublisher.send(cachedMemories)
-        persistRawMemories()
+        guard let existing = cachedMemories.first(where: { $0.id == item.id }), !existing.isArchived else { return }
+        var archived = existing
+        archived.isArchived = true
+        archived.updatedAt = Date()
+        guard commitMemoryMutation(before: existing, after: archived, operation: .archived, context: context) else {
+            logger.error("归档记忆及其审计记录失败。")
+            return
+        }
         logger.info("记忆已归档：\(item.id.uuidString)")
     }
     
     /// 恢复归档的记忆，使其重新参与检索。
-    public func unarchiveMemory(_ item: MemoryItem) async {
+    public func unarchiveMemory(
+        _ item: MemoryItem,
+        context: MemoryMutationContext = MemoryMutationContext()
+    ) async {
         await initializationTask.value
-        guard let index = cachedMemories.firstIndex(where: { $0.id == item.id }) else { return }
-        cachedMemories[index].isArchived = false
-        cachedMemories.sort(by: { $0.createdAt > $1.createdAt })
-        internalMemoriesPublisher.send(cachedMemories)
-        persistRawMemories()
+        guard let existing = cachedMemories.first(where: { $0.id == item.id }), existing.isArchived else { return }
+        var restored = existing
+        restored.isArchived = false
+        restored.updatedAt = Date()
+        guard commitMemoryMutation(before: existing, after: restored, operation: .restored, context: context) else {
+            logger.error("恢复记忆及其审计记录失败。")
+            return
+        }
         logger.info("记忆已恢复：\(item.id.uuidString)")
     }
     
@@ -432,6 +498,32 @@ public class MemoryManager {
     public func getAllMemories() async -> [MemoryItem] {
         await initializationTask.value
         return cachedMemories
+    }
+
+    public func mutationHistory(for memoryID: UUID, limit: Int = 200) async -> [MemoryMutationRecord] {
+        await initializationTask.value
+        return await Task.detached(priority: .utility) { [rawStore] in
+            rawStore.loadMutationHistory(memoryID: memoryID, limit: limit)
+        }.value
+    }
+
+    public func recentMutationHistory(limit: Int = 200) async -> [MemoryMutationRecord] {
+        await initializationTask.value
+        return await Task.detached(priority: .utility) { [rawStore] in
+            rawStore.loadMutationHistory(limit: limit)
+        }.value
+    }
+
+    public func transferReceipts(limit: Int = 100) async -> [MemoryTransferReceipt] {
+        await initializationTask.value
+        return await Task.detached(priority: .utility) { [rawStore] in
+            rawStore.loadTransferReceipts(limit: limit)
+        }.value
+    }
+
+    @discardableResult
+    public func saveTransferReceipt(_ receipt: MemoryTransferReceipt) -> Bool {
+        rawStore.saveTransferReceipt(receipt)
     }
     
     /// 获取激活的记忆（不包括归档的），用于发送给模型。
@@ -695,6 +787,19 @@ public class MemoryManager {
         imageAttachments: [ImageAttachment] = [],
         topK: Int
     ) async -> [MemoryItem] {
+        await searchMemoriesHybridExplained(
+            query: query,
+            imageAttachments: imageAttachments,
+            topK: topK
+        ).map(\.memory)
+    }
+
+    /// 返回混合检索结果及其真实排序分项，不暴露内部向量。
+    public func searchMemoriesHybridExplained(
+        query: String,
+        imageAttachments: [ImageAttachment] = [],
+        topK: Int
+    ) async -> [ExplainedMemoryResult] {
         await initializationTask.value
         guard topK > 0 else { return [] }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -730,9 +835,12 @@ public class MemoryManager {
             semanticScores: semanticScores,
             limit: topK
         )
-        let memories = matches.map(\.memory)
+        let results = matches.map {
+            ExplainedMemoryResult(memory: $0.memory, explanation: $0.explanation)
+        }
+        let memories = results.map(\.memory)
         recordMemoryAccess(memories)
-        return memories
+        return results
     }
 
     /// 根据查询文本和图片搜索最相关的记忆。
@@ -793,6 +901,11 @@ public class MemoryManager {
 
     /// 根据关键词检索相关记忆（不依赖向量）。
     public func searchMemoriesByKeyword(query: String, topK: Int) async -> [MemoryItem] {
+        await searchMemoriesByKeywordExplained(query: query, topK: topK).map(\.memory)
+    }
+
+    /// 返回纯本地关键词检索结果及其真实排序分项。
+    public func searchMemoriesByKeywordExplained(query: String, topK: Int) async -> [ExplainedMemoryResult] {
         await initializationTask.value
         guard topK > 0 else { return [] }
 
@@ -809,8 +922,11 @@ public class MemoryManager {
             semanticScores: [:],
             limit: topK
         )
-        let memories = matches.map(\.memory)
+        let results = matches.map {
+            ExplainedMemoryResult(memory: $0.memory, explanation: $0.explanation)
+        }
+        let memories = results.map(\.memory)
         recordMemoryAccess(memories)
-        return memories
+        return results
     }
 }

@@ -9,7 +9,10 @@
 import Foundation
 
 extension AppToolManager {
-    func executeEditMemory(argumentsJSON: String) async throws -> String {
+    func executeEditMemory(
+        argumentsJSON: String,
+        context: MemoryMutationContext = MemoryMutationContext(origin: .tool, sourceToolName: "edit_memory")
+    ) async throws -> String {
         struct EditMemoryArgs: Decodable {
             let memory_id: String
             let content: String?
@@ -86,7 +89,7 @@ extension AppToolManager {
             if let entities = args.entities { updated.entities = entities }
             if args.valid_from != nil { updated.validFrom = validFrom }
             if args.valid_until != nil { updated.validUntil = validUntil }
-            await MemoryManager.shared.updateMemory(item: updated)
+            await MemoryManager.shared.updateMemory(item: updated, context: context)
             resultPayload = [
                 "memory_id": existing.id.uuidString,
                 "content": updated.content,
@@ -100,9 +103,9 @@ extension AppToolManager {
             ]
         } else if let isArchived = args.is_archived {
             if isArchived {
-                await MemoryManager.shared.archiveMemory(existing)
+                await MemoryManager.shared.archiveMemory(existing, context: context)
             } else {
-                await MemoryManager.shared.unarchiveMemory(existing)
+                await MemoryManager.shared.unarchiveMemory(existing, context: context)
             }
             resultPayload = [
                 "memory_id": existing.id.uuidString,

@@ -85,10 +85,20 @@ public enum MemorySource: String, Codable, Hashable, Sendable {
     case assistantAction
     case conversationSummary
     case imported
+
+    public var localizedTitle: String {
+        switch self {
+        case .manual: return NSLocalizedString("手动添加", comment: "Manual memory source")
+        case .userStatement: return NSLocalizedString("用户陈述", comment: "User statement memory source")
+        case .assistantAction: return NSLocalizedString("助手操作", comment: "Assistant action memory source")
+        case .conversationSummary: return NSLocalizedString("对话摘要", comment: "Conversation summary memory source")
+        case .imported: return NSLocalizedString("外部导入", comment: "Imported memory source")
+        }
+    }
 }
 
 /// 代表一条独立的记忆，包含内容和其向量表示。
-public struct MemoryItem: Codable, Identifiable, Hashable {
+public struct MemoryItem: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var content: String
     public var embedding: [Float]

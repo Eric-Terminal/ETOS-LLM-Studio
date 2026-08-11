@@ -72,7 +72,9 @@ extension ChatService {
                         entities: args.entities ?? [],
                         validFrom: args.valid_from.flatMap(formatter.date(from:)),
                         validUntil: args.valid_until.flatMap(formatter.date(from:)),
-                        sourceSessionID: sessionID
+                        sourceSessionID: sessionID,
+                        sourceMessageID: triggeringMessageID,
+                        sourceToolName: "save_memory"
                     )
                 )
                 content = String(format: NSLocalizedString("成功将内容 \"%@\" 存入记忆。", comment: "Save memory tool result"), args.content)
@@ -99,6 +101,7 @@ extension ChatService {
                 let mode: String
                 let query: String
                 let count: Int?
+                let include_explanation: Bool?
             }
 
             guard let argsData = toolCall.arguments.data(using: .utf8),
@@ -120,13 +123,26 @@ extension ChatService {
 
             let requestedCount = max(1, args.count ?? resolvedMemoryTopK())
             var resolvedMemories: [MemoryItem] = []
+            var explanations: [UUID: MemoryRetrievalExplanation] = [:]
             switch mode {
             case "hybrid":
-                resolvedMemories = await memoryManager.searchMemoriesHybrid(query: query, topK: requestedCount)
+                if args.include_explanation == true {
+                    let results = await memoryManager.searchMemoriesHybridExplained(query: query, topK: requestedCount)
+                    resolvedMemories = results.map(\.memory)
+                    explanations = Dictionary(uniqueKeysWithValues: results.map { ($0.memory.id, $0.explanation) })
+                } else {
+                    resolvedMemories = await memoryManager.searchMemoriesHybrid(query: query, topK: requestedCount)
+                }
             case "vector":
                 resolvedMemories = await memoryManager.searchMemories(query: query, topK: requestedCount)
             case "keyword":
-                resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
+                if args.include_explanation == true {
+                    let results = await memoryManager.searchMemoriesByKeywordExplained(query: query, topK: requestedCount)
+                    resolvedMemories = results.map(\.memory)
+                    explanations = Dictionary(uniqueKeysWithValues: results.map { ($0.memory.id, $0.explanation) })
+                } else {
+                    resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
+                }
             default:
                 content = NSLocalizedString("错误：search_memory 的 mode 仅支持 hybrid、vector 或 keyword。", comment: "Search memory unsupported mode error")
                 displayResult = content
@@ -142,7 +158,8 @@ extension ChatService {
                 mode: mode,
                 query: query,
                 requestedCount: requestedCount,
-                memories: resolvedMemories
+                memories: resolvedMemories,
+                explanations: explanations
             )
             displayResult = content
             logger.info("  - search_memory 检索完成: mode=\(mode), queryLength=\(query.count), resultCount=\(resolvedMemories.count)")
@@ -362,7 +379,9 @@ extension ChatService {
                 do {
                     let result = try await AppToolManager.shared.executeToolFromChat(
                         toolName: toolCall.toolName,
-                        argumentsJSON: toolCall.arguments
+                        argumentsJSON: toolCall.arguments,
+                        sourceSessionID: sessionID,
+                        sourceMessageID: triggeringMessageID
                     )
                     content = result
                     displayResult = result
@@ -397,7 +416,9 @@ extension ChatService {
                     do {
                         let result = try await AppToolManager.shared.executeToolFromChat(
                             toolName: toolCall.toolName,
-                            argumentsJSON: toolCall.arguments
+                            argumentsJSON: toolCall.arguments,
+                            sourceSessionID: sessionID,
+                            sourceMessageID: triggeringMessageID
                         )
                         content = result
                         displayResult = result
@@ -445,7 +466,8 @@ extension ChatService {
         mode: String,
         query: String,
         requestedCount: Int,
-        memories: [MemoryItem]
+        memories: [MemoryItem],
+        explanations: [UUID: MemoryRetrievalExplanation] = [:]
     ) -> String {
         let formatter = ISO8601DateFormatter()
         let items: [[String: Any]] = memories.map { memory in
@@ -467,6 +489,20 @@ extension ChatService {
             }
             if shouldSendMemoryUpdateTime() {
                 item["updatedAt"] = formatter.string(from: memory.updatedAt ?? memory.createdAt)
+            }
+            if let explanation = explanations[memory.id] {
+                item["explanation"] = [
+                    "total": explanation.totalScore,
+                    "semantic": explanation.semantic,
+                    "keyword": explanation.lexical,
+                    "entity": explanation.entity,
+                    "importance": explanation.importance,
+                    "confidence": explanation.confidence,
+                    "recency": explanation.recency,
+                    "strength": explanation.strength,
+                    "time": explanation.temporal,
+                    "type": explanation.typeBoost
+                ]
             }
             return item
         }

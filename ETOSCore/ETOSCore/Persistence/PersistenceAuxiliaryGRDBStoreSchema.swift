@@ -1019,8 +1019,54 @@ extension PersistenceAuxiliaryGRDBStore {
                     try db.execute(sql: "ALTER TABLE conversation_user_profile ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1")
                 }
             }
+
+            migrator.registerMigration("v6_add_memory_governance") { db in
+                try Self.createMemoryGovernanceTables(db)
+            }
         }
         try migrator.migrate(self.dbPool)
         self.logger.info("辅助存储已启用，数据库路径: \(self.databaseURL.path)")
+    }
+
+    private static func createMemoryGovernanceTables(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS memory_mutation_history (
+                id TEXT PRIMARY KEY NOT NULL,
+                memory_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                source_session_id TEXT,
+                source_message_id TEXT,
+                source_tool_name TEXT,
+                source_shortcut_name TEXT,
+                transfer_receipt_id TEXT,
+                before_digest TEXT,
+                after_digest TEXT,
+                before_snapshot_json BLOB,
+                after_snapshot_json BLOB,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_memory_mutation_history_memory
+            ON memory_mutation_history(memory_id, created_at DESC)
+        """)
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS memory_transfer_receipts (
+                id TEXT PRIMARY KEY NOT NULL,
+                kind TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL,
+                added_count INTEGER NOT NULL,
+                updated_count INTEGER NOT NULL,
+                conflict_count INTEGER NOT NULL,
+                archived_count INTEGER NOT NULL,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_memory_transfer_receipts_created
+            ON memory_transfer_receipts(created_at DESC)
+        """)
     }
 }

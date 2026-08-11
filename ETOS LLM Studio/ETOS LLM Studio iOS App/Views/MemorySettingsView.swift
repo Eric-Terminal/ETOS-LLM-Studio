@@ -120,6 +120,11 @@ struct MemorySettingsView: View {
                 } label: {
                     Label(NSLocalizedString("数据维护", comment: ""), systemImage: "wrench.and.screwdriver")
                 }
+                NavigationLink {
+                    MemoryTransferView()
+                } label: {
+                    Label(NSLocalizedString("导入与导出", comment: "Memory transfer navigation title"), systemImage: "arrow.up.arrow.down.doc")
+                }
             } header: {
                 Text(NSLocalizedString("数据维护", comment: ""))
             } footer: {

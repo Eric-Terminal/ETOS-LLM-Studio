@@ -12,7 +12,9 @@ extension AppToolManager {
     static func executeResolvedTool(
         kind: AppToolKind,
         argumentsJSON: String,
-        current: AppToolManager
+        current: AppToolManager,
+        sourceSessionID: UUID?,
+        sourceMessageID: UUID?
     ) async throws -> String {
         switch kind {
         case .showWidget:
@@ -34,7 +36,15 @@ extension AppToolManager {
         case .createCustomWebKitJSTool:
             return try await current.executeCreateCustomJSTool(argumentsJSON: argumentsJSON, engine: .webKitBridge)
         case .editMemory:
-            return try await current.executeEditMemory(argumentsJSON: argumentsJSON)
+            return try await current.executeEditMemory(
+                argumentsJSON: argumentsJSON,
+                context: MemoryMutationContext(
+                    origin: .tool,
+                    sourceSessionID: sourceSessionID,
+                    sourceMessageID: sourceMessageID,
+                    sourceToolName: kind.toolName
+                )
+            )
         case .submitFeedbackTicket:
             return try await current.executeSubmitFeedbackTicket(argumentsJSON: argumentsJSON)
         case .listSandboxDirectory:

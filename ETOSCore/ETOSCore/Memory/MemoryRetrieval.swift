@@ -10,10 +10,9 @@ import Foundation
 
 struct MemoryRetrievalMatch: Equatable {
     let memory: MemoryItem
-    let score: Double
-    let semanticScore: Double
-    let lexicalScore: Double
-    let entityScore: Double
+    let explanation: MemoryRetrievalExplanation
+
+    var score: Double { explanation.totalScore }
 }
 
 enum MemoryTemporalIntent {
@@ -67,22 +66,39 @@ enum MemoryHybridRetriever {
             let temporal = temporalScore(memory: memory, intent: temporalIntent, now: now)
             let typeBoost = memory.kind == .preference || memory.kind == .procedural ? 1.0 : 0.0
 
-            let score = semantic * 0.42
-                + lexical * 0.25
-                + entity * 0.12
-                + memory.importance * 0.08
-                + memory.confidence * 0.05
-                + recency * 0.025
-                + strength * 0.025
-                + temporal * 0.02
-                + typeBoost * 0.01
+            let semanticContribution = semantic * 0.42
+            let lexicalContribution = lexical * 0.25
+            let entityContribution = entity * 0.12
+            let importanceContribution = memory.importance * 0.08
+            let confidenceContribution = memory.confidence * 0.05
+            let recencyContribution = recency * 0.025
+            let strengthContribution = strength * 0.025
+            let temporalContribution = temporal * 0.02
+            let typeContribution = typeBoost * 0.01
+            let score = semanticContribution
+                + lexicalContribution
+                + entityContribution
+                + importanceContribution
+                + confidenceContribution
+                + recencyContribution
+                + strengthContribution
+                + temporalContribution
+                + typeContribution
 
             return MemoryRetrievalMatch(
                 memory: memory,
-                score: score,
-                semanticScore: semantic,
-                lexicalScore: lexical,
-                entityScore: entity
+                explanation: MemoryRetrievalExplanation(
+                    totalScore: score,
+                    semantic: semanticContribution,
+                    lexical: lexicalContribution,
+                    entity: entityContribution,
+                    importance: importanceContribution,
+                    confidence: confidenceContribution,
+                    recency: recencyContribution,
+                    strength: strengthContribution,
+                    temporal: temporalContribution,
+                    typeBoost: typeContribution
+                )
             )
         }
 

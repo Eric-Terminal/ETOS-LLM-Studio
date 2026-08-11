@@ -920,7 +920,9 @@ extension AppToolManager {
             return try await Self.executeResolvedTool(
                 kind: kind,
                 argumentsJSON: argumentsJSON,
-                current: self
+                current: self,
+                sourceSessionID: nil,
+                sourceMessageID: nil
             )
         }
 
