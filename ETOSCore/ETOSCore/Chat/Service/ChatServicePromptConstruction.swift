@@ -68,7 +68,7 @@ extension ChatService {
 
         if let localAgentPrompt,
            !localAgentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append("<local_agent_runtime>\n\(localAgentPrompt)\n</local_agent_runtime>")
+            parts.append("<local_linux_runtime_instructions>\n\(localAgentPrompt)\n</local_linux_runtime_instructions>")
         }
 
         if let topic, !topic.isEmpty {

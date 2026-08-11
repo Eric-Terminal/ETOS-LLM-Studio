@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 使用与全局系统提示词一致的当前内容编辑器与列表管理本地 Agent 提示词。
+// 操作说明沿用系统提示词编辑体验，但只补充 Linux 能力，不承担人格定义。
 // ============================================================================
 
 import SwiftUI
@@ -101,7 +101,7 @@ struct LocalAgentPromptProfilesView: View {
             } header: {
                 Text(NSLocalizedString("提示词列表", comment: "Agent prompt profiles section"))
             } footer: {
-                Text(NSLocalizedString("点按可选为当前提示词，向左滑可删除自定义提示词，向右滑可编辑。只有 Agent 模式会插入这里选中的提示词。", comment: "Agent prompt profiles footer"))
+                Text(NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Agent prompt profiles footer"))
             }
         }
         .navigationTitle(NSLocalizedString("Agent 提示词", comment: "Agent prompt title"))

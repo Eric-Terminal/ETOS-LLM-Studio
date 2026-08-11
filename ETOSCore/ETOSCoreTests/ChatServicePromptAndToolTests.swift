@@ -628,6 +628,26 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("Linux 操作说明与用户提示词融合且使用独立能力标签")
+    func testLocalLinuxInstructionsMergeAfterUserPrompts() throws {
+        let prompt = chatService.buildFinalSystemPrompt(
+            global: "用户定义的人设",
+            conversationSystem: "当前会话语气",
+            topic: nil,
+            memories: [],
+            recentConversationSummaries: [],
+            conversationProfile: nil,
+            includeSystemTime: false,
+            localAgentPrompt: "只描述 Linux 操作边界"
+        )
+
+        let personaRange = try #require(prompt.range(of: "用户定义的人设"))
+        let linuxRange = try #require(prompt.range(of: "<local_linux_runtime_instructions>"))
+        #expect(personaRange.lowerBound < linuxRange.lowerBound)
+        #expect(prompt.contains("只描述 Linux 操作边界"))
+        #expect(!prompt.contains("<local_agent_runtime>"))
+    }
+
     @Test("search_memory 工具结果可按设置隐藏更新时间")
     func testSearchMemoryToolResultCanHideUpdateTime() async throws {
         await cleanup()

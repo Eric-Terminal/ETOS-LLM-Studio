@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch
 //
-// 在手表端以扁平列表直接编辑当前内容，并管理本地 Agent 提示词。
+// 手表端保持扁平编辑，同时明确这里只管理 Linux 能力说明而不是用户人设。
 // ============================================================================
 
 import SwiftUI
@@ -90,7 +90,7 @@ struct LocalLinuxWatchPromptView: View {
                 }
             }
 
-            Text(NSLocalizedString("点按可选为当前提示词，向左滑可删除自定义提示词，向右滑可编辑。只有 Agent 模式会插入这里选中的提示词。", comment: "Watch Agent prompt profiles footer"))
+            Text(NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Watch Agent prompt profiles footer"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
