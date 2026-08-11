@@ -38,30 +38,6 @@ struct ExtendedFeaturesView: View {
 
             Section {
                 NavigationLink {
-                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
-                } label: {
-                    SettingsListIconLabel("本地 Linux", icon: .localLinux)
-                }
-            } footer: {
-                Text(NSLocalizedString("按需启动内置 Linux 用户态，为 Agent、用户终端和本地 MCP 提供同一套环境。", comment: "Local Linux settings entry footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
-                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
-                } label: {
-                    SettingsListIconLabel("Browser Agent", icon: .browserAgent)
-                }
-            } footer: {
-                Text(NSLocalizedString("让 Agent 操作按会话隔离的网页，并允许你随时接管同一标签页。", comment: "Browser Agent settings entry footer"))
-                    .etFont(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section {
-                NavigationLink {
                     SlashCommandSettingsView()
                 } label: {
                     SettingsListIconLabel("快速指令", icon: .slashCommands)
