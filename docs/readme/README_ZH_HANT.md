@@ -202,18 +202,18 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 層測試（116 個
     *   watchOS 26.0+ SDK
     *   CMake + Ninja（如果沒有，先 `brew install cmake ninja`）
     *   （如果環境對不上，你可以自行調整相容性）
-3.  **編譯前第一步：先生成 llama.cpp 靜態庫**:
-    Xcode 現在不會在構建階段反覆編譯 llama.cpp，ETOSCore 只會連結已經生成好的 `libetos-llama.a`。如果你要跑真機 / Release，先執行：
+3.  **編譯前第一步：先生成原生靜態庫**:
+    Xcode 不會在構建階段反覆編譯 llama.cpp 和 iSH。ETOSCore 會分別連結預先生成的 `libetos-llama.a` 與 `libiSHApple.a`。如果你要跑真機 / Release，先執行：
     ```bash
-    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh --parallel
     ```
     如果只是本機 Debug 模擬器，可以改用：
     ```bash
-    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     ```
-    產物會放在 `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`。腳本預設使用 Ninja 作為 CMake Generator，Ninja 本身會並行構建；追加 `--parallel` 會依本機 CPU 數明確傳給 CMake，也可以用 `--parallel=8`、`--jobs 8` 或 `-j8` 指定任務數。腳本會用 stamp 判斷是否需要重編，並在生成最終庫後清理中間構建目錄；如果 Xcode 報 `library 'etos-llama' not found`、`file not found: libetos-llama.a` 或連結不到 llama.cpp 符號，就按當前 SDK / Configuration 重新跑一遍對應命令。
+    獨立的 `libetos-llama.a` 與 `libiSHApple.a` 會並列放在 `Dependencies/llama-build/products/<platform>-<configuration>/`。腳本預設使用 Ninja 作為 CMake Generator，Ninja 本身會並行構建；追加 `--parallel` 會依本機 CPU 數明確傳給 CMake，也可以用 `--parallel=8`、`--jobs 8` 或 `-j8` 指定任務數。兩套產物會分別校驗快取，修改 iSH 不會再觸發 llama.cpp 重編；如果 Xcode 報缺少 `etos-llama`、`iSHApple` 或對應符號，就按當前 SDK / Configuration 重新執行命令。
 4.  **打開專案**:
     打開 `ETOS LLM Studio.xcworkspace`（注意是 **workspace**，不是 xcodeproj）。
     首次打開時，Xcode 會自動解析並拉取 Swift Package 依賴。

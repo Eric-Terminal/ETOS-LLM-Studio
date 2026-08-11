@@ -193,10 +193,6 @@ PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$PRODUCT_CONFIGURATION"
 PRODUCT_LIBRARY="$PRODUCT_DIR/libetos-llama.a"
 PRODUCT_STAMP="$PRODUCT_DIR/libetos-llama.stamp"
 DEPLOYMENT_TARGET="default"
-ISH_ENABLED=0
-ISH_REVISION="none"
-ISH_WORKTREE_FINGERPRINT="none"
-ISH_PRODUCT_LIBRARY=""
 # 默认只保留最终链接库，避免 CMake 中间目录和单架构临时库长期占盘。
 KEEP_CMAKE_BUILD="${ETOS_LLAMA_KEEP_CMAKE_BUILD:-0}"
 KEEP_ARCH_PRODUCTS="${ETOS_LLAMA_KEEP_ARCH_PRODUCTS:-0}"
@@ -216,30 +212,7 @@ case "$SDK_FAMILY" in
         ;;
 esac
 
-case "$SDK_FAMILY" in
-    iphoneos|iphonesimulator|watchos|watchsimulator)
-        ISH_ENABLED=1
-        ISH_SOURCE_PATH="$ROOT_PATH/Dependencies/ish-multiarch"
-        if [ ! -f "$ISH_SOURCE_PATH/tools/apple-core-gate.sh" ]; then
-            echo "ish-multiarch 子模块未初始化，请先执行 git submodule update --init --recursive。" >&2
-            exit 1
-        fi
-        ISH_REVISION="$(git -C "$ISH_SOURCE_PATH" rev-parse HEAD)"
-        ISH_WORKTREE_FINGERPRINT="$(
-            cd "$ISH_SOURCE_PATH"
-            {
-                git diff --binary HEAD --
-                git ls-files --others --exclude-standard | LC_ALL=C sort | while IFS= read -r source_file; do
-                    [ -f "$source_file" ] || continue
-                    printf 'untracked:%s\n' "$source_file"
-                    shasum -a 256 "$source_file"
-                done
-            } | shasum -a 256 | awk '{print $1}'
-        )"
-        ;;
-esac
-
-PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION ish_worktree=$ISH_WORKTREE_FINGERPRINT"
+PRODUCT_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR archs=$REQUESTED_ARCHS deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
 
 cleanup_intermediates() {
     if [ "$KEEP_CMAKE_BUILD" != "1" ]; then
@@ -276,15 +249,6 @@ if product_matches_archs; then
     cleanup_intermediates
     echo "llama.cpp 静态库已存在：$PRODUCT_LIBRARY"
     exit 0
-fi
-
-if [ "$ISH_ENABLED" = "1" ]; then
-    "$ROOT_PATH/scripts/build-ish-static-library.sh"
-    ISH_PRODUCT_LIBRARY="$ROOT_PATH/Dependencies/ish-build/products/$SDK_FAMILY/libiSHApple.a"
-    if [ ! -f "$ISH_PRODUCT_LIBRARY" ]; then
-        echo "iSHApple 构建完成但没有找到平台产物：$ISH_PRODUCT_LIBRARY" >&2
-        exit 1
-    fi
 fi
 
 if [ "$LOCAL_LIGHTWEIGHT_DEBUG" = "1" ]; then
@@ -339,7 +303,7 @@ for arch in $REQUESTED_ARCHS; do
     ARCH_PRODUCT_DIR="$PRODUCT_ROOT/$SDK_FAMILY-$arch-$PRODUCT_CONFIGURATION"
     ARCH_PRODUCT_LIBRARY="$ARCH_PRODUCT_DIR/libetos-llama.a"
     ARCH_PRODUCT_STAMP="$ARCH_PRODUCT_DIR/libetos-llama.stamp"
-    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS ish=$ISH_REVISION ish_worktree=$ISH_WORKTREE_FINGERPRINT"
+    ARCH_SIGNATURE="sdk=$SDK_FAMILY product_config=$PRODUCT_CONFIGURATION cmake_config=$CMAKE_BUILD_TYPE generator=$CMAKE_GENERATOR arch=$arch deployment=$DEPLOYMENT_TARGET metal=$METAL_ENABLED mtmd=ON warnings=$LLAMA_WARNING_FLAGS"
 
     if [ ! -f "$ARCH_PRODUCT_LIBRARY" ] ||
        [ ! -f "$ARCH_PRODUCT_STAMP" ] ||
@@ -406,19 +370,6 @@ for arch in $REQUESTED_ARCHS; do
                 set -- "$@" "$archive"
             fi
         done
-
-        if [ "$ISH_ENABLED" = "1" ]; then
-            ISH_ARCH_LIBRARY="$ARCH_PRODUCT_DIR/libiSHApple-$arch.a"
-            rm -f "$ISH_ARCH_LIBRARY"
-            ISH_PRODUCT_ARCHS="$(xcrun lipo -archs "$ISH_PRODUCT_LIBRARY")"
-            if [ "$ISH_PRODUCT_ARCHS" = "$arch" ]; then
-                cp "$ISH_PRODUCT_LIBRARY" "$ISH_ARCH_LIBRARY"
-            else
-                xcrun lipo "$ISH_PRODUCT_LIBRARY" -thin "$arch" \
-                    -output "$ISH_ARCH_LIBRARY"
-            fi
-            set -- "$@" "$ISH_ARCH_LIBRARY"
-        fi
 
         if [ "$#" -eq 0 ]; then
             echo "CMake 构建完成但没有找到静态库产物：$BUILD_DIR" >&2

@@ -15,27 +15,30 @@
 
 ## 构建方式
 
-llama.cpp 位于 `Dependencies/llama.cpp` 子模块。ETOSCore 不在 Xcode 构建阶段自动编译 llama.cpp；构建 App 前需要先手动生成匹配当前 SDK 和配置的 `libetos-llama.a`，产物路径为：
+llama.cpp 位于 `Dependencies/llama.cpp` 子模块。ETOSCore 不在 Xcode 构建阶段自动编译 llama.cpp；构建 App 前需要先生成匹配当前 SDK 和配置的原生静态库。iOS/watchOS 会得到两个职责独立的产物：
 
 ```sh
 Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a
+Dependencies/llama-build/products/<platform>-<configuration>/libiSHApple.a
 ```
+
+`libetos-llama.a` 只包含 llama.cpp、ggml 与 mtmd；`libiSHApple.a` 包含 iSH runtime。后者由 `build-ish-static-library.sh` 生成后暂存到同一搜索目录，二者不会相互合并。
 
 本机 Debug 模拟器通常只需要 Apple Silicon 架构：
 
 ```sh
-SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
-SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
+SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-native-static-libraries.sh
+SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator CONFIGURATION=Debug ARCHS=arm64 scripts/build-native-static-libraries.sh
 ```
 
 真机 Debug：
 
 ```sh
-SDK_NAME=iphoneos PLATFORM_NAME=iphoneos CONFIGURATION=Debug ARCHS=arm64 scripts/build-llama-static-library.sh
-SDK_NAME=watchos PLATFORM_NAME=watchos CONFIGURATION=Debug ARCHS="arm64 arm64_32" scripts/build-llama-static-library.sh
+SDK_NAME=iphoneos PLATFORM_NAME=iphoneos CONFIGURATION=Debug ARCHS=arm64 scripts/build-native-static-libraries.sh
+SDK_NAME=watchos PLATFORM_NAME=watchos CONFIGURATION=Debug ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh
 ```
 
-如果 Xcode 报 `library 'etos-llama' not found`、`file not found: libetos-llama.a` 或某个平台链接不到 llama.cpp 符号，就按报错里的 SDK/Configuration 先运行对应命令，再重新构建 App。ETOSCore 通过 `-letos-llama` 链接这个静态库。
+如果 Xcode 报缺少 `etos-llama`、`iSHApple` 或某个平台链接不到对应符号，就按报错里的 SDK/Configuration 先运行对应命令，再重新构建 App。ETOSCore 对所有平台链接 `-letos-llama`；iOS/watchOS 的 C 薄桥通过对象链接选项额外链接 `-liSHApple`。
 
 iOS、macOS 和 visionOS 启用 `GGML_USE_METAL=1`；watchOS 和模拟器运行期强制 `n_gpu_layers = 0`，避免把不支持的 Metal 路径带进受限平台。watchOS 归档当前会同时链接 `arm64` 与 `arm64_32` slice，静态库必须保持双架构，避免其中任一 slice 被 Xcode 忽略。
 

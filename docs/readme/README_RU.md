@@ -197,18 +197,18 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
     *   Xcode 26.0+
     *   watchOS 26.0+ SDK
     *   CMake + Ninja (если их нет, выполните `brew install cmake ninja`)
-3.  **Первый шаг перед сборкой: соберите статическую библиотеку llama.cpp**:
-    Xcode больше не пересобирает llama.cpp на каждом app build. ETOSCore линкуется с заранее созданным `libetos-llama.a`. Для device / Release выполните:
+3.  **Первый шаг перед сборкой: соберите нативные статические библиотеки**:
+    Xcode не пересобирает llama.cpp и iSH при каждой сборке приложения. ETOSCore отдельно линкуется с заранее созданными `libetos-llama.a` и `libiSHApple.a`. Для device / Release выполните:
     ```bash
-    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh --parallel
     ```
     Для локального Debug simulator можно использовать:
     ```bash
-    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     ```
-    Артефакт появится в `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`. Скрипт использует Ninja как CMake Generator; Ninja сам выполняет параллельную сборку, а `--parallel` явно передаёт CMake число задач по количеству CPU. Также можно указать `--parallel=8`, `--jobs 8` или `-j8`. Скрипт использует stamp, чтобы не пересобирать лишнее, и очищает промежуточные build‑каталоги после создания итоговой библиотеки. Если Xcode сообщает `library 'etos-llama' not found`, `file not found: libetos-llama.a` или не находит символы llama.cpp, повторите команду для текущих SDK / Configuration.
+    Независимые `libetos-llama.a` и `libiSHApple.a` появятся рядом в `Dependencies/llama-build/products/<platform>-<configuration>/`. Скрипт использует Ninja как CMake Generator; Ninja сам выполняет параллельную сборку, а `--parallel` явно передаёт CMake число задач по количеству CPU. Также можно указать `--parallel=8`, `--jobs 8` или `-j8`. Кэш каждого артефакта проверяется отдельно, поэтому изменение iSH больше не приводит к пересборке llama.cpp. Если Xcode сообщает об отсутствии `etos-llama`, `iSHApple` или соответствующих символов, повторите команду для текущих SDK / Configuration.
 4.  **Откройте проект**:
     `ETOS LLM Studio.xcworkspace` (именно workspace, не xcodeproj).
     При первом открытии Xcode автоматически подтянет Swift Package зависимости.

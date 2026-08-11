@@ -202,18 +202,18 @@ If you want to build it yourself:
     *   watchOS 26.0+ SDK
     *   CMake + Ninja (if missing, run `brew install cmake ninja`)
     *   (If your environment does not match exactly, you can adjust compatibility yourself.)
-3.  **First build step: generate the llama.cpp static library**:
-    Xcode no longer rebuilds llama.cpp during every app build. ETOSCore links against the prebuilt `libetos-llama.a`. For device / Release builds, run:
+3.  **First build step: generate the native static libraries**:
+    Xcode does not rebuild llama.cpp or iSH during every app build. ETOSCore links the prebuilt `libetos-llama.a` and `libiSHApple.a` separately. For device / Release builds, run:
     ```bash
-    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh --parallel
     ```
     For local Debug simulator builds, use:
     ```bash
-    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     ```
-    The output is written to `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`. The script uses Ninja as the CMake generator; Ninja parallelizes builds by default, and `--parallel` explicitly passes the local CPU count to CMake. You can also use `--parallel=8`, `--jobs 8`, or `-j8` to choose a task count. The script uses a stamp file to skip unnecessary rebuilds and cleans intermediate build directories after producing the final library. If Xcode reports `library 'etos-llama' not found`, `file not found: libetos-llama.a`, or missing llama.cpp symbols, rerun the matching command for the current SDK / Configuration.
+    The separate `libetos-llama.a` and `libiSHApple.a` outputs are written side by side under `Dependencies/llama-build/products/<platform>-<configuration>/`. The script uses Ninja as the CMake generator; Ninja parallelizes builds by default, and `--parallel` explicitly passes the local CPU count to CMake. You can also use `--parallel=8`, `--jobs 8`, or `-j8` to choose a task count. Both outputs maintain independent cache validation, so changing iSH no longer rebuilds llama.cpp. If Xcode reports a missing `etos-llama` or `iSHApple` library or symbol, rerun the matching command for the current SDK / Configuration.
 4.  **Open the project**:
     Open `ETOS LLM Studio.xcworkspace` (**workspace**, not xcodeproj).
     On first launch, Xcode will automatically resolve and fetch Swift Package dependencies.

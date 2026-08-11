@@ -42,11 +42,11 @@
 2. 使用 Xcode 26.0+ 打开 `ETOS LLM Studio.xcworkspace`。注意打开的是
    workspace，不是单独的 xcodeproj。
 
-3. 如果要实际编译 App，先按 README 里的说明生成 llama.cpp 静态库：
+3. 如果要实际编译 App，先按 README 里的说明生成 llama.cpp 与 iSH 独立静态库：
 
    ```bash
-   CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-   CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
+   CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+   CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
    ```
 
 4. 选择 `ETOS LLM Studio App` Scheme 运行 iOS App。需要单独调试手表端时，

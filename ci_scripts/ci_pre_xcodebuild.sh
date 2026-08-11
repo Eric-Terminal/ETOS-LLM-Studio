@@ -38,17 +38,14 @@ export CONFIGURATION="${CONFIGURATION:-Release}"
 echo "初始化 Git 子模块。"
 git -C "$ROOT_PATH" submodule update --init --recursive
 
-echo "预构建 iSHApple 公共静态库。"
-"$ROOT_PATH/scripts/build-ish-static-library.sh"
-
-build_llama_static_library() {
+build_native_static_libraries() {
     sdk_name="$1"
     archs="$2"
 
-    echo "预构建 llama.cpp 静态库：$sdk_name / $archs / $CONFIGURATION"
-    SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-llama-static-library.sh"
+    echo "预构建原生静态库：$sdk_name / $archs / $CONFIGURATION"
+    SDK_NAME="$sdk_name" ARCHS="$archs" "$ROOT_PATH/scripts/build-native-static-libraries.sh"
 }
 
 # Xcode Cloud 只用于发布归档，预构建发布包实际会链接的设备 slice。
-build_llama_static_library iphoneos arm64
-build_llama_static_library watchos "arm64 arm64_32"
+build_native_static_libraries iphoneos arm64
+build_native_static_libraries watchos "arm64 arm64_32"

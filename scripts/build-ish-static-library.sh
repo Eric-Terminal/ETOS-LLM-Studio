@@ -16,15 +16,6 @@ if [[ ! -f "$ISH_SOURCE_PATH/tools/apple-core-gate.sh" ]]; then
     exit 1
 fi
 
-if ! command -v meson >/dev/null 2>&1; then
-    echo "错误：构建 iSHApple 需要 Meson，请先安装 meson。" >&2
-    exit 1
-fi
-if ! command -v ninja >/dev/null 2>&1; then
-    echo "错误：构建 iSHApple 需要 Ninja，请先安装 ninja。" >&2
-    exit 1
-fi
-
 ISH_REVISION=$(git -C "$ISH_SOURCE_PATH" rev-parse HEAD)
 ISH_WORKTREE_FINGERPRINT=$(
     cd "$ISH_SOURCE_PATH"
@@ -53,6 +44,17 @@ products_are_current() {
 if products_are_current && [[ "${ETOS_ISH_FORCE_REBUILD:-0}" != 1 ]]; then
     echo "iSHApple 公共产物已存在：$XCFRAMEWORK_PATH"
     exit 0
+fi
+
+# 只有缓存确实失效时才要求本机安装原生构建工具；消费已有静态产物不应被
+# Meson/Ninja 的可用性阻断。
+if ! command -v meson >/dev/null 2>&1; then
+    echo "错误：构建 iSHApple 需要 Meson，请先安装 meson。" >&2
+    exit 1
+fi
+if ! command -v ninja >/dev/null 2>&1; then
+    echo "错误：构建 iSHApple 需要 Ninja，请先安装 ninja。" >&2
+    exit 1
 fi
 
 mkdir -p "$OUTPUT_ROOT" "$PRODUCT_ROOT"

@@ -14,7 +14,8 @@
 // 细节扩散到 App target 的工程配置。
 __asm__(".linker_option \"-lsqlite3\"\n"
         ".linker_option \"-lresolv\"\n"
-        ".linker_option \"-lz\"\n");
+        ".linker_option \"-lz\"\n"
+        ".linker_option \"-liSHApple\"\n");
 #else
 #define ETOS_ISH_SUPPORTED 0
 #define ETOS_ISH_ENOSYS (-38)
