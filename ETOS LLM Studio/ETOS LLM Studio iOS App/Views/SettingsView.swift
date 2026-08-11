@@ -92,18 +92,6 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
-                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
-                } label: {
-                    SettingsListIconLabel("本地 Linux", icon: .localLinux)
-                }
-
-                NavigationLink {
-                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
-                } label: {
-                    SettingsListIconLabel("Browser Agent", icon: .browserAgent)
-                }
-
-                NavigationLink {
                     DailyPulseView()
                         .environmentObject(viewModel)
                 } label: {
@@ -175,6 +163,18 @@ struct SettingsView: View {
                     )
                 } label: {
                     SettingsListIconLabel("语音输入", icon: .speechInput)
+                }
+
+                NavigationLink {
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("本地 Linux", icon: .localLinux)
+                }
+
+                NavigationLink {
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("Browser Agent", icon: .browserAgent)
                 }
 
                 NavigationLink {
