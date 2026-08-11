@@ -204,7 +204,7 @@ public enum MCPBuiltInAppToolServer {
         case .linux:
             return NSLocalizedString("在 Agent 模式中提供 Linux 命令、Shell 与交互式进程管理；不会自动安装软件。", comment: "Built-in local Linux MCP server notes")
         case .browser:
-            return NSLocalizedString("在 Agent 模式中提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。", comment: "Built-in Browser Agent MCP server notes")
+            return NSLocalizedString("提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。", comment: "Built-in Browser Agent MCP server notes")
         case .feedback:
             return notes(for: .interaction)
         }

@@ -3,8 +3,8 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// Agent 模式和具体工具能力分开判定。Browser Agent 是原生能力，不因 Linux
-// 关闭而消失；只有 Linux 命令、Linux 文件和本地 stdio MCP 依赖该开关。
+// Chat / Agent 只描述本地 Linux 是否加入本次请求。浏览器、会话协作等普通
+// 聊天工具仍服从各自的工具开关，不能因为选择 Chat 就被一并关闭。
 // ============================================================================
 
 import Foundation
@@ -20,12 +20,13 @@ struct AgentToolCapabilityPolicy: Equatable, Sendable {
         isWorldbookContextIsolated: Bool,
         localLinuxEnabled: Bool
     ) -> AgentToolCapabilityPolicy {
-        let isAgent = mode == .agent && !isWorldbookContextIsolated
+        let allowsChatTools = !isWorldbookContextIsolated
+        let includesLocalLinux = allowsChatTools && localLinuxEnabled && mode == .agent
         return AgentToolCapabilityPolicy(
-            preparesAgentRun: isAgent,
-            includesConversationTools: isAgent,
-            includesBrowserTools: isAgent,
-            includesLocalLinuxTools: isAgent && localLinuxEnabled
+            preparesAgentRun: includesLocalLinux,
+            includesConversationTools: allowsChatTools,
+            includesBrowserTools: allowsChatTools,
+            includesLocalLinuxTools: includesLocalLinux
         )
     }
 }

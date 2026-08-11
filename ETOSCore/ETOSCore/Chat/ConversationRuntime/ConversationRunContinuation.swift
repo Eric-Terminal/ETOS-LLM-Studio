@@ -206,10 +206,11 @@ extension ChatService {
                 ?? (localAgentContext?.mode == .agent)
             let localLinuxToolsEnabled = configuration.localLinuxToolsEnabled
                 ?? (localAgentContext != nil)
+            let allowsChatTools = !session.isWorldbookContextIsolationActive
             let agentCapabilities = AgentToolCapabilityPolicy(
-                preparesAgentRun: agentToolsEnabled,
-                includesConversationTools: agentToolsEnabled,
-                includesBrowserTools: agentToolsEnabled,
+                preparesAgentRun: agentToolsEnabled && localLinuxToolsEnabled,
+                includesConversationTools: allowsChatTools,
+                includesBrowserTools: allowsChatTools,
                 includesLocalLinuxTools: agentToolsEnabled && localLinuxToolsEnabled
             )
             let selectedAgentMCPServerIDs = configuration.selectedAgentMCPServerIDs.map { Set($0) }

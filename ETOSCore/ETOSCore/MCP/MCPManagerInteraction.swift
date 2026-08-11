@@ -245,10 +245,9 @@ extension MCPManager {
         includeBrowserAgentTools: Bool = false,
         selectedServerIDs: Set<UUID>? = nil
     ) -> [InternalToolDefinition] {
-        let includesAgentBuiltIns = includeConversationAgentTools
-            || includeLocalLinuxTools
-            || includeBrowserAgentTools
-        guard chatToolsEnabled || includesAgentBuiltIns else { return [] }
+        // 只有 Linux 能力由 Agent 模式额外开启。浏览器和会话协作属于普通 MCP
+        // 聊天工具，必须继续服从 MCP 总开关。
+        guard chatToolsEnabled || includeLocalLinuxTools else { return [] }
         let chatTools: [InternalToolDefinition] = tools.compactMap { available -> InternalToolDefinition? in
             if let selectedServerIDs,
                !selectedServerIDs.contains(available.server.id) {
@@ -262,10 +261,8 @@ extension MCPManager {
             }
             let builtInCategory = MCPBuiltInAppToolServer.category(for: available.server.id)
             if !chatToolsEnabled {
-                let isIncludedAgentBuiltIn = (builtInCategory == .conversation && includeConversationAgentTools)
-                    || (builtInCategory == .linux && includeLocalLinuxTools)
+                let isIncludedAgentBuiltIn = (builtInCategory == .linux && includeLocalLinuxTools)
                     || (builtInCategory == .file && includeLocalLinuxTools)
-                    || (builtInCategory == .browser && includeBrowserAgentTools)
                 guard isIncludedAgentBuiltIn else { return nil }
             }
             if builtInCategory == .conversation,
@@ -315,11 +312,13 @@ extension MCPManager {
             throw MCPChatBridgeError.unknownTool
         }
         let builtInCategory = MCPBuiltInAppToolServer.category(for: routed.server.id)
-        let isAgentBuiltIn = sourceAgentRunID != nil
-            && (builtInCategory == .conversation
-                || builtInCategory == .linux
-                || builtInCategory == .file
-                || builtInCategory == .browser)
+        let activeLocalAgentRun = sourceAgentRunID
+            .flatMap { Persistence.loadLocalAgentRun(id: $0) }
+            .flatMap { run in
+                run.state == .running && run.context.mode == .agent ? run : nil
+            }
+        let isAgentBuiltIn = activeLocalAgentRun != nil
+            && (builtInCategory == .linux || builtInCategory == .file)
         guard chatToolsEnabled || isAgentBuiltIn else {
             throw MCPChatBridgeError.toolGroupDisabled(
                 NSLocalizedString("MCP 工具", comment: "MCP tool group display name")
@@ -327,6 +326,15 @@ extension MCPManager {
         }
         if routed.server.approvalPolicy(for: routed.tool.toolId) == .alwaysDeny {
             throw MCPChatBridgeError.toolDeniedByPolicy(displayName(for: routed))
+        }
+        if case .localStdio = routed.server.transport {
+            guard activeLocalAgentRun != nil else {
+                // 工具定义已在请求准备阶段隔离；执行层仍要拒绝历史或伪造调用，
+                // 避免已手动连接的 stdio 客户端绕过 Chat 模式边界。
+                throw LocalLinuxRuntimeError.runtimeUnavailable(
+                    NSLocalizedString("当前会话不是 Agent 模式。", comment: "Local Agent mode required error")
+                )
+            }
         }
         if case .localStdio(let configuration) = routed.server.transport,
            configuration.launchPolicy == .manual,

@@ -94,8 +94,11 @@ extension ChatService {
         let includeBrowserTools = agentCapabilities?.includesBrowserTools ?? includeAgentTools
         let includeLocalLinuxTools = agentCapabilities?.includesLocalLinuxTools
             ?? includeAgentTools
-        let selectedServerIDs = selectedAgentMCPServerIDs
-            ?? localAgentContext.map { Set($0.selectedMCPServerIDs) }
+        // 只有 Linux Agent Run 需要冻结本次可见的 MCP 集合；普通 Chat 继续使用
+        // MCP 管理页的实时选择，否则空的 Agent 快照会误伤远程 MCP 与内建工具。
+        let selectedServerIDs = includeLocalLinuxTools
+            ? (selectedAgentMCPServerIDs ?? localAgentContext.map { Set($0.selectedMCPServerIDs) })
+            : nil
         if policy.enableMemory && policy.enableMemoryWrite {
             resolvedTools.append(saveMemoryTool)
         }

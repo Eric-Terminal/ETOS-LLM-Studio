@@ -148,7 +148,7 @@ public struct ConversationRunRequestConfiguration: Codable, Hashable, Sendable {
     public var enableResponseSpeedMetrics: Bool
     /// Browser profile 随 Conversation Run 冻结，不依赖 Linux Run 上下文。
     public var browserDataProfile: BrowserAgentDataProfile?
-    /// Agent 工具集合随 Run 冻结，确保工具续写不会受 Linux Run 是否存在影响。
+    /// Linux Agent 能力随 Run 冻结，确保续写期间不会因设置变化而改变执行边界。
     public var agentToolsEnabled: Bool?
     public var localLinuxToolsEnabled: Bool?
     public var selectedAgentMCPServerIDs: [UUID]?

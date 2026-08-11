@@ -5870,7 +5870,7 @@
 "命令规则" = "command rules";
 "因系统挂起中断" = "Interrupted due to system hang";
 "在 Agent 模式中提供 Linux 命令、Shell 与交互式进程管理；不会自动安装软件。" = "Provides Linux commands, shell, and interactive process management in Agent mode; software is not installed automatically.";
-"在 Agent 模式中提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。" = "Provides session-isolated web navigation, reading, and interaction in Agent mode; users can take over the same tab.";
+"提供按会话隔离的网页导航、读取和交互；用户可接管同一标签页。" = "Provides session-isolated web navigation, reading, and interaction; users can take over the same tab.";
 "处理" = "Process";
 "备注（可选）" = "Remarks (optional)";
 "复制后的目标路径，必须与源路径使用相同后端。" = "The copied target path must use the same backend as the source path.";
@@ -5945,7 +5945,7 @@
 "按需启动内置 Linux 用户态，为 Agent、用户终端和本地 MCP 提供同一套环境。" = "Start the built-in Linux user mode on demand to provide the same environment for Agent, user terminal and local MCP.";
 "授权" = "Authorize";
 "授权有效" = "Authorization is valid";
-"控制当前 Agent 会话隔离的浏览器：管理标签页、导航、读取结构化页面、交互、截图与下载。先调用 capabilities 获取当前设备的准确能力；不会在不支持时伪装成功。" = "Browser that controls the isolation of the current Agent session: managing tabs, navigation, reading structured pages, interactions, screenshots, and downloads. First call capabilities to obtain the accurate capabilities of the current device; it will not be successfully disguised when it is not supported.";
+"控制当前聊天会话隔离的浏览器：管理标签页、导航、读取结构化页面、交互、截图与下载。先调用 capabilities 获取当前设备的准确能力；不会在不支持时伪装成功。" = "Controls the browser isolated to the current chat session: tabs, navigation, structured page reading, interaction, screenshots, and downloads. Call capabilities first to inspect the current device; unsupported capabilities are never reported as successful.";
 "提供统一文件工具：相对路径和 app:// 访问 Documents；Agent 模式还可通过 linux:// 与 mount:// 访问 Linux 和授权挂载。" = "Provides unified file tools: relative paths and app:// to access Documents; Agent mode can also access Linux and authorize mounting through linux:// and mount://.";
 "提升为读写需要再次通过系统文件选择器确认目录。活跃任务持有租约时，请先停止任务再普通卸载。" = "Promotion to read-write requires confirming the directory through the system file selector again. When an active task holds a lease, please stop the task first and then uninstall it normally.";
 "搜索起点。相对路径或 app:// 指向 Documents；Agent 模式还可使用 linux:// 和 mount://<挂载 ID>；留空表示 Documents 根目录。" = "Search starting point. Relative path or app:// points to Documents; Agent mode can also use linux:// and mount://<mount ID>; leave blank to indicate the Documents root directory.";
@@ -6250,7 +6250,6 @@
 "RootFS 缺少安装收据，无法记录系统更新。" = "The RootFS installation receipt is missing, so the system update cannot be recorded.";
 "外部目录尚未在本机准备好。请先在“文件”App 中打开该目录，等待 iCloud 或文件提供者下载完成后重试。" = "The external folder is not ready on this device. Open it in the Files app, wait for iCloud or the file provider to finish downloading, then try again.";
 "RootFS 更新清单" = "RootFS Update Manifest";
-"Agent 会向模型提供浏览器等工具；Linux 工具只在启用本地 Linux 后提供。" = "Agent provides the model with browser and other tools. Linux tools are available only when Local Linux is enabled.";
 "Linux 运行时" = "Linux Runtime";
 "本机限制" = "On-device Limitations";
 "这里只显示当前 watchOS 运行时缺少的能力；没有缺口时不会显示此区域。可选择把模型操作委托给 iPhone。" = "Only capabilities missing from the current watchOS runtime appear here. This section stays hidden when none are missing. You can delegate model actions to iPhone.";

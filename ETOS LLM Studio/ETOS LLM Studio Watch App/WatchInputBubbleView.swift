@@ -505,9 +505,12 @@ struct WatchInputBubbleView: View {
         switch action {
         case .requestControls:
             return viewModel.selectedModel?.model.requestBodyControls.contains(where: \.isEnabled) == true
-                || (viewModel.currentSession != nil && viewModel.selectedModel != nil)
+                || (appConfig.localLinuxEnabled
+                    && viewModel.currentSession != nil
+                    && viewModel.selectedModel != nil)
         case .agentMode:
-            return viewModel.currentSession != nil
+            return appConfig.localLinuxEnabled
+                && viewModel.currentSession != nil
                 && viewModel.selectedModel != nil
         case .browser:
             return viewModel.currentSession != nil
@@ -534,7 +537,7 @@ struct WatchInputBubbleView: View {
                 hasConversationStarted: !isTemporaryChatActivationAvailable
             )
         case .agentMode:
-            return viewModel.currentSession == nil
+            return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
         case .browser:
             return viewModel.currentSession == nil
         case .localTerminal:

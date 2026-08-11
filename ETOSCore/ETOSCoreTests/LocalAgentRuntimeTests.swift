@@ -31,14 +31,14 @@ struct LocalAgentRuntimeTests {
         }
     }
 
-    @Test("Browser Agent 不依赖本地 Linux 开关")
-    func browserAgentCapabilityIsIndependentFromLinux() {
+    @Test("Chat 与 Agent 只切换本地 Linux 能力")
+    func agentModeOnlyControlsLocalLinuxCapability() {
         let withoutLinux = AgentToolCapabilityPolicy.resolve(
             mode: .agent,
             isWorldbookContextIsolated: false,
             localLinuxEnabled: false
         )
-        #expect(withoutLinux.preparesAgentRun)
+        #expect(!withoutLinux.preparesAgentRun)
         #expect(withoutLinux.includesConversationTools)
         #expect(withoutLinux.includesBrowserTools)
         #expect(!withoutLinux.includesLocalLinuxTools)
@@ -49,8 +49,19 @@ struct LocalAgentRuntimeTests {
             localLinuxEnabled: true
         )
         #expect(!chat.preparesAgentRun)
-        #expect(!chat.includesBrowserTools)
+        #expect(chat.includesConversationTools)
+        #expect(chat.includesBrowserTools)
         #expect(!chat.includesLocalLinuxTools)
+
+        let agent = AgentToolCapabilityPolicy.resolve(
+            mode: .agent,
+            isWorldbookContextIsolated: false,
+            localLinuxEnabled: true
+        )
+        #expect(agent.preparesAgentRun)
+        #expect(agent.includesConversationTools)
+        #expect(agent.includesBrowserTools)
+        #expect(agent.includesLocalLinuxTools)
 
         let isolated = AgentToolCapabilityPolicy.resolve(
             mode: .agent,
@@ -58,6 +69,7 @@ struct LocalAgentRuntimeTests {
             localLinuxEnabled: true
         )
         #expect(!isolated.preparesAgentRun)
+        #expect(!isolated.includesConversationTools)
         #expect(!isolated.includesBrowserTools)
         #expect(!isolated.includesLocalLinuxTools)
     }

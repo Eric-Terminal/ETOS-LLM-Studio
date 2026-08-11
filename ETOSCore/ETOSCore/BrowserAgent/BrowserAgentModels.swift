@@ -225,7 +225,7 @@ enum BrowserAgentToolDefinitions {
         InternalToolDefinition(
             name: toolName,
             description: NSLocalizedString(
-                "控制当前 Agent 会话隔离的浏览器：管理标签页、导航、读取结构化页面、交互、截图与下载。先调用 capabilities 获取当前设备的准确能力；不会在不支持时伪装成功。",
+                "控制当前聊天会话隔离的浏览器：管理标签页、导航、读取结构化页面、交互、截图与下载。先调用 capabilities 获取当前设备的准确能力；不会在不支持时伪装成功。",
                 comment: "Browser Agent tool description"
             ),
             parameters: .dictionary([

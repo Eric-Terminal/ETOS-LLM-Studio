@@ -238,7 +238,9 @@ private struct WatchInputQuickActionPickerView: View {
             )
             actionSection(
                 title: NSLocalizedString("功能入口", comment: "Watch input quick action picker section"),
-                actions: WatchInputQuickAction.destinationActions
+                actions: WatchInputQuickAction.destinationActions.filter { action in
+                    appConfig.localLinuxEnabled || (action != .agentMode && action != .localTerminal)
+                }
             )
         }
         .navigationTitle(NSLocalizedString("添加快捷功能", comment: "Add watch input quick action"))
@@ -391,7 +393,8 @@ extension ContentView {
         case .extendedFeatures:
             ExtendedFeaturesView().environmentObject(viewModel)
         case .agentMode:
-            if let sessionID = viewModel.currentSession?.id {
+            if appConfig.localLinuxEnabled,
+               let sessionID = viewModel.currentSession?.id {
                 LocalAgentModeWatchView(sessionID: sessionID)
             } else {
                 EmptyView()

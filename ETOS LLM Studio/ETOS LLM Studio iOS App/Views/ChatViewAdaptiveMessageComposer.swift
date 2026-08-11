@@ -73,6 +73,9 @@ extension TelegramMessageComposer {
         .onChange(of: viewModel.selectedModel?.id) { _, _ in
             adaptiveRefreshRequestControls()
         }
+        .onChange(of: appConfig.localLinuxEnabled) { _, _ in
+            adaptiveRefreshRequestControls()
+        }
     }
 
     private var adaptiveComposerRow: some View {
@@ -241,7 +244,8 @@ extension TelegramMessageComposer {
                 }
 
                 if let selectedModel = viewModel.selectedModel {
-                    if let sessionID = viewModel.currentSession?.id {
+                    if appConfig.localLinuxEnabled,
+                       let sessionID = viewModel.currentSession?.id {
                         LocalAgentModePicker(sessionID: sessionID, isLocked: isSending)
                     }
 
@@ -273,7 +277,7 @@ extension TelegramMessageComposer {
 
     private var adaptiveRequestControlsPanelHeight: CGFloat {
         let maximumHeight = min(UIScreen.main.bounds.height * 0.38, 340)
-        let agentModeHeight: CGFloat = viewModel.currentSession == nil ? 0 : 150
+        let agentModeHeight: CGFloat = appConfig.localLinuxEnabled && viewModel.currentSession != nil ? 150 : 0
         let estimatedContentHeight = 82 + agentModeHeight + CGFloat(adaptiveRequestControls.count) * 68
         return min(maximumHeight, max(124, estimatedContentHeight))
     }
@@ -347,7 +351,8 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveShowsRequestControlsButton: Bool {
-        (!adaptiveRequestControls.isEmpty || (viewModel.currentSession != nil && viewModel.selectedModel != nil))
+        (!adaptiveRequestControls.isEmpty
+            || (appConfig.localLinuxEnabled && viewModel.currentSession != nil && viewModel.selectedModel != nil))
             && adaptivePresentation != .expandedText
     }
 
@@ -705,7 +710,7 @@ extension TelegramMessageComposer {
         let controls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
         adaptiveRequestControls = controls
         if controls.isEmpty,
-           (viewModel.selectedModel == nil || viewModel.currentSession == nil),
+           (!appConfig.localLinuxEnabled || viewModel.selectedModel == nil || viewModel.currentSession == nil),
            isRequestControlsExpanded {
             withAnimation(adaptiveComposerAnimation) {
                 isRequestControlsExpanded = false
