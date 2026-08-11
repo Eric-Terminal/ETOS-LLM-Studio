@@ -203,12 +203,16 @@ struct LocalAgentRuntimeTests {
             terminalResponseHandler: { responseCapture.append($0) }
         )
 
-        collector.append(stream: .terminal, data: Data("\u{1B}[31m红色\u{1B}[0m\u{1B}[6n".utf8))
+        collector.append(stream: .terminal, data: Data("\u{1B}[31m红色\u{1B}[0m\u{1B}[6n默认".utf8))
         collector.finish()
 
-        let presentation = try #require(collector.userVisibleTerminalPresentation())
-        #expect(presentation.plainText == "红色")
-        #expect(presentation.attributedText != AttributedString("红色"))
+        let darkPresentation = try #require(collector.userVisibleTerminalPresentation())
+        let lightPresentation = try #require(
+            collector.userVisibleTerminalPresentation(appearance: .light)
+        )
+        #expect(darkPresentation.plainText == "红色默认")
+        #expect(darkPresentation.attributedText != AttributedString("红色默认"))
+        #expect(lightPresentation.attributedText != darkPresentation.attributedText)
         #expect(String(decoding: responseCapture.data, as: UTF8.self) == "\u{1B}[1;5R")
     }
 

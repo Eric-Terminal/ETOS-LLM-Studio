@@ -160,22 +160,27 @@ public actor LocalLinuxJobScheduler {
         return try await storage.readRawOutput(relativePath: relativePath, maximumBytes: 262_144)
     }
 
-    public func userVisibleTerminalPresentation(jobID: UUID) throws -> LocalLinuxTerminalPresentation {
+    public func userVisibleTerminalPresentation(
+        jobID: UUID,
+        appearance: LocalLinuxTerminalAppearance = .dark
+    ) throws -> LocalLinuxTerminalPresentation {
         guard let terminal = activeTerminals[jobID] else {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
-        return terminal.collector.userVisibleTerminalPresentation() ?? .empty
+        return terminal.collector.userVisibleTerminalPresentation(appearance: appearance) ?? .empty
     }
 
     public func userVisibleTerminalPreviewPresentation(
         jobID: UUID,
-        maximumLines: Int
+        maximumLines: Int,
+        appearance: LocalLinuxTerminalAppearance = .dark
     ) throws -> LocalLinuxTerminalPresentation {
         guard let terminal = activeTerminals[jobID] else {
             throw LocalLinuxRuntimeError.jobNotFound(jobID)
         }
         return terminal.collector.userVisibleTerminalPreviewPresentation(
-            maximumLines: maximumLines
+            maximumLines: maximumLines,
+            appearance: appearance
         ) ?? .empty
     }
 

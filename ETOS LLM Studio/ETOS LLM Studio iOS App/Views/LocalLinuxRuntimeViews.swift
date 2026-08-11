@@ -34,6 +34,7 @@ struct LocalLinuxResourceStatusSection: View {
 struct LocalLinuxTerminalView: View {
     let initialJobID: UUID?
 
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
@@ -65,7 +66,7 @@ struct LocalLinuxTerminalView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
-                .background(Color.black)
+                .background(terminalCanvasColor)
                 .defaultScrollAnchor(.bottom)
                 .onAppear { resize(for: proxy.size) }
                 .onChange(of: proxy.size) { _, size in resize(for: size) }
@@ -102,8 +103,7 @@ struct LocalLinuxTerminalView: View {
             }
             .padding()
         }
-        .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .background(terminalCanvasColor.ignoresSafeArea())
         .navigationTitle(NSLocalizedString("终端", comment: "Linux terminal title"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -165,6 +165,10 @@ struct LocalLinuxTerminalView: View {
         .onChange(of: appConfig.localLinuxTerminalShortcutIDs) { _, _ in
             reloadTerminalShortcuts()
         }
+        .onChange(of: colorScheme) { _, _ in
+            guard let job else { return }
+            attach(to: job)
+        }
         .onDisappear {
             // 离开页面只停止界面订阅，终端本身继续运行。
             outputTask?.cancel()
@@ -209,13 +213,17 @@ struct LocalLinuxTerminalView: View {
     }
 
     private func attach(to selected: LocalLinuxJob) {
+        let appearance = terminalAppearance
         job = selected
         output = .empty
         outputTask?.cancel()
         outputTask = Task {
             inputOwner = try? await LocalLinuxJobScheduler.shared.terminalInputOwner(jobID: selected.id)
             while !Task.isCancelled {
-                if let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(jobID: selected.id) {
+                if let presentation = try? await LocalLinuxJobScheduler.shared.userVisibleTerminalPresentation(
+                    jobID: selected.id,
+                    appearance: appearance
+                ) {
                     output = presentation
                 }
                 if let current = await LocalLinuxJobScheduler.shared.job(id: selected.id) {
@@ -285,6 +293,14 @@ struct LocalLinuxTerminalView: View {
         guard let inputOwner else { return false }
         if case .agent = inputOwner { return true }
         return false
+    }
+
+    private var terminalAppearance: LocalLinuxTerminalAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var terminalCanvasColor: Color {
+        colorScheme == .dark ? .black : .white
     }
 
     private func reloadTerminalShortcuts() {

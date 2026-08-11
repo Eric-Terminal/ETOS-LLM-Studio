@@ -100,14 +100,17 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
 
     func renderedText() -> String {
         var values = usesAlternateScreen ? [] : scrollback.map(\.plainText)
-        values.append(contentsOf: activeBuffer.lines.map { renderedLine($0).plainText })
+        values.append(contentsOf: activeBuffer.lines.map(renderedPlainText))
         while values.last?.isEmpty == true {
             values.removeLast()
         }
         return values.joined(separator: "\n")
     }
 
-    func renderedPresentation(maximumLines: Int? = nil) -> LocalLinuxTerminalPresentation {
+    func renderedPresentation(
+        maximumLines: Int? = nil,
+        appearance: LocalLinuxTerminalAppearance = .dark
+    ) -> LocalLinuxTerminalPresentation {
         var values = usesAlternateScreen ? [] : scrollback
         values.append(contentsOf: activeBuffer.lines.map(renderedLine))
         while values.last?.isEmpty == true {
@@ -124,7 +127,7 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
                 attributedText.append(AttributedString("\n"))
             }
             plainText.append(line.plainText)
-            attributedText.append(line.attributedText)
+            attributedText.append(line.attributedText(for: appearance))
         }
         return LocalLinuxTerminalPresentation(
             plainText: plainText,
@@ -892,26 +895,18 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
     }
 
     private func renderedLine(_ line: [Cell]) -> LocalLinuxTerminalLinePresentation {
-        var end = line.count
-        while end > 0 {
-            let cell = line[end - 1]
-            if cell.isContinuation {
-                end -= 1
-                continue
-            }
-            let isBlank = cell.text.isEmpty || cell.text == " "
-            guard isBlank, !cell.style.keepsTrailingBlankVisible else { break }
-            end -= 1
-        }
+        let end = visibleCellEndIndex(in: line)
 
         var plainText = ""
-        var attributedText = AttributedString()
+        var lightAttributedText = AttributedString()
+        var darkAttributedText = AttributedString()
         var runText = ""
         var runStyle: LocalLinuxTerminalStyle?
 
         func flushRun() {
             guard let runStyle, !runText.isEmpty else { return }
-            attributedText.append(runStyle.attributedString(runText))
+            lightAttributedText.append(runStyle.attributedString(runText, appearance: .light))
+            darkAttributedText.append(runStyle.attributedString(runText, appearance: .dark))
             runText.removeAll(keepingCapacity: true)
         }
 
@@ -927,8 +922,32 @@ final class LocalLinuxTerminalScreen: @unchecked Sendable {
         flushRun()
         return LocalLinuxTerminalLinePresentation(
             plainText: plainText,
-            attributedText: attributedText
+            lightAttributedText: lightAttributedText,
+            darkAttributedText: darkAttributedText
         )
+    }
+
+    private func renderedPlainText(_ line: [Cell]) -> String {
+        var result = ""
+        for cell in line.prefix(visibleCellEndIndex(in: line)) where !cell.isContinuation {
+            result.append(cell.text.isEmpty ? " " : cell.text)
+        }
+        return result
+    }
+
+    private func visibleCellEndIndex(in line: [Cell]) -> Int {
+        var end = line.count
+        while end > 0 {
+            let cell = line[end - 1]
+            if cell.isContinuation {
+                end -= 1
+                continue
+            }
+            let isBlank = cell.text.isEmpty || cell.text == " "
+            guard isBlank, !cell.style.keepsTrailingBlankVisible else { break }
+            end -= 1
+        }
+        return end
     }
 
     private func appendScrollback(_ line: LocalLinuxTerminalLinePresentation) {

@@ -48,9 +48,11 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private let userPreviewLimit = 262_144
     private var terminalScreen: LocalLinuxTerminalScreen?
     private var terminalPresentation: LocalLinuxTerminalPresentation?
+    private var terminalPresentationAppearance: LocalLinuxTerminalAppearance?
     private var terminalPresentationNeedsRefresh = false
     private var terminalPreviewPresentation: LocalLinuxTerminalPresentation?
     private var terminalPreviewMaximumLines = 0
+    private var terminalPreviewAppearance: LocalLinuxTerminalAppearance?
     private var terminalPreviewNeedsRefresh = false
 
     public init(
@@ -179,11 +181,16 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         return String(decoding: userPreview, as: UTF8.self)
     }
 
-    public func userVisibleTerminalPresentation() -> LocalLinuxTerminalPresentation? {
+    public func userVisibleTerminalPresentation(
+        appearance: LocalLinuxTerminalAppearance = .dark
+    ) -> LocalLinuxTerminalPresentation? {
         lock.lock()
         defer { lock.unlock() }
-        if terminalPresentationNeedsRefresh, let terminalScreen {
-            terminalPresentation = terminalScreen.renderedPresentation()
+        if terminalPresentationNeedsRefresh
+            || terminalPresentationAppearance != appearance,
+           let terminalScreen {
+            terminalPresentation = terminalScreen.renderedPresentation(appearance: appearance)
+            terminalPresentationAppearance = appearance
             terminalPresentationNeedsRefresh = false
         }
         return terminalPresentation
@@ -191,18 +198,22 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
 
     /// 浮窗只需要末尾少量屏幕行，避免每次刷新都复制完整回滚缓冲区。
     public func userVisibleTerminalPreviewPresentation(
-        maximumLines: Int
+        maximumLines: Int,
+        appearance: LocalLinuxTerminalAppearance = .dark
     ) -> LocalLinuxTerminalPresentation? {
         lock.lock()
         defer { lock.unlock() }
         let normalizedMaximumLines = max(1, maximumLines)
         if terminalPreviewNeedsRefresh
-            || terminalPreviewMaximumLines != normalizedMaximumLines,
+            || terminalPreviewMaximumLines != normalizedMaximumLines
+            || terminalPreviewAppearance != appearance,
            let terminalScreen {
             terminalPreviewPresentation = terminalScreen.renderedPresentation(
-                maximumLines: normalizedMaximumLines
+                maximumLines: normalizedMaximumLines,
+                appearance: appearance
             )
             terminalPreviewMaximumLines = normalizedMaximumLines
+            terminalPreviewAppearance = appearance
             terminalPreviewNeedsRefresh = false
         }
         return terminalPreviewPresentation

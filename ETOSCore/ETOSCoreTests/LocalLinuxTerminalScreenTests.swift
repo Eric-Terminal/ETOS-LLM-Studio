@@ -56,6 +56,18 @@ struct LocalLinuxTerminalScreenTests {
         #expect(presentation.attributedText != AttributedString(presentation.plainText))
     }
 
+    @Test("终端默认文字会随浅色与深色外观调整")
+    func defaultTextAdaptsToTerminalAppearance() {
+        let screen = LocalLinuxTerminalScreen(columns: 20, rows: 2)
+        screen.append(Data("默认文字".utf8))
+
+        let light = screen.renderedPresentation(appearance: .light)
+        let dark = screen.renderedPresentation(appearance: .dark)
+
+        #expect(light.plainText == dark.plainText)
+        #expect(light.attributedText != dark.attributedText)
+    }
+
     @Test("ANSI 字体、背景与反色样式不会泄漏控制字符")
     func ansiTextStylesAreRendered() {
         let screen = LocalLinuxTerminalScreen(columns: 40, rows: 4)

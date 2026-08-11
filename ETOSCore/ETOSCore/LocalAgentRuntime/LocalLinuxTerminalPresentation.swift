@@ -10,6 +10,11 @@
 import Foundation
 import SwiftUI
 
+public enum LocalLinuxTerminalAppearance: Equatable, Hashable, Sendable {
+    case light
+    case dark
+}
+
 public struct LocalLinuxTerminalPresentation: Equatable, Sendable {
     public static let empty = LocalLinuxTerminalPresentation(
         plainText: "",
@@ -115,11 +120,14 @@ struct LocalLinuxTerminalStyle: Equatable, Sendable {
         background != nil || isInverse || isUnderlined || isStruckThrough
     }
 
-    func attributedString(_ text: String) -> AttributedString {
+    func attributedString(
+        _ text: String,
+        appearance: LocalLinuxTerminalAppearance
+    ) -> AttributedString {
         var attributed = AttributedString(text)
         guard !text.isEmpty else { return attributed }
         let range = attributed.startIndex..<attributed.endIndex
-        let resolved = resolvedColors
+        let resolved = resolvedColors(for: appearance)
         attributed[range].foregroundColor = isConcealed
             ? Color.clear
             : resolved.foreground.opacity(isFaint ? 0.55 : 1)
@@ -135,9 +143,19 @@ struct LocalLinuxTerminalStyle: Equatable, Sendable {
         return attributed
     }
 
-    private var resolvedColors: (foreground: Color, background: Color?) {
-        let defaultForeground = Color(red: 0.90, green: 0.90, blue: 0.90)
-        let defaultBackground = Color.black
+    private func resolvedColors(
+        for appearance: LocalLinuxTerminalAppearance
+    ) -> (foreground: Color, background: Color?) {
+        let defaultForeground: Color
+        let defaultBackground: Color
+        switch appearance {
+        case .light:
+            defaultForeground = Color(red: 0.10, green: 0.10, blue: 0.10)
+            defaultBackground = .white
+        case .dark:
+            defaultForeground = Color(red: 0.90, green: 0.90, blue: 0.90)
+            defaultBackground = .black
+        }
         let foreground = foreground?.swiftUIColor ?? defaultForeground
         let background = background?.swiftUIColor
         if isInverse {
@@ -149,7 +167,17 @@ struct LocalLinuxTerminalStyle: Equatable, Sendable {
 
 struct LocalLinuxTerminalLinePresentation: Equatable, Sendable {
     let plainText: String
-    let attributedText: AttributedString
+    let lightAttributedText: AttributedString
+    let darkAttributedText: AttributedString
 
     var isEmpty: Bool { plainText.isEmpty }
+
+    func attributedText(for appearance: LocalLinuxTerminalAppearance) -> AttributedString {
+        switch appearance {
+        case .light:
+            return lightAttributedText
+        case .dark:
+            return darkAttributedText
+        }
+    }
 }

@@ -49,7 +49,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
         .task(id: isEnabled) {
             await observeTerminalActivity()
         }
-        .task(id: activeTerminalID) {
+        .task(id: terminalOutputObservationID) {
             await observeTerminalOutput()
         }
     }
@@ -97,7 +97,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
             .font(.system(size: 6, design: .monospaced))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             .padding(6)
-            .background(Color.black)
+            .background(terminalCanvasColor)
             .clipped()
         }
         .frame(width: panelSize.width, height: panelSize.height)
@@ -136,10 +136,15 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
     private func observeTerminalOutput() async {
         guard let terminalID = activeTerminalID else { return }
+        let appearance = terminalAppearance
         while !Task.isCancelled, activeTerminalID == terminalID {
             do {
                 presentation = try await LocalLinuxJobScheduler.shared
-                    .userVisibleTerminalPreviewPresentation(jobID: terminalID, maximumLines: 10)
+                    .userVisibleTerminalPreviewPresentation(
+                        jobID: terminalID,
+                        maximumLines: 10,
+                        appearance: appearance
+                    )
             } catch {
                 activeTerminalID = nil
                 presentation = .empty
@@ -181,6 +186,18 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
     private var clampedOffset: CGSize {
         clamp(offset)
+    }
+
+    private var terminalAppearance: LocalLinuxTerminalAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var terminalCanvasColor: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
+    private var terminalOutputObservationID: String {
+        "\(activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
     }
 
     private func clamp(_ candidate: CGSize) -> CGSize {
