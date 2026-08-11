@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct LocalLinuxEnvironmentRecipe: Identifiable, Equatable, Sendable {
+public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
     public let id: String
     public let title: String
     public let detail: String
@@ -47,6 +47,11 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Equatable, Sendable {
             )
         ].joined(separator: "\n\n")
     }
+
+    /// 专用安装终端执行完 recipe 后立即退出，让 PTY 任务保留真实退出码。
+    public var terminalInput: Data {
+        Data("\(command); exit $?\n".utf8)
+    }
 }
 
 public struct LocalLinuxEnvironmentInstallationResult: Equatable, Sendable {
@@ -65,37 +70,26 @@ public struct LocalLinuxEnvironmentInstallationResult: Equatable, Sendable {
 }
 
 public enum LocalLinuxEnvironmentInstaller {
-    public static func install(_ recipe: LocalLinuxEnvironmentRecipe) async throws -> LocalLinuxEnvironmentInstallationResult {
+    public static func startTerminal(columns: UInt16, rows: UInt16) async throws -> LocalLinuxJob {
         let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
-        let executable = "/bin/sh"
-        let request = LocalLinuxJobRequest(
-            executable: executable,
-            arguments: [executable, "-lc", recipe.command],
-            workingDirectory: workspace.guestPath,
-            timeoutSeconds: 0,
-            outputLimitBytes: 0,
-            shellScript: recipe.command
-        )
-        let match = await LocalLinuxApprovalPolicy.shared.evaluate(
-            request: request,
-            kind: .recipe,
-            isEnabled: AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled)
-        )
-        let approvedRuleIDs: Set<UUID>
-        if let match, match.action == .confirm {
-            approvedRuleIDs = [match.ruleID]
-        } else {
-            approvedRuleIDs = []
-        }
-        let job = try await LocalLinuxJobScheduler.shared.runCommand(
-            kind: .recipe,
-            request: request,
+        return try await LocalLinuxJobScheduler.shared.startTerminal(
             context: nil,
             workspace: workspace,
-            approval: LocalLinuxCommandApproval(approvedRuleIDs: approvedRuleIDs)
+            inputOwner: .user,
+            columns: columns,
+            rows: rows
         )
-        let output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? ""
-        return LocalLinuxEnvironmentInstallationResult(job: job, output: output)
+    }
+
+    public static func waitForCompletion(jobID: UUID) async throws -> LocalLinuxEnvironmentInstallationResult {
+        while let job = await LocalLinuxJobScheduler.shared.job(id: jobID) {
+            if job.state.isTerminal {
+                let output = (try? await LocalLinuxJobScheduler.shared.userVisibleOutput(jobID: job.id)) ?? ""
+                return LocalLinuxEnvironmentInstallationResult(job: job, output: output)
+            }
+            try await Task<Never, Never>.sleep(nanoseconds: 250_000_000)
+        }
+        throw LocalLinuxRuntimeError.jobNotFound(jobID)
     }
 }
 

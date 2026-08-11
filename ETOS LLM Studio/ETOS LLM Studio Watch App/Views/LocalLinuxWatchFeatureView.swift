@@ -242,6 +242,8 @@ struct LocalLinuxWatchTerminalView: View {
     let initialJobID: UUID?
     let isPresentationActive: Bool
     let showsTerminalManagement: Bool
+    let startupInput: Data?
+    let requestedTitle: String?
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var job: LocalLinuxJob?
     @State private var terminalJobs: [LocalLinuxJob] = []
@@ -251,15 +253,20 @@ struct LocalLinuxWatchTerminalView: View {
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
+    @State private var didSendStartupInput = false
 
     init(
         initialJobID: UUID? = nil,
         isPresentationActive: Bool = true,
-        showsTerminalManagement: Bool = true
+        showsTerminalManagement: Bool = true,
+        startupInput: Data? = nil,
+        title: String? = nil
     ) {
         self.initialJobID = initialJobID
         self.isPresentationActive = isPresentationActive
         self.showsTerminalManagement = showsTerminalManagement
+        self.startupInput = startupInput
+        self.requestedTitle = title
     }
 
     var body: some View {
@@ -290,7 +297,7 @@ struct LocalLinuxWatchTerminalView: View {
                                     sendRaw(shortcut.inputData)
                                 }
                                 .buttonStyle(.borderless)
-                                .disabled(job == nil)
+                                .disabled(!isTerminalActive)
                             }
                         }
                     }
@@ -300,15 +307,17 @@ struct LocalLinuxWatchTerminalView: View {
                 TextField(NSLocalizedString("输入", comment: "Watch Linux terminal input"), text: $input)
                     .submitLabel(.done)
                 Button(NSLocalizedString("发送", comment: "Send"), action: send)
-                    .disabled(job == nil || input.isEmpty)
+                    .disabled(!isTerminalActive || input.isEmpty)
                 Button(NSLocalizedString("中断", comment: "Interrupt")) {
                     guard let job else { return }
                     Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
                 }
+                .disabled(!isTerminalActive)
                 Button(NSLocalizedString("结束", comment: "Stop"), role: .destructive) {
                     guard let job else { return }
                     Task { await LocalLinuxJobScheduler.shared.cancel(jobID: job.id) }
                 }
+                .disabled(!isTerminalActive)
             }
             if showsTerminalManagement {
                 Section(NSLocalizedString("终端", comment: "Watch terminal sessions section")) {
@@ -353,6 +362,7 @@ struct LocalLinuxWatchTerminalView: View {
         terminalJobs = visibleTerminalJobs(in: active)
         if let initialJobID, let selected = active.first(where: { $0.id == initialJobID }) {
             attach(to: selected)
+            await sendStartupInputIfNeeded(to: selected)
             return
         }
         for terminal in terminalJobs where terminal.runID == nil {
@@ -376,6 +386,7 @@ struct LocalLinuxWatchTerminalView: View {
             )
             terminalJobs.insert(started, at: 0)
             attach(to: started)
+            await sendStartupInputIfNeeded(to: started)
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -412,7 +423,7 @@ struct LocalLinuxWatchTerminalView: View {
     }
 
     private func sendRaw(_ data: Data) {
-        guard let job, !data.isEmpty else { return }
+        guard let job, !job.state.isTerminal, !data.isEmpty else { return }
         Task {
             do {
                 if inputOwner != .user {
@@ -442,6 +453,7 @@ struct LocalLinuxWatchTerminalView: View {
     }
 
     private var terminalNavigationTitle: String {
+        if let requestedTitle { return requestedTitle }
         guard !showsTerminalManagement, let initialJobID else {
             return NSLocalizedString("终端", comment: "Watch Linux terminal title")
         }
@@ -460,6 +472,26 @@ struct LocalLinuxWatchTerminalView: View {
             format: NSLocalizedString("切换到终端 %@", comment: "Watch switch Linux terminal"),
             String(terminal.id.uuidString.prefix(8))
         )
+    }
+
+    private var isTerminalActive: Bool {
+        guard let job else { return false }
+        return !job.state.isTerminal
+    }
+
+    private func sendStartupInputIfNeeded(to terminal: LocalLinuxJob) async {
+        guard !didSendStartupInput, let startupInput else { return }
+        didSendStartupInput = true
+        do {
+            try await LocalLinuxJobScheduler.shared.sendTerminalInput(
+                jobID: terminal.id,
+                owner: .user,
+                data: startupInput
+            )
+        } catch {
+            didSendStartupInput = false
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

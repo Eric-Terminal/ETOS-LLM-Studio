@@ -3,6 +3,13 @@ import ETOSCore
 import SwiftUI
 
 struct LocalLinuxWatchRecipesView: View {
+    private struct InstallationTerminalTarget: Identifiable, Hashable {
+        let recipe: LocalLinuxEnvironmentRecipe
+        let jobID: UUID
+
+        var id: UUID { jobID }
+    }
+
     private enum RecipeStatus {
         case running
         case installed
@@ -14,6 +21,7 @@ struct LocalLinuxWatchRecipesView: View {
     @State private var activeRecipe: LocalLinuxEnvironmentRecipe?
     @State private var result: LocalLinuxEnvironmentInstallationResult?
     @State private var errorMessage: String?
+    @State private var installationTerminalTarget: InstallationTerminalTarget?
 
     var body: some View {
         List {
@@ -73,6 +81,14 @@ struct LocalLinuxWatchRecipesView: View {
                 .foregroundStyle(.secondary)
         }
         .navigationTitle(NSLocalizedString("常用环境", comment: "Watch Linux recipes title"))
+        .navigationDestination(item: $installationTerminalTarget) { target in
+            LocalLinuxWatchTerminalView(
+                initialJobID: target.jobID,
+                showsTerminalManagement: false,
+                startupInput: target.recipe.terminalInput,
+                title: target.recipe.title
+            )
+        }
         .confirmationDialog(selectedRecipe?.title ?? "", isPresented: Binding(get: { selectedRecipe != nil }, set: { if !$0 { selectedRecipe = nil } })) {
             Button(NSLocalizedString("执行", comment: "Execute")) {
                 if let selectedRecipe { run(selectedRecipe) }
@@ -91,7 +107,9 @@ struct LocalLinuxWatchRecipesView: View {
         recipeStatuses[recipe.id] = .running
         Task {
             do {
-                let installation = try await LocalLinuxEnvironmentInstaller.install(recipe)
+                let terminal = try await LocalLinuxEnvironmentInstaller.startTerminal(columns: 40, rows: 12)
+                installationTerminalTarget = InstallationTerminalTarget(recipe: recipe, jobID: terminal.id)
+                let installation = try await LocalLinuxEnvironmentInstaller.waitForCompletion(jobID: terminal.id)
                 result = installation
                 recipeStatuses[recipe.id] = installation.succeeded ? .installed : .failed
             } catch {

@@ -562,6 +562,8 @@ struct LocalAgentRuntimeTests {
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "uvx")?.id == "uvx")
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "unknown-tool") == nil)
         #expect(LocalLinuxEnvironmentRecipes.all.allSatisfy { $0.command.hasPrefix("apk add ") })
+        let bashRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "bash" })
+        #expect(String(data: bashRecipe.terminalInput, encoding: .utf8) == "apk add bash; exit $?\n")
 
         var job = LocalLinuxJob(
             requestID: 1,

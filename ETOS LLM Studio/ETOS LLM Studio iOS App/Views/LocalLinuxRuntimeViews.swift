@@ -33,6 +33,8 @@ struct LocalLinuxResourceStatusSection: View {
 
 struct LocalLinuxTerminalView: View {
     let initialJobID: UUID?
+    let startupInput: Data?
+    let requestedTitle: String?
 
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -44,9 +46,16 @@ struct LocalLinuxTerminalView: View {
     @State private var input = ""
     @State private var errorMessage: String?
     @State private var outputTask: Task<Void, Never>?
+    @State private var didSendStartupInput = false
 
-    init(initialJobID: UUID? = nil) {
+    init(
+        initialJobID: UUID? = nil,
+        startupInput: Data? = nil,
+        title: String? = nil
+    ) {
         self.initialJobID = initialJobID
+        self.startupInput = startupInput
+        self.requestedTitle = title
     }
 
     var body: some View {
@@ -99,12 +108,12 @@ struct LocalLinuxTerminalView: View {
                     Image(systemName: "return")
                 }
                 .accessibilityLabel(NSLocalizedString("发送到终端", comment: "Send terminal input"))
-                .disabled(job == nil)
+                .disabled(!isTerminalActive)
             }
             .padding()
         }
         .background(terminalCanvasColor.ignoresSafeArea())
-        .navigationTitle(NSLocalizedString("终端", comment: "Linux terminal title"))
+        .navigationTitle(requestedTitle ?? NSLocalizedString("终端", comment: "Linux terminal title"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -142,7 +151,7 @@ struct LocalLinuxTerminalView: View {
                             systemImage: "exclamationmark"
                         )
                     }
-                    .disabled(job == nil)
+                    .disabled(!isTerminalActive)
 
                     Button(role: .destructive) {
                         guard let job else { return }
@@ -153,7 +162,7 @@ struct LocalLinuxTerminalView: View {
                             systemImage: "stop.fill"
                         )
                     }
-                    .disabled(job == nil)
+                    .disabled(!isTerminalActive)
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -184,6 +193,7 @@ struct LocalLinuxTerminalView: View {
         terminalJobs = visibleTerminalJobs(in: active)
         if let initialJobID, let selected = active.first(where: { $0.id == initialJobID }) {
             attach(to: selected)
+            await sendStartupInputIfNeeded(to: selected)
             return
         }
         for terminal in terminalJobs where terminal.runID == nil {
@@ -207,6 +217,7 @@ struct LocalLinuxTerminalView: View {
             )
             terminalJobs.insert(started, at: 0)
             attach(to: started)
+            await sendStartupInputIfNeeded(to: started)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -247,7 +258,7 @@ struct LocalLinuxTerminalView: View {
     }
 
     private func sendRaw(_ data: Data) {
-        guard let job, !data.isEmpty else { return }
+        guard let job, !job.state.isTerminal, !data.isEmpty else { return }
         Task {
             do {
                 if inputOwner != .user {
@@ -268,7 +279,7 @@ struct LocalLinuxTerminalView: View {
     private func terminalKey(_ shortcut: LocalLinuxTerminalShortcut) -> some View {
         Button(shortcut.title) { sendRaw(shortcut.inputData) }
             .buttonStyle(.bordered)
-            .disabled(job == nil)
+            .disabled(!isTerminalActive)
     }
 
     private func resize(for size: CGSize) {
@@ -303,6 +314,11 @@ struct LocalLinuxTerminalView: View {
         colorScheme == .dark ? .black : .white
     }
 
+    private var isTerminalActive: Bool {
+        guard let job else { return false }
+        return !job.state.isTerminal
+    }
+
     private func reloadTerminalShortcuts() {
         terminalShortcuts = LocalLinuxTerminalShortcutConfiguration.decode(appConfig.localLinuxTerminalShortcutIDs)
     }
@@ -319,6 +335,21 @@ struct LocalLinuxTerminalView: View {
         let text = input + "\n"
         input = ""
         sendRaw(Data(text.utf8))
+    }
+
+    private func sendStartupInputIfNeeded(to terminal: LocalLinuxJob) async {
+        guard !didSendStartupInput, let startupInput else { return }
+        didSendStartupInput = true
+        do {
+            try await LocalLinuxJobScheduler.shared.sendTerminalInput(
+                jobID: terminal.id,
+                owner: .user,
+                data: startupInput
+            )
+        } catch {
+            didSendStartupInput = false
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -596,6 +627,13 @@ private struct LocalLinuxJobDetailView: View {
 }
 
 struct LocalLinuxRecipesView: View {
+    private struct InstallationTerminalTarget: Identifiable, Hashable {
+        let recipe: LocalLinuxEnvironmentRecipe
+        let jobID: UUID
+
+        var id: UUID { jobID }
+    }
+
     private enum RecipeStatus {
         case running
         case installed
@@ -607,6 +645,7 @@ struct LocalLinuxRecipesView: View {
     @State private var activeRecipe: LocalLinuxEnvironmentRecipe?
     @State private var result: LocalLinuxEnvironmentInstallationResult?
     @State private var errorMessage: String?
+    @State private var installationTerminalTarget: InstallationTerminalTarget?
 
     var body: some View {
         List {
@@ -634,6 +673,13 @@ struct LocalLinuxRecipesView: View {
             installationResultSection
         }
         .navigationTitle(NSLocalizedString("安装常用环境", comment: "Linux recipes title"))
+        .navigationDestination(item: $installationTerminalTarget) { target in
+            LocalLinuxTerminalView(
+                initialJobID: target.jobID,
+                startupInput: target.recipe.terminalInput,
+                title: target.recipe.title
+            )
+        }
         .confirmationDialog(
             selectedRecipe?.title ?? "",
             isPresented: Binding(get: { selectedRecipe != nil }, set: { if !$0 { selectedRecipe = nil } }),
@@ -661,7 +707,9 @@ struct LocalLinuxRecipesView: View {
         recipeStatuses[recipe.id] = .running
         Task {
             do {
-                let installation = try await LocalLinuxEnvironmentInstaller.install(recipe)
+                let terminal = try await LocalLinuxEnvironmentInstaller.startTerminal(columns: 80, rows: 24)
+                installationTerminalTarget = InstallationTerminalTarget(recipe: recipe, jobID: terminal.id)
+                let installation = try await LocalLinuxEnvironmentInstaller.waitForCompletion(jobID: terminal.id)
                 result = installation
                 recipeStatuses[recipe.id] = installation.succeeded ? .installed : .failed
             } catch {
