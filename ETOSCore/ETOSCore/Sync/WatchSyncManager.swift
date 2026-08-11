@@ -1539,6 +1539,9 @@ extension WatchSyncManager: WCSessionDelegate {
             if BrowserAgentCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
                 return
             }
+            if MCPNativeDeviceCompanionRelay.handleIncomingMessage(message, replyHandler: replyHandler) {
+                return
+            }
             // 保留消息处理以兼容旧版本
             replyHandler([:])
         }

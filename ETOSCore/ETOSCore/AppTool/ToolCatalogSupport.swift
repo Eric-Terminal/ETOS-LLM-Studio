@@ -65,6 +65,7 @@ public enum AppToolCatalogCategory: String, Hashable, Codable, Sendable {
     case feedback
     case linux
     case browser
+    case deviceOperations = "device_operations"
 }
 
 public enum ToolCatalogSupport {

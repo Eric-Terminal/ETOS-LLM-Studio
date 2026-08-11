@@ -8,6 +8,25 @@
 
 import Foundation
 
+enum MCPNativeCapabilityError: LocalizedError {
+    case missingArgument(String)
+    case invalidArgument(String)
+    case unsupportedTool(String)
+    case unavailable(String)
+    case permissionDenied(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingArgument(let name):
+            return String(format: NSLocalizedString("缺少参数：%@", comment: "Missing native MCP argument"), name)
+        case .invalidArgument(let message), .unavailable(let message), .permissionDenied(let message):
+            return message
+        case .unsupportedTool(let name):
+            return String(format: NSLocalizedString("不支持的原生工具：%@", comment: "Unsupported native MCP tool"), name)
+        }
+    }
+}
+
 enum MCPNativeCapabilityPolicy {
     private static let perCallApprovalToolIDs: Set<String> = [
         "health.write_quantity",
@@ -125,6 +144,77 @@ enum MCPNativeJSON {
         let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         guard let value = String(data: data, encoding: .utf8) else {
             throw MCPClientError.invalidResponse
+        }
+        return value
+    }
+}
+
+extension Dictionary where Key == String, Value == Any {
+    func nativeString(_ key: String) -> String? {
+        (self[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func nativeRequiredString(_ key: String) throws -> String {
+        guard let value = nativeString(key), !value.isEmpty else {
+            throw MCPNativeCapabilityError.missingArgument(key)
+        }
+        return value
+    }
+
+    func nativeDouble(_ key: String) -> Double? {
+        if let value = self[key] as? NSNumber { return value.doubleValue }
+        return nativeString(key).flatMap(Double.init)
+    }
+
+    func nativeRequiredDouble(_ key: String) throws -> Double {
+        guard let value = nativeDouble(key) else {
+            throw MCPNativeCapabilityError.missingArgument(key)
+        }
+        return value
+    }
+
+    func nativeInt(_ key: String) -> Int? {
+        if let value = self[key] as? NSNumber { return value.intValue }
+        return nativeString(key).flatMap(Int.init)
+    }
+
+    func nativeBool(_ key: String) -> Bool? {
+        if let value = self[key] as? Bool { return value }
+        if let value = self[key] as? NSNumber { return value.boolValue }
+        switch nativeString(key)?.lowercased() {
+        case "true", "yes", "1": return true
+        case "false", "no", "0": return false
+        default: return nil
+        }
+    }
+
+    func nativeRequiredStringArray(_ key: String) throws -> [String] {
+        guard let values = self[key] as? [Any] else {
+            throw MCPNativeCapabilityError.missingArgument(key)
+        }
+        let strings = values.compactMap { ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !strings.isEmpty, strings.count == values.count else {
+            throw MCPNativeCapabilityError.invalidArgument(
+                String(format: NSLocalizedString("%@ 必须是非空字符串数组。", comment: "Invalid native MCP string array"), key)
+            )
+        }
+        return strings
+    }
+
+    func nativeDate(_ key: String) throws -> Date? {
+        guard let value = nativeString(key), !value.isEmpty else { return nil }
+        guard let date = MCPBuiltInPersonalDataDateCodec.parse(value) else {
+            throw MCPNativeCapabilityError.invalidArgument(
+                String(format: NSLocalizedString("%@ 必须是 ISO-8601 时间。", comment: "Invalid native MCP ISO date"), key)
+            )
+        }
+        return date
+    }
+
+    func nativeRequiredDate(_ key: String) throws -> Date {
+        guard let value = try nativeDate(key) else {
+            throw MCPNativeCapabilityError.missingArgument(key)
         }
         return value
     }
