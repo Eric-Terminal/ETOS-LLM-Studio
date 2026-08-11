@@ -116,7 +116,8 @@ struct SystemEntryInfrastructureTests {
             ETOSSystemEntryReceipt(id: requestID, kind: .appIntent, sessionID: UUID())
         )
 
-        let receipt = try #require(store.loadSystemEntryReceipt(id: requestID))
+        let loadedReceipt = try store.loadSystemEntryReceipt(id: requestID)
+        let receipt = try #require(loadedReceipt)
         #expect(receipt.sessionID == firstSessionID)
         #expect(receipt.kind == .appIntent)
     }

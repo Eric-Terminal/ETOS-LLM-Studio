@@ -71,7 +71,7 @@ private extension MCPNativePhotosExecutor {
         let fetch = PHAsset.fetchAssets(with: options)
         var assets: [[String: Any]] = []
         fetch.enumerateObjects { asset, _, stop in
-            let item = assetPayload(asset)
+            let item = self.assetPayload(asset)
             if query.isEmpty || ((item["filename"] as? String)?.localizedLowercase.contains(query) == true) {
                 assets.append(item)
             }

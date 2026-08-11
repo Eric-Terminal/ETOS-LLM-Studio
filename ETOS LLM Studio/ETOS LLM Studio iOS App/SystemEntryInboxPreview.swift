@@ -33,7 +33,7 @@ struct SystemEntryInboxPayload: Identifiable, Sendable {
 }
 
 enum SystemEntryInboxLoader {
-    static func load(requestID: UUID) throws -> SystemEntryInboxPayload {
+    nonisolated static func load(requestID: UUID) throws -> SystemEntryInboxPayload {
         guard let layout = ETOSSharedStorageLayout.resolve() else { throw CocoaError(.fileNoSuchFile) }
         let directory = layout.inbox.appendingPathComponent(requestID.uuidString, isDirectory: true)
         let request = try ETOSInboxStore.load(requestID: requestID, layout: layout)

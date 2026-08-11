@@ -5,6 +5,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension PersistenceGRDBStore {
     func loadSystemEntryReceipt(id: UUID) throws -> ETOSSystemEntryReceipt? {

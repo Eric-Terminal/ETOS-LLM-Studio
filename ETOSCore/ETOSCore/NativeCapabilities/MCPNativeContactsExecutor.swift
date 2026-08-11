@@ -194,13 +194,8 @@ private extension MCPNativeContactsExecutor {
 
     func requestAccess(_ store: CNContactStore) async throws {
         let status = CNContactStore.authorizationStatus(for: .contacts)
-        #if os(iOS)
-        if #available(iOS 18.0, *), status == .limited {
-            return
-        }
-        #endif
         switch status {
-        case .authorized:
+        case .authorized, .limited:
             return
         case .notDetermined:
             let granted = try await store.requestAccess(for: .contacts)

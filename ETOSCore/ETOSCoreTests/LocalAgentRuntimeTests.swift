@@ -450,7 +450,13 @@ struct LocalAgentRuntimeTests {
         #expect(layout.root == documents.appendingPathComponent("Linux", isDirectory: true))
         #expect(layout.rootFSData.path.hasSuffix("Linux/System/RootFS/data"))
         #expect(layout.home.path.hasSuffix("Linux/Home"))
-        #expect(layout.shared.path.hasSuffix("Linux/Shared"))
+        if let sharedLayout = ETOSSharedStorageLayout.resolve() {
+            #expect(layout.shared == sharedLayout.shared)
+            #expect(layout.exports == sharedLayout.exports)
+        } else {
+            #expect(layout.shared == layout.legacyShared)
+            #expect(layout.exports == layout.legacyExports)
+        }
         #expect(layout.workspaces.path.hasSuffix("Linux/Workspaces"))
         #expect(
             LocalLinuxStorageManager.guestWorkspacePath(
@@ -678,8 +684,19 @@ struct LocalAgentRuntimeTests {
             title: "Example",
             url: "https://example.com",
             text: "正文",
-            elements: [.init(index: 0, role: "button", label: "继续", value: nil)],
-            wasTruncated: false
+            elements: [.init(
+                index: 0,
+                elementID: "continue-button",
+                domRevision: 1,
+                role: "button",
+                label: "继续",
+                value: nil,
+                isVisible: true,
+                bounds: BrowserAgentElementBounds(x: 0, y: 0, width: 120, height: 44),
+                actions: ["click"]
+            )],
+            wasTruncated: false,
+            domRevision: 1
         )
         let decoded = try JSONDecoder().decode(
             BrowserAgentSnapshot.self,

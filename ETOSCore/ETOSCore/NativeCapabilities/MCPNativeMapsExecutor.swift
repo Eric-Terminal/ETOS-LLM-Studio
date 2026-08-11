@@ -10,10 +10,10 @@ import Foundation
 #if canImport(MapKit)
 import MapKit
 #endif
-#if canImport(UIKit)
+#if os(iOS) && canImport(UIKit)
 import UIKit
 #endif
-#if canImport(WatchKit)
+#if os(watchOS) && canImport(WatchKit)
 import WatchKit
 #endif
 
@@ -112,8 +112,9 @@ private extension MCPNativeMapsExecutor {
         if let mode = arguments.nativeString("directions_mode") {
             options[MKLaunchOptionsDirectionsModeKey] = try directionsMode(mode)
         }
+        let launchOptions = options
         let opened = await MainActor.run {
-            item.openInMaps(launchOptions: options)
+            item.openInMaps(launchOptions: launchOptions)
         }
         return ["opened": opened, "latitude": coordinate.latitude, "longitude": coordinate.longitude]
         #else
@@ -139,10 +140,10 @@ private extension MCPNativeMapsExecutor {
             )
         }
 
-        #if canImport(UIKit)
+        #if os(iOS) && canImport(UIKit)
         let opened = await UIApplication.shared.open(url)
         return ["opened": opened, "url": url.absoluteString]
-        #elseif canImport(WatchKit)
+        #elseif os(watchOS) && canImport(WatchKit)
         await MainActor.run {
             WKApplication.shared().openSystemURL(url)
         }

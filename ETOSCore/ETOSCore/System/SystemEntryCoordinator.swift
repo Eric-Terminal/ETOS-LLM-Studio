@@ -4,6 +4,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 
 public enum ETOSSystemEntryError: LocalizedError {
     case emptyPrompt

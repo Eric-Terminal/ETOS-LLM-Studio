@@ -7,20 +7,29 @@
 // ============================================================================
 
 import Foundation
-#if canImport(UIKit)
+#if os(iOS) && canImport(UIKit)
 import UIKit
 #endif
-#if canImport(WatchKit)
+#if os(watchOS) && canImport(WatchKit)
 import WatchKit
 #endif
 
 actor MCPNativeDeviceStatusExecutor {
     func execute() async throws -> [String: Any] {
         let process = ProcessInfo.processInfo
+        #if os(watchOS)
+        let capacity = try? StorageUtility.documentsDirectory.resourceValues(forKeys: [
+            .volumeAvailableCapacityKey,
+            .volumeTotalCapacityKey
+        ])
+        let availableStorage: Any = capacity?.volumeAvailableCapacity ?? NSNull()
+        #else
         let capacity = try? StorageUtility.documentsDirectory.resourceValues(forKeys: [
             .volumeAvailableCapacityForImportantUsageKey,
             .volumeTotalCapacityKey
         ])
+        let availableStorage: Any = capacity?.volumeAvailableCapacityForImportantUsage ?? NSNull()
+        #endif
         let device = await devicePayload()
         return [
             "platform": platformName,
@@ -29,7 +38,7 @@ actor MCPNativeDeviceStatusExecutor {
             "low_power_mode": process.isLowPowerModeEnabled,
             "thermal_state": thermalStateName(process.thermalState),
             "system_uptime_seconds": process.systemUptime,
-            "available_storage_bytes": capacity?.volumeAvailableCapacityForImportantUsage ?? NSNull(),
+            "available_storage_bytes": availableStorage,
             "total_storage_bytes": capacity?.volumeTotalCapacity ?? NSNull(),
             "locale": Locale.current.identifier,
             "time_zone": TimeZone.current.identifier,
@@ -51,7 +60,7 @@ actor MCPNativeDeviceStatusExecutor {
 
     @MainActor
     private func devicePayload() -> [String: Any] {
-        #if canImport(UIKit)
+        #if os(iOS) && canImport(UIKit)
         let device = UIDevice.current
         device.isBatteryMonitoringEnabled = true
         let battery: Any = device.batteryLevel >= 0 ? NSNumber(value: device.batteryLevel) : NSNull()
@@ -63,7 +72,7 @@ actor MCPNativeDeviceStatusExecutor {
             "system_version": device.systemVersion,
             "battery_level": battery
         ]
-        #elseif canImport(WatchKit)
+        #elseif os(watchOS) && canImport(WatchKit)
         let device = WKInterfaceDevice.current()
         device.isBatteryMonitoringEnabled = true
         let battery: Any = device.batteryLevel >= 0 ? NSNumber(value: device.batteryLevel) : NSNull()

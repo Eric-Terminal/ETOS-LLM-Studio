@@ -53,7 +53,7 @@ public final class BrowserSessionManager: NSObject, ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.reclaimBackgroundTabs(olderThan: nil) }
+            Task { @MainActor [weak self] in self?.reclaimBackgroundTabs(olderThan: nil) }
         })
     }
 

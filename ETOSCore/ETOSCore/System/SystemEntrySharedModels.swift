@@ -214,7 +214,7 @@ public enum ETOSInboxStore {
             fileManager: fileManager
         )
         try fileManager.moveItem(at: stagedDirectory, to: destination)
-        return request
+        return try load(requestID: requestID, layout: layout, fileManager: fileManager)
     }
 
     public static func load(

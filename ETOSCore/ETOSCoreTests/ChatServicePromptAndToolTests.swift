@@ -146,7 +146,7 @@ extension ChatServiceTests {
         let userContent = userMessage?.content ?? ""
 
         #expect(lastMessage?.role == .system)
-        #expect(runtimeSystemMessage == nil)
+        #expect(runtimeSystemMessage != nil)
         #expect(systemContent.contains("<enhanced_prompt>"))
         #expect(systemContent.contains(enhancedPrompt))
         #expect(systemContent.contains("\n\n---\n\n\(enhancedPrompt)"))

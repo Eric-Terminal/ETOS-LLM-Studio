@@ -7,6 +7,7 @@
 
 import Foundation
 import GRDB
+import os.log
 
 extension PersistenceGRDBStore {
     static func createSkillExecutionGovernanceTables(_ db: Database) throws {

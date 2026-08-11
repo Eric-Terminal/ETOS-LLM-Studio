@@ -44,7 +44,7 @@ final class MCPNativeBluetoothExecutor: NSObject, @preconcurrency CBCentralManag
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.cleanupAll() }
+            Task { @MainActor [weak self] in self?.cleanupAll() }
         })
         #elseif canImport(WatchKit)
         lifecycleObservers.append(center.addObserver(
@@ -52,7 +52,7 @@ final class MCPNativeBluetoothExecutor: NSObject, @preconcurrency CBCentralManag
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.cleanupAll() }
+            Task { @MainActor [weak self] in self?.cleanupAll() }
         })
         #endif
     }

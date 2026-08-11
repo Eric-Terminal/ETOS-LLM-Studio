@@ -55,6 +55,7 @@ public final class LocalLinuxMountLease: @unchecked Sendable {
         bridgeLease = nil
         lock.unlock()
         // native lease 必须先归还，随后才能安全尝试移除临时挂载。
+        withExtendedLifetime(lease) {}
         lease = nil
         releaseHandler(mountID)
     }

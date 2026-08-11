@@ -111,7 +111,6 @@ enum WatchSystemEntryURLRouter {
             }.value
             if let session {
                 ChatService.shared.setCurrentSession(session)
-                NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
             }
         } else if destination == "new-agent" {
             let session = ChatService.shared.createSavedSession(
@@ -120,7 +119,6 @@ enum WatchSystemEntryURLRouter {
             _ = await Task.detached(priority: .userInitiated) {
                 Persistence.saveLocalAgentMode(.agent, sessionID: session.id)
             }.value
-            NotificationCenter.default.post(name: .requestSwitchToChatTab, object: nil)
         } else if destination == "daily-pulse" {
             NotificationCenter.default.post(name: .requestOpenDailyPulse, object: nil)
         }

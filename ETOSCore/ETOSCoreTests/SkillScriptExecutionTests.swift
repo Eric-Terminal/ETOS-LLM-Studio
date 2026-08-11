@@ -30,7 +30,7 @@ struct SkillScriptExecutionTests {
             "scripts/check.sh": Data("printf '%s\\n' ok".utf8),
             "scripts/check.py": Data("print('ok')".utf8),
             "scripts/check.mjs": Data("console.log('ok')".utf8),
-            "scripts/direct": Data("#!/bin/sh\\nprintf '%s\\n' direct".utf8),
+            "scripts/direct": Data("#!/bin/sh\nprintf '%s\\n' direct".utf8),
             "scripts/tool": binary
         ]))
         try makeExecutable(skillName: skillName, path: "scripts/direct")

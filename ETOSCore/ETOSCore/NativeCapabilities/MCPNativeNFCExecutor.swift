@@ -133,6 +133,24 @@ private struct MCPNativeNDEFRecord {
     }
 }
 
+// CoreNFC 的 Objective-C 对象没有声明 Sendable，但这些引用只在同一个系统会话
+// 的串行回调与 MainActor 状态机之间传递，不会脱离 Session 生命周期并发访问。
+private struct MCPNativeNFCTagReference: @unchecked Sendable {
+    let value: NFCTag
+}
+
+private struct MCPNativeNDEFTagReference: @unchecked Sendable {
+    let value: NFCNDEFTag
+}
+
+private struct MCPNativeNDEFMessageReference: @unchecked Sendable {
+    let value: NFCNDEFMessage
+}
+
+private struct MCPNativeNDEFPreviewReference: @unchecked Sendable {
+    let value: [[String: Any]]
+}
+
 @MainActor
 private final class MCPNativeNFCSessionController: NSObject {
     static let shared = MCPNativeNFCSessionController()
@@ -156,11 +174,16 @@ private final class MCPNativeNFCSessionController: NSObject {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 operation = .scan(continuation)
-                let session = NFCTagReaderSession(
+                guard let session = NFCTagReaderSession(
                     pollingOption: [.iso14443, .iso15693],
                     delegate: self,
                     queue: nil
-                )
+                ) else {
+                    finish(.failure(MCPNativeCapabilityError.unavailable(
+                        NSLocalizedString("系统无法创建 NFC 标签读取会话。", comment: "NFC tag session creation failed")
+                    )))
+                    return
+                }
                 session.alertMessage = NSLocalizedString(
                     "请将 iPhone 顶部靠近 NFC 标签。",
                     comment: "NFC scan system prompt"
@@ -256,16 +279,29 @@ private final class MCPNativeNFCSessionController: NSObject {
 }
 
 extension MCPNativeNFCSessionController: NFCTagReaderSessionDelegate {
+    nonisolated func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
+
+    nonisolated func tagReaderSession(
+        _ session: NFCTagReaderSession,
+        didInvalidateWithError error: Error
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self, self.operation != nil else { return }
+            self.fail(error)
+        }
+    }
+
     nonisolated func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
         guard let tag = tags.first else { return }
-        session.connect(to: tag) { [weak self] error in
-            Task { @MainActor in
+        let tagReference = MCPNativeNFCTagReference(value: tag)
+        session.connect(to: tagReference.value) { [weak self] error in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
                     return
                 }
-                let payload = self.tagPayload(tag)
+                let payload = self.tagPayload(tagReference.value)
                 self.finish(
                     .success(payload),
                     message: NSLocalizedString("已读取 NFC 标签。", comment: "NFC scan complete")
@@ -303,6 +339,18 @@ extension MCPNativeNFCSessionController: NFCTagReaderSessionDelegate {
 }
 
 extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
+    nonisolated func readerSessionDidBecomeActive(_ session: NFCNDEFReaderSession) {}
+
+    nonisolated func readerSession(
+        _ session: NFCNDEFReaderSession,
+        didInvalidateWithError error: Error
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self, self.operation != nil else { return }
+            self.fail(error)
+        }
+    }
+
     nonisolated func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
         // 实现 didDetect(tags:) 后系统不会走这个只读回调，但协议仍要求提供。
     }
@@ -316,21 +364,22 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
             session.restartPolling()
             return
         }
-        session.connect(to: tag) { [weak self] error in
-            Task { @MainActor in
+        let tagReference = MCPNativeNDEFTagReference(value: tag)
+        session.connect(to: tagReference.value) { [weak self] error in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
                     return
                 }
-                self.handleConnectedNDEFTag(tag)
+                self.handleConnectedNDEFTag(tagReference)
             }
         }
     }
 
-    private func handleConnectedNDEFTag(_ tag: NFCNDEFTag) {
-        tag.queryNDEFStatus { [weak self] status, capacity, error in
-            Task { @MainActor in
+    private func handleConnectedNDEFTag(_ tag: MCPNativeNDEFTagReference) {
+        tag.value.queryNDEFStatus { [weak self] status, capacity, error in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
@@ -368,15 +417,16 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
         }
     }
 
-    private func read(tag: NFCNDEFTag, status: NFCNDEFStatus, capacity: Int) {
-        tag.readNDEF { [weak self] message, error in
-            Task { @MainActor in
+    private func read(tag: MCPNativeNDEFTagReference, status: NFCNDEFStatus, capacity: Int) {
+        tag.value.readNDEF { [weak self] message, error in
+            let messageReference = message.map { MCPNativeNDEFMessageReference(value: $0) }
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
                     return
                 }
-                guard let message else {
+                guard let message = messageReference?.value else {
                     self.fail(MCPNativeCapabilityError.unavailable(
                         NSLocalizedString("标签没有可读取的 NDEF 消息。", comment: "Empty NDEF tag")
                     ))
@@ -401,11 +451,13 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
     private func write(
         message: NFCNDEFMessage,
         preview: [[String: Any]],
-        to tag: NFCNDEFTag,
+        to tag: MCPNativeNDEFTagReference,
         capacity: Int
     ) {
-        tag.writeNDEF(message) { [weak self] error in
-            Task { @MainActor in
+        let messageLength = message.length
+        let previewReference = MCPNativeNDEFPreviewReference(value: preview)
+        tag.value.writeNDEF(message) { [weak self] error in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     self.fail(error)
@@ -414,10 +466,10 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
                 self.finish(
                     .success([
                         "written": true,
-                        "message_length_bytes": message.length,
+                        "message_length_bytes": messageLength,
                         "capacity_bytes": capacity,
-                        "record_count": preview.count,
-                        "preview": preview
+                        "record_count": previewReference.value.count,
+                        "preview": previewReference.value
                     ]),
                     message: NSLocalizedString("NDEF 消息已写入。", comment: "NDEF write complete")
                 )
@@ -426,7 +478,8 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
     }
 
     private func payload(_ record: NFCNDEFPayload) -> [String: Any] {
-        if let text = record.wellKnownTypeTextPayload() {
+        let (decodedText, _) = record.wellKnownTypeTextPayload()
+        if let text = decodedText {
             return ["kind": "text", "text": String(text.prefix(8_192))]
         }
         if let url = record.wellKnownTypeURIPayload() {
@@ -449,17 +502,6 @@ extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
         case .readOnly: return "read_only"
         case .readWrite: return "read_write"
         @unknown default: return "unknown"
-        }
-    }
-}
-
-extension MCPNativeNFCSessionController: NFCReaderSessionDelegate {
-    nonisolated func readerSessionDidBecomeActive(_ session: NFCReaderSession) {}
-
-    nonisolated func readerSession(_ session: NFCReaderSession, didInvalidateWithError error: Error) {
-        Task { @MainActor [weak self] in
-            guard let self, self.operation != nil else { return }
-            self.fail(error)
         }
     }
 }

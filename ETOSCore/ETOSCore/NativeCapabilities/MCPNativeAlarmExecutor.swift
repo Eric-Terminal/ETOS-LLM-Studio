@@ -144,6 +144,8 @@ private extension MCPNativeAlarmExecutor {
                 output["schedule_type"] = "relative"
                 output["hour"] = relative.time.hour
                 output["minute"] = relative.time.minute
+            @unknown default:
+                output["schedule_type"] = "unknown"
             }
         }
         return output
