@@ -31,11 +31,12 @@ public enum MCPBuiltInAppToolServer {
         .linux: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0008")!,
         .browser: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0009")!,
         .deviceOperations: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0010")!,
-        .mediaEnvironment: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0011")!
+        .mediaEnvironment: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0011")!,
+        .visionLanguage: UUID(uuidString: "45544F53-0000-0000-0000-4150544C0012")!
     ]
 
     public static var categories: [AppToolCatalogCategory] {
-        [.interaction, .conversation, .memory, .file, .database, .custom, .linux, .browser, .deviceOperations, .mediaEnvironment]
+        [.interaction, .conversation, .memory, .file, .database, .custom, .linux, .browser, .deviceOperations, .mediaEnvironment, .visionLanguage]
     }
 
     public static func serverID(for category: AppToolCatalogCategory) -> UUID {
@@ -97,7 +98,7 @@ public enum MCPBuiltInAppToolServer {
         )
         let disabledToolIds: [String]
         let approvalPolicies: [String: MCPToolApprovalPolicy]
-        if category == .conversation || category == .linux || category == .browser || category == .deviceOperations || category == .mediaEnvironment {
+        if category == .conversation || category == .linux || category == .browser || category == .deviceOperations || category == .mediaEnvironment || category == .visionLanguage {
             disabledToolIds = []
             approvalPolicies = category == .conversation
                 ? Dictionary(uniqueKeysWithValues: tools.map { ($0.toolId, .alwaysAllow) })
@@ -123,6 +124,8 @@ public enum MCPBuiltInAppToolServer {
                 : category == .deviceOperations
                 ? false
                 : category == .mediaEnvironment
+                ? false
+                : category == .visionLanguage
                 ? false
                 : appToolManager.chatToolsEnabled,
             disabledToolIds: disabledToolIds,
@@ -192,6 +195,8 @@ public enum MCPBuiltInAppToolServer {
             return NSLocalizedString("内建设备操作", comment: "Built-in device operations MCP server name")
         case .mediaEnvironment:
             return NSLocalizedString("内建媒体与环境", comment: "Built-in media and environment MCP server name")
+        case .visionLanguage:
+            return NSLocalizedString("内建视觉与语言", comment: "Built-in vision and language MCP server name")
         case .feedback:
             return displayName(for: .interaction)
         }
@@ -219,6 +224,8 @@ public enum MCPBuiltInAppToolServer {
             return NSLocalizedString("提供剪贴板、通知、AlarmKit、地图、URL 与只读设备状态工具。该服务器默认不加入聊天。", comment: "Built-in device operations MCP server notes")
         case .mediaEnvironment:
             return NSLocalizedString("提供语音、ETOS 内媒体播放、WeatherKit、HomeKit、蓝牙与 NFC 工具。该服务器默认不加入聊天。", comment: "Built-in media and environment MCP server notes")
+        case .visionLanguage:
+            return NSLocalizedString("提供 Vision 与 NaturalLanguage 的确定性端侧分析工具，不会启动大模型。该服务器默认不加入聊天。", comment: "Built-in vision and language MCP server notes")
         case .feedback:
             return notes(for: .interaction)
         }
@@ -283,6 +290,10 @@ public enum MCPBuiltInAppToolServer {
             return MCPNativeMediaToolDefinitions.descriptions
         }
 
+        if category == .visionLanguage {
+            return MCPNativeVisionLanguageToolDefinitions.descriptions
+        }
+
         let staticTools = AppToolKind.allCases
             .filter { !AppToolManager.builtInToolKinds.contains($0) }
             .filter { includeUnavailablePlatformTools || $0.isAvailableOnCurrentPlatform }
@@ -327,6 +338,9 @@ public enum MCPBuiltInAppToolServer {
         }
         if MCPNativeMediaToolDefinitions.contains(toolName) {
             return .mediaEnvironment
+        }
+        if MCPNativeVisionLanguageToolDefinitions.contains(toolName) {
+            return .visionLanguage
         }
         if toolName == MCPServerManagementTool.name {
             return .custom
@@ -428,6 +442,14 @@ public enum MCPBuiltInAppToolServer {
 
     static func executeNativeMediaTool(toolName: String, argumentsJSON: String) async throws -> String {
         let result = try await MCPNativeMediaExecutor.shared.execute(
+            toolName: toolName,
+            argumentsJSON: argumentsJSON
+        )
+        return try MCPNativeJSON.text(result)
+    }
+
+    static func executeNativeVisionLanguageTool(toolName: String, argumentsJSON: String) async throws -> String {
+        let result = try await MCPNativeVisionLanguageExecutor.shared.execute(
             toolName: toolName,
             argumentsJSON: argumentsJSON
         )
@@ -768,6 +790,15 @@ actor MCPBuiltInAppToolServerEngine {
             if category == .mediaEnvironment {
                 argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
                 let result = try await MCPBuiltInAppToolServer.executeNativeMediaTool(
+                    toolName: name,
+                    argumentsJSON: argumentsJSON
+                )
+                return successToolResult(toolName: name, result: result)
+            }
+
+            if category == .visionLanguage {
+                argumentsJSON = try prettyPrintedJSON(arguments, prettyPrinted: false)
+                let result = try await MCPBuiltInAppToolServer.executeNativeVisionLanguageTool(
                     toolName: name,
                     argumentsJSON: argumentsJSON
                 )
