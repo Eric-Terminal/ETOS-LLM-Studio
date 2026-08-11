@@ -173,6 +173,7 @@ extension ChatService {
     }
 
     public func createNewSession() {
+        let sourceSessionID = currentSessionSubject.value?.id
         var updatedSessions = chatSessionsSubject.value
 
         // 约束：最多只保留一个临时会话，重复点击“新建对话”时复用现有临时会话。
@@ -205,6 +206,7 @@ extension ChatService {
 
             // 始终切换到复用的临时会话，并刷新其消息列表（通常为空）。
             if let target = updatedSessions.first(where: { $0.id == reusableTemporary.id }) {
+                inheritLocalAgentMode(from: sourceSessionID, to: target.id)
                 if currentSessionSubject.value?.id == target.id {
                     let messages = messagesForSessionActivation(target.id)
                     storeRuntimeMessagesSnapshot(messages, for: target.id)
@@ -224,6 +226,7 @@ extension ChatService {
         )
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSessionID, to: newSession.id)
         currentSessionSubject.send(newSession)
         storeRuntimeMessagesSnapshot([], for: newSession.id)
         publishMessages([])
@@ -277,6 +280,9 @@ extension ChatService {
 
     public func deleteSessions(_ sessionsToDelete: [ChatSession]) {
         var currentSessions = chatSessionsSubject.value
+        let currentModeBeforeDeletion = currentSessionSubject.value.map {
+            Persistence.localAgentMode(sessionID: $0.id)
+        }
         let existingPermanentSessionIDs = Set(currentSessions.filter { !$0.isTemporary }.map(\.id))
         let containedSessionIDs = Set(sessionsToDelete.flatMap { session in
             Persistence.loadEmbeddedSubagentSessionIDs(containerSessionID: session.id)
@@ -326,6 +332,12 @@ extension ChatService {
                 )
                 currentSessions.append(newSession)
                 newCurrentSession = newSession
+                if let currentModeBeforeDeletion {
+                    _ = Persistence.saveLocalAgentMode(
+                        currentModeBeforeDeletion,
+                        sessionID: newSession.id
+                    )
+                }
             }
         }
         chatSessionsSubject.send(currentSessions)
@@ -389,6 +401,7 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSession.id, to: newSession.id)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("保存了会话列表。")
@@ -471,10 +484,20 @@ extension ChatService {
         var updatedSessions = chatSessionsSubject.value
         updatedSessions.insert(newSession, at: 0)
         chatSessionsSubject.send(updatedSessions)
+        inheritLocalAgentMode(from: sourceSession.id, to: newSession.id)
         setCurrentSession(newSession)
         Persistence.saveChatSessions(updatedSessions)
         logger.info("保存了会话列表。")
         return newSession
+    }
+
+    /// 新会话只在创建时复制一次来源模式；后续切换始终读取各自的会话记录。
+    private func inheritLocalAgentMode(from sourceSessionID: UUID?, to targetSessionID: UUID) {
+        guard let sourceSessionID, sourceSessionID != targetSessionID else { return }
+        _ = Persistence.saveLocalAgentMode(
+            Persistence.localAgentMode(sessionID: sourceSessionID),
+            sessionID: targetSessionID
+        )
     }
 
     public func deleteLastMessage(for session: ChatSession) {

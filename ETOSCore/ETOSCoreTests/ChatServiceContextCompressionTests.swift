@@ -62,6 +62,7 @@ extension ChatServiceTests {
             lorebookIDs: [UUID()],
             worldbookContextIsolationEnabled: true
         )
+        #expect(Persistence.saveLocalAgentMode(.agent, sessionID: source.id))
 
         let child = try await chatService.createCompressedContinuation(
             from: source.id,
@@ -81,6 +82,7 @@ extension ChatServiceTests {
         #expect(child.enhancedPrompt == source.enhancedPrompt)
         #expect(child.lorebookIDs == source.lorebookIDs)
         #expect(child.worldbookContextIsolationEnabled)
+        #expect(Persistence.localAgentMode(sessionID: child.id) == .agent)
 
         chatService.deleteSessions([child, source])
     }

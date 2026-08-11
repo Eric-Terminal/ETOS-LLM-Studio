@@ -93,6 +93,10 @@ extension ChatService {
                 session: childSession,
                 context: context
             )
+            _ = Persistence.saveLocalAgentMode(
+                Persistence.localAgentMode(sessionID: sourceSession.id),
+                sessionID: childSession.id
+            )
         }.value
 
         storeRuntimeMessagesSnapshot([], for: childSession.id)
