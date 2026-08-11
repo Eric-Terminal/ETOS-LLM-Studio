@@ -214,24 +214,115 @@ extension ChatService {
     ) async {
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
 
+        let agentCapabilities = AgentToolCapabilityPolicy.resolve(
+            mode: Persistence.localAgentMode(sessionID: currentSession.id),
+            isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+            localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
+        )
+        let shouldPrepareAgentRun = agentCapabilities.preparesAgentRun
+        let includeLocalLinuxCapability = agentCapabilities.includesLocalLinuxTools
+        let selectedMCPServerIDs = shouldPrepareAgentRun
+            ? MCPServerStore.loadServers().filter(\.isSelectedForChat).map(\.id)
+            : []
+        let requestConfiguration = ConversationRunRequestConfiguration(
+            modelIdentifier: selectedModelSubject.value?.id,
+            temperature: aiTemperature,
+            topP: aiTopP,
+            systemPrompt: systemPrompt,
+            maxChatHistory: maxChatHistory,
+            enableStreaming: enableStreaming,
+            enhancedPrompt: currentSession.enhancedPrompt ?? enhancedPrompt,
+            enableMemory: enableMemory,
+            enableMemoryWrite: enableMemoryWrite,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+            includeSystemTime: includeSystemTime,
+            systemTimeInjectionPosition: systemTimeInjectionPosition,
+            enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
+            periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
+            enableResponseSpeedMetrics: enableResponseSpeedMetrics,
+            browserDataProfile: Persistence.browserAgentDataProfile(sessionID: currentSession.id),
+            agentToolsEnabled: shouldPrepareAgentRun,
+            localLinuxToolsEnabled: includeLocalLinuxCapability,
+            selectedAgentMCPServerIDs: selectedMCPServerIDs
+        )
+        var runtimeRun = ConversationRun(
+            sessionID: currentSession.id,
+            requestConfiguration: requestConfiguration
+        )
+        runtimeRun.status = .running
+        runtimeRun.startedAt = Date()
+        runtimeRun.loadingMessageID = loadingMessageID
+        _ = Persistence.saveConversationRun(runtimeRun)
+        _ = Persistence.saveConversationExecutionBudget(
+            ConversationExecutionBudget(
+                rootRunID: runtimeRun.rootRunID,
+                maximumExecutions: ConversationExecutionBudgetPolicy.configuredMaximumExecutions(),
+                usedExecutions: 1
+            )
+        )
+
+        let runtimeRunID = runtimeRun.id
+        let rootRuntimeRunID = runtimeRun.rootRunID
+        let parentRuntimeRunID = runtimeRun.parentRunID
+
         let requestToken = UUID()
         setRequestContext(
             RequestExecutionContext(
                 token: requestToken,
                 task: nil,
                 loadingMessageID: loadingMessageID,
-                imageGenerationContext: nil
+                imageGenerationContext: nil,
+                conversationRunID: runtimeRunID,
+                rootConversationRunID: rootRuntimeRunID
             ),
             for: currentSession.id
         )
 
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
+            var localAgentContext: AgentRuntimeContext?
+            if includeLocalLinuxCapability {
+                do {
+                    let prepared = try await LocalAgentRuntimeContextManager.shared.beginRun(
+                        sessionID: currentSession.id,
+                        triggeringMessageID: userMessage?.id,
+                        runID: runtimeRunID,
+                        rootRunID: rootRuntimeRunID,
+                        parentRunID: parentRuntimeRunID,
+                        selectedMCPServerIDs: selectedMCPServerIDs,
+                        browserSessionID: currentSession.id
+                    )
+                    localAgentContext = prepared.context
+                    _ = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .agentRequest)
+                    try Task.checkCancellation()
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(id: runtimeRunID, state: .failed)
+                    _ = Persistence.updateConversationRunStatus(
+                        id: runtimeRunID,
+                        status: .failed,
+                        errorMessage: error.localizedDescription
+                    )
+                    self.addErrorMessage(
+                        String(
+                            format: NSLocalizedString("错误: 无法准备 Agent Run：%@", comment: "Prepare local Agent run failure"),
+                            error.localizedDescription
+                        ),
+                        sessionID: currentSession.id
+                    )
+                    self.emitSessionRequestStatus(.error, sessionID: currentSession.id)
+                    return
+                }
+            }
             let requestTooling = await self.resolveRequestTooling(
                 for: currentSession,
                 enableMemory: enableMemory,
                 enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval
+                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
+                localAgentContext: localAgentContext,
+                agentCapabilities: agentCapabilities,
+                selectedAgentMCPServerIDs: Set(selectedMCPServerIDs)
             )
 
             await self.executeMessageRequest(
@@ -247,6 +338,7 @@ extension ChatService {
                 enableStreaming: enableStreaming,
                 enhancedPrompt: enhancedPrompt,
                 tools: requestTooling.tools,
+                localAgentPrompt: localAgentContext?.promptContent,
                 enableMemory: requestTooling.policy.enableMemory,
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,

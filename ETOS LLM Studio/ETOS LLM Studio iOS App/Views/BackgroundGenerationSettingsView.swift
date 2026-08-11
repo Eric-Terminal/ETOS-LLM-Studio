@@ -69,7 +69,7 @@ struct BackgroundGenerationSettingsView: View {
                 Text(NSLocalizedString("保活方式", comment: "后台生成保活方式分组"))
             } footer: {
                 Text(NSLocalizedString(
-                    "两种保活方式均默认关闭，可按需组合。音频保活会在生成期间循环播放可听的轻柔等待音；位置追踪则创建系统定位后台活动。",
+                    "两种方式可单独开启，也可组合使用。",
                     comment: "后台生成保活方式说明"
                 ))
                 .etFont(.footnote)
@@ -108,7 +108,7 @@ struct BackgroundGenerationSettingsView: View {
                 Text(NSLocalizedString("状态", comment: "后台持续生成状态分组"))
             } footer: {
                 Text(NSLocalizedString(
-                    "位置追踪运行时，iOS 会显示蓝色定位指示器；ETOS 不读取、保存或上传位置坐标。音频保活从任务开始播放，并在回复朗读时自动暂停。后台能力仍受系统调度影响，且会增加耗电。",
+                    "后台能力受系统调度影响，并会增加耗电。",
                     comment: "后台持续生成状态说明"
                 ))
                 .etFont(.footnote)

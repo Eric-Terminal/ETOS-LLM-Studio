@@ -304,10 +304,26 @@ extension Persistence {
         }
     }
 
+    /// 异步加载指定会话的消息，GRDB 连接繁忙时挂起任务而不是阻塞调用线程。
+    public static func loadMessagesAsync(for sessionID: UUID) async -> [ChatMessage] {
+        if let store = activeGRDBStore() {
+            return await store.loadMessagesAsync(for: sessionID)
+        }
+        return loadMessages(for: sessionID)
+    }
+
     /// 统计指定会话的消息数量。
     public static func loadMessageCount(for sessionID: UUID) -> Int {
         if let store = activeGRDBStore() {
             return store.loadMessageCount(for: sessionID)
+        }
+        return loadMessages(for: sessionID).count
+    }
+
+    /// 异步统计指定会话的消息数量，供 UI 交互路径使用。
+    public static func loadMessageCountAsync(for sessionID: UUID) async -> Int {
+        if let store = activeGRDBStore() {
+            return await store.loadMessageCountAsync(for: sessionID)
         }
         return loadMessages(for: sessionID).count
     }
@@ -552,6 +568,7 @@ extension Persistence {
 
     /// 删除会话相关的消息持久化文件（当前格式 + legacy）。
     public static func deleteSessionArtifacts(sessionID: UUID) {
+        LocalLinuxWorkspaceCleanupCoordinator.scheduleForDeletedSession(sessionID)
         if let store = activeGRDBStore() {
             store.deleteSessionArtifacts(sessionID: sessionID)
             return

@@ -2,29 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleLocalizations</key>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>en</string>
-		<string>ja</string>
-		<string>zh-Hans</string>
-		<string>zh-Hant-HK</string>
-		<string>ru</string>
-		<string>fr</string>
-		<string>es</string>
-		<string>ar</string>
-	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>com.ericterminal.els.shortcuts</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>etosllmstudio</string>
-			</array>
-		</dict>
+		<string>com.ericterminal.els.dailyPulse.refresh</string>
 	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
@@ -54,6 +34,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>ETOS Memory Archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.ericterminal.els.memory-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Chat Attachment</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -70,6 +62,137 @@
 				<string>public.audio</string>
 				<string>public.data</string>
 			</array>
+		</dict>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ja</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant-HK</string>
+		<string>ru</string>
+		<string>fr</string>
+		<string>es</string>
+		<string>ar</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.ericterminal.els.shortcuts</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>etosllmstudio</string>
+			</array>
+		</dict>
+	</array>
+	<key>ETCommitHash</key>
+	<string>LocalBuild</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Scan and connect to nearby Bluetooth devices only when you explicitly invoke a Bluetooth tool.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Read, create, and update authorized calendar events only when you explicitly invoke a calendar tool.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Read, create, and update authorized calendar events only when you explicitly invoke a calendar tool.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Use the camera when you choose to capture an image for the model.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Read or update authorized contacts only when you explicitly invoke a contacts tool.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to unlock the app lock.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Read authorized health, sleep, and activity data only when you explicitly invoke a health tool.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Write authorized hydration, caffeine, nutrition, mindfulness, or symptom records only when you explicitly invoke a health tool.</string>
+	<key>NSHomeKitUsageDescription</key>
+	<string>Read and control authorized homes and accessories only when you explicitly invoke a Home tool.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect to local debugging services and local-network tools you select.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Read your current location when you explicitly invoke a location tool, or keep an active response running when background generation is enabled.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record audio when you use voice input.</string>
+	<key>NFCReaderUsageDescription</key>
+	<string>Scan or write nearby NFC tags only when you explicitly invoke an NFC tool.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save generated or selected images to your photo library after you confirm.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Read and manage authorized photos when you select an image or explicitly invoke a Photos tool.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Read, create, and update authorized reminders only when you explicitly invoke a reminders tool.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Read, create, and update authorized reminders only when you explicitly invoke a reminders tool.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Convert speech to text when you use voice input or explicitly invoke a transcription tool.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSUbiquitousContainers</key>
+	<dict>
+		<key>iCloud.com.ericterminal.els</key>
+		<dict>
+			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
+			<true/>
+			<key>NSUbiquitousContainerName</key>
+			<string>ETOS LLM Studio</string>
+			<key>NSUbiquitousContainerSupportedFolderLevels</key>
+			<string>Any</string>
+		</dict>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ETOS Snapshot Backup</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.ericterminal.els.snapshot-backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>elsbackup</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/octet-stream</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>ETOS Memory Archive</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.ericterminal.els.memory-archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>etosmemory</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.etos.memory+zip</string>
+			</dict>
 		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>
@@ -94,77 +217,5 @@
 			</dict>
 		</dict>
 	</array>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeDescription</key>
-			<string>ETOS Snapshot Backup</string>
-			<key>UTTypeIdentifier</key>
-			<string>com.ericterminal.els.snapshot-backup</string>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>elsbackup</string>
-				</array>
-				<key>public.mime-type</key>
-				<string>application/octet-stream</string>
-			</dict>
-		</dict>
-	</array>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>语音输入需要访问语音识别</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>仅在你开启“后台持续生成”且 AI 正在回复时维持定位后台活动；不会读取、保存或上传位置坐标。</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>AI 工具在你明确调用健康数据能力时，需要读取你授权的健康、睡眠与运动数据。</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>AI 工具在你明确调用健康记录能力时，需要写入你授权的饮水、咖啡因、营养、正念或症状记录。</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>AI 工具在你明确调用日历能力时，需要读取、创建和修改你授权的日程。</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>AI 工具在你明确调用日历能力时，需要读取、创建和修改你授权的日程。</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>AI 工具在你明确调用提醒事项能力时，需要读取、创建和修改你授权的提醒事项。</string>
-	<key>NSRemindersUsageDescription</key>
-	<string>AI 工具在你明确调用提醒事项能力时，需要读取、创建和修改你授权的提醒事项。</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>用于通过 Face ID 解锁应用锁</string>
-	<key>NSUbiquitousContainers</key>
-	<dict>
-		<key>iCloud.com.ericterminal.els</key>
-		<dict>
-			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
-			<true/>
-			<key>NSUbiquitousContainerName</key>
-			<string>ETOS LLM Studio</string>
-			<key>NSUbiquitousContainerSupportedFolderLevels</key>
-			<string>Any</string>
-		</dict>
-	</dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-		<string>fetch</string>
-		<string>location</string>
-		<string>remote-notification</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.ericterminal.els.dailyPulse.refresh</string>
-	</array>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>ETCommitHash</key>
-	<string>LocalBuild</string>
 </dict>
 </plist>

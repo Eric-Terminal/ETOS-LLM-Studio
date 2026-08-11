@@ -11,6 +11,7 @@ import Foundation
 import ETOSCore
 import AVKit
 import AVFoundation
+import WatchKit
 
 struct WatchChatTransientNotice {
     let message: String
@@ -20,22 +21,21 @@ struct WatchChatTransientNotice {
 
 extension ContentView {
     var legacyChatRootView: some View {
-        ScrollViewReader { proxy in
-            ZStack(alignment: .bottom) {
-                chatList(proxy: proxy)
-
-                WatchRoleplaySessionScriptHost(
-                    sessionID: viewModel.currentSession?.id,
-                    messageID: viewModel.displayMessages.last?.message.id,
-                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0
-                )
-
-                if showScrollToBottomButton {
-                    scrollToBottomButton(proxy: proxy)
-                }
+        watchChatPageContainer
+        .navigationTitle(watchChatNavigationTitle)
+        .onChange(of: watchChatPage) { oldPage, newPage in
+            guard oldPage != newPage else { return }
+            WKInterfaceDevice.current().play(newPage.terminalID == nil ? .directionUp : .directionDown)
+        }
+        .task(id: appConfig.localLinuxEnabled) {
+            await observeActiveUserTerminalForWatchChat()
+        }
+        .onChange(of: activeUserTerminalJobIDs) { _, terminalIDs in
+            if let selectedID = watchChatPage.terminalID,
+               !terminalIDs.contains(selectedID) {
+                watchChatPage = .chat
             }
         }
-        .navigationTitle(viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: ""))
         .sheet(isPresented: $isSettingsPresented) {
             SettingsView(viewModel: viewModel, requestedDestination: $settingsDestination)
                 .appLockOverlayLayer()
@@ -274,6 +274,80 @@ extension ContentView {
                 cancelDailyPulsePreparation()
             }
         }
+    }
+
+    @ViewBuilder
+    private var watchChatPageContainer: some View {
+        if appConfig.localLinuxEnabled, !activeUserTerminalJobIDs.isEmpty {
+            TabView(selection: $watchChatPage) {
+                watchChatConversationPage
+                    .tag(WatchChatPage.chat)
+
+                ForEach(activeUserTerminalJobIDs, id: \.self) { terminalID in
+                    LocalLinuxWatchTerminalView(
+                        initialJobID: terminalID,
+                        isPresentationActive: watchChatPage == .terminal(terminalID),
+                        showsTerminalManagement: false
+                    )
+                    .tag(WatchChatPage.terminal(terminalID))
+                }
+            }
+            .tabViewStyle(.verticalPage(transitionStyle: .blur))
+        } else {
+            watchChatConversationPage
+        }
+    }
+
+    private var watchChatConversationPage: some View {
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottom) {
+                chatList(proxy: proxy)
+
+                WatchRoleplaySessionScriptHost(
+                    sessionID: viewModel.currentSession?.id,
+                    messageID: viewModel.displayMessages.last?.message.id,
+                    versionIndex: viewModel.displayMessages.last?.message.getCurrentVersionIndex() ?? 0,
+                    chatMessages: viewModel.allMessagesForSession
+                )
+
+                if showScrollToBottomButton {
+                    scrollToBottomButton(proxy: proxy)
+                }
+            }
+        }
+    }
+
+    private func observeActiveUserTerminalForWatchChat() async {
+        guard appConfig.localLinuxEnabled else {
+            activeUserTerminalJobIDs = []
+            watchChatPage = .chat
+            return
+        }
+
+        let updates = await LocalLinuxRuntimeController.shared.updates()
+        for await snapshot in updates {
+            guard !Task.isCancelled else { return }
+            if snapshot.activeTerminalCount == 0 {
+                activeUserTerminalJobIDs = []
+                watchChatPage = .chat
+                continue
+            }
+            let terminals = await LocalLinuxJobScheduler.shared.activeStandaloneUserTerminals()
+            activeUserTerminalJobIDs = terminals.map(\.id)
+            if activeUserTerminalJobIDs.isEmpty {
+                watchChatPage = .chat
+            }
+        }
+    }
+
+    private var watchChatNavigationTitle: String {
+        guard let terminalID = watchChatPage.terminalID else {
+            return viewModel.currentSession?.name ?? NSLocalizedString("新对话", comment: "")
+        }
+        return String(
+            format: NSLocalizedString("终端 %@", comment: "Watch Linux terminal page title"),
+            String(terminalID.uuidString.prefix(4))
+        )
     }
 
     var watchModalBlocksAskUserInputPresentation: Bool {

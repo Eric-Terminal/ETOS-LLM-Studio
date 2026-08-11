@@ -361,7 +361,13 @@ private func prepareConfigDatabaseBeforeV5(
             "v10_add_provider_model_pricing",
             "v11_add_mcp_server_order",
             "v12_allow_personal_data_mcp_transport",
-            "v13_add_provider_chat_endpoint_path"
+            "v13_add_provider_chat_endpoint_path",
+            "v14_add_provider_model_picker_group",
+            "v15_remove_speech_to_text_model_marker",
+            "v16_add_provider_model_api_format_override",
+            "v17_create_official_data_action_state",
+            "v18_create_local_linux_configuration",
+            "v19_add_mcp_local_stdio_transport"
         ] {
             try db.execute(
                 sql: "INSERT OR IGNORE INTO grdb_migrations(identifier) VALUES (?)",

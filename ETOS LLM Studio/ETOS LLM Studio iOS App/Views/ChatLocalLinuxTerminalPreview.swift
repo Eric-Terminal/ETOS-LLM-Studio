@@ -1,0 +1,650 @@
+// ============================================================================
+// ChatLocalLinuxTerminalPreview.swift
+// ============================================================================
+// ETOS LLM Studio
+//
+// 聊天页按设置缩略显示当前会话的 Agent 工具或既有用户终端；预览本身
+// 不启动 Linux、不创建新 PTY，也不替代工具详情与用户接管入口。
+// ============================================================================
+
+import ETOSCore
+import SwiftUI
+import UIKit
+import WebKit
+
+struct LocalLinuxChatFloatingPreview: View {
+    let mode: LocalLinuxChatPreviewMode
+    let isLocalLinuxEnabled: Bool
+    let agentToolPreview: AgentToolExecutionPreviewSnapshot?
+    let sessionID: UUID?
+    let containerSize: CGSize
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+    @Binding var offset: CGSize
+    let isLiquidGlassEnabled: Bool
+    let onOpenTerminal: (UUID) -> Void
+    let onOpenBrowser: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        switch mode {
+        case .off:
+            EmptyView()
+        case .agentTools:
+            AgentToolExecutionFloatingPreview(
+                preview: agentToolPreview,
+                sessionID: sessionID,
+                containerSize: containerSize,
+                topPadding: topPadding,
+                bottomPadding: bottomPadding,
+                offset: $offset,
+                isLiquidGlassEnabled: isLiquidGlassEnabled,
+                onOpenBrowser: onOpenBrowser
+            )
+        case .userTerminal:
+            LocalLinuxTerminalFloatingPreview(
+                isEnabled: isLocalLinuxEnabled,
+                containerSize: containerSize,
+                topPadding: topPadding,
+                bottomPadding: bottomPadding,
+                offset: $offset,
+                isLiquidGlassEnabled: isLiquidGlassEnabled,
+                onOpen: onOpenTerminal
+            )
+        }
+    }
+}
+
+struct AgentToolExecutionFloatingPreview: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var browserManager = BrowserSessionManager.shared
+
+    let preview: AgentToolExecutionPreviewSnapshot?
+    let sessionID: UUID?
+    let containerSize: CGSize
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+    @Binding var offset: CGSize
+    let isLiquidGlassEnabled: Bool
+    let onOpenBrowser: () -> Void
+
+    @State private var browserImage: UIImage?
+    @State private var dragStartOffset: CGSize?
+    @State private var isShowingDetail = false
+
+    private let panelSize = CGSize(width: 168, height: 112)
+
+    var body: some View {
+        Group {
+            if let preview {
+                Button {
+                    isShowingDetail = true
+                } label: {
+                    panelContent(preview)
+                }
+                .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .simultaneousGesture(dragGesture)
+                .position(
+                    x: defaultCenter.x + clampedOffset.width,
+                    y: defaultCenter.y + clampedOffset.height
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
+            }
+        }
+        .task(id: browserSnapshotObservationID) {
+            await observeBrowserSnapshot()
+        }
+        .sheet(isPresented: $isShowingDetail) {
+            if let preview {
+                AgentToolExecutionPreviewDetail(
+                    preview: preview,
+                    displayName: displayName(for: preview.toolName),
+                    iconName: iconName(for: preview.toolName),
+                    onOpenBrowser: isBrowserTool(preview.toolName) ? onOpenBrowser : nil
+                )
+            }
+        }
+    }
+
+    private func panelContent(_ preview: AgentToolExecutionPreviewSnapshot) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: iconName(for: preview.toolName))
+                    .etFont(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TelegramColors.attachButtonColor)
+
+                Text(displayName(for: preview.toolName))
+                    .etFont(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Label(preview.state == .running
+                      ? NSLocalizedString("执行中", comment: "Agent tool preview running")
+                      : NSLocalizedString("已完成", comment: "Agent tool preview completed"),
+                      systemImage: preview.state == .running ? "clock" : "checkmark.circle.fill")
+                    .labelStyle(.iconOnly)
+                    .etFont(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(preview.state == .running ? Color.orange : Color.green)
+
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .etFont(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+
+            Group {
+                if isBrowserTool(preview.toolName), let browserImage {
+                    Image(uiImage: browserImage)
+                        .resizable()
+                        .scaledToFill()
+                } else if preview.previewText.isEmpty {
+                    Text(NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(preview.previewText)
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(6)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(previewCanvasColor)
+            .clipped()
+        }
+        .frame(width: panelSize.width, height: panelSize.height)
+        .background(panelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func observeBrowserSnapshot() async {
+        guard let preview,
+              isBrowserTool(preview.toolName),
+              let sessionID else {
+            browserImage = nil
+            return
+        }
+
+        repeat {
+            guard !Task.isCancelled else { return }
+            if let webView = browserManager.selectedWebView(sessionID: sessionID) {
+                let configuration = WKSnapshotConfiguration()
+                configuration.snapshotWidth = NSNumber(value: panelSize.width * 2)
+                browserImage = try? await webView.takeSnapshot(configuration: configuration)
+            } else {
+                browserImage = nil
+            }
+
+            guard preview.state == .running else { return }
+            do {
+                try await Task.sleep(nanoseconds: 2_000_000_000)
+            } catch {
+                return
+            }
+        } while true
+    }
+
+    private func displayName(for toolName: String) -> String {
+        if isBrowserTool(toolName) {
+            return NSLocalizedString("浏览器", comment: "Browser Agent tool preview title")
+        }
+        if isLinuxTool(toolName) {
+            return NSLocalizedString("Linux", comment: "Linux Agent tool preview title")
+        }
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
+    }
+
+    private func iconName(for toolName: String) -> String {
+        if isBrowserTool(toolName) { return "safari" }
+        if isLinuxTool(toolName) { return "terminal" }
+        if toolName.localizedCaseInsensitiveContains("file") { return "doc.text" }
+        return "wrench.and.screwdriver"
+    }
+
+    private func isBrowserTool(_ toolName: String) -> Bool {
+        toolName == "browser_control" || toolName.hasSuffix("/browser_control")
+    }
+
+    private func isLinuxTool(_ toolName: String) -> Bool {
+        ["linux_run", "linux_shell", "linux_process"].contains { candidate in
+            toolName == candidate || toolName.hasSuffix("/\(candidate)") || toolName.hasSuffix("_\(candidate)")
+        }
+    }
+
+    private var browserSnapshotObservationID: String {
+        guard let preview else { return "none" }
+        return "\(preview.id)#\(preview.state)#\(sessionID?.uuidString ?? "none")"
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                if dragStartOffset == nil {
+                    dragStartOffset = offset
+                }
+                let startOffset = dragStartOffset ?? offset
+                offset = clamp(
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    )
+                )
+            }
+            .onEnded { value in
+                let startOffset = dragStartOffset ?? offset
+                offset = clamp(
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    )
+                )
+                dragStartOffset = nil
+            }
+    }
+
+    private var clampedOffset: CGSize { clamp(offset) }
+
+    private func clamp(_ candidate: CGSize) -> CGSize {
+        let minX = panelSize.width / 2 + 12
+        let maxX = max(minX, containerSize.width - panelSize.width / 2 - 12)
+        let minY = topPadding + panelSize.height / 2
+        let maxY = max(minY, containerSize.height - bottomPadding - panelSize.height / 2)
+        let x = min(max(defaultCenter.x + candidate.width, minX), maxX)
+        let y = min(max(defaultCenter.y + candidate.height, minY), maxY)
+        return CGSize(width: x - defaultCenter.x, height: y - defaultCenter.y)
+    }
+
+    private var defaultCenter: CGPoint {
+        CGPoint(
+            x: panelSize.width / 2 + 16,
+            y: max(
+                topPadding + panelSize.height / 2,
+                containerSize.height - bottomPadding - panelSize.height / 2
+            )
+        )
+    }
+
+    private var previewCanvasColor: Color {
+        colorScheme == .dark ? .black : Color(uiColor: .secondarySystemBackground)
+    }
+
+    private var panelBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: shape)
+                        .overlay(shape.fill(glassOverlayColor))
+                        .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                        .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+                } else {
+                    materialBackground(shape: shape)
+                }
+            } else {
+                materialBackground(shape: shape)
+            }
+        }
+    }
+
+    private func materialBackground(shape: RoundedRectangle) -> some View {
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay(shape.fill(glassOverlayColor))
+            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+            .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
+    }
+}
+
+private struct AgentToolExecutionPreviewDetail: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let preview: AgentToolExecutionPreviewSnapshot
+    let displayName: String
+    let iconName: String
+    let onOpenBrowser: (() -> Void)?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent(
+                        NSLocalizedString("状态", comment: "Agent tool preview detail state"),
+                        value: preview.state == .running
+                            ? NSLocalizedString("执行中", comment: "Agent tool preview running")
+                            : NSLocalizedString("已完成", comment: "Agent tool preview completed")
+                    )
+                    LabeledContent(NSLocalizedString("工具", comment: "Agent tool preview detail tool")) {
+                        Label(displayName, systemImage: iconName)
+                    }
+                }
+
+                Section(NSLocalizedString("工具参数", comment: "Agent tool preview arguments")) {
+                    Text(preview.arguments.isEmpty ? "{}" : preview.arguments)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                    if preview.argumentsWereTruncated {
+                        Label(NSLocalizedString("预览已截断", comment: "Agent tool detail preview truncated"), systemImage: "ellipsis")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let result = preview.result, !result.isEmpty {
+                    Section(NSLocalizedString("工具结果", comment: "Agent tool preview result")) {
+                        Text(result)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                        if preview.resultWasTruncated {
+                            Label(NSLocalizedString("预览已截断", comment: "Agent tool detail preview truncated"), systemImage: "ellipsis")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if let onOpenBrowser {
+                    Section {
+                        Button {
+                            dismiss()
+                            onOpenBrowser()
+                        } label: {
+                            Label(NSLocalizedString("打开浏览器", comment: "Open Browser Agent from tool preview"), systemImage: "safari")
+                        }
+                    }
+                }
+            }
+            .navigationTitle(displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("关闭", comment: "Close Agent tool preview detail")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct LocalLinuxTerminalFloatingPreview: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let isEnabled: Bool
+    let containerSize: CGSize
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+    @Binding var offset: CGSize
+    let isLiquidGlassEnabled: Bool
+    let onOpen: (UUID) -> Void
+
+    @State private var activeTerminalID: UUID?
+    @State private var activeTerminalCount = 0
+    @State private var presentation = LocalLinuxTerminalPresentation.empty
+    @State private var dragStartOffset: CGSize?
+
+    private let panelSize = CGSize(width: 168, height: 112)
+
+    var body: some View {
+        Group {
+            if let activeTerminalID {
+                Button {
+                    onOpen(activeTerminalID)
+                } label: {
+                    panelContent(jobID: activeTerminalID)
+                }
+                .buttonStyle(.plain)
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .simultaneousGesture(dragGesture)
+                .position(
+                    x: defaultCenter.x + clampedOffset.width,
+                    y: defaultCenter.y + clampedOffset.height
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
+            }
+        }
+        .task(id: isEnabled) {
+            await observeTerminalActivity()
+        }
+        .task(id: terminalOutputObservationID) {
+            await observeTerminalOutput()
+        }
+    }
+
+    private func panelContent(jobID: UUID) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal.fill")
+                    .etFont(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TelegramColors.attachButtonColor)
+
+                Text(NSLocalizedString("用户终端", comment: "User terminal preview title"))
+                    .etFont(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                if activeTerminalCount > 1 {
+                    Label("\(activeTerminalCount)", systemImage: "rectangle.stack")
+                        .labelStyle(.titleAndIcon)
+                        .etFont(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(String(jobID.uuidString.prefix(4)))
+                        .etFont(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .etFont(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+
+            Group {
+                if presentation.plainText.isEmpty {
+                    Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(presentation.attributedText)
+                }
+            }
+            .font(.system(size: 6, design: .monospaced))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(6)
+            .background(terminalCanvasColor)
+            .clipped()
+        }
+        .frame(width: panelSize.width, height: panelSize.height)
+        .background(panelBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func observeTerminalActivity() async {
+        guard isEnabled else {
+            activeTerminalID = nil
+            activeTerminalCount = 0
+            presentation = .empty
+            return
+        }
+
+        let updates = await LocalLinuxRuntimeController.shared.updates()
+        for await snapshot in updates {
+            guard !Task.isCancelled else { return }
+            if snapshot.activeTerminalCount == 0 {
+                activeTerminalID = nil
+                activeTerminalCount = 0
+                presentation = .empty
+                continue
+            }
+            let terminals = await LocalLinuxJobScheduler.shared.activeStandaloneUserTerminals()
+            let terminalIDs = terminals.map(\.id)
+            activeTerminalCount = terminalIDs.count
+            let nextID = activeTerminalID.flatMap { terminalIDs.contains($0) ? $0 : nil }
+                ?? terminalIDs.first
+            if activeTerminalID != nextID {
+                activeTerminalID = nextID
+                presentation = .empty
+            }
+        }
+    }
+
+    private func observeTerminalOutput() async {
+        guard let terminalID = activeTerminalID else { return }
+        let appearance = terminalAppearance
+        while !Task.isCancelled, activeTerminalID == terminalID {
+            do {
+                presentation = try await LocalLinuxJobScheduler.shared
+                    .userVisibleTerminalPreviewPresentation(
+                        jobID: terminalID,
+                        maximumLines: 10,
+                        appearance: appearance
+                    )
+            } catch {
+                activeTerminalID = nil
+                presentation = .empty
+                return
+            }
+            do {
+                try await Task.sleep(nanoseconds: 350_000_000)
+            } catch {
+                return
+            }
+        }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                if dragStartOffset == nil {
+                    dragStartOffset = offset
+                }
+                let startOffset = dragStartOffset ?? offset
+                offset = clamp(
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    )
+                )
+            }
+            .onEnded { value in
+                let startOffset = dragStartOffset ?? offset
+                offset = clamp(
+                    CGSize(
+                        width: startOffset.width + value.translation.width,
+                        height: startOffset.height + value.translation.height
+                    )
+                )
+                dragStartOffset = nil
+            }
+    }
+
+    private var clampedOffset: CGSize {
+        clamp(offset)
+    }
+
+    private var terminalAppearance: LocalLinuxTerminalAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var terminalCanvasColor: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
+    private var terminalOutputObservationID: String {
+        "\(activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
+    }
+
+    private func clamp(_ candidate: CGSize) -> CGSize {
+        let minX = panelSize.width / 2 + 12
+        let maxX = max(minX, containerSize.width - panelSize.width / 2 - 12)
+        let minY = topPadding + panelSize.height / 2
+        let maxY = max(minY, containerSize.height - bottomPadding - panelSize.height / 2)
+        let x = min(max(defaultCenter.x + candidate.width, minX), maxX)
+        let y = min(max(defaultCenter.y + candidate.height, minY), maxY)
+        return CGSize(width: x - defaultCenter.x, height: y - defaultCenter.y)
+    }
+
+    private var defaultCenter: CGPoint {
+        CGPoint(
+            x: panelSize.width / 2 + 16,
+            y: max(
+                topPadding + panelSize.height / 2,
+                containerSize.height - bottomPadding - panelSize.height / 2
+            )
+        )
+    }
+
+    private var panelBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: shape)
+                        .overlay(shape.fill(glassOverlayColor))
+                        .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+                        .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+                } else {
+                    materialBackground(shape: shape)
+                }
+            } else {
+                materialBackground(shape: shape)
+            }
+        }
+    }
+
+    private func materialBackground(shape: RoundedRectangle) -> some View {
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay(shape.fill(glassOverlayColor))
+            .overlay(shape.stroke(glassStrokeColor, lineWidth: 0.5))
+            .shadow(color: glassShadowColor, radius: 8, x: 0, y: 3)
+    }
+
+    private var glassOverlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var glassStrokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var glassShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
+    }
+}

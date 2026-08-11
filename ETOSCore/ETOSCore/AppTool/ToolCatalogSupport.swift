@@ -63,6 +63,11 @@ public enum AppToolCatalogCategory: String, Hashable, Codable, Sendable {
     case database
     case custom
     case feedback
+    case linux
+    case browser
+    case deviceOperations = "device_operations"
+    case mediaEnvironment = "media_environment"
+    case visionLanguage = "vision_language"
 }
 
 public enum ToolCatalogSupport {

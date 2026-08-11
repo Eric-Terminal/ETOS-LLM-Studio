@@ -69,6 +69,8 @@ private let appLocalNotificationCardIDUserInfoKey = "cardID"
 private let appLocalNotificationIssueNumberUserInfoKey = "issue_number"
 private let appLocalNotificationSessionIDUserInfoKey = "session_id"
 private let appLocalNotificationAchievementIDUserInfoKey = "achievement_id"
+private let appLocalNotificationSuppressWhenForegroundUserInfoKey = "suppress_when_foreground"
+private let appLocalNotificationChatReplyIdentifierPrefix = "chat.reply.finished"
 private let appLocalNotificationDailyPulseReminderCategoryIdentifier = "dailyPulse.reminder"
 private let appLocalNotificationDailyPulseReadyCategoryIdentifier = "dailyPulse.ready"
 private let appLocalNotificationDailyPulseOpenActionIdentifier = "dailyPulse.action.open"
@@ -226,6 +228,50 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         )
     }
 
+    @discardableResult
+    public func postChatReplyFinishedNotification(
+        sessionID: UUID,
+        sessionName: String?,
+        snippet: String,
+        messageID: UUID
+    ) async -> Bool {
+        guard await requestAuthorizationIfNeeded() else { return false }
+
+        let content = UNMutableNotificationContent()
+        content.title = NSLocalizedString("AI 回复已完成", comment: "Background reply notification title")
+        if let sessionName, !sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            content.body = String(
+                format: NSLocalizedString(
+                    "会话“%@”已收到新回复：%@",
+                    comment: "Background reply notification body with session name"
+                ),
+                sessionName,
+                snippet
+            )
+        } else {
+            content.body = String(
+                format: NSLocalizedString(
+                    "已收到新回复：%@",
+                    comment: "Background reply notification body without session name"
+                ),
+                snippet
+            )
+        }
+        content.sound = .default
+        content.threadIdentifier = appLocalNotificationChatReplyIdentifierPrefix
+        content.userInfo = Self.chatReplyFinishedUserInfo(sessionID: sessionID)
+        if #available(iOS 15.0, watchOS 8.0, *) {
+            content.interruptionLevel = .timeSensitive
+            content.relevanceScore = 1.0
+        }
+
+        let identifier = Self.chatReplyNotificationIdentifierPrefix(sessionID: sessionID)
+            + ".\(messageID.uuidString)"
+        return await addNotificationRequest(
+            UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        )
+    }
+
     public func removePendingRequests(withIdentifiers identifiers: [String]) {
         guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
@@ -249,6 +295,28 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
     public func removeDeliveredRequests(withIdentifiers identifiers: [String]) {
         guard !Self.isRunningUnitTests, !identifiers.isEmpty else { return }
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    public func removeDeliveredRequests(withIdentifierPrefixes prefixes: [String]) async {
+        guard !Self.isRunningUnitTests, !prefixes.isEmpty else { return }
+        let notifications = await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+                continuation.resume(returning: notifications)
+            }
+        }
+        let identifiers = notifications
+            .map(\.request.identifier)
+            .filter { identifier in
+                prefixes.contains { prefix in identifier.hasPrefix(prefix) }
+            }
+        removeDeliveredRequests(withIdentifiers: identifiers)
+    }
+
+    /// 回复完成通知只服务于用户停留在其他 App 的场景；进入对应会话后清理系统通知中心残留。
+    public func removeChatReplyNotifications(sessionID: UUID) async {
+        let prefix = Self.chatReplyNotificationIdentifierPrefix(sessionID: sessionID)
+        await removePendingRequests(withIdentifierPrefixes: [prefix])
+        await removeDeliveredRequests(withIdentifierPrefixes: [prefix])
     }
 
     public nonisolated static func dailyPulseUserInfo(
@@ -316,6 +384,26 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
             appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.contextCompression.rawValue,
             appLocalNotificationSessionIDUserInfoKey: sessionID.uuidString
         ]
+    }
+
+    public nonisolated static func chatReplyFinishedUserInfo(sessionID: UUID) -> [AnyHashable: Any] {
+        [
+            appLocalNotificationRouteUserInfoKey: AppLocalNotificationRoute.chatSession.rawValue,
+            appLocalNotificationSessionIDUserInfoKey: sessionID.uuidString,
+            appLocalNotificationSuppressWhenForegroundUserInfoKey: true
+        ]
+    }
+
+    public nonisolated static func notificationShouldPresentWhileForeground(
+        userInfo: [AnyHashable: Any]
+    ) -> Bool {
+        if let value = userInfo[appLocalNotificationSuppressWhenForegroundUserInfoKey] as? Bool {
+            return !value
+        }
+        if let value = userInfo[appLocalNotificationSuppressWhenForegroundUserInfoKey] as? NSNumber {
+            return !value.boolValue
+        }
+        return true
     }
 
     public nonisolated static func achievementJournalUserInfo(achievementID: String? = nil) -> [AnyHashable: Any] {
@@ -536,6 +624,10 @@ public final class AppLocalNotificationCenter: NSObject, ObservableObject {
         }
     }
 
+    private nonisolated static func chatReplyNotificationIdentifierPrefix(sessionID: UUID) -> String {
+        "\(appLocalNotificationChatReplyIdentifierPrefix).\(sessionID.uuidString)"
+    }
+
 }
 
 extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
@@ -544,6 +636,12 @@ extension AppLocalNotificationCenter: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        guard Self.notificationShouldPresentWhileForeground(
+            userInfo: notification.request.content.userInfo
+        ) else {
+            completionHandler([])
+            return
+        }
 #if os(iOS)
         completionHandler([.banner, .list, .sound])
 #elseif os(watchOS)

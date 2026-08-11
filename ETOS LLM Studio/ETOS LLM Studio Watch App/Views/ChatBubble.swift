@@ -22,6 +22,7 @@ struct ChatBubble: View {
 
     @ObservedObject var messageState: ChatMessageRenderState
     let roleplaySessionID: UUID?
+    let roleplayMessages: [ChatMessage]
     let preparedMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload?
     let reasoningThinkingTitle: String?
@@ -77,6 +78,7 @@ struct ChatBubble: View {
     init(
         messageState: ChatMessageRenderState,
         roleplaySessionID: UUID? = nil,
+        roleplayMessages: [ChatMessage] = [],
         preparedMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         preparedReasoningMarkdownPayload: ETPreparedMarkdownRenderPayload? = nil,
         reasoningThinkingTitle: String? = nil,
@@ -117,6 +119,7 @@ struct ChatBubble: View {
     ) {
         self.messageState = messageState
         self.roleplaySessionID = roleplaySessionID
+        self.roleplayMessages = roleplayMessages
         self.preparedMarkdownPayload = preparedMarkdownPayload
         self.preparedReasoningMarkdownPayload = preparedReasoningMarkdownPayload
         self.reasoningThinkingTitle = reasoningThinkingTitle

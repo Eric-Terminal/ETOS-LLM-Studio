@@ -386,11 +386,15 @@ extension ChatView {
                 sessionDraftName = session.name
             },
             onInfo: {
-                sessionInfo = SessionPickerInfoPayload(
-                    session: session,
-                    messageCount: viewModel.messageCount(for: session),
-                    isCurrent: isCurrent
-                )
+                Task { @MainActor in
+                    let messageCount = await viewModel.messageCount(for: session)
+                    guard !Task.isCancelled else { return }
+                    sessionInfo = SessionPickerInfoPayload(
+                        session: session,
+                        messageCount: messageCount,
+                        isCurrent: isCurrent
+                    )
+                }
             },
             onExport: { format, includeReasoning, includeSystemPrompt in
                 exportSession(

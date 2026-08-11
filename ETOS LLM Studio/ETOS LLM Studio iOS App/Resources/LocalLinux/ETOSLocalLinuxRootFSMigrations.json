@@ -1,0 +1,5 @@
+{
+  "format": "etos-rootfs-migrations-v1",
+  "migrations": [],
+  "targetSeedSHA256": "f55a90f69052c5bd6f92cb09a8f47065970830b194c917a006fb94028e721259"
+}

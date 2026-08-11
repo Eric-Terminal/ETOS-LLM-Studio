@@ -384,18 +384,6 @@ struct ModelAdvancedSettingsView: View {
             }
 
             Section {
-                LabeledContent(NSLocalizedString("并行回复数", comment: "Conversation runtime concurrency")) {
-                    TextField(
-                        NSLocalizedString("数量", comment: ""),
-                        value: conversationRuntimeConcurrencyBinding,
-                        formatter: numberFormatter
-                    )
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .frame(width: 80)
-                }
-
                 LabeledContent(NSLocalizedString("自动执行预算", comment: "Conversation runtime execution budget")) {
                     TextField(
                         NSLocalizedString("数量", comment: ""),
@@ -410,7 +398,7 @@ struct ModelAdvancedSettingsView: View {
             } header: {
                 Text(NSLocalizedString("会话协作", comment: "Conversation collaboration settings"))
             } footer: {
-                Text(NSLocalizedString("并行回复数限制同时占用模型的会话；等待其他会话不占名额。自动执行预算由同一根协作链共享，耗尽后可在会话列表继续。", comment: "Conversation runtime settings explanation"))
+                Text(NSLocalizedString("自动执行预算由同一根协作链共享，耗尽后可从会话列表继续。", comment: "Conversation runtime settings explanation"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -539,13 +527,6 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var conversationRuntimeConcurrencyBinding: Binding<Int> {
-        Binding(
-            get: { max(1, appConfig.conversationRuntimeConcurrencyLimit) },
-            set: { appConfig.conversationRuntimeConcurrencyLimit = max(1, $0) }
-        )
     }
 
     private var conversationRuntimeBudgetBinding: Binding<Int> {

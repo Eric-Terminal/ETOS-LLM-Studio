@@ -146,6 +146,12 @@ public struct ConversationRunRequestConfiguration: Codable, Hashable, Sendable {
     public var enablePeriodicTimeLandmark: Bool
     public var periodicTimeLandmarkIntervalMinutes: Int
     public var enableResponseSpeedMetrics: Bool
+    /// Browser profile 随 Conversation Run 冻结，不依赖 Linux Run 上下文。
+    public var browserDataProfile: BrowserAgentDataProfile?
+    /// Linux Agent 能力随 Run 冻结，确保续写期间不会因设置变化而改变执行边界。
+    public var agentToolsEnabled: Bool?
+    public var localLinuxToolsEnabled: Bool?
+    public var selectedAgentMCPServerIDs: [UUID]?
 
     public init(
         modelIdentifier: String? = nil,
@@ -162,7 +168,11 @@ public struct ConversationRunRequestConfiguration: Codable, Hashable, Sendable {
         systemTimeInjectionPosition: SystemTimeInjectionPosition = .front,
         enablePeriodicTimeLandmark: Bool = false,
         periodicTimeLandmarkIntervalMinutes: Int = 30,
-        enableResponseSpeedMetrics: Bool = true
+        enableResponseSpeedMetrics: Bool = true,
+        browserDataProfile: BrowserAgentDataProfile? = nil,
+        agentToolsEnabled: Bool? = nil,
+        localLinuxToolsEnabled: Bool? = nil,
+        selectedAgentMCPServerIDs: [UUID]? = nil
     ) {
         self.modelIdentifier = modelIdentifier
         self.temperature = temperature
@@ -179,6 +189,10 @@ public struct ConversationRunRequestConfiguration: Codable, Hashable, Sendable {
         self.enablePeriodicTimeLandmark = enablePeriodicTimeLandmark
         self.periodicTimeLandmarkIntervalMinutes = max(1, periodicTimeLandmarkIntervalMinutes)
         self.enableResponseSpeedMetrics = enableResponseSpeedMetrics
+        self.browserDataProfile = browserDataProfile
+        self.agentToolsEnabled = agentToolsEnabled
+        self.localLinuxToolsEnabled = localLinuxToolsEnabled
+        self.selectedAgentMCPServerIDs = selectedAgentMCPServerIDs
     }
 }
 

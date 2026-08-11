@@ -198,11 +198,31 @@ extension ChatService {
         let requestTask = Task<Void, Error> { [weak self] in
             guard let self else { return }
             let configuration = run.requestConfiguration
+            let localAgentRecord = Persistence.loadLocalAgentRun(id: run.id)
+            let localAgentContext = localAgentRecord?.state == .running
+                ? localAgentRecord?.context
+                : nil
+            let agentToolsEnabled = configuration.agentToolsEnabled
+                ?? (localAgentContext?.mode == .agent)
+            let localLinuxToolsEnabled = configuration.localLinuxToolsEnabled
+                ?? (localAgentContext != nil)
+            let allowsChatTools = !session.isWorldbookContextIsolationActive
+            let agentCapabilities = AgentToolCapabilityPolicy(
+                preparesAgentRun: agentToolsEnabled && localLinuxToolsEnabled,
+                includesConversationTools: allowsChatTools,
+                includesBrowserTools: allowsChatTools,
+                includesLocalLinuxTools: agentToolsEnabled && localLinuxToolsEnabled
+            )
+            let selectedAgentMCPServerIDs = configuration.selectedAgentMCPServerIDs.map { Set($0) }
+                ?? localAgentContext.map { Set($0.selectedMCPServerIDs) }
             let requestTooling = await self.resolveRequestTooling(
                 for: session,
                 enableMemory: configuration.enableMemory,
                 enableMemoryWrite: configuration.enableMemoryWrite,
-                enableMemoryActiveRetrieval: configuration.enableMemoryActiveRetrieval
+                enableMemoryActiveRetrieval: configuration.enableMemoryActiveRetrieval,
+                localAgentContext: localAgentContext,
+                agentCapabilities: agentCapabilities,
+                selectedAgentMCPServerIDs: selectedAgentMCPServerIDs
             )
             await self.executeMessageRequest(
                 messages: requestMessages,
@@ -217,6 +237,7 @@ extension ChatService {
                 enableStreaming: configuration.enableStreaming,
                 enhancedPrompt: configuration.enhancedPrompt,
                 tools: requestTooling.tools,
+                localAgentPrompt: localAgentContext?.promptContent,
                 enableMemory: requestTooling.policy.enableMemory,
                 enableMemoryWrite: requestTooling.policy.enableMemoryWrite,
                 enableMemoryActiveRetrieval: requestTooling.policy.enableMemoryActiveRetrieval,

@@ -85,6 +85,12 @@ extension MCPServerStore {
                 apiKey: payload?.apiKey,
                 additionalHeaders: additionalHeaders
             )
+        case "local_stdio":
+            guard let configuration = MCPServerStoreCodec.decodeJSONTextIfPresent(
+                MCPLocalStdioConfiguration.self,
+                from: header.endpointURL
+            ) else { return nil }
+            transport = .localStdio(configuration: configuration)
         case "built_in_search":
             transport = .builtInSearch
         case "built_in_app_tool":
@@ -253,6 +259,8 @@ extension MCPServerStore {
             return "http"
         case .httpSSE:
             return "sse"
+        case .localStdio:
+            return "local_stdio"
         case .builtInSearch:
             return "built_in_search"
         case .builtInAppTool:
@@ -270,6 +278,8 @@ extension MCPServerStore {
             return endpoint.absoluteString
         case .httpSSE:
             return nil
+        case .localStdio(let configuration):
+            return MCPServerStoreCodec.encodeJSONTextIfPresent(configuration)
         case .builtInSearch:
             return MCPBuiltInSearchServer.endpoint
         case .builtInAppTool(let category):
@@ -287,6 +297,8 @@ extension MCPServerStore {
             return nil
         case .httpSSE(let messageEndpoint, _, _, _):
             return messageEndpoint.absoluteString
+        case .localStdio:
+            return nil
         case .builtInSearch:
             return nil
         case .builtInAppTool:
@@ -304,6 +316,8 @@ extension MCPServerStore {
             return nil
         case .httpSSE(_, let sseEndpoint, _, _):
             return sseEndpoint.absoluteString
+        case .localStdio:
+            return nil
         case .builtInSearch:
             return nil
         case .builtInAppTool:

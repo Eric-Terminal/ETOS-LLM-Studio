@@ -28,6 +28,17 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## iSH 与 Alpine Linux RootFS
+
+ETOS LLM Studio 的“本地 Linux”使用 `ish-multiarch` 提供 AArch64 Linux
+用户态解释执行，并随 iOS/watchOS App 内置一个固定版本的最小 Alpine
+RootFS seed。App 不会默认安装 Bash、Python、Node.js、编译器或第三方 MCP
+Server。
+
+完整 iSH 项目许可证、精确 Alpine 包版本、包许可证、第三方声明、对应源码
+资产索引与 SPDX SBOM 随 App 的 `LocalLinux` 资源一同分发。iSH 修改源码入口：
+<https://github.com/Eric-Terminal/ish-multiarch>。
+
 ## FunASR llama.cpp runtime
 
 ETOS LLM Studio 的本地语音转写实现改编自 FunASR llama.cpp runtime v0.1.9。

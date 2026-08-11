@@ -335,9 +335,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var lastDistanceToTop: CGFloat = 0
         private var hasReportedDistance = false
         private var lastReportedInteractionState = false
-        #if DEBUG
-        private var debugContentSizeEvent = 0
-        #endif
 
         init(
             keepsBottomPinned: Binding<Bool>,
@@ -422,13 +419,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         private func handleContentSizeChange(from oldSize: CGSize?, to newSize: CGSize) {
-            #if DEBUG
-            if let oldSize,
-               isStreaming,
-               abs(newSize.height - oldSize.height) > 20 {
-                recordStreamingContentSizeChange(from: oldSize.height, to: newSize.height)
-            }
-            #endif
             let isUserInteracting = scrollView?.isDragging == true
                 || scrollView?.isTracking == true
                 || scrollView?.isDecelerating == true
@@ -461,73 +451,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             }
             scheduleDistanceChangeNotification()
         }
-
-        #if DEBUG
-        /// 仅用于复现流式反向跳动；同时记录模型层终点与用户实际看见的呈现层位置。
-        private func recordStreamingContentSizeChange(
-            from oldContentHeight: CGFloat,
-            to newContentHeight: CGFloat
-        ) {
-            guard let scrollView else { return }
-            debugContentSizeEvent &+= 1
-            let event = debugContentSizeEvent
-            reportStreamingGeometry(
-                event: event,
-                phase: "before",
-                oldContentHeight: oldContentHeight,
-                newContentHeight: newContentHeight,
-                scrollView: scrollView
-            )
-
-            for (phase, delay) in [("next", 0.0), ("30ms", 0.03), ("80ms", 0.08), ("160ms", 0.16), ("260ms", 0.26)] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak scrollView] in
-                    guard let self,
-                          let scrollView,
-                          self.scrollView === scrollView else {
-                        return
-                    }
-                    self.reportStreamingGeometry(
-                        event: event,
-                        phase: phase,
-                        oldContentHeight: oldContentHeight,
-                        newContentHeight: newContentHeight,
-                        scrollView: scrollView
-                    )
-                }
-            }
-        }
-
-        private func reportStreamingGeometry(
-            event: Int,
-            phase: String,
-            oldContentHeight: CGFloat,
-            newContentHeight: CGFloat,
-            scrollView: UIScrollView
-        ) {
-            let presentationY = scrollView.layer.presentation()?.bounds.origin.y
-                ?? scrollView.bounds.origin.y
-            let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
-                contentHeight: scrollView.contentSize.height,
-                boundsHeight: scrollView.bounds.height,
-                topInset: scrollView.adjustedContentInset.top,
-                bottomInset: scrollView.adjustedContentInset.bottom
-            )
-            let animationKeys = scrollView.layer.animationKeys()?.joined(separator: ",") ?? "-"
-            NSLog(String(
-                format: "[StreamScrollTrace] event=%d phase=%@ height=%.1f->%.1f liveHeight=%.1f modelY=%.1f visibleY=%.1f maxY=%.1f insetBottom=%.1f animations=%@",
-                event,
-                phase,
-                oldContentHeight,
-                newContentHeight,
-                scrollView.contentSize.height,
-                scrollView.contentOffset.y,
-                presentationY,
-                maximumOffsetY,
-                scrollView.adjustedContentInset.bottom,
-                animationKeys
-            ))
-        }
-        #endif
 
         private func handleBoundsChange(_ newSize: CGSize) {
             defer {
@@ -663,18 +586,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
-            #if DEBUG
-            if !isStreaming || !keepsBottomPinned.wrappedValue || isUserInteracting {
-                NSLog(
-                    "[BottomPinTrace] follow-skip streaming=%d pin=%d tracking=%d dragging=%d decelerating=%d",
-                    isStreaming ? 1 : 0,
-                    keepsBottomPinned.wrappedValue ? 1 : 0,
-                    scrollView.isTracking ? 1 : 0,
-                    scrollView.isDragging ? 1 : 0,
-                    scrollView.isDecelerating ? 1 : 0
-                )
-            }
-            #endif
             guard isStreaming, keepsBottomPinned.wrappedValue, !isUserInteracting else { return }
 
             let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
@@ -709,16 +620,6 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 targetOffsetY: targetOffsetY,
                 reduceMotion: reduceMotion
             )
-            #if DEBUG
-            NSLog(
-                "[BottomPinTrace] follow-run visible=%.1f start=%.1f target=%.1f height=%.1f animate=%d",
-                visibleOffsetY,
-                startOffsetY,
-                targetOffsetY,
-                scrollView.contentSize.height,
-                shouldAnimate ? 1 : 0
-            )
-            #endif
 
             // removeAllAnimations 与模型层回写发生在同一提交前，屏幕不会看见中间跳帧。
             scrollView.layer.removeAllAnimations()

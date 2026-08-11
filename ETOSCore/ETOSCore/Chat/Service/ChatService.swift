@@ -578,6 +578,9 @@ public class ChatService {
             requestContextBySessionID.removeValue(forKey: sessionID)?.task
         }
         task?.cancel()
+        Task {
+            await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
+        }
         setSessionRunning(sessionID, isRunning: false)
     }
 
@@ -612,8 +615,31 @@ public class ChatService {
             case .cancelled:
                 _ = Persistence.updateConversationRunStatus(id: runIDs.runID, status: .cancelled)
             }
+
+            // Agent Run 与聊天运行记录使用同一个稳定 runID。成功态需要等最后一轮
+            // 无工具回复再结束；失败和取消则可在统一请求出口立即准确收尾。
+            switch status {
+            case .error:
+                Task {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(
+                        id: runIDs.runID,
+                        state: .failed
+                    )
+                }
+            case .cancelled:
+                Task {
+                    await LocalAgentRuntimeContextManager.shared.finishRun(
+                        id: runIDs.runID,
+                        state: .cancelled
+                    )
+                }
+            case .started, .finished:
+                break
+            }
         }
 
+        // 终态事件对外可见时，会话必须已经离开运行集合；实时活动和通知订阅者
+        // 会在收到事件后持有各自的短后台任务，完成快照与通知收尾。
         switch status {
         case .started:
             break
@@ -984,6 +1010,11 @@ public class ChatService {
         guard let activeContext = withRequestStateLock({ requestContextBySessionID[sessionID] }),
               let task = activeContext.task else { return }
         task.cancel()
+        if let runID = activeContext.conversationRunID {
+            await LocalLinuxJobScheduler.shared.cancel(runID: runID)
+        } else {
+            await LocalLinuxJobScheduler.shared.cancel(sessionID: sessionID)
+        }
         emitSessionRequestStatus(.cancelled, sessionID: sessionID)
 
         if let imageContext = activeContext.imageGenerationContext {

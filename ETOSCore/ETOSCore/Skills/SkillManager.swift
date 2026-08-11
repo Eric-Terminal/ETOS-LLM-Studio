@@ -23,6 +23,7 @@ public final class SkillManager: ObservableObject {
         case readInstructions = "read_instructions"
         case listResources = "list_resources"
         case readResource = "read_resource"
+        case executeScript = "execute_script"
 
         static func resolveToolArgument(_ rawValue: String) -> SkillToolAction? {
             let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,6 +41,8 @@ public final class SkillManager: ObservableObject {
                 return .listResources
             case "read_resource", "readresource", "resource", "resource_content":
                 return .readResource
+            case "execute_script", "executescript", "execute":
+                return .executeScript
             default:
                 return nil
             }
@@ -52,6 +55,9 @@ public final class SkillManager: ObservableObject {
         let path: String?
         let startLine: Int?
         let maxLines: Int?
+        let arguments: [String]?
+        let timeoutSeconds: Double?
+        let outputLimitBytes: UInt64?
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: FlexibleCodingKey.self)
@@ -77,6 +83,18 @@ public final class SkillManager: ObservableObject {
             self.maxLines = try Self.decodeInt(
                 from: container,
                 keys: ["max_lines", "maxLines", "line_count", "lineCount", "limit"]
+            )
+            self.arguments = try Self.decodeStringArray(
+                from: container,
+                keys: ["arguments", "args", "argv"]
+            )
+            self.timeoutSeconds = try Self.decodeDouble(
+                from: container,
+                keys: ["timeout_seconds", "timeoutSeconds"]
+            )
+            self.outputLimitBytes = try Self.decodeUInt64(
+                from: container,
+                keys: ["output_limit_bytes", "outputLimitBytes"]
             )
         }
 
@@ -105,6 +123,52 @@ public final class SkillManager: ObservableObject {
                 if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
                    let intValue = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
                     return intValue
+                }
+            }
+            return nil
+        }
+
+        private static func decodeStringArray(
+            from container: KeyedDecodingContainer<FlexibleCodingKey>,
+            keys: [String]
+        ) throws -> [String]? {
+            for key in keys {
+                if let value = try? container.decodeIfPresent([String].self, forKey: FlexibleCodingKey(key)) {
+                    return value
+                }
+            }
+            return nil
+        }
+
+        private static func decodeDouble(
+            from container: KeyedDecodingContainer<FlexibleCodingKey>,
+            keys: [String]
+        ) throws -> Double? {
+            for key in keys {
+                let codingKey = FlexibleCodingKey(key)
+                if let value = try? container.decodeIfPresent(Double.self, forKey: codingKey) {
+                    return value
+                }
+                if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+                   let number = Double(value) {
+                    return number
+                }
+            }
+            return nil
+        }
+
+        private static func decodeUInt64(
+            from container: KeyedDecodingContainer<FlexibleCodingKey>,
+            keys: [String]
+        ) throws -> UInt64? {
+            for key in keys {
+                let codingKey = FlexibleCodingKey(key)
+                if let value = try? container.decodeIfPresent(UInt64.self, forKey: codingKey) {
+                    return value
+                }
+                if let value = try? container.decodeIfPresent(String.self, forKey: codingKey),
+                   let number = UInt64(value) {
+                    return number
                 }
             }
             return nil
@@ -210,6 +274,47 @@ public final class SkillManager: ObservableObject {
 
     public func isSkillEnabled(_ name: String) -> Bool {
         enabledSkillNames.contains(name.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    public func executionPolicyStatus(skillName: String) async -> SkillExecutionPolicyStatus {
+        let metadata = skills.first { $0.name == skillName }
+        return await Task.detached(priority: .utility) {
+            let record = Persistence.skillExecutionPolicy(skillName: skillName)
+            let digest = metadata.flatMap { try? SkillRunSnapshotBuilder.build(skill: $0).versionDigest }
+            return SkillExecutionPolicyStatus(record: record, currentVersionDigest: digest)
+        }.value
+    }
+
+    @discardableResult
+    public func setExecutionPolicy(
+        _ policy: SkillExecutionPolicy,
+        skillName: String
+    ) async -> Bool {
+        guard let metadata = skills.first(where: { $0.name == skillName }) else { return false }
+        let record = await Task.detached(priority: .utility) {
+            let digest: String?
+            if policy == .allowCurrentVersion {
+                digest = try? SkillRunSnapshotBuilder.build(skill: metadata).versionDigest
+            } else {
+                digest = nil
+            }
+            return SkillExecutionPolicyRecord(
+                skillName: skillName,
+                policy: policy,
+                approvedVersionDigest: digest
+            )
+        }.value
+        guard policy != .allowCurrentVersion || record.approvedVersionDigest != nil else {
+            lastErrorMessage = NSLocalizedString("无法读取当前 Skill 版本，未保存执行授权。", comment: "Cannot approve unreadable Skill version")
+            return false
+        }
+        let saved = await Task.detached(priority: .utility) {
+            Persistence.saveSkillExecutionPolicy(record)
+        }.value
+        if !saved {
+            lastErrorMessage = NSLocalizedString("保存 Skill 执行策略失败。", comment: "Save Skill execution policy failure")
+        }
+        return saved
     }
 
     @discardableResult
@@ -521,7 +626,8 @@ public final class SkillManager: ObservableObject {
         let actionDescription = [
             "\(SkillToolAction.readInstructions.rawValue): \(NSLocalizedString("读取 SKILL.md 正文说明。", comment: "Skill tool action description sent to model"))",
             "\(SkillToolAction.listResources.rawValue): \(NSLocalizedString("列出技能包内可发现资源。", comment: "Skill tool action description sent to model"))",
-            "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts/ 仅允许读取，不能执行。", comment: "Skill tool action description sent to model"))"
+            "\(SkillToolAction.readResource.rawValue): \(NSLocalizedString("读取技能包内可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本。", comment: "Skill tool action description sent to model"))",
+            "\(SkillToolAction.executeScript.rawValue): \(NSLocalizedString("在当前 Agent Run 的本地 Linux 中执行 scripts/ 内脚本；Skill 只读，工作区可写，且可能需要用户授权。", comment: "Skill execute script action description sent to model"))"
         ].joined(separator: "\n")
         let parameters = JSONValue.dictionary([
             "type": .string("object"),
@@ -536,13 +642,14 @@ public final class SkillManager: ObservableObject {
                     "enum": .array([
                         .string(SkillToolAction.readInstructions.rawValue),
                         .string(SkillToolAction.listResources.rawValue),
-                        .string(SkillToolAction.readResource.rawValue)
+                        .string(SkillToolAction.readResource.rawValue),
+                        .string(SkillToolAction.executeScript.rawValue)
                     ]),
                     "description": .string(actionDescription)
                 ]),
                 "path": .dictionary([
                     "type": .string("string"),
-                    "description": .string(NSLocalizedString("技能目录内的相对路径，仅在 read_resource 时需要。可读取 references/、scripts/、agents/、assets/ 内的文本资源，并可从 docx/pptx/xlsx 与支持平台上的 PDF 抽取纯文本；不会执行 scripts/ 里的脚本。", comment: "Skill tool path parameter description sent to model"))
+                    "description": .string(NSLocalizedString("技能目录内的相对路径。read_resource 可读取资源；execute_script 只接受 scripts/ 内文件。", comment: "Skill tool path parameter description sent to model"))
                 ]),
                 "start_line": .dictionary([
                     "type": .string("integer"),
@@ -551,6 +658,23 @@ public final class SkillManager: ObservableObject {
                 "max_lines": .dictionary([
                     "type": .string("integer"),
                     "description": .string(NSLocalizedString("read_resource 分块读取的最多行数，默认 200，最大 1000。", comment: "Skill tool max lines parameter description sent to model"))
+                ]),
+                "arguments": .dictionary([
+                    "type": .string("array"),
+                    "items": .dictionary(["type": .string("string")]),
+                    "description": .string(NSLocalizedString("execute_script 的 argv 参数数组；不会经过 shell 拼接。", comment: "Skill script argv description sent to model"))
+                ]),
+                "timeout_seconds": .dictionary([
+                    "type": .string("number"),
+                    "minimum": .int(1),
+                    "maximum": .int(3600),
+                    "description": .string(NSLocalizedString("execute_script 的超时秒数。", comment: "Skill script timeout description sent to model"))
+                ]),
+                "output_limit_bytes": .dictionary([
+                    "type": .string("integer"),
+                    "minimum": .int(1),
+                    "maximum": .int(16777216),
+                    "description": .string(NSLocalizedString("execute_script 的输出终止阈值。", comment: "Skill script output limit description sent to model"))
                 ])
             ]),
             "required": .array([.string("name")])
@@ -576,7 +700,14 @@ public final class SkillManager: ObservableObject {
         makeToolDescription(availableSkills: availableSkills)
     }
 
-    public nonisolated func executeToolFromChat(toolName: String, argumentsJSON: String) async throws -> String {
+    public nonisolated func executeToolFromChat(
+        toolName: String,
+        argumentsJSON: String,
+        sourceSessionID: UUID? = nil,
+        sourceAgentRunID: UUID? = nil,
+        triggeringMessageID: UUID? = nil,
+        sourceToolCallID: String? = nil
+    ) async throws -> String {
         guard toolName == Self.chatToolName else {
             throw SkillStoreError.invalidPath
         }
@@ -628,6 +759,43 @@ public final class SkillManager: ObservableObject {
         } else {
             action = path.isEmpty ? .readInstructions : .readResource
         }
+        if action != .executeScript,
+           let sourceAgentRunID,
+           let runRecord = Persistence.loadLocalAgentRun(id: sourceAgentRunID) {
+            guard let frozenSkill = runRecord.context.skillSnapshots?.first(where: { $0.skillName == name }) else {
+                throw SkillExecutionError.skillNotFrozen
+            }
+            guard let metadata = snapshot.skills.first(where: { $0.name == name }) else {
+                throw SkillExecutionError.skillChanged
+            }
+            let currentDigest = try await Task.detached(priority: .utility) {
+                try SkillRunSnapshotBuilder.build(skill: metadata).versionDigest
+            }.value
+            guard currentDigest == frozenSkill.versionDigest else {
+                throw SkillExecutionError.skillChanged
+            }
+        }
+        if action == .executeScript {
+            guard !path.isEmpty else {
+                throw SkillStoreError.saveFailed(
+                    NSLocalizedString("execute_script 必须提供 scripts/ 内的 path。", comment: "Skill execute script path required")
+                )
+            }
+            guard let sourceSessionID, let sourceAgentRunID, let sourceToolCallID else {
+                throw SkillExecutionError.agentContextRequired
+            }
+            return try await SkillScriptToolExecutor.shared.execute(
+                skillName: name,
+                relativePath: path,
+                arguments: args.arguments ?? [],
+                timeoutSeconds: args.timeoutSeconds,
+                outputLimitBytes: args.outputLimitBytes,
+                sessionID: sourceSessionID,
+                runID: sourceAgentRunID,
+                triggeringMessageID: triggeringMessageID,
+                toolCallID: sourceToolCallID
+            )
+        }
         return try await Task.detached(priority: .utility) {
             switch action {
             case .readInstructions:
@@ -664,6 +832,8 @@ public final class SkillManager: ObservableObject {
                 let content = try await SkillStore.loadSkillReadableResource(skillName: name, relativePath: path)
                 let normalizedPath = SkillResourcePolicy.normalizeRelativePath(path) ?? path
                 return Self.formatResourceContent(skillName: name, relativePath: normalizedPath, content: content)
+            case .executeScript:
+                preconditionFailure("execute_script 应在进入资源读取任务前处理。")
             }
         }.value
     }
@@ -685,7 +855,7 @@ public final class SkillManager: ObservableObject {
             }
             lines.append("- \(file.relativePath) (\(StorageUtility.formatSize(file.size)), \(access))")
         }
-        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取；scripts/ 资源只会返回源码，不会执行。", comment: "Skill resource list footer sent to model"))
+        lines.append(NSLocalizedString("使用 action=read_resource 和对应 path 读取可读资源；文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；大文件可额外提供 start_line 与 max_lines 分块读取。scripts/ 源码可读取；只有 execute_script 会在授权后执行。", comment: "Skill resource list footer sent to model"))
         lines.append(NSLocalizedString("支持平台上的图片资源会尝试 OCR；常见非 UTF-8 文本编码会尝试解码。", comment: "Skill resource readable formats note sent to model"))
         return lines.joined(separator: "\n")
     }
@@ -719,9 +889,9 @@ public final class SkillManager: ObservableObject {
     private nonisolated static func makeToolDescription(availableSkills: [SkillMetadata]) -> String {
         var lines: [String] = []
         lines.append(NSLocalizedString("按需加载技能说明。仅当用户请求与某个技能匹配时调用 use_skill。", comment: "Skill tool description sent to model"))
-        lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。文本文件原样读取，docx/pptx/xlsx 与支持平台上的 PDF 会抽取纯文本；scripts 只能读取源码，不能执行。", comment: "Skill progressive disclosure tool instruction sent to model"))
+        lines.append(NSLocalizedString("先用 read_instructions 加载技能正文；需要额外资料时用 list_resources 查看资源，再用 read_resource 读取 references/scripts/agents/assets 中的可读资源。只有在 Agent 模式、本地 Linux 与该 Skill 均已启用时，才可用 execute_script 执行 scripts/ 内文件。", comment: "Skill progressive disclosure tool instruction sent to model"))
         lines.append(NSLocalizedString("支持平台上的图片资源会尝试 OCR；常见非 UTF-8 文本编码会尝试解码。", comment: "Skill resource readable formats note sent to model"))
-        lines.append(NSLocalizedString("SKILL.md 里的 allowed-tools 仅作为技能作者说明；当前应用仍只提供 use_skill 读取能力，不会执行脚本或本地命令。", comment: "Skill allowed tools limitation sent to model"))
+        lines.append(NSLocalizedString("SKILL.md 的 allowed-tools 只是不超过当前会话已启用工具的权限上限，不能新增工具、绕过工具开关或替代用户审批。", comment: "Skill allowed tools limitation sent to model"))
         lines.append(NSLocalizedString("当前可用技能如下：", comment: "Available skills header sent to model"))
         lines.append("<available_skills>")
         for skill in availableSkills {

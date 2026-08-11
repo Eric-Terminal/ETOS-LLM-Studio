@@ -22,6 +22,7 @@ public struct MemoryEditView: View {
     @State private var reembedStatusIsError = false
     @State private var reembedAlert: MemoryReembedAlert?
     @State private var showUnsavedChangesAlert = false
+    @State private var mutationHistory: [MemoryMutationRecord] = []
     
     public init(memory: MemoryItem) {
         _memory = State(initialValue: memory)
@@ -78,14 +79,42 @@ public struct MemoryEditView: View {
                 TextField(NSLocalizedString("相关实体（用逗号分隔）", comment: "Memory entities field"), text: entitiesBinding)
             }
             
-            Section {
-                HStack {
-                    Text(NSLocalizedString("更新时间", comment: ""))
-                        .etFont(.footnote)
-                    Spacer()
-                    Text(memory.displayDate.formatted(date: .abbreviated, time: .shortened))
-                        .etFont(.caption2)
-                        .foregroundColor(.secondary)
+            Section(header: Text(NSLocalizedString("来源与时间", comment: "Memory source and dates section"))) {
+                metadataRow(NSLocalizedString("来源", comment: "Memory source field"), value: memory.source.localizedTitle)
+                metadataRow(
+                    NSLocalizedString("创建时间", comment: "Memory created date field"),
+                    value: memory.createdAt.formatted(date: .abbreviated, time: .shortened)
+                )
+                if let updatedAt = memory.updatedAt {
+                    metadataRow(
+                        NSLocalizedString("更新时间", comment: ""),
+                        value: updatedAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                }
+                metadataRow(NSLocalizedString("有效期", comment: "Memory validity field"), value: validityDescription)
+                if let sourceSessionID = memory.sourceSessionID {
+                    metadataRow(NSLocalizedString("来源会话", comment: "Memory source session field"), value: sourceSessionID.uuidString)
+                }
+            }
+
+            Section(header: Text(NSLocalizedString("变更时间线", comment: "Memory mutation timeline section"))) {
+                if mutationHistory.isEmpty {
+                    Text(NSLocalizedString("这条记忆还没有可显示的历史记录。", comment: "Empty memory mutation history"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(mutationHistory.prefix(20)) { record in
+                        VStack(alignment: .leading) {
+                            Text(record.operation.localizedTitle)
+                                .font(.footnote)
+                            Text(record.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(record.context.origin.localizedTitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
 
@@ -163,6 +192,9 @@ public struct MemoryEditView: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
         }
+        .task(id: memory.id) {
+            mutationHistory = await MemoryManager.shared.mutationHistory(for: memory.id, limit: 20)
+        }
     }
 
     private var canSaveChanges: Bool {
@@ -180,6 +212,34 @@ public struct MemoryEditView: View {
                 hasChanges = true
             }
         )
+    }
+
+    private var validityDescription: String {
+        switch (memory.validFrom, memory.validUntil) {
+        case (nil, nil):
+            return NSLocalizedString("长期有效", comment: "Memory validity without bounds")
+        case (let start?, nil):
+            return String(format: NSLocalizedString("从 %@ 起", comment: "Memory validity starting date"), start.formatted(date: .abbreviated, time: .omitted))
+        case (nil, let end?):
+            return String(format: NSLocalizedString("至 %@", comment: "Memory validity ending date"), end.formatted(date: .abbreviated, time: .omitted))
+        case (let start?, let end?):
+            return String(
+                format: NSLocalizedString("%@ 至 %@", comment: "Memory validity date range"),
+                start.formatted(date: .abbreviated, time: .omitted),
+                end.formatted(date: .abbreviated, time: .omitted)
+            )
+        }
+    }
+
+    private func metadataRow(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.footnote)
+                .lineLimit(2)
+        }
     }
 
     private func requestDismiss() {

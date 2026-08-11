@@ -418,7 +418,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(abs(offset.height + 16) < 0.001)
     }
 
-    @Test("手表聊天输入主按钮会在停用、发送和语音输入之间切换")
+    @Test("手表聊天输入主按钮会在停止、并行发送和语音输入之间切换")
     func testWatchChatInputActionStateResolution() {
         #expect(
             WatchChatInputActionState.resolve(
@@ -426,7 +426,7 @@ struct ETOS_LLM_Studio_Watch_AppTests {
                 hasSendableContent: true,
                 canQuickRetry: true,
                 isSpeechInputEnabled: true
-            ) == .stop
+            ) == .send
         )
         #expect(
             WatchChatInputActionState.resolve(
@@ -473,6 +473,14 @@ struct ETOS_LLM_Studio_Watch_AppTests {
     func testWatchChatInputUsesBoundEditorForExistingDraft() {
         #expect(!WatchChatInputSubmission.shouldUseBoundEditor(for: ""))
         #expect(WatchChatInputSubmission.shouldUseBoundEditor(for: "继续写"))
+    }
+
+    @Test("手表聊天分页为每个终端保留独立标识")
+    func testWatchChatTerminalPageKeepsTerminalIdentity() {
+        let terminalID = UUID()
+
+        #expect(WatchChatPage.chat.terminalID == nil)
+        #expect(WatchChatPage.terminal(terminalID).terminalID == terminalID)
     }
 
     @Test("Markdown 围栏闭合容错：重复语言标签闭合会被规范为标准围栏")

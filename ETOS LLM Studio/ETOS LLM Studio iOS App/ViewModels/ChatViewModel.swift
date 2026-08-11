@@ -113,6 +113,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedSpeechModel: RunnableModel?
     @Published var latestAssistantMessageID: UUID?
     @Published var toolCallResultIDs: Set<String> = []
+    @Published var latestAgentToolExecutionPreview: AgentToolExecutionPreviewSnapshot?
     @Published var runningSessionIDs: Set<UUID> = []
     @Published var conversationRuntimeStates: [UUID: ConversationRuntimeSessionState] = [:]
     @Published var pendingSearchJumpTarget: SessionMessageJumpTarget?
@@ -392,6 +393,7 @@ final class ChatViewModel: ObservableObject {
         return cache
     }()
     var globalSystemPromptReloadTask: Task<Void, Never>?
+    var conversationMemoryReloadTask: Task<Void, Never>?
     var backgroundBlurTask: Task<Void, Never>?
     var isApplicationActive: Bool = true
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]

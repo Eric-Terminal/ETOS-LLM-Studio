@@ -73,6 +73,9 @@ extension TelegramMessageComposer {
         .onChange(of: viewModel.selectedModel?.id) { _, _ in
             adaptiveRefreshRequestControls()
         }
+        .onChange(of: appConfig.localLinuxEnabled) { _, _ in
+            adaptiveRefreshRequestControls()
+        }
     }
 
     private var adaptiveComposerRow: some View {
@@ -241,12 +244,17 @@ extension TelegramMessageComposer {
                 }
 
                 if let selectedModel = viewModel.selectedModel {
-                    if adaptiveRequestControls.isEmpty {
+                    if appConfig.localLinuxEnabled,
+                       let sessionID = viewModel.currentSession?.id {
+                        LocalAgentModePicker(sessionID: sessionID, isLocked: isSending)
+                    }
+
+                    if adaptiveRequestControls.isEmpty && viewModel.currentSession == nil {
                         Text(NSLocalizedString("当前模型没有可用的请求控制。", comment: ""))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
+                    } else if !adaptiveRequestControls.isEmpty {
                         VStack(spacing: 14) {
                             ChatRequestBodyControlRows(
                                 runnableModel: selectedModel,
@@ -269,7 +277,8 @@ extension TelegramMessageComposer {
 
     private var adaptiveRequestControlsPanelHeight: CGFloat {
         let maximumHeight = min(UIScreen.main.bounds.height * 0.38, 340)
-        let estimatedContentHeight = 82 + CGFloat(adaptiveRequestControls.count) * 68
+        let agentModeHeight: CGFloat = appConfig.localLinuxEnabled && viewModel.currentSession != nil ? 150 : 0
+        let estimatedContentHeight = 82 + agentModeHeight + CGFloat(adaptiveRequestControls.count) * 68
         return min(maximumHeight, max(124, estimatedContentHeight))
     }
 
@@ -342,7 +351,9 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveShowsRequestControlsButton: Bool {
-        !adaptiveRequestControls.isEmpty && adaptivePresentation != .expandedText
+        (!adaptiveRequestControls.isEmpty
+            || (appConfig.localLinuxEnabled && viewModel.currentSession != nil && viewModel.selectedModel != nil))
+            && adaptivePresentation != .expandedText
     }
 
     private var adaptiveShowsSpeechButton: Bool {
@@ -698,7 +709,9 @@ extension TelegramMessageComposer {
     private func adaptiveRefreshRequestControls() {
         let controls = viewModel.selectedModel?.model.requestBodyControls.filter(\.isEnabled) ?? []
         adaptiveRequestControls = controls
-        if controls.isEmpty, isRequestControlsExpanded {
+        if controls.isEmpty,
+           (!appConfig.localLinuxEnabled || viewModel.selectedModel == nil || viewModel.currentSession == nil),
+           isRequestControlsExpanded {
             withAnimation(adaptiveComposerAnimation) {
                 isRequestControlsExpanded = false
             }
@@ -709,5 +722,54 @@ extension TelegramMessageComposer {
         adaptiveHasSendableText = !text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
+    }
+}
+
+private struct LocalAgentModePicker: View {
+    let sessionID: UUID
+    let isLocked: Bool
+    @State private var mode = LocalAgentMode.chat
+    @State private var hasActiveRun = false
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Picker(NSLocalizedString("会话模式", comment: "Chat or Agent session mode"), selection: $mode) {
+                ForEach(LocalAgentMode.allCases) { value in
+                    Text(value.displayName).tag(value)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(isLocked || hasActiveRun)
+            .onChange(of: mode) { _, value in
+                _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
+            }
+            if hasActiveRun {
+                Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task(id: sessionID) {
+            await reloadSessionState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
+            Task { await reloadRunState() }
+        }
+    }
+
+    private func reloadSessionState() async {
+        mode = await Task.detached(priority: .userInitiated) {
+            Persistence.localAgentMode(sessionID: sessionID)
+        }.value
+        await reloadRunState()
+    }
+
+    private func reloadRunState() async {
+        hasActiveRun = await Task.detached(priority: .userInitiated) {
+            guard let run = Persistence.loadLatestConversationRun(sessionID: sessionID) else {
+                return false
+            }
+            return !run.status.isTerminal
+        }.value
     }
 }

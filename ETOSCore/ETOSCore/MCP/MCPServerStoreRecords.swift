@@ -144,6 +144,10 @@ struct MCPServerPayloadRecord: Codable, FetchableRecord, MutablePersistableRecor
             self.apiKey = apiKey
             additionalHeadersJSON = headers.isEmpty ? nil : MCPServerStoreCodec.encodeJSONTextIfPresent(headers)
             oauthPayloadJSON = nil
+        case .localStdio:
+            self.apiKey = nil
+            additionalHeadersJSON = nil
+            oauthPayloadJSON = nil
         case .builtInSearch:
             self.apiKey = nil
             additionalHeadersJSON = nil

@@ -555,14 +555,18 @@ extension SessionFolderBrowserView {
                     draftSessionName = session.name
                 },
                 onInfo: {
-                    sessionInfo = SessionInfoPayload(
-                        session: session,
-                        messageCount: viewModel.messageCount(for: session),
-                        isCurrent: session.id == viewModel.currentSession?.id,
-                        onOpenSession: { sessionID in
-                            _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
-                        }
-                    )
+                    Task { @MainActor in
+                        let messageCount = await viewModel.messageCount(for: session)
+                        guard !Task.isCancelled else { return }
+                        sessionInfo = SessionInfoPayload(
+                            session: session,
+                            messageCount: messageCount,
+                            isCurrent: session.id == viewModel.currentSession?.id,
+                            onOpenSession: { sessionID in
+                                _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
+                            }
+                        )
+                    }
                 },
                 onEditTags: {
                     sessionForTagEditing = session

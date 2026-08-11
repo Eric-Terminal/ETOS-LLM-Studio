@@ -559,6 +559,22 @@ final class PersistenceGRDBStore {
             try Self.replaceMessagesFTSUpdateTrigger(db)
         }
 
+        migrator.registerMigration("v13_local_agent_runtime") { db in
+            try Self.createLocalAgentRuntimeTables(db)
+        }
+
+        migrator.registerMigration("v14_browser_agent_governance") { db in
+            try Self.migrateLocalAgentBrowserSchema(db)
+        }
+
+        migrator.registerMigration("v15_skill_execution_governance") { db in
+            try Self.createSkillExecutionGovernanceTables(db)
+        }
+
+        migrator.registerMigration("v16_system_entry_receipts") { db in
+            try Self.createSystemEntryReceiptTable(db)
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }
@@ -568,6 +584,9 @@ final class PersistenceGRDBStore {
             try createCoreTablesIfMissing(db)
             try Self.createConversationContinuationContextTable(db)
             try Self.createConversationRuntimeTables(db)
+            try Self.migrateLocalAgentBrowserSchema(db)
+            try Self.createSkillExecutionGovernanceTables(db)
+            try Self.createSystemEntryReceiptTable(db)
             try ensureColumn(
                 db,
                 table: "conversation_waits",
@@ -691,6 +710,21 @@ final class PersistenceGRDBStore {
             try Self.createSessionTagTables(db)
             try ensureMessagesFTSObjects(db)
         }
+    }
+
+    static func createSystemEntryReceiptTable(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS system_entry_receipts (
+                id TEXT PRIMARY KEY NOT NULL,
+                kind TEXT NOT NULL,
+                session_id TEXT,
+                created_at REAL NOT NULL
+            )
+        """)
+        try db.execute(sql: """
+            CREATE INDEX IF NOT EXISTS idx_system_entry_receipts_created_at
+            ON system_entry_receipts(created_at DESC)
+        """)
     }
 
     private func createCoreTablesIfMissing(_ db: Database) throws {
@@ -880,12 +914,13 @@ final class PersistenceGRDBStore {
 
     private func scheduleDatabaseMaintenanceIfNeeded() {
         Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
             let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: delay)
                 guard !Task.isCancelled else { return }
             }
+            // 延迟期间不持有 Store，避免已被释放的测试数据库稍后仍触发维护。
+            guard let self else { return }
             self.runDatabaseMaintenanceIfNeeded()
         }
     }

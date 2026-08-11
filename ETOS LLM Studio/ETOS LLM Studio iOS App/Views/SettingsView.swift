@@ -166,6 +166,18 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("本地 Linux", icon: .localLinux)
+                }
+
+                NavigationLink {
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    SettingsListIconLabel("Browser Agent", icon: .browserAgent)
+                }
+
+                NavigationLink {
                     ExtendedFeaturesView()
                         .environmentObject(viewModel)
                 } label: {
@@ -470,6 +482,8 @@ extension SettingsListIcon {
     static let extendedFeatures = SettingsListIcon(systemName: "ellipsis", backgroundColor: .indigo)
     static let backgroundGeneration = SettingsListIcon(systemName: "location", backgroundColor: .green)
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
+    static let localLinux = SettingsListIcon(systemName: "terminal", backgroundColor: .green)
+    static let browserAgent = SettingsListIcon(systemName: "safari", backgroundColor: .blue)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)

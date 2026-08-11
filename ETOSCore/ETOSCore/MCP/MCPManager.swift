@@ -101,6 +101,8 @@ public final class MCPManager: ObservableObject {
     var routedPrompts: [String: RoutedPrompt] = [:]
     var debugBusyCount = 0
     var inFlightConnections: [UUID: Task<MCPClient, Error>] = [:]
+    var localStdioInstances: [MCPLocalStdioInstanceKey: MCPLocalStdioInstance] = [:]
+    var localStdioConnectionTasks: [MCPLocalStdioInstanceKey: Task<MCPLocalStdioInstance, Error>] = [:]
     var trackedToolCallTasks: [UUID: Task<JSONValue, Error>] = [:]
     var trackedToolCallObservers: [UUID: @Sendable (MCPProgressParams) -> Void] = [:]
     var trackedToolCallTokenKeys: [UUID: String] = [:]
@@ -160,6 +162,7 @@ public final class MCPManager: ObservableObject {
     // MARK: - Server Management
 
     public func reloadServers() {
+        let previousServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
         let storedServers = MCPServerStore.loadServers()
         let deletedBuiltInServerIDs = MCPServerStore.deletedBuiltInServerIDs()
         let preparedSearchServers = MCPBuiltInSearchServer.prepareServersForManager(
@@ -182,6 +185,11 @@ public final class MCPManager: ObservableObject {
             MCPServerStore.save(serverToPersist)
         }
         servers = preparedPersonalDataServers.servers
+        let currentServersByID = Dictionary(uniqueKeysWithValues: servers.map { ($0.id, $0) })
+        for (serverID, previous) in previousServersByID
+        where currentServersByID[serverID] != previous {
+            removeLocalStdioInstances(for: serverID)
+        }
         configSnapshotSignature = MCPServerStore.configurationSnapshotSignature()
         let serverIDs = Set(servers.map { $0.id })
         autoConnectSuppressedServerIDs = autoConnectSuppressedServerIDs.intersection(serverIDs)
@@ -258,7 +266,23 @@ public final class MCPManager: ObservableObject {
     }
 
     public func save(server: MCPServerConfiguration) {
-        var serverToSave = server
+        removeLocalStdioInstances(for: server.id)
+        guard var serverToSave = MCPServerConfigurationTransferService.materializeEnvironmentReferences(
+            in: server
+        ) else {
+            let message = NSLocalizedString(
+                "无法把本地 MCP 环境变量保存到加密配置数据库。",
+                comment: "Local stdio MCP environment persistence failure"
+            )
+            lastOperationError = message
+            appendGovernanceLog(
+                level: .error,
+                category: .lifecycle,
+                serverID: server.id,
+                message: message
+            )
+            return
+        }
         if let existingServer = servers.first(where: { $0.id == server.id }) {
             serverToSave.sortIndex = existingServer.sortIndex
         } else {
@@ -329,6 +353,7 @@ public final class MCPManager: ObservableObject {
     }
 
     public func delete(server: MCPServerConfiguration) {
+        removeLocalStdioInstances(for: server.id)
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器被删除", comment: "MCP server deleted cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
@@ -408,6 +433,7 @@ public final class MCPManager: ObservableObject {
     public func disconnect(server: MCPServerConfiguration) {
         mcpManagerLogger.info("断开 MCP 服务器：\(server.displayName, privacy: .public) (\(server.id.uuidString, privacy: .public))")
         autoConnectSuppressedServerIDs.insert(server.id)
+        removeLocalStdioInstances(for: server.id)
         persistResumptionToken(for: server.id)
         cancelTrackedToolCalls(for: server.id, reason: NSLocalizedString("服务器已断开", comment: "MCP server disconnected cancellation reason"))
         cancelAutoConnectRetry(for: server.id, resetAttempts: true)
@@ -520,7 +546,39 @@ public final class MCPManager: ObservableObject {
             $0.isBusy = true
         }
 
-        let transportBundle = server.makeSDKTransport()
+        var approvedLocalLinuxCommandRuleIDs: Set<UUID> = []
+        if case .localStdio(let configuration) = server.transport,
+           AppConfigStore.boolValue(for: .localLinuxCommandSafetyEnabled) {
+            let command = configuration.command.trimmingCharacters(in: .whitespacesAndNewlines)
+            let request = LocalLinuxJobRequest(
+                executable: command,
+                arguments: [command] + configuration.arguments,
+                workingDirectory: configuration.workingDirectory,
+                timeoutSeconds: 0,
+                outputLimitBytes: 0
+            )
+            if let match = await LocalLinuxApprovalPolicy.shared.evaluate(
+                request: request,
+                kind: .localMCP,
+                isEnabled: true
+            ) {
+                switch match.action {
+                case .warn:
+                    break
+                case .confirm:
+                    // 本地 MCP 不会自动连接；用户在管理页点按“连接”即确认本次进程启动。
+                    approvedLocalLinuxCommandRuleIDs.insert(match.ruleID)
+                case .deny:
+                    throw LocalLinuxRuntimeError.commandDenied(
+                        ruleName: match.ruleName,
+                        matchedText: match.matchedText
+                    )
+                }
+            }
+        }
+        let transportBundle = server.makeSDKTransport(
+            approvedLocalLinuxCommandRuleIDs: approvedLocalLinuxCommandRuleIDs
+        )
         if let resumptionTransport = transportBundle.streamControl as? MCPResumptionControllableTransport,
            let token = server.streamResumptionToken,
            !token.isEmpty {
@@ -552,9 +610,16 @@ public final class MCPManager: ObservableObject {
         clients[server.id] = client
 
         do {
-            let handshakeTimeout = (retryOnFailure || keepReadyStateDuringHandshake)
-                ? autoConnectHandshakeTimeout
-                : nil
+            let handshakeTimeout: TimeInterval?
+            if case .localStdio(let configuration) = server.transport {
+                handshakeTimeout = configuration.startupTimeoutSeconds > 0
+                    ? configuration.startupTimeoutSeconds
+                    : nil
+            } else {
+                handshakeTimeout = (retryOnFailure || keepReadyStateDuringHandshake)
+                    ? autoConnectHandshakeTimeout
+                    : nil
+            }
             let info = try await initializeClient(
                 client,
                 timeout: handshakeTimeout,
@@ -753,6 +818,10 @@ public final class MCPManager: ObservableObject {
             return false
         }
         guard servers.first(where: { $0.id == serverID })?.isSelectedForChat == true else {
+            return false
+        }
+        if let server = servers.first(where: { $0.id == serverID }),
+           case .localStdio = server.transport {
             return false
         }
         return status(for: serverID).isSelectedForChat

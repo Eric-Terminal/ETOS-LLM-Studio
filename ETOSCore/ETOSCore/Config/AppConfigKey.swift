@@ -148,6 +148,31 @@ public enum ChatStreamingDisplayMode: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+public enum LocalLinuxChatPreviewMode: String, CaseIterable, Identifiable, Sendable {
+    case off
+    case agentTools = "agent_tools"
+    case userTerminal = "user_terminal"
+
+    public static let defaultMode: LocalLinuxChatPreviewMode = .agentTools
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .off:
+            return NSLocalizedString("关闭", comment: "Local Linux chat preview disabled")
+        case .agentTools:
+            return NSLocalizedString("Agent 工具预览", comment: "Agent tool execution chat preview")
+        case .userTerminal:
+            return NSLocalizedString("用户终端预览", comment: "User terminal chat preview")
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> LocalLinuxChatPreviewMode {
+        LocalLinuxChatPreviewMode(rawValue: rawValue) ?? defaultMode
+    }
+}
+
 public enum LiquidGlassTintSetting {
     public static let minimumOpacity = 0.0
     public static let maximumOpacity = 0.6
@@ -209,6 +234,18 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localModelPerformanceMonitorEnabled = "localModels.performanceMonitor.enabled"
     case localModelCacheEnabled = "localModels.cache.enabled"
     case localModelKVCacheEnabled = "localModels.kvCache.enabled"
+    case localLinuxEnabled = "localLinux.enabled"
+    case localLinuxEnvironmentPrivacyEnabled = "localLinux.environmentPrivacy.enabled"
+    case localLinuxCommandSafetyEnabled = "localLinux.commandSafety.enabled"
+    case localLinuxDefaultSessionMode = "localLinux.defaultSessionMode"
+    case localLinuxDefaultTimeoutSeconds = "localLinux.defaultTimeoutSeconds"
+    case localLinuxOutputPreviewBytes = "localLinux.outputPreviewBytes"
+    case localLinuxLocalMCPOnDemand = "localLinux.localMCP.onDemand"
+    case localLinuxActivePromptProfileID = "localLinux.activePromptProfileID"
+    case localLinuxWorkspaceCleanupPolicy = "localLinux.workspace.cleanupPolicy"
+    case localLinuxTerminalShortcutIDs = "localLinux.terminal.shortcutIDs"
+    case localLinuxChatPreviewMode = "localLinux.chat.previewMode"
+    case browserAgentDelegateToIPhone = "browserAgent.delegateToIPhone"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
@@ -246,7 +283,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
     case chatSendDelaySeconds = "chat.sendDelaySeconds"
-    case conversationRuntimeConcurrencyLimit = "chat.conversationRuntime.concurrencyLimit"
     case conversationRuntimeExecutionBudget = "chat.conversationRuntime.executionBudget"
     case messageRegexRules = "chat.messageRegexRules"
     case videoFrameExtractionMode = "video.frameExtraction.mode"
@@ -411,6 +447,28 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .localModelCacheEnabled:
             return .bool(true)
+        case .localLinuxEnabled:
+            return .bool(false)
+        case .localLinuxEnvironmentPrivacyEnabled,
+             .localLinuxCommandSafetyEnabled,
+             .localLinuxLocalMCPOnDemand:
+            return .bool(true)
+        case .localLinuxDefaultSessionMode:
+            return .text("chat")
+        case .localLinuxDefaultTimeoutSeconds:
+            return .integer(300)
+        case .localLinuxOutputPreviewBytes:
+            return .integer(65_536)
+        case .localLinuxActivePromptProfileID:
+            return .text("")
+        case .localLinuxWorkspaceCleanupPolicy:
+            return .text("manual")
+        case .localLinuxTerminalShortcutIDs:
+            return .text(LocalLinuxTerminalShortcutConfiguration.defaultEncodedValue)
+        case .localLinuxChatPreviewMode:
+            return .text(LocalLinuxChatPreviewMode.defaultMode.rawValue)
+        case .browserAgentDelegateToIPhone:
+            return .bool(false)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
@@ -485,12 +543,6 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .integer(1)
         case .chatSendDelaySeconds:
             return .real(0.0)
-        case .conversationRuntimeConcurrencyLimit:
-            #if os(watchOS)
-            return .integer(1)
-            #else
-            return .integer(3)
-            #endif
         case .conversationRuntimeExecutionBudget:
             return .integer(32)
         case .videoFrameExtractionMode:
@@ -641,7 +693,23 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .modelPickerFolderPathsByProvider:
             return .text("{}")
         case .chatQuickActionIDs:
-            return .text("temporaryChat")
+            return .text([
+                "temporaryChat",
+                "contextCompression",
+                "settings",
+                "toolCenter",
+                "dailyPulse",
+                "usageAnalytics",
+                "memory",
+                "mcp",
+                "agentSkills",
+                "shortcuts",
+                "roleplay",
+                "worldbook",
+                "extendedFeatures",
+                "browser",
+                "localTerminal"
+            ].joined(separator: ","))
         case .restoreLastSessionOnLaunch,
              .restoreLastSessionOnlyIfRecent:
             return .bool(false)

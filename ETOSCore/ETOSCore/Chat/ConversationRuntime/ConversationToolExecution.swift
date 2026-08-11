@@ -281,6 +281,10 @@ extension ChatService {
         ) else {
             throw ConversationRuntimeError.persistenceUnavailable
         }
+        _ = Persistence.saveLocalAgentMode(
+            Persistence.localAgentMode(sessionID: sourceSession.id),
+            sessionID: targetSession.id
+        )
         if let groupingFolder {
             var folders = sessionFoldersSubject.value
             if !folders.contains(where: { $0.id == groupingFolder.id }) {

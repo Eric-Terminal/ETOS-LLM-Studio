@@ -57,14 +57,14 @@ extension ChatViewModel {
         chatService.deleteSessions(sessions)
     }
 
-    func messageCount(for session: ChatSession) -> Int {
+    func messageCount(for session: ChatSession) async -> Int {
         if session.id == currentSession?.id {
             return allMessagesForSession.count
         }
         if let temporaryCount = chatService.temporaryChatMessageCount(for: session.id) {
             return temporaryCount
         }
-        return Persistence.loadMessageCount(for: session.id)
+        return await Persistence.loadMessageCountAsync(for: session.id)
     }
 
     @discardableResult

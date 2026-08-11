@@ -18,7 +18,12 @@ extension ChatService {
     }
     
     /// 处理单个工具调用
-    func handleToolCall(_ toolCall: InternalToolCall, sessionID: UUID? = nil) async -> ToolCallOutcome {
+    func handleToolCall(
+        _ toolCall: InternalToolCall,
+        sessionID: UUID? = nil,
+        agentRunID: UUID? = nil,
+        triggeringMessageID: UUID? = nil
+    ) async -> ToolCallOutcome {
         logger.info("正在处理工具调用: \(toolCall.toolName)")
 
         var content = ""
@@ -67,7 +72,9 @@ extension ChatService {
                         entities: args.entities ?? [],
                         validFrom: args.valid_from.flatMap(formatter.date(from:)),
                         validUntil: args.valid_until.flatMap(formatter.date(from:)),
-                        sourceSessionID: sessionID
+                        sourceSessionID: sessionID,
+                        sourceMessageID: triggeringMessageID,
+                        sourceToolName: "save_memory"
                     )
                 )
                 content = String(format: NSLocalizedString("成功将内容 \"%@\" 存入记忆。", comment: "Save memory tool result"), args.content)
@@ -94,6 +101,7 @@ extension ChatService {
                 let mode: String
                 let query: String
                 let count: Int?
+                let include_explanation: Bool?
             }
 
             guard let argsData = toolCall.arguments.data(using: .utf8),
@@ -115,13 +123,26 @@ extension ChatService {
 
             let requestedCount = max(1, args.count ?? resolvedMemoryTopK())
             var resolvedMemories: [MemoryItem] = []
+            var explanations: [UUID: MemoryRetrievalExplanation] = [:]
             switch mode {
             case "hybrid":
-                resolvedMemories = await memoryManager.searchMemoriesHybrid(query: query, topK: requestedCount)
+                if args.include_explanation == true {
+                    let results = await memoryManager.searchMemoriesHybridExplained(query: query, topK: requestedCount)
+                    resolvedMemories = results.map(\.memory)
+                    explanations = Dictionary(uniqueKeysWithValues: results.map { ($0.memory.id, $0.explanation) })
+                } else {
+                    resolvedMemories = await memoryManager.searchMemoriesHybrid(query: query, topK: requestedCount)
+                }
             case "vector":
                 resolvedMemories = await memoryManager.searchMemories(query: query, topK: requestedCount)
             case "keyword":
-                resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
+                if args.include_explanation == true {
+                    let results = await memoryManager.searchMemoriesByKeywordExplained(query: query, topK: requestedCount)
+                    resolvedMemories = results.map(\.memory)
+                    explanations = Dictionary(uniqueKeysWithValues: results.map { ($0.memory.id, $0.explanation) })
+                } else {
+                    resolvedMemories = await memoryManager.searchMemoriesByKeyword(query: query, topK: requestedCount)
+                }
             default:
                 content = NSLocalizedString("错误：search_memory 的 mode 仅支持 hybrid、vector 或 keyword。", comment: "Search memory unsupported mode error")
                 displayResult = content
@@ -137,7 +158,8 @@ extension ChatService {
                 mode: mode,
                 query: query,
                 requestedCount: requestedCount,
-                memories: resolvedMemories
+                memories: resolvedMemories,
+                explanations: explanations
             )
             displayResult = content
             logger.info("  - search_memory 检索完成: mode=\(mode), queryLength=\(query.count), resultCount=\(resolvedMemories.count)")
@@ -152,8 +174,44 @@ extension ChatService {
             let isConversationTool = await MainActor.run {
                 MCPManager.shared.isConversationTool(toolCall.toolName)
             }
+            let localLinuxToolID = await MainActor.run {
+                MCPManager.shared.localLinuxToolID(for: toolCall.toolName)
+            }
+            let commandRuleMatch: LocalLinuxCommandRuleMatch?
+            if let localLinuxToolID {
+                commandRuleMatch = try? await LocalLinuxToolExecutor.shared.commandRuleMatch(
+                    toolName: localLinuxToolID,
+                    argumentsJSON: toolCall.arguments
+                )
+            } else {
+                commandRuleMatch = await MCPManager.shared.localStdioCommandRuleMatch(
+                    for: toolCall.toolName,
+                    sourceAgentRunID: agentRunID
+                )
+            }
+            let needsCommandRuleConfirmation = commandRuleMatch?.action == .confirm
+            let effectiveApprovalPolicy: MCPToolApprovalPolicy =
+                needsCommandRuleConfirmation && approvalPolicy == .alwaysAllow
+                ? .askEveryTime
+                : approvalPolicy
+            let approvalDisplayName: String
+            if let commandRuleMatch, needsCommandRuleConfirmation {
+                approvalDisplayName = String(
+                    format: NSLocalizedString("%@（命中命令规则：%@）", comment: "Linux tool approval label with matching command rule"),
+                    toolLabel,
+                    commandRuleMatch.ruleName
+                )
+            } else {
+                approvalDisplayName = toolLabel
+            }
+            let approvedCommandRuleIDs: Set<UUID>
+            if let commandRuleMatch, commandRuleMatch.action == .confirm {
+                approvedCommandRuleIDs = [commandRuleMatch.ruleID]
+            } else {
+                approvedCommandRuleIDs = []
+            }
 
-            switch approvalPolicy {
+            switch effectiveApprovalPolicy {
             case .alwaysDeny:
                 content = policyDeniedText(toolLabel)
                 displayResult = content
@@ -164,7 +222,10 @@ extension ChatService {
                         toolName: toolCall.toolName,
                         argumentsJSON: toolCall.arguments,
                         sourceSessionID: sessionID,
-                        sourceToolCallID: toolCall.id
+                        sourceToolCallID: toolCall.id,
+                        sourceAgentRunID: agentRunID,
+                        triggeringMessageID: triggeringMessageID,
+                        approvedLocalLinuxCommandRuleIDs: []
                     )
                     content = result
                     shouldPauseForConversation = isConversationTool
@@ -179,7 +240,7 @@ extension ChatService {
             case .askEveryTime:
                 let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                     toolName: toolCall.toolName,
-                    displayName: toolLabel,
+                    displayName: approvalDisplayName,
                     arguments: toolCall.arguments,
                     sourceSessionID: sessionID,
                     toolCallID: toolCall.id
@@ -200,7 +261,10 @@ extension ChatService {
                             toolName: toolCall.toolName,
                             argumentsJSON: toolCall.arguments,
                             sourceSessionID: sessionID,
-                            sourceToolCallID: toolCall.id
+                            sourceToolCallID: toolCall.id,
+                            sourceAgentRunID: agentRunID,
+                            triggeringMessageID: triggeringMessageID,
+                            approvedLocalLinuxCommandRuleIDs: approvedCommandRuleIDs
                         )
                         content = result
                         shouldPauseForConversation = isConversationTool
@@ -272,7 +336,11 @@ extension ChatService {
             do {
                 let result = try await SkillManager.shared.executeToolFromChat(
                     toolName: toolCall.toolName,
-                    argumentsJSON: toolCall.arguments
+                    argumentsJSON: toolCall.arguments,
+                    sourceSessionID: sessionID,
+                    sourceAgentRunID: agentRunID,
+                    triggeringMessageID: triggeringMessageID,
+                    sourceToolCallID: toolCall.id
                 )
                 content = result
                 displayResult = result
@@ -280,6 +348,10 @@ extension ChatService {
             } catch {
                 content = callFailedText(toolLabel, error.localizedDescription)
                 displayResult = content
+                if let skillError = error as? SkillExecutionError,
+                   case .userSupplementRequested = skillError {
+                    shouldAwaitUserSupplement = true
+                }
                 logger.error("  - Agent Skills 调用失败: \(error.localizedDescription)")
             }
 
@@ -307,7 +379,9 @@ extension ChatService {
                 do {
                     let result = try await AppToolManager.shared.executeToolFromChat(
                         toolName: toolCall.toolName,
-                        argumentsJSON: toolCall.arguments
+                        argumentsJSON: toolCall.arguments,
+                        sourceSessionID: sessionID,
+                        sourceMessageID: triggeringMessageID
                     )
                     content = result
                     displayResult = result
@@ -342,7 +416,9 @@ extension ChatService {
                     do {
                         let result = try await AppToolManager.shared.executeToolFromChat(
                             toolName: toolCall.toolName,
-                            argumentsJSON: toolCall.arguments
+                            argumentsJSON: toolCall.arguments,
+                            sourceSessionID: sessionID,
+                            sourceMessageID: triggeringMessageID
                         )
                         content = result
                         displayResult = result
@@ -390,7 +466,8 @@ extension ChatService {
         mode: String,
         query: String,
         requestedCount: Int,
-        memories: [MemoryItem]
+        memories: [MemoryItem],
+        explanations: [UUID: MemoryRetrievalExplanation] = [:]
     ) -> String {
         let formatter = ISO8601DateFormatter()
         let items: [[String: Any]] = memories.map { memory in
@@ -412,6 +489,20 @@ extension ChatService {
             }
             if shouldSendMemoryUpdateTime() {
                 item["updatedAt"] = formatter.string(from: memory.updatedAt ?? memory.createdAt)
+            }
+            if let explanation = explanations[memory.id] {
+                item["explanation"] = [
+                    "total": explanation.totalScore,
+                    "semantic": explanation.semantic,
+                    "keyword": explanation.lexical,
+                    "entity": explanation.entity,
+                    "importance": explanation.importance,
+                    "confidence": explanation.confidence,
+                    "recency": explanation.recency,
+                    "strength": explanation.strength,
+                    "time": explanation.temporal,
+                    "type": explanation.typeBoost
+                ]
             }
             return item
         }

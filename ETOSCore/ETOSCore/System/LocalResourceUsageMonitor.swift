@@ -20,7 +20,11 @@ public struct LocalResourceUsageSnapshot: Hashable, Sendable {
     public var memoryBytes: UInt64?
     public var gpuAllocatedBytes: UInt64?
 
-    public init(cpuPercent: Double?, memoryBytes: UInt64?, gpuAllocatedBytes: UInt64?) {
+    public init(
+        cpuPercent: Double?,
+        memoryBytes: UInt64?,
+        gpuAllocatedBytes: UInt64?
+    ) {
         self.cpuPercent = cpuPercent
         self.memoryBytes = memoryBytes
         self.gpuAllocatedBytes = gpuAllocatedBytes
@@ -60,17 +64,28 @@ public final class LocalResourceUsageMonitor: ObservableObject {
 
     public init() {}
 
+    private struct RawSample: Sendable {
+        let cpuTime: Double?
+        let memoryBytes: UInt64?
+    }
+
     @MainActor
-    public func refresh() {
+    public func refresh() async {
+        let raw = await Task.detached(priority: .utility) {
+            RawSample(
+                cpuTime: Self.currentProcessCPUTime(),
+                memoryBytes: Self.currentMemoryFootprintBytes()
+            )
+        }.value
         snapshot = LocalResourceUsageSnapshot(
-            cpuPercent: currentCPUPercent(),
-            memoryBytes: currentMemoryFootprintBytes(),
+            cpuPercent: cpuPercent(for: raw.cpuTime),
+            memoryBytes: raw.memoryBytes,
             gpuAllocatedBytes: currentGPUAllocatedBytes()
         )
     }
 
-    private func currentCPUPercent() -> Double? {
-        guard let cpuTime = currentProcessCPUTime() else { return nil }
+    private func cpuPercent(for cpuTime: Double?) -> Double? {
+        guard let cpuTime else { return nil }
         let now = Date()
         defer {
             lastCPUTime = cpuTime
@@ -82,7 +97,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
         return max(0, (cpuTime - lastCPUTime) / elapsed * 100)
     }
 
-    private func currentProcessCPUTime() -> Double? {
+    private nonisolated static func currentProcessCPUTime() -> Double? {
         var info = task_thread_times_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_thread_times_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in
@@ -95,7 +110,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
             + Double(info.user_time.microseconds + info.system_time.microseconds) / 1_000_000
     }
 
-    private func currentMemoryFootprintBytes() -> UInt64? {
+    private nonisolated static func currentMemoryFootprintBytes() -> UInt64? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in

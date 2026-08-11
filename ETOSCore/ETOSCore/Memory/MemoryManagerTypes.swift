@@ -19,6 +19,9 @@ public struct MemoryWriteRequest: Sendable {
     public let validFrom: Date?
     public let validUntil: Date?
     public let sourceSessionID: UUID?
+    public let sourceMessageID: UUID?
+    public let sourceToolName: String?
+    public let sourceShortcutName: String?
 
     public init(
         content: String,
@@ -29,7 +32,10 @@ public struct MemoryWriteRequest: Sendable {
         entities: [String] = [],
         validFrom: Date? = nil,
         validUntil: Date? = nil,
-        sourceSessionID: UUID? = nil
+        sourceSessionID: UUID? = nil,
+        sourceMessageID: UUID? = nil,
+        sourceToolName: String? = nil,
+        sourceShortcutName: String? = nil
     ) {
         self.content = content
         self.kind = kind
@@ -40,6 +46,19 @@ public struct MemoryWriteRequest: Sendable {
         self.validFrom = validFrom
         self.validUntil = validUntil
         self.sourceSessionID = sourceSessionID
+        self.sourceMessageID = sourceMessageID
+        self.sourceToolName = sourceToolName
+        self.sourceShortcutName = sourceShortcutName
+    }
+
+    public var mutationContext: MemoryMutationContext {
+        MemoryMutationContext(
+            origin: sourceToolName == nil ? (sourceShortcutName == nil ? .manual : .shortcut) : .tool,
+            sourceSessionID: sourceSessionID,
+            sourceMessageID: sourceMessageID,
+            sourceToolName: sourceToolName,
+            sourceShortcutName: sourceShortcutName
+        )
     }
 }
 

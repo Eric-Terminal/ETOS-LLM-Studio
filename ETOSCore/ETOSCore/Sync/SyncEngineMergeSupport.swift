@@ -333,6 +333,9 @@ extension SyncEngine {
                 hasher.combine(key)
                 hasher.combine(value)
             }
+        case .localStdio(let configuration):
+            hasher.combine("localStdio")
+            hasher.combine(configuration)
         case .builtInSearch:
             hasher.combine("builtInSearch")
             hasher.combine(MCPBuiltInSearchServer.endpoint)

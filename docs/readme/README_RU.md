@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**Нативный AI‑клиент для iOS и Apple Watch. Поддерживает OpenAI, Anthropic Claude, Google Gemini и локальные GGUF / llama.cpp модели на устройстве, встроенный вызов MCP‑инструментов, пакеты Agent Skills, локальную RAG‑память, Worldbook, Daily Pulse, блокировку приложения и полнодисковое шифрование SQLCipher, синхронизацию между устройствами через CloudKit / WatchConnectivity, а также Siri Shortcuts.**
+**Нативный AI / Agent‑клиент для iOS и Apple Watch. Поддерживает OpenAI, Anthropic Claude, Google Gemini и локальные GGUF / llama.cpp модели, режимы Chat / Agent для каждой сессии, локальный Linux, Browser Agent, 64 нативных Apple‑инструмента, MCP, Agent Skills, совместную работу между сессиями, локальную RAG‑память, Live Activity и синхронизацию между устройствами.**
 
 [简体中文](../../README.md) | [English](README_EN.md) | [繁體中文](README_ZH_HANT.md) | [日本語](README_JA.md)
 
@@ -23,9 +23,9 @@
 
 В школе часто скучно, а вопросов к AI всегда слишком много. Когда я смотрела на приложения в App Store, почти все были либо слишком дорогими, либо слишком урезанными — особенно на Apple Watch. Поэтому я просто решила сделать своё.
 
-Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **758 Swift‑файлов и 284 139 строк Swift‑кода** (только Swift внутри проекта; сабмодуль llama.cpp и зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
+Изначально это был маленький эксперимент: около 1 800 строк и даже захардкоженные API‑ключи. Сейчас проект вырос до **971 Swift‑файла и 362 394 строк Swift‑кода** (только Swift внутри проекта; сабмодули llama.cpp и iSH, а также зависимости VitePress doc‑сайта не учитываются). Название «ETOS LLM Studio» звучит громко, но по сути это всё ещё мой полигон для экспериментов с LLM‑приложениями.
 
-Раньше это был почти чисто watch‑проект, а теперь iOS‑часть тоже стала полноценной: облачные модели, локальные GGUF‑веса, инструменты, память, worldbook, Daily Pulse и синхронизация между устройствами в одном приложении.
+Теперь это не только watch‑приложение: и iOS, и watchOS умеют управлять облачными моделями, локальными GGUF‑весами, инструментами, памятью, worldbook и Daily Pulse. Agent может работать с управляемым браузером, вызывать нативные возможности Apple и выполнять команды или Skill‑скрипты во встроенном локальном Linux. Данные обеих платформ синхронизируются встроенным движком.
 
 В повседневной жизни я в основном пользуюсь Mac и Apple Watch, так что у iPhone‑части ещё остаются углы, которые хочется отполировать, но я буду их потихоньку дорабатывать.
 
@@ -61,7 +61,7 @@
 #### Инструменты и автоматизация
 
 *   **Tool Center + Extended Tools**: единое управление MCP, Shortcuts, встроенными локальными инструментами, кастомными JavaScript‑инструментами, Agent Skills и встроенными утилитами вроде `getSystemTime`; группировка по источнику и назначению, политики подтверждения, переключатели на уровне сессии, категоризация и страницы деталей инструментов.
-*   **Пакеты Agent Skills**: импорт навыков из локальной папки, ссылки на репозиторий GitHub, GitHub raw / вложенных каталогов, дефолтных веток и скрытых каталогов. Ресурсы навыка поддерживают чтение в нескольких текстовых кодировках, чанкование больших файлов, извлечение текста из документов и OCR изображений; метаданные навыка передаются модели, чтобы она могла включать его по запросу.
+*   **Пакеты Agent Skills**: импорт навыков из локальной папки, ссылки на репозиторий GitHub, GitHub raw / вложенных каталогов, дефолтных веток и скрытых каталогов. Ресурсы навыка поддерживают чтение в нескольких текстовых кодировках, чанкование больших файлов, извлечение текста из документов и OCR изображений. Когда в режиме Agent включён локальный Linux, скрипты из `scripts/` можно запускать после отдельного подтверждения. Каталог Skill монтируется только для чтения, а версия и хеш скрипта фиксируются на время Run, поэтому подмена файла во время выполнения не позволяет расширить права.
 *   **Структурированный опрос (`ask_user_input`)**: пошаговый режим «вопрос за вопросом», правила single/multi choice, кастомный ввод и возврат к предыдущему вопросу.
 *   **Кастомные JavaScript‑инструменты**: раздельное выполнение JS и AI‑созданные script tools. Скрипты хранятся в отдельной директории `CustomJSTools`, проверяются перед созданием и управляются как обычные инструменты: enable/disable и approval policy.
 *   **Расширение набора инструментов**: встроенное системное время, CRUD по SQLite, отображение web-карточек, заполнение поля ввода, операции с sandbox‑файлами и автоотправка тикетов обратной связи.
@@ -70,6 +70,18 @@
 *   **Встроенные MCP‑серверы**: встроены поиск, локальные app tools и personal data MCP server; personal data server запрашивает разрешения HealthKit, Calendar и Reminders только при реальном вызове инструмента.
 *   **Siri Shortcuts**: вызов AI через Shortcuts, кастомные инструменты и URL Scheme роутинг.
 *   **Встроенный файловый менеджер**: просмотр и управление sandbox‑файлами прямо в приложении, для текстовых файлов доступен предпросмотр.
+
+#### Агенты, нативные возможности и локальный Linux
+
+*   **Режим Chat / Agent для каждой сессии**: выбранный режим сохраняется вместе с сессией. Chat не показывает модели Agent‑инструменты. Agent даже без Linux может использовать Browser Agent, нативные возможности и совместную работу между сессиями; команды, Linux‑файлы и локальный stdio MCP появляются только после включения локального Linux. Пользовательский терминал доступен независимо в обоих режимах.
+*   **Встроенный локальный Linux**: минимальный Alpine AArch64 RootFS на базе `ish-multiarch` встроен в iOS и watchOS. Система устанавливается лениво при реальном действии, а не при включении переключателя. Python, Node.js и компиляторы не устанавливаются скрытно: пользователь сам запускает recipe, заранее показывающий команды, репозитории и влияние на хранилище.
+*   **Команды, PTY и управление задачами**: доступны `linux_run`, `linux_shell`, `linux_process`, интерактивный PTY‑терминал, список задач, постраничный вывод, отмена и диагностика. Пользовательский терминал, команды Agent и Agent PTY изолированы друг от друга, но используют разрешённые RootFS и workspace. Стандартный вывод продолжает собираться в фоне и не требует держать экран чата открытым.
+*   **Workspace, mounts и переменные окружения**: у каждой сессии отдельный workspace. Каталоги приложения, iCloud Drive и явно разрешённые пользователем внешние каталоги можно монтировать в Linux только для чтения или с правом записи. Переменные окружения хранятся в GRDB и передаются при запуске процесса; в копиях для модели, логов и диагностики секретные значения маскируются.
+*   **Единые файловые инструменты и локальный MCP**: существующие файловые инструменты одинаково понимают `app://`, `linux://` и `mount://`; отдельного Linux API, обходящего подтверждения, нет. Локальный stdio MCP использует ту же страницу управления, сортировку, переключатели инструментов и approval policy, что HTTP / SSE‑серверы, и поддерживает импорт / экспорт обычного JSON `mcpServers`.
+*   **Browser Agent**: управляемый WKWebView на iOS поддерживает изолированные вкладки сессий, DOM / accessibility snapshot, клики, ввод, прокрутку, JavaScript, скриншоты, загрузки и передачу управления пользователю. watchOS сообщает реальные локальные возможности и, если пользователь разрешил, может делегировать недоступные действия спаренному iPhone.
+*   **64 нативных Apple‑инструмента**: четыре группы — устройство, медиа и окружение, личные данные, зрение и язык — включают буфер обмена, уведомления, AlarmKit, карты, состояние устройства, речь, медиа, WeatherKit, HomeKit, Bluetooth, NFC, контакты, фото, геопозицию, Vision и NaturalLanguage. Инструменты сообщают реальную доступность для платформы и версии ОС; запись и внешние побочные эффекты по‑прежнему требуют отдельного подтверждения. Некоторые отсутствующие на watchOS функции можно делегировать iPhone.
+*   **Постоянная совместная работа сессий**: Agent может создать скрытого субагента или видимую совместную сессию, дождаться результата, получить его в фоне либо дописать его в текущую сессию после завершения. Состояние привязано к session / run / tool, поэтому параллельные разговоры не получают чужие результаты.
+*   **Live Activity и уведомления о фоновом завершении**: на экране блокировки и Dynamic Island iOS показывает выполнение Chat / Agent, ожидание ввода, завершение или ошибку; нажатие возвращает в нужную сессию. После ухода приложения в фон ответ или Linux‑задача продолжается в коротком окне выполнения, предоставленном системой. Локальное уведомление отправляется только если ответ действительно завершился в фоне; если iOS в итоге приостановила задачу, Run точно отмечается как прерванный без скрытого повтора.
 
 #### Память и организация знаний
 
@@ -124,7 +136,7 @@
 
 ## 🛠️ Технологии
 
-*   **Язык**: Swift 6, C / C++ (слой моста llama.cpp)
+*   **Язык**: Swift 6, C / C++ (общий слой мостов llama.cpp и iSH)
 *   **UI**: SwiftUI
 *   **Архитектура**: MVVM + Protocol Oriented Programming
 *   **Данные**: GRDB + SQLite + SQLCipher (основная персистентность, локальная векторная БД и опциональное полнодисковое физическое шифрование), JSON (форматы импорта/экспорта и совместимости)
@@ -133,21 +145,25 @@
 *   **Сеть и транспорт**: URLSession (запросы к API), Streamable HTTP / SSE (транспорт MCP), WatchConnectivity / CloudKit / APNs silent push (межустройственный и облачный транспорт), WebSocket / HTTP polling (LAN‑отладка)
 *   **AI‑протокол**: Model Context Protocol (на базе официального [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk)), OpenAI Chat / Responses, Anthropic Messages, Gemini API, локальный провайдер `local-llama-cpp`
 *   **Локальный inference**: llama.cpp / GGUF, мост Swift ↔ C ABI ↔ C++, заранее собираемый через CMake + Ninja `libetos-llama.a`, Accelerate / Metal (на watchOS runtime фиксируется на CPU path)
-*   **Системные интеграции**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, BackgroundTasks (iOS), LocalAuthentication, Speech / AVFoundation
+*   **Локальный Agent Runtime**: `ish-multiarch`, встроенный Alpine AArch64 RootFS, заранее собираемый через Meson + Ninja `libiSHApple.a`, PTY, динамические mounts, guest file API и локальный stdio MCP
+*   **Возможности Agent**: 64 нативных Apple MCP‑инструмента, WKWebView Browser Agent, исполняемые Agent Skills, постоянная совместная работа сессий и зафиксированный на время Run контекст прав
+*   **Системные интеграции**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, ActivityKit / WidgetKit, короткие фоновые задачи iOS, LocalAuthentication, Speech / AVFoundation
 *   **Сайт документации**: VitePress / Teek (используется только сайтом; его зависимости не учитываются в подсчёте размера кода в README)
-*   **Зависимости**: Swift Package Manager — текущие явные зависимости: `GRDB.swift` (форк Eric-Terminal), `SQLCipher.swift`, `swift-sdk` (MCP), `swift-markdown-ui`, `SwiftMath`, `ZIPFoundation`, `Cepheus` (сторонняя клавиатура для watchOS); транзитивно подтягиваются `networkimage`, `swift-cmark`, `eventsource`, `swift-nio` и т. д. + Git submodule llama.cpp + CMake/Ninja script для сборки статической библиотеки
+*   **Зависимости**: Swift Package Manager — текущие явные зависимости: `GRDB.swift` (форк Eric-Terminal), `SQLCipher.swift`, `swift-sdk` (MCP), `swift-markdown-ui`, `SwiftMath`, `ZIPFoundation`, `Cepheus` (сторонняя клавиатура для watchOS); транзитивно подтягиваются `networkimage`, `swift-cmark`, `eventsource`, `swift-nio` и т. д. + Git‑сабмодули llama.cpp / ish-multiarch + независимые скрипты сборки статических библиотек
 
 ---
 
 ## 🏗️ Архитектура проекта
 
-Проект разделён на два уровня: платформенно‑независимый ETOSCore и отдельные UI‑слои для каждой платформы. В последнем рефакторинге появился настроечный хаб `Config/AppConfigStore`, полностью заменивший `@AppStorage`, а новые `LocalLLM` / `LocalLLMBridge` подключили локальный GGUF inference к существующему жизненному циклу чата. MCP, sync/import, LAN‑отладка и теги сессий также вынесены в отдельные модули. Самый большой Swift‑файл сейчас занимает около 1 540 строк (`Sync/WatchSyncManager.swift`); управление локальными моделями, sync engine и Tool Center остаются тяжёлыми модулями, которые стоит дальше постепенно разгружать.
+Проект разделён на два уровня: платформенно‑независимый ETOSCore и отдельные UI‑слои для каждой платформы. Chat, оркестрация Agent, нативные инструменты, Browser Agent, локальный Linux, MCP и Skills сначала проходят через единый runtime context, подтверждения, аудит и границы персистентности ETOSCore; затем iOS / watchOS предоставляют подходящие для платформы интерфейсы и реализации системных возможностей.
 
 ```
-ETOSCore/ETOSCore/                         ← Общая бизнес-логика (349 Swift-файлов)
+ETOSCore/ETOSCore/                         ← Общая бизнес-логика (481 Swift-файл)
 ├── AppTool/                            ← Локальные инструменты, custom JS tools, ask_user_input, утилиты для SQLite и sandbox-файлов
 ├── Attachments/                        ← Извлечение текста из файловых вложений
+├── BrowserAgent/                       ← Управляемые браузерные сессии, DOM-автоматизация, скриншоты, загрузки, Cookie и делегирование iPhone
 ├── Chat/                               ← Модели чата, версии сообщений, экспорт, состояние рендера
+│   ├── ConversationRuntime/            ← Постоянные совместные сессии, субагенты, граф ожидания, бюджеты и дописывание
 │   └── Service/                        ← Оркестрация запросов ChatService, разбор ответов, ретраи, инструменты, инъекция памяти и worldbook
 ├── Config/                             ← Хаб AppConfigStore, определения ключей и миграция со старого UserDefaults
 ├── ConfigLoader/                       ← Конфигурация провайдеров, SQLite-хранилище, фон и одноразовая загрузка
@@ -156,18 +172,20 @@ ETOSCore/ETOSCore/                         ← Общая бизнес-логи�
 ├── Feedback/                           ← Встроенный feedback-модуль, сбор окружения, DTO и локальное хранение
 ├── Font/                               ← Библиотека пользовательских шрифтов, маршрутизация и диапазоны fallback
 ├── LocalDebugServer/                   ← Клиент LAN-отладки, web-консоль, команды файлов / SQLite / Provider и захват запросов
+├── LocalAgentRuntime/                  ← Локальный Linux, RootFS, PTY, workspace, mounts, задачи, подтверждения и iSH C ABI
 ├── LocalLLM/                            ← Записи локальных GGUF-моделей, мост провайдера, маппинг параметров и Swift-точка входа inference
 ├── LocalLLMBridge/                      ← Граница C ABI / C++ моста llama.cpp и линковки статической библиотеки
 ├── Math/                               ← Движок рендеринга LaTeX/математики
 ├── MCP/                                ← MCP-клиент, встроенные серверы, хранилище серверов, Streamable HTTP / SSE (на базе официального swift-sdk)
 ├── Memory/ + SimilaritySearch/         ← Локальная RAG, embeddings, чанкование, векторный поиск в SQLite
+├── NativeCapabilities/                 ← Определения, исполнители, права и межустройственное делегирование 64 нативных Apple-возможностей
 ├── Parsing/                            ← Парсеры заголовков и параметрических выражений
 ├── Persistence/                        ← Основная/вспомогательные БД GRDB, миграции, startup-бэкап, медиа и файлы
 ├── Providers/                          ← Модели провайдеров, настройка прокси и адаптеры OpenAI / Anthropic / Gemini
 ├── Roleplay/                           ← Персоны для ролевых игр, шаблоны промптов чата и пресеты персонажей
 ├── Security/                           ← Стейт-машина блокировки приложения, master-пароль PBKDF2 и менеджер шифрования БД
 ├── Shortcuts/                          ← Siri Shortcuts, URL-роутер, импорт и реле выполнения
-├── Skills/                             ← Импорт Agent Skills, парсинг, загрузка с GitHub, чтение ресурсов и политики
+├── Skills/                             ← Импорт Agent Skills, чтение ресурсов, снапшоты скриптов, подтверждения и выполнение в локальном Linux
 ├── Snapshot/                           ← Сборка офлайн-снапшотов БД, шифрование AES-256-GCM и безопасное восстановление
 ├── Storage/                            ← Обзор sandbox-файлов, статистика хранения, очистка кеша
 ├── Sync/                               ← Быстрый канал WatchConnectivity / CloudKit / iCloud roaming / Manifest / Delta / iCloud Drive / S3 и импорт из сторонних форматов
@@ -177,12 +195,16 @@ ETOSCore/ETOSCore/                         ← Общая бизнес-логи�
 ├── UsageAnalytics/                     ← События использования, дашборды, почасовые тренды и доли токенов по моделям
 └── Worldbook/                          ← Модели worldbook, импорт/экспорт, SQLite-хранилище и движок триггеров
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (155 Swift-файлов)
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (131 Swift-файл)
-ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя (116 Swift-файлов)
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← UI-слой iOS (187 Swift-файлов)
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← UI-слой watchOS (156 Swift-файлов)
+ETOS LLM Studio/ETOS Agent Widgets/          ← iOS Widget и Live Activity
+ETOS LLM Studio/ETOS Agent Watch Widgets/    ← watchOS Widget
+ETOS LLM Studio/ETOS Workspace Provider/     ← системная точка входа Files / File Provider
+ETOS LLM Studio/ETOS Agent Share/            ← системная точка входа Share Extension
+ETOSCore/ETOSCoreTests/                       ← Тесты ETOSCore-слоя (147 Swift-файлов)
 ```
 
-Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Сессии, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами слоя ETOSCore и хранилищем GRDB / SQLite.
+Поток данных для облачных моделей: `View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`. Поток данных для локальных моделей: `View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`. Поток Agent‑инструментов: `ChatService → AgentRuntimeContext → подтверждение и аудит → BrowserAgent / NativeCapabilities / MCP / Skills / LocalAgentRuntime → libiSHApple.a`. Сессии, Run, инструменты, память, worldbook, аналитика использования и синхронизация управляются сервисами ETOSCore и GRDB / SQLite.
 
 ---
 
@@ -193,22 +215,42 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
     git clone --recurse-submodules https://github.com/Eric-Terminal/ETOS-LLM-Studio.git
     cd ETOS-LLM-Studio
     ```
+    Если проект уже клонирован, но нет `Dependencies/llama.cpp` или `Dependencies/ish-multiarch`, выполните:
+    ```bash
+    git submodule update --init --recursive
+    ```
 2.  **Требования**:
     *   Xcode 26.0+
     *   watchOS 26.0+ SDK
-    *   CMake + Ninja (если их нет, выполните `brew install cmake ninja`)
-3.  **Первый шаг перед сборкой: соберите статическую библиотеку llama.cpp**:
-    Xcode больше не пересобирает llama.cpp на каждом app build. ETOSCore линкуется с заранее созданным `libetos-llama.a`. Для device / Release выполните:
+    *   CMake + Ninja (для сборки llama.cpp)
+    *   Meson + Ninja (для сборки iSHApple)
+    *   Рекомендуется сразу выполнить `brew install cmake ninja meson`
+3.  **Перед сборкой создайте нативные статические библиотеки**:
+    Xcode не компилирует llama.cpp и iSH заново в обычной Build Phase. Общая точка входа отдельно запускает два скрипта сборки и размещает две независимые статические библиотеки в одном поисковом каталоге Xcode; они не объединяются в один `.a`.
+
+    Для устройства / Release выполните:
     ```bash
-    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh --parallel
     ```
-    Для локального Debug simulator можно использовать:
+    Для iOS + watchOS Debug‑симуляторов из этого README выполните:
     ```bash
-    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
-    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-llama-static-library.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
+    CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     ```
-    Артефакт появится в `Dependencies/llama-build/products/<platform>-<configuration>/libetos-llama.a`. Скрипт использует Ninja как CMake Generator; Ninja сам выполняет параллельную сборку, а `--parallel` явно передаёт CMake число задач по количеству CPU. Также можно указать `--parallel=8`, `--jobs 8` или `-j8`. Скрипт использует stamp, чтобы не пересобирать лишнее, и очищает промежуточные build‑каталоги после создания итоговой библиотеки. Если Xcode сообщает `library 'etos-llama' not found`, `file not found: libetos-llama.a` или не находит символы llama.cpp, повторите команду для текущих SDK / Configuration.
+
+    Первый запуск собирает iSHApple‑срезы для устройств и симуляторов iOS / watchOS, а также llama.cpp‑артефакт для платформы из команды, поэтому он заметно дольше последующих. При попадании в кеш скрипт использует готовые результаты. Изменения iSH не пересобирают llama.cpp, и наоборот. `--parallel` передаёт CMake число задач по количеству CPU; можно явно указать `--parallel=8`, `--jobs 8` или `-j8`.
+
+    Основные артефакты:
+
+    | Артефакт | Расположение | Назначение |
+    | --- | --- | --- |
+    | `iSHApple.xcframework` | `Dependencies/ish-build/iSHApple.xcframework` | Общий мультиплатформенный артефакт iSH |
+    | `libiSHApple.a` | `Dependencies/ish-build/products/<platform>/` | Исходная статическая библиотека iSH для каждой платформы |
+    | `libetos-llama.a` | `Dependencies/llama-build/products/<platform>-<configuration>/` | llama.cpp / ggml / mtmd |
+    | Размещённая копия `libiSHApple.a` | Рядом с `libetos-llama.a` | Поиск и линковка для текущих Xcode SDK / Configuration |
+
+    ETOSCore линкует llama.cpp через `-letos-llama`; тонкий Linux‑мост iOS / watchOS добавляет `-liSHApple` через параметры объектной линковки. Поэтому Xcode одновременно использует две статические библиотеки, а не предварительно упаковывает их в одну. Каталоги артефактов находятся в `.gitignore` — не добавляйте результаты сборки в коммит.
 4.  **Откройте проект**:
     `ETOS LLM Studio.xcworkspace` (именно workspace, не xcodeproj).
     При первом открытии Xcode автоматически подтянет Swift Package зависимости.
@@ -216,6 +258,14 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
     Выберите scheme `ETOS LLM Studio App` для запуска iOS-приложения. Scheme `ETOS LLM Studio Watch App` нужна только для отдельной отладки watchOS. Подключите устройство/симулятор и нажмите Command + R.
 6.  **Настройка**:
     Добавьте API key в настройках. Для удобства можно через LAN Debugging отправить готовый JSON в `Documents/Providers/`.
+
+### Частые проблемы сборки
+
+*   `Сабмодуль ish-multiarch не инициализирован`: выполните `git submodule update --init --recursive`.
+*   `meson не найден` / `ninja не найден` / `cmake: command not found`: выполните `brew install cmake ninja meson`, затем снова запустите скрипт статических библиотек.
+*   `library 'etos-llama' not found` или `library 'iSHApple' not found`: проверьте, что `SDK_NAME`, `PLATFORM_NAME` и `CONFIGURATION` скрипта совпадают с текущей целью Xcode.
+*   В Archive для физического watchOS‑устройства не хватает архитектуры: пересоберите Release‑артефакт `watchos` с `ARCHS="arm64 arm64_32"`.
+*   Переменные локального окружения ломают линковку watchOS: используйте стандартную команду `env -u ... xcodebuild` из следующего раздела.
 
 ---
 
@@ -231,7 +281,7 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
   ```bash
   env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
   ```
-* **Запуск модульных тестов фреймворка ETOSCore** (116 файлов тестов, 41 055 строк тестового кода):
+* **Запуск модульных тестов фреймворка ETOSCore** (147 файлов тестов, 50 853 строки тестового кода):
   ```bash
   env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
   ```
@@ -241,7 +291,7 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
   ```
 * **Запуск Unit & UI-тестов watchOS App**:
   ```bash
-  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5' -parallel-testing-enabled NO test
   ```
 
 ---
@@ -254,4 +304,4 @@ ETOSCore/ETOSCoreTests/                         ← Тесты ETOSCore-слоя
 
 ---
 
-Этот README обновлён 25 июля 2026 года. Если README не успел за кодом, смотрите историю коммитов.
+Этот README обновлён 12 августа 2026 года. Если README не успел за кодом, смотрите историю коммитов.

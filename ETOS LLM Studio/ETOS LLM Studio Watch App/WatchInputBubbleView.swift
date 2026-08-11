@@ -275,6 +275,8 @@ struct WatchInputBubbleView: View {
                     NavigationStack {
                         WatchQuickRequestControlsView(
                             runnableModel: selectedModel,
+                            sessionID: viewModel.currentSession?.id,
+                            isLocked: viewModel.isSendingMessage || viewModel.isSendDelayPending,
                             onDone: { isRequestControlsPresented = false }
                         )
                     }
@@ -503,6 +505,17 @@ struct WatchInputBubbleView: View {
         switch action {
         case .requestControls:
             return viewModel.selectedModel?.model.requestBodyControls.contains(where: \.isEnabled) == true
+                || (appConfig.localLinuxEnabled
+                    && viewModel.currentSession != nil
+                    && viewModel.selectedModel != nil)
+        case .agentMode:
+            return appConfig.localLinuxEnabled
+                && viewModel.currentSession != nil
+                && viewModel.selectedModel != nil
+        case .browser:
+            return viewModel.currentSession != nil
+        case .localTerminal:
+            return appConfig.localLinuxEnabled && viewModel.currentSession != nil
         case .roleplayScripts:
             return !roleplayScriptActions.isEmpty
         case .clearInput:
@@ -523,6 +536,12 @@ struct WatchInputBubbleView: View {
                 isTemporaryChatEnabled: isTemporaryChatEnabled,
                 hasConversationStarted: !isTemporaryChatActivationAvailable
             )
+        case .agentMode:
+            return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
+        case .browser:
+            return viewModel.currentSession == nil
+        case .localTerminal:
+            return viewModel.currentSession == nil || !appConfig.localLinuxEnabled
         default:
             return false
         }
@@ -543,6 +562,8 @@ struct WatchInputBubbleView: View {
             viewModel.clearUserInput()
             viewModel.clearAllAttachments()
             slashCommandSuggestions = []
+        case .agentMode:
+            onPerformQuickAction(action)
         case .sessionHistory,
              .contextCompression,
              .settings,
@@ -556,7 +577,9 @@ struct WatchInputBubbleView: View {
              .shortcuts,
              .roleplay,
              .worldbook,
-             .extendedFeatures:
+             .extendedFeatures,
+             .browser,
+             .localTerminal:
             onPerformQuickAction(action)
         }
     }
@@ -780,7 +803,7 @@ struct WatchInputBubbleView: View {
         guard resourceUsageTask == nil else { return }
         resourceUsageTask = Task { @MainActor in
             while !Task.isCancelled {
-                resourceUsageMonitor.refresh()
+                await resourceUsageMonitor.refresh()
                 do {
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                 } catch {

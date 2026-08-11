@@ -69,6 +69,8 @@ struct ContentView: View {
     @State var contextCompressionReminderNotificationKeys: Set<WatchContextCompressionReminderNotificationKey> = []
     @State var chatTransientNotice: WatchChatTransientNotice?
     @State var chatTransientNoticeDismissTask: Task<Void, Never>?
+    @State var watchChatPage: WatchChatPage = .chat
+    @State var activeUserTerminalJobIDs: [UUID] = []
 
     var effectiveFontScale: CGFloat {
         CGFloat(FontLibrary.effectiveFontScale(appConfig.fontCustomScale, isCustomFontEnabled: appConfig.fontUseCustomFonts))
@@ -296,6 +298,9 @@ struct ContentView: View {
                 ChatService.recordAppDidEnterBackground()
                 didEnterBackgroundSinceLastActivation = true
                 Task {
+                    // watchOS 不提供 iOS 的通用后台收尾窗口；进入后台后立即把
+                    // 活跃 guest 任务标记为系统挂起，避免下次启动误认为仍在运行。
+                    await LocalLinuxJobScheduler.shared.interruptForSystemSuspension()
                     await AppConfigStore.shared.flushPendingWrites()
                 }
             default:

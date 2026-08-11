@@ -62,7 +62,7 @@
     </div>
 
     <h1>隱私政策</h1>
-    <p class="last-updated">最近更新：2026年7月26日</p>
+    <p class="last-updated">最近更新：2026年8月8日</p>
 
     <section>
         <h2>1. 前言</h2>
@@ -79,6 +79,7 @@
     <li><strong>API 提供商配置與 API Key：</strong>提供商配置（例如模型清單、請求頭覆寫、代理設定等）與 API Key 會保存在本地 <strong>SQLite</strong> 配置資料庫。舊版本若曾寫入 Keychain，升級時會合併並清理舊憑據儲存。</li>
     <li><strong>本地請求與回應日誌：</strong>App 可在本地保存完整 HTTP 請求內容、回應內容，以及耗時、狀態、Token 用量等診斷欄位。此功能有獨立總開關，預設隱藏聊天正文；只有你主動開啟明文記錄後才會保留文字，圖片、音訊與檔案的 Base64 一律隱藏。此類日誌不會自動上傳。</li>
     <li><strong>反饋工單快取：</strong>如果你使用反饋助手，App 會在本地保存工單編號、票據令牌、狀態、更新時間與公開連結，方便後續追蹤處理進度。</li>
+    <li><strong>本地 Linux：</strong>可選的內建 AArch64 RootFS、工作區、任務日誌與診斷只保存在 App 沙盒內。環境變數保存在支援加密的 SQLite 配置資料庫中，只在所選 Linux 程序啟動時注入，不會自動加入模型提示詞。</li>
 </ul>
 
     </section>
@@ -89,6 +90,7 @@
     <li><strong>文本聊天：</strong>你的訊息會直接發送到你自行配置的第三方 AI 提供商（例如 OpenAI、Anthropic、Google、相容 OpenAI 的服務或自建模型）。我們不會在開發者伺服器上攔截或轉存這些內容。</li>
     <li><strong>語音與音訊：</strong>麥克風權限只會在你主動錄音或觸發語音輸入時啟用。音訊只會發送到目前模型提供商，或你自行選擇的語音 / 轉寫服務。</li>
     <li><strong>圖片與檔案：</strong>App 只有在你主動選擇時才會存取圖片或檔案。相關附件會發送到目前模型提供商，或發送到你主動連接的本地調試端。</li>
+    <li><strong>瀏覽器 Agent 與本地 MCP：</strong>瀏覽器 Agent 的請求會直接發往 App 自有 WebKit 視圖開啟的網站；本地 stdio MCP 在本地 Linux 內執行。只有你主動選擇並授權後，外部資料夾才會提供給 Linux，瀏覽器 Cookie 不會掛載到 Linux。</li>
 </ul>
 
     </section>

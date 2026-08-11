@@ -396,6 +396,9 @@ private struct WatchSkillDetailView: View {
     @State private var files: [SkillFileReference] = []
     @State private var showCreateFileSheet = false
     @State private var deleteTarget: SkillFileReference?
+    @State private var executionPolicy: SkillExecutionPolicy = .askEveryTime
+    @State private var executionPolicyStatus: SkillExecutionPolicyStatus?
+    @State private var isSavingExecutionPolicy = false
 
     init(initialSkillName: String, manager: SkillManager) {
         self.initialSkillName = initialSkillName
@@ -413,6 +416,27 @@ private struct WatchSkillDetailView: View {
                             set: { manager.setSkillEnabled(name: skill.name, isEnabled: $0) }
                         )
                     )
+                }
+
+                Section {
+                    Picker(
+                        NSLocalizedString("脚本执行", comment: "Skill script execution policy picker"),
+                        selection: Binding(
+                            get: { executionPolicy },
+                            set: { updateExecutionPolicy($0) }
+                        )
+                    ) {
+                        ForEach(SkillExecutionPolicy.allCases, id: \.self) { policy in
+                            Text(policy.displayName).tag(policy)
+                        }
+                    }
+                    .disabled(isSavingExecutionPolicy)
+
+                    Text(executionPolicyFooter)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text(NSLocalizedString("执行权限", comment: "Skill execution permission section"))
                 }
 
                 Section(NSLocalizedString("编辑", comment: "")) {
@@ -545,6 +569,32 @@ private struct WatchSkillDetailView: View {
         }
         skillBody = manager.readSkillBody(skillName: skillName) ?? ""
         files = manager.listFiles(skillName: skillName)
+        Task { await reloadExecutionPolicy() }
+    }
+
+    private var executionPolicyFooter: String {
+        if let status = executionPolicyStatus,
+           status.record.policy == .allowCurrentVersion,
+           !status.isCurrentVersionApproved {
+            return NSLocalizedString("Skill 已变化，旧授权失效，执行时会重新询问。", comment: "Watch stale Skill execution approval footer")
+        }
+        return NSLocalizedString("仅 Agent 模式可执行 scripts/；Skill 只读，工作区可写。", comment: "Watch Skill execution policy footer")
+    }
+
+    private func reloadExecutionPolicy() async {
+        let status = await manager.executionPolicyStatus(skillName: skillName)
+        executionPolicyStatus = status
+        executionPolicy = status.record.policy
+    }
+
+    private func updateExecutionPolicy(_ policy: SkillExecutionPolicy) {
+        executionPolicy = policy
+        isSavingExecutionPolicy = true
+        Task {
+            _ = await manager.setExecutionPolicy(policy, skillName: skillName)
+            await reloadExecutionPolicy()
+            isSavingExecutionPolicy = false
+        }
     }
 
     private func fileRow(_ file: SkillFileReference) -> some View {

@@ -303,7 +303,13 @@ extension SyncEngine {
         var skipped = 0
         var localContentHashes = Set(local.map { computeMCPServerContentHash($0) })
 
-        for var server in incoming {
+        for incomingServer in incoming {
+            guard var server = MCPServerConfigurationTransferService.materializeEnvironmentReferences(
+                in: incomingServer
+            ) else {
+                skipped += 1
+                continue
+            }
             let incomingHash = computeMCPServerContentHash(server)
             if localContentHashes.contains(incomingHash) {
                 skipped += 1

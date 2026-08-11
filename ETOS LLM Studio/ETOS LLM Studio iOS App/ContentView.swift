@@ -37,6 +37,8 @@ struct ContentView: View {
     @State private var isLegacyMigrationErrorPresented: Bool = false
     @State private var isNativeSettingsPresented: Bool = false
     @State private var incomingSnapshotRestorePayload: IncomingSnapshotRestorePayload?
+    @State private var systemEntryInboxPayload: SystemEntryInboxPayload?
+    @State private var systemEntryRoute: SystemEntryRoute?
     @State private var newAPIProviderImportNoticeMessage: String?
     @State private var newAPIProviderImportErrorMessage: String?
     @State private var didEnterBackgroundSinceLastActivation = false
@@ -67,6 +69,7 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidBecomeActive()
                     TTSManager.shared.setApplicationIsInBackground(false)
                     appLockManager.handleSceneDidBecomeActive()
                     ChatAppearanceProfileManager.shared.handleAppBecameActive()
@@ -76,6 +79,7 @@ struct ContentView: View {
                     }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
+                    LocalLinuxBackgroundTaskManager.shared.sceneDidEnterBackground()
                     TTSManager.shared.setApplicationIsInBackground(true)
                     appLockManager.handleSceneDidEnterBackground()
                     ChatService.recordAppDidEnterBackground()
@@ -150,42 +154,35 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(item: $systemEntryInboxPayload) { payload in
+            SystemEntryInboxPreviewView(payload: payload) { sessionID in
+                systemEntryInboxPayload = nil
+                if let sessionID { openChatSession(sessionID: sessionID) }
+            }
+        }
+        .sheet(item: $systemEntryRoute) { route in
+            NavigationStack {
+                switch route {
+                case .browser:
+                    BrowserAgentFeatureView(sessionID: viewModel.currentSession?.id)
+                case .terminal:
+                    LocalLinuxFeatureView(sessionID: viewModel.currentSession?.id)
+                case .memory(let memory):
+                    if let memory {
+                        MemoryEditView(memory: memory)
+                            .environmentObject(viewModel)
+                    } else {
+                        LongTermMemoryFeatureView()
+                    }
+                }
+            }
+        }
     }
 
     private var notificationAwareContent: some View {
-        appNavigationContent
-        .environment(\.font, rootBodyFont)
-        .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
-        .onAppear {
-            AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
-            refreshRootBodyFont()
-        }
+        fontAndLanguageAwareContent
         .onReceive(NotificationCenter.default.publisher(for: .requestSwitchToChatTab)) { _ in
             pushNativeChatIfNeeded()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .syncFontsUpdated)
-                .receive(on: DispatchQueue.main)
-        ) { _ in
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
-            _ = isEnabled
-            FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontFallbackScope) { _, _ in
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.fontCustomScale) { _, newValue in
-            let normalizedValue = FontLibrary.normalizedFontScale(newValue)
-            if normalizedValue != newValue {
-                appConfig.fontCustomScale = normalizedValue
-            }
-            refreshRootBodyFont()
-        }
-        .onChange(of: appConfig.appLanguage) { _, newValue in
-            AppLanguageRuntime.apply(rawValue: newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
             openDailyPulse()
@@ -209,11 +206,51 @@ struct ContentView: View {
             NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore),
             perform: handleIncomingSnapshotRestore
         )
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryInboxPreview)) { notification in
+            systemEntryInboxPayload = notification.object as? SystemEntryInboxPayload
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .requestSystemEntryRoute)) { notification in
+            systemEntryRoute = notification.object as? SystemEntryRoute
+        }
         .onReceive(NotificationCenter.default.publisher(for: .requestContinueDailyPulseChat)) { _ in
             Task { @MainActor in
                 openDailyPulseContinuationIfNeeded()
             }
         }
+    }
+
+    private var fontAndLanguageAwareContent: some View {
+        appNavigationContent
+            .environment(\.font, rootBodyFont)
+            .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
+            .onAppear {
+                AppLanguageRuntime.apply(rawValue: appConfig.appLanguage)
+                refreshRootBodyFont()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .syncFontsUpdated)
+                    .receive(on: DispatchQueue.main)
+            ) { _ in
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontUseCustomFonts) { _, isEnabled in
+                _ = isEnabled
+                FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontFallbackScope) { _, _ in
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.fontCustomScale) { _, newValue in
+                let normalizedValue = FontLibrary.normalizedFontScale(newValue)
+                if normalizedValue != newValue {
+                    appConfig.fontCustomScale = normalizedValue
+                }
+                refreshRootBodyFont()
+            }
+            .onChange(of: appConfig.appLanguage) { _, newValue in
+                AppLanguageRuntime.apply(rawValue: newValue)
+            }
     }
 
     private func handleIncomingSnapshotRestore(_ notification: Notification) {

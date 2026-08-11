@@ -176,6 +176,17 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localModelPerformanceMonitorEnabled: Bool { didSet { write(.localModelPerformanceMonitorEnabled, localModelPerformanceMonitorEnabled) } }
     @Published public var localModelCacheEnabled: Bool { didSet { write(.localModelCacheEnabled, localModelCacheEnabled) } }
     @Published public var localModelKVCacheEnabled: Bool { didSet { write(.localModelKVCacheEnabled, localModelKVCacheEnabled) } }
+    @Published public var localLinuxEnabled: Bool { didSet { write(.localLinuxEnabled, localLinuxEnabled) } }
+    @Published public var localLinuxEnvironmentPrivacyEnabled: Bool { didSet { write(.localLinuxEnvironmentPrivacyEnabled, localLinuxEnvironmentPrivacyEnabled) } }
+    @Published public var localLinuxCommandSafetyEnabled: Bool { didSet { write(.localLinuxCommandSafetyEnabled, localLinuxCommandSafetyEnabled) } }
+    @Published public var localLinuxDefaultSessionMode: String { didSet { write(.localLinuxDefaultSessionMode, localLinuxDefaultSessionMode) } }
+    @Published public var localLinuxDefaultTimeoutSeconds: Int { didSet { write(.localLinuxDefaultTimeoutSeconds, localLinuxDefaultTimeoutSeconds) } }
+    @Published public var localLinuxOutputPreviewBytes: Int { didSet { write(.localLinuxOutputPreviewBytes, localLinuxOutputPreviewBytes) } }
+    @Published public var localLinuxLocalMCPOnDemand: Bool { didSet { write(.localLinuxLocalMCPOnDemand, localLinuxLocalMCPOnDemand) } }
+    @Published public var localLinuxActivePromptProfileID: String { didSet { write(.localLinuxActivePromptProfileID, localLinuxActivePromptProfileID) } }
+    @Published public var localLinuxWorkspaceCleanupPolicy: String { didSet { write(.localLinuxWorkspaceCleanupPolicy, localLinuxWorkspaceCleanupPolicy) } }
+    @Published public var localLinuxTerminalShortcutIDs: String { didSet { write(.localLinuxTerminalShortcutIDs, localLinuxTerminalShortcutIDs) } }
+    @Published public var localLinuxChatPreviewMode: String { didSet { write(.localLinuxChatPreviewMode, localLinuxChatPreviewMode) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -195,7 +206,6 @@ public final class AppConfigStore: ObservableObject {
     @Published public var requestLogPlainMessageEnabled: Bool { didSet { write(.requestLogPlainMessageEnabled, requestLogPlainMessageEnabled) } }
     @Published public var performanceTelemetryEnabled: Bool { didSet { write(.performanceTelemetryEnabled, performanceTelemetryEnabled) } }
     @Published public var modelConnectivityTestConcurrencyLimit: Int { didSet { write(.modelConnectivityTestConcurrencyLimit, modelConnectivityTestConcurrencyLimit) } }
-    @Published public var conversationRuntimeConcurrencyLimit: Int { didSet { write(.conversationRuntimeConcurrencyLimit, conversationRuntimeConcurrencyLimit) } }
     @Published public var conversationRuntimeExecutionBudget: Int { didSet { write(.conversationRuntimeExecutionBudget, conversationRuntimeExecutionBudget) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
@@ -556,6 +566,19 @@ public final class AppConfigStore: ObservableObject {
         localModelPerformanceMonitorEnabled = Self.boolValue(.localModelPerformanceMonitorEnabled, userDefaults: userDefaults)
         localModelCacheEnabled = Self.boolValue(.localModelCacheEnabled, userDefaults: userDefaults)
         localModelKVCacheEnabled = Self.boolValue(.localModelKVCacheEnabled, userDefaults: userDefaults)
+        localLinuxEnabled = Self.boolValue(.localLinuxEnabled, userDefaults: userDefaults)
+        localLinuxEnvironmentPrivacyEnabled = Self.boolValue(.localLinuxEnvironmentPrivacyEnabled, userDefaults: userDefaults)
+        localLinuxCommandSafetyEnabled = Self.boolValue(.localLinuxCommandSafetyEnabled, userDefaults: userDefaults)
+        localLinuxDefaultSessionMode = Self.textValue(.localLinuxDefaultSessionMode, userDefaults: userDefaults)
+        localLinuxDefaultTimeoutSeconds = Self.integerValue(.localLinuxDefaultTimeoutSeconds, userDefaults: userDefaults)
+        localLinuxOutputPreviewBytes = Self.integerValue(.localLinuxOutputPreviewBytes, userDefaults: userDefaults)
+        localLinuxLocalMCPOnDemand = Self.boolValue(.localLinuxLocalMCPOnDemand, userDefaults: userDefaults)
+        localLinuxActivePromptProfileID = Self.textValue(.localLinuxActivePromptProfileID, userDefaults: userDefaults)
+        localLinuxWorkspaceCleanupPolicy = Self.textValue(.localLinuxWorkspaceCleanupPolicy, userDefaults: userDefaults)
+        localLinuxTerminalShortcutIDs = Self.textValue(.localLinuxTerminalShortcutIDs, userDefaults: userDefaults)
+        localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(
+            Self.textValue(.localLinuxChatPreviewMode, userDefaults: userDefaults)
+        ).rawValue
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
         aiTopP = Self.realValue(.aiTopP, userDefaults: userDefaults)
@@ -573,7 +596,6 @@ public final class AppConfigStore: ObservableObject {
         requestLogPlainMessageEnabled = Self.boolValue(.requestLogPlainMessageEnabled, userDefaults: userDefaults)
         performanceTelemetryEnabled = Self.boolValue(.performanceTelemetryEnabled, userDefaults: userDefaults)
         modelConnectivityTestConcurrencyLimit = Self.integerValue(.modelConnectivityTestConcurrencyLimit, userDefaults: userDefaults)
-        conversationRuntimeConcurrencyLimit = Self.integerValue(.conversationRuntimeConcurrencyLimit, userDefaults: userDefaults)
         conversationRuntimeExecutionBudget = Self.integerValue(.conversationRuntimeExecutionBudget, userDefaults: userDefaults)
         enableOpenAIStreamIncludeUsage = Self.boolValue(.enableOpenAIStreamIncludeUsage, userDefaults: userDefaults)
         reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
@@ -806,6 +828,38 @@ public final class AppConfigStore: ObservableObject {
         }
 
         return defaultValue ?? defaultBool(for: key)
+    }
+
+    public nonisolated static func integerValue(
+        for key: AppConfigKey,
+        legacyUserDefaultsKey: String? = nil,
+        userDefaults: UserDefaults = .standard,
+        defaultValue: Int? = nil
+    ) -> Int {
+        if userDefaults === UserDefaults.standard {
+            AppConfigLegacyUserDefaultsMigration.migrateStandardUserDefaults()
+        }
+        if let stored = Persistence.readAppConfigInteger(key: key.rawValue) {
+            let normalized = normalizedIntegerValue(stored, for: key)
+            snapshotCache.set(normalized, for: key)
+            return normalized
+        }
+
+        guard userDefaults !== UserDefaults.standard else {
+            return normalizedIntegerValue(defaultValue ?? defaultInteger(for: key), for: key)
+        }
+
+        let rawKey = legacyUserDefaultsKey ?? key.rawValue
+        if let object = userDefaults.object(forKey: rawKey),
+           let legacy = coerceInt(object) {
+            let normalized = normalizedIntegerValue(legacy, for: key)
+            if persistSynchronously(.integer(normalized), for: key) {
+                userDefaults.removeObject(forKey: rawKey)
+            }
+            return normalized
+        }
+
+        return normalizedIntegerValue(defaultValue ?? defaultInteger(for: key), for: key)
     }
 
     public nonisolated static func stringArrayValue(
@@ -1055,6 +1109,7 @@ public final class AppConfigStore: ObservableObject {
              .configLoaderToolCapabilityMigrated,
              .feedbackAPIBaseURL,
              .localDebugLastServerAddress,
+             .browserAgentDelegateToIPhone,
              .memoryAutoConsolidationState:
             return Self.cachedValue(for: key) ?? key.defaultValue
         case .appLockEnabled: return .bool(appLockEnabled)
@@ -1065,6 +1120,17 @@ public final class AppConfigStore: ObservableObject {
         case .localModelPerformanceMonitorEnabled: return .bool(localModelPerformanceMonitorEnabled)
         case .localModelCacheEnabled: return .bool(localModelCacheEnabled)
         case .localModelKVCacheEnabled: return .bool(localModelKVCacheEnabled)
+        case .localLinuxEnabled: return .bool(localLinuxEnabled)
+        case .localLinuxEnvironmentPrivacyEnabled: return .bool(localLinuxEnvironmentPrivacyEnabled)
+        case .localLinuxCommandSafetyEnabled: return .bool(localLinuxCommandSafetyEnabled)
+        case .localLinuxDefaultSessionMode: return .text(localLinuxDefaultSessionMode)
+        case .localLinuxDefaultTimeoutSeconds: return .integer(localLinuxDefaultTimeoutSeconds)
+        case .localLinuxOutputPreviewBytes: return .integer(localLinuxOutputPreviewBytes)
+        case .localLinuxLocalMCPOnDemand: return .bool(localLinuxLocalMCPOnDemand)
+        case .localLinuxActivePromptProfileID: return .text(localLinuxActivePromptProfileID)
+        case .localLinuxWorkspaceCleanupPolicy: return .text(localLinuxWorkspaceCleanupPolicy)
+        case .localLinuxTerminalShortcutIDs: return .text(localLinuxTerminalShortcutIDs)
+        case .localLinuxChatPreviewMode: return .text(localLinuxChatPreviewMode)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -1080,7 +1146,6 @@ public final class AppConfigStore: ObservableObject {
         case .requestLogPlainMessageEnabled: return .bool(requestLogPlainMessageEnabled)
         case .performanceTelemetryEnabled: return .bool(performanceTelemetryEnabled)
         case .modelConnectivityTestConcurrencyLimit: return .integer(modelConnectivityTestConcurrencyLimit)
-        case .conversationRuntimeConcurrencyLimit: return .integer(conversationRuntimeConcurrencyLimit)
         case .conversationRuntimeExecutionBudget: return .integer(conversationRuntimeExecutionBudget)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
@@ -1244,7 +1309,8 @@ public final class AppConfigStore: ObservableObject {
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
              .skillsChatToolsEnabled,
-             .shortcutChatToolsEnabled:
+             .shortcutChatToolsEnabled,
+             .browserAgentDelegateToIPhone:
             Self.persistSynchronously(.bool(value), for: key, quickSync: false)
         case .appLockEnabled: appLockEnabled = value
         case .appLockBiometricEnabled: appLockBiometricEnabled = value
@@ -1253,6 +1319,10 @@ public final class AppConfigStore: ObservableObject {
         case .localModelPerformanceMonitorEnabled: localModelPerformanceMonitorEnabled = value
         case .localModelCacheEnabled: localModelCacheEnabled = value
         case .localModelKVCacheEnabled: localModelKVCacheEnabled = value
+        case .localLinuxEnabled: localLinuxEnabled = value
+        case .localLinuxEnvironmentPrivacyEnabled: localLinuxEnvironmentPrivacyEnabled = value
+        case .localLinuxCommandSafetyEnabled: localLinuxCommandSafetyEnabled = value
+        case .localLinuxLocalMCPOnDemand: localLinuxLocalMCPOnDemand = value
         case .aiTemperatureEnabled: aiTemperatureEnabled = value
         case .aiTopPEnabled: aiTopPEnabled = value
         case .enableContextCompressionReminder: enableContextCompressionReminder = value
@@ -1323,10 +1393,12 @@ public final class AppConfigStore: ObservableObject {
             restoreLastSessionWithinMinutes = Self.normalizedIntegerValue(value, for: key)
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
-        case .conversationRuntimeConcurrencyLimit:
-            conversationRuntimeConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .conversationRuntimeExecutionBudget:
             conversationRuntimeExecutionBudget = Self.normalizedIntegerValue(value, for: key)
+        case .localLinuxDefaultTimeoutSeconds:
+            localLinuxDefaultTimeoutSeconds = Self.normalizedIntegerValue(value, for: key)
+        case .localLinuxOutputPreviewBytes:
+            localLinuxOutputPreviewBytes = Self.normalizedIntegerValue(value, for: key)
         case .memoryTopK: memoryTopK = value
         case .memoryReembeddingConcurrencyLimit: memoryReembeddingConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .conversationMemoryRecentLimit: conversationMemoryRecentLimit = value
@@ -1398,6 +1470,16 @@ public final class AppConfigStore: ObservableObject {
              .localDebugLastServerAddress:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)
         case .systemPrompt: systemPrompt = value
+        case .localLinuxDefaultSessionMode:
+            localLinuxDefaultSessionMode = LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxActivePromptProfileID:
+            localLinuxActivePromptProfileID = value
+        case .localLinuxWorkspaceCleanupPolicy:
+            localLinuxWorkspaceCleanupPolicy = value == "automatic" ? "automatic" : "manual"
+        case .localLinuxTerminalShortcutIDs:
+            localLinuxTerminalShortcutIDs = value
+        case .localLinuxChatPreviewMode:
+            localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(value).rawValue
         case .reasoningContentEchoMode:
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
@@ -1765,6 +1847,12 @@ public final class AppConfigStore: ObservableObject {
             return VideoFrameExtractionMode.normalized(value).rawValue
         case .chatStreamingDisplayMode:
             return ChatStreamingDisplayMode.normalized(value).rawValue
+        case .localLinuxDefaultSessionMode:
+            return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxWorkspaceCleanupPolicy:
+            return value == "automatic" ? "automatic" : "manual"
+        case .localLinuxChatPreviewMode:
+            return LocalLinuxChatPreviewMode.normalized(value).rawValue
         default:
             return value
         }
@@ -1778,9 +1866,12 @@ public final class AppConfigStore: ObservableObject {
             return LaunchSessionPolicy.normalizedRestoreWindowMinutes(value)
         case .modelConnectivityTestConcurrencyLimit,
              .memoryReembeddingConcurrencyLimit,
-             .conversationRuntimeConcurrencyLimit,
              .conversationRuntimeExecutionBudget:
             return max(1, value)
+        case .localLinuxDefaultTimeoutSeconds:
+            return min(max(0, value), 4_294_967)
+        case .localLinuxOutputPreviewBytes:
+            return max(4_096, value)
         case .videoFrameMaximumCount:
             return min(max(4, value), 120)
         default:
@@ -1827,6 +1918,13 @@ public final class AppConfigStore: ObservableObject {
             return value
         }
         return false
+    }
+
+    private nonisolated static func defaultInteger(for key: AppConfigKey) -> Int {
+        if case .integer(let value) = key.defaultValue {
+            return value
+        }
+        return 0
     }
 
     private nonisolated static func defaultStringArray(for key: AppConfigKey) -> [String]? {

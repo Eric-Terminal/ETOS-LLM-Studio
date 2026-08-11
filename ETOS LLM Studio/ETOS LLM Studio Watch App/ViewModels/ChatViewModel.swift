@@ -462,6 +462,7 @@ class ChatViewModel: ObservableObject {
         return cache
     }()
     var globalSystemPromptReloadTask: Task<Void, Never>?
+    var conversationMemoryReloadTask: Task<Void, Never>?
     var backgroundBlurTask: Task<Void, Never>?
 
     // MARK: - 初始化

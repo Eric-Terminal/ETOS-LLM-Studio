@@ -56,7 +56,19 @@ public struct ExtendedFeaturesView: View {
                     .foregroundStyle(.secondary)
             }
 
-            WatchBackgroundGenerationSettingsRows()
+            Section {
+                NavigationLink {
+                    WatchBackgroundGenerationSettingsView()
+                } label: {
+                    settingsNavigationLabel("后台生成", icon: .backgroundGeneration)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("减少切换 App 后长回复中断。", comment: "watchOS 后台生成入口说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Section {
                 NavigationLink {
@@ -142,6 +154,34 @@ public struct ExtendedFeaturesView: View {
                 }
             } footer: {
                 Text(NSLocalizedString("配置 MCP 工具服务器，让助手调用外部能力。", comment: "MCP 入口说明"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    LocalLinuxWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    settingsNavigationLabel("本地 Linux", icon: .localLinux)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("按需准备 Linux 用户态环境、终端与本地 Agent 工具。", comment: "Watch local Linux entry footer"))
+                    .etFont(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            Section {
+                NavigationLink {
+                    BrowserAgentWatchFeatureView(sessionID: viewModel.currentSession?.id)
+                } label: {
+                    settingsNavigationLabel("Browser Agent", icon: .browserAgent)
+                        .etFont(.headline)
+                        .padding(.vertical, 4)
+                }
+            } footer: {
+                Text(NSLocalizedString("使用本机实验性网页能力，或由你选择委托给 iPhone。", comment: "Watch Browser Agent settings entry footer"))
                     .etFont(.footnote)
                     .foregroundColor(.secondary)
             }

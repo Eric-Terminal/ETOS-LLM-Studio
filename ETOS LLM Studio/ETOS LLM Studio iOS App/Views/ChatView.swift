@@ -110,6 +110,8 @@ struct ChatView: View {
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
     @State var localResourceUsagePanelOffset: CGSize = .zero
+    @State var localTerminalPreviewOffset: CGSize = .zero
+    @State var localTerminalInitialJobID: UUID?
     // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
@@ -629,7 +631,7 @@ private struct LocalResourceUsageFloatingPanel: View {
         guard resourceUsageTask == nil else { return }
         resourceUsageTask = Task { @MainActor in
             while !Task.isCancelled {
-                resourceUsageMonitor.refresh()
+                await resourceUsageMonitor.refresh()
                 do {
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                 } catch {
@@ -737,8 +739,9 @@ extension ChatView {
         showsBackground: Bool = true
     ) -> some View {
         let displayedMessages = viewModel.displayMessages
+        let sessionMessages = viewModel.allMessagesForSession
         let retryableMessageIDs = MessageActionBarAvailability.retryableMessageIDs(
-            in: viewModel.allMessagesForSession,
+            in: sessionMessages,
             isSending: viewModel.isSendingMessage
         )
         let messageLayoutWidth = max(1, chatViewportWidth - 16)
@@ -835,6 +838,7 @@ extension ChatView {
                                 ChatBubble(
                                     messageState: state,
                                     roleplaySessionID: viewModel.currentSession?.id,
+                                    roleplayMessages: sessionMessages,
                                     layoutWidth: messageLayoutWidth,
                                     reasoningPreviewMaxHeight: reasoningPreviewMaxHeight,
                                     preparedMarkdownPayload: preparedMarkdownPayload,
@@ -845,9 +849,6 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.setReasoningExpanded(isExpanded, for: message.id)
                                             if isExpanded {
-                                                #if DEBUG
-                                                NSLog("[BottomPinTrace] release source=reasoning-expansion")
-                                                #endif
                                                 shouldKeepBottomPinned = false
                                             }
                                         }
@@ -858,9 +859,6 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.toolCallsExpandedState[message.id] = isExpanded
                                             if isExpanded {
-                                                #if DEBUG
-                                                NSLog("[BottomPinTrace] release source=tool-expansion")
-                                                #endif
                                                 shouldKeepBottomPinned = false
                                             }
                                         }
@@ -1048,25 +1046,6 @@ extension ChatView {
                 .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
                     handleDisplayedMessageIdentityChange()
                 }
-                #if DEBUG
-                .onChange(of: shouldKeepBottomPinned) { oldValue, newValue in
-                    NSLog(
-                        "[BottomPinTrace] observed-pin=%d->%d distance=%.1f streaming=%d",
-                        oldValue ? 1 : 0,
-                        newValue ? 1 : 0,
-                        scrollDistanceToBottom,
-                        viewModel.isSendingMessage ? 1 : 0
-                    )
-                }
-                .onChange(of: chatScrollTarget) { oldValue, newValue in
-                    NSLog(
-                        "[BottomPinTrace] target=%@->%@ streaming=%d",
-                        String(describing: oldValue),
-                        String(describing: newValue),
-                        viewModel.isSendingMessage ? 1 : 0
-                    )
-                }
-                #endif
                 .onAppear {
                     if shouldRestorePendingJumpOnAppear {
                         shouldRestorePendingJumpOnAppear = false
@@ -1146,6 +1125,26 @@ extension ChatView {
                     .zIndex(24)
                 }
 
+                LocalLinuxChatFloatingPreview(
+                    mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                    isLocalLinuxEnabled: appConfig.localLinuxEnabled,
+                    agentToolPreview: viewModel.latestAgentToolExecutionPreview,
+                    sessionID: viewModel.currentSession?.id,
+                    containerSize: chatViewportSize,
+                    topPadding: navBarHeight + 12,
+                    bottomPadding: max(16, chatInputBarHeight + 16),
+                    offset: $localTerminalPreviewOffset,
+                    isLiquidGlassEnabled: isLiquidGlassEnabled,
+                    onOpenTerminal: { jobID in
+                        localTerminalInitialJobID = jobID
+                        navigationDestination = .localTerminal
+                    },
+                    onOpenBrowser: {
+                        navigationDestination = .browser
+                    }
+                )
+                .zIndex(25)
+
                 VStack {
                     Spacer()
                     TTSFloatingController()
@@ -1181,7 +1180,8 @@ extension ChatView {
                 RoleplaySessionScriptHost(
                     sessionID: viewModel.currentSession?.id,
                     messageID: displayedMessages.last?.message.id,
-                    versionIndex: displayedMessages.last?.message.getCurrentVersionIndex() ?? 0
+                    versionIndex: displayedMessages.last?.message.getCurrentVersionIndex() ?? 0,
+                    chatMessages: sessionMessages
                 )
             }
             .coordinateSpace(.named(ChatView.flightCoordinateSpace))

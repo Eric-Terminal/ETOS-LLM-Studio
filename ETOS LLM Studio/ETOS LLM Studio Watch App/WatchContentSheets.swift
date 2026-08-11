@@ -157,16 +157,40 @@ struct WatchImportSourceView: View {
 // 独立的请求控制快速面板，供输入框左划快捷入口使用
 struct WatchQuickRequestControlsView: View {
     let runnableModel: RunnableModel
+    let sessionID: UUID?
+    let isLocked: Bool
     let onDone: () -> Void
 
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var state: ModelRequestBodyControlState?
     @State private var pendingSaveTask: Task<Void, Never>?
     @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
+    @State private var localAgentMode = LocalAgentMode.chat
+    @State private var hasActiveRun = false
 
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
         List {
-            if controls.isEmpty {
+            if appConfig.localLinuxEnabled, let sessionID {
+                Section(NSLocalizedString("会话模式", comment: "Watch local Agent mode section")) {
+                    Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: $localAgentMode) {
+                        ForEach(LocalAgentMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .disabled(isLocked || hasActiveRun)
+                    .onChange(of: localAgentMode) { _, mode in
+                        _ = Persistence.saveLocalAgentMode(mode, sessionID: sessionID)
+                    }
+                    if hasActiveRun {
+                        Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if controls.isEmpty && sessionID == nil {
                 Text(NSLocalizedString("当前模型没有可用请求控制。", comment: ""))
                     .foregroundStyle(.secondary)
             } else {
@@ -222,6 +246,25 @@ struct WatchQuickRequestControlsView: View {
         .disabled(state == nil)
         .task(id: runnableModel.id) {
             await loadState()
+            if let sessionID {
+                let sessionState = await Task.detached(priority: .userInitiated) {
+                    let run = Persistence.loadLatestConversationRun(sessionID: sessionID)
+                    return (
+                        mode: Persistence.localAgentMode(sessionID: sessionID),
+                        hasActiveRun: run.map { !$0.status.isTerminal } ?? false
+                    )
+                }.value
+                localAgentMode = sessionState.mode
+                hasActiveRun = sessionState.hasActiveRun
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
+            guard let sessionID else { return }
+            Task {
+                hasActiveRun = await Task.detached(priority: .utility) {
+                    Persistence.loadLatestConversationRun(sessionID: sessionID).map { !$0.status.isTerminal } ?? false
+                }.value
+            }
         }
     }
 

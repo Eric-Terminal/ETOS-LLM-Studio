@@ -35,6 +35,9 @@ public enum WatchInputQuickAction: String, CaseIterable, Identifiable, Codable, 
     case roleplay
     case worldbook
     case extendedFeatures
+    case agentMode
+    case browser
+    case localTerminal
 
     public var id: String { rawValue }
 }

@@ -105,6 +105,9 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                             await handleNewAPIProviderImport(url)
                             return
                         }
+                        if await SystemEntryURLRouter.handle(url) {
+                            return
+                        }
                         let handledByShortcutRouter = await ShortcutURLRouter.shared.handleIncomingURL(url)
                         if !handledByShortcutRouter {
                             if IncomingSnapshotRestoreSupport.isSnapshotURL(url) {
@@ -124,6 +127,8 @@ struct ETOS_LLM_Studio_iOS_AppApp: App {
                     DailyPulseBackgroundDeliveryScheduler.shared.activate()
                     updateTimelineManager.activateOnLaunchIfNeeded()
                     triggerFeedbackRefreshOnLaunchIfNeeded()
+                    SystemEntrySnapshotPublisher.shared.activate()
+                    SystemFileProviderDomainManager.activate()
                 }
                 .onChange(of: appConfig.performanceTelemetryEnabled) { _, enabled in
                     Task {

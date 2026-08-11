@@ -218,6 +218,46 @@ struct PersistenceCoreTests {
         cleanup(sessions: [session])
     }
 
+    @Test("GRDB 异步读取消息与计数保持完整结果")
+    func testGRDBAsyncMessageReadAndCount() async {
+        let previousOverride = Persistence.grdbEnabledOverrideForTests
+        Persistence.grdbEnabledOverrideForTests = true
+        Persistence.resetGRDBStoreForTests()
+        defer {
+            Persistence.grdbEnabledOverrideForTests = previousOverride
+            Persistence.resetGRDBStoreForTests()
+        }
+
+        let session = ChatSession(id: UUID(), name: "异步读取会话", isTemporary: false)
+        var assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "第一版",
+            imageFileNames: ["image.png"],
+            responseAttemptID: UUID()
+        )
+        assistantMessage.addVersion("第二版")
+        assistantMessage.switchToVersion(0)
+        let messages = [
+            ChatMessage(role: .user, content: "问题"),
+            assistantMessage
+        ]
+
+        Persistence.saveChatSessions([session])
+        Persistence.saveMessages(messages, for: session.id)
+
+        let loadedMessages = await Persistence.loadMessagesAsync(for: session.id)
+        let messageCount = await Persistence.loadMessageCountAsync(for: session.id)
+
+        #expect(messageCount == messages.count)
+        #expect(loadedMessages.map(\.id) == messages.map(\.id))
+        #expect(loadedMessages.last?.getAllVersions() == ["第一版", "第二版"])
+        #expect(loadedMessages.last?.getCurrentVersionIndex() == 0)
+        #expect(loadedMessages.last?.imageFileNames == ["image.png"])
+        #expect(loadedMessages.last?.responseAttemptID == assistantMessage.responseAttemptID)
+
+        cleanup(sessions: [session])
+    }
+
     @Test("GRDB saveMessages 会保留回复尝试元数据")
     func testGRDBSaveAndLoadResponseAttemptMetadata() {
         let previousOverride = Persistence.grdbEnabledOverrideForTests

@@ -323,8 +323,15 @@ extension ChatViewModel {
     }
 
     func reloadConversationMemoryState() {
-        conversationSessionSummaries = ConversationMemoryManager.loadAllSessionSummaries()
-        conversationUserProfile = ConversationMemoryManager.loadUserProfile()
+        conversationMemoryReloadTask?.cancel()
+        conversationMemoryReloadTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            let snapshot = await ConversationMemoryManager.loadStateSnapshotAsync()
+            guard let self, !Task.isCancelled else { return }
+            conversationSessionSummaries = snapshot.sessionSummaries
+            conversationUserProfile = snapshot.userProfile
+            conversationMemoryReloadTask = nil
+        }
     }
 
     func deleteConversationSummary(for sessionID: UUID) {
