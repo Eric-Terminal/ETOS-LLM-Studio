@@ -297,6 +297,28 @@ struct LocalLinuxWatchTerminalView: View {
 
     var body: some View {
         List {
+            if startupInput != nil, let job {
+                Section {
+                    HStack {
+                        if isTerminalActive {
+                            ProgressView()
+                            Text(NSLocalizedString("正在安装", comment: "Watch Linux recipe installing status"))
+                            Spacer()
+                            Text(job.startedAt ?? job.createdAt, style: .timer)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Label(
+                                job.state.displayName,
+                                systemImage: job.state == .completed
+                                    ? "checkmark.circle.fill"
+                                    : "exclamationmark.circle.fill"
+                            )
+                            .foregroundStyle(job.state == .completed ? .green : .red)
+                        }
+                    }
+                }
+            }
             Section {
                 Group {
                     if output.plainText.isEmpty {

@@ -60,6 +60,8 @@ struct LocalLinuxTerminalView: View {
 
     var body: some View {
         VStack {
+            installationStatusBar
+
             GeometryReader { proxy in
                 ScrollView {
                     Group {
@@ -142,10 +144,7 @@ struct LocalLinuxTerminalView: View {
                     }
 
                     Divider()
-                    Button {
-                        guard let job else { return }
-                        Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
-                    } label: {
+                    Button(action: interruptForegroundProgram) {
                         Label(
                             NSLocalizedString("中断前台程序", comment: "Interrupt terminal"),
                             systemImage: "exclamationmark"
@@ -280,6 +279,48 @@ struct LocalLinuxTerminalView: View {
         Button(shortcut.title) { sendRaw(shortcut.inputData) }
             .buttonStyle(.bordered)
             .disabled(!isTerminalActive)
+    }
+
+    @ViewBuilder
+    private var installationStatusBar: some View {
+        if startupInput != nil, let job {
+            HStack {
+                if isTerminalActive {
+                    ProgressView()
+                    Text(NSLocalizedString("正在安装", comment: "Linux recipe installing status"))
+                } else {
+                    Label(
+                        job.state.displayName,
+                        systemImage: job.state == .completed
+                            ? "checkmark.circle.fill"
+                            : "exclamationmark.circle.fill"
+                    )
+                    .foregroundStyle(job.state == .completed ? .green : .red)
+                }
+
+                Spacer()
+
+                if isTerminalActive {
+                    Text(job.startedAt ?? job.createdAt, style: .timer)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                    Button(action: interruptForegroundProgram) {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("中断前台程序", comment: "Interrupt terminal"))
+                }
+            }
+            .font(.caption)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .overlay(alignment: .bottom) { Divider() }
+        }
+    }
+
+    private func interruptForegroundProgram() {
+        guard let job else { return }
+        Task { try? await LocalLinuxJobScheduler.shared.interrupt(jobID: job.id) }
     }
 
     private func resize(for size: CGSize) {

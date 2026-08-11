@@ -44,6 +44,10 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
             NSLocalizedString(
                 "目标：本地 Linux RootFS。影响：软件包、依赖与 apk 缓存会持久增加 System 占用，直到你自行卸载或重置系统。",
                 comment: "Local Linux recipe storage impact"
+            ),
+            NSLocalizedString(
+                "安装终端会显示 apk 下载进度；网络连续 120 秒没有传输进展时，apk 才会停止并报告错误。",
+                comment: "Local Linux recipe network progress explanation"
             )
         ].joined(separator: "\n\n")
     }
@@ -100,35 +104,35 @@ public enum LocalLinuxEnvironmentRecipes {
                 id: "bash",
                 title: NSLocalizedString("安装 Bash", comment: "Bash environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 Bash；不会自动改用 Bash 执行失败的脚本。", comment: "Bash environment recipe detail"),
-                command: "apk add bash",
+                command: "apk --timeout 120 --progress add bash",
                 providedCommands: ["bash"]
             ),
             LocalLinuxEnvironmentRecipe(
                 id: "python",
                 title: NSLocalizedString("安装 Python 环境", comment: "Python environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 python3 与 py3-pip。", comment: "Python environment recipe detail"),
-                command: "apk add python3 py3-pip",
+                command: "apk --timeout 120 --progress add python3 py3-pip",
                 providedCommands: ["python", "python3", "pip", "pip3"]
             ),
             LocalLinuxEnvironmentRecipe(
                 id: "node",
                 title: NSLocalizedString("安装 Node.js 环境", comment: "Node environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 nodejs 与 npm；npx 会随 npm 提供。", comment: "Node environment recipe detail"),
-                command: "apk add nodejs npm",
+                command: "apk --timeout 120 --progress add nodejs npm",
                 providedCommands: ["node", "npm", "npx"]
             ),
             LocalLinuxEnvironmentRecipe(
                 id: "build",
                 title: NSLocalizedString("安装编译工具", comment: "Build tools environment recipe name"),
                 detail: NSLocalizedString("安装 build-base 与 cmake；会明显增加系统占用和运行负载。", comment: "Build tools environment recipe detail"),
-                command: "apk add build-base cmake",
+                command: "apk --timeout 120 --progress add build-base cmake",
                 providedCommands: ["cc", "c++", "gcc", "g++", "make", "cmake"]
             ),
             LocalLinuxEnvironmentRecipe(
                 id: "uvx",
                 title: NSLocalizedString("安装 uvx 环境", comment: "uvx environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 uv；之后由用户决定是否通过 uvx 下载并运行具体工具。", comment: "uvx environment recipe detail"),
-                command: "apk add uv",
+                command: "apk --timeout 120 --progress add uv",
                 providedCommands: ["uv", "uvx"]
             )
         ]
