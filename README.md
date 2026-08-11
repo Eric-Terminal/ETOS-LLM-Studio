@@ -5,7 +5,7 @@
 ![License](https://img.shields.io/badge/License-GPLv3-0052CC?style=flat-square)
 ![Build](https://img.shields.io/badge/Build-Passing-44CC11?style=flat-square)
 
-**一个运行在 iOS 和 Apple Watch 上的原生 AI 客户端。支持 OpenAI、Anthropic Claude、Google Gemini 与本机 GGUF / llama.cpp 模型，内置 MCP 工具调用、Agent Skills 技能包、本地 RAG 记忆、世界书、每日脉冲、应用锁与 SQLCipher 全盘加密、CloudKit / WatchConnectivity 双端同步以及 Siri 快捷指令。**
+**一个运行在 iOS 和 Apple Watch 上的原生 AI / Agent 客户端。支持 OpenAI、Anthropic Claude、Google Gemini 与本机 GGUF / llama.cpp 模型，并提供会话级 Chat / Agent 模式、本地 Linux、Browser Agent、64 个 Apple 原生能力工具、MCP、Agent Skills、跨会话协作、本地 RAG 记忆、实时活动与双端同步。**
 
 [English](docs/readme/README_EN.md) | [繁體中文](docs/readme/README_ZH_HANT.md) | [日本語](docs/readme/README_JA.md) | [Русский](docs/readme/README_RU.md)
 
@@ -23,9 +23,9 @@
 
 在学校的日子挺无聊的，平时又总会冒出很多想问 AI 的问题。当时我嫌 App Store 上的 AI 应用要么贵得离谱，要么功能太残废（尤其是手表端），索性就自己动手搓了一个。
 
-从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 **758 个 Swift 源文件、284,139 行 Swift 代码**（仅计算项目内 Swift，不把 llama.cpp 子模块和 VitePress 文档站依赖算进来）的工程，它确实已经长大了不少。虽然名字叫 "ETOS LLM Studio" 听着有点唬人，但它本质上还是我拿来探索大模型应用边界的试验场。
+从最初那个只有 1,800 行代码、API Key 还要硬编码的简陋版本，到现在 **971 个 Swift 源文件、362,394 行 Swift 代码**（仅计算项目内 Swift，不把 llama.cpp、iSH 子模块和 VitePress 文档站依赖算进来）的工程，它确实已经长大了不少。虽然名字叫 "ETOS LLM Studio" 听着有点唬人，但它本质上还是我拿来探索大模型应用边界的试验场。
 
-现在它已经不只是一个手表端 App 了：我把 iOS 端也一点点补成了完整版本，方便在手机上管理云端模型、本地 GGUF 权重、工具、记忆、世界书和每日脉冲；两端数据还能通过内置同步引擎自动互通。
+现在它已经不只是一个手表端 App 了：iOS 和 watchOS 都能管理云端模型、本地 GGUF 权重、工具、记忆、世界书和每日脉冲；Agent 还可以操作受控浏览器、调用 Apple 原生能力，或在 App 内置的本地 Linux 中运行命令与 Skill 脚本。两端数据通过内置同步引擎互通。
 
 因为我平时主要还是用 Mac 和 Watch，iPhone 端偶尔会有一些还在继续打磨的边角，不过我会继续慢慢补齐。
 
@@ -61,7 +61,7 @@
 #### 工具与自动化
 
 *   **工具中心 + 拓展工具**：统一管理 MCP / Shortcuts / 内建本地工具 / 自定义 JavaScript 工具 / Agent Skills 与内置 `getSystemTime` 等能力，支持按来源和用途分组、聊天工具开关、审批策略、会话级启用、分类收纳与工具详情页。
-*   **Agent Skills 技能包**：支持从本地目录、GitHub 仓库链接、GitHub raw / 嵌套目录、默认分支与隐藏目录导入技能包；技能资源支持文本编码读取、大文本分块、文档抽取与图片 OCR，技能元数据暴露给模型用于按需启用。
+*   **Agent Skills 技能包**：支持从本地目录、GitHub 仓库链接、GitHub raw / 嵌套目录、默认分支与隐藏目录导入技能包；技能资源支持文本编码读取、大文本分块、文档抽取与图片 OCR。Agent 模式启用本地 Linux 后，Skill 可在逐次授权下执行 `scripts/` 中的脚本；Skill 目录只读挂载，脚本版本与哈希随 Run 冻结，不能借运行中替换文件扩权。
 *   **结构化问答工具（ask_user_input）**：支持单题逐步作答、单选/多选互斥规则、自定义输入与返回上题。
 *   **自定义 JavaScript 工具**：支持分离式 JS 执行与 AI 生成脚本工具，脚本保存在 `CustomJSTools` 独立目录，创建前会执行脚本验证，可像普通工具一样启用、禁用和配置审批策略。
 *   **拓展工具能力补齐**：内置系统时间、SQLite 数据库增删改查、网页卡片展示、输入框填充、沙盒文件操作与反馈工单自动提交工具。
@@ -70,6 +70,18 @@
 *   **内建 MCP 服务器**：内置搜索、本地工具和个人数据 MCP 服务器；个人数据服务器可在工具真正调用时按需申请 HealthKit、日历和提醒事项权限。
 *   **Siri 快捷指令**：集成 Shortcuts 框架，支持通过快捷指令调用 AI 能力、自定义工具并通过 URL Scheme 路由。
 *   **应用内文件管理**：内置可浏览目录的文件管理器，支持直接查看与管理应用沙盒文件，纯文本文件可直接预览。
+
+#### Agent、原生能力与本地 Linux
+
+*   **会话级 Chat / Agent 模式**：模式随会话保存。Chat 不向模型暴露 Agent 工具；Agent 即使未开启 Linux，也可使用 Browser Agent、原生能力和会话协作，开启本地 Linux 后才会增加命令、Linux 文件与本地 stdio MCP。用户终端在两种模式下都能独立使用。
+*   **App 内置本地 Linux**：基于 `ish-multiarch` 嵌入最小 Alpine AArch64 RootFS，覆盖 iOS 与 watchOS。系统按实际操作懒安装，不会因为打开开关就启动，也不会静默安装 Python、Node.js 或编译工具；常用环境通过展示命令、软件源和存储影响的一键 recipe 由用户主动执行。
+*   **命令、PTY 与任务治理**：提供 `linux_run`、`linux_shell`、`linux_process`、交互式 PTY 终端、任务页、输出分页、取消和诊断。用户终端、Agent 命令与 Agent PTY 相互隔离，但共享授权后的 RootFS 与工作区；标准输出持续在后台收集，不依赖聊天页面保持打开。
+*   **工作区、挂载与环境变量**：每个会话拥有独立工作区，可把 App、iCloud Drive 或用户明确授权的外部目录以只读或读写方式挂载进 Linux。环境变量保存在 GRDB 中并在启动进程时注入，面向模型、日志与诊断的副本支持敏感值打码。
+*   **统一文件工具与本地 MCP**：现有文件工具同时理解 `app://`、`linux://` 与 `mount://`，不会另造一套绕过审批的 Linux 文件 API。本地 stdio MCP 与 HTTP / SSE 服务器使用同一管理页、排序、工具开关和审批策略，并支持常见 `mcpServers` JSON 导入导出。
+*   **Browser Agent**：iOS 受控 WKWebView 支持会话隔离标签页、DOM / 可访问性快照、点击、输入、滚动、JavaScript、截图、下载和用户接管；watchOS 会探测本机真实能力，并可在用户开启后把缺失操作委托给配对 iPhone。
+*   **64 个 Apple 原生工具**：按设备、媒体与环境、个人数据、视觉与语言四组提供剪贴板、通知、AlarmKit、地图、设备状态、语音、媒体、WeatherKit、HomeKit、Bluetooth、NFC、联系人、照片、定位、Vision 与 NaturalLanguage 等能力。工具按平台和系统版本报告真实可用性，写入或外部副作用仍需逐次审批；部分 watchOS 缺失能力可委托 iPhone。
+*   **持久会话协作**：Agent 可创建隐藏子代理或可见协作会话，选择等待结果、后台交付或完成后续写当前会话。运行状态按 session / run / tool 归属，避免多会话并发时把结果串回错误聊天。
+*   **实时活动与后台完成通知**：iOS 会在锁屏和灵动岛显示 Chat / Agent 的运行、等待输入、完成或失败状态，点按可返回对应会话。App 进入后台后会使用系统授予的短时执行窗口继续回复或 Linux 任务；回复确实在后台结束时才发送本地通知，若系统最终挂起任务则准确记录为中断而不是静默重放。
 
 #### 记忆与知识组织
 
@@ -126,7 +138,7 @@
 
 ## 🛠️ 技术栈
 
-*   **语言**: Swift 6, C / C++（llama.cpp 桥接层）
+*   **语言**: Swift 6, C / C++（llama.cpp 与 iSH 公共桥接层）
 *   **UI**: SwiftUI
 *   **架构**: MVVM + Protocol Oriented Programming
 *   **数据**: GRDB + SQLite + SQLCipher（核心持久化、本地向量数据库与可选全盘物理加密）, JSON（导入导出与兼容格式）
@@ -135,21 +147,25 @@
 *   **网络与传输**: URLSession（API 请求）, Streamable HTTP / SSE（MCP 传输）, WatchConnectivity / CloudKit / APNs 静默推送（跨端与云传输）, WebSocket / HTTP Polling（局域网调试）
 *   **AI 协议**: Model Context Protocol（基于官方 [swift-sdk](https://github.com/modelcontextprotocol/swift-sdk)）, OpenAI Chat / Responses, Anthropic Messages, Gemini API, 本地 `local-llama-cpp` 提供商
 *   **本地推理**: llama.cpp / GGUF, Swift ↔ C ABI ↔ C++ 桥接, CMake + Ninja 预编译 `libetos-llama.a`, Accelerate / Metal（watchOS 运行期固定 CPU 路径）
-*   **系统能力**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, BackgroundTasks（iOS）, LocalAuthentication, Speech / AVFoundation
+*   **本地 Agent Runtime**: `ish-multiarch`、内置 Alpine AArch64 RootFS、Meson + Ninja 预编译 `libiSHApple.a`、PTY、动态挂载、guest 文件 API 与本地 stdio MCP
+*   **Agent 能力**: 64 个 Apple 原生 MCP 工具、WKWebView Browser Agent、可执行 Agent Skills、持久会话协作与按 Run 冻结的权限上下文
+*   **系统能力**: Siri Shortcuts, WatchConnectivity, CloudKit, UserNotifications, ActivityKit / WidgetKit, iOS 短时后台任务, LocalAuthentication, Speech / AVFoundation
 *   **文档站**: VitePress / Teek（仅文档站使用；README 中的代码规模不统计其依赖）
-*   **依赖管理**: Swift Package Manager（当前显式依赖 `GRDB.swift`(Eric-Terminal fork)、`SQLCipher.swift`、`swift-sdk`(MCP)、`swift-markdown-ui`、`SwiftMath`、`ZIPFoundation`、`Cepheus`(watchOS 第三方键盘)，并包含其传递依赖 `networkimage`、`swift-cmark`、`eventsource`、`swift-nio` 等）+ llama.cpp Git submodule + CMake/Ninja 静态库构建脚本
+*   **依赖管理**: Swift Package Manager（当前显式依赖 `GRDB.swift`(Eric-Terminal fork)、`SQLCipher.swift`、`swift-sdk`(MCP)、`swift-markdown-ui`、`SwiftMath`、`ZIPFoundation`、`Cepheus`(watchOS 第三方键盘)，并包含其传递依赖 `networkimage`、`swift-cmark`、`eventsource`、`swift-nio` 等）+ llama.cpp / ish-multiarch Git submodule + 独立静态库构建脚本
 
 ---
 
 ## 🏗️ 项目架构
 
-项目采用双层结构：平台无关的 ETOSCore 框架 + 各平台独立的视图层。最近一轮重构引入了 `Config/AppConfigStore` 配置中心，全量替代 `@AppStorage`，并新增 `LocalLLM` / `LocalLLMBridge` 把本机 GGUF 推理接入现有聊天生命周期；同时把 MCP、同步导入、局域网调试和会话标签继续拆成独立模块。当前最大 Swift 文件约 1,540 行（`Sync/WatchSyncManager.swift`），本地模型管理页、同步引擎和工具中心仍是后续继续拆分的重型模块。
+项目采用双层结构：平台无关的 ETOSCore 框架 + 各平台独立的视图层。Chat、Agent 编排、原生工具、Browser Agent、本地 Linux、MCP 和 Skills 都先进入 ETOSCore 的统一运行上下文、审批、审计与持久化边界，再由 iOS / watchOS 提供各自适合的界面和系统能力实现。
 
 ```
-ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（349 个 Swift 源文件）
+ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（481 个 Swift 源文件）
 ├── AppTool/                            ← 本地工具、自定义 JS 工具、ask_user_input、SQLite 与沙盒文件工具
 ├── Attachments/                        ← 文件附件文本抽取
+├── BrowserAgent/                       ← 受控浏览器会话、DOM 自动化、截图、下载、Cookie 与 iPhone 委托
 ├── Chat/                               ← 聊天模型、消息版本、导出、渲染状态
+│   ├── ConversationRuntime/            ← 持久协作会话、子代理、等待图、预算与续写
 │   └── Service/                        ← ChatService 请求编排、响应解析、重试、工具、记忆与世界书注入
 ├── Config/                             ← AppConfigStore 配置中心、键定义与旧版 UserDefaults 迁移
 ├── ConfigLoader/                       ← Provider 配置、SQLite 存储、背景与一次性下载状态
@@ -158,18 +174,20 @@ ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（349 �
 ├── Feedback/                           ← 应用内反馈助手、环境采集、DTO 与本地存储
 ├── Font/                               ← 自定义字体库、字体路由与回退范围
 ├── LocalDebugServer/                   ← 局域网调试客户端、Web 控制台、文件 / SQLite / Provider 命令与请求捕获
+├── LocalAgentRuntime/                  ← 本地 Linux、RootFS、PTY、工作区、挂载、任务、审批与 iSH C ABI
 ├── LocalLLM/                            ← 本地 GGUF 模型记录、提供商桥接、参数映射与 Swift 推理入口
 ├── LocalLLMBridge/                      ← llama.cpp C ABI / C++ 桥接层与静态库链接边界
 ├── Math/                               ← LaTeX/数学公式渲染引擎
 ├── MCP/                                ← MCP 客户端、内建服务器、服务器存储、Streamable HTTP / SSE 传输（基于官方 swift-sdk）
 ├── Memory/ + SimilaritySearch/         ← 本地 RAG、嵌入、分块、SQLite 向量检索
+├── NativeCapabilities/                 ← 64 个 Apple 原生能力的定义、执行器、权限与双端委托
 ├── Parsing/                            ← 请求头与参数表达式解析
 ├── Persistence/                        ← GRDB 主库/辅助库、迁移、启动备份、媒体与文件存储
 ├── Providers/                          ← Provider 模型、代理配置与 OpenAI / Anthropic / Gemini 适配器
 ├── Roleplay/                           ← 角色扮演人设、聊天提示词模板与预置角色库
 ├── Security/                           ← 应用锁状态机、PBKDF2 主密码与数据库加密管理
 ├── Shortcuts/                          ← Siri Shortcuts、URL Router、导入与执行中继
-├── Skills/                             ← Agent Skills 技能包导入、解析、GitHub 拉取、资源读取与策略
+├── Skills/                             ← Agent Skills 导入、资源读取、脚本快照、授权与本地 Linux 执行
 ├── Snapshot/                           ← 数据库脱机快照构建、AES-256-GCM 加密与安全恢复
 ├── Storage/                            ← 沙盒文件浏览、存储统计、缓存清理
 ├── Sync/                               ← WatchConnectivity 快速通道 / CloudKit / iCloud 漫游 / Manifest / Delta / iCloud Drive / S3 与第三方导入
@@ -179,12 +197,16 @@ ETOSCore/ETOSCore/                         ← 平台无关业务逻辑（349 �
 ├── UsageAnalytics/                     ← 用量事件、统计仪表盘、按小时趋势与模型 Token 占比
 └── Worldbook/                          ← 世界书模型、导入导出、SQLite 存储与触发引擎
 
-ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（155 个 Swift 源文件）
-ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（131 个 Swift 源文件）
-ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio iOS App/    ← iOS 视图层（187 个 Swift 源文件）
+ETOS LLM Studio/ETOS LLM Studio Watch App/  ← watchOS 视图层（156 个 Swift 源文件）
+ETOS LLM Studio/ETOS Agent Widgets/          ← iOS Widget 与 Live Activity
+ETOS LLM Studio/ETOS Agent Watch Widgets/    ← watchOS Widget
+ETOS LLM Studio/ETOS Workspace Provider/     ← Files / File Provider 系统入口
+ETOS LLM Studio/ETOS Agent Share/            ← 分享扩展系统入口
+ETOSCore/ETOSCoreTests/                       ← ETOSCore 层测试（147 个 Swift 源文件）
 ```
 
-云端模型数据流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型数据流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。会话、工具、记忆、世界书、用量统计与同步数据经由 ETOSCore 层服务和 GRDB/SQLite 存储统一治理。
+云端模型数据流：`View → ChatViewModel → ChatService.shared → Provider Adapter → LLM API`。本地模型数据流：`View → ChatViewModel → ChatService.shared → LocalLLMEngine → LocalLLMBridge → libetos-llama.a / llama.cpp`。Agent 工具数据流：`ChatService → AgentRuntimeContext → 审批与审计 → BrowserAgent / NativeCapabilities / MCP / Skills / LocalAgentRuntime → libiSHApple.a`。会话、Run、工具、记忆、世界书、用量统计与同步数据经由 ETOSCore 层服务和 GRDB/SQLite 统一治理。
 
 ---
 
@@ -197,23 +219,43 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个
     git clone --recurse-submodules https://github.com/Eric-Terminal/ETOS-LLM-Studio.git
     cd ETOS-LLM-Studio
     ```
+    如果已经 Clone 过但缺少 `Dependencies/llama.cpp` 或 `Dependencies/ish-multiarch`，执行：
+    ```bash
+    git submodule update --init --recursive
+    ```
 2.  **环境要求**:
     *   Xcode 26.0+
     *   watchOS 26.0+ SDK
-    *   CMake + Ninja（如果没有，先 `brew install cmake ninja`）
+    *   CMake + Ninja（构建 llama.cpp）
+    *   Meson + Ninja（构建 iSHApple）
+    *   推荐直接执行 `brew install cmake ninja meson`
     *   （如果对不上你可以自己改一改兼容性）
-3.  **编译前第一步：先生成原生静态库**:
-    Xcode 不会在构建阶段反复编译 llama.cpp 和 iSH。ETOSCore 会分别链接预先生成的 `libetos-llama.a` 与 `libiSHApple.a`。如果你要跑真机 / Release，先执行：
+3.  **编译前先生成原生静态库**:
+    Xcode 不会在普通 Build Phase 中反复编译 llama.cpp 和 iSH。统一入口会分别调用两套构建脚本，并把两个独立静态库放进同一个 Xcode 搜索目录；它们不会被合并成一份 `.a`。
+
+    如果要编译真机 / Release：
     ```bash
     CONFIGURATION=Release SDK_NAME=iphoneos PLATFORM_NAME=iphoneos ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     CONFIGURATION=Release SDK_NAME=watchos PLATFORM_NAME=watchos ARCHS="arm64 arm64_32" scripts/build-native-static-libraries.sh --parallel
     ```
-    如果只是本机 Debug 模拟器，可以改用：
+    如果要编译当前 README 使用的 iOS + watchOS Debug 模拟器：
     ```bash
     CONFIGURATION=Debug SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     CONFIGURATION=Debug SDK_NAME=watchsimulator PLATFORM_NAME=watchsimulator ARCHS=arm64 scripts/build-native-static-libraries.sh --parallel
     ```
-    `libetos-llama.a` 与独立的 `libiSHApple.a` 会并列放在 `Dependencies/llama-build/products/<platform>-<configuration>/`。脚本默认使用 Ninja 作为 CMake Generator，Ninja 本身会并行构建；追加 `--parallel` 会按本机 CPU 数显式传给 CMake，也可以用 `--parallel=8`、`--jobs 8` 或 `-j8` 指定任务数。两套产物分别校验缓存，修改 iSH 不会再触发 llama.cpp 重编；如果 Xcode 报缺少 `etos-llama`、`iSHApple` 或对应符号，就按当前 SDK / Configuration 重新运行命令。
+
+    首次运行会构建 iSHApple 的 iOS / watchOS 设备与模拟器切片，以及当前命令要求的 llama.cpp 平台产物，耗时会明显长于后续构建。缓存命中后，脚本会直接复用现有结果；修改 iSH 不会触发 llama.cpp 重编，反之亦然。`--parallel` 默认按本机 CPU 数传给 CMake，也可使用 `--parallel=8`、`--jobs 8` 或 `-j8` 指定任务数。
+
+    主要产物如下：
+
+    | 产物 | 位置 | 用途 |
+    | --- | --- | --- |
+    | `iSHApple.xcframework` | `Dependencies/ish-build/iSHApple.xcframework` | iSH 公共多平台产物 |
+    | `libiSHApple.a` | `Dependencies/ish-build/products/<platform>/` | 各平台原始 iSH 静态库 |
+    | `libetos-llama.a` | `Dependencies/llama-build/products/<platform>-<configuration>/` | llama.cpp / ggml / mtmd |
+    | 暂存的 `libiSHApple.a` | 与 `libetos-llama.a` 同目录 | 供当前 Xcode SDK / Configuration 搜索并链接 |
+
+    ETOSCore 通过 `-letos-llama` 链接 llama.cpp；iOS / watchOS 的 Linux 薄桥通过对象链接选项额外链接 `-liSHApple`。因此 Xcode 会同时消费两份静态库，而不是先把它们打包到一起。生成目录均已加入 `.gitignore`，不要提交构建产物。
 4.  **打开项目**:
     打开 `ETOS LLM Studio.xcworkspace`（注意是 **workspace** 不是 xcodeproj）。
     首次打开会自动解析并拉取 Swift Package 依赖。
@@ -221,6 +263,14 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个
     选择 `ETOS LLM Studio App` Scheme 运行 iOS App；如果要单独调试 watchOS，再选择 `ETOS LLM Studio Watch App` Scheme。连上设备（或模拟器）后，Command + R 即可。
 6.  **配置**:
     启动后，去设置里添加你的 API Key。推荐使用"局域网调试"功能，直接把做好的 JSON 配置文件推送到 `Documents/Providers/` 目录下（真的有人会想在 Apple Watch 上面戳 API Key 进去吗）。
+
+### 常见编译问题
+
+*   `ish-multiarch 子模块未初始化`：运行 `git submodule update --init --recursive`。
+*   `找不到 meson` / `找不到 ninja` / `cmake: command not found`：运行 `brew install cmake ninja meson`，然后重新执行静态库脚本。
+*   `library 'etos-llama' not found` 或 `library 'iSHApple' not found`：确认脚本使用的 `SDK_NAME`、`PLATFORM_NAME` 与 `CONFIGURATION` 和 Xcode 当前目标一致。
+*   watchOS 真机归档缺少架构：使用 `ARCHS="arm64 arm64_32"` 重新生成 `watchos` Release 产物。
+*   本机环境变量导致 watchOS 链接异常：使用下一节提供的 `env -u ... xcodebuild` 标准命令。
 
 ---
 
@@ -236,7 +286,7 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个
   ```bash
   env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'generic/platform=watchOS Simulator' build
   ```
-* **运行 ETOSCore 核心框架单元测试**（116 个测试源文件，41,055 行测试代码）：
+* **运行 ETOSCore 核心框架单元测试**（147 个测试源文件，50,853 行测试代码）：
   ```bash
   env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOSCore' -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -parallel-testing-enabled NO test
   ```
@@ -246,7 +296,7 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个
   ```
 * **运行 watchOS App 单元与 UI 测试**：
   ```bash
-  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm),OS=26.5' -parallel-testing-enabled NO test
+  env -u SDKROOT -u LIBRARY_PATH -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH xcodebuild -workspace 'ETOS LLM Studio.xcworkspace' -scheme 'ETOS LLM Studio Watch App' -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.5' -parallel-testing-enabled NO test
   ```
 
 ---
@@ -269,4 +319,4 @@ ETOSCore/ETOSCoreTests/                         ← ETOSCore 层测试（116 个
 
 ---
 
-本次 README 修订于 2026 年 7 月 25 日。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
+本次 README 修订于 2026 年 8 月 12 日。项目更新频率比较高，如果你发现 README 跟不上代码，欢迎直接翻提交记录。
