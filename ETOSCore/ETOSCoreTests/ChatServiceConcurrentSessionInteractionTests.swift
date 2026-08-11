@@ -167,7 +167,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
             )
         }
 
-        try await waitUntil("会话 A 请求启动") {
+        try await waitUntil("会话 A 请求启动", timeout: 15.0) {
             ControlledSessionURLProtocol.hasStarted(marker: "A")
         }
 
@@ -187,7 +187,7 @@ struct ChatServiceConcurrentSessionInteractionTests {
             )
         }
 
-        try await waitUntil("会话 B 请求启动") {
+        try await waitUntil("会话 B 请求启动", timeout: 15.0) {
             ControlledSessionURLProtocol.hasStarted(marker: "B")
         }
 

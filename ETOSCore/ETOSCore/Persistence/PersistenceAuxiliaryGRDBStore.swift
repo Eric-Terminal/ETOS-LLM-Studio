@@ -150,12 +150,13 @@ final class PersistenceAuxiliaryGRDBStore {
 
     private func scheduleDatabaseMaintenanceIfNeeded() {
         Task.detached(priority: .userInitiated) { [weak self] in
-            guard let self else { return }
             let delay = DatabaseMaintenanceLaunchDeferral.delayNanoseconds
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: delay)
                 guard !Task.isCancelled else { return }
             }
+            // 延迟期间不持有 Store，避免已被释放的测试数据库稍后仍触发维护。
+            guard let self else { return }
             self.runDatabaseMaintenanceIfNeeded()
         }
     }
