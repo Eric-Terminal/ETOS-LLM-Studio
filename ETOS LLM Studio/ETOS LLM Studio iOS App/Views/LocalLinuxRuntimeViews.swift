@@ -968,7 +968,7 @@ struct LocalLinuxFileBrowserView: View {
                 )
                 if isCriticalSystemPath(pendingDelete.path) {
                     try await LocalLinuxRuntimeController.shared.markSystemDamaged(
-                        reason: NSLocalizedString("用户删除了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。", comment: "Critical Linux system path deleted")
+                        reason: NSLocalizedString("用户删除了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。", comment: "Critical Linux system path deleted")
                     )
                 }
                 await reload()

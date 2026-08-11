@@ -74,6 +74,9 @@ func etosISHRuntimeStart(
     _ mountCount: UInt32
 ) -> Int32
 
+@_silgen_name("etos_ish_runtime_stop")
+func etosISHRuntimeStop() -> Int32
+
 @_silgen_name("etos_ish_runtime_phase")
 func etosISHRuntimePhase() -> Int32
 

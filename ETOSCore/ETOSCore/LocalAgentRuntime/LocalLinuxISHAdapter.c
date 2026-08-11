@@ -233,6 +233,14 @@ int32_t etos_ish_runtime_start(
 #endif
 }
 
+int32_t etos_ish_runtime_stop(void) {
+#if ETOS_ISH_SUPPORTED
+    return ish_apple_runtime_stop();
+#else
+    return ETOS_ISH_ENOSYS;
+#endif
+}
+
 int32_t etos_ish_runtime_phase(void) {
 #if ETOS_ISH_SUPPORTED
     return ish_apple_runtime_current_phase();

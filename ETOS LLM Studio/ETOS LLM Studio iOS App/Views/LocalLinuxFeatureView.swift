@@ -26,6 +26,8 @@ struct LocalLinuxFeatureView: View {
     @State private var deleteUserData = false
     @State private var showResetConfirmation = false
     @State private var isPreparingRuntime = false
+    @State private var isResettingSystem = false
+    @State private var resetStatusMessage: String?
 
     var body: some View {
         TabView {
@@ -67,7 +69,7 @@ struct LocalLinuxFeatureView: View {
         } message: {
             Text(deleteUserData
                  ? NSLocalizedString("将同时删除 Home、Shared 与全部工作区。此操作无法撤销。", comment: "Reset Linux including user data warning")
-                 : NSLocalizedString("只删除可重建的系统；Home、Shared 与工作区会保留。运行中的系统需要重新打开 App。", comment: "Reset Linux system warning"))
+                 : NSLocalizedString("只删除可重建的系统；Home、Shared 与工作区会保留。运行中的 Linux 会在 App 内停止并重新启动。", comment: "Reset Linux system warning"))
         }
     }
 
@@ -309,9 +311,21 @@ struct LocalLinuxFeatureView: View {
                     NSLocalizedString("同时删除用户数据", comment: "Delete Linux user data toggle"),
                     isOn: $deleteUserData
                 )
+                .disabled(isResettingSystem)
+                if isResettingSystem {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(NSLocalizedString("正在重置并重新启动 Linux…", comment: "Resetting local Linux status"))
+                    }
+                } else if let resetStatusMessage {
+                    Label(resetStatusMessage, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
                 Button(NSLocalizedString("重置本地 Linux…", comment: "Reset local Linux action"), role: .destructive) {
                     showResetConfirmation = true
                 }
+                .disabled(isResettingSystem)
             }
         }
     }
@@ -326,7 +340,11 @@ struct LocalLinuxFeatureView: View {
         Task {
             defer { isPreparingRuntime = false }
             do {
-                snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
+                if snapshot.phase == .requiresRelaunch {
+                    snapshot = try await LocalLinuxRuntimeController.shared.restartRuntime()
+                } else {
+                    snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -336,7 +354,7 @@ struct LocalLinuxFeatureView: View {
     private var canPrepareRuntime: Bool {
         guard appConfig.localLinuxEnabled, !isPreparingRuntime else { return false }
         switch snapshot.phase {
-        case .installing, .starting, .ready, .requiresRelaunch:
+        case .installing, .starting, .ready:
             return false
         default:
             return true
@@ -350,8 +368,10 @@ struct LocalLinuxFeatureView: View {
             return LocalLinuxRuntimePhase.installing.displayName
         }
         switch snapshot.phase {
-        case .installing, .starting, .requiresRelaunch:
+        case .installing, .starting:
             return snapshot.phase.displayName
+        case .requiresRelaunch:
+            return NSLocalizedString("重新启动 Linux", comment: "Restart local Linux action")
         default:
             return NSLocalizedString("准备并启动系统", comment: "Prepare local Linux action")
         }
@@ -367,10 +387,17 @@ struct LocalLinuxFeatureView: View {
     }
 
     private func resetSystem() {
+        guard !isResettingSystem else { return }
+        isResettingSystem = true
+        resetStatusMessage = nil
         Task {
+            defer { isResettingSystem = false }
             do {
-                try await LocalLinuxRuntimeController.shared.deleteSystem(deleteUserData: deleteUserData)
+                snapshot = try await LocalLinuxRuntimeController.shared.deleteSystem(deleteUserData: deleteUserData)
                 usage = await LocalLinuxStorageManager.shared.storageUsage()
+                resetStatusMessage = appConfig.localLinuxEnabled
+                    ? NSLocalizedString("系统已重置并重新启动。", comment: "Local Linux reset completed")
+                    : NSLocalizedString("系统已重置；下次启用时会重新准备。", comment: "Disabled local Linux reset completed")
             } catch {
                 errorMessage = error.localizedDescription
             }

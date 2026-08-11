@@ -109,6 +109,7 @@ int32_t etos_ish_runtime_start(
         const int32_t *mount_directory_fds,
         const char *const *mount_guest_directories,
         uint32_t mount_count);
+int32_t etos_ish_runtime_stop(void);
 int32_t etos_ish_runtime_phase(void);
 int32_t etos_ish_runtime_last_error(void);
 int32_t etos_ish_runtime_capabilities(

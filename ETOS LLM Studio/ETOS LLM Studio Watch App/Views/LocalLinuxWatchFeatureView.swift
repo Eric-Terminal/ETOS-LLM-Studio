@@ -8,6 +8,8 @@ struct LocalLinuxWatchFeatureView: View {
     @State private var errorMessage: String?
     @State private var showResetConfirmation = false
     @State private var isPreparingRuntime = false
+    @State private var isResettingSystem = false
+    @State private var resetStatusMessage: String?
     var body: some View {
         List {
             Section {
@@ -64,7 +66,11 @@ struct LocalLinuxWatchFeatureView: View {
                             isPreparingRuntime = true
                             defer { isPreparingRuntime = false }
                             do {
-                                snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
+                                if snapshot.phase == .requiresRelaunch {
+                                    snapshot = try await LocalLinuxRuntimeController.shared.restartRuntime()
+                                } else {
+                                    snapshot = try await LocalLinuxRuntimeController.shared.ensureReady(trigger: .recipe)
+                                }
                             } catch { errorMessage = error.localizedDescription }
                         }
                     } label: {
@@ -148,9 +154,19 @@ struct LocalLinuxWatchFeatureView: View {
             }
 
             Section {
+                if isResettingSystem {
+                    HStack {
+                        ProgressView()
+                        Text(NSLocalizedString("正在重置并重新启动…", comment: "Watch resetting local Linux status"))
+                    }
+                } else if let resetStatusMessage {
+                    Label(resetStatusMessage, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
                 Button(NSLocalizedString("重置系统…", comment: "Watch reset Linux"), role: .destructive) {
                     showResetConfirmation = true
                 }
+                .disabled(isResettingSystem)
             } footer: {
                 Text(NSLocalizedString("只重建 System，保留 Home、Shared 与工作区。删除或改坏系统文件由用户自行承担；重置可以恢复。", comment: "Watch reset Linux footer"))
                     .font(.caption2)
@@ -171,9 +187,17 @@ struct LocalLinuxWatchFeatureView: View {
             titleVisibility: .visible
         ) {
             Button(NSLocalizedString("重置系统", comment: "Watch reset Linux action"), role: .destructive) {
+                guard !isResettingSystem else { return }
+                isResettingSystem = true
+                resetStatusMessage = nil
                 Task {
-                    do { try await LocalLinuxRuntimeController.shared.deleteSystem(deleteUserData: false) }
-                    catch { errorMessage = error.localizedDescription }
+                    defer { isResettingSystem = false }
+                    do {
+                        snapshot = try await LocalLinuxRuntimeController.shared.deleteSystem(deleteUserData: false)
+                        resetStatusMessage = appConfig.localLinuxEnabled
+                            ? NSLocalizedString("系统已重置并重新启动。", comment: "Watch local Linux reset completed")
+                            : NSLocalizedString("系统已重置。", comment: "Watch disabled local Linux reset completed")
+                    } catch { errorMessage = error.localizedDescription }
                 }
             }
             Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}
@@ -193,7 +217,7 @@ struct LocalLinuxWatchFeatureView: View {
     private var canPrepareRuntime: Bool {
         guard appConfig.localLinuxEnabled, !isPreparingRuntime else { return false }
         switch snapshot.phase {
-        case .installing, .starting, .ready, .requiresRelaunch:
+        case .installing, .starting, .ready:
             return false
         default:
             return true
@@ -207,8 +231,10 @@ struct LocalLinuxWatchFeatureView: View {
             return LocalLinuxRuntimePhase.installing.displayName
         }
         switch snapshot.phase {
-        case .installing, .starting, .requiresRelaunch:
+        case .installing, .starting:
             return snapshot.phase.displayName
+        case .requiresRelaunch:
+            return NSLocalizedString("重新启动 Linux", comment: "Watch restart local Linux action")
         default:
             return NSLocalizedString("准备系统", comment: "Watch prepare Linux")
         }
@@ -929,7 +955,7 @@ private struct LocalLinuxWatchFileBrowserView: View {
             Button(NSLocalizedString("删除", comment: "Delete"), role: .destructive, action: deletePending)
             Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}
         } message: {
-            Text(NSLocalizedString("不会硬拦截系统路径。删除后如无法运行，请重新打开 App 或重置系统。", comment: "Watch delete Linux path warning"))
+            Text(NSLocalizedString("不会硬拦截系统路径。删除后如无法运行，请重新启动本地 Linux 或重置系统。", comment: "Watch delete Linux path warning"))
         }
         .alert(NSLocalizedString("文件错误", comment: "Watch Linux file error"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
@@ -1021,7 +1047,7 @@ private struct LocalLinuxWatchFileBrowserView: View {
                 )
                 if isCriticalSystemPath(pendingDelete.path) {
                     try await LocalLinuxRuntimeController.shared.markSystemDamaged(
-                        reason: NSLocalizedString("用户删除了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。", comment: "Watch critical Linux path deleted")
+                        reason: NSLocalizedString("用户删除了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。", comment: "Watch critical Linux path deleted")
                     )
                     entries = []
                 } else {

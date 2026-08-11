@@ -6647,3 +6647,17 @@
 "消息" = "Message";
 "继续指定会话" = "Continue Session";
 "获取 Agent 状态" = "Get Agent Status";
+"需要重新启动 Linux" = "Linux needs to restart";
+"Linux 系统已在运行时发生变化，请重新启动本地 Linux 后继续。" = "The Linux system changed while running. Restart Local Linux to continue.";
+"运行中的 Linux 系统目录已被删除。重新启动本地 Linux 后会从内置系统恢复。" = "The running Linux system directory was deleted. Restart Local Linux to restore it from the bundled system.";
+"关键 Linux 系统路径已缺失：%@。重新启动本地 Linux 后可从内置系统恢复。" = "A critical Linux system path is missing: %@. Restart Local Linux to restore it from the bundled system.";
+"只删除可重建的系统；Home、Shared 与工作区会保留。运行中的 Linux 会在 App 内停止并重新启动。" = "Only the rebuildable system is deleted; Home, Shared, and workspaces are preserved. The running Linux instance stops and restarts inside the app.";
+"正在重置并重新启动 Linux…" = "Resetting and restarting Linux…";
+"正在重置并重新启动…" = "Resetting and restarting…";
+"系统已重置并重新启动。" = "The system was reset and restarted.";
+"系统已重置；下次启用时会重新准备。" = "The system was reset and will be prepared again the next time it is enabled.";
+"系统已重置。" = "The system was reset.";
+"重新启动 Linux" = "Restart Linux";
+"不会硬拦截系统路径。删除后如无法运行，请重新启动本地 Linux 或重置系统。" = "System paths are not forcibly protected. If Linux stops working after deletion, restart Local Linux or reset the system.";
+"用户删除了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。" = "A critical Linux system path was deleted. Restart Local Linux to restore it from the bundled system.";
+"Agent 修改了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。" = "The Agent changed a critical Linux system path. Restart Local Linux to restore it from the bundled system.";

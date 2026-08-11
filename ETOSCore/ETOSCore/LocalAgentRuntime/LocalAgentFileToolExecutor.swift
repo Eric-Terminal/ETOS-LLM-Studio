@@ -530,7 +530,7 @@ public actor LocalAgentFileToolExecutor {
 
     private func markCriticalSystemDamaged() async -> Bool {
         let reason = NSLocalizedString(
-            "Agent 修改了关键 Linux 系统路径。重新打开 App 后会从内置系统恢复。",
+            "Agent 修改了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。",
             comment: "Agent mutated critical Linux system path"
         )
         do {

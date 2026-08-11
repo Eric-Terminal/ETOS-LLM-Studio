@@ -122,7 +122,7 @@ public actor LocalLinuxRuntimeController {
                         phase: .requiresRelaunch,
                         resource: resource,
                         progress: nil,
-                        error: NSLocalizedString("运行中的 Linux 系统目录已被删除。重新打开 App 后会从内置系统恢复。", comment: "Running Linux RootFS deleted")
+                        error: NSLocalizedString("运行中的 Linux 系统目录已被删除。重新启动本地 Linux 后会从内置系统恢复。", comment: "Running Linux RootFS deleted")
                     )
                 } else {
                     updateSnapshot(phase: .notInstalled, resource: resource, progress: nil, error: nil)
@@ -164,7 +164,7 @@ public actor LocalLinuxRuntimeController {
                 return snapshotValue
             case .notInstalled:
                 await transitionToRequiresRelaunch(
-                    reason: NSLocalizedString("运行中的 Linux 系统目录已被删除。重新打开 App 后会从内置系统恢复。", comment: "Running Linux RootFS deleted")
+                    reason: NSLocalizedString("运行中的 Linux 系统目录已被删除。重新启动本地 Linux 后会从内置系统恢复。", comment: "Running Linux RootFS deleted")
                 )
                 throw LocalLinuxRuntimeError.requiresRelaunch
             case .damaged(let detail):
@@ -223,18 +223,35 @@ public actor LocalLinuxRuntimeController {
         publishSnapshot()
     }
 
-    public func deleteSystem(deleteUserData: Bool) async throws {
-        preparationTask?.cancel()
-        if let cancelActiveWork { await cancelActiveWork() }
-        try await storage.deleteSystem(deleteUserData: deleteUserData)
-        if runtimeStarted {
-            updateSnapshot(
-                phase: .requiresRelaunch,
-                progress: nil,
-                error: LocalLinuxRuntimeError.requiresRelaunch.localizedDescription
-            )
-        } else {
-            updateSnapshot(phase: .notInstalled, progress: nil, error: nil)
+    @discardableResult
+    public func restartRuntime() async throws -> LocalLinuxRuntimeSnapshot {
+        guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
+            throw LocalLinuxRuntimeError.featureDisabled
+        }
+        do {
+            try await stopRuntimeForMaintenance()
+            _ = await refreshInstalledState()
+            return try await ensureReady(trigger: .recipe)
+        } catch {
+            updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func deleteSystem(deleteUserData: Bool) async throws -> LocalLinuxRuntimeSnapshot {
+        do {
+            try await stopRuntimeForMaintenance()
+            try await storage.deleteSystem(deleteUserData: deleteUserData)
+            let phase: LocalLinuxRuntimePhase = AppConfigStore.boolValue(for: .localLinuxEnabled)
+                ? .notInstalled
+                : .disabled
+            updateSnapshot(phase: phase, progress: nil, error: nil)
+            guard phase != .disabled else { return snapshotValue }
+            return try await ensureReady(trigger: .recipe)
+        } catch {
+            updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
+            throw error
         }
     }
 
@@ -254,6 +271,25 @@ public actor LocalLinuxRuntimeController {
     private func transitionToRequiresRelaunch(reason: String) async {
         if let cancelActiveWork { await cancelActiveWork() }
         updateSnapshot(phase: .requiresRelaunch, progress: nil, error: reason)
+    }
+
+    private func stopRuntimeForMaintenance() async throws {
+        if let task = preparationTask {
+            task.cancel()
+            _ = try? await task.value
+            preparationTask = nil
+        }
+        if let cancelActiveWork { await cancelActiveWork() }
+
+        let bridgePhase = await bridge.runtimePhase()
+        guard runtimeStarted || bridgePhase != 0 else { return }
+        updateSnapshot(phase: .starting, progress: nil, error: nil)
+        try await bridge.stopRuntime()
+        runtimeStarted = false
+        snapshotValue.capabilities = nil
+        snapshotValue.activeJobCount = 0
+        snapshotValue.activeTerminalCount = 0
+        snapshotValue.activeMCPProcessCount = 0
     }
 
     private func performPreparation(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {

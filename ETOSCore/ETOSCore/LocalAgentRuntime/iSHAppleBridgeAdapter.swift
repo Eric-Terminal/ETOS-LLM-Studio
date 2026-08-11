@@ -106,6 +106,11 @@ public actor iSHAppleBridgeAdapter {
         try requireSuccess(status, operation: "启动 Linux runtime")
     }
 
+    public func stopRuntime() throws {
+        try requireAvailability()
+        try requireSuccess(etosISHRuntimeStop(), operation: "停止 Linux runtime")
+    }
+
     public func runtimePhase() -> Int32 {
         etosISHRuntimePhase()
     }

@@ -583,10 +583,15 @@ public actor LocalLinuxJobScheduler {
     }
 
     public func cancelAll() async {
+        await cancelAllLinuxRuntimeWork()
+        await BrowserAgentToolExecutor.shared.cancelAll()
+    }
+
+    /// Linux 热重启只终止依赖 iSH 的作业；浏览器 Agent 使用独立执行链，不应被连带取消。
+    public func cancelAllLinuxRuntimeWork() async {
         activeCommands.values.forEach { try? $0.session.cancel() }
         activeTerminals.values.forEach { try? $0.session.cancel() }
         await MCPLocalStdioActivityRegistry.shared.cancelAll()
-        await BrowserAgentToolExecutor.shared.cancelAll()
     }
 
     public func cancelJobs(usingMountID mountID: UUID) async {
@@ -969,7 +974,7 @@ public actor LocalLinuxJobScheduler {
                 guard case .bridgeFailure(_, let code) = error,
                       code == -2 || code == -20 else { return }
                 let reason = String(
-                    format: NSLocalizedString("关键 Linux 系统路径已缺失：%@。重新打开 App 后可从内置系统恢复。", comment: "Critical Linux system path missing"),
+                    format: NSLocalizedString("关键 Linux 系统路径已缺失：%@。重新启动本地 Linux 后可从内置系统恢复。", comment: "Critical Linux system path missing"),
                     path
                 )
                 do {
@@ -988,7 +993,7 @@ public actor LocalLinuxJobScheduler {
         guard !didRegisterRuntimeCancellation else { return }
         didRegisterRuntimeCancellation = true
         await runtime.setActiveWorkCancellationHandler { [weak self] in
-            await self?.cancelAll()
+            await self?.cancelAllLinuxRuntimeWork()
         }
     }
 

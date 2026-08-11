@@ -53,7 +53,7 @@ public enum LocalLinuxRuntimePhase: String, Codable, CaseIterable, Sendable {
         case .degraded:
             return NSLocalizedString("兼容性受限", comment: "Local Linux degraded state")
         case .requiresRelaunch:
-            return NSLocalizedString("需要重新打开 App", comment: "Local Linux relaunch state")
+            return NSLocalizedString("需要重新启动 Linux", comment: "Local Linux relaunch state")
         case .failed:
             return NSLocalizedString("故障", comment: "Local Linux failed state")
         }
@@ -902,7 +902,7 @@ public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
                 detail
             )
         case .requiresRelaunch:
-            return NSLocalizedString("Linux 系统已在运行时发生变化，请重新打开 App 后继续。", comment: "Local Linux relaunch required error")
+            return NSLocalizedString("Linux 系统已在运行时发生变化，请重新启动本地 Linux 后继续。", comment: "Local Linux relaunch required error")
         case .runtimeUnavailable(let detail):
             return detail
         case .invalidPath(let path):
