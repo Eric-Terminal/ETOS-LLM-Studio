@@ -302,7 +302,12 @@ struct TelegramMessageComposer: View {
                 participatesInGlassContainer: participatesInGlassContainer
             )
         }
-        .buttonStyle(ComposerPressButtonStyle())
+        .buttonStyle(
+            ComposerPressButtonStyle(
+                usesSystemGlassFeedback: participatesInGlassContainer
+                    && isLiquidGlassEnabled
+            )
+        )
     }
 
     @ViewBuilder

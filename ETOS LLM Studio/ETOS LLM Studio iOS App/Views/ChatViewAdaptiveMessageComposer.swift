@@ -21,12 +21,23 @@ enum AdaptiveComposerPresentation: Equatable {
 
 struct ComposerPressButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let usesSystemGlassFeedback: Bool
 
+    init(usesSystemGlassFeedback: Bool = false) {
+        self.usesSystemGlassFeedback = usesSystemGlassFeedback
+    }
+
+    @ViewBuilder
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        if usesSystemGlassFeedback {
+            // 交互式 Liquid Glass 已提供完整按压反馈，避免叠加反向缩放削弱系统高光。
+            configuration.label
+        } else {
+            configuration.label
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
+                .opacity(configuration.isPressed ? 0.78 : 1)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
     }
 }
 
@@ -518,7 +529,12 @@ extension TelegramMessageComposer {
                 participatesInGlassContainer: participatesInGlassContainer
             )
         }
-        .buttonStyle(ComposerPressButtonStyle())
+        .buttonStyle(
+            ComposerPressButtonStyle(
+                usesSystemGlassFeedback: participatesInGlassContainer
+                    && viewModel.enableLiquidGlass
+            )
+        )
         .disabled(adaptiveActionIsDisabled)
         .accessibilityLabel(adaptiveActionAccessibilityLabel)
     }
