@@ -14,6 +14,7 @@ struct MessageTextSelectionView: View {
     let onRewriteSelection: ((MessageRewriteSelectionTarget) -> Void)?
     let onAskAI: (String) -> Void
 
+    @Environment(\.copyCompletionNoticeAction) private var showCopyCompletionNotice
     @State private var selectableDocument: MessageSelectableTextDocument?
     @State private var showsCopyFormatDialog = false
     @State private var showsSelectionMappingError = false
@@ -116,6 +117,7 @@ struct MessageTextSelectionView: View {
     private func copyToPasteboard(_ text: String) {
         UIPasteboard.general.string = text
         AppHapticFeedback.operationSucceeded()
+        showCopyCompletionNotice()
     }
 }
 

@@ -23,6 +23,7 @@ struct ETMathWebMarkdownView: View {
     let fontScale: Double
     let lineSpacingEm: Double
 
+    @Environment(\.copyCompletionNoticeAction) private var showCopyCompletionNotice
     @State private var renderedHeight: CGFloat = 28
 
     var body: some View {
@@ -39,6 +40,7 @@ struct ETMathWebMarkdownView: View {
                 fontScale: fontScale,
                 lineSpacingEm: lineSpacingEm,
                 availableWidth: max(1, geometry.size.width),
+                onCopyCompleted: showCopyCompletionNotice,
                 renderedHeight: $renderedHeight
             )
         }
@@ -96,10 +98,14 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     let fontScale: Double
     let lineSpacingEm: Double
     let availableWidth: CGFloat
+    let onCopyCompleted: () -> Void
     @Binding var renderedHeight: CGFloat
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(renderedHeight: $renderedHeight)
+        Coordinator(
+            renderedHeight: $renderedHeight,
+            onCopyCompleted: onCopyCompleted
+        )
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -122,6 +128,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.onCopyCompleted = onCopyCompleted
         let stableWidth = max(1, floor(availableWidth))
         let payload = ETMathWebPayload(
             content: content,
@@ -198,14 +205,19 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         static let copyMessageName = "etMathCopy"
 
         @Binding var renderedHeight: CGFloat
+        var onCopyCompleted: () -> Void
         var lastPayload: ETMathWebPayload?
         var lastShellConfiguration: ETMathWebShellConfiguration?
         var pendingPayload: ETMathWebPayload?
         var isShellLoaded = false
         var isShellLoading = false
 
-        init(renderedHeight: Binding<CGFloat>) {
+        init(
+            renderedHeight: Binding<CGFloat>,
+            onCopyCompleted: @escaping () -> Void
+        ) {
             self._renderedHeight = renderedHeight
+            self.onCopyCompleted = onCopyCompleted
         }
 
         func render(
@@ -256,8 +268,9 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             didReceive message: WKScriptMessage
         ) {
             if message.name == Self.copyMessageName {
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     AppHapticFeedback.operationSucceeded()
+                    self?.onCopyCompleted()
                 }
                 return
             }

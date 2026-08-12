@@ -313,6 +313,9 @@ struct ChatView: View {
     }
     var body: some View {
         applyPresentationModifiers(to: adaptiveChatLayout)
+            .copyCompletionNoticeAction {
+                showChatTransientNotice(.copyCompleted, duration: .seconds(1.4))
+            }
             .onAppear {
                 reloadChatQuickActions()
                 refreshTemporaryChatState()

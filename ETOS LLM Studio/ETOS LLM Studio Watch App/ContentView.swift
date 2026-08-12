@@ -171,6 +171,9 @@ struct ContentView: View {
                 .zIndex(2_000)
             }
         }
+        .copyCompletionNoticeAction {
+            showChatTransientNotice(.copyCompleted, duration: .seconds(1.4))
+        }
         .environment(\.font, rootBodyFont)
         .environment(\.locale, AppLanguagePreference.preferredLocale(rawValue: appConfig.appLanguage))
         .onAppear {

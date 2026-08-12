@@ -17,6 +17,14 @@ struct WatchChatTransientNotice {
     let message: String
     let systemImage: String
     let tint: Color
+
+    static var copyCompleted: WatchChatTransientNotice {
+        WatchChatTransientNotice(
+            message: NSLocalizedString("已复制", comment: "Copy completion notice"),
+            systemImage: "checkmark.circle.fill",
+            tint: .green
+        )
+    }
 }
 
 extension ContentView {

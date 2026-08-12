@@ -16,10 +16,28 @@ enum AppHapticFeedback {
     }
 }
 
+private struct CopyCompletionNoticeActionKey: EnvironmentKey {
+    static let defaultValue: () -> Void = { }
+}
+
+extension EnvironmentValues {
+    var copyCompletionNoticeAction: () -> Void {
+        get { self[CopyCompletionNoticeActionKey.self] }
+        set { self[CopyCompletionNoticeActionKey.self] = newValue }
+    }
+}
+
+extension View {
+    func copyCompletionNoticeAction(_ action: @escaping () -> Void) -> some View {
+        environment(\.copyCompletionNoticeAction, action)
+    }
+}
+
 struct CopyConfirmationButton<Label: View>: View {
     let action: () -> Void
     @ViewBuilder let label: (_ didCopy: Bool) -> Label
 
+    @Environment(\.copyCompletionNoticeAction) private var showCompletionNotice
     @State private var didCopy = false
     @State private var resetTask: Task<Void, Never>?
 
@@ -27,6 +45,7 @@ struct CopyConfirmationButton<Label: View>: View {
         Button {
             action()
             AppHapticFeedback.operationSucceeded()
+            showCompletionNotice()
 
             resetTask?.cancel()
             withAnimation(.easeInOut(duration: 0.15)) {

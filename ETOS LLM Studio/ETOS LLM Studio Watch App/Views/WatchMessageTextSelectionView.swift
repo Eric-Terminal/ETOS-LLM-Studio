@@ -16,6 +16,7 @@ struct WatchMessageTextSelectionView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.copyCompletionNoticeAction) private var showCopyCompletionNotice
     @State private var content: WatchSelectableMessageContent?
     @State private var geometryIndex = WatchTextSelectionGeometryIndex.empty
     @State private var selectionAnchorTokenID: Int?
@@ -346,6 +347,7 @@ struct WatchMessageTextSelectionView: View {
     private func commit(_ text: String) {
         guard !text.isEmpty else { return }
         WKInterfaceDevice.current().play(.success)
+        showCopyCompletionNotice()
         onCommit(text)
     }
 }
