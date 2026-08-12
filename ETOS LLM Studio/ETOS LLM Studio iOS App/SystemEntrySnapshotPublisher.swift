@@ -148,7 +148,7 @@ final class SystemEntrySnapshotPublisher {
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
         for activity in Activity<ETOSAgentActivityAttributes>.activities {
             guard let snapshot = byID[activity.attributes.runID] else {
-                await activity.end(nil, dismissalPolicy: .default)
+                await activity.end(nil, dismissalPolicy: .immediate)
                 continue
             }
             let content = ActivityContent(
@@ -156,7 +156,12 @@ final class SystemEntrySnapshotPublisher {
                 staleDate: Date().addingTimeInterval(15 * 60)
             )
             if isTerminal(snapshot.status) {
-                await activity.end(content, dismissalPolicy: .default)
+                switch ReplyActivityDismissalPolicy.terminalDecision(updatedAt: snapshot.updatedAt) {
+                case .immediate:
+                    await activity.end(content, dismissalPolicy: .immediate)
+                case .after(let dismissalDate):
+                    await activity.end(content, dismissalPolicy: .after(dismissalDate))
+                }
             } else {
                 await activity.update(content)
             }

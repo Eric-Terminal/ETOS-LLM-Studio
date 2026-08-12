@@ -110,6 +110,24 @@ enum BackgroundReplyNotificationPolicy {
     }
 }
 
+enum ReplyActivityDismissalDecision: Equatable {
+    case immediate
+    case after(Date)
+}
+
+enum ReplyActivityDismissalPolicy {
+    // 终态只承担即时反馈；后台完成另有本地通知，避免系统默认策略长期堆积卡片。
+    static let terminalVisibilityDuration: TimeInterval = 30
+
+    static func terminalDecision(
+        updatedAt: Date,
+        now: Date = Date()
+    ) -> ReplyActivityDismissalDecision {
+        let dismissalDate = updatedAt.addingTimeInterval(terminalVisibilityDuration)
+        return dismissalDate > now ? .after(dismissalDate) : .immediate
+    }
+}
+
 actor ReplyActivitySnapshotStore {
     private let fileName = "chat-replies.json"
 

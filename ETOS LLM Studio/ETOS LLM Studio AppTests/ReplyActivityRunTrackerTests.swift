@@ -64,4 +64,26 @@ struct ReplyActivityRunTrackerTests {
         #expect(BackgroundReplyNotificationPolicy.action(for: .inactive) == .resolveTransition)
         #expect(BackgroundReplyNotificationPolicy.action(for: .background) == .deliver)
     }
+
+    @Test("回复实时活动终态只保留短暂反馈")
+    func dismissesTerminalActivityAfterFeedbackWindow() {
+        let updatedAt = Date(timeIntervalSince1970: 100)
+        let now = Date(timeIntervalSince1970: 110)
+
+        #expect(
+            ReplyActivityDismissalPolicy.terminalDecision(updatedAt: updatedAt, now: now)
+                == .after(Date(timeIntervalSince1970: 130))
+        )
+    }
+
+    @Test("超过反馈窗口的回复实时活动立即清理")
+    func immediatelyDismissesExpiredTerminalActivity() {
+        let updatedAt = Date(timeIntervalSince1970: 100)
+        let now = Date(timeIntervalSince1970: 131)
+
+        #expect(
+            ReplyActivityDismissalPolicy.terminalDecision(updatedAt: updatedAt, now: now)
+                == .immediate
+        )
+    }
 }
