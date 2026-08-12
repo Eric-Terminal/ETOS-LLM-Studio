@@ -80,15 +80,14 @@ extension ChatView {
     }
 
     var navBarMessageSelectionLabel: some View {
-        Image(systemName: "ellipsis")
-            .etFont(.system(size: 17, weight: .semibold))
-            .foregroundColor(TelegramColors.navBarText)
-            .frame(width: navBarIconSize, height: navBarIconSize)
-            .background(navBarIconBackground)
-            .overlay(
-                Circle()
-                    .stroke(Color.red.opacity(0.7), lineWidth: 1)
-            )
+        navBarIconSurface(
+            Image(systemName: "ellipsis")
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(width: navBarIconSize, height: navBarIconSize),
+            strokeColor: Color.red.opacity(0.7),
+            lineWidth: 1
+        )
             .contentShape(Circle())
             .accessibilityLabel(
                 String(
@@ -99,38 +98,52 @@ extension ChatView {
     }
 
     var navBarSessionLabel: some View {
-        Image(systemName: navBarSessionIconName)
-            .etFont(.system(size: 17, weight: .semibold))
-            .foregroundColor(TelegramColors.navBarText)
-            .frame(width: navBarIconSize, height: navBarIconSize)
-            .background(
-                sessionPickerButtonBackground
-            )
-            .overlay(
-                Circle()
-                    .stroke(isSessionPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
-            )
+        navBarIconSurface(
+            Image(systemName: navBarSessionIconName)
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(width: navBarIconSize, height: navBarIconSize),
+            strokeColor: isSessionPickerPresented
+                ? Color.white.opacity(0.35)
+                : Color.white.opacity(0.2),
+            lineWidth: 0.6
+        )
             .contentShape(Circle())
             .accessibilityLabel(navBarSessionAccessibilityLabel)
     }
 
     func navBarIconLabel(systemName: String, accessibilityLabel: String) -> some View {
-        Image(systemName: systemName)
-            .etFont(.system(size: 17, weight: .semibold))
-            .foregroundColor(TelegramColors.navBarText)
-            .frame(width: navBarIconSize, height: navBarIconSize)
-            .background(
-                navBarIconBackground
-            )
-            .overlay(
-                Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-            )
+        navBarIconSurface(
+            Image(systemName: systemName)
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundColor(TelegramColors.navBarText)
+                .frame(width: navBarIconSize, height: navBarIconSize),
+            strokeColor: Color.white.opacity(0.2),
+            lineWidth: 0.5
+        )
             .contentShape(Circle())
             .accessibilityLabel(accessibilityLabel)
     }
 
     var navBarCenterPill: some View {
+        Group {
+            if #available(iOS 26.0, *), isLiquidGlassEnabled {
+                navBarCenterPillContent
+                    .background(Capsule().fill(navBarGlassOverlayColor))
+                    .glassEffect(.clear.interactive(), in: Capsule())
+            } else {
+                navBarCenterPillContent
+                    .background(navBarPillBackground)
+            }
+        }
+        .overlay(
+            Capsule()
+                .stroke(isModelPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+    }
+
+    var navBarCenterPillContent: some View {
         VStack(spacing: navBarPillSpacing) {
             MarqueeText(
                 content: viewModel.currentSession?.name ?? NSLocalizedString("新的对话", comment: ""),
@@ -152,75 +165,42 @@ extension ChatView {
         .padding(.horizontal, 22)
         .padding(.vertical, navBarPillVerticalPadding)
         .frame(height: navBarPillHeight)
-        .background(
-            navBarPillBackground
-        )
-        .overlay(
-            Capsule()
-                .stroke(isModelPickerPresented ? Color.white.opacity(0.35) : Color.white.opacity(0.2), lineWidth: 0.6)
-        )
         .overlay(alignment: .trailing) {
             Image(systemName: isModelPickerPresented ? "chevron.up" : "chevron.down")
                 .etFont(.system(size: 11, weight: .semibold))
                 .foregroundColor(TelegramColors.navBarSubtitle)
                 .padding(.trailing, 10)
         }
-        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
     }
 
     @ViewBuilder
-    var navBarIconBackground: some View {
-        if isLiquidGlassEnabled {
-            if #available(iOS 26.0, *) {
-                Circle()
-                    .fill(Color.clear)
+    func navBarIconSurface<Content: View>(
+        _ content: Content,
+        strokeColor: Color,
+        lineWidth: CGFloat
+    ) -> some View {
+        Group {
+            if #available(iOS 26.0, *), isLiquidGlassEnabled {
+                // 玻璃必须包住完整标签，系统才能依据触点位置绘制膨胀与移动高光。
+                content
+                    .background(Circle().fill(navBarGlassOverlayColor))
                     .glassEffect(.clear.interactive(), in: Circle())
-                    .overlay(
-                        Circle()
-                            .fill(navBarGlassOverlayColor)
-                    )
             } else {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Circle()
-                            .fill(navBarGlassOverlayColor)
-                    )
+                content
+                    .background(navBarIconBackground)
             }
-        } else {
-            Circle()
-                .fill(.ultraThinMaterial)
         }
+        .overlay(Circle().stroke(strokeColor, lineWidth: lineWidth))
     }
 
-    @ViewBuilder
+    var navBarIconBackground: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+    }
+
     var navBarPillBackground: some View {
-        if isLiquidGlassEnabled {
-            if #available(iOS 26.0, *) {
-                Capsule()
-                    .fill(Color.clear)
-                    .glassEffect(.clear.interactive(), in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            } else {
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule()
-                            .fill(navBarGlassOverlayColor)
-                    )
-            }
-        } else {
-            Capsule()
-                .fill(.ultraThinMaterial)
-        }
-    }
-
-    @ViewBuilder
-    var sessionPickerButtonBackground: some View {
-        navBarIconBackground
+        Capsule()
+            .fill(.ultraThinMaterial)
     }
 
     var modelSubtitle: String {
