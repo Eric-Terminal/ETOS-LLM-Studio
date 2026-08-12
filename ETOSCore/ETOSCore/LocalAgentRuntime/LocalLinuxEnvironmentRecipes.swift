@@ -15,6 +15,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
     public let detail: String
     public let displayedCommand: String
     public let command: String
+    public let requiredPackages: Set<String>
     public let providedCommands: Set<String>
 
     public init(
@@ -23,6 +24,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
         detail: String,
         displayedCommand: String,
         command: String,
+        requiredPackages: Set<String>,
         providedCommands: Set<String>
     ) {
         self.id = id
@@ -30,6 +32,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
         self.detail = detail
         self.displayedCommand = displayedCommand
         self.command = command
+        self.requiredPackages = requiredPackages
         self.providedCommands = providedCommands
     }
 
@@ -77,6 +80,17 @@ public struct LocalLinuxEnvironmentInstallationResult: Equatable, Sendable {
 }
 
 public enum LocalLinuxEnvironmentInstaller {
+    public static func installedRecipeIDs() async -> Set<String> {
+        guard let installedPackages = try? await LocalLinuxStorageManager.shared.installedPackageNames() else {
+            return []
+        }
+        return Set(
+            LocalLinuxEnvironmentRecipes.all.compactMap { recipe in
+                recipe.requiredPackages.isSubset(of: installedPackages) ? recipe.id : nil
+            }
+        )
+    }
+
     public static func startTerminal(columns: UInt16, rows: UInt16) async throws -> LocalLinuxJob {
         let workspace = try await LocalLinuxStorageManager.shared.interactiveUserWorkspace()
         return try await LocalLinuxJobScheduler.shared.startTerminal(
@@ -164,6 +178,7 @@ public enum LocalLinuxEnvironmentRecipes {
             detail: detail,
             displayedCommand: displayedCommand,
             command: encodedShellCommand(script: script),
+            requiredPackages: Set(packages),
             providedCommands: providedCommands
         )
     }

@@ -681,6 +681,7 @@ struct LocalLinuxRecipesView: View {
         case failed
     }
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedRecipe: LocalLinuxEnvironmentRecipe?
     @State private var recipeStatuses: [String: RecipeStatus] = [:]
     @State private var activeRecipe: LocalLinuxEnvironmentRecipe?
@@ -738,6 +739,13 @@ struct LocalLinuxRecipesView: View {
         } message: {
             Text(selectedRecipe?.confirmationDetail ?? "")
         }
+        .onAppear {
+            Task { await refreshInstallationStatuses() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await refreshInstallationStatuses() }
+        }
     }
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
@@ -758,6 +766,18 @@ struct LocalLinuxRecipesView: View {
                 recipeStatuses[recipe.id] = .failed
             }
             activeRecipe = nil
+            await refreshInstallationStatuses()
+        }
+    }
+
+    private func refreshInstallationStatuses() async {
+        let installedIDs = await LocalLinuxEnvironmentInstaller.installedRecipeIDs()
+        for recipe in LocalLinuxEnvironmentRecipes.all where activeRecipe?.id != recipe.id {
+            if installedIDs.contains(recipe.id) {
+                recipeStatuses[recipe.id] = .installed
+            } else if recipeStatuses[recipe.id] == .installed {
+                recipeStatuses[recipe.id] = nil
+            }
         }
     }
 

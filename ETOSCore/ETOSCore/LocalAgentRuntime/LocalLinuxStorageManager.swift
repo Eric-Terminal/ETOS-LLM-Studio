@@ -211,6 +211,27 @@ public actor LocalLinuxStorageManager {
         return .installed(seedSHA256: digest.lowercased())
     }
 
+    /// 直接读取 apk 的持久化数据库，避免仅为刷新页面状态启动 Linux 进程。
+    public func installedPackageNames() throws -> Set<String> {
+        let databaseURL = layout.rootFSData
+            .appendingPathComponent("lib", isDirectory: true)
+            .appendingPathComponent("apk", isDirectory: true)
+            .appendingPathComponent("db", isDirectory: true)
+            .appendingPathComponent("installed", isDirectory: false)
+        guard fileManager.fileExists(atPath: databaseURL.path) else { return [] }
+        let database = try String(contentsOf: databaseURL, encoding: .utf8)
+        return Self.installedPackageNames(inAPKDatabase: database)
+    }
+
+    static func installedPackageNames(inAPKDatabase database: String) -> Set<String> {
+        Set(
+            database.split(whereSeparator: \Character.isNewline).compactMap { line in
+                guard line.hasPrefix("P:"), line.count > 2 else { return nil }
+                return String(line.dropFirst(2))
+            }
+        )
+    }
+
     public func workspace(sessionID: UUID, profileID: UUID? = nil) throws -> LocalAgentWorkspace {
         if var existing = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID).first {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)

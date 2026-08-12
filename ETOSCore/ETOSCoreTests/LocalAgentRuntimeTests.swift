@@ -572,6 +572,7 @@ struct LocalAgentRuntimeTests {
         })
         let bashRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "bash" })
         #expect(bashRecipe.displayedCommand == "apk add bash")
+        #expect(bashRecipe.requiredPackages == ["bash"])
         #expect(
             String(data: bashRecipe.terminalInput, encoding: .utf8)
                 == "\(bashRecipe.command); exit $?\n"
@@ -603,6 +604,40 @@ struct LocalAgentRuntimeTests {
         #expect(LocalLinuxEnvironmentInstallationResult(job: job, output: "OK").succeeded)
         job.exitCode = 1
         #expect(!LocalLinuxEnvironmentInstallationResult(job: job, output: "ERROR").succeeded)
+    }
+
+    @Test("Linux 环境安装状态以 apk 数据库为准")
+    func installedEnvironmentPackages() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storage = LocalLinuxStorageManager(
+            documentsDirectory: directory,
+            appGroupLayout: nil
+        )
+        let databaseURL = storage.layout.rootFSData
+            .appendingPathComponent("lib/apk/db/installed", isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try """
+        C:checksum
+        P:nodejs
+        V:24.0.0-r0
+
+        C:checksum
+        P:npm
+        V:11.0.0-r0
+
+        """.write(to: databaseURL, atomically: true, encoding: .utf8)
+
+        let installed = try await storage.installedPackageNames()
+
+        #expect(installed == ["nodejs", "npm"])
+        let nodeRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "node" })
+        #expect(nodeRecipe.requiredPackages.isSubset(of: installed))
+        let pythonRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "python" })
+        #expect(!pythonRecipe.requiredPackages.isSubset(of: installed))
     }
 
     @Test("Linux、Browser 与反馈工具协议暴露完整动作")
