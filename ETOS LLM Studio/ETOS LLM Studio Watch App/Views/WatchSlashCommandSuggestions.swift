@@ -10,8 +10,8 @@ import SwiftUI
 import ETOSCore
 
 struct WatchSlashCommandSuggestionPanel: View {
-    let commands: [ChatSlashCommand]
-    let onSelect: (ChatSlashCommand) -> Void
+    let commands: [ChatSlashCommandSuggestion]
+    let onSelect: (ChatSlashCommandSuggestion) -> Void
 
     private let rowHeight: CGFloat = 42
     private let maximumPanelHeight: CGFloat = 152
@@ -34,7 +34,7 @@ struct WatchSlashCommandSuggestionPanel: View {
                                 Text(command.invocation)
                                     .etFont(.footnote.monospaced().weight(.semibold))
                                     .foregroundStyle(.primary)
-                                Text(NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description"))
+                                Text(command.displayDescription)
                                     .etFont(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)

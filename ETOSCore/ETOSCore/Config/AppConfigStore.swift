@@ -1104,6 +1104,7 @@ public final class AppConfigStore: ObservableObject {
              .skillsEnabledNames,
              .shortcutChatToolsEnabled,
              .messageRegexRules,
+             .customChatSlashCommands,
              .shortcutOfficialImportShortcutName,
              .configLoaderDownloadOnceCompleted,
              .configLoaderToolCapabilityMigrated,
@@ -1466,6 +1467,7 @@ public final class AppConfigStore: ObservableObject {
              .mcpDeletedBuiltInServerIDs,
              .skillsEnabledNames,
              .messageRegexRules,
+             .customChatSlashCommands,
              .shortcutOfficialImportShortcutName,
              .localDebugLastServerAddress:
             Self.persistSynchronously(.text(value), for: key, quickSync: false)

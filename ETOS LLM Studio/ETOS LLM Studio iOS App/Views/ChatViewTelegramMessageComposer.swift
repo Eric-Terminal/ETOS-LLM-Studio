@@ -20,6 +20,7 @@ struct TelegramMessageComposer: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @ObservedObject var appConfig = AppConfigStore.shared
+    @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool
     let isSending: Bool
@@ -39,8 +40,9 @@ struct TelegramMessageComposer: View {
     @State var isExpandedComposer = false
     @State var adaptiveRequestControls: [ModelRequestBodyControl] = []
     @State var adaptiveHasSendableText = false
-    @State var adaptiveRecognizedSlashCommand: ChatSlashCommand?
-    @State var slashCommandSuggestions: [ChatSlashCommand] = []
+    @State var adaptiveRecognizedSlashCommand: ChatSlashCommandSuggestion?
+    @State var slashCommandSuggestions: [ChatSlashCommandSuggestion] = []
+    @State private var customSlashCommandPrefilledPrompt: String?
     @StateObject var inlineSpeechRecorder = InlineSpeechRecorderController()
     @Namespace var adaptiveGlassNamespace
     @State private var inlineSpeechFinalizeTask: Task<Void, Never>?
@@ -147,6 +149,9 @@ struct TelegramMessageComposer: View {
             handleAutoExpand(for: newValue)
         }
         .onChange(of: appConfig.enableSlashCommands) { _, _ in
+            refreshSlashCommandState(for: text)
+        }
+        .onChange(of: customSlashCommandStore.commands) { _, _ in
             refreshSlashCommandState(for: text)
         }
         .onChange(of: showAudioRecorder) { _, presented in
@@ -536,15 +541,41 @@ struct TelegramMessageComposer: View {
             slashCommandSuggestions = []
             return
         }
-        adaptiveRecognizedSlashCommand = ChatSlashCommandParser.recognizedCommand(in: value)
-        slashCommandSuggestions = ChatSlashCommandParser.suggestions(for: value)
+
+        if customSlashCommandPrefilledPrompt == value {
+            adaptiveRecognizedSlashCommand = nil
+            slashCommandSuggestions = []
+            return
+        }
+        customSlashCommandPrefilledPrompt = nil
+        adaptiveRecognizedSlashCommand = ChatSlashCommandParser.recognizedSuggestion(
+            in: value,
+            customCommands: customSlashCommandStore.commands
+        )
+        slashCommandSuggestions = ChatSlashCommandParser.suggestions(
+            for: value,
+            customCommands: customSlashCommandStore.commands
+        )
     }
 
-    private func performSuggestedSlashCommand(_ command: ChatSlashCommand) {
-        text = ""
+    private func performSuggestedSlashCommand(_ command: ChatSlashCommandSuggestion) {
+        performSelectedSlashCommand(command)
+    }
+
+    func performSelectedSlashCommand(_ command: ChatSlashCommandSuggestion) {
         adaptiveRecognizedSlashCommand = nil
         slashCommandSuggestions = []
-        slashCommandAction(command)
+
+        switch command {
+        case .builtIn(let builtInCommand):
+            customSlashCommandPrefilledPrompt = nil
+            text = ""
+            slashCommandAction(builtInCommand)
+        case .custom(let customCommand):
+            customSlashCommandPrefilledPrompt = customCommand.prompt
+            text = customCommand.prompt
+            focus.wrappedValue = true
+        }
     }
 
     private func measuredTextLineCount(for value: String, width: CGFloat) -> Int {

@@ -12,10 +12,10 @@ import ETOSCore
 struct ChatSlashCommandSuggestionPanel: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    let commands: [ChatSlashCommand]
+    let commands: [ChatSlashCommandSuggestion]
     let usesLiquidGlass: Bool
     let glassTintOpacity: Double
-    let onSelect: (ChatSlashCommand) -> Void
+    let onSelect: (ChatSlashCommandSuggestion) -> Void
 
     private let rowHeight: CGFloat = 52
     private let maximumPanelHeight: CGFloat = 286
@@ -63,7 +63,7 @@ struct ChatSlashCommandSuggestionPanel: View {
                                 .etFont(.body.monospaced().weight(.semibold))
                                 .foregroundStyle(.primary)
 
-                            Text(NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description"))
+                            Text(command.displayDescription)
                                 .etFont(.footnote)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -76,7 +76,7 @@ struct ChatSlashCommandSuggestionPanel: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(
-                        "\(command.invocation), \(NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description"))"
+                        "\(command.invocation), \(command.displayDescription)"
                     )
 
                     if command.id != commands.last?.id {

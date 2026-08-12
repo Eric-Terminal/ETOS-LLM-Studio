@@ -58,4 +58,40 @@ final class ChatSlashCommandTests: XCTestCase {
     func testFeatureIsDisabledByDefault() {
         XCTAssertEqual(AppConfigKey.enableSlashCommands.defaultValue, .bool(false))
     }
+
+    func testCustomCommandAppearsInPrefixSuggestions() {
+        let customCommand = CustomChatSlashCommand(trigger: "sk", prompt: "请总结当前对话。")
+
+        let suggestions = ChatSlashCommandParser.suggestions(
+            for: "/sk",
+            customCommands: [customCommand]
+        )
+
+        XCTAssertTrue(suggestions.contains(.builtIn(.skills)))
+        XCTAssertTrue(suggestions.contains(.custom(customCommand)))
+    }
+
+    func testCustomCommandRecognitionIsCaseInsensitive() {
+        let customCommand = CustomChatSlashCommand(trigger: "sk", prompt: "请总结当前对话。")
+
+        XCTAssertEqual(
+            ChatSlashCommandParser.recognizedCustomCommand(
+                in: "/SK\n",
+                customCommands: [customCommand]
+            ),
+            customCommand
+        )
+    }
+
+    func testBuiltInNamesAndAliasesAreReserved() {
+        XCTAssertTrue(ChatSlashCommandParser.isReservedTrigger("new"))
+        XCTAssertTrue(ChatSlashCommandParser.isReservedTrigger("history"))
+        XCTAssertFalse(ChatSlashCommandParser.isReservedTrigger("sk"))
+    }
+
+    func testCustomTriggerNormalizationAcceptsLeadingSlash() {
+        XCTAssertEqual(CustomChatSlashCommandStore.canonicalTrigger(" /SK "), "sk")
+        XCTAssertTrue(CustomChatSlashCommandStore.isValidTrigger("story-kit_2"))
+        XCTAssertFalse(CustomChatSlashCommandStore.isValidTrigger("story kit"))
+    }
 }

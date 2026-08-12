@@ -146,6 +146,47 @@ public enum ChatSlashCommand: String, CaseIterable, Hashable, Identifiable, Send
     }
 }
 
+public enum ChatSlashCommandSuggestion: Hashable, Identifiable, Sendable {
+    case builtIn(ChatSlashCommand)
+    case custom(CustomChatSlashCommand)
+
+    public var id: String {
+        switch self {
+        case .builtIn(let command):
+            return "built-in:\(command.id)"
+        case .custom(let command):
+            return "custom:\(command.id.uuidString)"
+        }
+    }
+
+    public var invocation: String {
+        switch self {
+        case .builtIn(let command):
+            return command.invocation
+        case .custom(let command):
+            return command.invocation
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .builtIn(let command):
+            return command.systemImage
+        case .custom:
+            return "text.bubble"
+        }
+    }
+
+    public var displayDescription: String {
+        switch self {
+        case .builtIn(let command):
+            return NSLocalizedString(command.titleLocalizationKey, comment: "Slash command description")
+        case .custom(let command):
+            return command.prompt
+        }
+    }
+}
+
 public enum ChatSlashCommandParser {
     /// 只识别完整且不带参数的命令；未知命令必须继续作为普通消息发送。
     public static func recognizedCommand(in text: String) -> ChatSlashCommand? {
@@ -181,6 +222,66 @@ public enum ChatSlashCommandParser {
 
         return ChatSlashCommand.allCases.filter {
             $0.rawValue.hasPrefix(normalizedQuery)
+        }
+    }
+
+    public static func recognizedSuggestion(
+        in text: String,
+        customCommands: [CustomChatSlashCommand]
+    ) -> ChatSlashCommandSuggestion? {
+        if let builtInCommand = recognizedCommand(in: text) {
+            return .builtIn(builtInCommand)
+        }
+        return recognizedCustomCommand(in: text, customCommands: customCommands).map {
+            .custom($0)
+        }
+    }
+
+    public static func suggestions(
+        for text: String,
+        customCommands: [CustomChatSlashCommand]
+    ) -> [ChatSlashCommandSuggestion] {
+        guard text.first == "/" else { return [] }
+        let query = String(text.dropFirst())
+        guard !query.contains(where: \.isWhitespace),
+              !query.contains("/") else {
+            return []
+        }
+
+        let normalizedQuery = query.lowercased()
+        let builtInSuggestions = suggestions(for: text).map(ChatSlashCommandSuggestion.builtIn)
+        let customSuggestions = customCommands.compactMap { command -> ChatSlashCommandSuggestion? in
+            let trigger = CustomChatSlashCommandStore.canonicalTrigger(command.trigger)
+            guard normalizedQuery.isEmpty || trigger.hasPrefix(normalizedQuery) else { return nil }
+            return .custom(command)
+        }
+        return builtInSuggestions + customSuggestions
+    }
+
+    public static func recognizedCustomCommand(
+        in text: String,
+        customCommands: [CustomChatSlashCommand]
+    ) -> CustomChatSlashCommand? {
+        guard text.first == "/" else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.first == "/" else { return nil }
+
+        let token = String(trimmed.dropFirst())
+        guard !token.isEmpty,
+              !token.contains(where: \.isWhitespace) else {
+            return nil
+        }
+
+        let normalizedToken = token.lowercased()
+        return customCommands.first {
+            CustomChatSlashCommandStore.canonicalTrigger($0.trigger) == normalizedToken
+        }
+    }
+
+    public static func isReservedTrigger(_ trigger: String) -> Bool {
+        let canonical = CustomChatSlashCommandStore.canonicalTrigger(trigger)
+        return ChatSlashCommand.allCases.contains {
+            $0.rawValue == canonical || $0.aliases.contains(canonical)
         }
     }
 }

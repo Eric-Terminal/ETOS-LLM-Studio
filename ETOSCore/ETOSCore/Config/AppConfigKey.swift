@@ -367,6 +367,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case chatQuickActionIDs = "ui.chatQuickActionIDs"
     case temporaryChatMemoryEnabled = "chat.temporary.memoryEnabled"
     case enableSlashCommands = "chat.slashCommands.enabled"
+    case customChatSlashCommands = "chat.slashCommands.custom"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
@@ -511,7 +512,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(true)
         case .systemPrompt:
             return .text("")
-        case .messageRegexRules:
+        case .messageRegexRules,
+             .customChatSlashCommands:
             return .text("[]")
         case .maxChatHistory:
             return .integer(0)

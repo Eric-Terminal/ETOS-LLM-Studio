@@ -691,10 +691,7 @@ extension TelegramMessageComposer {
         } else if adaptiveHasContent {
             adaptiveCloseRequestControls()
             if let command = adaptiveRecognizedSlashCommand {
-                text = ""
-                slashCommandSuggestions = []
-                adaptiveRecognizedSlashCommand = nil
-                slashCommandAction(command)
+                performSelectedSlashCommand(command)
             } else {
                 sendAction()
             }

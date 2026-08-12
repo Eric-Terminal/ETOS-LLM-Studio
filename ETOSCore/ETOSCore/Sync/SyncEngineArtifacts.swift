@@ -245,6 +245,9 @@ extension SyncEngine {
         if changedKeys.contains(AppConfigKey.messageRegexRules.rawValue) {
             MessageRegexRuleStore.shared.reload(notify: true)
         }
+        if changedKeys.contains(AppConfigKey.customChatSlashCommands.rawValue) {
+            CustomChatSlashCommandStore.shared.reload(notify: true)
+        }
     }
 
     static func encodeAppStorageSnapshot(_ snapshot: [String: Any]) -> Data? {
