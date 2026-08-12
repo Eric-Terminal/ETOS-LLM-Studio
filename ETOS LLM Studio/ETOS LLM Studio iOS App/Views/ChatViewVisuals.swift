@@ -138,7 +138,8 @@ extension ChatView {
 
                         LoopingBackgroundVideoView(
                             url: videoURL,
-                            contentMode: viewModel.backgroundContentMode
+                            contentMode: viewModel.backgroundContentMode,
+                            shouldPlay: isChatVisible && scenePhase == .active
                         )
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
@@ -314,6 +315,7 @@ extension ChatView {
 private struct LoopingBackgroundVideoView: UIViewRepresentable {
     let url: URL
     let contentMode: String
+    let shouldPlay: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -321,12 +323,22 @@ private struct LoopingBackgroundVideoView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PlayerContainerView {
         let view = PlayerContainerView()
-        context.coordinator.configure(view: view, url: url, contentMode: contentMode)
+        context.coordinator.configure(
+            view: view,
+            url: url,
+            contentMode: contentMode,
+            shouldPlay: shouldPlay
+        )
         return view
     }
 
     func updateUIView(_ uiView: PlayerContainerView, context: Context) {
-        context.coordinator.configure(view: uiView, url: url, contentMode: contentMode)
+        context.coordinator.configure(
+            view: uiView,
+            url: url,
+            contentMode: contentMode,
+            shouldPlay: shouldPlay
+        )
     }
 
     static func dismantleUIView(_ uiView: PlayerContainerView, coordinator: Coordinator) {
@@ -339,10 +351,15 @@ private struct LoopingBackgroundVideoView: UIViewRepresentable {
         private var player: AVQueuePlayer?
         private var looper: AVPlayerLooper?
 
-        func configure(view: PlayerContainerView, url: URL, contentMode: String) {
+        func configure(
+            view: PlayerContainerView,
+            url: URL,
+            contentMode: String,
+            shouldPlay: Bool
+        ) {
             view.playerLayer.videoGravity = contentMode == "fit" ? .resizeAspect : .resizeAspectFill
             if currentURL == url, view.playerLayer.player === player {
-                player?.play()
+                updatePlayback(shouldPlay: shouldPlay)
                 return
             }
 
@@ -354,7 +371,15 @@ private struct LoopingBackgroundVideoView: UIViewRepresentable {
             view.playerLayer.player = player
             self.player = player
             currentURL = url
-            player.play()
+            updatePlayback(shouldPlay: shouldPlay)
+        }
+
+        private func updatePlayback(shouldPlay: Bool) {
+            if shouldPlay {
+                player?.play()
+            } else {
+                player?.pause()
+            }
         }
 
         func stop() {

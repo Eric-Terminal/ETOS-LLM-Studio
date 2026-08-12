@@ -23,10 +23,12 @@ struct ChatView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
+    @Environment(\.scenePhase) var scenePhase
     @ObservedObject var appConfig = AppConfigStore.shared
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject var ttsManager = TTSManager.shared
     @ObservedObject var localNotificationCenter = AppLocalNotificationCenter.shared
+    @State var isChatVisible = false
     @State var showScrollToBottom = false
     @State var shouldKeepBottomPinned = true
     @State var suppressAutoScrollOnce = false
@@ -317,11 +319,13 @@ struct ChatView: View {
                 showChatTransientNotice(.copyCompleted, duration: .seconds(1.4))
             }
             .onAppear {
+                isChatVisible = true
                 reloadChatQuickActions()
                 refreshTemporaryChatState()
                 refreshChatToolPermissionAutoPresentationBlocker()
             }
             .onDisappear {
+                isChatVisible = false
                 setChatToolPermissionAutoPresentationBlocked(false)
             }
             .onChange(of: chatToolPermissionAutoPresentationBlocked) { _, _ in
