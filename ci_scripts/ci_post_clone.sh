@@ -25,5 +25,40 @@ install_build_tool_if_needed() {
     fi
 }
 
+llvm_supports_ish_vdso() {
+    llvm_prefix="$(brew --prefix llvm 2>/dev/null || true)"
+    [ -n "$llvm_prefix" ] || return 1
+    llvm_clang="${llvm_prefix}/bin/clang"
+
+    [ -x "$llvm_clang" ] || return 1
+    printf '%s\n' \
+        '#if !defined(__i386__) || !defined(__ELF__)' \
+        '#error "缺少 iSH VDSO 所需的 i386 ELF 目标支持"' \
+        '#endif' | "$llvm_clang" \
+            -target i386-linux -fuse-ld=lld -shared -nostdlib \
+            -x c - -o /dev/null >/dev/null 2>&1
+}
+
+install_llvm_if_needed() {
+    if ! command -v brew >/dev/null 2>&1; then
+        echo "错误：构建 iSH VDSO 需要 Homebrew LLVM，但当前环境没有 Homebrew。" >&2
+        exit 1
+    fi
+
+    if llvm_supports_ish_vdso; then
+        echo "构建工具已可用：Homebrew LLVM（i386 ELF + LLD）"
+        return
+    fi
+
+    echo "正在通过 Homebrew 安装构建工具：llvm"
+    HOMEBREW_NO_AUTO_UPDATE=1 brew install llvm
+
+    if ! llvm_supports_ish_vdso; then
+        echo "错误：Homebrew LLVM 安装完成后仍无法构建 iSH VDSO。" >&2
+        exit 1
+    fi
+}
+
 install_build_tool_if_needed meson
 install_build_tool_if_needed ninja
+install_llvm_if_needed
