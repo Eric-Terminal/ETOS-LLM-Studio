@@ -14,7 +14,7 @@ import Foundation
 actor MCPNativeNFCExecutor {
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
         #if os(iOS) && canImport(CoreNFC)
-        guard NFCNDEFReaderSession.readingAvailable else {
+        guard NFCReaderSession.readingAvailable else {
             throw MCPNativeCapabilityError.unavailable(
                 NSLocalizedString("当前 iPhone 不支持 NFC 标签读取。", comment: "NFC unavailable")
             )
@@ -167,29 +167,18 @@ private final class MCPNativeNFCSessionController: NSObject {
 
     private var operation: Operation?
     private var tagSession: NFCTagReaderSession?
-    private var ndefSession: NFCNDEFReaderSession?
 
     func scan() async throws -> [String: Any] {
         try ensureIdle()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 operation = .scan(continuation)
-                guard let session = NFCTagReaderSession(
-                    pollingOption: [.iso14443, .iso15693],
-                    delegate: self,
-                    queue: nil
-                ) else {
-                    finish(.failure(MCPNativeCapabilityError.unavailable(
-                        NSLocalizedString("系统无法创建 NFC 标签读取会话。", comment: "NFC tag session creation failed")
-                    )))
-                    return
-                }
-                session.alertMessage = NSLocalizedString(
-                    "请将 iPhone 顶部靠近 NFC 标签。",
-                    comment: "NFC scan system prompt"
+                beginTagSession(
+                    alertMessage: NSLocalizedString(
+                        "请将 iPhone 顶部靠近 NFC 标签。",
+                        comment: "NFC scan system prompt"
+                    )
                 )
-                tagSession = session
-                session.begin()
             }
         } onCancel: {
             Task { @MainActor [weak self] in self?.cancel() }
@@ -201,7 +190,7 @@ private final class MCPNativeNFCSessionController: NSObject {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 operation = .read(continuation)
-                beginNDEFSession(
+                beginTagSession(
                     alertMessage: NSLocalizedString(
                         "请将 iPhone 顶部靠近要读取的 NFC 标签。",
                         comment: "NFC read system prompt"
@@ -220,7 +209,7 @@ private final class MCPNativeNFCSessionController: NSObject {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 operation = .write(message: message, preview: preview, continuation: continuation)
-                beginNDEFSession(
+                beginTagSession(
                     alertMessage: NSLocalizedString(
                         "请核对预览后，将 iPhone 顶部靠近要写入的 NFC 标签。",
                         comment: "NFC write system prompt"
@@ -232,10 +221,19 @@ private final class MCPNativeNFCSessionController: NSObject {
         }
     }
 
-    private func beginNDEFSession(alertMessage: String) {
-        let session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
+    private func beginTagSession(alertMessage: String) {
+        guard let session = NFCTagReaderSession(
+            pollingOption: [.iso14443, .iso15693],
+            delegate: self,
+            queue: nil
+        ) else {
+            finish(.failure(MCPNativeCapabilityError.unavailable(
+                NSLocalizedString("系统无法创建 NFC 标签读取会话。", comment: "NFC tag session creation failed")
+            )))
+            return
+        }
         session.alertMessage = alertMessage
-        ndefSession = session
+        tagSession = session
         session.begin()
     }
 
@@ -250,7 +248,6 @@ private final class MCPNativeNFCSessionController: NSObject {
     private func cancel() {
         let error = CancellationError()
         tagSession?.invalidate()
-        ndefSession?.invalidate()
         finish(.failure(error))
     }
 
@@ -259,12 +256,9 @@ private final class MCPNativeNFCSessionController: NSObject {
         self.operation = nil
         if let message {
             tagSession?.alertMessage = message
-            ndefSession?.alertMessage = message
         }
         tagSession?.invalidate()
-        ndefSession?.invalidate()
         tagSession = nil
-        ndefSession = nil
         switch operation {
         case .scan(let continuation), .read(let continuation):
             continuation.resume(with: result)
@@ -292,7 +286,14 @@ extension MCPNativeNFCSessionController: NFCTagReaderSessionDelegate {
     }
 
     nonisolated func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
-        guard let tag = tags.first else { return }
+        guard tags.count == 1, let tag = tags.first else {
+            session.alertMessage = NSLocalizedString(
+                "检测到多个标签，请一次只靠近一个标签。",
+                comment: "Multiple NFC tags detected"
+            )
+            session.restartPolling()
+            return
+        }
         let tagReference = MCPNativeNFCTagReference(value: tag)
         session.connect(to: tagReference.value) { [weak self] error in
             Task { @MainActor [weak self] in
@@ -301,12 +302,35 @@ extension MCPNativeNFCSessionController: NFCTagReaderSessionDelegate {
                     self.fail(error)
                     return
                 }
-                let payload = self.tagPayload(tagReference.value)
-                self.finish(
-                    .success(payload),
-                    message: NSLocalizedString("已读取 NFC 标签。", comment: "NFC scan complete")
-                )
+                switch self.operation {
+                case .scan:
+                    let payload = self.tagPayload(tagReference.value)
+                    self.finish(
+                        .success(payload),
+                        message: NSLocalizedString("已读取 NFC 标签。", comment: "NFC scan complete")
+                    )
+                case .read, .write:
+                    guard let ndefTag = self.ndefTag(from: tagReference.value) else {
+                        self.fail(MCPNativeCapabilityError.unavailable(
+                            NSLocalizedString("该标签不支持 NDEF。", comment: "NDEF unsupported")
+                        ))
+                        return
+                    }
+                    self.handleConnectedNDEFTag(MCPNativeNDEFTagReference(value: ndefTag))
+                case nil:
+                    break
+                }
             }
+        }
+    }
+
+    private func ndefTag(from tag: NFCTag) -> NFCNDEFTag? {
+        switch tag {
+        case .miFare(let value): return value
+        case .iso7816(let value): return value
+        case .iso15693(let value): return value
+        case .feliCa(let value): return value
+        @unknown default: return nil
         }
     }
 
@@ -335,46 +359,6 @@ extension MCPNativeNFCSessionController: NFCTagReaderSessionDelegate {
             "identifier_hex": identifier.map { String(format: "%02X", $0) }.joined(),
             "identifier_byte_count": identifier.count
         ]
-    }
-}
-
-extension MCPNativeNFCSessionController: NFCNDEFReaderSessionDelegate {
-    nonisolated func readerSessionDidBecomeActive(_ session: NFCNDEFReaderSession) {}
-
-    nonisolated func readerSession(
-        _ session: NFCNDEFReaderSession,
-        didInvalidateWithError error: Error
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self, self.operation != nil else { return }
-            self.fail(error)
-        }
-    }
-
-    nonisolated func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
-        // 实现 didDetect(tags:) 后系统不会走这个只读回调，但协议仍要求提供。
-    }
-
-    nonisolated func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        guard tags.count == 1, let tag = tags.first else {
-            session.alertMessage = NSLocalizedString(
-                "检测到多个标签，请一次只靠近一个标签。",
-                comment: "Multiple NFC tags detected"
-            )
-            session.restartPolling()
-            return
-        }
-        let tagReference = MCPNativeNDEFTagReference(value: tag)
-        session.connect(to: tagReference.value) { [weak self] error in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if let error {
-                    self.fail(error)
-                    return
-                }
-                self.handleConnectedNDEFTag(tagReference)
-            }
-        }
     }
 
     private func handleConnectedNDEFTag(_ tag: MCPNativeNDEFTagReference) {
