@@ -282,29 +282,20 @@ struct ETCodeCopyButton: View {
     let normalColor: Color
     let successColor: Color
 
-    @State private var didCopy = false
-
     var body: some View {
-        Button {
+        CopyConfirmationButton {
             ETCodeClipboard.copy(content)
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
-
-            withAnimation(.easeInOut(duration: 0.15)) {
-                didCopy = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    didCopy = false
-                }
-            }
-        } label: {
+        } label: { didCopy in
             Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
                 .etFont(.system(size: 12, weight: .semibold))
                 .foregroundStyle(didCopy ? successColor : normalColor)
+                .contentTransition(.symbolEffect(.replace))
+                .accessibilityLabel(
+                    didCopy
+                        ? NSLocalizedString("已复制", comment: "")
+                        : NSLocalizedString("复制代码", comment: "")
+                )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(NSLocalizedString("复制代码", comment: ""))
     }
 }

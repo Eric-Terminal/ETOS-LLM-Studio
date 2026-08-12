@@ -107,6 +107,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         let controller = WKUserContentController()
 
         controller.add(context.coordinator, name: Coordinator.heightMessageName)
+        controller.add(context.coordinator, name: Coordinator.copyMessageName)
         config.userContentController = controller
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -168,6 +169,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
         webView.navigationDelegate = nil
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.heightMessageName)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.copyMessageName)
     }
 
     private static func resolvedCSSFontFamily(
@@ -193,6 +195,7 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         static let heightMessageName = "etMathHeight"
+        static let copyMessageName = "etMathCopy"
 
         @Binding var renderedHeight: CGFloat
         var lastPayload: ETMathWebPayload?
@@ -252,6 +255,13 @@ private struct ETMathWebViewRepresentable: UIViewRepresentable {
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
+            if message.name == Self.copyMessageName {
+                Task { @MainActor in
+                    AppHapticFeedback.operationSucceeded()
+                }
+                return
+            }
+
             guard message.name == Self.heightMessageName else { return }
             guard let value = message.body as? Double else { return }
 

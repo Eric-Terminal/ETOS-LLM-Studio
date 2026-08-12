@@ -730,6 +730,7 @@ struct LocalLinuxRecipesView: View {
             if let recipe = selectedRecipe {
                 Button(NSLocalizedString("复制命令", comment: "Copy Linux recipe command")) {
                     UIPasteboard.general.string = recipe.displayedCommand
+                    AppHapticFeedback.operationSucceeded()
                 }
                 Button(NSLocalizedString("执行此命令", comment: "Execute Linux recipe command")) {
                     run(recipe)

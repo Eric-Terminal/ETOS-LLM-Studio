@@ -115,7 +115,7 @@ struct MessageTextSelectionView: View {
 
     private func copyToPasteboard(_ text: String) {
         UIPasteboard.general.string = text
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        AppHapticFeedback.operationSucceeded()
     }
 }
 

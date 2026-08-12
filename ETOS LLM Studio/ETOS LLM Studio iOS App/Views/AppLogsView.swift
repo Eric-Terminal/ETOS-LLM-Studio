@@ -528,8 +528,16 @@ private struct AppLogRunDetailView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("复制", comment: "")) {
+                CopyConfirmationButton {
                     copyLogsToClipboard()
+                } label: { didCopy in
+                    Label(
+                        didCopy
+                            ? NSLocalizedString("已复制", comment: "")
+                            : NSLocalizedString("复制", comment: ""),
+                        systemImage: didCopy ? "checkmark" : "doc.on.doc"
+                    )
+                    .contentTransition(.symbolEffect(.replace))
                 }
                 .disabled(displayedEvents.isEmpty)
             }
@@ -756,8 +764,16 @@ private struct AppLogEventDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("复制", comment: "")) {
+                CopyConfirmationButton {
                     UIPasteboard.general.string = fullLogText
+                } label: { didCopy in
+                    Label(
+                        didCopy
+                            ? NSLocalizedString("已复制", comment: "")
+                            : NSLocalizedString("复制", comment: ""),
+                        systemImage: didCopy ? "checkmark" : "doc.on.doc"
+                    )
+                    .contentTransition(.symbolEffect(.replace))
                 }
             }
         }
@@ -794,8 +810,16 @@ private struct AppLogPayloadValueDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button(NSLocalizedString("复制", comment: "")) {
+                CopyConfirmationButton {
                     UIPasteboard.general.string = prettyPayloadValue(value)
+                } label: { didCopy in
+                    Label(
+                        didCopy
+                            ? NSLocalizedString("已复制", comment: "")
+                            : NSLocalizedString("复制", comment: ""),
+                        systemImage: didCopy ? "checkmark" : "doc.on.doc"
+                    )
+                    .contentTransition(.symbolEffect(.replace))
                 }
             }
         }

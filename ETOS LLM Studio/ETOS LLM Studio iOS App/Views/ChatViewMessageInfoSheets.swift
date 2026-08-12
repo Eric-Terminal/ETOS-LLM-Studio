@@ -38,10 +38,16 @@ struct FullErrorContentSheet: View {
                     Button(NSLocalizedString("完成", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
+                    CopyConfirmationButton {
                         UIPasteboard.general.string = payload.content
-                    } label: {
-                        Image(systemName: "doc.on.doc")
+                    } label: { didCopy in
+                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                            .contentTransition(.symbolEffect(.replace))
+                            .accessibilityLabel(
+                                didCopy
+                                    ? NSLocalizedString("已复制", comment: "")
+                                    : NSLocalizedString("复制", comment: "")
+                            )
                     }
                 }
             }

@@ -193,6 +193,9 @@ extension ETMathWebShellConfiguration {
           await __copyText(codeText);
           button.dataset.copied = "true";
           button.textContent = \(codeCopiedText);
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.etMathCopy) {
+            window.webkit.messageHandlers.etMathCopy.postMessage(true);
+          }
           if (button.__etCopyTimer) {
             clearTimeout(button.__etCopyTimer);
           }

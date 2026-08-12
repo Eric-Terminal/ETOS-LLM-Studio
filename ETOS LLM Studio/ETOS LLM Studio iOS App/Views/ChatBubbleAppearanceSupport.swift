@@ -168,13 +168,16 @@ extension ChatBubble {
             .accessibilityLabel(Text(item.title))
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .copyMessage:
-            Button(action: onCopy) {
-                Image(systemName: item.systemImage)
+            CopyConfirmationButton(action: onCopy) { didCopy in
+                Image(systemName: didCopy ? "checkmark" : item.systemImage)
                     .etFont(.system(size: 13 * messageActionBarFontScale))
                     .fontWeight(.semibold)
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityLabel(
+                        Text(didCopy ? NSLocalizedString("已复制", comment: "") : item.title)
+                    )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(item.title))
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
