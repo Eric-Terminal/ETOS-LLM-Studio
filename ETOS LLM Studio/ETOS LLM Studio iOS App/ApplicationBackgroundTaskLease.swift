@@ -24,8 +24,11 @@ final class ApplicationBackgroundTaskLease {
     }
 
     deinit {
+        let identifier = identifier
         if identifier != .invalid {
-            UIApplication.shared.endBackgroundTask(identifier)
+            Task { @MainActor in
+                UIApplication.shared.endBackgroundTask(identifier)
+            }
         }
     }
 }
