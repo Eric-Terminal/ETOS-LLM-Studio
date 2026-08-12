@@ -66,8 +66,6 @@ struct ExtendedFeaturesView: View {
                 } label: {
                     SettingsListIconLabel("应用锁", icon: .security)
                 }
-            } header: {
-                Text(NSLocalizedString("安全", comment: "设置安全分组"))
             } footer: {
                 Text(NSLocalizedString("保护本机界面与离线数据库文件。", comment: "应用锁入口说明"))
                     .etFont(.footnote)
