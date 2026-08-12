@@ -499,9 +499,9 @@ private struct FontDescriptorInfo {
         [
             raw,
             explicitSize.map { String(format: "%.4f", Double($0)) } ?? "dynamic",
-            textStyle.map(Self.textStyleName) ?? "none",
+            textStyle.map { Self.textStyleName($0) } ?? "none",
             Self.designName(resolvedDesign),
-            weight.map(Self.weightName) ?? "regular",
+            weight.map { Self.weightName($0) } ?? "regular",
             isItalic ? "italic" : "upright",
             isMonospaced ? "monospaced" : "proportional"
         ].joined(separator: "|")
