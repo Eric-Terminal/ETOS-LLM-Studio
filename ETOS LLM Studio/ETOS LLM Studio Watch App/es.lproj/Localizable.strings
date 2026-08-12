@@ -1502,7 +1502,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "字体大小" = "Tamaño de fuente";
 "字号比例" = "Escala de tamaño";
 "恢复默认字号" = "Restaurar tamaño predeterminado";
-"仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Solo ajusta el tamaño de visualización de las fuentes personalizadas, de 50% a 200%; el tamaño dinámico del sistema sigue aplicándose.";
+"调整系统字体和自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Ajusta el tamaño de visualización de las fuentes del sistema y personalizadas, del 50% al 200%; Dynamic Type sigue aplicándose.";
 "在全局字号比例的基础上，单独调整气泡功能栏的文字和图标大小。" = "Ajusta de forma independiente el tamaño del texto y los iconos de la barra de acciones de la burbuja, además de la escala global de la fuente.";
 "彩色设置图标" = "Iconos de ajustes coloridos";
 "需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。" = "Cambia primero la arquitectura de interfaz a «Página independiente» para activar los iconos de ajustes coloridos; «Ventana inmersiva» seguirá usando iconos lineales monocromos.";

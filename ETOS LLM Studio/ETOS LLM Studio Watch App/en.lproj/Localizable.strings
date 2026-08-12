@@ -1538,7 +1538,7 @@
 "字体大小" = "Font Size";
 "字号比例" = "Size Scale";
 "恢复默认字号" = "Restore Default Size";
-"仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Only adjusts the display size of custom fonts, from 50% to 200%; the system Dynamic Type size still applies.";
+"调整系统字体和自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。" = "Adjusts the display size of both system and custom fonts, from 50% to 200%; Dynamic Type still applies.";
 "在全局字号比例的基础上，单独调整气泡功能栏的文字和图标大小。" = "Adjusts the text and icon size of the bubble action bar independently on top of the global font scale.";
 "彩色设置图标" = "Colorful Settings Icons";
 "需要先将界面架构切换为“独立页面”才可开启彩色设置图标；沉浸视窗会继续使用单色线条图标。" = "Switch the interface architecture to Standalone Page before enabling colorful Settings icons; Immersive Window will keep using monochrome line icons.";

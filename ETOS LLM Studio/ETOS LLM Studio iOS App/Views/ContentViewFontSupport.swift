@@ -124,20 +124,19 @@ enum AppFontAdapter {
     private static var adaptedFontCacheToken: String = ""
 
     static func adaptedFont(from original: Font, sampleText: String? = nil) -> Font {
-        let rawDescriptor = String(describing: original)
-        let descriptor = FontDescriptorInfo(rawDescription: rawDescriptor)
+        let descriptor = FontDescriptorInfo(font: original)
         let role = inferredRole(from: descriptor)
         let resolvedSample = resolvedSampleText(for: role, override: sampleText)
-        let cacheKey = "\(rawDescriptor)|\(role.rawValue)|\(resolvedSample)"
+        let cacheKey = "\(descriptor.cacheSignature)|\(role.rawValue)|\(resolvedSample)"
         let cacheToken = FontLibrary.adapterCacheToken()
+
+        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: resolvedSample) else {
+            // 系统字体也要应用用户倍率；不缓存该分支，让 Dynamic Type 变化后重新取系统度量。
+            return mappedSystemFont(original: original, descriptor: descriptor)
+        }
 
         if let cached = cachedFont(for: cacheKey, cacheToken: cacheToken) {
             return cached
-        }
-
-        guard let postScriptName = FontLibrary.resolvePostScriptName(for: role, sampleText: resolvedSample) else {
-            storeAdaptedFont(original, for: cacheKey, cacheToken: cacheToken)
-            return original
         }
 
         let fallbackPostScriptNames = FontLibrary.fallbackPostScriptNames(for: role)
@@ -148,6 +147,57 @@ enum AppFontAdapter {
         )
         storeAdaptedFont(mapped, for: cacheKey, cacheToken: cacheToken)
         return mapped
+    }
+
+    private static func mappedSystemFont(original: Font, descriptor: FontDescriptorInfo) -> Font {
+        let fontScale = CGFloat(FontLibrary.customFontScale)
+        guard abs(fontScale - CGFloat(FontLibrary.defaultFontScale)) > 0.001 else {
+            return original
+        }
+
+        let pointSize: CGFloat
+        if let explicitSize = descriptor.explicitSize {
+            pointSize = explicitSize * fontScale
+        } else if let textStyle = descriptor.textStyle {
+            pointSize = defaultPointSize(for: textStyle) * fontScale
+        } else {
+            pointSize = 17 * fontScale
+        }
+
+#if canImport(UIKit)
+        let weight = descriptor.weight ?? defaultSystemWeight(for: descriptor.textStyle)
+        var systemDescriptor = UIFont.systemFont(
+            ofSize: pointSize,
+            weight: UIFont.Weight(rawValue: uiFontWeightValue(weight))
+        ).fontDescriptor
+        if let design = uiSystemDesign(for: descriptor.resolvedDesign),
+           let designedDescriptor = systemDescriptor.withDesign(design) {
+            systemDescriptor = designedDescriptor
+        }
+        if descriptor.isItalic,
+           let italicDescriptor = systemDescriptor.withSymbolicTraits(.traitItalic) {
+            systemDescriptor = italicDescriptor
+        }
+
+        let uiFont = UIFont(descriptor: systemDescriptor, size: pointSize)
+        if let textStyle = descriptor.textStyle {
+            return Font(
+                UIFontMetrics(forTextStyle: uiTextStyle(for: textStyle))
+                    .scaledFont(for: uiFont)
+            )
+        }
+        return Font(uiFont)
+#else
+        var mapped = Font.system(
+            size: pointSize,
+            weight: descriptor.weight ?? defaultSystemWeight(for: descriptor.textStyle),
+            design: descriptor.resolvedDesign
+        )
+        if descriptor.isItalic {
+            mapped = mapped.italic()
+        }
+        return mapped
+#endif
     }
 
     private static func resolvedSampleText(for role: FontSemanticRole, override sampleText: String?) -> String {
@@ -303,6 +353,39 @@ enum AppFontAdapter {
         }
     }
 
+    private static func defaultSystemWeight(for textStyle: Font.TextStyle?) -> Font.Weight {
+        textStyle == .headline ? .semibold : .regular
+    }
+
+#if canImport(UIKit)
+    private static func uiTextStyle(for textStyle: Font.TextStyle) -> UIFont.TextStyle {
+        switch textStyle {
+        case .largeTitle: return .largeTitle
+        case .title: return .title1
+        case .title2: return .title2
+        case .title3: return .title3
+        case .headline: return .headline
+        case .subheadline: return .subheadline
+        case .body: return .body
+        case .callout: return .callout
+        case .footnote: return .footnote
+        case .caption: return .caption1
+        case .caption2: return .caption2
+        @unknown default: return .body
+        }
+    }
+
+    private static func uiSystemDesign(for design: Font.Design) -> UIFontDescriptor.SystemDesign? {
+        switch design {
+        case .default: return .default
+        case .serif: return .serif
+        case .rounded: return .rounded
+        case .monospaced: return .monospaced
+        @unknown default: return nil
+        }
+    }
+#endif
+
     private static func sampleText(for role: FontSemanticRole) -> String {
         switch role {
         case .body:
@@ -394,18 +477,46 @@ enum AppFontAdapter {
 private struct FontDescriptorInfo {
     let raw: String
     let lowercasedRaw: String
+    private let mirroredExplicitSize: CGFloat?
+    private let mirroredTextStyle: Font.TextStyle?
+    private let mirroredDesign: Font.Design?
+    private let mirroredWeight: Font.Weight?
+    private let mirroredIsItalic: Bool
+    private let mirroredIsMonospaced: Bool
 
-    init(rawDescription: String) {
-        self.raw = rawDescription
-        self.lowercasedRaw = rawDescription.lowercased()
+    init(font: Font) {
+        let rawDescription = String(reflecting: font)
+        let snapshot = Self.mirrorSnapshot(from: font)
+        raw = rawDescription
+        lowercasedRaw = rawDescription.lowercased()
+        mirroredExplicitSize = snapshot.explicitSize
+        mirroredTextStyle = snapshot.textStyle
+        mirroredDesign = snapshot.design
+        mirroredWeight = snapshot.weight
+        mirroredIsItalic = snapshot.isItalic
+        mirroredIsMonospaced = snapshot.isMonospaced
+    }
+
+    var cacheSignature: String {
+        [
+            raw,
+            explicitSize.map { String(format: "%.4f", Double($0)) } ?? "dynamic",
+            textStyle.map(Self.textStyleName) ?? "none",
+            Self.designName(resolvedDesign),
+            weight.map(Self.weightName) ?? "regular",
+            isItalic ? "italic" : "upright",
+            isMonospaced ? "monospaced" : "proportional"
+        ].joined(separator: "|")
     }
 
     var explicitSize: CGFloat? {
-        firstMatchedNumber(after: "size:")
+        mirroredExplicitSize
+            ?? firstMatchedNumber(after: "size:")
             ?? firstMatchedNumber(after: "size ")
     }
 
     var textStyle: Font.TextStyle? {
+        if let mirroredTextStyle { return mirroredTextStyle }
         if lowercasedRaw.contains("caption2") { return .caption2 }
         if lowercasedRaw.contains("caption") { return .caption }
         if lowercasedRaw.contains("footnote") { return .footnote }
@@ -421,14 +532,24 @@ private struct FontDescriptorInfo {
     }
 
     var isItalic: Bool {
-        lowercasedRaw.contains("italic")
+        mirroredIsItalic || lowercasedRaw.contains("italic")
     }
 
     var isMonospaced: Bool {
-        lowercasedRaw.contains("monospaced") || lowercasedRaw.contains("mono")
+        mirroredIsMonospaced || lowercasedRaw.contains("monospaced") || lowercasedRaw.contains("mono")
+    }
+
+    var design: Font.Design? {
+        mirroredDesign
+    }
+
+    var resolvedDesign: Font.Design {
+        if let design { return design }
+        return isMonospaced ? .monospaced : .default
     }
 
     var weight: Font.Weight? {
+        if let mirroredWeight { return mirroredWeight }
         if lowercasedRaw.contains("black") { return .black }
         if lowercasedRaw.contains("heavy") { return .heavy }
         if lowercasedRaw.contains("semibold") { return .semibold }
@@ -438,6 +559,112 @@ private struct FontDescriptorInfo {
         if lowercasedRaw.contains("thin") { return .thin }
         if lowercasedRaw.contains("ultralight") || lowercasedRaw.contains("ultra light") { return .ultraLight }
         return nil
+    }
+
+    private struct MirrorSnapshot {
+        var explicitSize: CGFloat?
+        var textStyle: Font.TextStyle?
+        var design: Font.Design?
+        var weight: Font.Weight?
+        var isItalic = false
+        var isMonospaced = false
+    }
+
+    private static func mirrorSnapshot(from font: Font) -> MirrorSnapshot {
+        var snapshot = MirrorSnapshot()
+        inspect(font, label: nil, depth: 0, snapshot: &snapshot)
+        return snapshot
+    }
+
+    private static func inspect(
+        _ value: Any,
+        label: String?,
+        depth: Int,
+        snapshot: inout MirrorSnapshot
+    ) {
+        guard depth <= 12 else { return }
+
+        if label == "size", snapshot.explicitSize == nil {
+            if let size = value as? CGFloat {
+                snapshot.explicitSize = size
+            } else if let size = value as? Double {
+                snapshot.explicitSize = CGFloat(size)
+            }
+        }
+        if let textStyle = value as? Font.TextStyle {
+            snapshot.textStyle = textStyle
+        }
+        if let design = value as? Font.Design {
+            snapshot.design = design
+            if case .monospaced = design {
+                snapshot.isMonospaced = true
+            }
+        }
+        if let weight = value as? Font.Weight {
+            snapshot.weight = weight
+        }
+
+        let typeName = String(reflecting: type(of: value)).lowercased()
+        if typeName.contains("italicmodifier") {
+            snapshot.isItalic = true
+        }
+        if typeName.contains("monospacedmodifier") {
+            snapshot.isMonospaced = true
+        }
+        if typeName.contains("boldmodifier"), snapshot.weight == nil {
+            snapshot.weight = .bold
+        }
+
+        for child in Mirror(reflecting: value).children {
+            inspect(
+                child.value,
+                label: child.label,
+                depth: depth + 1,
+                snapshot: &snapshot
+            )
+        }
+    }
+
+    private static func textStyleName(_ textStyle: Font.TextStyle) -> String {
+        switch textStyle {
+        case .largeTitle: return "largeTitle"
+        case .title: return "title"
+        case .title2: return "title2"
+        case .title3: return "title3"
+        case .headline: return "headline"
+        case .subheadline: return "subheadline"
+        case .body: return "body"
+        case .callout: return "callout"
+        case .footnote: return "footnote"
+        case .caption: return "caption"
+        case .caption2: return "caption2"
+        @unknown default: return "body"
+        }
+    }
+
+    private static func designName(_ design: Font.Design) -> String {
+        switch design {
+        case .default: return "default"
+        case .serif: return "serif"
+        case .rounded: return "rounded"
+        case .monospaced: return "monospaced"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private static func weightName(_ weight: Font.Weight) -> String {
+        switch weight {
+        case .ultraLight: return "ultraLight"
+        case .thin: return "thin"
+        case .light: return "light"
+        case .regular: return "regular"
+        case .medium: return "medium"
+        case .semibold: return "semibold"
+        case .bold: return "bold"
+        case .heavy: return "heavy"
+        case .black: return "black"
+        default: return "regular"
+        }
     }
 
     private func firstMatchedNumber(after marker: String) -> CGFloat? {

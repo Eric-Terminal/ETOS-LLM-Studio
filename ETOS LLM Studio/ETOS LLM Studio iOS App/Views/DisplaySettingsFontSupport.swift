@@ -32,7 +32,7 @@ struct FontSettingsView: View {
         nonmutating set { appConfig.fontFallbackScope = newValue }
     }
 
-    private var customFontScale: Double {
+    private var fontScale: Double {
         get { appConfig.fontCustomScale }
         nonmutating set { appConfig.fontCustomScale = newValue }
     }
@@ -94,10 +94,10 @@ struct FontSettingsView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
         }
-        .onChange(of: customFontScale) { _, newValue in
+        .onChange(of: fontScale) { _, newValue in
             let normalizedValue = FontLibrary.normalizedFontScale(newValue)
             if normalizedValue != newValue {
-                customFontScale = normalizedValue
+                fontScale = normalizedValue
                 return
             }
             NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
@@ -200,8 +200,8 @@ struct FontSettingsView: View {
 
     private var fontScaleBinding: Binding<Double> {
         Binding(
-            get: { FontLibrary.normalizedFontScale(customFontScale) },
-            set: { customFontScale = FontLibrary.normalizedFontScale($0) }
+            get: { FontLibrary.normalizedFontScale(fontScale) },
+            set: { fontScale = FontLibrary.normalizedFontScale($0) }
         )
     }
 
@@ -249,7 +249,7 @@ struct FontSettingsView: View {
         } header: {
             Text(NSLocalizedString("字体大小", comment: ""))
         } footer: {
-            Text(NSLocalizedString("仅调整自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
+            Text(NSLocalizedString("调整系统字体和自定义字体的显示大小，范围为 50% 到 200%；系统动态字号仍会继续生效。", comment: ""))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -456,7 +456,7 @@ struct FontSettingsView: View {
             FontLibrary.lineSpacingPoints(
                 basePointSize: 17,
                 lineSpacingEm: lineSpacingBinding.wrappedValue,
-                fontScale: customFontScale,
+                fontScale: fontScale,
                 isCustomFontEnabled: isCustomFontEnabled,
                 fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
             )

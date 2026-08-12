@@ -143,8 +143,9 @@ public enum FontLibrary {
             * effectiveFontScale(fontScale, isCustomFontEnabled: isCustomFontEnabled)
     }
 
-    public static func effectiveFontScale(_ value: Double, isCustomFontEnabled: Bool) -> Double {
-        isCustomFontEnabled ? normalizedFontScale(value) : defaultFontScale
+    public static func effectiveFontScale(_ value: Double, isCustomFontEnabled _: Bool) -> Double {
+        // 保留参数标签以兼容现有调用点；字号倍率现在同时作用于系统字体与自定义字体。
+        normalizedFontScale(value)
     }
 
     public static func effectiveFontScale(isCustomFontEnabled: Bool) -> Double {

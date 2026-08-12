@@ -435,8 +435,8 @@ struct FontRouteSyncTests {
         }
     }
 
-    @Test("自定义字体字号比例会限制范围并刷新适配缓存标记")
-    func testCustomFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
+    @Test("全局字号比例会限制范围并刷新适配缓存标记")
+    func testGlobalFontScaleIsClampedAndIncludedInAdapterCacheToken() async throws {
         let key = AppConfigKey.fontCustomScale
         let previousValue = Persistence.readAppConfigReal(key: key.rawValue)
         defer {
@@ -459,13 +459,13 @@ struct FontRouteSyncTests {
             #expect(FontLibrary.customFontScale == 1.75)
             #expect(FontLibrary.scaledPointSize(16) == 28)
             #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: true) == 1.75)
-            #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: false) == FontLibrary.defaultFontScale)
+            #expect(FontLibrary.effectiveFontScale(1.75, isCustomFontEnabled: false) == 1.75)
             #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: true) == 1.75)
-            #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: false) == FontLibrary.defaultFontScale)
+            #expect(FontLibrary.effectiveFontScale(isCustomFontEnabled: false) == 1.75)
             #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: true) == 28)
-            #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: false) == 16)
+            #expect(FontLibrary.scaledPointSize(16, scale: 1.75, isCustomFontEnabled: false) == 28)
             #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: true) == 28)
-            #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: false) == 16)
+            #expect(FontLibrary.scaledPointSize(16, isCustomFontEnabled: false) == 28)
             #expect(FontLibrary.adapterCacheToken() != defaultToken)
 
             Persistence.writeAppConfig(key: key.rawValue, real: 9.0, typeHint: key.typeHint)
