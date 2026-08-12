@@ -52,6 +52,50 @@ public struct LocalLinuxBridgeCommandResult: Equatable, Sendable {
     public let elapsedMilliseconds: UInt64
 }
 
+public enum LocalLinuxTerminalShellConfiguration {
+    public static let defaultPath = "/bin/sh"
+
+    static let commonPaths = [
+        defaultPath,
+        "/bin/ash",
+        "/bin/bash",
+        "/bin/zsh",
+        "/usr/bin/bash",
+        "/usr/bin/zsh",
+        "/usr/bin/fish"
+    ]
+
+    public static func normalizedPath(_ rawPath: String) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/"),
+              trimmed.rangeOfCharacter(from: .controlCharacters) == nil else {
+            return defaultPath
+        }
+        let normalized = (trimmed as NSString).standardizingPath
+        guard normalized != "/" else { return defaultPath }
+        return normalized
+    }
+
+    public static func loginArguments(for shellPath: String) -> [String] {
+        let normalized = normalizedPath(shellPath)
+        return [normalized, "-l"]
+    }
+
+    static func candidatePaths(shellsFileContents: String?) -> [String] {
+        var paths = commonPaths
+        if let shellsFileContents {
+            paths.append(contentsOf: shellsFileContents.split(whereSeparator: \Character.isNewline).compactMap { line in
+                let value = line.trimmingCharacters(in: .whitespaces)
+                guard value.hasPrefix("/"), !value.hasPrefix("#") else { return nil }
+                return normalizedPath(value)
+            })
+        }
+
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
+    }
+}
+
 public struct LocalLinuxBridgeTerminalRequest: Equatable, Sendable {
     public let terminalID: UInt64
     public let executable: String

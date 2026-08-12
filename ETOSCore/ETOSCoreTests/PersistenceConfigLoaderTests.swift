@@ -70,6 +70,25 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
     }
 
+    @Test("默认终端 Shell 使用本机数据库配置")
+    @MainActor
+    func localLinuxTerminalShellDefaultsToSHAndStaysLocal() {
+        let key = AppConfigKey.localLinuxDefaultShellPath
+        let previousValue = AppConfigStore.shared.localLinuxDefaultShellPath
+
+        defer {
+            AppConfigStore.shared.localLinuxDefaultShellPath = previousValue
+        }
+
+        #expect(key.defaultValue == .text("/bin/sh"))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.localLinuxDefaultShellPath = "/bin/bash"
+
+        #expect(AppConfigStore.shared.localLinuxDefaultShellPath == "/bin/bash")
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? String == "/bin/bash")
+    }
+
     @Test("iOS 与 watchOS 默认使用按提供商选择模型")
     func modelPickerDefaultsToProviderGrouping() {
         #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))

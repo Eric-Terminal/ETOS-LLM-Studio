@@ -10,6 +10,7 @@ struct LocalLinuxWatchFeatureView: View {
     @State private var isPreparingRuntime = false
     @State private var isResettingSystem = false
     @State private var resetStatusMessage: String?
+    @State private var availableTerminalShellPaths = [LocalLinuxTerminalShellConfiguration.defaultPath]
     var body: some View {
         List {
             Section {
@@ -97,6 +98,21 @@ struct LocalLinuxWatchFeatureView: View {
             LocalLinuxWatchResourceStatusView()
 
             Section {
+                Picker(
+                    NSLocalizedString("默认终端 Shell", comment: "Watch default interactive Linux shell setting"),
+                    selection: $appConfig.localLinuxDefaultShellPath
+                ) {
+                    ForEach(availableTerminalShellPaths, id: \.self) { path in
+                        Text(path).tag(path)
+                    }
+                }
+            } footer: {
+                Text(NSLocalizedString("只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。", comment: "Watch default interactive Linux shell footer"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 NavigationLink(NSLocalizedString("环境变量", comment: "Watch Linux environment entry")) {
                     LocalLinuxWatchEnvironmentView()
                 }
@@ -176,6 +192,7 @@ struct LocalLinuxWatchFeatureView: View {
         .navigationTitle(NSLocalizedString("本地 Linux", comment: "Watch local Linux title"))
         .task {
             snapshot = await LocalLinuxRuntimeController.shared.refreshInstalledState()
+            await refreshAvailableTerminalShellPaths()
             for await update in await LocalLinuxRuntimeController.shared.updates() {
                 if Task.isCancelled { break }
                 snapshot = update
@@ -205,6 +222,18 @@ struct LocalLinuxWatchFeatureView: View {
         .alert(NSLocalizedString("操作失败", comment: "Watch Linux operation failed"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
+    }
+
+    @MainActor
+    private func refreshAvailableTerminalShellPaths() async {
+        let paths = await LocalLinuxStorageManager.shared.availableTerminalShellPaths()
+        availableTerminalShellPaths = paths
+        let configuredPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
+            appConfig.localLinuxDefaultShellPath
+        )
+        appConfig.localLinuxDefaultShellPath = paths.contains(configuredPath)
+            ? configuredPath
+            : LocalLinuxTerminalShellConfiguration.defaultPath
     }
 
     private static let integerFormatter: NumberFormatter = {

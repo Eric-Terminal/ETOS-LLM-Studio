@@ -98,7 +98,9 @@ public enum LocalLinuxEnvironmentInstaller {
             workspace: workspace,
             inputOwner: .user,
             columns: columns,
-            rows: rows
+            rows: rows,
+            // 安装命令由 App 固定为 POSIX 脚本，不跟随用户的交互 Shell 偏好。
+            shellPathOverride: LocalLinuxTerminalShellConfiguration.defaultPath
         )
     }
 

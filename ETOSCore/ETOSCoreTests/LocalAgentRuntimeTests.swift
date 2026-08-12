@@ -440,6 +440,41 @@ struct LocalAgentRuntimeTests {
         )
     }
 
+    @Test("交互终端 Shell 路径会标准化并以登录模式启动")
+    func terminalShellLaunchConfiguration() {
+        #expect(LocalLinuxTerminalShellConfiguration.normalizedPath("bash") == "/bin/sh")
+        #expect(LocalLinuxTerminalShellConfiguration.normalizedPath("/bin/../bin/bash") == "/bin/bash")
+        #expect(
+            LocalLinuxTerminalShellConfiguration.loginArguments(for: "/bin/zsh")
+                == ["/bin/zsh", "-l"]
+        )
+    }
+
+    @Test("Shell 选择项从持久化 RootFS 发现且不会启动运行时")
+    func availableTerminalShellPaths() async throws {
+        let documents = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: documents) }
+        let manager = LocalLinuxStorageManager(documentsDirectory: documents)
+        let rootFSData = manager.layout.rootFSData
+        let bin = rootFSData.appendingPathComponent("bin", isDirectory: true)
+        let customBin = rootFSData.appendingPathComponent("opt/bin", isDirectory: true)
+        let etc = rootFSData.appendingPathComponent("etc", isDirectory: true)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: customBin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: etc, withIntermediateDirectories: true)
+        try Data().write(to: bin.appendingPathComponent("sh"))
+        try Data().write(to: bin.appendingPathComponent("bash"))
+        try Data().write(to: customBin.appendingPathComponent("custom-shell"))
+        try "# comment\n/bin/bash\n/opt/bin/custom-shell\n".write(
+            to: etc.appendingPathComponent("shells"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let paths = await manager.availableTerminalShellPaths()
+        #expect(paths == ["/bin/sh", "/bin/bash", "/opt/bin/custom-shell"])
+    }
+
     @Test("Linux 存储布局稳定且收据损坏会被识别")
     func storageLayoutAndIntegrity() async throws {
         let documents = try makeTemporaryDirectory()

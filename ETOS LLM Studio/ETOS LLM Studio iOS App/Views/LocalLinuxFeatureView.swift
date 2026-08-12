@@ -28,6 +28,7 @@ struct LocalLinuxFeatureView: View {
     @State private var isPreparingRuntime = false
     @State private var isResettingSystem = false
     @State private var resetStatusMessage: String?
+    @State private var availableTerminalShellPaths = [LocalLinuxTerminalShellConfiguration.defaultPath]
 
     var body: some View {
         TabView {
@@ -44,6 +45,7 @@ struct LocalLinuxFeatureView: View {
         .task {
             snapshot = await LocalLinuxRuntimeController.shared.refreshInstalledState()
             usage = await LocalLinuxStorageManager.shared.storageUsage()
+            await refreshAvailableTerminalShellPaths()
             for await update in await LocalLinuxRuntimeController.shared.updates() {
                 if Task.isCancelled { break }
                 snapshot = update
@@ -144,6 +146,20 @@ struct LocalLinuxFeatureView: View {
                     }
                 }
                 .pickerStyle(.navigationLink)
+            }
+
+            Section {
+                Picker(
+                    NSLocalizedString("默认终端 Shell", comment: "Default interactive Linux shell setting"),
+                    selection: $appConfig.localLinuxDefaultShellPath
+                ) {
+                    ForEach(availableTerminalShellPaths, id: \.self) { path in
+                        Text(path).tag(path)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+            } footer: {
+                Text(NSLocalizedString("只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。", comment: "Default interactive Linux shell footer"))
             }
 
             Section {
@@ -328,6 +344,18 @@ struct LocalLinuxFeatureView: View {
                 .disabled(isResettingSystem)
             }
         }
+    }
+
+    @MainActor
+    private func refreshAvailableTerminalShellPaths() async {
+        let paths = await LocalLinuxStorageManager.shared.availableTerminalShellPaths()
+        availableTerminalShellPaths = paths
+        let configuredPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
+            appConfig.localLinuxDefaultShellPath
+        )
+        appConfig.localLinuxDefaultShellPath = paths.contains(configuredPath)
+            ? configuredPath
+            : LocalLinuxTerminalShellConfiguration.defaultPath
     }
 
     private func storageRow(_ title: String, bytes: UInt64) -> some View {

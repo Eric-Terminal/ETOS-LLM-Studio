@@ -388,29 +388,65 @@ public actor LocalLinuxJobScheduler {
         inputOwner: LocalLinuxTerminalInputOwner,
         columns: UInt16,
         rows: UInt16,
+        shellPathOverride: String? = nil,
         toolCallID: String? = nil
     ) async throws -> LocalLinuxJob {
         await registerRuntimeCancellationIfNeeded()
         let runtimeSnapshot = try await runtime.ensureReady(trigger: .userTerminal)
-        let environment: LocalLinuxEnvironmentSnapshot
+        let baseEnvironment: LocalLinuxEnvironmentSnapshot
         if let context {
-            environment = try await environmentProvider.snapshot(
+            baseEnvironment = try await environmentProvider.snapshot(
                 explicitValues: context.environmentValues,
                 redactionValues: context.environmentRedactionValues ?? []
             )
         } else {
-            environment = try await environmentProvider.snapshot()
+            baseEnvironment = try await environmentProvider.snapshot()
         }
+        var shellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
+            shellPathOverride ?? AppConfigStore.textValue(for: .localLinuxDefaultShellPath)
+        )
+        var environmentValues = baseEnvironment.values
+        environmentValues["SHELL"] = shellPath
+        var environment = try await environmentProvider.snapshot(
+            explicitValues: environmentValues,
+            redactionValues: baseEnvironment.redactionValues
+        )
         let requestID = nextRequestID()
-        let terminalRequest = LocalLinuxBridgeTerminalRequest(
+        var terminalRequest = LocalLinuxBridgeTerminalRequest(
             terminalID: requestID,
+            executable: shellPath,
+            arguments: LocalLinuxTerminalShellConfiguration.loginArguments(for: shellPath),
             environment: environment.values,
             // 独立用户终端从 HOME 开始，避免把内部工作区路径暴露成默认操作目录。
             workingDirectory: environment.values["HOME"] ?? "/home/etos",
             columns: columns,
             rows: rows
         )
-        try await validateTerminalLaunchPaths(terminalRequest, requestID: requestID)
+        do {
+            try await validateTerminalLaunchPaths(terminalRequest, requestID: requestID)
+        } catch let error as LocalLinuxRuntimeError {
+            guard case .terminalShellUnavailable = error,
+                  shellPath != LocalLinuxTerminalShellConfiguration.defaultPath else {
+                throw error
+            }
+            // 用户卸载了已选 Shell 时仍保证终端可用；下次打开设置页会同步回默认值。
+            shellPath = LocalLinuxTerminalShellConfiguration.defaultPath
+            environmentValues["SHELL"] = shellPath
+            environment = try await environmentProvider.snapshot(
+                explicitValues: environmentValues,
+                redactionValues: baseEnvironment.redactionValues
+            )
+            terminalRequest = LocalLinuxBridgeTerminalRequest(
+                terminalID: requestID,
+                executable: shellPath,
+                arguments: LocalLinuxTerminalShellConfiguration.loginArguments(for: shellPath),
+                environment: environment.values,
+                workingDirectory: environment.values["HOME"] ?? "/home/etos",
+                columns: columns,
+                rows: rows
+            )
+            try await validateTerminalLaunchPaths(terminalRequest, requestID: requestID)
+        }
         let jobRequest = LocalLinuxJobRequest(
             executable: terminalRequest.executable,
             arguments: terminalRequest.arguments,

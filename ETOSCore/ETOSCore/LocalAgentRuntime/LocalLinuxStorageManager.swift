@@ -232,6 +232,28 @@ public actor LocalLinuxStorageManager {
         )
     }
 
+    /// 直接检查持久化 RootFS，避免用户只是打开设置页时就启动 Linux。
+    public func availableTerminalShellPaths() -> [String] {
+        let shellsFileURL = layout.rootFSData
+            .appendingPathComponent("etc", isDirectory: true)
+            .appendingPathComponent("shells", isDirectory: false)
+        let shellsFileContents = try? String(contentsOf: shellsFileURL, encoding: .utf8)
+        let availablePaths = LocalLinuxTerminalShellConfiguration.candidatePaths(
+            shellsFileContents: shellsFileContents
+        ).filter { guestPath in
+            let hostURL = layout.rootFSData.appendingPathComponent(String(guestPath.dropFirst()))
+            var isDirectory: ObjCBool = false
+            return fileManager.fileExists(atPath: hostURL.path, isDirectory: &isDirectory)
+                && !isDirectory.boolValue
+        }
+
+        // 尚未准备 RootFS 时仍允许保留默认值；系统安装完成后必然提供 /bin/sh。
+        if availablePaths.contains(LocalLinuxTerminalShellConfiguration.defaultPath) {
+            return availablePaths
+        }
+        return [LocalLinuxTerminalShellConfiguration.defaultPath] + availablePaths
+    }
+
     public func workspace(sessionID: UUID, profileID: UUID? = nil) throws -> LocalAgentWorkspace {
         if var existing = Persistence.loadLocalAgentWorkspaces(sessionID: sessionID).first {
             let directory = layout.root.appendingPathComponent(existing.hostRelativePath, isDirectory: true)

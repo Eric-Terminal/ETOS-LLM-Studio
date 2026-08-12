@@ -179,6 +179,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localLinuxEnabled: Bool { didSet { write(.localLinuxEnabled, localLinuxEnabled) } }
     @Published public var localLinuxEnvironmentPrivacyEnabled: Bool { didSet { write(.localLinuxEnvironmentPrivacyEnabled, localLinuxEnvironmentPrivacyEnabled) } }
     @Published public var localLinuxCommandSafetyEnabled: Bool { didSet { write(.localLinuxCommandSafetyEnabled, localLinuxCommandSafetyEnabled) } }
+    @Published public var localLinuxDefaultShellPath: String { didSet { write(.localLinuxDefaultShellPath, localLinuxDefaultShellPath) } }
     @Published public var localLinuxDefaultSessionMode: String { didSet { write(.localLinuxDefaultSessionMode, localLinuxDefaultSessionMode) } }
     @Published public var localLinuxDefaultTimeoutSeconds: Int { didSet { write(.localLinuxDefaultTimeoutSeconds, localLinuxDefaultTimeoutSeconds) } }
     @Published public var localLinuxOutputPreviewBytes: Int { didSet { write(.localLinuxOutputPreviewBytes, localLinuxOutputPreviewBytes) } }
@@ -569,6 +570,9 @@ public final class AppConfigStore: ObservableObject {
         localLinuxEnabled = Self.boolValue(.localLinuxEnabled, userDefaults: userDefaults)
         localLinuxEnvironmentPrivacyEnabled = Self.boolValue(.localLinuxEnvironmentPrivacyEnabled, userDefaults: userDefaults)
         localLinuxCommandSafetyEnabled = Self.boolValue(.localLinuxCommandSafetyEnabled, userDefaults: userDefaults)
+        localLinuxDefaultShellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
+            Self.textValue(.localLinuxDefaultShellPath, userDefaults: userDefaults)
+        )
         localLinuxDefaultSessionMode = Self.textValue(.localLinuxDefaultSessionMode, userDefaults: userDefaults)
         localLinuxDefaultTimeoutSeconds = Self.integerValue(.localLinuxDefaultTimeoutSeconds, userDefaults: userDefaults)
         localLinuxOutputPreviewBytes = Self.integerValue(.localLinuxOutputPreviewBytes, userDefaults: userDefaults)
@@ -1124,6 +1128,7 @@ public final class AppConfigStore: ObservableObject {
         case .localLinuxEnabled: return .bool(localLinuxEnabled)
         case .localLinuxEnvironmentPrivacyEnabled: return .bool(localLinuxEnvironmentPrivacyEnabled)
         case .localLinuxCommandSafetyEnabled: return .bool(localLinuxCommandSafetyEnabled)
+        case .localLinuxDefaultShellPath: return .text(localLinuxDefaultShellPath)
         case .localLinuxDefaultSessionMode: return .text(localLinuxDefaultSessionMode)
         case .localLinuxDefaultTimeoutSeconds: return .integer(localLinuxDefaultTimeoutSeconds)
         case .localLinuxOutputPreviewBytes: return .integer(localLinuxOutputPreviewBytes)
@@ -1474,6 +1479,8 @@ public final class AppConfigStore: ObservableObject {
         case .systemPrompt: systemPrompt = value
         case .localLinuxDefaultSessionMode:
             localLinuxDefaultSessionMode = LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxDefaultShellPath:
+            localLinuxDefaultShellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(value)
         case .localLinuxActivePromptProfileID:
             localLinuxActivePromptProfileID = value
         case .localLinuxWorkspaceCleanupPolicy:
@@ -1851,6 +1858,8 @@ public final class AppConfigStore: ObservableObject {
             return ChatStreamingDisplayMode.normalized(value).rawValue
         case .localLinuxDefaultSessionMode:
             return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxDefaultShellPath:
+            return LocalLinuxTerminalShellConfiguration.normalizedPath(value)
         case .localLinuxWorkspaceCleanupPolicy:
             return value == "automatic" ? "automatic" : "manual"
         case .localLinuxChatPreviewMode:
