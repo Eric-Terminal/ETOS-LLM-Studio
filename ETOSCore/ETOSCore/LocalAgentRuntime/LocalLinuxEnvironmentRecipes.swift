@@ -13,6 +13,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
     public let id: String
     public let title: String
     public let detail: String
+    public let displayedCommand: String
     public let command: String
     public let providedCommands: Set<String>
 
@@ -20,12 +21,14 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
         id: String,
         title: String,
         detail: String,
+        displayedCommand: String,
         command: String,
         providedCommands: Set<String>
     ) {
         self.id = id
         self.title = title
         self.detail = detail
+        self.displayedCommand = displayedCommand
         self.command = command
         self.providedCommands = providedCommands
     }
@@ -35,10 +38,10 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
             detail,
             String(
                 format: NSLocalizedString("命令：%@", comment: "Local Linux recipe exact command"),
-                command
+                displayedCommand
             ),
             NSLocalizedString(
-                "内置初始软件源：https://dl-cdn.alpinelinux.org/alpine/v3.24/main 与 community；若你已修改 /etc/apk/repositories，执行时以当前文件为准。",
+                "使用内置初始源时，执行前会临时测试可用镜像；若你已修改 /etc/apk/repositories，则保持当前配置不变。",
                 comment: "Local Linux recipe repository explanation"
             ),
             NSLocalizedString(
@@ -46,7 +49,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
                 comment: "Local Linux recipe storage impact"
             ),
             NSLocalizedString(
-                "安装终端会显示 apk 下载进度；网络连续 120 秒没有传输进展时，apk 才会停止并报告错误。",
+                "安装终端会显示测速结果与 apk 下载进度；如果网络长时间没有进展，可以中断后重试或手动更换软件源。",
                 comment: "Local Linux recipe network progress explanation"
             )
         ].joined(separator: "\n\n")
@@ -98,44 +101,162 @@ public enum LocalLinuxEnvironmentInstaller {
 }
 
 public enum LocalLinuxEnvironmentRecipes {
+    private static let defaultMirror = "https://dl-cdn.alpinelinux.org/alpine"
+    private static let mirrorCandidates = [
+        defaultMirror,
+        "https://mirrors.tuna.tsinghua.edu.cn/alpine",
+        "https://mirrors.ustc.edu.cn/alpine",
+        "https://mirror.nju.edu.cn/alpine"
+    ]
+
     public static var all: [LocalLinuxEnvironmentRecipe] {
         [
-            LocalLinuxEnvironmentRecipe(
+            recipe(
                 id: "bash",
                 title: NSLocalizedString("安装 Bash", comment: "Bash environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 Bash；不会自动改用 Bash 执行失败的脚本。", comment: "Bash environment recipe detail"),
-                command: "apk --timeout 120 --progress add bash",
+                packages: ["bash"],
                 providedCommands: ["bash"]
             ),
-            LocalLinuxEnvironmentRecipe(
+            recipe(
                 id: "python",
                 title: NSLocalizedString("安装 Python 环境", comment: "Python environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 python3 与 py3-pip。", comment: "Python environment recipe detail"),
-                command: "apk --timeout 120 --progress add python3 py3-pip",
+                packages: ["python3", "py3-pip"],
                 providedCommands: ["python", "python3", "pip", "pip3"]
             ),
-            LocalLinuxEnvironmentRecipe(
+            recipe(
                 id: "node",
                 title: NSLocalizedString("安装 Node.js 环境", comment: "Node environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 nodejs 与 npm；npx 会随 npm 提供。", comment: "Node environment recipe detail"),
-                command: "apk --timeout 120 --progress add nodejs npm",
+                packages: ["nodejs", "npm"],
                 providedCommands: ["node", "npm", "npx"]
             ),
-            LocalLinuxEnvironmentRecipe(
+            recipe(
                 id: "build",
                 title: NSLocalizedString("安装编译工具", comment: "Build tools environment recipe name"),
                 detail: NSLocalizedString("安装 build-base 与 cmake；会明显增加系统占用和运行负载。", comment: "Build tools environment recipe detail"),
-                command: "apk --timeout 120 --progress add build-base cmake",
+                packages: ["build-base", "cmake"],
                 providedCommands: ["cc", "c++", "gcc", "g++", "make", "cmake"]
             ),
-            LocalLinuxEnvironmentRecipe(
+            recipe(
                 id: "uvx",
                 title: NSLocalizedString("安装 uvx 环境", comment: "uvx environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 uv；之后由用户决定是否通过 uvx 下载并运行具体工具。", comment: "uvx environment recipe detail"),
-                command: "apk --timeout 120 --progress add uv",
+                packages: ["uv"],
                 providedCommands: ["uv", "uvx"]
             )
         ]
+    }
+
+    private static func recipe(
+        id: String,
+        title: String,
+        detail: String,
+        packages: [String],
+        providedCommands: Set<String>
+    ) -> LocalLinuxEnvironmentRecipe {
+        let displayedCommand = "apk add \(packages.joined(separator: " "))"
+        let script = installationScript(packages: packages)
+        return LocalLinuxEnvironmentRecipe(
+            id: id,
+            title: title,
+            detail: detail,
+            displayedCommand: displayedCommand,
+            command: encodedShellCommand(script: script),
+            providedCommands: providedCommands
+        )
+    }
+
+    /// 只有 RootFS 仍使用内置默认源时才自动测速，避免覆盖用户的仓库选择。
+    static func installationScript(packages: [String]) -> String {
+        let checkingMessage = NSLocalizedString("正在检测可用的 Alpine 软件源…", comment: "Linux recipe mirror checking status")
+        let customMessage = NSLocalizedString("检测到自定义软件源，保持当前配置。", comment: "Linux recipe custom repository status")
+        let fallbackMessage = NSLocalizedString("没有镜像在限定时间内完成测速，继续使用内置软件源。", comment: "Linux recipe mirror fallback status")
+        let selectedFormat = NSLocalizedString("使用软件源：%@", comment: "Linux recipe selected repository status")
+        let selectedShellFormat = selectedFormat.replacingOccurrences(of: "%@", with: "%s")
+        let installingFormat = NSLocalizedString("正在安装：%@", comment: "Linux recipe package installation status")
+        let failureMessage = NSLocalizedString("安装未完成；如果下载长时间没有进展，请重试或在 /etc/apk/repositories 中更换软件源。", comment: "Linux recipe network failure advice")
+        let packageList = packages.joined(separator: " ")
+        let candidates = mirrorCandidates.map(shellQuote).joined(separator: " ")
+
+        return """
+        #!/bin/sh
+        set -u
+        DEFAULT_MIRROR=\(shellQuote(defaultMirror))
+        WORK_DIRECTORY="$(mktemp -d /tmp/etos-apk.XXXXXX)" || exit 1
+        TEMP_REPOSITORIES="$WORK_DIRECTORY/repositories"
+        FASTEST_MIRROR="$WORK_DIRECTORY/fastest-mirror"
+        cleanup() {
+            rm -f "$TEMP_REPOSITORIES" "$FASTEST_MIRROR"
+            rmdir "$WORK_DIRECTORY" 2>/dev/null || true
+        }
+        trap cleanup EXIT HUP INT TERM
+
+        printf '\\033[2J\\033[H'
+        BRANCH="v$(cut -d. -f1,2 /etc/alpine-release)"
+        ARCH="$(apk --print-arch)"
+        CURRENT_REPOSITORIES="$(sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' -e 's:/*$::' /etc/apk/repositories 2>/dev/null)"
+        DEFAULT_REPOSITORIES="$(printf '%s\\n%s' "$DEFAULT_MIRROR/$BRANCH/main" "$DEFAULT_MIRROR/$BRANCH/community")"
+        REPOSITORIES_FILE=
+
+        if [ "$CURRENT_REPOSITORIES" = "$DEFAULT_REPOSITORIES" ]; then
+            printf '[1/3] %s\\n' \(shellQuote(checkingMessage))
+            probe_mirror() {
+                mirror="$1"
+                main_bytes="$(timeout 8 sh -c 'wget -q -T 4 -O - "$1" 2>/dev/null | head -c 131072 | wc -c' sh "$mirror/$BRANCH/main/$ARCH/APKINDEX.tar.gz")"
+                [ "${main_bytes:-0}" -ge 131072 ] 2>/dev/null || return
+                community_bytes="$(timeout 8 sh -c 'wget -q -T 4 -O - "$1" 2>/dev/null | head -c 131072 | wc -c' sh "$mirror/$BRANCH/community/$ARCH/APKINDEX.tar.gz")"
+                [ "${community_bytes:-0}" -ge 131072 ] 2>/dev/null || return
+                (set -C; printf '%s\\n' "$mirror" > "$FASTEST_MIRROR") 2>/dev/null || true
+            }
+
+            rm -f "$FASTEST_MIRROR"
+            probe_pids=
+            for mirror in \(candidates); do
+                probe_mirror "$mirror" &
+                probe_pids="$probe_pids $!"
+            done
+            for probe_pid in $probe_pids; do
+                wait "$probe_pid" 2>/dev/null || true
+            done
+
+            if [ -s "$FASTEST_MIRROR" ]; then
+                SELECTED_MIRROR="$(head -n 1 "$FASTEST_MIRROR")"
+            else
+                SELECTED_MIRROR="$DEFAULT_MIRROR"
+                printf '[2/3] %s\\n' \(shellQuote(fallbackMessage))
+            fi
+            printf '%s/%s/main\\n%s/%s/community\\n' "$SELECTED_MIRROR" "$BRANCH" "$SELECTED_MIRROR" "$BRANCH" > "$TEMP_REPOSITORIES"
+            REPOSITORIES_FILE="$TEMP_REPOSITORIES"
+            printf '[2/3] '
+            printf \(shellQuote(selectedShellFormat + "\\n")) "$SELECTED_MIRROR"
+        else
+            printf '[1/3] %s\\n' \(shellQuote(customMessage))
+            printf '[2/3] %s\\n' \(shellQuote(String(format: selectedFormat, "/etc/apk/repositories")))
+        fi
+
+        printf '[3/3] %s\\n' \(shellQuote(String(format: installingFormat, packageList)))
+        if [ -n "$REPOSITORIES_FILE" ]; then
+            apk --repositories-file "$REPOSITORIES_FILE" --timeout 30 --progress add \(packages.map(shellQuote).joined(separator: " "))
+        else
+            apk --timeout 30 --progress add \(packages.map(shellQuote).joined(separator: " "))
+        fi
+        status=$?
+        if [ "$status" -ne 0 ]; then
+            printf '\\n%s\\n' \(shellQuote(failureMessage))
+        fi
+        exit "$status"
+        """
+    }
+
+    private static func encodedShellCommand(script: String) -> String {
+        let encoded = Data(script.utf8).base64EncodedString()
+        return "printf '%s' '\(encoded)' | base64 -d | /bin/sh"
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\\"'\\\"'"))'"
     }
 
     public static func matching(command: String) -> LocalLinuxEnvironmentRecipe? {

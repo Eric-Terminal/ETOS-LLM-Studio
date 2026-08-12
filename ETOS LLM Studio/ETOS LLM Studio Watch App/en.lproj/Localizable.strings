@@ -6509,3 +6509,11 @@
 "不会硬拦截系统路径。删除后如无法运行，请重新启动本地 Linux 或重置系统。" = "System paths are not forcibly protected. If Linux stops working after deletion, restart Local Linux or reset the system.";
 "用户删除了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。" = "A critical Linux system path was deleted. Restart Local Linux to restore it from the bundled system.";
 "Agent 修改了关键 Linux 系统路径。重新启动本地 Linux 后会从内置系统恢复。" = "The Agent changed a critical Linux system path. Restart Local Linux to restore it from the bundled system.";
+"使用内置初始源时，执行前会临时测试可用镜像；若你已修改 /etc/apk/repositories，则保持当前配置不变。" = "When using the built-in initial repositories, available mirrors are tested temporarily before installation. If you changed /etc/apk/repositories, the current configuration is kept.";
+"安装终端会显示测速结果与 apk 下载进度；如果网络长时间没有进展，可以中断后重试或手动更换软件源。" = "The installation terminal shows mirror test results and apk download progress. If the network makes no progress for a long time, interrupt and retry or change the repository manually.";
+"正在检测可用的 Alpine 软件源…" = "Checking available Alpine mirrors…";
+"检测到自定义软件源，保持当前配置。" = "Custom repositories detected; keeping the current configuration.";
+"没有镜像在限定时间内完成测速，继续使用内置软件源。" = "No mirror completed the speed test within the time limit; continuing with the built-in repositories.";
+"使用软件源：%@" = "Using repository: %@";
+"正在安装：%@" = "Installing: %@";
+"安装未完成；如果下载长时间没有进展，请重试或在 /etc/apk/repositories 中更换软件源。" = "Installation did not complete. If the download makes no progress for a long time, retry or change the repository in /etc/apk/repositories.";

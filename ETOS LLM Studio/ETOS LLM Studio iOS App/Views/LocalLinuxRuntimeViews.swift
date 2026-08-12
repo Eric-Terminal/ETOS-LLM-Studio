@@ -699,7 +699,7 @@ struct LocalLinuxRecipesView: View {
                             VStack(alignment: .leading) {
                                 Text(recipe.title).foregroundStyle(.primary)
                                 Text(recipe.detail).font(.caption).foregroundStyle(.secondary)
-                                Text(recipe.command).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                Text(recipe.displayedCommand).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
                             Spacer()
                             statusView(for: recipe)
@@ -728,7 +728,7 @@ struct LocalLinuxRecipesView: View {
         ) {
             if let recipe = selectedRecipe {
                 Button(NSLocalizedString("复制命令", comment: "Copy Linux recipe command")) {
-                    UIPasteboard.general.string = recipe.command
+                    UIPasteboard.general.string = recipe.displayedCommand
                 }
                 Button(NSLocalizedString("执行此命令", comment: "Execute Linux recipe command")) {
                     run(recipe)

@@ -32,7 +32,7 @@ struct LocalLinuxWatchRecipesView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(recipe.title)
-                            Text(recipe.command).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                            Text(recipe.displayedCommand).font(.caption2.monospaced()).foregroundStyle(.secondary)
                         }
                         Spacer()
                         statusView(for: recipe)

@@ -568,13 +568,23 @@ struct LocalAgentRuntimeTests {
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "uvx")?.id == "uvx")
         #expect(LocalLinuxEnvironmentRecipes.matching(command: "unknown-tool") == nil)
         #expect(LocalLinuxEnvironmentRecipes.all.allSatisfy {
-            $0.command.hasPrefix("apk --timeout 120 --progress add ")
+            $0.command.hasPrefix("printf '%s' '") && $0.command.hasSuffix("' | base64 -d | /bin/sh")
         })
         let bashRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "bash" })
+        #expect(bashRecipe.displayedCommand == "apk add bash")
         #expect(
             String(data: bashRecipe.terminalInput, encoding: .utf8)
-                == "apk --timeout 120 --progress add bash; exit $?\n"
+                == "\(bashRecipe.command); exit $?\n"
         )
+
+        let script = LocalLinuxEnvironmentRecipes.installationScript(packages: ["nodejs", "npm"])
+        #expect(script.contains("CURRENT_REPOSITORIES=\"$(sed"))
+        #expect(script.contains("probe_mirror \"$mirror\" &"))
+        #expect(script.contains("head -c 131072"))
+        #expect(script.contains("mktemp -d /tmp/etos-apk.XXXXXX"))
+        #expect(script.contains("--repositories-file \"$REPOSITORIES_FILE\""))
+        #expect(script.contains("apk --timeout 30 --progress add 'nodejs' 'npm'"))
+        #expect(!script.contains("setup-apkrepos"))
 
         var job = LocalLinuxJob(
             requestID: 1,
