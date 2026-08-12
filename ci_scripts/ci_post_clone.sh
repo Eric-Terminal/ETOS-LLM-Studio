@@ -39,9 +39,9 @@ llvm_supports_ish_vdso() {
             -x c - -o /dev/null >/dev/null 2>&1
 }
 
-install_llvm_if_needed() {
+install_llvm_toolchain_if_needed() {
     if ! command -v brew >/dev/null 2>&1; then
-        echo "错误：构建 iSH VDSO 需要 Homebrew LLVM，但当前环境没有 Homebrew。" >&2
+        echo "错误：构建 iSH VDSO 需要 Homebrew LLVM 与 LLD，但当前环境没有 Homebrew。" >&2
         exit 1
     fi
 
@@ -50,15 +50,17 @@ install_llvm_if_needed() {
         return
     fi
 
-    echo "正在通过 Homebrew 安装构建工具：llvm"
-    HOMEBREW_NO_AUTO_UPDATE=1 brew install llvm
+    # Homebrew 已把 LLD 从 llvm formula 拆出；lld formula 会同时拉取匹配版本的
+    # LLVM，直接安装它可兼容全新环境和“已有 LLVM、缺少 LLD”两种情况。
+    echo "正在通过 Homebrew 安装构建工具：LLVM + LLD"
+    HOMEBREW_NO_AUTO_UPDATE=1 brew install lld
 
     if ! llvm_supports_ish_vdso; then
-        echo "错误：Homebrew LLVM 安装完成后仍无法构建 iSH VDSO。" >&2
+        echo "错误：Homebrew LLVM 与 LLD 安装完成后仍无法构建 iSH VDSO。" >&2
         exit 1
     fi
 }
 
 install_build_tool_if_needed meson
 install_build_tool_if_needed ninja
-install_llvm_if_needed
+install_llvm_toolchain_if_needed
