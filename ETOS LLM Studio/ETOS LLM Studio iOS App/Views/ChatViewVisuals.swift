@@ -9,6 +9,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import ETOSCore
 
 /// 聊天页短暂显示的轻量状态通知，由调用方决定内容与强调色。
 struct ChatTransientNotice {
@@ -139,7 +140,9 @@ extension ChatView {
                         LoopingBackgroundVideoView(
                             url: videoURL,
                             contentMode: viewModel.backgroundContentMode,
-                            shouldPlay: isChatVisible && scenePhase == .active
+                            shouldPlay: scenePhase == .active && (
+                                isChatVisible || appConfig.continueVideoBackgroundPlaybackWhenChatHidden
+                            )
                         )
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)

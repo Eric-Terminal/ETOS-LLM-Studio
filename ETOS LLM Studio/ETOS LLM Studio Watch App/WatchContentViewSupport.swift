@@ -849,23 +849,34 @@ extension ContentView {
 private struct WatchLoopingBackgroundVideoView: View {
     let url: URL
 
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var player = AVPlayer()
     @State private var endObserver: NSObjectProtocol?
     @State private var currentURL: URL?
+    @State private var isVisible = false
 
     var body: some View {
         VideoPlayer(player: player)
             .disabled(true)
             .onAppear {
+                isVisible = true
                 configurePlayerIfNeeded()
-                player.play()
+                updatePlayback()
             }
             .onDisappear {
-                player.pause()
+                isVisible = false
+                updatePlayback()
             }
             .onChange(of: url) { _, _ in
                 configurePlayerIfNeeded()
-                player.play()
+                updatePlayback()
+            }
+            .onChange(of: scenePhase) { _, _ in
+                updatePlayback()
+            }
+            .onChange(of: appConfig.continueVideoBackgroundPlaybackWhenChatHidden) { _, _ in
+                updatePlayback()
             }
     }
 
@@ -888,5 +899,15 @@ private struct WatchLoopingBackgroundVideoView: View {
         player.isMuted = true
         player.actionAtItemEnd = .none
         currentURL = url
+    }
+
+    private func updatePlayback() {
+        let shouldPlay = scenePhase == .active
+            && (isVisible || appConfig.continueVideoBackgroundPlaybackWhenChatHidden)
+        if shouldPlay {
+            player.play()
+        } else {
+            player.pause()
+        }
     }
 }

@@ -52,6 +52,19 @@ struct DisplaySettingsView: View {
                     }
                 }
 
+                if enableBackground && selectedBackgroundIsVideo {
+                    Section {
+                        Toggle(
+                            NSLocalizedString("离开聊天时继续播放", comment: "Video background continuous playback toggle"),
+                            isOn: $appConfig.continueVideoBackgroundPlaybackWhenChatHidden
+                        )
+                    } footer: {
+                        Text(NSLocalizedString("开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。", comment: "Video background continuous playback description"))
+                            .etFont(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if enableBackground {
                     Section(NSLocalizedString("质感与特效", comment: "")) {
                         VStack(alignment: .leading, spacing: 8) {
@@ -269,6 +282,10 @@ struct DisplaySettingsView: View {
 
     private var isAnyChatAnimationEnabled: Bool {
         appConfig.chatScrollAnimationEnabled || appConfig.chatSendAnimationEnabled
+    }
+
+    private var selectedBackgroundIsVideo: Bool {
+        ConfigLoader.isVideoBackgroundFile(currentBackgroundImage)
     }
 
     @ViewBuilder

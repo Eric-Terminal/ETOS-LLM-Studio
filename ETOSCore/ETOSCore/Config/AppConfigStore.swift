@@ -259,6 +259,14 @@ public final class AppConfigStore: ObservableObject {
     @Published public var backgroundContentMode: String { didSet { write(.backgroundContentMode, backgroundContentMode) } }
     @Published public var currentBackgroundImage: String { didSet { write(.currentBackgroundImage, currentBackgroundImage) } }
     @Published public var enableAutoRotateBackground: Bool { didSet { write(.enableAutoRotateBackground, enableAutoRotateBackground) } }
+    @Published public var continueVideoBackgroundPlaybackWhenChatHidden: Bool {
+        didSet {
+            write(
+                .continueVideoBackgroundPlaybackWhenChatHidden,
+                continueVideoBackgroundPlaybackWhenChatHidden
+            )
+        }
+    }
     @Published public var enableReasoningSummary: Bool { didSet { write(.enableReasoningSummary, enableReasoningSummary) } }
     @Published public var enableLiquidGlass: Bool { didSet { write(.enableLiquidGlass, enableLiquidGlass) } }
     @Published public var liquidGlassTintOpacity: Double {
@@ -652,6 +660,10 @@ public final class AppConfigStore: ObservableObject {
         backgroundContentMode = Self.textValue(.backgroundContentMode, userDefaults: userDefaults)
         currentBackgroundImage = Self.textValue(.currentBackgroundImage, userDefaults: userDefaults)
         enableAutoRotateBackground = Self.boolValue(.enableAutoRotateBackground, userDefaults: userDefaults)
+        continueVideoBackgroundPlaybackWhenChatHidden = Self.boolValue(
+            .continueVideoBackgroundPlaybackWhenChatHidden,
+            userDefaults: userDefaults
+        )
         enableReasoningSummary = Self.boolValue(.enableReasoningSummary, userDefaults: userDefaults)
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
         liquidGlassTintOpacity = Self.realValue(.liquidGlassTintOpacity, userDefaults: userDefaults)
@@ -1200,6 +1212,8 @@ public final class AppConfigStore: ObservableObject {
         case .backgroundContentMode: return .text(backgroundContentMode)
         case .currentBackgroundImage: return .text(currentBackgroundImage)
         case .enableAutoRotateBackground: return .bool(enableAutoRotateBackground)
+        case .continueVideoBackgroundPlaybackWhenChatHidden:
+            return .bool(continueVideoBackgroundPlaybackWhenChatHidden)
         case .enableReasoningSummary: return .bool(enableReasoningSummary)
         case .enableLiquidGlass: return .bool(enableLiquidGlass)
         case .liquidGlassTintOpacity: return .real(liquidGlassTintOpacity)
@@ -1355,6 +1369,8 @@ public final class AppConfigStore: ObservableObject {
         case .enableResponsiveReasoningPreviewHeight: enableResponsiveReasoningPreviewHeight = value
         case .enableBackground: enableBackground = value
         case .enableAutoRotateBackground: enableAutoRotateBackground = value
+        case .continueVideoBackgroundPlaybackWhenChatHidden:
+            continueVideoBackgroundPlaybackWhenChatHidden = value
         case .enableReasoningSummary: enableReasoningSummary = value
         case .enableLiquidGlass: enableLiquidGlass = value
         case .enableChatTopBlurFade: enableChatTopBlurFade = value

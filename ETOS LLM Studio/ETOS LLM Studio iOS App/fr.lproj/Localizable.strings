@@ -6775,3 +6775,5 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "默认终端 Shell" = "Shell de terminal par défaut";
 "只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。" = "Seuls les shells installés dans le système Linux actuel sont affichés. Les nouveaux terminaux démarrent en tant que shells de connexion ; les commandes de script de l’Agent utilisent toujours /bin/sh.";
 "没有可接收该请求的聊天界面。" = "Aucune interface de discussion n’est disponible pour recevoir cette demande.";
+"离开聊天时继续播放" = "Continuer la lecture hors du chat";
+"开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。" = "Lorsque cette option est activée, la vidéo continue pendant la consultation des réglages et des autres pages, puis conserve sa progression au retour dans le chat. La lecture se met toujours en pause lorsque l’app passe en arrière-plan.";

@@ -224,6 +224,24 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == false)
     }
 
+    @Test("视频背景离开聊天持续播放默认关闭并支持配置快照")
+    @MainActor
+    func continueVideoBackgroundPlaybackDefaultAndPersistence() {
+        let key = AppConfigKey.continueVideoBackgroundPlaybackWhenChatHidden
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(false))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: true])
+
+        #expect(AppConfigStore.shared.continueVideoBackgroundPlaybackWhenChatHidden)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:

@@ -329,6 +329,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case backgroundContentMode = "backgroundContentMode"
     case currentBackgroundImage = "currentBackgroundImage"
     case enableAutoRotateBackground = "enableAutoRotateBackground"
+    case continueVideoBackgroundPlaybackWhenChatHidden = "background.video.continuePlaybackWhenChatHidden"
     case enableReasoningSummary = "enableReasoningSummary"
     case enableLiquidGlass = "enableLiquidGlass"
     case liquidGlassTintOpacity = "liquidGlass.tintOpacity"
@@ -616,6 +617,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableChatTopBlurFade:
             return .bool(true)
         case .enableAutoRotateBackground,
+             .continueVideoBackgroundPlaybackWhenChatHidden,
              .enableReasoningSummary,
              .enableLiquidGlass,
              .enableNoBubbleUI,

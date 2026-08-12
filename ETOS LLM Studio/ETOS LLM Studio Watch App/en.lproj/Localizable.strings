@@ -6545,3 +6545,5 @@
 "默认终端 Shell" = "Default Terminal Shell";
 "只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。" = "Only shells installed in the current Linux system are listed. New terminals start as login shells; Agent script commands still always use /bin/sh.";
 "没有可接收该请求的聊天界面。" = "No chat interface is available to receive this request.";
+"离开聊天时继续播放" = "Continue playing outside chat";
+"开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。" = "When enabled, the video keeps playing while you browse settings and other pages, preserving its timeline when you return. Playback still pauses when the app enters the background.";
