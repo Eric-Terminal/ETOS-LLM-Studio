@@ -21,7 +21,7 @@ description: 给模型加"专项技能包"和"系统自动化能力"——Agent 
 **Skill 包**就是把这些"规则 + 模板 + 参考资料"打包成一个文件夹，里面有：
 
 - `SKILL.md`：核心说明文档（含名字、描述、何时使用、详细步骤）
-- 任意多个资源文件（代码模板、参考图、示例）
+- 任意多个资源文件（代码模板、参考图、示例，以及可选的 `scripts/`）
 
 AI 在聊天时会看到「你有这些 Skill 可用」，需要时主动读取 `SKILL.md` 并按步骤执行。
 
@@ -43,10 +43,10 @@ iOS Shortcuts 已经能干很多事——查手机电量、发短信、控智能
 
 页面顶部有总开关「**向模型暴露 Agent Skills（use_skill）**」。
 
-::: warning use_skill 是什么
-ETOS **不会**直接执行 Skill 包里的脚本或本地命令。它只把 `SKILL.md` 内容作为可读资料提供给 AI，AI 通过名为 `use_skill` 的工具来"读取"这个 Skill。`SKILL.md` 里写的"运行 X 命令"——只是给 AI 的**指引**，最终执行靠 AI 把请求转成普通文字回答或调用别的工具。
+::: warning use_skill 与脚本执行
+普通聊天仍通过 `use_skill` 按需读取 `SKILL.md` 和资源。进入 **Agent 模式**并启用**本地 Linux**后，Skill 的 `scripts/` 才能在用户审批和命令安全规则下执行；脚本使用本次 Agent Run 冻结的版本，并以只读方式挂载到 Linux，不能直接访问宿主文件系统。
 
-简单说：**Skills 是"知识包"而不是"脚本包"**。
+使用 OpenAI Responses 格式时，ETOS 会改用 Responses 原生的 local Shell，并把已启用 Skill 作为原生 Skills 挂到 Shell 环境；其他格式继续使用 `use_skill` 的 `execute_script`。两条路径都复用 ETOS 的 Linux 隔离、工作区和审批机制。
 :::
 
 #### 四种导入方式
@@ -92,7 +92,7 @@ ETOS 解析时只关心 `name` 和 `description`——`name` 必须填且唯一�
 
 1. 单项开关：进入「**已安装技能**」列表里的某条，「**在聊天中启用该技能**」打开
 2. AI 看到的会是：「你有 N 个 Skill 可用：邮件助手、代码规范、…」
-3. AI 觉得当前问题适合用某 Skill 时，会调 `use_skill` 工具读那份 `SKILL.md`，然后按里面的指引生成回答
+3. AI 觉得当前问题适合用某 Skill 时，会通过 `use_skill` 读取它；OpenAI Responses 的 Agent + Linux 会通过原生 Skills 加载同一份冻结技能包
 
 #### 技能文件管理
 
@@ -163,7 +163,7 @@ ETOS 通过一个"**桥接快捷指令**"来调用你的所有 Shortcut。整体
 
 | 维度 | Agent Skills | MCP / 拓展工具 |
 | --- | --- | --- |
-| 性质 | 知识包（文档 + 资源） | 代码/服务 |
+| 性质 | 技能包（文档 + 资源 + 可选脚本） | 代码/服务 |
 | 写法 | 写 Markdown | 写代码或部署服务器 |
 | 适合 | 流程类、规范类、模板类 | 实时数据、外部 API、文件操作 |
 | 例子 | 邮件模板、代码规范、写作风格 | 查天气、读文件、调 GitHub |
@@ -190,9 +190,9 @@ etos-llm-studio://shortcut-tool?name=工具名&input=输入文本
 
 ### 技能权限的"allowed-tools"
 
-SKILL.md 的 frontmatter 里可以写 `allowed-tools` 字段——这是 Skill 作者的**约定描述**，ETOS **不会基于它真正去限制工具调用**。它只是告诉 AI"按设计这个技能应该用这些工具"。
+SKILL.md 的 frontmatter 可以写 `allowed-tools`。在当前聊天运行加载这个 Skill 后，ETOS 会用它过滤后续暴露和执行的普通工具；未列出的工具会被拒绝。
 
-ETOS 本身只提供 `use_skill` 这一个读取能力，不会执行 Skill 里写的脚本或本地命令。
+`allowed-tools` 只能从当前会话已经启用的工具中做减法，不能新增工具、打开已关闭的集成、绕过工具审批，也不是 Shell 命令白名单。未填写时不额外收窄当前工具集；本次运行结束后限制随即释放。
 
 ## 下一步
 

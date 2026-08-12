@@ -206,6 +206,12 @@ public enum SkillStore {
         do {
             try fileURL.deletingLastPathComponent().createDirectoryIfNeeded()
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            try applySupportedScriptPermissions(
+                relativePath: relativePath,
+                data: Data(content.utf8),
+                fileURL: fileURL,
+                fileManager: .default
+            )
             return true
         } catch {
             skillStoreLogger.error("保存技能文件失败 \(relativePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -289,6 +295,12 @@ public enum SkillStore {
                 }
                 try target.deletingLastPathComponent().createDirectoryIfNeeded()
                 try data.write(to: target, options: .atomic)
+                try applySupportedScriptPermissions(
+                    relativePath: relativePath,
+                    data: data,
+                    fileURL: target,
+                    fileManager: fm
+                )
             }
 
             let stagingSkillFile = stagingDir.appendingPathComponent(defaultSkillFileName, isDirectory: false)
@@ -367,6 +379,12 @@ public enum SkillStore {
                 }
                 try target.deletingLastPathComponent().createDirectoryIfNeeded()
                 try data.write(to: target, options: .atomic)
+                try applySupportedScriptPermissions(
+                    relativePath: relativePath,
+                    data: data,
+                    fileURL: target,
+                    fileManager: fm
+                )
             }
 
             let stagingSkillFile = stagingDir.appendingPathComponent(defaultSkillFileName, isDirectory: false)
@@ -410,6 +428,25 @@ public enum SkillStore {
     public static func resolveSkillFile(skillName: String, relativePath: String) -> URL? {
         guard let skillDir = resolveSkillDir(skillName: skillName) else { return nil }
         return SkillPaths.resolveSkillFile(skillDir: skillDir, relativePath: relativePath)
+    }
+
+    /// 导入过程会重新创建文件，因此宿主包里的 POSIX mode 无法自然保留。这里只为
+    /// ETOS 能直接执行的 shebang 与 AArch64 ELF 恢复执行位；普通资源始终保持不可执行。
+    private static func applySupportedScriptPermissions(
+        relativePath: String,
+        data: Data,
+        fileURL: URL,
+        fileManager: FileManager
+    ) throws {
+        guard let normalized = SkillResourcePolicy.normalizeRelativePath(relativePath),
+              normalized == relativePath,
+              normalized.hasPrefix("scripts/"),
+              normalized != "scripts/" else { return }
+        let permissions = SkillScriptResolver.requiresExecutablePermission(
+            relativePath: relativePath,
+            data: data
+        ) ? 0o755 : 0o644
+        try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: fileURL.path)
     }
 
     // MARK: - Sync

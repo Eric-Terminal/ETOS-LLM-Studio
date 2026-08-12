@@ -24,13 +24,19 @@ enum LocalLinuxToolDefinitions {
     }
 
     static func containsExposedName(_ name: String) -> Bool {
-        if contains(name) { return true }
-        return LocalLinuxToolName.allCases.contains { candidate in
-            let raw = candidate.rawValue
-            return name == "mcp_\(raw)"
-                || (name.hasPrefix(MCPManager.toolNamePrefix) && name.hasSuffix("/\(raw)"))
-                || (name.hasPrefix(MCPManager.toolAliasPrefix) && name.hasSuffix("_\(raw)"))
-        }
+        LocalLinuxToolName.allCases.contains { matchesExposedName(name, tool: $0) }
+    }
+
+    static func isCommandExecutionToolExposedName(_ name: String) -> Bool {
+        matchesExposedName(name, tool: .run) || matchesExposedName(name, tool: .shell)
+    }
+
+    private static func matchesExposedName(_ name: String, tool: LocalLinuxToolName) -> Bool {
+        let raw = tool.rawValue
+        return name == raw
+            || name == "mcp_\(raw)"
+            || (name.hasPrefix(MCPManager.toolNamePrefix) && name.hasSuffix("/\(raw)"))
+            || (name.hasPrefix(MCPManager.toolAliasPrefix) && name.hasSuffix("_\(raw)"))
     }
 
     private static var run: InternalToolDefinition {

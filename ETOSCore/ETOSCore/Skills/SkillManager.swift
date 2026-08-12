@@ -784,7 +784,7 @@ public final class SkillManager: ObservableObject {
             guard let sourceSessionID, let sourceAgentRunID, let sourceToolCallID else {
                 throw SkillExecutionError.agentContextRequired
             }
-            return try await SkillScriptToolExecutor.shared.execute(
+            let result = try await SkillScriptToolExecutor.shared.execute(
                 skillName: name,
                 relativePath: path,
                 arguments: args.arguments ?? [],
@@ -795,8 +795,13 @@ public final class SkillManager: ObservableObject {
                 triggeringMessageID: triggeringMessageID,
                 toolCallID: sourceToolCallID
             )
+            if let runRecord = Persistence.loadLocalAgentRun(id: sourceAgentRunID),
+               let frozenSkill = runRecord.context.skillSnapshots?.first(where: { $0.skillName == name }) {
+                await SkillAllowedToolRuntime.shared.activate(skill: frozenSkill, runID: sourceAgentRunID)
+            }
+            return result
         }
-        return try await Task.detached(priority: .utility) {
+        let result = try await Task.detached(priority: .utility) {
             switch action {
             case .readInstructions:
                 guard path.isEmpty || path == SkillStore.defaultSkillFileName else {
@@ -836,6 +841,19 @@ public final class SkillManager: ObservableObject {
                 preconditionFailure("execute_script 应在进入资源读取任务前处理。")
             }
         }.value
+        if let sourceAgentRunID {
+            if let runRecord = Persistence.loadLocalAgentRun(id: sourceAgentRunID),
+               let frozenSkill = runRecord.context.skillSnapshots?.first(where: { $0.skillName == name }) {
+                await SkillAllowedToolRuntime.shared.activate(skill: frozenSkill, runID: sourceAgentRunID)
+            } else if let metadata = snapshot.skills.first(where: { $0.name == name }) {
+                await SkillAllowedToolRuntime.shared.activate(
+                    skillName: metadata.name,
+                    allowedTools: metadata.allowedTools,
+                    runID: sourceAgentRunID
+                )
+            }
+        }
+        return result
     }
 
     private nonisolated static func formatResourceList(skillName: String, files: [SkillFileReference]) -> String {

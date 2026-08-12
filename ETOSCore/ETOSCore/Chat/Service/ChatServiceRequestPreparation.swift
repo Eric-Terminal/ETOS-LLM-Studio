@@ -128,7 +128,66 @@ extension ChatService {
             let skillTools = await MainActor.run { SkillManager.shared.chatToolsForLLM() }
             resolvedTools.append(contentsOf: skillTools)
         }
+        if let runID = localAgentContext?.runID {
+            resolvedTools = await SkillAllowedToolRuntime.shared.filteredTools(
+                resolvedTools,
+                runID: runID
+            )
+        }
         return (resolvedTools.isEmpty ? nil : resolvedTools, policy)
+    }
+
+    func toolsUsingNativeResponsesShellIfNeeded(
+        _ tools: [InternalToolDefinition]?,
+        runnableModel: RunnableModel,
+        sessionID: UUID
+    ) async throws -> [InternalToolDefinition]? {
+        guard runnableModel.model.supportsToolCalling,
+              var resolved = tools,
+              let runID = conversationRunIDs(for: sessionID)?.runID else {
+            return tools
+        }
+        let usesNativeResponsesShell: Bool
+        if runnableModel.effectiveAPIFormat == "openai-responses" {
+            usesNativeResponsesShell = true
+        } else if runnableModel.effectiveAPIFormat == "openai-compatible" {
+            let overrides = runnableModel.effectiveOverrideParameters.mapValues { $0.toAny() }
+            switch OpenAIAdapter().resolvedConversationAPI(for: overrides) {
+            case .responses:
+                usesNativeResponsesShell = true
+            case .chatCompletions:
+                usesNativeResponsesShell = false
+            }
+        } else {
+            usesNativeResponsesShell = false
+        }
+        resolved = await SkillAllowedToolRuntime.shared.filteredTools(
+            resolved,
+            runID: runID,
+            exemptToolNames: usesNativeResponsesShell
+                ? Set([SkillManager.chatToolName, OpenAIResponsesLocalShellProtocol.toolName])
+                : Set([SkillManager.chatToolName])
+        )
+        guard usesNativeResponsesShell,
+              let context = Persistence.loadLocalAgentRun(id: runID)?.context else {
+            return resolved.isEmpty ? nil : resolved
+        }
+        let hasNativeShell = resolved.contains {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.isCommandExecutionToolExposedName($0.name)
+        }
+        guard hasNativeShell else {
+            return resolved
+        }
+
+        let nativeShell = try await OpenAIResponsesLocalShellRuntime.shared.toolDefinition(for: context)
+        resolved.removeAll {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.isCommandExecutionToolExposedName($0.name)
+                || $0.name == SkillManager.chatToolName
+        }
+        resolved.append(nativeShell)
+        return resolved.isEmpty ? nil : resolved
     }
 
     func preparedMessagesForRequest(

@@ -289,6 +289,111 @@ struct OpenAIAdapterAdvancedTests {
         #expect(firstTool["strict"] as? Bool == false)
     }
 
+    @Test("OpenAI Responses 使用原生本地 Shell 挂载 Skills")
+    func testResponsesRequestUsesNativeLocalShellSkills() throws {
+        let localShell = InternalToolDefinition(
+            name: OpenAIResponsesLocalShellProtocol.toolName,
+            description: "Local shell",
+            parameters: .dictionary([:]),
+            kind: .openAIResponsesLocalShell,
+            providerSpecificFields: [
+                OpenAIResponsesLocalShellProtocol.skillsField: .array([
+                    .dictionary([
+                        "name": .string("demo-skill"),
+                        "description": .string("Demo skill"),
+                        "path": .string("/mnt/etos/skills/demo-skill/version")
+                    ])
+                ])
+            ]
+        )
+
+        let request = try #require(responsesAdapter.buildChatRequest(
+            for: responsesDummyModel,
+            commonPayload: [:],
+            messages: [ChatMessage(role: .user, content: "运行技能")],
+            tools: [saveMemoryToolDefinition(), localShell],
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(payload["tools"] as? [[String: Any]])
+        let shell = try #require(tools.first { $0["type"] as? String == "shell" })
+        let environment = try #require(shell["environment"] as? [String: Any])
+        let skills = try #require(environment["skills"] as? [[String: Any]])
+
+        #expect(environment["type"] as? String == "local")
+        #expect(skills.first?["name"] as? String == "demo-skill")
+        #expect(skills.first?["path"] as? String == "/mnt/etos/skills/demo-skill/version")
+        #expect(tools.contains { $0["type"] as? String == "function" && $0["name"] as? String == "save_memory" })
+        #expect(!tools.contains { $0["type"] as? String == "function" && $0["name"] as? String == OpenAIResponsesLocalShellProtocol.toolName })
+    }
+
+    @Test("OpenAI Responses 原生 Shell 调用与结果按原协议续接")
+    func testResponsesNativeShellCallRoundTrip() throws {
+        let response = Data("""
+        {
+          "id": "resp_shell_1",
+          "output": [
+            {
+              "type": "shell_call",
+              "id": "sh_item_1",
+              "call_id": "call_shell_1",
+              "status": "completed",
+              "action": {
+                "commands": ["/mnt/etos/skills/demo/version/scripts/run.sh"],
+                "timeout_ms": 30000,
+                "max_output_length": 4096
+              }
+            }
+          ]
+        }
+        """.utf8)
+        let assistant = try responsesAdapter.parseResponse(data: response)
+        let toolCall = try #require(assistant.toolCalls?.first)
+        let argumentsData = try #require(toolCall.arguments.data(using: .utf8))
+        let arguments = try #require(JSONSerialization.jsonObject(with: argumentsData) as? [String: Any])
+        let toolMessage = ChatMessage(
+            role: .tool,
+            content: #"{"max_output_length":4096,"output":[{"outcome":{"exit_code":0,"type":"exit"},"stderr":"","stdout":"ok\n"}]}"#,
+            toolCalls: [toolCall]
+        )
+
+        #expect(toolCall.id == "call_shell_1")
+        #expect(toolCall.toolName == OpenAIResponsesLocalShellProtocol.toolName)
+        #expect((arguments["commands"] as? [String]) == ["/mnt/etos/skills/demo/version/scripts/run.sh"])
+        #expect(toolCall.providerSpecificFields?[OpenAIAdapter.responsesOutputItemIDKey] == .string("sh_item_1"))
+
+        let request = try #require(responsesAdapter.buildChatRequest(
+            for: responsesDummyModel,
+            commonPayload: [:],
+            messages: [
+                ChatMessage(role: .user, content: "运行技能"),
+                assistant,
+                toolMessage
+            ],
+            tools: nil,
+            audioAttachments: [:],
+            imageAttachments: [:],
+            fileAttachments: [:]
+        ))
+        let body = try #require(request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let input = try #require(payload["input"] as? [[String: Any]])
+        let shellCall = try #require(input.first { $0["type"] as? String == "shell_call" })
+        let shellOutput = try #require(input.first { $0["type"] as? String == "shell_call_output" })
+        let output = try #require(shellOutput["output"] as? [[String: Any]])
+        let outcome = try #require(output.first?["outcome"] as? [String: Any])
+
+        #expect(shellCall["call_id"] as? String == "call_shell_1")
+        #expect(shellOutput["call_id"] as? String == "call_shell_1")
+        #expect(shellOutput["max_output_length"] as? Int == 4096)
+        #expect(output.first?["stdout"] as? String == "ok\n")
+        #expect(outcome["type"] as? String == "exit")
+        #expect(outcome["exit_code"] as? Int == 0)
+    }
+
     @Test("OpenAI Responses 独立适配器默认使用 Responses 请求体")
     func testOpenAIResponsesAdapterBuildsResponsesPayloadByDefault() throws {
         var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")

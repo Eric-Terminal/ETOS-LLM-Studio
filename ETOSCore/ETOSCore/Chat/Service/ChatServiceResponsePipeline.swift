@@ -893,6 +893,7 @@ extension ChatService {
         if Persistence.loadLocalAgentRun(id: runID)?.state == .running {
             await LocalAgentRuntimeContextManager.shared.finishRun(id: runID, state: .completed)
         } else {
+            await SkillAllowedToolRuntime.shared.finishRun(id: runID)
             await LocalAgentFileToolExecutor.shared.finishRun(id: runID)
         }
     }

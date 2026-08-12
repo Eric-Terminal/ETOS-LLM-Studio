@@ -6533,3 +6533,12 @@
 "指令只能包含字母、数字、短横线和下划线。" = "Commands may contain only letters, numbers, hyphens, and underscores.";
 "该指令与内建命令重复。" = "This name conflicts with a built-in command.";
 "已有同名的自定义指令。" = "A custom command with this name already exists.";
+"错误: 无法准备 Responses 本地 Shell：%@" = "Error: Unable to prepare the Responses local Shell: %@";
+"%@ 不在当前 Skill 的 allowed-tools 范围内，已拒绝调用。" = "%@ is outside the current Skill's allowed-tools scope, so the call was denied.";
+"Responses 本地 Shell" = "Responses Local Shell";
+"缺少可信的 Agent Run 归属。" = "No trusted Agent Run context is available.";
+"在 ETOS 隔离的本地 Linux 用户态中执行 OpenAI Responses 原生 Shell 调用。" = "Runs native OpenAI Responses Shell calls in ETOS's isolated local Linux userspace.";
+"Responses shell_call 参数无效。" = "The Responses shell_call arguments are invalid.";
+"本地 Shell 已被策略禁止调用。" = "Local Shell calls are blocked by policy.";
+"Responses 本地 Shell 调用已被用户拒绝。" = "The user denied the Responses Local Shell call.";
+"等待用户补充，命令尚未执行。" = "Waiting for user input; the command was not run.";

@@ -81,6 +81,7 @@ public struct SkillRunSnapshot: Codable, Equatable, Sendable {
     public let versionDigest: String
     public let allowedTools: [String]
     public let scripts: [SkillScriptSnapshot]
+    public let skillDescription: String?
     public let createdAt: Date
 
     public init(
@@ -89,6 +90,7 @@ public struct SkillRunSnapshot: Codable, Equatable, Sendable {
         versionDigest: String,
         allowedTools: [String],
         scripts: [SkillScriptSnapshot],
+        skillDescription: String? = nil,
         createdAt: Date = Date()
     ) {
         self.skillID = skillID
@@ -96,6 +98,7 @@ public struct SkillRunSnapshot: Codable, Equatable, Sendable {
         self.versionDigest = versionDigest
         self.allowedTools = allowedTools
         self.scripts = scripts
+        self.skillDescription = skillDescription
         self.createdAt = createdAt
     }
 }
@@ -190,7 +193,27 @@ public enum SkillAllowedToolPolicy {
     /// `allowed-tools` 只能收窄当前会话已经暴露的工具，绝不能借 Skill 扩权。
     public static func effectiveTools(declared: [String], sessionEnabled: Set<String>) -> Set<String> {
         guard !declared.isEmpty else { return sessionEnabled }
-        return Set(declared).intersection(sessionEnabled)
+        return Set(sessionEnabled.filter { allows(toolName: $0, declared: declared) })
+    }
+
+    public static func allows(toolName: String, declared: [String]) -> Bool {
+        let actual = normalized(toolName)
+        guard !actual.isEmpty else { return false }
+        return declared.contains { rawDeclaration in
+            let declaration = normalized(rawDeclaration)
+            guard !declaration.isEmpty else { return false }
+            return actual == declaration
+                || actual == "mcp_\(declaration)"
+                || (actual.hasPrefix("mcp://") && actual.hasSuffix("/\(declaration)"))
+        }
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            )
     }
 }
 

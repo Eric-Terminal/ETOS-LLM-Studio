@@ -6526,3 +6526,12 @@
 "指令只能包含字母、数字、短横线和下划线。" = "コマンドには文字、数字、ハイフン、アンダースコアのみ使用できます。";
 "该指令与内建命令重复。" = "この名前は組み込みコマンドと重複しています。";
 "已有同名的自定义指令。" = "同じ名前のカスタムコマンドが既にあります。";
+"错误: 无法准备 Responses 本地 Shell：%@" = "エラー：Responses ローカル Shell を準備できません：%@";
+"%@ 不在当前 Skill 的 allowed-tools 范围内，已拒绝调用。" = "%@ は現在の Skill の allowed-tools 範囲外のため、呼び出しを拒否しました。";
+"Responses 本地 Shell" = "Responses ローカル Shell";
+"缺少可信的 Agent Run 归属。" = "信頼できる Agent Run コンテキストがありません。";
+"在 ETOS 隔离的本地 Linux 用户态中执行 OpenAI Responses 原生 Shell 调用。" = "ETOS の隔離されたローカル Linux ユーザー空間で OpenAI Responses のネイティブ Shell 呼び出しを実行します。";
+"Responses shell_call 参数无效。" = "Responses shell_call の引数が無効です。";
+"本地 Shell 已被策略禁止调用。" = "ローカル Shell の呼び出しはポリシーで禁止されています。";
+"Responses 本地 Shell 调用已被用户拒绝。" = "Responses ローカル Shell の呼び出しはユーザーに拒否されました。";
+"等待用户补充，命令尚未执行。" = "ユーザーの追加入力を待っているため、コマンドはまだ実行されていません。";

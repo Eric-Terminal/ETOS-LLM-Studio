@@ -63,7 +63,8 @@ public enum SkillRunSnapshotBuilder {
             skillName: skill.name,
             versionDigest: versionDigest(files: files, scriptExecutability: scriptExecutability),
             allowedTools: skill.allowedTools,
-            scripts: scripts.sorted { $0.relativePath < $1.relativePath }
+            scripts: scripts.sorted { $0.relativePath < $1.relativePath },
+            skillDescription: skill.description
         )
     }
 
@@ -180,6 +181,16 @@ public struct ResolvedSkillScript: Equatable, Sendable {
 }
 
 public enum SkillScriptResolver {
+    static func requiresExecutablePermission(relativePath: String, data: Data) -> Bool {
+        guard let normalized = SkillResourcePolicy.normalizeRelativePath(relativePath),
+              normalized == relativePath,
+              normalized.hasPrefix("scripts/"),
+              normalized != "scripts/" else {
+            return false
+        }
+        return shebangInterpreter(in: data) != nil || isAArch64ELF(data)
+    }
+
     public static func resolve(
         skillName: String,
         relativePath: String,
@@ -271,7 +282,7 @@ public enum SkillScriptResolver {
         )
     }
 
-    private static func shebangInterpreter(in data: Data) -> String? {
+    static func shebangInterpreter(in data: Data) -> String? {
         guard data.count >= 3,
               data[data.startIndex] == 0x23,
               data[data.startIndex + 1] == 0x21 else { return nil }
@@ -288,7 +299,7 @@ public enum SkillScriptResolver {
         return first
     }
 
-    private static func isAArch64ELF(_ data: Data) -> Bool {
+    static func isAArch64ELF(_ data: Data) -> Bool {
         guard data.count >= 20,
               data[0] == 0x7f,
               data[1] == 0x45,

@@ -73,6 +73,25 @@ extension OpenAIAdapter {
     }
 
     func buildResponsesFunctionCallItem(from toolCall: InternalToolCall) -> [String: Any] {
+        if toolCall.toolName == OpenAIResponsesLocalShellProtocol.toolName {
+            let action: [String: Any]
+            if let data = toolCall.arguments.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data),
+               let decodedAction = object as? [String: Any] {
+                action = decodedAction
+            } else {
+                action = [:]
+            }
+            var item: [String: Any] = [
+                "type": "shell_call",
+                "call_id": toolCall.id,
+                "action": action,
+                "status": "completed"
+            ]
+            applyResponsesOutputIdentity(from: toolCall, to: &item)
+            return item
+        }
+
         var item: [String: Any] = [
             "type": "function_call",
             "call_id": toolCall.id,
@@ -80,6 +99,14 @@ extension OpenAIAdapter {
             "arguments": toolCall.arguments,
             "status": "completed"
         ]
+        applyResponsesOutputIdentity(from: toolCall, to: &item)
+        return item
+    }
+
+    private func applyResponsesOutputIdentity(
+        from toolCall: InternalToolCall,
+        to item: inout [String: Any]
+    ) {
         if let rawItemID = toolCall.providerSpecificFields?[Self.responsesOutputItemIDKey],
            case let .string(itemID) = rawItemID,
            !itemID.isEmpty {
@@ -90,16 +117,58 @@ extension OpenAIAdapter {
            !status.isEmpty {
             item["status"] = status
         }
-        return item
     }
 
     func buildResponsesFunctionCallOutputItem(from message: ChatMessage) -> [String: Any]? {
-        guard message.role == .tool, let callID = message.toolCalls?.first?.id else { return nil }
+        guard message.role == .tool, let toolCall = message.toolCalls?.first else { return nil }
+        if toolCall.toolName == OpenAIResponsesLocalShellProtocol.toolName {
+            let payload: [String: Any]?
+            if let data = message.content.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) {
+                payload = object as? [String: Any]
+            } else {
+                payload = nil
+            }
+            let output = payload?["output"] as? [Any] ?? [[
+                "stdout": "",
+                "stderr": message.content,
+                "outcome": ["type": "exit", "exit_code": -1]
+            ]]
+            var item: [String: Any] = [
+                "type": "shell_call_output",
+                "call_id": toolCall.id,
+                "output": output
+            ]
+            if let maximum = payload?["max_output_length"] {
+                item["max_output_length"] = maximum
+            }
+            return item
+        }
         return [
             "type": "function_call_output",
-            "call_id": callID,
+            "call_id": toolCall.id,
             "output": message.content
         ]
+    }
+
+    private func responsesShellArguments(from item: [String: Any]) -> String {
+        guard let action = item["action"] as? [String: Any],
+              JSONSerialization.isValidJSONObject(action),
+              let data = try? JSONSerialization.data(withJSONObject: action, options: [.sortedKeys]) else {
+            return "{}"
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func responsesToolCallFields(from item: [String: Any]) -> [String: JSONValue]? {
+        var fields: [String: JSONValue] = [:]
+        if let itemID = item["id"] as? String, !itemID.isEmpty {
+            fields[Self.responsesOutputItemIDKey] = .string(itemID)
+        }
+        if let status = item["status"] as? String, !status.isEmpty {
+            fields[Self.responsesOutputItemStatusKey] = .string(status)
+        }
+        return fields.isEmpty ? nil : fields
     }
 
     static func reasoningContentEchoMode(from payload: [String: Any]) -> ReasoningContentEchoMode {
@@ -478,6 +547,18 @@ extension OpenAIAdapter {
                         providerSpecificFields: providerSpecificFields.isEmpty ? nil : providerSpecificFields
                     )
                 )
+            case "shell_call":
+                let callID = (item["call_id"] as? String)
+                    ?? (item["id"] as? String)
+                    ?? "shell-\(UUID().uuidString)"
+                internalToolCalls.append(
+                    InternalToolCall(
+                        id: callID,
+                        toolName: OpenAIResponsesLocalShellProtocol.toolName,
+                        arguments: responsesShellArguments(from: item),
+                        providerSpecificFields: responsesToolCallFields(from: item)
+                    )
+                )
             case "reasoning":
                 if let reasoning = parseResponsesReasoningContent(from: item) {
                     appendSegment(reasoning, to: &reasoningContent)
@@ -613,6 +694,22 @@ extension OpenAIAdapter {
                     providerResponseMetadata: responseMetadata
                 )
             }
+            if itemType == "shell_call" {
+                let callID = (item["call_id"] as? String) ?? (item["id"] as? String)
+                return ChatMessagePart(
+                    providerResponseMetadata: responseMetadata,
+                    toolCallDeltas: [
+                        ChatMessagePart.ToolCallDelta(
+                            id: callID,
+                            index: payload["output_index"] as? Int,
+                            nameFragment: OpenAIResponsesLocalShellProtocol.toolName,
+                            argumentsFragment: nil,
+                            argumentsReplacement: responsesShellArguments(from: item),
+                            providerSpecificFields: responsesToolCallFields(from: item)
+                        )
+                    ]
+                )
+            }
             guard itemType == "function_call" else {
                 return ChatMessagePart(providerResponseMetadata: responseMetadata)
             }
@@ -645,6 +742,22 @@ extension OpenAIAdapter {
             }
             let responseMetadata = responsesProviderMetadata(outputItem: item)
             guard itemType == "reasoning" else {
+                if itemType == "shell_call" {
+                    let callID = (item["call_id"] as? String) ?? (item["id"] as? String)
+                    return ChatMessagePart(
+                        providerResponseMetadata: responseMetadata,
+                        toolCallDeltas: [
+                            ChatMessagePart.ToolCallDelta(
+                                id: callID,
+                                index: payload["output_index"] as? Int,
+                                nameFragment: OpenAIResponsesLocalShellProtocol.toolName,
+                                argumentsFragment: nil,
+                                argumentsReplacement: responsesShellArguments(from: item),
+                                providerSpecificFields: responsesToolCallFields(from: item)
+                            )
+                        ]
+                    )
+                }
                 guard itemType == "function_call" else {
                     return ChatMessagePart(providerResponseMetadata: responseMetadata)
                 }

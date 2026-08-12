@@ -81,7 +81,9 @@ public actor LocalAgentRuntimeContextManager {
         let promptProfile = await LocalAgentPromptStore.shared.activeProfile()
         let skillState = await MainActor.run {
             (
-                names: SkillManager.shared.enabledSkillNames,
+                names: SkillManager.shared.chatToolsEnabled
+                    ? SkillManager.shared.enabledSkillNames
+                    : [],
                 skills: SkillManager.shared.skills
             )
         }
@@ -130,6 +132,8 @@ public actor LocalAgentRuntimeContextManager {
             _ = Persistence.saveLocalAgentRun(record)
         }
         if state.isTerminal {
+            await OpenAIResponsesLocalShellRuntime.shared.finishRun(id: id)
+            await SkillAllowedToolRuntime.shared.finishRun(id: id)
             await LocalAgentFileToolExecutor.shared.finishRun(id: id)
             await MCPNativeMediaExecutor.shared.finishRun(id: id)
         }

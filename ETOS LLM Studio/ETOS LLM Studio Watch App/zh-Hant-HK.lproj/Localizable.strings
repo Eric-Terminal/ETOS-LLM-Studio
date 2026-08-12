@@ -6525,3 +6525,12 @@
 "指令只能包含字母、数字、短横线和下划线。" = "指令只能包含字母、數字、連字號和底線。";
 "该指令与内建命令重复。" = "此指令與內建指令重複。";
 "已有同名的自定义指令。" = "已有同名的自訂指令。";
+"错误: 无法准备 Responses 本地 Shell：%@" = "錯誤：無法準備 Responses 本機 Shell：%@";
+"%@ 不在当前 Skill 的 allowed-tools 范围内，已拒绝调用。" = "%@ 不在目前 Skill 的 allowed-tools 範圍內，已拒絕呼叫。";
+"Responses 本地 Shell" = "Responses 本機 Shell";
+"缺少可信的 Agent Run 归属。" = "缺少可信的 Agent Run 歸屬。";
+"在 ETOS 隔离的本地 Linux 用户态中执行 OpenAI Responses 原生 Shell 调用。" = "在 ETOS 隔離的本機 Linux 使用者空間中執行 OpenAI Responses 原生 Shell 呼叫。";
+"Responses shell_call 参数无效。" = "Responses shell_call 參數無效。";
+"本地 Shell 已被策略禁止调用。" = "本機 Shell 已被策略禁止呼叫。";
+"Responses 本地 Shell 调用已被用户拒绝。" = "Responses 本機 Shell 呼叫已被使用者拒絕。";
+"等待用户补充，命令尚未执行。" = "等待使用者補充，命令尚未執行。";

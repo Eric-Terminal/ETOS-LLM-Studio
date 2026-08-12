@@ -649,7 +649,31 @@ extension ChatService {
             let includeUsageInStream = await MainActor.run { AppConfigStore.shared.enableOpenAIStreamIncludeUsage }
             commonPayload[OpenAIAdapter.streamIncludeUsageControlKey] = includeUsageInStream
         }
-        let effectiveTools = runnableModel.model.supportsToolCalling ? tools : nil
+        let providerResolvedTools: [InternalToolDefinition]?
+        do {
+            providerResolvedTools = try await toolsUsingNativeResponsesShellIfNeeded(
+                tools,
+                runnableModel: runnableModel,
+                sessionID: currentSessionID
+            )
+        } catch {
+            let reason = String(
+                format: NSLocalizedString("错误: 无法准备 Responses 本地 Shell：%@", comment: "Prepare Responses local shell failure"),
+                error.localizedDescription
+            )
+            addErrorMessage(reason, sessionID: currentSessionID)
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            persistRequestLog(
+                context: requestLogContext,
+                status: .failed,
+                tokenUsage: nil,
+                finishedAt: Date(),
+                recordUsageEvent: false,
+                errorKind: "responses_local_shell_preparation_failed"
+            )
+            return
+        }
+        let effectiveTools = runnableModel.model.supportsToolCalling ? providerResolvedTools : nil
         if tools != nil, effectiveTools == nil {
             logger.info("当前模型未启用工具能力，本次请求不会附带工具定义。")
         }

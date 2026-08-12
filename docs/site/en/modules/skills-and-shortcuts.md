@@ -21,7 +21,7 @@ If you keep asking the AI to do similar things — write emails to company spec,
 A **Skill pack** is a folder containing:
 
 - `SKILL.md` — the core spec (name, description, when to use, step-by-step)
-- Any number of resource files (templates, references, examples)
+- Any number of resource files (templates, references, examples, and optional `scripts/`)
 
 In chat, the AI sees "you have these Skills available" and proactively reads `SKILL.md` when it needs to follow that recipe.
 
@@ -43,10 +43,10 @@ Settings → Agent Skills
 
 Top of the page is the master switch: **"Expose Agent Skills to Model (use_skill)"**.
 
-::: warning What `use_skill` Is
-ETOS **does not** execute scripts or local commands inside a Skill pack. It just makes `SKILL.md` available as readable material to the AI, exposed through a tool named `use_skill`. Anything `SKILL.md` says about "run X" is **guidance for the AI**, not real execution — the AI satisfies it by replying in text or by calling other tools you've enabled.
+::: warning `use_skill` and Script Execution
+Regular chat still uses `use_skill` to read `SKILL.md` and resources on demand. A Skill's `scripts/` can run only in **Agent mode** with **local Linux** enabled, subject to user approval and command safety rules. Execution uses the version frozen for that Agent Run and mounts it read-only inside Linux; it does not expose the host filesystem.
 
-In short: **Skills are knowledge packs, not script packs.**
+With the OpenAI Responses format, ETOS uses the native local Shell and attaches enabled Skills to that Shell environment. Other formats continue through `use_skill` and its `execute_script` action. Both paths reuse ETOS's Linux isolation, writable workspace, and approval system.
 :::
 
 #### Four Import Methods
@@ -92,7 +92,7 @@ After import:
 
 1. Per-Skill toggle: open the Skill row → enable **"Use in Chat"**
 2. The AI sees: "You have N Skills available: Email Helper, Code Style, …"
-3. When it judges a Skill is relevant, it calls `use_skill` to read `SKILL.md` and follows it
+3. When a Skill is relevant, the AI reads it through `use_skill`; OpenAI Responses in Agent + Linux loads the same frozen pack through native Skills
 
 #### Skill Files
 
@@ -163,7 +163,7 @@ If your Shortcuts include "send message", "send email", "control home", **don't 
 
 | Dimension | Agent Skills | MCP / App Tools |
 | --- | --- | --- |
-| Nature | Knowledge pack (docs + resources) | Code / service |
+| Nature | Skill pack (docs + resources + optional scripts) | Code / service |
 | Authoring | Markdown | Code or server deployment |
 | Best for | Flows, rules, templates | Live data, external APIs, file ops |
 | Examples | Email templates, code style guides, writing style | Weather, file read, GitHub API |
@@ -190,9 +190,9 @@ Full scheme protocol is documented under Extended Features.
 
 ### `allowed-tools` in SKILL.md
 
-`SKILL.md` frontmatter may list `allowed-tools` — purely **author intent**, not enforced by ETOS. It just tells the AI "by design this Skill is meant to use these tools."
+`SKILL.md` frontmatter may list `allowed-tools`. Once that Skill is loaded in the current chat run, ETOS uses the list to filter ordinary tools both when exposing them and immediately before execution; unlisted tools are rejected.
 
-ETOS only provides the `use_skill` read capability; it never executes scripts or local commands embedded in the Skill.
+`allowed-tools` can only subtract from tools already enabled for the session. It cannot add tools, enable a disabled integration, bypass approvals, or act as a Shell command allowlist. Omitting it adds no extra restriction, and the restriction is released when the current run ends.
 
 ## Next
 

@@ -306,7 +306,23 @@ extension OpenAIAdapter {
         }
 
         if let tools, !tools.isEmpty {
-            let functionTools = stableToolDefinitions(tools) { self.sanitizedToolName($0) }.map { tool -> [String: Any] in
+            if let localShell = tools.first(where: { $0.kind == .openAIResponsesLocalShell }) {
+                var environment: [String: Any] = ["type": "local"]
+                if let rawSkills = localShell.providerSpecificFields?[OpenAIResponsesLocalShellProtocol.skillsField],
+                   case let .array(skills) = rawSkills,
+                   !skills.isEmpty {
+                    environment["skills"] = skills.map { $0.toAny() }
+                }
+                responsesTools.removeAll { ($0["type"] as? String) == "shell" }
+                responsesTools.append([
+                    "type": "shell",
+                    "environment": environment
+                ])
+            }
+
+            let functionTools = stableToolDefinitions(tools.filter { $0.kind == nil }) {
+                self.sanitizedToolName($0)
+            }.map { tool -> [String: Any] in
                 let rawParams = tool.parameters.toAny() as? [String: Any] ?? [:]
                 let functionParams = normalizedOpenAIToolParameters(rawParams)
                 return [

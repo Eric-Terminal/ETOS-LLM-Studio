@@ -339,16 +339,31 @@ public actor LocalLinuxMountManager {
         }
     }
 
-    /// Skill 包只在一次或并发的执行存续期间挂载，且 guest 永远只能只读访问。
+    /// Skill 包只在持有租约的执行或 Agent Run 存续期间挂载，且 guest 永远只能只读访问。
     public func acquireReadOnlySkillMount(
         skillID: String,
-        hostDirectory: URL
+        hostDirectory: URL,
+        guestDirectory: String? = nil
     ) async throws -> LocalLinuxMountLease {
         guard SkillPaths.isValidSkillName(skillID) else {
             throw SkillExecutionError.invalidScriptPath
         }
         let canonicalDirectory = hostDirectory.resolvingSymlinksInPath().standardizedFileURL
-        let guestPath = "/mnt/etos/skills/\(skillID)"
+        let skillGuestRoot = "/mnt/etos/skills/\(skillID)"
+        let guestPath = guestDirectory ?? skillGuestRoot
+        if guestPath != skillGuestRoot {
+            let prefix = skillGuestRoot + "/"
+            guard guestPath.hasPrefix(prefix) else {
+                throw SkillExecutionError.invalidScriptPath
+            }
+            let suffix = String(guestPath.dropFirst(prefix.count))
+            guard !suffix.isEmpty,
+                  suffix.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
+                      !$0.isEmpty && $0 != "." && $0 != ".."
+                  }) else {
+                throw SkillExecutionError.invalidScriptPath
+            }
+        }
         if var existing = transientSkillMounts[guestPath] {
             guard existing.canonicalHostPath == canonicalDirectory.path else {
                 throw LocalLinuxRuntimeError.runtimeUnavailable(

@@ -40,7 +40,56 @@ extension ChatService {
             String(format: NSLocalizedString("%@ 调用已被用户拒绝。", comment: "Tool result when user denies a call"), $0)
         }
 
+        if let agentRunID,
+           !(await SkillAllowedToolRuntime.shared.isToolAllowed(
+                toolCall.toolName,
+                runID: agentRunID,
+                exemptToolNames: [SkillManager.chatToolName, OpenAIResponsesLocalShellProtocol.toolName]
+           )) {
+            let denied = String(
+                format: NSLocalizedString("%@ 不在当前 Skill 的 allowed-tools 范围内，已拒绝调用。", comment: "Skill allowed tools denied result"),
+                toolCall.toolName
+            )
+            return ToolCallOutcome(
+                message: ChatMessage(
+                    role: .tool,
+                    content: denied,
+                    toolCalls: [
+                        InternalToolCall(
+                            id: toolCall.id,
+                            toolName: toolCall.toolName,
+                            arguments: toolCall.arguments,
+                            result: denied,
+                            providerSpecificFields: toolCall.providerSpecificFields
+                        )
+                    ]
+                ),
+                toolResult: denied,
+                shouldAwaitUserSupplement: false,
+                shouldPauseForConversation: false
+            )
+        }
+
         switch toolCall.toolName {
+        case OpenAIResponsesLocalShellProtocol.toolName:
+            guard let sessionID, let agentRunID else {
+                content = callFailedText(
+                    NSLocalizedString("Responses 本地 Shell", comment: "Responses local shell tool label"),
+                    NSLocalizedString("缺少可信的 Agent Run 归属。", comment: "Responses local shell missing Agent run")
+                )
+                displayResult = content
+                break
+            }
+            let execution = await executeResponsesLocalShellCall(
+                toolCall,
+                sessionID: sessionID,
+                runID: agentRunID,
+                triggeringMessageID: triggeringMessageID
+            )
+            content = execution.content
+            displayResult = execution.content
+            shouldAwaitUserSupplement = execution.shouldAwaitUserSupplement
+
         case "save_memory":
             guard !isTemporaryChatMemoryIsolated(for: sessionID) else {
                 content = policyDeniedText(toolCall.toolName)

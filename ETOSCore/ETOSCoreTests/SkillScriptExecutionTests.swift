@@ -33,8 +33,10 @@ struct SkillScriptExecutionTests {
             "scripts/direct": Data("#!/bin/sh\nprintf '%s\\n' direct".utf8),
             "scripts/tool": binary
         ]))
-        try makeExecutable(skillName: skillName, path: "scripts/direct")
-        try makeExecutable(skillName: skillName, path: "scripts/tool")
+        let directURL = try #require(SkillStore.resolveSkillFile(skillName: skillName, relativePath: "scripts/direct"))
+        let binaryURL = try #require(SkillStore.resolveSkillFile(skillName: skillName, relativePath: "scripts/tool"))
+        #expect(try isExecutable(directURL))
+        #expect(try isExecutable(binaryURL))
         let metadata = try #require(manager.skills.first { $0.name == skillName })
         let snapshot = try SkillRunSnapshotBuilder.build(skill: metadata)
 
@@ -116,6 +118,38 @@ struct SkillScriptExecutionTests {
                 sessionEnabled: enabled
             ) == ["search_web"]
         )
+        #expect(SkillAllowedToolPolicy.allows(toolName: "mcp://server/search_web", declared: ["search_web"]))
+        #expect(SkillAllowedToolPolicy.allows(toolName: "mcp_search_web", declared: ["search_web"]))
+        #expect(!SkillAllowedToolPolicy.allows(toolName: "mcp_delete_search_web", declared: ["search_web"]))
+        #expect(!SkillAllowedToolPolicy.allows(toolName: "linux_shell", declared: ["search_web"]))
+    }
+
+    @Test("加载 Skill 后 allowed-tools 会过滤工具并在 Run 结束时释放")
+    func allowedToolsAreEnforcedForActiveRun() async {
+        let runtime = SkillAllowedToolRuntime()
+        let runID = UUID()
+        let snapshot = SkillRunSnapshot(
+            skillID: "restricted",
+            skillName: "restricted",
+            versionDigest: String(repeating: "a", count: 64),
+            allowedTools: ["search_web"],
+            scripts: []
+        )
+        let tools = [
+            InternalToolDefinition(name: "search_web", description: "", parameters: .dictionary([:])),
+            InternalToolDefinition(name: "linux_shell", description: "", parameters: .dictionary([:])),
+            InternalToolDefinition(name: SkillManager.chatToolName, description: "", parameters: .dictionary([:]))
+        ]
+
+        await runtime.activate(skill: snapshot, runID: runID)
+        let filtered = await runtime.filteredTools(tools, runID: runID)
+        let deniedBeforeFinish = await runtime.isToolAllowed("linux_shell", runID: runID)
+        #expect(Set(filtered.map(\.name)) == ["search_web", SkillManager.chatToolName])
+        #expect(!deniedBeforeFinish)
+
+        await runtime.finishRun(id: runID)
+        let allowedAfterFinish = await runtime.isToolAllowed("linux_shell", runID: runID)
+        #expect(allowedAfterFinish)
     }
 
     @Test("当前版本授权与冻结摘要不一致时会失效")
@@ -178,8 +212,9 @@ struct SkillScriptExecutionTests {
         """.utf8)
     }
 
-    private func makeExecutable(skillName: String, path: String) throws {
-        let url = try #require(SkillStore.resolveSkillFile(skillName: skillName, relativePath: path))
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    private func isExecutable(_ url: URL) throws -> Bool {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        return permissions & 0o111 != 0
     }
 }
