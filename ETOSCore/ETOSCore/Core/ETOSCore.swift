@@ -256,7 +256,7 @@ public final class ToolPermissionCenter: ObservableObject {
             toolCallID: toolCallID,
             forcePrompt: forcePrompt
         )
-        let decision = await withTaskCancellationHandler {
+        let decision: ToolPermissionDecision = await withTaskCancellationHandler {
             guard !Task.isCancelled else { return .deny }
             return await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else {

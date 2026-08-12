@@ -73,7 +73,7 @@ extension ChatService {
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
                     advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
-                    toolCallIDScope: loadingMessageID.uuidString
+                    toolCallIDScope: requestLogContext.requestID.uuidString
                 )
             )
             persistRequestLog(
