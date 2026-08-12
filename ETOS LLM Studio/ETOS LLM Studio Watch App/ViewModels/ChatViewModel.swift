@@ -454,7 +454,7 @@ class ChatViewModel: ObservableObject {
     var memoryRetryStoppedNoticeTask: Task<Void, Never>?
     var pendingSendDelayTask: Task<Void, Never>?
     private var pendingSendDelayPayload: PendingChatSendPayload?
-    private let iso8601Formatter = ISO8601DateFormatter()
+    let iso8601Formatter = ISO8601DateFormatter()
     let backgroundImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 6
