@@ -439,18 +439,10 @@ extension ChatBubble {
         if resolvedResult.isEmpty {
             return .running
         }
-        if isDeniedToolResultText(resolvedResult) {
+        if call.wasRejected {
             return .rejected
         }
         return .finished
-    }
-
-    private func isDeniedToolResultText(_ text: String) -> Bool {
-        let normalized = text.lowercased()
-        return normalized.contains("denied")
-            || normalized.contains("拒绝")
-            || normalized.contains("拒絕")
-            || normalized.contains("rejected")
     }
 
     func shouldShowPendingGuidance(for call: InternalToolCall) -> Bool {

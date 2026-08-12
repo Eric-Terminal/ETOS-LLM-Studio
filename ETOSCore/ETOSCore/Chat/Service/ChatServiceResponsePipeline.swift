@@ -735,7 +735,14 @@ extension ChatService {
                     triggeringMessageID: activeAttemptMetadata?.groupID
                 )
                 if let toolResult = outcome.toolResult {
-                    await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                    await attachToolResult(
+                        toolResult,
+                        disposition: outcome.resultDisposition,
+                        to: toolCall.id,
+                        toolName: toolCall.toolName,
+                        loadingMessageID: toolCallMessageID,
+                        sessionID: currentSessionID
+                    )
                 }
                 if outcome.shouldPauseForConversation {
                     shouldPauseForConversation = true
@@ -786,7 +793,14 @@ extension ChatService {
                             triggeringMessageID: activeAttemptMetadata?.groupID
                         )
                         if let toolResult = outcome.toolResult {
-                            await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                            await attachToolResult(
+                                toolResult,
+                                disposition: outcome.resultDisposition,
+                                to: toolCall.id,
+                                toolName: toolCall.toolName,
+                                loadingMessageID: toolCallMessageID,
+                                sessionID: currentSessionID
+                            )
                         }
                         var outcomeMessage = outcome.message
                         self.applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)
@@ -808,7 +822,14 @@ extension ChatService {
                         triggeringMessageID: activeAttemptMetadata?.groupID
                     )
                     if let toolResult = outcome.toolResult {
-                        await attachToolResult(toolResult, to: toolCall.id, toolName: toolCall.toolName, loadingMessageID: toolCallMessageID, sessionID: currentSessionID)
+                        await attachToolResult(
+                            toolResult,
+                            disposition: outcome.resultDisposition,
+                            to: toolCall.id,
+                            toolName: toolCall.toolName,
+                            loadingMessageID: toolCallMessageID,
+                            sessionID: currentSessionID
+                        )
                     }
                     var outcomeMessage = outcome.message
                     applyResponseAttemptMetadata(activeAttemptMetadata, to: &outcomeMessage)

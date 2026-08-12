@@ -11,6 +11,7 @@ import Foundation
 extension ChatService {
     struct ResponsesLocalShellExecution {
         let content: String
+        let resultDisposition: InternalToolCallResultDisposition
         let shouldAwaitUserSupplement: Bool
     }
 
@@ -46,6 +47,7 @@ extension ChatService {
                     outputs: [responsesShellFailure(NSLocalizedString("Responses shell_call 参数无效。", comment: "Invalid Responses shell call"))],
                     maxOutputLength: nil
                 ),
+                resultDisposition: .completed,
                 shouldAwaitUserSupplement: false
             )
         }
@@ -64,6 +66,7 @@ extension ChatService {
             .context.selectedMCPServerIDs ?? []
         let configuredPolicy = responsesLocalShellApprovalPolicy()
         var outputs: [[String: Any]] = []
+        var resultDisposition: InternalToolCallResultDisposition = .completed
         var shouldAwaitUserSupplement = false
 
         commandLoop: for command in arguments.commands {
@@ -84,6 +87,7 @@ extension ChatService {
             switch effectivePolicy {
             case .alwaysDeny:
                 outputs.append(responsesShellFailure(NSLocalizedString("本地 Shell 已被策略禁止调用。", comment: "Responses local shell policy denied")))
+                resultDisposition = .rejected
                 continue
             case .alwaysAllow:
                 break
@@ -97,6 +101,7 @@ extension ChatService {
                 )
                 guard decision == .allowOnce || decision == .allowForTool || decision == .allowAll else {
                     outputs.append(responsesShellFailure(NSLocalizedString("Responses 本地 Shell 调用已被用户拒绝。", comment: "Responses local shell user denied")))
+                    resultDisposition = .rejected
                     shouldAwaitUserSupplement = decision == .supplement
                     if shouldAwaitUserSupplement { break commandLoop }
                     continue
@@ -132,6 +137,7 @@ extension ChatService {
         }
         return ResponsesLocalShellExecution(
             content: responsesShellOutputJSON(outputs: outputs, maxOutputLength: arguments.maxOutputLength),
+            resultDisposition: resultDisposition,
             shouldAwaitUserSupplement: shouldAwaitUserSupplement
         )
     }

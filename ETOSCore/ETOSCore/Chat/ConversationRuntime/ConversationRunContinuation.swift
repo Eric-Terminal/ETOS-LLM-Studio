@@ -72,6 +72,7 @@ extension ChatService {
             return true
         }
         updatedToolCalls[toolCallIndex].result = result
+        updatedToolCalls[toolCallIndex].resultDisposition = .completed
         updatedAssistantMessage.toolCalls = updatedToolCalls
         do {
             _ = try await upsertConversationMessage(updatedAssistantMessage, to: run.sessionID)
@@ -107,6 +108,7 @@ extension ChatService {
                         toolName: originalToolCall.toolName,
                         arguments: originalToolCall.arguments,
                         result: result,
+                        resultDisposition: .completed,
                         providerSpecificFields: originalToolCall.providerSpecificFields
                     )
                 ],

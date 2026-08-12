@@ -759,25 +759,41 @@ public struct InternalToolDefinition: Codable, Hashable, Sendable {
     }
 }
 
+/// 工具结果的终态来源。正文只负责承载输出，不能再反向推断审批状态。
+public enum InternalToolCallResultDisposition: String, Codable, Hashable, Sendable {
+    /// 调用已经结束；结果正文可能同时包含成功输出或执行错误说明。
+    case completed
+    /// 调用在执行前被用户或治理策略明确拒绝。
+    case rejected
+}
+
 /// 内部工具调用，与服务商无关。
 public struct InternalToolCall: Codable, Hashable, Sendable {
     public let id: String
     public let toolName: String
     public let arguments: String // 参数通常是JSON字符串
     public var result: String? // 工具执行结果（用于展示）
+    public var resultDisposition: InternalToolCallResultDisposition?
     public let providerSpecificFields: [String: JSONValue]? // 服务商专有字段（例如 Gemini thought_signature）
+
+    /// 只认可执行链路写入的结构化终态，避免工具正文中的安全规则或错误示例污染 UI。
+    public var wasRejected: Bool {
+        resultDisposition == .rejected
+    }
 
     public init(
         id: String,
         toolName: String,
         arguments: String,
         result: String? = nil,
+        resultDisposition: InternalToolCallResultDisposition? = nil,
         providerSpecificFields: [String: JSONValue]? = nil
     ) {
         self.id = id
         self.toolName = toolName
         self.arguments = arguments
         self.result = result
+        self.resultDisposition = resultDisposition
         self.providerSpecificFields = providerSpecificFields
     }
 }

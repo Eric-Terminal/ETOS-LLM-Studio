@@ -13,6 +13,7 @@ extension ChatService {
     struct ToolCallOutcome {
         let message: ChatMessage
         let toolResult: String?
+        let resultDisposition: InternalToolCallResultDisposition
         let shouldAwaitUserSupplement: Bool
         let shouldPauseForConversation: Bool
     }
@@ -28,6 +29,7 @@ extension ChatService {
 
         var content = ""
         var displayResult: String?
+        var resultDisposition: InternalToolCallResultDisposition = .completed
         var shouldAwaitUserSupplement = false
         var shouldPauseForConversation = false
         let policyDeniedText: (String) -> String = {
@@ -60,11 +62,13 @@ extension ChatService {
                             toolName: toolCall.toolName,
                             arguments: toolCall.arguments,
                             result: denied,
+                            resultDisposition: .rejected,
                             providerSpecificFields: toolCall.providerSpecificFields
                         )
                     ]
                 ),
                 toolResult: denied,
+                resultDisposition: .rejected,
                 shouldAwaitUserSupplement: false,
                 shouldPauseForConversation: false
             )
@@ -88,6 +92,7 @@ extension ChatService {
             )
             content = execution.content
             displayResult = execution.content
+            resultDisposition = execution.resultDisposition
             shouldAwaitUserSupplement = execution.shouldAwaitUserSupplement
 
         case "save_memory":
@@ -264,6 +269,7 @@ extension ChatService {
             case .alwaysDeny:
                 content = policyDeniedText(toolLabel)
                 displayResult = content
+                resultDisposition = .rejected
                 logger.info("  - MCP 工具调用被策略拒绝: \(toolCall.toolName)")
             case .alwaysAllow:
                 do {
@@ -298,10 +304,12 @@ extension ChatService {
                 case .deny:
                     content = userDeniedText(toolLabel)
                     displayResult = content
+                    resultDisposition = .rejected
                     logger.info("  - MCP 工具调用被用户拒绝: \(toolCall.toolName)")
                 case .supplement:
                     content = userDeniedText(toolLabel)
                     displayResult = content
+                    resultDisposition = .rejected
                     shouldAwaitUserSupplement = true
                     logger.info("  - MCP 工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
                 case .allowOnce, .allowForTool, .allowAll:
@@ -348,10 +356,12 @@ extension ChatService {
             case .deny:
                 content = userDeniedText(toolLabel)
                 displayResult = content
+                resultDisposition = .rejected
                 logger.info("  - 快捷指令工具调用被用户拒绝: \(toolCall.toolName)")
             case .supplement:
                 content = userDeniedText(toolLabel)
                 displayResult = content
+                resultDisposition = .rejected
                 shouldAwaitUserSupplement = true
                 logger.info("  - 快捷指令工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
             case .allowOnce, .allowForTool, .allowAll:
@@ -397,9 +407,16 @@ extension ChatService {
             } catch {
                 content = callFailedText(toolLabel, error.localizedDescription)
                 displayResult = content
-                if let skillError = error as? SkillExecutionError,
-                   case .userSupplementRequested = skillError {
-                    shouldAwaitUserSupplement = true
+                if let skillError = error as? SkillExecutionError {
+                    switch skillError {
+                    case .executionDenied, .userDenied:
+                        resultDisposition = .rejected
+                    case .userSupplementRequested:
+                        resultDisposition = .rejected
+                        shouldAwaitUserSupplement = true
+                    default:
+                        break
+                    }
                 }
                 logger.error("  - Agent Skills 调用失败: \(error.localizedDescription)")
             }
@@ -423,6 +440,7 @@ extension ChatService {
             case .alwaysDeny:
                 content = policyDeniedText(toolLabel)
                 displayResult = content
+                resultDisposition = .rejected
                 logger.info("  - 拓展工具调用被策略拒绝: \(toolCall.toolName)")
             case .alwaysAllow:
                 do {
@@ -455,10 +473,12 @@ extension ChatService {
                 case .deny:
                     content = userDeniedText(toolLabel)
                     displayResult = content
+                    resultDisposition = .rejected
                     logger.info("  - 拓展工具调用被用户拒绝: \(toolCall.toolName)")
                 case .supplement:
                     content = userDeniedText(toolLabel)
                     displayResult = content
+                    resultDisposition = .rejected
                     shouldAwaitUserSupplement = true
                     logger.info("  - 拓展工具调用被用户拒绝并等待补充: \(toolCall.toolName)")
                 case .allowOnce, .allowForTool, .allowAll:
@@ -498,6 +518,7 @@ extension ChatService {
                     toolName: toolCall.toolName,
                     arguments: toolCall.arguments,
                     result: displayResult,
+                    resultDisposition: resultDisposition,
                     providerSpecificFields: toolCall.providerSpecificFields
                 )
             ]
@@ -506,6 +527,7 @@ extension ChatService {
         return ToolCallOutcome(
             message: message,
             toolResult: displayResult,
+            resultDisposition: resultDisposition,
             shouldAwaitUserSupplement: shouldAwaitUserSupplement,
             shouldPauseForConversation: shouldPauseForConversation
         )
@@ -573,7 +595,14 @@ extension ChatService {
     }
 
     @MainActor
-    func attachToolResult(_ result: String, to toolCallID: String, toolName: String, loadingMessageID: UUID, sessionID: UUID) async {
+    func attachToolResult(
+        _ result: String,
+        disposition: InternalToolCallResultDisposition,
+        to toolCallID: String,
+        toolName: String,
+        loadingMessageID: UUID,
+        sessionID: UUID
+    ) async {
         let messages = messagesSnapshot(for: sessionID)
         guard let messageIndex = messages.firstIndex(where: { $0.id == loadingMessageID }) else { return }
         var message = messages[messageIndex]
@@ -588,6 +617,7 @@ extension ChatService {
         }
         guard let resolvedIndex = callIndex else { return }
         toolCalls[resolvedIndex].result = result
+        toolCalls[resolvedIndex].resultDisposition = disposition
         message.toolCalls = toolCalls
         do {
             _ = try await upsertConversationMessage(message, to: sessionID)
@@ -607,6 +637,7 @@ extension ChatService {
         for call in toolCalls {
             if let existingIndex = existingCalls.firstIndex(where: { $0.id == call.id }) {
                 let existingResult = existingCalls[existingIndex].result
+                let existingResultDisposition = existingCalls[existingIndex].resultDisposition
                 if existingCalls[existingIndex].toolName != call.toolName
                     || existingCalls[existingIndex].arguments != call.arguments
                     || existingCalls[existingIndex].providerSpecificFields != call.providerSpecificFields {
@@ -615,6 +646,7 @@ extension ChatService {
                         toolName: call.toolName,
                         arguments: call.arguments,
                         result: existingResult,
+                        resultDisposition: existingResultDisposition,
                         providerSpecificFields: call.providerSpecificFields
                     )
                     didChange = true

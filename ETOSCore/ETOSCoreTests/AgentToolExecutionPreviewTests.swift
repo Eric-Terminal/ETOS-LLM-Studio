@@ -11,6 +11,46 @@ import Testing
 @testable import ETOSCore
 
 struct AgentToolExecutionPreviewTests {
+    @Test("工具结果中的拒绝字样不会伪造审批终态")
+    func derivesRejectionOnlyFromStructuredDisposition() throws {
+        let successfulRead = InternalToolCall(
+            id: "read-skill",
+            toolName: "use_skill",
+            arguments: #"{"action":"read_resource","path":"SKILL.md"}"#,
+            result: "读取成功：必须拒绝未经授权的操作。",
+            resultDisposition: .completed
+        )
+        let rejectedCall = InternalToolCall(
+            id: "denied-call",
+            toolName: "dangerous_tool",
+            arguments: "{}",
+            result: "调用已被用户拒绝。",
+            resultDisposition: .rejected
+        )
+
+        #expect(!successfulRead.wasRejected)
+        #expect(rejectedCall.wasRejected)
+
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: JSONEncoder().encode(rejectedCall)
+        )
+        #expect(restored.resultDisposition == .rejected)
+        #expect(restored.wasRejected)
+    }
+
+    @Test("旧工具记录缺少结构化终态时保持可解码")
+    func decodesLegacyToolCallWithoutDisposition() throws {
+        let legacyJSON = #"{"id":"legacy","toolName":"read_file","arguments":"{}","result":"permission denied 示例"}"#
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: try #require(legacyJSON.data(using: .utf8))
+        )
+
+        #expect(restored.resultDisposition == nil)
+        #expect(!restored.wasRejected)
+    }
+
     @Test("聊天缩略图默认显示 Agent 工具，并能修复未知配置值")
     func normalizesPreviewMode() {
         #expect(LocalLinuxChatPreviewMode.defaultMode == .agentTools)
