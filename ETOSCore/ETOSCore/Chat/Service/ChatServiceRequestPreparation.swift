@@ -228,12 +228,23 @@ extension ChatService {
     func limitedChatHistory(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {
         guard maxMessages > 0, messages.count > maxMessages else { return messages }
 
-        let suffix = Array(messages.suffix(maxMessages))
-        guard let firstUserIndex = suffix.firstIndex(where: { $0.role == .user }) else {
-            return suffix
-        }
+        let turns = ChatConversationTurnSupport.turns(in: messages)
+        guard !turns.isEmpty else { return Array(messages.suffix(maxMessages)) }
 
-        return Array(suffix[firstUserIndex...])
+        var retainedCount = 0
+        var retainedStart = messages.endIndex
+        for turn in turns.reversed() {
+            let turnCount = turn.range.count
+            if retainedCount > 0, retainedCount + turnCount > maxMessages {
+                break
+            }
+            retainedStart = turn.range.lowerBound
+            retainedCount += turnCount
+            if retainedCount >= maxMessages {
+                break
+            }
+        }
+        return Array(messages[retainedStart...])
     }
 
     func responseAttemptMetadata(from message: ChatMessage) -> ResponseAttemptMetadata? {
@@ -285,106 +296,6 @@ extension ChatService {
 
         updatedMessages.insert(contentsOf: additions, at: insertionIndex)
         return updatedMessages
-    }
-
-    func responseRoundEndIndex(in messages: [ChatMessage], anchorUserIndex: Int) -> Int {
-        guard anchorUserIndex + 1 < messages.count else { return messages.count }
-        return messages[(anchorUserIndex + 1)...].firstIndex(where: { $0.role == .user }) ?? messages.count
-    }
-
-    func prepareRetryAttemptMetadata(
-        in messages: inout [ChatMessage],
-        anchorUserIndex: Int
-    ) -> ResponseAttemptMetadata {
-        let groupID = messages[anchorUserIndex].id
-        let roundEndIndex = responseRoundEndIndex(in: messages, anchorUserIndex: anchorUserIndex)
-        let roundRange = messages.index(after: anchorUserIndex)..<roundEndIndex
-        let existingAttemptIDs = ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages)
-
-        if existingAttemptIDs.isEmpty, !roundRange.isEmpty {
-            let legacyAttemptID = UUID()
-            for index in roundRange where messages[index].role != .user {
-                messages[index].responseGroupID = groupID
-                messages[index].responseAttemptID = legacyAttemptID
-                messages[index].responseAttemptIndex = 0
-            }
-            messages[anchorUserIndex].selectedResponseAttemptID = legacyAttemptID
-        } else if messages[anchorUserIndex].selectedResponseAttemptID == nil {
-            messages[anchorUserIndex].selectedResponseAttemptID = existingAttemptIDs.last
-        }
-
-        let nextAttemptIndex = messages[roundRange]
-            .compactMap(\.responseAttemptIndex)
-            .max()
-            .map { $0 + 1 } ?? (existingAttemptIDs.isEmpty ? 0 : existingAttemptIDs.count)
-        let newAttempt = ResponseAttemptMetadata(
-            groupID: groupID,
-            attemptID: UUID(),
-            attemptIndex: nextAttemptIndex
-        )
-        messages[anchorUserIndex].selectedResponseAttemptID = newAttempt.attemptID
-        return newAttempt
-    }
-
-    func isTailContinuationRetryTarget(_ message: ChatMessage, in messages: [ChatMessage]) -> Bool {
-        guard message.role == .error else { return false }
-        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
-        guard let visibleIndex = visibleMessages.firstIndex(where: { $0.id == message.id }) else { return false }
-        let precedingMessages = visibleMessages[..<visibleIndex]
-        guard precedingMessages.last(where: { $0.role != .system })?.role == .tool else {
-            return false
-        }
-        let trailingMessages = visibleMessages[visibleMessages.index(after: visibleIndex)...]
-        return !trailingMessages.contains { trailingMessage in
-            switch trailingMessage.role {
-            case .user, .assistant, .tool, .error:
-                return true
-            case .system:
-                return false
-            }
-        }
-    }
-
-    func continuationAttemptMetadata(
-        for message: ChatMessage,
-        in messages: [ChatMessage],
-        anchorUserIndex: Int,
-        targetIndex: Int
-    ) -> ResponseAttemptMetadata? {
-        if let metadata = responseAttemptMetadata(from: message) {
-            return metadata
-        }
-
-        let anchorUser = messages[anchorUserIndex]
-        if let selectedAttemptID = anchorUser.selectedResponseAttemptID {
-            let attemptIndex = messages
-                .filter { $0.responseGroupID == anchorUser.id && $0.responseAttemptID == selectedAttemptID }
-                .compactMap(\.responseAttemptIndex)
-                .min() ?? 0
-            return ResponseAttemptMetadata(
-                groupID: anchorUser.id,
-                attemptID: selectedAttemptID,
-                attemptIndex: attemptIndex
-            )
-        }
-
-        guard targetIndex > anchorUserIndex else { return nil }
-        return messages[anchorUserIndex...targetIndex]
-            .reversed()
-            .compactMap { responseAttemptMetadata(from: $0) }
-            .first
-    }
-
-    func continuationInsertionIndex(
-        in messages: [ChatMessage],
-        referenceIndex: Int,
-        metadata: ResponseAttemptMetadata?
-    ) -> Int {
-        if let attemptID = metadata?.attemptID,
-           let lastAttemptIndex = messages.lastIndex(where: { $0.responseAttemptID == attemptID }) {
-            return messages.index(after: lastAttemptIndex)
-        }
-        return messages.index(after: referenceIndex)
     }
 
     func normalizedMessagesForToolCallChain(_ source: [ChatMessage]) -> [ChatMessage] {

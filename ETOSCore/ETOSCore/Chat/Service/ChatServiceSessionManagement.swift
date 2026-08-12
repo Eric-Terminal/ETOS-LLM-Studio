@@ -523,13 +523,15 @@ extension ChatService {
         var messages = messagesForSessionSubject.value
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
-        let relatedToolMessageIDs = relatedToolResultMessageIDs(for: targetMessage, at: messageIndex, in: messages)
-        let deletedMessageIDs = Set([targetMessage.id]).union(relatedToolMessageIDs)
-        let deletedMessages = messages.filter { deletedMessageIDs.contains($0.id) }
+        let deletedMessages = [targetMessage]
         for deletedMessage in deletedMessages {
             invalidateAttachmentCache(for: deletedMessage)
         }
-        messages.removeAll { deletedMessageIDs.contains($0.id) }
+        reanchorResponseGroupsAfterDeletingUsers(
+            in: &messages,
+            deletingMessageIDs: [targetMessage.id]
+        )
+        messages.remove(at: messageIndex)
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
         publishMessages(messages)
@@ -553,6 +555,10 @@ extension ChatService {
         for deletedMessage in deletedMessages {
             invalidateAttachmentCache(for: deletedMessage)
         }
+        reanchorResponseGroupsAfterDeletingUsers(
+            in: &messages,
+            deletingMessageIDs: messageIDs
+        )
         messages.removeAll { messageIDs.contains($0.id) }
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
@@ -572,8 +578,9 @@ extension ChatService {
         guard let messageIndex = messages.firstIndex(where: { $0.id == message.id }) else { return }
         let targetMessage = messages[messageIndex]
 
-        if let groupID = targetMessage.responseGroupID,
-           targetMessage.responseAttemptID != nil,
+        if let groupID = ChatResponseAttemptSupport
+            .versionInfo(for: targetMessage, in: messages)?
+            .responseGroupID,
            ChatResponseAttemptSupport.orderedAttemptIDs(for: groupID, in: messages).count > 1 {
             let deletedMessages = messages.filter { $0.responseGroupID == groupID }
             guard !deletedMessages.isEmpty else { return }
@@ -614,7 +621,10 @@ extension ChatService {
         guard let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
         guard let index = messages.firstIndex(where: { $0.id == updatedMessage.id }) else { return }
-        messages[index] = updatedMessage
+        messages.replaceSubrange(
+            index...index,
+            with: ChatMessageAtomicContentSupport.atomized(updatedMessage)
+        )
         publishMessages(messages)
         persistMessages(messages, for: currentSession.id)
         logger.info("已更新消息: \(updatedMessage.id.uuidString)")
@@ -651,37 +661,35 @@ extension ChatService {
         logger.info("已强制保存所有会话。")
     }
 
-    private func relatedToolResultMessageIDs(for message: ChatMessage, at messageIndex: Int, in messages: [ChatMessage]) -> Set<UUID> {
-        guard message.role == .assistant,
-              let toolCalls = message.toolCalls,
-              !toolCalls.isEmpty else {
-            return []
-        }
-
-        let toolCallIDs = Set(toolCalls.map(\.id))
-        var relatedIDs = Set<UUID>()
-        var cursor = messages.index(after: messageIndex)
-        while cursor < messages.endIndex {
-            let candidate = messages[cursor]
-            guard candidate.role == .tool else { break }
-            if isSameResponseAttempt(candidate, message),
-               let candidateToolCalls = candidate.toolCalls,
-               candidateToolCalls.contains(where: { toolCallIDs.contains($0.id) }) {
-                relatedIDs.insert(candidate.id)
+    /// 一次发送的最后一条 user 消息是回复组锚点。删除它时，将版本组迁移到同次输入中剩余的最后一条消息。
+    private func reanchorResponseGroupsAfterDeletingUsers(
+        in messages: inout [ChatMessage],
+        deletingMessageIDs: Set<UUID>
+    ) {
+        let visibleMessages = ChatResponseAttemptSupport.visibleMessages(from: messages)
+        for turn in ChatConversationTurnSupport.turns(in: visibleMessages) {
+            guard let userRange = turn.userRange else { continue }
+            let oldAnchorID = visibleMessages[userRange.index(before: userRange.endIndex)].id
+            guard deletingMessageIDs.contains(oldAnchorID),
+                  let newAnchorID = visibleMessages[userRange]
+                    .reversed()
+                    .first(where: { !deletingMessageIDs.contains($0.id) })?
+                    .id else {
+                continue
             }
-            cursor = messages.index(after: cursor)
-        }
-        return relatedIDs
-    }
 
-    private func isSameResponseAttempt(_ lhs: ChatMessage, _ rhs: ChatMessage) -> Bool {
-        switch (lhs.responseAttemptID, rhs.responseAttemptID) {
-        case let (lhsAttemptID?, rhsAttemptID?):
-            return lhsAttemptID == rhsAttemptID
-        case (nil, nil):
-            return true
-        default:
-            return false
+            let selectedAttemptID = ChatResponseAttemptSupport.selectedAttemptID(
+                for: oldAnchorID,
+                in: messages
+            )
+            for index in messages.indices {
+                if messages[index].responseGroupID == oldAnchorID {
+                    messages[index].responseGroupID = newAnchorID
+                }
+                if messages[index].id == newAnchorID {
+                    messages[index].selectedResponseAttemptID = selectedAttemptID
+                }
+            }
         }
     }
 

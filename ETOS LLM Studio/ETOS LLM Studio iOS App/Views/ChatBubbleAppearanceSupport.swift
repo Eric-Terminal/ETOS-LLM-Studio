@@ -628,7 +628,10 @@ extension ChatBubble {
     }
 
     static let imagePlaceholders: Set<String> = ["[图片]", "[圖片]", "[Image]", "[画像]", "[Imagen]", "[صورة]", "[Изображение]"]
-    static let filePlaceholders: Set<String> = ["[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]"]
+    static let filePlaceholders: Set<String> = [
+        "[文件]", "[檔案]", "[ファイル]", "[File]", "[Archivo]", "[Fichier]", "[ملف]", "[Файл]",
+        "[视频]", "[影片]", "[ビデオ]", "[Video]", "[Vídeo]", "[Vidéo]", "[فيديو]", "[Видео]"
+    ]
 
     var hasOnlyImages: Bool {
         guard let imageFileNames = message.imageFileNames, !imageFileNames.isEmpty else {

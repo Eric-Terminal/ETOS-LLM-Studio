@@ -173,10 +173,6 @@ public class ChatService {
     let ephemeralSessionLock = NSLock()
     /// 记录每个会话上一次注入周期性时间路标的时间，保证路标按周期出现且不会过于频繁。
     var periodicTimeLandmarkLastInjectedAtBySessionID: [UUID: Date] = [:]
-    /// 重试时要添加新版本的assistant消息ID（如果有）
-    var retryTargetMessageID: UUID?
-    /// 重试 assistant 时保留原始消息快照，便于失败或取消时恢复，避免把错误写入版本历史。
-    var retryTargetOriginalAssistantMessage: ChatMessage?
     var providers: [Provider]
     let localModelStore: LocalModelStore
     let startupTemporarySession: ChatSession
@@ -1043,14 +1039,8 @@ public class ChatService {
 
         if let loadingID = activeContext.loadingMessageID {
             await finalizeInterruptedReasoningMessageIfNeeded(loadingMessageID: loadingID, in: sessionID)
-            if await restoreRetryTargetMessageIfNeeded(loadingMessageID: loadingID, in: sessionID) {
-                logger.info("已恢复被取消重试的原始 assistant 消息: \(loadingID.uuidString)")
-            } else if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
+            if shouldRemoveLoadingMessageOnCancel(loadingMessageID: loadingID, in: sessionID) {
                 await removeMessage(withID: loadingID, in: sessionID)
-            }
-            if retryTargetMessageID == loadingID {
-                retryTargetMessageID = nil
-                retryTargetOriginalAssistantMessage = nil
             }
         }
 

@@ -138,8 +138,7 @@ extension ChatViewModel {
     }
 
     private func deleteResponseAttemptVersion(at index: Int, of message: ChatMessage) -> Bool {
-        guard let groupID = message.responseGroupID,
-              message.responseAttemptID != nil else {
+        guard let groupID = responseAttemptVersionInfo(for: message)?.responseGroupID else {
             return false
         }
 

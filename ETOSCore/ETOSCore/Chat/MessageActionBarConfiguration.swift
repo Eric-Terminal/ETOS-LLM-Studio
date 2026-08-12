@@ -209,9 +209,9 @@ public enum MessageActionBarAvailability {
 
         return Set(messages.compactMap { message in
             switch message.role {
-            case .user, .assistant, .error:
+            case .user, .assistant, .tool, .error:
                 return message.id
-            case .system, .tool:
+            case .system:
                 return nil
             @unknown default:
                 return nil

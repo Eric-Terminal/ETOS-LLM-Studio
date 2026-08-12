@@ -12,6 +12,145 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("轮内最终回复重试从该气泡前分叉并保留后续轮次")
+    func testRetryPlanForksBeforeSelectedFinalResponse() throws {
+        let user = ChatMessage(role: .user, content: "执行任务")
+        let call = InternalToolCall(
+            id: "call_1",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#,
+            result: "找到线索"
+        )
+        let toolCallingAssistant = ChatMessage(role: .assistant, content: "", toolCalls: [call])
+        let toolResult = ChatMessage(role: .tool, content: "找到线索", toolCalls: [call])
+        let finalResponse = ChatMessage(role: .assistant, content: "旧结论")
+        let nextUser = ChatMessage(role: .user, content: "下一轮")
+        let nextResponse = ChatMessage(role: .assistant, content: "下一轮回答")
+        let source = [user, toolCallingAssistant, toolResult, finalResponse, nextUser, nextResponse]
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(targetMessage: finalResponse, in: source)
+        )
+        let visible = ChatResponseAttemptSupport.visibleMessages(from: retry.storedMessages)
+
+        #expect(retry.createsNewVersion)
+        #expect(retry.requestMessages.map(\.content) == ["执行任务", "", "找到线索", ""])
+        #expect(visible.map(\.content) == ["执行任务", "", "找到线索", "", "下一轮", "下一轮回答"])
+        #expect(ChatResponseAttemptSupport.orderedAttemptIDs(for: user.id, in: retry.storedMessages).count == 2)
+    }
+
+    @Test("含工具调用的中间气泡重试从工具结果之后继续生成")
+    func testRetryPlanIncludesSelectedToolCallAndResult() throws {
+        let user = ChatMessage(role: .user, content: "执行任务")
+        let call = InternalToolCall(
+            id: "call_1",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#,
+            result: "找到线索"
+        )
+        let toolCallingAssistant = ChatMessage(role: .assistant, content: "", toolCalls: [call])
+        let toolResult = ChatMessage(role: .tool, content: "找到线索", toolCalls: [call])
+        let oldFinalResponse = ChatMessage(role: .assistant, content: "旧结论")
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(
+                targetMessage: toolCallingAssistant,
+                in: [user, toolCallingAssistant, toolResult, oldFinalResponse]
+            )
+        )
+
+        #expect(retry.createsNewVersion)
+        #expect(retry.requestMessages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(retry.requestMessages.map(\.content) == ["执行任务", "", "找到线索", ""])
+        #expect(retry.pendingToolCallMessageID == nil)
+    }
+
+    @Test("轮尾损坏工具调用原地续接且不创建新版本")
+    func testRetryPlanResumesBrokenTailToolCallWithoutForking() throws {
+        let user = ChatMessage(role: .user, content: "执行任务")
+        let brokenCall = InternalToolCall(
+            id: "call_broken",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#
+        )
+        let brokenAssistant = ChatMessage(role: .assistant, content: "", toolCalls: [brokenCall])
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(
+                targetMessage: brokenAssistant,
+                in: [user, brokenAssistant]
+            )
+        )
+
+        #expect(!retry.createsNewVersion)
+        #expect(retry.pendingToolCallMessageID == brokenAssistant.id)
+        #expect(retry.requestMessages.map(\.id).contains(brokenAssistant.id))
+        #expect(ChatResponseAttemptSupport.orderedAttemptIDs(for: user.id, in: retry.storedMessages).count == 1)
+    }
+
+    @Test("轮尾已有工具结果时从结果后原地续写")
+    func testRetryPlanContinuesAfterCompletedTailToolResultWithoutForking() throws {
+        let user = ChatMessage(role: .user, content: "执行任务")
+        let completedCall = InternalToolCall(
+            id: "call_completed",
+            toolName: "search_memory",
+            arguments: #"{"mode":"keyword","query":"线索"}"#,
+            result: "找到线索"
+        )
+        let assistant = ChatMessage(role: .assistant, content: "", toolCalls: [completedCall])
+        let toolResult = ChatMessage(
+            role: .tool,
+            content: "找到线索",
+            toolCalls: [completedCall]
+        )
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(
+                targetMessage: toolResult,
+                in: [user, assistant, toolResult]
+            )
+        )
+
+        #expect(!retry.createsNewVersion)
+        #expect(retry.pendingToolCallMessageID == nil)
+        #expect(retry.requestMessages.map(\.role) == [.user, .assistant, .tool, .assistant])
+        #expect(ChatResponseAttemptSupport.orderedAttemptIDs(for: user.id, in: retry.storedMessages).count == 1)
+    }
+
+    @Test("连续用户附件重试会发送同一轮的全部用户原子消息")
+    func testRetryPlanKeepsConsecutiveUserInputAtomsTogether() throws {
+        let firstImage = ChatMessage(role: .user, content: "[图片]", imageFileNames: ["a.jpg"])
+        let secondImage = ChatMessage(role: .user, content: "[图片]", imageFileNames: ["b.jpg"])
+        let text = ChatMessage(role: .user, content: "比较两张图")
+        let response = ChatMessage(role: .assistant, content: "旧回答")
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(
+                targetMessage: secondImage,
+                in: [firstImage, secondImage, text, response]
+            )
+        )
+
+        #expect(Array(retry.requestMessages.map(\.id).prefix(3)) == [firstImage.id, secondImage.id, text.id])
+        #expect(retry.requestMessages.last?.role == .assistant)
+    }
+
+    @Test("历史消息上限不会拆开同一次发送的连续用户原子消息")
+    func testHistoryLimitKeepsLatestMultiPartUserTurnIntact() {
+        let oldUser = ChatMessage(role: .user, content: "旧问题")
+        let oldResponse = ChatMessage(role: .assistant, content: "旧回答")
+        let firstImage = ChatMessage(role: .user, content: "[图片]", imageFileNames: ["a.jpg"])
+        let secondImage = ChatMessage(role: .user, content: "[图片]", imageFileNames: ["b.jpg"])
+        let text = ChatMessage(role: .user, content: "比较两张图")
+
+        let limited = chatService.limitedChatHistory(
+            [oldUser, oldResponse, firstImage, secondImage, text],
+            maxMessages: 2
+        )
+
+        #expect(limited.map(\.id) == [firstImage.id, secondImage.id, text.id])
+    }
+
     @Test("Update Message Content")
     func testUpdateMessageContent() {
         let session = chatService.currentSessionSubject.value!

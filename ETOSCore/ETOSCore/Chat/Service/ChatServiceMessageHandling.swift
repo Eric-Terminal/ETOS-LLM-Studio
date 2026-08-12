@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 负责 ChatService 的消息写入、更新、转写回填、取消恢复与重试状态维护。
+// 负责 ChatService 的消息写入、更新、转写回填与回复原子化。
 // ============================================================================
 
 import Foundation
@@ -33,12 +33,6 @@ extension ChatService {
             // 优先使用当前请求记录的 loading 消息，避免误命中历史中的空 assistant（例如工具调用占位消息）。
             if let loadingMessageID = loadingMessageID(for: resolvedSessionID),
                let index = messages.firstIndex(where: { $0.id == loadingMessageID && $0.role == .assistant }) {
-                return index
-            }
-
-            // 兼容重试场景：当 retryTargetMessageID 仍存在时，优先定位该消息。
-            if let targetID = retryTargetMessageID,
-               let index = messages.firstIndex(where: { $0.id == targetID && $0.role == .assistant }) {
                 return index
             }
 
@@ -86,67 +80,7 @@ extension ChatService {
             let loadingAttemptMetadata = responseAttemptMetadata(from: loadingMessage)
             let shouldPreserveLoadingMessage = messageHasDisplayablePayload(loadingMessage)
 
-            // 检查是否在重试 assistant 场景（有保留的旧 assistant）
-            if let targetID = retryTargetMessageID,
-               loadingMessage.id == targetID {
-                if shouldPreserveLoadingMessage {
-                    messages.insert(
-                        makeErrorMessage(
-                            loadingMessage.requestedAt,
-                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
-                            metadata: loadingAttemptMetadata
-                        ),
-                        at: loadingIndex + 1
-                    )
-                } else if let originalAssistant = retryTargetOriginalAssistantMessage {
-                    messages[loadingIndex] = originalAssistant
-                    messages.insert(
-                        makeErrorMessage(
-                            loadingMessage.requestedAt,
-                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
-                            metadata: loadingAttemptMetadata
-                        ),
-                        at: loadingIndex + 1
-                    )
-                } else if shouldPreserveLoadingMessage {
-                    messages.insert(
-                        makeErrorMessage(
-                            loadingMessage.requestedAt,
-                            NSLocalizedString("重试失败", comment: "Retry failed error message prefix"),
-                            metadata: loadingAttemptMetadata
-                        ),
-                        at: loadingIndex + 1
-                    )
-                } else {
-                    messages[loadingIndex] = ChatMessage(
-                        id: loadingMessage.id,
-                        role: .error,
-                        content: String(
-                            format: NSLocalizedString("重试失败\n\n%@", comment: "Retry failed full error content"),
-                            formattedContent
-                        ),
-                        requestedAt: loadingMessage.requestedAt,
-                        modelReference: loadingMessage.modelReference,
-                        costEstimate: loadingMessage.costEstimate,
-                        fullErrorContent: fullContent.map {
-                            String(
-                                format: NSLocalizedString("重试失败\n\n%@", comment: "Retry failed full error content"),
-                                $0
-                            )
-                        },
-                        sentSystemPromptSnapshot: loadingMessage.sentSystemPromptSnapshot,
-                        responseGroupID: loadingMessage.responseGroupID,
-                        responseAttemptID: loadingMessage.responseAttemptID,
-                        responseAttemptIndex: loadingMessage.responseAttemptIndex,
-                        selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID ?? loadingMessage.responseAttemptID
-                    )
-                }
-
-                retryTargetMessageID = nil
-                retryTargetOriginalAssistantMessage = nil
-                // 系统日志只记录状态，完整错误正文仅保留在应用内消息中。
-                logger.error("重试失败，已根据输出情况保留或恢复 assistant，并追加错误气泡。")
-            } else if shouldPreserveLoadingMessage {
+            if shouldPreserveLoadingMessage {
                 // 流式正文只存在于运行期快照时，它与 originalMessages 相等，但磁盘仍可能是空占位。
                 // 错误收尾必须强制落盘该助手消息，随后才能追加错误气泡。
                 forcedMutationMessageIDs.insert(loadingMessage.id)
@@ -175,6 +109,8 @@ extension ChatService {
             messages.append(makeErrorMessage(nil))
             logger.error("错误消息已添加。")
         }
+
+        messages = messages.flatMap(ChatMessageAtomicContentSupport.atomized)
 
         let mutations: [(message: ChatMessage, afterMessageID: UUID?)] = messages.indices.compactMap { index in
             let message = messages[index]
@@ -346,30 +282,6 @@ extension ChatService {
         }
     }
 
-    func restoreRetryTargetMessageIfNeeded(loadingMessageID: UUID, in sessionID: UUID) async -> Bool {
-        guard retryTargetMessageID == loadingMessageID,
-              let originalAssistant = retryTargetOriginalAssistantMessage else {
-            return false
-        }
-        guard let message = messagesSnapshot(for: sessionID).first(where: { $0.id == loadingMessageID }) else {
-            retryTargetMessageID = nil
-            retryTargetOriginalAssistantMessage = nil
-            return false
-        }
-        if messageHasDisplayablePayload(message) {
-            return false
-        }
-        do {
-            _ = try await upsertConversationMessage(originalAssistant, to: sessionID)
-        } catch {
-            logger.error("原子恢复重试消息失败：\(error.localizedDescription)")
-            return false
-        }
-        retryTargetMessageID = nil
-        retryTargetOriginalAssistantMessage = nil
-        return true
-    }
-
     func messageHasDisplayablePayload(_ message: ChatMessage) -> Bool {
         let hasContent = !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasReasoning = !(message.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -397,74 +309,8 @@ extension ChatService {
             : applyMessageRegexRules(to: newMessage, rules: messageRegexRules, mode: .persist)
         let messages = messagesSnapshot(for: sessionID)
 
-        // 检查是否是重试场景，需要添加新版本
-        if let targetID = retryTargetMessageID,
-           let targetIndex = messages.firstIndex(where: { $0.id == targetID }) {
-            // 找到目标assistant消息（此时它应该处于 loading 状态，已经有一个空版本）
-            var targetMessage = messages[targetIndex]
-
-            // 【重要】直接更新当前版本（即 loading 时添加的空版本），而不是再添加新版本
-            // 因为在 retryGenerating 中已经调用了 addVersion("") 创建了新版本
-            targetMessage.content = newMessage.content
-
-            // 如果有推理内容，也添加到新版本
-            if let newReasoning = newMessage.reasoningContent, !newReasoning.isEmpty {
-                targetMessage.reasoningContent = newReasoning
-            }
-            if let newReasoningFields = newMessage.reasoningProviderSpecificFields {
-                targetMessage.reasoningProviderSpecificFields = newReasoningFields
-            }
-            if let newProviderResponseMetadata = newMessage.providerResponseMetadata {
-                targetMessage.providerResponseMetadata = newProviderResponseMetadata
-            }
-            targetMessage.audioFileName = newMessage.audioFileName
-            targetMessage.imageFileNames = newMessage.imageFileNames
-            targetMessage.modelExcludedImageFileNames = newMessage.modelExcludedImageFileNames
-            targetMessage.fileFileNames = newMessage.fileFileNames
-
-            // 更新 token 使用情况
-            if let newUsage = newMessage.tokenUsage {
-                targetMessage.tokenUsage = newUsage
-            }
-            targetMessage.modelReference = newMessage.modelReference ?? targetMessage.modelReference
-            if newMessage.modelReference != nil {
-                targetMessage.costEstimate = newMessage.costEstimate
-            }
-
-            // 如果新消息有工具调用，也要更新
-            if let newToolCalls = newMessage.toolCalls {
-                targetMessage.toolCalls = newToolCalls
-            }
-            if let newPlacement = newMessage.toolCallsPlacement {
-                targetMessage.toolCallsPlacement = newPlacement
-            }
-            if let newMetrics = newMessage.responseMetrics {
-                targetMessage.responseMetrics = newMetrics
-            }
-            targetMessage.responseGroupID = newMessage.responseGroupID ?? targetMessage.responseGroupID
-            targetMessage.responseAttemptID = newMessage.responseAttemptID ?? targetMessage.responseAttemptID
-            targetMessage.responseAttemptIndex = newMessage.responseAttemptIndex ?? targetMessage.responseAttemptIndex
-
-            // 注意：这里不需要移除 loading message，因为 targetID 就是 loadingMessageID
-            // 我们已经在原位置更新了消息
-
-            // 清除重试标记
-            retryTargetMessageID = nil
-            retryTargetOriginalAssistantMessage = nil
-
-            do {
-                _ = try await upsertConversationMessage(
-                    targetMessage,
-                    to: sessionID,
-                    keepingSpeedSamplesFor: loadingMessageID
-                )
-            } catch {
-                logger.error("原子更新重试消息失败：\(error.localizedDescription)")
-            }
-
-            logger.info("已将新内容追加到消息历史: \(targetID)")
-        } else if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
-            // 正常流程：替换loading message
+        if let index = messages.firstIndex(where: { $0.id == loadingMessageID }) {
+            // 无论普通请求还是轮次重试，都只替换已预先放入正确位置的占位气泡。
             let preservedToolCalls = messages[index].toolCalls
             let mergedToolCalls: [InternalToolCall]? = {
                 if let newCalls = newMessage.toolCalls, !newCalls.isEmpty {
@@ -491,6 +337,7 @@ extension ChatService {
                 modelExcludedImageFileNames: newMessage.modelExcludedImageFileNames
                     ?? messages[index].modelExcludedImageFileNames,
                 fileFileNames: newMessage.fileFileNames ?? messages[index].fileFileNames,
+                videoAnalysisResults: newMessage.videoAnalysisResults ?? messages[index].videoAnalysisResults,
                 fullErrorContent: newMessage.fullErrorContent ?? messages[index].fullErrorContent,
                 sentSystemPromptSnapshot: newMessage.sentSystemPromptSnapshot ?? messages[index].sentSystemPromptSnapshot,
                 responseMetrics: newMessage.responseMetrics ?? messages[index].responseMetrics,
@@ -499,11 +346,14 @@ extension ChatService {
                 responseAttemptIndex: newMessage.responseAttemptIndex ?? messages[index].responseAttemptIndex,
                 selectedResponseAttemptID: newMessage.selectedResponseAttemptID ?? messages[index].selectedResponseAttemptID
             )
-            do {
-                _ = try await upsertConversationMessage(updatedMessage, to: sessionID)
-            } catch {
-                logger.error("原子更新回复消息失败：\(error.localizedDescription)")
-            }
+            let atomizedMessages = ChatMessageAtomicContentSupport.atomized(updatedMessage)
+            var updatedMessages = messages
+            updatedMessages.replaceSubrange(index...index, with: atomizedMessages)
+            persistAndPublishMessages(
+                updatedMessages,
+                for: sessionID,
+                keepingSpeedSamplesFor: loadingMessageID
+            )
         }
     }
 

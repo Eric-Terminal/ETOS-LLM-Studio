@@ -78,7 +78,10 @@ extension ChatViewModel {
         excludedImageFileNames.removeAll { $0 == fileName }
         updatedMessage.modelExcludedImageFileNames = excludedImageFileNames.isEmpty ? nil : excludedImageFileNames
 
-        let hasRemainingPayload = !updatedMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasRemainingPayload = (
+            !updatedMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !ChatMessageAtomicContentSupport.isAttachmentPlaceholder(updatedMessage.content)
+        )
             || !(updatedMessage.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !(updatedMessage.toolCalls ?? []).isEmpty
             || !(updatedMessage.imageFileNames ?? []).isEmpty

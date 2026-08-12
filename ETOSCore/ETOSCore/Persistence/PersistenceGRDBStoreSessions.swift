@@ -480,7 +480,10 @@ extension PersistenceGRDBStore {
             let records = try dbPool.read { db in
                 try Self.fetchPersistedChatMessageReadRecords(db, sessionID: sessionID)
             }
-            return decodePersistedChatMessages(records)
+            return atomizePersistedMessagesIfNeeded(
+                decodePersistedChatMessages(records),
+                sessionID: sessionID
+            )
         } catch {
             logger.error("读取会话消息失败 \(sessionID.uuidString): \(error.localizedDescription)")
             return []
@@ -493,11 +496,29 @@ extension PersistenceGRDBStore {
             let records = try await dbPool.read { db in
                 try Self.fetchPersistedChatMessageReadRecords(db, sessionID: sessionID)
             }
-            return decodePersistedChatMessages(records)
+            return atomizePersistedMessagesIfNeeded(
+                decodePersistedChatMessages(records),
+                sessionID: sessionID
+            )
         } catch {
             logger.error("异步读取会话消息失败 \(sessionID.uuidString): \(error.localizedDescription)")
             return []
         }
+    }
+
+    /// 旧记录允许正文与多份附件共用一条消息。首次读取时同步拆分并落库，
+    /// 确保随后删除任一附件只影响对应原子消息，且新生成的 UUID 保持稳定。
+    private func atomizePersistedMessagesIfNeeded(
+        _ messages: [ChatMessage],
+        sessionID: UUID
+    ) -> [ChatMessage] {
+        let atomizedMessages = messages.flatMap(ChatMessageAtomicContentSupport.atomized)
+        guard atomizedMessages != messages else { return messages }
+        saveMessagesIncrementally(atomizedMessages, for: sessionID)
+        WatchDatabaseSyncService.markDatabaseChanged(.chat)
+        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        logger.info("会话 \(sessionID.uuidString) 的复合消息已拆分为独立附件消息。")
+        return atomizedMessages
     }
 
     private static func fetchPersistedChatMessageReadRecords(

@@ -169,24 +169,6 @@ extension ChatService {
             .filter { $0.isVideo }
             .map { $0.fileName }
 
-        if !messageContent.isEmpty {
-            let textMessage = ChatMessage(
-                role: .user,
-                content: messageContent,
-                requestedAt: requestTimestamp,
-                audioFileName: nil,
-                fileFileNames: savedVideoFileNames.isEmpty
-                    ? nil
-                    : savedVideoFileNames,
-                authorKind: messageAuthorKind,
-                sourceSessionID: sourceSessionID,
-                sourceMessageID: sourceMessageID,
-                conversationEventID: conversationEventID
-            )
-            userMessages.append(textMessage)
-            primaryUserMessage = textMessage
-        }
-
         if let savedAudioFileName {
             userMessages.append(ChatMessage(
                 role: .user,
@@ -213,12 +195,12 @@ extension ChatService {
             ))
         }
 
-        if messageContent.isEmpty, !savedVideoFileNames.isEmpty {
+        for savedVideoFileName in savedVideoFileNames {
             userMessages.append(ChatMessage(
                 role: .user,
                 content: videoPlaceholder,
                 requestedAt: requestTimestamp,
-                fileFileNames: savedVideoFileNames,
+                fileFileNames: [savedVideoFileName],
                 authorKind: messageAuthorKind,
                 sourceSessionID: sourceSessionID,
                 sourceMessageID: sourceMessageID,
@@ -239,8 +221,23 @@ extension ChatService {
             ))
         }
 
+        if !messageContent.isEmpty {
+            let textMessage = ChatMessage(
+                role: .user,
+                content: messageContent,
+                requestedAt: requestTimestamp,
+                authorKind: messageAuthorKind,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID,
+                conversationEventID: conversationEventID
+            )
+            userMessages.append(textMessage)
+            primaryUserMessage = textMessage
+        }
+
         if let existingInputMessageID {
-            guard let existingMessage = messagesSnapshot(for: currentSession.id).first(where: {
+            let existingMessages = messagesSnapshot(for: currentSession.id)
+            guard let existingMessage = existingMessages.first(where: {
                 $0.id == existingInputMessageID && $0.role == .user
             }) else {
                 addErrorMessage(
@@ -250,7 +247,15 @@ extension ChatService {
                 requestStatusSubject.send(.error)
                 return
             }
-            userMessages = [existingMessage]
+            // steering 输入的文本和附件共用同一事件 ID，延后执行时也必须保留整个原子消息序列。
+            if let eventID = existingMessage.conversationEventID {
+                let eventMessages = existingMessages.filter {
+                    $0.role == .user && $0.conversationEventID == eventID
+                }
+                userMessages = eventMessages.isEmpty ? [existingMessage] : eventMessages
+            } else {
+                userMessages = [existingMessage]
+            }
             primaryUserMessage = existingMessage
         }
 

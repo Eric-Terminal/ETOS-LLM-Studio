@@ -272,7 +272,7 @@ struct ChatBubble: View {
             ChatBubbleOpenMoreGestureModifier(
                 isSelectionMode: isSelectionMode,
                 onToggleSelection: onToggleSelection,
-                onOpenMore: nil
+                onOpenMore: hasOnlyImages || hasOnlyFiles ? openMoreAction : nil
             )
         )
         .fullScreenCover(item: $imagePreview, onDismiss: {

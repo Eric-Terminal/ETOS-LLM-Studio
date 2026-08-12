@@ -69,10 +69,13 @@ public enum ChatQuickRetrySupport {
         case .error:
             return true
         case .assistant:
-            return isAbnormalStoppedAssistantMessage(latestMessage)
+            return !(latestMessage.toolCalls ?? []).isEmpty
+                || isAbnormalStoppedAssistantMessage(latestMessage)
         case .user:
             return true
-        case .system, .tool:
+        case .tool:
+            return true
+        case .system:
             return false
         }
     }
@@ -147,32 +150,25 @@ public enum ChatResponseAttemptSupport {
     }
 
     public static func versionInfo(for message: ChatMessage, in messages: [ChatMessage]) -> ChatResponseAttemptVersionInfo? {
-        guard canCarryResponseAttemptVersionInfo(message),
-              let groupID = message.responseGroupID,
-              let attemptID = message.responseAttemptID else {
+        guard let groupID = responseGroupID(for: message, in: messages) else {
             return nil
         }
 
         let attempts = orderedAttemptIDs(for: groupID, in: messages)
         guard attempts.count > 1,
-              let currentIndex = attempts.firstIndex(of: attemptID) else {
+              let selectedAttemptID = selectedAttemptIDsByGroup(in: messages)[groupID],
+              let currentIndex = attempts.firstIndex(of: selectedAttemptID) else {
             return nil
         }
 
-        if let selectedAttemptID = selectedAttemptIDsByGroup(in: messages)[groupID],
-           selectedAttemptID != attemptID {
+        if let messageAttemptID = message.responseAttemptID,
+           messageAttemptID != selectedAttemptID {
             return nil
         }
-
-        let visibleAttemptMessages = messages.filter {
-            $0.responseGroupID == groupID && $0.responseAttemptID == attemptID
-        }
-        let lastCarrierID = visibleAttemptMessages.last(where: canCarryResponseAttemptVersionInfo)?.id
-        guard lastCarrierID == message.id else { return nil }
 
         return ChatResponseAttemptVersionInfo(
             responseGroupID: groupID,
-            currentAttemptID: attemptID,
+            currentAttemptID: selectedAttemptID,
             currentIndex: currentIndex,
             totalCount: attempts.count
         )
@@ -344,13 +340,20 @@ public enum ChatResponseAttemptSupport {
         }
     }
 
-    private static func canCarryResponseAttemptVersionInfo(_ message: ChatMessage) -> Bool {
-        switch message.role {
-        case .assistant, .tool, .system, .error:
-            return true
-        case .user:
-            return false
+    private static func responseGroupID(for message: ChatMessage, in messages: [ChatMessage]) -> UUID? {
+        if let responseGroupID = message.responseGroupID {
+            return responseGroupID
         }
+
+        let visibleMessages = visibleMessages(from: messages)
+        guard let turn = ChatConversationTurnSupport.turn(
+            containingMessageID: message.id,
+            in: visibleMessages
+        ),
+        let anchorIndex = turn.responseGroupAnchorIndex else {
+            return nil
+        }
+        return visibleMessages[anchorIndex].id
     }
 }
 

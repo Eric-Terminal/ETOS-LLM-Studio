@@ -428,6 +428,7 @@ extension ChatServiceTests {
         let afterDeletingAssistant = chatService.messagesForSessionSubject.value
         #expect(afterDeletingAssistant.map(\.id) == [
             userMessage.id,
+            toolResult.id,
             finalAssistant.id
         ])
         #expect(afterDeletingAssistant.first?.selectedResponseAttemptID == attemptID)
@@ -534,6 +535,56 @@ extension ChatServiceTests {
                 .filter { $0.responseGroupID == userMessage.id }
                 .allSatisfy { $0.selectedResponseAttemptID == firstAttemptID }
         )
+
+        await cleanup()
+    }
+
+    @Test("删除多附件输入的锚点后版本组迁移到剩余用户气泡")
+    func testDeleteMultipartUserAnchorReanchorsResponseAttempts() async throws {
+        await cleanup()
+
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let firstAttemptID = UUID()
+        let secondAttemptID = UUID()
+        let imageMessage = ChatMessage(
+            role: .user,
+            content: "[图片]",
+            imageFileNames: ["reference.png"]
+        )
+        let textMessage = ChatMessage(
+            role: .user,
+            content: "请分析",
+            selectedResponseAttemptID: secondAttemptID
+        )
+        let firstResponse = ChatMessage(
+            role: .assistant,
+            content: "第一版",
+            responseGroupID: textMessage.id,
+            responseAttemptID: firstAttemptID,
+            responseAttemptIndex: 0
+        )
+        let secondResponse = ChatMessage(
+            role: .assistant,
+            content: "第二版",
+            responseGroupID: textMessage.id,
+            responseAttemptID: secondAttemptID,
+            responseAttemptIndex: 1,
+            selectedResponseAttemptID: secondAttemptID
+        )
+        chatService.updateMessages(
+            [imageMessage, textMessage, firstResponse, secondResponse],
+            for: sessionID
+        )
+
+        chatService.deleteMessage(textMessage)
+
+        let messages = chatService.messagesForSessionSubject.value
+        #expect(messages.first?.id == imageMessage.id)
+        #expect(messages.dropFirst().allSatisfy { $0.responseGroupID == imageMessage.id })
+        let versionInfo = try #require(
+            ChatResponseAttemptSupport.versionInfo(for: imageMessage, in: messages)
+        )
+        #expect(versionInfo.currentAttemptID == secondAttemptID)
 
         await cleanup()
     }

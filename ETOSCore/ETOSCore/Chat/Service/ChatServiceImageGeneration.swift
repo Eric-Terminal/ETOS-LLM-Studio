@@ -134,20 +134,41 @@ extension ChatService {
             }
         }
 
-        let userMessage = ChatMessage(
+        let requestedAt = Date()
+        var userMessages = savedImageFileNames.map { fileName in
+            ChatMessage(
+                role: .user,
+                content: NSLocalizedString("[图片]", comment: "Image message placeholder"),
+                requestedAt: requestedAt,
+                imageFileNames: [fileName]
+            )
+        }
+        var userMessage = ChatMessage(
             role: .user,
             content: trimmedPrompt,
-            requestedAt: Date(),
-            imageFileNames: savedImageFileNames.isEmpty ? nil : savedImageFileNames
+            requestedAt: requestedAt
         )
+        let responseAttempt = ResponseAttemptMetadata(
+            groupID: userMessage.id,
+            attemptID: UUID(),
+            attemptIndex: 0
+        )
+        userMessage.selectedResponseAttemptID = responseAttempt.attemptID
+        userMessages.append(userMessage)
         let loadingMessage = ChatMessage(
             role: .assistant,
             content: "",
-            requestedAt: Date()
+            requestedAt: requestedAt,
+            responseGroupID: responseAttempt.groupID,
+            responseAttemptID: responseAttempt.attemptID,
+            responseAttemptIndex: responseAttempt.attemptIndex,
+            selectedResponseAttemptID: responseAttempt.attemptID
         )
 
         do {
-            _ = try await appendConversationMessage(userMessage, to: currentSession.id)
+            for message in userMessages {
+                _ = try await appendConversationMessage(message, to: currentSession.id)
+            }
             _ = try await appendConversationMessage(loadingMessage, to: currentSession.id)
         } catch {
             addErrorMessage(
@@ -438,15 +459,22 @@ extension ChatService {
                     id: loadingMessage.id,
                     role: .assistant,
                     content: content,
-                    imageFileNames: generatedImageFileNames
+                    requestedAt: loadingMessage.requestedAt,
+                    providerResponseMetadata: loadingMessage.providerResponseMetadata,
+                    imageFileNames: generatedImageFileNames,
+                    responseGroupID: loadingMessage.responseGroupID,
+                    responseAttemptID: loadingMessage.responseAttemptID,
+                    responseAttemptIndex: loadingMessage.responseAttemptIndex,
+                    selectedResponseAttemptID: loadingMessage.selectedResponseAttemptID
                 )
-                do {
-                    _ = try await upsertConversationMessage(completedMessage, to: currentSessionID)
+                let atomizedMessages = ChatMessageAtomicContentSupport.atomized(completedMessage)
+                var updatedMessages = messagesSnapshot(for: currentSessionID)
+                if let loadingIndex = updatedMessages.firstIndex(where: { $0.id == loadingMessageID }) {
+                    updatedMessages.replaceSubrange(loadingIndex...loadingIndex, with: atomizedMessages)
+                    persistAndPublishMessages(updatedMessages, for: currentSessionID)
                     logger.info(
                         "生图消息已落盘: session=\(currentSessionID.uuidString), loadingMessageID=\(loadingMessageID.uuidString), imageCount=\(generatedImageFileNames.count)"
                     )
-                } catch {
-                    logger.error("原子保存生图消息失败：\(error.localizedDescription)")
                 }
             } else {
                 logger.warning("未找到生图占位消息，无法替换: loadingMessageID=\(loadingMessageID.uuidString)")
