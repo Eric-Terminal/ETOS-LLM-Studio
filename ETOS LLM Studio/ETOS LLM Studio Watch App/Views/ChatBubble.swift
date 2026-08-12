@@ -477,8 +477,7 @@ struct ChatBubble: View {
     @ViewBuilder
     private var separatedAssistantBubbles: some View {
         let hasReasoning = message.reasoningContent != nil && !((message.reasoningContent ?? "").isEmpty)
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-        let isErrorVersion = message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")
+        let isErrorVersion = message.role == .error
         let toolCalls = message.toolCalls ?? []
         let hasMainBubble = hasMainContentWhenToolCallsSeparated
         let totalBubbleCount = toolCalls.count + (hasMainBubble ? 1 : 0)
@@ -551,8 +550,7 @@ struct ChatBubble: View {
             .contentShape(Rectangle())
         } else {
             let hasReasoning = message.reasoningContent != nil && !message.reasoningContent!.isEmpty
-            let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-            let isErrorVersion = message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")
+            let isErrorVersion = message.role == .error
             let toolCalls = message.toolCalls ?? []
             let reasoning = message.reasoningContent?.trimmingCharacters(in: .whitespacesAndNewlines)
             let canUseTimeline = shouldRenderReasoningToolTimeline

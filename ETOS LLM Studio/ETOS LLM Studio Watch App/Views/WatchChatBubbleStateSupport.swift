@@ -515,7 +515,8 @@ extension ChatBubble {
     var pendingToolCallForAutoPresentation: InternalToolCall? {
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return nil }
         return toolCalls.first { call in
-            activeToolPermissionRequest(for: call) != nil && !hasAutoOpenedPendingToolCall(call.id)
+            activeToolPermissionRequest(for: call) != nil
+                && !hasAutoOpenedPendingToolCall(pendingToolCallPresentationID(call.id))
         }
     }
 

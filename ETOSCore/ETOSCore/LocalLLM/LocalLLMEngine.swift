@@ -38,6 +38,7 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var samplerKinds: [LocalLLMSamplerKind]
     public var chatTemplateKwargs: [String: JSONValue]
     public var advancedArguments: String
+    public var toolCallIDScope: String
 
     public init(
         mmprojPath: String? = nil,
@@ -66,7 +67,8 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         imageMaxTokens: Int = LocalModelRecord.defaultImageMaxTokens,
         samplerKinds: [LocalLLMSamplerKind] = LocalLLMSamplerKind.defaultChain,
         chatTemplateKwargs: [String: JSONValue] = [:],
-        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments
+        advancedArguments: String = LocalModelRecord.defaultAdvancedArguments,
+        toolCallIDScope: String = UUID().uuidString
     ) {
         self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.kvCacheKey = kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -96,6 +98,8 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         self.samplerKinds = uniqueSamplerKinds.isEmpty ? LocalLLMSamplerKind.defaultChain : uniqueSamplerKinds
         self.chatTemplateKwargs = chatTemplateKwargs
         self.advancedArguments = advancedArguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedToolCallIDScope = toolCallIDScope.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.toolCallIDScope = normalizedToolCallIDScope.isEmpty ? UUID().uuidString : normalizedToolCallIDScope
     }
 }
 
@@ -492,7 +496,10 @@ private enum LocalLLMBridge {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
         }
-        return try parseChatResponseJSON(String(cString: outputPointer))
+        return try parseChatResponseJSON(
+            String(cString: outputPointer),
+            fallbackToolCallIDScope: options.toolCallIDScope
+        )
     }
 
     static func streamChat(
@@ -577,7 +584,10 @@ private enum LocalLLMBridge {
                 return
             }
 
-            let state = LocalLLMParsedStreamState(continuation: continuation)
+            let state = LocalLLMParsedStreamState(
+                continuation: continuation,
+                fallbackToolCallIDScope: options.toolCallIDScope
+            )
             continuation.onTermination = { @Sendable _ in
                 state.cancel()
             }
@@ -675,7 +685,10 @@ private enum LocalLLMBridge {
             let message = errorPointer.map { String(cString: $0) } ?? LocalLLMEngineError.backendUnavailable.localizedDescription
             throw LocalLLMEngineError.generationFailed(message)
         }
-        return try parseChatResponseJSON(String(cString: outputPointer))
+        return try parseChatResponseJSON(
+            String(cString: outputPointer),
+            fallbackToolCallIDScope: UUID().uuidString
+        )
     }
 
     static func embed(
@@ -804,7 +817,10 @@ private struct LocalLLMParsedChatMessage: Decodable {
     }
 }
 
-private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallParseResult {
+private func parseChatResponseJSON(
+    _ json: String,
+    fallbackToolCallIDScope: String
+) throws -> LocalLLMToolCallParseResult {
     guard let data = json.data(using: .utf8) else {
         throw LocalLLMEngineError.generationFailed(NSLocalizedString("本地模型结构化输出不是有效 UTF-8。", comment: "Local LLM structured output invalid UTF-8"))
     }
@@ -815,7 +831,7 @@ private func parseChatResponseJSON(_ json: String) throws -> LocalLLMToolCallPar
         guard !name.isEmpty else { return nil }
         let id = toolCall.id?.trimmingCharacters(in: .whitespacesAndNewlines)
         return InternalToolCall(
-            id: id?.isEmpty == false ? id! : "local_tool_\(index + 1)",
+            id: id?.isEmpty == false ? id! : "local-\(fallbackToolCallIDScope)-\(index + 1)",
             toolName: name,
             arguments: toolCall.function?.arguments ?? "{}"
         )
@@ -1222,9 +1238,14 @@ private final class LocalLLMStreamState: @unchecked Sendable {
 private final class LocalLLMParsedStreamState: @unchecked Sendable {
     private let continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation
     private let cancellationState = LocalLLMCancellationState()
+    private let fallbackToolCallIDScope: String
 
-    init(continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation) {
+    init(
+        continuation: AsyncThrowingStream<LocalLLMToolCallParseResult, Error>.Continuation,
+        fallbackToolCallIDScope: String
+    ) {
         self.continuation = continuation
+        self.fallbackToolCallIDScope = fallbackToolCallIDScope
     }
 
     func cancel() {
@@ -1239,7 +1260,12 @@ private final class LocalLLMParsedStreamState: @unchecked Sendable {
         guard !isCancelled() else { return false }
 
         do {
-            let result = continuation.yield(try parseChatResponseJSON(json))
+            let result = continuation.yield(
+                try parseChatResponseJSON(
+                    json,
+                    fallbackToolCallIDScope: fallbackToolCallIDScope
+                )
+            )
             switch result {
             case .terminated:
                 cancel()

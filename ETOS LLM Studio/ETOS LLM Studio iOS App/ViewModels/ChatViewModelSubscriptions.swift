@@ -297,6 +297,7 @@ extension ChatViewModel {
             .sink { [weak self] session in
                 guard let self else { return }
                 currentSession = session
+                refreshSessionScopedAppToolRequests()
                 imageGenerationFeedback = .idle
                 refreshCurrentSessionSendingState()
 #if canImport(UIKit)
@@ -359,6 +360,7 @@ extension ChatViewModel {
                 guard let self else { return }
                 self.runningSessionIDs = runningSessionIDs
                 refreshCurrentSessionSendingState()
+                flushPendingToolSupplementMessagesIfPossible()
                 if runningSessionIDs.isEmpty {
                     endBackgroundTaskIfNeeded()
                 } else {
@@ -473,18 +475,20 @@ extension ChatViewModel {
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .appToolFillUserInputRequested)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
-                guard let request = AppToolInputDraftRequest.decode(from: notification.userInfo) else { return }
-                self?.applyToolInputDraftRequest(request)
+                guard let self,
+                      let request = AppToolInputDraftRequest.decode(from: notification.userInfo),
+                      let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo) else { return }
+                receiveToolInputDraftRequest(request, receipt: receipt)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .appToolAskUserInputRequested)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
-                guard let request = AppToolAskUserInputRequest.decode(from: notification.userInfo) else { return }
-                self?.activeAskUserInputRequest = request
+                guard let self,
+                      let request = AppToolAskUserInputRequest.decode(from: notification.userInfo),
+                      let receipt = AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo) else { return }
+                receiveAskUserInputRequest(request, receipt: receipt)
             }
             .store(in: &cancellables)
 

@@ -242,7 +242,7 @@ extension ChatService {
                         }
                         let partialToolCalls: [InternalToolCall] = toolCallOrder.compactMap { orderIdx in
                             guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
-                            let id = builder.id ?? "tool-\(orderIdx)"
+                            let id = builder.id ?? "tool-\(loadingMessageID.uuidString)-\(orderIdx)"
                             let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
                             return InternalToolCall(
                                 id: id,
@@ -357,7 +357,7 @@ extension ChatService {
                             logger.error("流式响应中检测到未完成的工具调用 (index: \(orderIdx))，缺少名称。")
                             return nil
                         }
-                        let id = builder.id ?? "tool-\(orderIdx)"
+                        let id = builder.id ?? "tool-\(loadingMessageID.uuidString)-\(orderIdx)"
                         let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
                         return InternalToolCall(
                             id: id,

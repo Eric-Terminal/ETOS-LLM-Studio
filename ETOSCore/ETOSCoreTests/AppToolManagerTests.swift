@@ -10,7 +10,7 @@ import Testing
 import Foundation
 @testable import ETOSCore
 
-@Suite("拓展工具管理器测试")
+@Suite("拓展工具管理器测试", .serialized)
 struct AppToolManagerTests {
 
     @MainActor
@@ -477,12 +477,15 @@ struct AppToolManagerTests {
         )
 
         var latestRequest: AppToolAskUserInputRequest?
+        let sourceSessionID = UUID()
+        let sourceMessageID = UUID()
         let observer = NotificationCenter.default.addObserver(
             forName: .appToolAskUserInputRequested,
             object: nil,
             queue: nil
         ) { notification in
             latestRequest = AppToolAskUserInputRequest.decode(from: notification.userInfo)
+            AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo)?.claim(.displayed)
         }
         defer {
             NotificationCenter.default.removeObserver(observer)
@@ -508,7 +511,9 @@ struct AppToolManagerTests {
                 }
               ]
             }
-            """#
+            """#,
+            sourceSessionID: sourceSessionID,
+            sourceMessageID: sourceMessageID
         )
 
         #expect(latestRequest?.requestID == "clarify-user")
@@ -517,6 +522,117 @@ struct AppToolManagerTests {
         #expect(latestRequest?.questions.count == 1)
         #expect(latestRequest?.questions.first?.type == .multiSelect)
         #expect(latestRequest?.questions.first?.allowOther == true)
+        #expect(latestRequest?.sourceSessionID == sourceSessionID)
+        #expect(latestRequest?.sourceMessageID == sourceMessageID)
+    }
+
+    @MainActor
+    @Test("询问用户选项工具会唯一化重复问题 ID")
+    func testAskUserInputToolDeduplicatesQuestionIDs() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledKinds: [.askUserInput])
+
+        var latestRequest: AppToolAskUserInputRequest?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .appToolAskUserInputRequested,
+            object: nil,
+            queue: nil
+        ) { notification in
+            latestRequest = AppToolAskUserInputRequest.decode(from: notification.userInfo)
+            AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo)?.claim(.displayed)
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        _ = try await manager.executeToolFromChat(
+            toolName: AppToolKind.askUserInput.toolName,
+            argumentsJSON: #"{"questions":[{"id":"same","question":"第一题","type":"single_select","options":[{"id":"a","label":"A"}]},{"id":"same","question":"第二题","type":"single_select","options":[{"id":"b","label":"B"}]}]}"#,
+            sourceSessionID: UUID(),
+            sourceMessageID: UUID()
+        )
+
+        #expect(latestRequest?.questions.map(\.id) == ["same", "same_2"])
+    }
+
+    @MainActor
+    @Test("没有聊天界面消费时交互工具不会虚报成功")
+    func testAskUserInputToolRequiresConsumerReceipt() async {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledKinds: [.askUserInput])
+
+        do {
+            _ = try await manager.executeToolFromChat(
+                toolName: AppToolKind.askUserInput.toolName,
+                argumentsJSON: #"{"questions":[{"question":"确认？","type":"single_select","options":[{"label":"是"}]}]}"#,
+                sourceSessionID: UUID()
+            )
+            Issue.record("没有消费者时不应返回成功")
+        } catch AppToolExecutionError.uiRequestUnavailable {
+            // 预期路径。
+        } catch {
+            Issue.record("收到非预期错误：\(error.localizedDescription)")
+        }
+    }
+
+    @MainActor
+    @Test("填充输入工具携带来源并准确报告排队状态")
+    func testFillUserInputToolReportsQueuedDelivery() async throws {
+        let manager = AppToolManager.shared
+        let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalEnabledKinds = manager.enabledToolKinds
+        let originalApprovalPolicies = manager.configuredApprovalPoliciesByKind
+        defer {
+            manager.restoreStateForTests(
+                chatToolsEnabled: originalGlobalSwitch,
+                enabledKinds: originalEnabledKinds,
+                approvalPolicies: originalApprovalPolicies
+            )
+        }
+        manager.restoreStateForTests(chatToolsEnabled: true, enabledKinds: [.fillUserInput])
+
+        let sourceSessionID = UUID()
+        let sourceMessageID = UUID()
+        var latestRequest: AppToolInputDraftRequest?
+        let observer = NotificationCenter.default.addObserver(
+            forName: .appToolFillUserInputRequested,
+            object: nil,
+            queue: nil
+        ) { notification in
+            latestRequest = AppToolInputDraftRequest.decode(from: notification.userInfo)
+            AppToolUIRequestDeliveryReceipt.decode(from: notification.userInfo)?.claim(.queued)
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let result = try await manager.executeToolFromChat(
+            toolName: AppToolKind.fillUserInput.toolName,
+            argumentsJSON: #"{"text":"稍后填写","mode":"append"}"#,
+            sourceSessionID: sourceSessionID,
+            sourceMessageID: sourceMessageID
+        )
+
+        #expect(latestRequest?.sourceSessionID == sourceSessionID)
+        #expect(latestRequest?.sourceMessageID == sourceMessageID)
+        #expect(result.contains(#""applied" : false"#))
+        #expect(result.contains(#""queued" : true"#))
     }
 
     @Test("结构化问答策略：单选题输入自定义内容后会锁定选项")

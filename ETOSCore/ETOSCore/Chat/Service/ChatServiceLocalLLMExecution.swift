@@ -72,7 +72,8 @@ extension ChatService {
                     imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
-                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
+                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
+                    toolCallIDScope: loadingMessageID.uuidString
                 )
             )
             persistRequestLog(
@@ -204,7 +205,8 @@ extension ChatService {
                     imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
                     samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
                     chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
-                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments
+                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
+                    toolCallIDScope: loadingMessageID.uuidString
                 )
             )
 

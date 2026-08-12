@@ -124,7 +124,7 @@ extension ContentView {
         }
         .sheet(item: watchGlobalToolPermissionRequestBinding) { request in
             WatchGlobalToolPermissionView(request: request) { decision in
-                toolPermissionCenter.resolveActiveRequest(with: decision)
+                toolPermissionCenter.resolveRequest(withID: request.id, decision: decision)
             }
             .interactiveDismissDisabled(true)
             .appLockOverlayLayer()

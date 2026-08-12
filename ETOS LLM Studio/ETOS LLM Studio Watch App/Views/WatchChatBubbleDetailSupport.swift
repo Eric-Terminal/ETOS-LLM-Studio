@@ -114,6 +114,10 @@ extension ChatBubble {
               let request = toolPermissionCenter.activeRequest else {
             return nil
         }
+        if let sourceSessionID = request.sourceSessionID,
+           sourceSessionID != roleplaySessionID {
+            return nil
+        }
         if let toolCallID = request.toolCallID {
             return call.id == toolCallID ? request : nil
         }
@@ -121,6 +125,10 @@ extension ChatBubble {
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
         return isMatch ? request : nil
+    }
+
+    func pendingToolCallPresentationID(_ toolCallID: String) -> String {
+        "\(message.id.uuidString)#\(toolCallID)"
     }
 
     func resolvedToolResultText(for call: InternalToolCall) -> String {
@@ -169,7 +177,7 @@ extension ChatBubble {
         guard toolPermissionCenter.canAutoPresentRequestDetails else { return }
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
-        markPendingToolCallAutoOpened(pendingCall.id)
+        markPendingToolCallAutoOpened(pendingToolCallPresentationID(pendingCall.id))
         showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,
@@ -282,6 +290,7 @@ extension ChatBubble {
                             title: NSLocalizedString("允许一次", comment: ""),
                             systemImage: "checkmark.circle.fill",
                             tint: .green,
+                            requestID: permissionRequest.id,
                             decision: .allowOnce
                         )
                         toolPermissionDecisionButton(
@@ -289,24 +298,28 @@ extension ChatBubble {
                             systemImage: "xmark.circle.fill",
                             tint: .red,
                             role: .destructive,
+                            requestID: permissionRequest.id,
                             decision: .deny
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("补充提示", comment: ""),
                             systemImage: "text.badge.plus",
                             tint: .blue,
+                            requestID: permissionRequest.id,
                             decision: .supplement
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("保持允许", comment: ""),
                             systemImage: "checkmark.shield.fill",
                             tint: .teal,
+                            requestID: permissionRequest.id,
                             decision: .allowForTool
                         )
                         toolPermissionDecisionButton(
                             title: NSLocalizedString("完全权限", comment: ""),
                             systemImage: "shield.fill",
                             tint: .purple,
+                            requestID: permissionRequest.id,
                             decision: .allowAll
                         )
                     }
@@ -424,10 +437,11 @@ extension ChatBubble {
         systemImage: String,
         tint: Color,
         role: ButtonRole? = nil,
+        requestID: UUID,
         decision: ToolPermissionDecision
     ) -> some View {
         Button(role: role) {
-            resolveToolPermission(decision)
+            resolveToolPermission(decision, requestID: requestID)
         } label: {
             Label {
                 Text(title)
@@ -438,8 +452,8 @@ extension ChatBubble {
         }
     }
 
-    private func resolveToolPermission(_ decision: ToolPermissionDecision) {
-        toolPermissionCenter.resolveActiveRequest(with: decision)
+    private func resolveToolPermission(_ decision: ToolPermissionDecision, requestID: UUID) {
+        toolPermissionCenter.resolveRequest(withID: requestID, decision: decision)
         selectedToolCallDetailSheetItem = nil
     }
 

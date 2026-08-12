@@ -330,10 +330,7 @@ extension ChatBubble {
     }
 
     var isError: Bool {
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
-        return message.role == .error
-            || (message.role == .assistant
-                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
+        message.role == .error
     }
 
     var usesNoBubbleStyle: Bool {
@@ -778,7 +775,8 @@ extension ChatBubble {
     var pendingToolCallForAutoPresentation: InternalToolCall? {
         guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return nil }
         return toolCalls.first { call in
-            activeToolPermissionRequest(for: call) != nil && !hasAutoOpenedPendingToolCall(call.id)
+            activeToolPermissionRequest(for: call) != nil
+                && !hasAutoOpenedPendingToolCall(pendingToolCallPresentationID(call.id))
         }
     }
 

@@ -397,6 +397,10 @@ final class ChatViewModel: ObservableObject {
     var backgroundBlurTask: Task<Void, Never>?
     var isApplicationActive: Bool = true
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
+    var askUserInputRequestsBySessionID: [UUID: [AppToolAskUserInputRequest]] = [:]
+    var toolInputDraftRequestsBySessionID: [UUID: [AppToolInputDraftRequest]] = [:]
+    var pendingToolSupplementMessagesBySessionID: [UUID: [String]] = [:]
+    var dispatchingToolSupplementSessionIDs: Set<UUID> = []
     var lastNotifiedAssistantMarker: AssistantReplyMarker?
     var lastAutoPlayedAssistantMessageID: UUID?
     var lastMemoryEmbeddingErrorSignature: String = ""
@@ -507,7 +511,8 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             await chatService.sendAndProcessMessage(
                 content: payload.content,
                 aiTemperature: payload.aiTemperature,
@@ -528,6 +533,7 @@ final class ChatViewModel: ObservableObject {
                 imageAttachments: payload.imageAttachments,
                 fileAttachments: payload.fileAttachments
             )
+            flushPendingToolSupplementMessagesIfPossible()
         }
     }
 
@@ -540,6 +546,7 @@ final class ChatViewModel: ObservableObject {
         pendingSendDelayPayload = nil
         isSendDelayPending = false
         restorePendingSendDraftIfPossible(payload)
+        flushPendingToolSupplementMessagesIfPossible()
         return true
     }
 
@@ -773,75 +780,6 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    func submitAskUserInputAnswers(
-        _ answers: [AppToolAskUserInputQuestionAnswer],
-        for requestOverride: AppToolAskUserInputRequest? = nil
-    ) {
-        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
-        let submission = AppToolAskUserInputSubmission(
-            requestID: request.requestID,
-            cancelled: false,
-            submittedAt: iso8601Formatter.string(from: Date()),
-            answers: answers
-        )
-        if activeAskUserInputRequest?.requestID == request.requestID {
-            activeAskUserInputRequest = nil
-        }
-        sendToolSupplementMessage(
-            AppToolAskUserInputSubmissionFormatter.messageContent(
-                request: request,
-                submission: submission
-            )
-        )
-    }
-
-    func cancelAskUserInputRequest(using requestOverride: AppToolAskUserInputRequest? = nil) {
-        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
-        let submission = AppToolAskUserInputSubmission(
-            requestID: request.requestID,
-            cancelled: true,
-            submittedAt: iso8601Formatter.string(from: Date()),
-            answers: []
-        )
-        if activeAskUserInputRequest?.requestID == request.requestID {
-            activeAskUserInputRequest = nil
-        }
-        sendToolSupplementMessage(
-            AppToolAskUserInputSubmissionFormatter.messageContent(
-                request: request,
-                submission: submission
-            )
-        )
-    }
-
-    private func sendToolSupplementMessage(_ content: String) {
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedContent.isEmpty, !isSendingMessage, !isSendDelayPending else { return }
-
-        Task {
-            await chatService.sendAndProcessMessage(
-                content: trimmedContent,
-                aiTemperature: aiTemperature,
-                aiTopP: aiTopP,
-                systemPrompt: systemPrompt,
-                maxChatHistory: maxChatHistory,
-                enableStreaming: enableStreaming,
-                enhancedPrompt: currentSession?.enhancedPrompt,
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeSystemTime: includeSystemTimeInPrompt,
-                systemTimeInjectionPosition: systemTimeInjectionPosition,
-                enablePeriodicTimeLandmark: enablePeriodicTimeLandmark,
-                periodicTimeLandmarkIntervalMinutes: periodicTimeLandmarkIntervalMinutes,
-                enableResponseSpeedMetrics: enableResponseSpeedMetrics,
-                audioAttachment: nil,
-                imageAttachments: [],
-                fileAttachments: []
-            )
-        }
-    }
-    
     func addErrorMessage(_ content: String) {
         chatService.addErrorMessage(content)
     }

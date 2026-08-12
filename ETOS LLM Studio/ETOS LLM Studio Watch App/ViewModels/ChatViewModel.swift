@@ -443,6 +443,10 @@ class ChatViewModel: ObservableObject {
     var isPersistingGlobalSystemPrompts = false
     var lastAutoPlayedAssistantMessageID: UUID?
     var pendingReplyNotificationContextBySessionID: [UUID: PendingBackgroundReplyNotificationContext] = [:]
+    var askUserInputRequestsBySessionID: [UUID: [AppToolAskUserInputRequest]] = [:]
+    var toolInputDraftRequestsBySessionID: [UUID: [AppToolInputDraftRequest]] = [:]
+    var pendingToolSupplementMessagesBySessionID: [UUID: [String]] = [:]
+    var dispatchingToolSupplementSessionIDs: Set<UUID> = []
     var lastNotifiedAssistantMarker: AssistantReplyMarker?
     var lastMemoryEmbeddingErrorSignature: String = ""
     var lastMemoryEmbeddingErrorDate: Date = .distantPast
@@ -575,7 +579,8 @@ class ChatViewModel: ObservableObject {
     }
 
     private func sendCapturedMessage(_ payload: PendingChatSendPayload) {
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             await chatService.sendAndProcessMessage(
                 content: payload.content,
                 aiTemperature: payload.aiTemperature,
@@ -596,6 +601,7 @@ class ChatViewModel: ObservableObject {
                 imageAttachments: payload.imageAttachments,
                 fileAttachments: payload.fileAttachments
             )
+            flushPendingToolSupplementMessagesIfPossible()
         }
     }
 
@@ -608,6 +614,7 @@ class ChatViewModel: ObservableObject {
         pendingSendDelayPayload = nil
         isSendDelayPending = false
         restorePendingSendDraftIfPossible(payload)
+        flushPendingToolSupplementMessagesIfPossible()
         return true
     }
 
@@ -834,47 +841,6 @@ class ChatViewModel: ObservableObject {
         globalSystemPromptEntries.remove(at: index)
         let fallbackSelection = (selectedGlobalSystemPromptEntryID == id) ? globalSystemPromptEntries.first?.id : selectedGlobalSystemPromptEntryID
         persistGlobalSystemPromptEntries(selectedEntryID: fallbackSelection)
-    }
-
-    func submitAskUserInputAnswers(
-        _ answers: [AppToolAskUserInputQuestionAnswer],
-        for requestOverride: AppToolAskUserInputRequest? = nil
-    ) {
-        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
-        let submission = AppToolAskUserInputSubmission(
-            requestID: request.requestID,
-            cancelled: false,
-            submittedAt: iso8601Formatter.string(from: Date()),
-            answers: answers
-        )
-        if activeAskUserInputRequest?.requestID == request.requestID {
-            activeAskUserInputRequest = nil
-        }
-        sendToolSupplementMessage(
-            AppToolAskUserInputSubmissionFormatter.messageContent(
-                request: request,
-                submission: submission
-            )
-        )
-    }
-
-    func cancelAskUserInputRequest(using requestOverride: AppToolAskUserInputRequest? = nil) {
-        guard let request = requestOverride ?? activeAskUserInputRequest else { return }
-        let submission = AppToolAskUserInputSubmission(
-            requestID: request.requestID,
-            cancelled: true,
-            submittedAt: iso8601Formatter.string(from: Date()),
-            answers: []
-        )
-        if activeAskUserInputRequest?.requestID == request.requestID {
-            activeAskUserInputRequest = nil
-        }
-        sendToolSupplementMessage(
-            AppToolAskUserInputSubmissionFormatter.messageContent(
-                request: request,
-                submission: submission
-            )
-        )
     }
 
     // MARK: - 私有方法 (内部逻辑)

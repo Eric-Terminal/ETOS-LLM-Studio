@@ -52,9 +52,13 @@ struct WatchMessageRowView: View {
 
     private var hasActivePermission: Bool {
         guard let request = toolPermissionCenter.activeRequest,
+              request.sourceSessionID == nil || request.sourceSessionID == viewModel.currentSession?.id,
               let toolCalls = message.toolCalls,
               !toolCalls.isEmpty else {
             return false
+        }
+        if let toolCallID = request.toolCallID {
+            return toolCalls.contains(where: { $0.id == toolCallID })
         }
         let normalizedRequestArguments = request.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         return toolCalls.contains { call in

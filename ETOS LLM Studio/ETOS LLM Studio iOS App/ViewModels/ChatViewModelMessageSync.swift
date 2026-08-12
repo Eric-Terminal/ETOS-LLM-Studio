@@ -551,8 +551,11 @@ extension ChatViewModel {
         guard !autoOpenedPendingToolCallIDs.isEmpty else { return }
         let existingToolCallIDs = Set(
             messages
-                .compactMap(\.toolCalls)
-                .flatMap { $0.map(\.id) }
+                .flatMap { message in
+                    (message.toolCalls ?? []).map { call in
+                        "\(message.id.uuidString)#\(call.id)"
+                    }
+                }
         )
         let filteredIDs = autoOpenedPendingToolCallIDs.intersection(existingToolCallIDs)
         if filteredIDs != autoOpenedPendingToolCallIDs {

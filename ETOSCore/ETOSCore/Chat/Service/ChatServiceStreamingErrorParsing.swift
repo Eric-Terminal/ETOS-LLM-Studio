@@ -95,15 +95,28 @@ extension ChatService {
             return true
         }
         let lowercased = trimmed.lowercased()
-        if trimmed.hasPrefix("HTTP/") || trimmed.hasPrefix("<!DOCTYPE") || lowercased.hasPrefix("<html") {
-            return true
-        }
-        let errorMarkers = [
+        let explicitProxyErrors = [
             "bad gateway", "gateway timeout", "gateway time-out", "service unavailable",
-            "internal server error", "upstream timed out", "nginx", "cloudflare", "error",
-            "错误", "失败", "无法解析流式响应", "无法解析流失响应"
+            "internal server error", "upstream timed out"
         ]
-        return errorMarkers.contains { lowercased.contains($0) }
+        if trimmed.hasPrefix("HTTP/") {
+            return (inferredHTTPStatusCode(from: trimmed) ?? 0) >= 400
+        }
+        if trimmed.hasPrefix("<!DOCTYPE") || lowercased.hasPrefix("<html") {
+            return explicitProxyErrors.contains(where: lowercased.contains)
+        }
+        let statusLine = lowercased.split(maxSplits: 1, whereSeparator: { $0.isWhitespace })
+        let statusLineMessage: String? = {
+            guard statusLine.count == 2,
+                  let code = Int(statusLine[0]),
+                  (400...599).contains(code) else { return nil }
+            return String(statusLine[1])
+        }()
+        return explicitProxyErrors.contains { marker in
+            lowercased == marker
+                || lowercased.hasPrefix("\(marker):")
+                || statusLineMessage == marker
+        }
     }
 
     private func jsonPayloadLooksLikeError(_ value: Any) -> Bool {
@@ -117,7 +130,7 @@ extension ChatService {
             if let statusCode = httpStatusCode(fromJSONObject: dictionary), statusCode >= 400 {
                 return true
             }
-            return dictionary.values.contains { jsonPayloadLooksLikeError($0) }
+            return false
         }
         if let array = value as? [Any] {
             return array.contains { jsonPayloadLooksLikeError($0) }

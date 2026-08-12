@@ -22,11 +22,19 @@ extension AppToolManager {
         case .getSystemTime:
             return SystemTimeContextFormatter.description()
         case .askUserInput:
-            return try current.executeAskUserInput(argumentsJSON: argumentsJSON)
+            return try current.executeAskUserInput(
+                argumentsJSON: argumentsJSON,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID
+            )
         case .echoText:
             return try current.executeEchoText(argumentsJSON: argumentsJSON)
         case .fillUserInput:
-            return try current.executeFillUserInput(argumentsJSON: argumentsJSON)
+            return try current.executeFillUserInput(
+                argumentsJSON: argumentsJSON,
+                sourceSessionID: sourceSessionID,
+                sourceMessageID: sourceMessageID
+            )
         case .executeJSCJavaScript:
             return try await current.executeJavaScript(argumentsJSON: argumentsJSON, engine: .javaScriptCore)
         case .createCustomJSCJSTool:

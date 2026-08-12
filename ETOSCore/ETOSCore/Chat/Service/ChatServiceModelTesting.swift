@@ -342,6 +342,7 @@ extension ChatService {
         availableTools: [InternalToolDefinition]?
     ) async throws -> ChatMessage {
         let bytes = try await streamData(for: request, provider: provider)
+        let responseMessageID = UUID()
         var content = ""
         var reasoningContent: String?
         var tokenUsage: MessageTokenUsage?
@@ -404,7 +405,7 @@ extension ChatService {
             guard let builder = toolCallBuilders[orderIdx], let name = builder.name else { return nil }
             let resolvedName = resolveToolName(name, availableTools: availableTools ?? [])
             return InternalToolCall(
-                id: builder.id ?? "tool-\(orderIdx)",
+                id: builder.id ?? "tool-\(responseMessageID.uuidString)-\(orderIdx)",
                 toolName: resolvedName,
                 arguments: builder.arguments,
                 providerSpecificFields: builder.providerSpecificFields
@@ -412,6 +413,7 @@ extension ChatService {
         }
 
         return ChatMessage(
+            id: responseMessageID,
             role: .assistant,
             content: content,
             reasoningContent: reasoningContent,

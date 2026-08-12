@@ -31,11 +31,8 @@ extension ChatBubble {
 
     @ViewBuilder
     func renderContent(_ content: String) -> some View {
-        let retryFailedPrefix = NSLocalizedString("重试失败", comment: "Retry failed error message prefix")
         let shouldRenderAsOutgoing = message.role == .user
             || message.role == .error
-            || (message.role == .assistant
-                && (message.content.hasPrefix(retryFailedPrefix) || message.content.hasPrefix("重试失败")))
         if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
            extraction.containsHTML {

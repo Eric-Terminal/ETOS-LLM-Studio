@@ -425,6 +425,7 @@ public final class ShortcutToolManager: ObservableObject {
             throw ShortcutToolError.unknownTool
         }
         let result = await executeWithFallback(tool: tool, argumentsJSON: argumentsJSON, allowRelayOnWatch: true)
+        try Task.checkCancellation()
         lastExecutionResult = result
 
         guard result.success else {
@@ -483,19 +484,19 @@ public final class ShortcutToolManager: ObservableObject {
             return true
         }
 
-        let status = (queryItem(named: "status", in: url) ?? "success").lowercased()
+        let status = queryItem(named: "status", in: url)?.lowercased()
         let resultText = queryItem(named: "result", in: url)
         let errorMessage = queryItem(named: "errorMessage", in: url)
         let transportRaw = queryItem(named: "transport", in: url)
         let transport = ShortcutExecutionTransport(rawValue: transportRaw ?? "") ?? pending.transport
 
-        let success = status != "error" && (errorMessage == nil)
+        let success = Self.callbackIndicatesSuccess(status: status, errorMessage: errorMessage)
         let result = ShortcutToolExecutionResult(
             requestID: requestID,
             toolName: pending.toolName,
             success: success,
             result: success ? resultText : nil,
-            errorMessage: success ? nil : (errorMessage ?? NSLocalizedString("快捷指令执行失败。", comment: "")),
+            errorMessage: success ? nil : Self.callbackFailureMessage(status: status, errorMessage: errorMessage),
             transport: transport,
             startedAt: pending.startedAt,
             finishedAt: Date()
@@ -504,6 +505,31 @@ public final class ShortcutToolManager: ObservableObject {
         resolvePending(requestID: requestID, result: result)
         lastExecutionResult = result
         return true
+    }
+
+    nonisolated static func callbackIndicatesSuccess(
+        status: String?,
+        errorMessage: String?
+    ) -> Bool {
+        status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "success"
+            && errorMessage == nil
+    }
+
+    nonisolated static func callbackFailureMessage(
+        status: String?,
+        errorMessage: String?
+    ) -> String {
+        if let errorMessage, !errorMessage.isEmpty {
+            return errorMessage
+        }
+        switch status?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "cancelled", "canceled":
+            return NSLocalizedString("工具调用已取消。", comment: "Shortcut callback cancelled")
+        case "denied":
+            return NSLocalizedString("已拒绝", comment: "Shortcut callback denied")
+        default:
+            return NSLocalizedString("快捷指令执行失败。", comment: "")
+        }
     }
 
     @discardableResult

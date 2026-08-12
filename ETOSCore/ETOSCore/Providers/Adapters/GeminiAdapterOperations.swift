@@ -356,6 +356,7 @@ extension GeminiAdapter {
         var textContent = ""
         var reasoningContent: String? = nil
         var internalToolCalls: [InternalToolCall] = []
+        let responseMessageID = UUID()
         
         for (index, part) in parts.enumerated() {
             if let text = part.text {
@@ -372,7 +373,7 @@ extension GeminiAdapter {
                    !existingCallId.isEmpty {
                     callId = existingCallId
                 } else {
-                    callId = "gemini_call_\(index)"
+                    callId = "gemini-\(responseMessageID.uuidString)-\(index)"
                 }
                 var argsString = "{}"
                 if let args = functionCall.args {
@@ -396,7 +397,7 @@ extension GeminiAdapter {
         }
         
         return ChatMessage(
-            id: UUID(),
+            id: responseMessageID,
             role: .assistant,
             content: textContent,
             reasoningContent: reasoningContent,
@@ -440,12 +441,14 @@ extension GeminiAdapter {
                     }
                 }
                 if let functionCall = part.functionCall {
-                    let callId: String
+                    let callId: String?
                     if let existingCallId = functionCall.id?.trimmingCharacters(in: .whitespacesAndNewlines),
                        !existingCallId.isEmpty {
                         callId = existingCallId
                     } else {
-                        callId = "gemini_call_\(index)"
+                        // 流式适配器本身没有消息身份；留空后由响应编排器按 loadingMessageID
+                        // 生成在整个响应期间稳定、跨消息唯一的调用 ID。
+                        callId = nil
                     }
                     var argsString: String? = nil
                     if let args = functionCall.args {

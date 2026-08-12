@@ -271,7 +271,7 @@ struct ContentView: View {
         baseContent
             .sheet(item: globalToolPermissionRequestBinding) { request in
                 GlobalToolPermissionSheet(request: request) { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                    toolPermissionCenter.resolveRequest(withID: request.id, decision: decision)
                 }
                 .interactiveDismissDisabled(true)
             }

@@ -189,7 +189,7 @@ public struct SessionMessageJumpTarget: Equatable, Sendable {
 
 @MainActor
 public final class ToolPermissionCenter: ObservableObject {
-    public static let shared = ToolPermissionCenter()
+    public static let shared = ToolPermissionCenter(defaults: .standard)
     // 注意：这里必须使用系统合成的 objectWillChange，
     // 否则聊天里的工具审批弹窗与倒计时不会稳定自动刷新。
     
@@ -221,7 +221,7 @@ public final class ToolPermissionCenter: ObservableObject {
         autoPresentationBlockerIDs.isEmpty
     }
 
-    private init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults) {
         self.defaults = defaults
         autoApproveEnabled = Self.boolValue(forKey: DefaultsKey.autoApproveEnabled, defaults: defaults, defaultValue: false)
         let storedCountdown = Self.integerValue(forKey: DefaultsKey.autoApproveCountdownSeconds, defaults: defaults, defaultValue: 8)
@@ -243,31 +243,49 @@ public final class ToolPermissionCenter: ObservableObject {
         toolCallID: String? = nil,
         forcePrompt: Bool = false
     ) async -> ToolPermissionDecision {
+        guard !Task.isCancelled else { return .deny }
         if !forcePrompt, allowAll || allowedTools.contains(toolName) {
             return .allowOnce
         }
-        
-        return await withCheckedContinuation { continuation in
-            let request = ToolPermissionRequest(
-                toolName: toolName,
-                displayName: displayName,
-                arguments: arguments,
-                sourceSessionID: sourceSessionID,
-                toolCallID: toolCallID,
-                forcePrompt: forcePrompt
-            )
-            if activeRequest == nil {
-                activeRequest = request
-                activeContinuation = continuation
-                scheduleAutoApproveIfNeeded(for: request)
-            } else {
-                queuedRequests.append(QueuedRequest(request: request, continuation: continuation))
+
+        let request = ToolPermissionRequest(
+            toolName: toolName,
+            displayName: displayName,
+            arguments: arguments,
+            sourceSessionID: sourceSessionID,
+            toolCallID: toolCallID,
+            forcePrompt: forcePrompt
+        )
+        let decision = await withTaskCancellationHandler {
+            guard !Task.isCancelled else { return .deny }
+            return await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(returning: .deny)
+                    return
+                }
+                if activeRequest == nil {
+                    activeRequest = request
+                    activeContinuation = continuation
+                    scheduleAutoApproveIfNeeded(for: request)
+                } else {
+                    queuedRequests.append(QueuedRequest(request: request, continuation: continuation))
+                }
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.cancelRequest(withID: request.id)
             }
         }
+        return Task.isCancelled ? .deny : decision
     }
-    
-    public func resolveActiveRequest(with decision: ToolPermissionDecision) {
-        guard let activeRequest else { return }
+
+    /// 只解决调用方实际展示的请求，避免迟到或重复的按钮事件误批下一条排队请求。
+    @discardableResult
+    public func resolveRequest(
+        withID requestID: UUID,
+        decision: ToolPermissionDecision
+    ) -> Bool {
+        guard let activeRequest, activeRequest.id == requestID else { return false }
         cancelAutoApproveCountdown()
         
         switch decision {
@@ -283,6 +301,7 @@ public final class ToolPermissionCenter: ObservableObject {
         activeContinuation = nil
         self.activeRequest = nil
         advanceQueueIfNeeded()
+        return true
     }
 
     public func setAutoApproveEnabled(_ enabled: Bool) {
@@ -412,9 +431,26 @@ public final class ToolPermissionCenter: ObservableObject {
 
             await MainActor.run {
                 guard self.activeRequest?.id == requestID else { return }
-                self.resolveActiveRequest(with: .allowOnce)
+                self.resolveRequest(withID: requestID, decision: .allowOnce)
             }
         }
+    }
+
+    private func cancelRequest(withID requestID: UUID) {
+        if activeRequest?.id == requestID {
+            cancelAutoApproveCountdown()
+            activeContinuation?.resume(returning: .deny)
+            activeContinuation = nil
+            activeRequest = nil
+            advanceQueueIfNeeded()
+            return
+        }
+
+        guard let index = queuedRequests.firstIndex(where: { $0.request.id == requestID }) else {
+            return
+        }
+        let cancelled = queuedRequests.remove(at: index)
+        cancelled.continuation.resume(returning: .deny)
     }
 
     private func cancelAutoApproveCountdown() {

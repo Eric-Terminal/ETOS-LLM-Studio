@@ -159,7 +159,7 @@ extension ChatBubble {
             ToolPermissionInlineView(
                 request: permissionRequest,
                 onDecision: { decision in
-                    toolPermissionCenter.resolveActiveRequest(with: decision)
+                    toolPermissionCenter.resolveRequest(withID: permissionRequest.id, decision: decision)
                     selectedToolCallDetailSheetItem = nil
                 }
             )

@@ -364,6 +364,10 @@ extension ChatBubble {
               let request = toolPermissionCenter.activeRequest else {
             return nil
         }
+        if let sourceSessionID = request.sourceSessionID,
+           sourceSessionID != roleplaySessionID {
+            return nil
+        }
         if let toolCallID = request.toolCallID {
             return call.id == toolCallID ? request : nil
         }
@@ -371,6 +375,10 @@ extension ChatBubble {
         let callArgs = call.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
         let isMatch = call.toolName == request.toolName && callArgs == trimmedArgs
         return isMatch ? request : nil
+    }
+
+    func pendingToolCallPresentationID(_ toolCallID: String) -> String {
+        "\(message.id.uuidString)#\(toolCallID)"
     }
 
     var toolCallAutoPresentationSignature: String {
@@ -399,7 +407,7 @@ extension ChatBubble {
         guard toolPermissionCenter.canAutoPresentRequestDetails else { return }
         guard selectedToolCallDetailSheetItem == nil else { return }
         guard let pendingCall = pendingToolCallForAutoPresentation else { return }
-        markPendingToolCallAutoOpened(pendingCall.id)
+        markPendingToolCallAutoOpened(pendingToolCallPresentationID(pendingCall.id))
         showRawToolResultInDetailSheet = false
         selectedToolCallDetailSheetItem = ToolCallDetailSheetItem(
             messageID: message.id,

@@ -526,6 +526,17 @@ struct GeminiAdapterTests {
         #expect(call.providerSpecificFields?["thought_signature"] == .string("sig-123"))
     }
 
+    @Test("Gemini 缺少函数调用 ID 时按响应生成唯一 ID")
+    func testGeminiResponseGeneratesResponseScopedCallID() throws {
+        let payload = #"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{}}}]}}]}"#
+
+        let first = try #require(adapter.parseResponse(data: Data(payload.utf8)).toolCalls?.first)
+        let second = try #require(adapter.parseResponse(data: Data(payload.utf8)).toolCalls?.first)
+
+        #expect(first.id != second.id)
+        #expect(first.id.hasPrefix("gemini-"))
+    }
+
     @Test("Gemini 请求体保留 thoughtSignature 并透传 function id")
     func testGeminiBuildRequestPreservesThoughtSignatureAndCallID() throws {
         let assistantCall = InternalToolCall(
