@@ -293,6 +293,8 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     ) -> LocalLinuxTerminalPresentation {
         guard !terminalDiagnosticSummaries.isEmpty else { return presentation }
         let summaries = terminalDiagnosticSummaries.joined(separator: "\n")
+            + "\n"
+            + LocalLinuxDiagnosticPresentation.userGuidance
         let separator = presentation.plainText.isEmpty ? "" : "\n"
         var attributedText = presentation.attributedText
         attributedText.append(AttributedString(separator + summaries))

@@ -141,6 +141,13 @@ public actor LocalLinuxDiagnosticsRecorder {
 enum LocalLinuxDiagnosticPresentation {
     private static let userSummaryByteLimit = 256
 
+    static var userGuidance: String {
+        NSLocalizedString(
+            "可复制以上诊断询问 AI，或通过反馈助手发送给开发者。",
+            comment: "Linux terminal diagnostic sharing guidance"
+        )
+    }
+
     static func userSummary(_ event: LocalLinuxBridgeDiagnosticEvent) -> String {
         var fields: [(isOptional: Bool, value: String)] = [
             (false, "type=\(category(rawValue: event.category))")

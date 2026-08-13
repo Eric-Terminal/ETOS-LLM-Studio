@@ -804,8 +804,14 @@ struct LocalAgentRuntimeTests {
         collector.finish()
         let presentation = try #require(collector.userVisibleTerminalPresentation())
         #expect(presentation.plainText.contains(summary))
+        #expect(presentation.plainText.contains(LocalLinuxDiagnosticPresentation.userGuidance))
         #expect(collector.userVisiblePreview() == "ETOS:/mnt/home#")
-        #expect(try String(contentsOf: directory.appendingPathComponent("terminal.model"), encoding: .utf8).contains(summary))
+        let modelOutput = try String(
+            contentsOf: directory.appendingPathComponent("terminal.model"),
+            encoding: .utf8
+        )
+        #expect(modelOutput.contains(summary))
+        #expect(!modelOutput.contains(LocalLinuxDiagnosticPresentation.userGuidance))
     }
 
     @Test("Linux、Browser 与反馈工具协议暴露完整动作")

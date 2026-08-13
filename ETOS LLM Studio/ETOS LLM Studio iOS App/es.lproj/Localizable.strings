@@ -5862,6 +5862,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "Linux 路径" = "ruta de linux";
 "Linux 路径无效：%@" = "Ruta de Linux no válida: %@";
 "Linux 运行时诊断：" = "Diagnóstico en tiempo de ejecución de Linux:";
+"可复制以上诊断询问 AI，或通过反馈助手发送给开发者。" = "Copia el diagnóstico anterior para consultarlo con la IA o envíalo a los desarrolladores mediante el asistente de comentarios.";
 "MCP JSON 必须包含 mcpServers 对象。" = "MCP JSON debe contener objetos mcpServers.";
 "MCP Server“%@”的配置无效。" = "La configuración del servidor MCP \"%@\" no es válida.";
 "MCP 只取得这里选择的外部挂载租约；不可用或失效的授权会在启动时明确报错。" = "MCP solo obtiene arrendamientos para los soportes externos seleccionados aquí; Las autorizaciones no disponibles o caducadas informarán explícitamente un error al inicio.";
