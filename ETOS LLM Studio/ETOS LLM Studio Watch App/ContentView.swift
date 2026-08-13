@@ -48,6 +48,10 @@ struct ContentView: View {
     @State var bottomAnchorVisibilityWorkItem: DispatchWorkItem?
     @State var shouldRestorePendingJumpOnAppear = false
     @State var pendingJumpRequest: MessageJumpRequest?
+    @State var pendingAutomaticHistoryLoadRequest: WatchAutomaticHistoryLoadRequest?
+    @State var automaticHistoryAnchorTask: Task<Void, Never>?
+    @State var isAutomaticHistoryLoadInFlight = false
+    @State var lastAutomaticHistoryLoadAnchorID: UUID?
     @State var launchRecoveryNoticeMessage: String?
     @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State var launchRecoveryErrorMessage: String?
@@ -85,6 +89,7 @@ struct ContentView: View {
     let bottomAnchorID = "inputBubble"
     let watchBottomPinnedDistanceThreshold: CGFloat = 24
     let watchScrollToBottomButtonRevealDistance: CGFloat = 48
+    let watchAutomaticHistoryLoadTriggerDistance: CGFloat = 32
 
     var isLiquidGlassEnabled: Bool {
         if #available(watchOS 26.0, *) {
@@ -234,6 +239,10 @@ struct ContentView: View {
             pendingBottomSnapTask = nil
             watchInputLayoutSettleTask?.cancel()
             watchInputLayoutSettleTask = nil
+            automaticHistoryAnchorTask?.cancel()
+            automaticHistoryAnchorTask = nil
+            pendingAutomaticHistoryLoadRequest = nil
+            isAutomaticHistoryLoadInFlight = false
             bottomAnchorVisibilityWorkItem?.cancel()
             bottomAnchorVisibilityWorkItem = nil
             chatTransientNoticeDismissTask?.cancel()
@@ -324,4 +333,14 @@ struct ContentView: View {
         viewModel.reloadPersistedDataAfterLegacyJSONMigration()
         launchStateMachine.continueAfterDatabaseUnlock()
     }
+}
+
+enum WatchAutomaticHistoryDirection: Equatable {
+    case earlier
+    case later
+}
+
+struct WatchAutomaticHistoryLoadRequest: Equatable {
+    let direction: WatchAutomaticHistoryDirection
+    let anchorMessageID: UUID
 }

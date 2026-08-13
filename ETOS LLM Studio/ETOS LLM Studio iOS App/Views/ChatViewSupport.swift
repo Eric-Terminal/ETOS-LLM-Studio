@@ -91,6 +91,16 @@ struct MessageJumpRequest: Equatable {
     let messageID: UUID
 }
 
+enum ChatAutomaticHistoryDirection: Equatable {
+    case earlier
+    case later
+}
+
+struct ChatAutomaticHistoryLoadRequest: Equatable {
+    let direction: ChatAutomaticHistoryDirection
+    let anchorMessageID: UUID
+}
+
 enum ChatBubbleRendererIdentity: String, Hashable, Sendable {
     case none
     case plainText

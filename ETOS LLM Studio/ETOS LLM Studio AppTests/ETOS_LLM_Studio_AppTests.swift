@@ -516,61 +516,60 @@ struct ETOS_LLM_Studio_AppTests {
         ) == nil)
     }
 
-    @Test("自动历史窗口只在真实滚到顶部时加载一次")
-    func testAutomaticHistoryLoadingRequiresTopInteraction() {
+    @Test("自动历史窗口只在真实滚到边缘时记录一次加载意图")
+    func testAutomaticHistoryLoadingRequiresEdgeInteraction() {
         let firstMessageID = UUID()
 
-        #expect(!ChatView.shouldLoadAutomaticHistory(
+        #expect(!ChatView.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: true,
             isUserInteracting: false,
-            distanceToTop: 0,
+            distanceToEdge: 0,
             triggerDistance: 240,
-            firstMessageID: firstMessageID,
+            anchorMessageID: firstMessageID,
             lastLoadAnchorID: nil
         ))
-        #expect(ChatView.shouldLoadAutomaticHistory(
+        #expect(ChatView.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: true,
             isUserInteracting: true,
-            distanceToTop: 120,
+            distanceToEdge: 120,
             triggerDistance: 240,
-            firstMessageID: firstMessageID,
+            anchorMessageID: firstMessageID,
             lastLoadAnchorID: nil
         ))
-        #expect(!ChatView.shouldLoadAutomaticHistory(
+        #expect(!ChatView.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: true,
             isUserInteracting: true,
-            distanceToTop: 120,
+            distanceToEdge: 120,
             triggerDistance: 240,
-            firstMessageID: firstMessageID,
+            anchorMessageID: firstMessageID,
             lastLoadAnchorID: firstMessageID
         ))
 
-        // 回到底部收缩窗口后会清空已加载锚点，同一个首条消息可再次开启新一轮加载。
-        #expect(ChatView.shouldLoadAutomaticHistory(
+        #expect(ChatView.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: true,
             isUserInteracting: true,
-            distanceToTop: 120,
+            distanceToEdge: 120,
             triggerDistance: 240,
-            firstMessageID: firstMessageID,
+            anchorMessageID: firstMessageID,
             lastLoadAnchorID: nil
         ))
 
         #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
             isLoadInFlight: true,
             awaitsAnchorMetrics: false,
-            distanceToTop: 400,
+            distanceToEdge: 400,
             triggerDistance: 240
         ))
         #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
             isLoadInFlight: true,
             awaitsAnchorMetrics: true,
-            distanceToTop: 120,
+            distanceToEdge: 120,
             triggerDistance: 240
         ))
         #expect(ChatView.shouldReleaseAutomaticHistoryLoad(
             isLoadInFlight: true,
             awaitsAnchorMetrics: true,
-            distanceToTop: 400,
+            distanceToEdge: 400,
             triggerDistance: 240
         ))
     }

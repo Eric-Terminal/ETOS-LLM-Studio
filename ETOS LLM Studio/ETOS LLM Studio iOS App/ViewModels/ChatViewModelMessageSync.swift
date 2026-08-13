@@ -12,86 +12,98 @@ import SwiftUI
 
 extension ChatViewModel {
     var usesAutomaticHistoryWindow: Bool {
-        lazyLoadMessageCount == 0
+        automaticHistoryLoadingEnabled
     }
 
     var usesManualHistoryLoading: Bool {
-        lazyLoadMessageCount > 0
+        !automaticHistoryLoadingEnabled && lazyLoadMessageCount > 0
     }
 
     func updateDisplayedMessages() {
         ensureVisibleMessagesCachePrepared()
-
-        if lastSessionID != currentSession?.id {
-            lastSessionID = currentSession?.id
-            additionalHistoryLoaded = 0
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else {
+            updateDisplayedStatesIfNeeded([])
+            updateHistoryBoundaryState(for: ChatHistoryWindow(lowerBound: 0, upperBound: 0))
+            return
         }
 
-        let lazyCount = lazyLoadMessageCount
-        let filtered = visibleMessagesCache
-        let weightedCount = visibleMessagesWeightedCount
-        if lazyCount > 0 && weightedCount > lazyCount {
-            let limit = lazyCount + additionalHistoryLoaded
-            if weightedCount > limit {
-                let subset = Self.suffixMessagesForLazyLoad(filtered, weightedLimit: limit)
-                updateDisplayedStatesIfNeeded(subset)
-                updateHistoryFullyLoadedIfNeeded(false)
-            } else {
-                updateDisplayedStatesIfNeeded(filtered)
-                updateHistoryFullyLoadedIfNeeded(true)
-                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, weightedCount - lazyCount))
-            }
-        } else if usesAutomaticHistoryWindow && weightedCount > automaticHistoryWindowSize {
-            let limit = automaticHistoryWindowSize + additionalHistoryLoaded
-            if weightedCount > limit {
-                let subset = Self.suffixMessagesForLazyLoad(filtered, weightedLimit: limit)
-                updateDisplayedStatesIfNeeded(subset)
-                updateHistoryFullyLoadedIfNeeded(false)
-            } else {
-                updateDisplayedStatesIfNeeded(filtered)
-                updateHistoryFullyLoadedIfNeeded(true)
-                additionalHistoryLoaded = max(additionalHistoryLoaded, max(0, weightedCount - automaticHistoryWindowSize))
-            }
-        } else {
-            updateDisplayedStatesIfNeeded(filtered)
-            updateHistoryFullyLoadedIfNeeded(true)
-            additionalHistoryLoaded = 0
-        }
-    }
-
-    func loadEntireHistory() {
-        additionalHistoryLoaded = max(0, visibleMessagesWeightedCount - lazyLoadMessageCount)
-        updateDisplayedStatesIfNeeded(visibleMessagesCache)
-        updateHistoryFullyLoadedIfNeeded(true)
+        let subset = ChatHistoryWindowSupport.messages(
+            in: historyWindow,
+            from: visibleMessagesCache
+        )
+        updateDisplayedStatesIfNeeded(subset)
+        updateHistoryBoundaryState(for: historyWindow)
     }
 
     func loadMoreHistoryChunk(count: Int? = nil) {
         guard !isHistoryFullyLoaded else { return }
-        let increment = count ?? incrementalHistoryBatchSize
-        additionalHistoryLoaded += increment
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return }
+        self.historyWindow = ChatHistoryWindowSupport.expandingEarlier(
+            historyWindow,
+            in: visibleMessagesCache,
+            weightedBatchSize: count ?? incrementalHistoryBatchSize,
+            maximumWeightedCount: nil
+        )
         updateDisplayedMessages()
     }
 
     @discardableResult
     func loadMoreAutomaticHistoryIfNeeded(count: Int? = nil) -> Bool {
         guard usesAutomaticHistoryWindow, !isHistoryFullyLoaded else { return false }
-        let previousLoaded = additionalHistoryLoaded
-        let increment = count ?? automaticHistoryBatchSize
-        additionalHistoryLoaded += increment
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return false }
+        let updated = ChatHistoryWindowSupport.expandingEarlier(
+            historyWindow,
+            in: visibleMessagesCache,
+            weightedBatchSize: count ?? automaticHistoryBatchSize,
+            maximumWeightedCount: automaticHistoryMaximumWindowSize
+        )
+        guard updated != historyWindow else { return false }
+        self.historyWindow = updated
         updateDisplayedMessages()
-        return additionalHistoryLoaded != previousLoaded
-    }
-
-    func resetLazyLoadState() {
-        additionalHistoryLoaded = 0
-        updateDisplayedMessages()
+        return true
     }
 
     @discardableResult
-    func resetAutomaticHistoryWindowIfNeeded() -> Bool {
-        guard usesAutomaticHistoryWindow, additionalHistoryLoaded > 0 else { return false }
-        resetLazyLoadState()
+    func loadMoreAutomaticLaterHistoryIfNeeded(count: Int? = nil) -> Bool {
+        guard usesAutomaticHistoryWindow, !isLaterHistoryFullyLoaded else { return false }
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return false }
+        let updated = ChatHistoryWindowSupport.expandingLater(
+            historyWindow,
+            in: visibleMessagesCache,
+            weightedBatchSize: count ?? automaticHistoryBatchSize,
+            maximumWeightedCount: automaticHistoryMaximumWindowSize
+        )
+        guard updated != historyWindow else { return false }
+        self.historyWindow = updated
+        updateDisplayedMessages()
         return true
+    }
+
+    @discardableResult
+    func prepareHistoryWindow(containing messageID: UUID) -> Bool {
+        ensureVisibleMessagesCachePrepared()
+        if messages.contains(where: { $0.id == messageID }) {
+            return true
+        }
+        guard let centeredWindow = ChatHistoryWindowSupport.centered(
+            on: messageID,
+            in: visibleMessagesCache,
+            maximumWeightedCount: automaticHistoryMaximumWindowSize
+        ) else {
+            return false
+        }
+        historyWindow = centeredWindow
+        updateDisplayedMessages()
+        return true
+    }
+
+    func resetLazyLoadState() {
+        historyWindow = nil
+        updateDisplayedMessages()
     }
 
     func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {
@@ -115,8 +127,28 @@ extension ChatViewModel {
 
     func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
         let previousMessages = allMessagesForSession
+        let previousVisibleMessages = visibleMessagesCache
+        let previousHistoryWindow = historyWindow
+        let sessionID = currentSession?.id
+        if historyWindowSessionID != sessionID {
+            historyWindowSessionID = sessionID
+            historyWindow = nil
+            retainedRenderMessageIDs.removeAll(keepingCapacity: true)
+            messageStateByID.removeAll(keepingCapacity: true)
+            cleanupPreparedMarkdownCache(validIDs: [])
+            cleanupStreamingMarkdownPreparation(validIDs: [])
+        }
         allMessagesForSession = incomingMessages
         refreshVisibleMessagesCache()
+        if let previousHistoryWindow,
+           !previousVisibleMessages.isEmpty,
+           historyWindow != nil {
+            historyWindow = ChatHistoryWindowSupport.rebased(
+                previousHistoryWindow,
+                from: previousVisibleMessages,
+                to: visibleMessagesCache
+            )
+        }
         let hasSameMessageIdentity = hasMatchingMessageIdentity(previousMessages, incomingMessages)
         if !hasSameMessageIdentity {
             allMessageIdentityVersion &+= 1
@@ -147,6 +179,8 @@ extension ChatViewModel {
         let currentIDs = messages.map(\.id)
         let newIDs = newMessages.map(\.id)
         let visibleIDSet = Set(newIDs)
+        updateRetainedRenderMessageIDs(visibleIDs: visibleIDSet)
+        let retainedIDSet = visibleIDSet.union(retainedRenderMessageIDs)
 
         var newStates: [ChatMessageRenderState] = []
         newStates.reserveCapacity(newMessages.count)
@@ -173,16 +207,35 @@ extension ChatViewModel {
         }
 
         if !messageStateByID.isEmpty {
-            messageStateByID = messageStateByID.filter { visibleIDSet.contains($0.key) }
+            messageStateByID = messageStateByID.filter { retainedIDSet.contains($0.key) }
         }
-        cleanupPreparedMarkdownCache(validIDs: visibleIDSet)
-        cleanupStreamingMarkdownPreparation(validIDs: visibleIDSet)
+        cleanupPreparedMarkdownCache(validIDs: retainedIDSet)
+        cleanupStreamingMarkdownPreparation(validIDs: retainedIDSet)
 
         if currentIDs != newIDs {
             messages = newStates
             updateDisplayMessagesIfNeeded(with: newStates)
         } else {
             updateDisplayMessagesIfNeeded()
+        }
+    }
+
+    /// 最近离开窗口的渲染结果保留一小段，来回翻阅长 Markdown 时无需重复解析。
+    func updateRetainedRenderMessageIDs(visibleIDs: Set<UUID>) {
+        let validMessageIDs = Set(visibleMessagesCache.map(\.id))
+        retainedRenderMessageIDs.removeAll {
+            visibleIDs.contains($0) || !validMessageIDs.contains($0)
+        }
+        let newlyHiddenIDs = messages.map(\.id).filter {
+            validMessageIDs.contains($0)
+                && !visibleIDs.contains($0)
+                && !retainedRenderMessageIDs.contains($0)
+        }
+        retainedRenderMessageIDs.append(contentsOf: newlyHiddenIDs)
+        if retainedRenderMessageIDs.count > retainedRenderMessageCacheLimit {
+            retainedRenderMessageIDs.removeFirst(
+                retainedRenderMessageIDs.count - retainedRenderMessageCacheLimit
+            )
         }
     }
 
@@ -691,7 +744,27 @@ extension ChatViewModel {
 
     func refreshVisibleMessagesCache() {
         visibleMessagesCache = visibleMessages(from: allMessagesForSession)
-        visibleMessagesWeightedCount = Self.lazyLoadWeightedMessageCount(in: visibleMessagesCache)
+    }
+
+    func ensureHistoryWindowPrepared() {
+        guard historyWindow == nil else {
+            historyWindow = historyWindow?.clamped(to: visibleMessagesCache.count)
+            return
+        }
+
+        if usesAutomaticHistoryWindow {
+            historyWindow = ChatHistoryWindowSupport.trailing(
+                in: visibleMessagesCache,
+                weightedLimit: automaticHistoryWindowSize
+            )
+        } else if usesManualHistoryLoading {
+            historyWindow = ChatHistoryWindowSupport.trailing(
+                in: visibleMessagesCache,
+                weightedLimit: lazyLoadMessageCount
+            )
+        } else {
+            historyWindow = ChatHistoryWindowSupport.full(messageCount: visibleMessagesCache.count)
+        }
     }
 
     func ensureVisibleMessagesCachePrepared() {
@@ -725,6 +798,17 @@ extension ChatViewModel {
     func updateHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
         guard isHistoryFullyLoaded != newValue else { return }
         isHistoryFullyLoaded = newValue
+    }
+
+    func updateLaterHistoryFullyLoadedIfNeeded(_ newValue: Bool) {
+        guard isLaterHistoryFullyLoaded != newValue else { return }
+        isLaterHistoryFullyLoaded = newValue
+    }
+
+    func updateHistoryBoundaryState(for window: ChatHistoryWindow) {
+        let clamped = window.clamped(to: visibleMessagesCache.count)
+        updateHistoryFullyLoadedIfNeeded(clamped.lowerBound == 0)
+        updateLaterHistoryFullyLoadedIfNeeded(clamped.upperBound == visibleMessagesCache.count)
     }
 
     func filterDisplayMessages(_ source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
@@ -766,29 +850,12 @@ extension ChatViewModel {
     }
 
     nonisolated static func lazyLoadWeightedMessageCount(in messages: [ChatMessage]) -> Int {
-        messages.indices.reduce(0) { partialResult, index in
-            partialResult + lazyLoadWeight(in: messages, at: index)
-        }
+        ChatHistoryWindowSupport.weightedCount(in: messages)
     }
 
     nonisolated static func suffixMessagesForLazyLoad(_ messages: [ChatMessage], weightedLimit: Int) -> [ChatMessage] {
-        guard weightedLimit > 0, !messages.isEmpty else { return [] }
-
-        var remaining = weightedLimit
-        var startIndex = messages.endIndex
-
-        while startIndex > messages.startIndex {
-            guard remaining > 0 else { break }
-            let candidateIndex = messages.index(before: startIndex)
-            let weight = lazyLoadWeight(in: messages, at: candidateIndex)
-            if weight > remaining {
-                break
-            }
-            remaining -= weight
-            startIndex = candidateIndex
-        }
-
-        return Array(messages[startIndex...])
+        let window = ChatHistoryWindowSupport.trailing(in: messages, weightedLimit: weightedLimit)
+        return ChatHistoryWindowSupport.messages(in: window, from: messages)
     }
 
     nonisolated static func autoReasoningDisclosureTargetState(

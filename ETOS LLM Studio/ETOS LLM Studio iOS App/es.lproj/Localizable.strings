@@ -6807,3 +6807,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "让 AI 描述 MCP 任务" = "Permitir que la IA describa tareas MCP";
 "开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。" = "Al activarlo, el modelo genera un título breve para cada llamada de herramienta MCP y lo muestra en la vista previa del chat. Los títulos solo se muestran en ETOS y no se envían al MCP Server. Al desactivarlo, se mantienen las vistas previas existentes de parámetros y resultados.";
 "为这次 MCP 工具调用提供简短的用户可见任务标题，使用与用户相同的语言。中文尽量不超过 15 个字，其他语言使用 5 到 10 个词。此字段仅供 ETOS 界面显示，不会发送给 MCP Server。" = "Proporciona un título de tarea breve y visible para esta llamada de herramienta MCP, en el mismo idioma que el usuario. Limita los títulos chinos a unos 15 caracteres y los demás idiomas a 5–10 palabras. Este campo solo se usa en la interfaz de ETOS y no se envía al MCP Server.";
+"自动管理历史消息" = "Gestionar historial automáticamente";
+"手动加载轮次" = "Turnos de carga manual";
+"接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Carga automáticamente mensajes cercanos en los extremos de una conversación y libera las burbujas complejas alejadas de la posición de lectura. Al desactivarlo, elige una cantidad manual; 0 muestra todo el historial.";

@@ -410,10 +410,17 @@ struct ModelAdvancedSettingsView: View {
                         .frame(width: 80)
                 }
 
-                LabeledContent(NSLocalizedString("懒加载轮次", comment: "")) {
-                    TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
+                Toggle(
+                    NSLocalizedString("自动管理历史消息", comment: "自动管理聊天历史窗口设置"),
+                    isOn: $viewModel.automaticHistoryLoadingEnabled
+                )
+
+                if !viewModel.automaticHistoryLoadingEnabled {
+                    LabeledContent(NSLocalizedString("手动加载轮次", comment: "手动加载聊天历史轮次设置")) {
+                        TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
                 }
 
                 Toggle(
@@ -781,8 +788,8 @@ struct ModelAdvancedSettingsView: View {
                 NSLocalizedString("设置为 0 时立即发送；大于 0 时，点击发送后会等待对应秒数，期间可点停止取消。", comment: "Send delay setting footer")
             ),
             (
-                NSLocalizedString("懒加载轮次", comment: ""),
-                NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: "")
+                NSLocalizedString("自动管理历史消息", comment: "自动管理聊天历史窗口设置"),
+                NSLocalizedString("接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明")
             ),
             (
                 NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),

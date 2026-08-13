@@ -84,6 +84,7 @@ class ChatViewModel: ObservableObject {
     @Published var reasoningThinkingTitleByMessageID: [UUID: String] = [:]
     var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
+    @Published var isLaterHistoryFullyLoaded: Bool = true
     @Published var userInput: String = AppConfigStore.shared.chatComposerDraft {
         didSet {
             guard userInput != AppConfigStore.shared.chatComposerDraft else { return }
@@ -239,12 +240,18 @@ class ChatViewModel: ObservableObject {
     @Published var enableOpenAIStreamIncludeUsage: Bool = AppConfigStore.shared.enableOpenAIStreamIncludeUsage {
         didSet { AppConfigStore.shared.enableOpenAIStreamIncludeUsage = enableOpenAIStreamIncludeUsage }
     }
+    @Published var automaticHistoryLoadingEnabled: Bool = AppConfigStore.shared.automaticHistoryLoadingEnabled {
+        didSet {
+            AppConfigStore.shared.automaticHistoryLoadingEnabled = automaticHistoryLoadingEnabled
+            guard oldValue != automaticHistoryLoadingEnabled else { return }
+            resetLazyLoadState()
+        }
+    }
     @Published var lazyLoadMessageCount: Int = AppConfigStore.shared.lazyLoadMessageCount {
         didSet {
             AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount
             guard oldValue != lazyLoadMessageCount else { return }
-            additionalHistoryLoaded = 0
-            updateDisplayedMessages()
+            resetLazyLoadState()
         }
     }
     @Published var currentBackgroundImage: String = AppConfigStore.shared.currentBackgroundImage {
@@ -397,7 +404,7 @@ class ChatViewModel: ObservableObject {
     }
 
     var remainingHistoryCount: Int {
-        max(0, allMessagesForSession.count - messages.count)
+        max(0, historyWindow?.lowerBound ?? 0)
     }
 
     var historyLoadChunkCount: Int {
@@ -414,13 +421,15 @@ class ChatViewModel: ObservableObject {
     let chatService: ChatService
     let ttsManager: TTSManager
     var cancellables = Set<AnyCancellable>()
-    var additionalHistoryLoaded: Int = 0
-    var lastSessionID: UUID?
+    var historyWindow: ChatHistoryWindow?
+    var historyWindowSessionID: UUID?
     let incrementalHistoryBatchSize = 5
     let automaticHistoryWindowSize = 3
     let automaticHistoryBatchSize = 4
+    let automaticHistoryMaximumWindowSize = 9
+    let retainedRenderMessageCacheLimit = 4
+    var retainedRenderMessageIDs: [UUID] = []
     var visibleMessagesCache: [ChatMessage] = []
-    var visibleMessagesWeightedCount: Int = 0
     var displayMessageIDs: [UUID] = []
     var activatedModelIDs: [String] = []
     var audioRecorder: AVAudioRecorder?

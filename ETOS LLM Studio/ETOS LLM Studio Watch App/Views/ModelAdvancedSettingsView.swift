@@ -276,12 +276,19 @@ struct ModelAdvancedSettingsView: View {
                             .frame(width: 60)
                     }
 
-                    HStack {
-                        Text(NSLocalizedString("懒加载轮次", comment: ""))
-                        Spacer()
-                        TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 60)
+                    Toggle(
+                        NSLocalizedString("自动管理历史消息", comment: "自动管理聊天历史窗口设置"),
+                        isOn: $viewModel.automaticHistoryLoadingEnabled
+                    )
+
+                    if !viewModel.automaticHistoryLoadingEnabled {
+                        HStack {
+                            Text(NSLocalizedString("手动加载轮次", comment: "手动加载聊天历史轮次设置"))
+                            Spacer()
+                            TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 60)
+                        }
                     }
 
                     Toggle(

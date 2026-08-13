@@ -70,6 +70,7 @@ final class ChatViewModel: ObservableObject {
     @Published var reasoningThinkingTitleByMessageID: [UUID: String] = [:]
     var allMessagesForSession: [ChatMessage] = []
     @Published var isHistoryFullyLoaded: Bool = false
+    @Published var isLaterHistoryFullyLoaded: Bool = true
     @Published var userInput: String = ""
     @Published var messageToEdit: ChatMessage?
     @Published var messageRewritePayload: MessageRewritePayload?
@@ -211,12 +212,18 @@ final class ChatViewModel: ObservableObject {
     @Published var enableOpenAIStreamIncludeUsage: Bool = AppConfigStore.shared.enableOpenAIStreamIncludeUsage {
         didSet { AppConfigStore.shared.enableOpenAIStreamIncludeUsage = enableOpenAIStreamIncludeUsage }
     }
+    @Published var automaticHistoryLoadingEnabled: Bool = AppConfigStore.shared.automaticHistoryLoadingEnabled {
+        didSet {
+            AppConfigStore.shared.automaticHistoryLoadingEnabled = automaticHistoryLoadingEnabled
+            guard oldValue != automaticHistoryLoadingEnabled else { return }
+            resetLazyLoadState()
+        }
+    }
     @Published var lazyLoadMessageCount: Int = AppConfigStore.shared.lazyLoadMessageCount {
         didSet {
             AppConfigStore.shared.lazyLoadMessageCount = lazyLoadMessageCount
             guard oldValue != lazyLoadMessageCount else { return }
-            additionalHistoryLoaded = 0
-            updateDisplayedMessages()
+            resetLazyLoadState()
         }
     }
     @Published var currentBackgroundImage: String = AppConfigStore.shared.currentBackgroundImage {
@@ -357,7 +364,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     var remainingHistoryCount: Int {
-        max(0, allMessagesForSession.count - messages.count)
+        max(0, historyWindow?.lowerBound ?? 0)
     }
 
     var historyLoadChunkCount: Int {
@@ -368,13 +375,15 @@ final class ChatViewModel: ObservableObject {
     
     let chatService: ChatService
     let ttsManager: TTSManager
-    var additionalHistoryLoaded: Int = 0
-    var lastSessionID: UUID?
+    var historyWindow: ChatHistoryWindow?
+    var historyWindowSessionID: UUID?
     let incrementalHistoryBatchSize = 5
     let automaticHistoryWindowSize = 25
-    let automaticHistoryBatchSize = 20
+    let automaticHistoryBatchSize = 12
+    let automaticHistoryMaximumWindowSize = 37
+    let retainedRenderMessageCacheLimit = 12
+    var retainedRenderMessageIDs: [UUID] = []
     var visibleMessagesCache: [ChatMessage] = []
-    var visibleMessagesWeightedCount: Int = 0
     var cancellables = Set<AnyCancellable>()
     var displayMessageIDs: [UUID] = []
     var activatedModelIDs: [String] = []

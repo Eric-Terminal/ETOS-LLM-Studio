@@ -103,6 +103,8 @@ struct ChatView: View {
     @State var scrollTargetGeneration: UInt = 0
     @State var isAutomaticHistoryLoadInFlight = false
     @State var awaitsAutomaticHistoryAnchorMetrics = false
+    @State var automaticHistoryLoadDirection: ChatAutomaticHistoryDirection?
+    @State var pendingAutomaticHistoryLoadRequest: ChatAutomaticHistoryLoadRequest?
     @State var lastAutomaticHistoryLoadAnchorID: UUID?
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
@@ -114,6 +116,7 @@ struct ChatView: View {
     @State var isComposerRequestControlsExpanded = false
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
+    @State var isMessageJumpInFlight = false
     @State var localResourceUsagePanelOffset: CGSize = .zero
     @State var localTerminalPreviewOffset: CGSize = .zero
     @State var localTerminalInitialJobID: UUID?
@@ -1051,6 +1054,10 @@ extension ChatView {
                         frames,
                         orderedMessageIDs: viewModel.displayMessages.map(\.id)
                     )
+                    if let messageID = pendingJumpRequest?.messageID,
+                       frames.samples[messageID] != nil {
+                        applyPendingMessageJumpIfReady(messageID)
+                    }
                 }
                 .onChange(of: chatLayoutAuditContext) { _, context in
                     chatLayoutIntegrityMonitor.updateContext(context)
@@ -1105,10 +1112,6 @@ extension ChatView {
                     guard newValue != nil, shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
                     scrollToBottom()
                 }
-                .onChange(of: pendingJumpRequest) { _, request in
-                    guard let request else { return }
-                    scrollToMessage(request.messageID)
-                }
                 .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
                     resolvePendingSearchJumpIfNeeded()
                 }
@@ -1119,6 +1122,7 @@ extension ChatView {
                     lastAutomaticHistoryLoadAnchorID = nil
                     shouldRestorePendingJumpOnAppear = false
                     pendingJumpRequest = nil
+                    isMessageJumpInFlight = false
                     shouldKeepBottomPinned = true
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
@@ -1339,7 +1343,12 @@ extension ChatView {
                 chatLayoutSettleTask?.cancel()
                 chatLayoutSettleTask = nil
                 chatLayoutIntegrityMonitor.stop()
-                cancelPendingScrollTargetCommand()
+                if isMessageJumpInFlight,
+                   case .message(let messageID)? = chatScrollTarget {
+                    pendingJumpRequest = MessageJumpRequest(messageID: messageID)
+                    shouldRestorePendingJumpOnAppear = true
+                }
+                cancelPendingScrollTargetCommand(preservingMessageJump: true)
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
                 chatTransientNoticeDismissTask?.cancel()

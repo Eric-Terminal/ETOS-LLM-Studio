@@ -305,6 +305,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case modelConnectivityTestConcurrencyLimit = "modelConnectivityTest.concurrencyLimit"
     case enableOpenAIStreamIncludeUsage = "enableOpenAIStreamIncludeUsage"
     case reasoningContentEchoMode = "chat.reasoningContentEchoMode"
+    case automaticHistoryLoadingEnabled = "chat.historyWindow.automaticLoadingEnabled"
     case lazyLoadMessageCount = "lazyLoadMessageCount"
     case enableAutoSessionNaming = "enableAutoSessionNaming"
     case chatSendDelaySeconds = "chat.sendDelaySeconds"
@@ -539,6 +540,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .aiTopPEnabled:
             return .bool(false)
         case .enableOpenAIStreamIncludeUsage,
+             .automaticHistoryLoadingEnabled,
              .enableAutoSessionNaming:
             return .bool(true)
         case .systemPrompt:

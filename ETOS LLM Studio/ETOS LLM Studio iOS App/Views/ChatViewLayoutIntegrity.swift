@@ -510,6 +510,10 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         recoveryRevisionByMessageID[messageID, default: 0]
     }
 
+    func hasLayoutFrame(for messageID: UUID) -> Bool {
+        snapshot.samples[messageID] != nil
+    }
+
     func updateContext(_ newContext: ChatLayoutAuditContext) {
         if context.sessionID != newContext.sessionID {
             reset()
@@ -871,5 +875,9 @@ extension ChatView {
     func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
         guard isChatScrollUserInteracting != isUserInteracting else { return }
         isChatScrollUserInteracting = isUserInteracting
+        if isUserInteracting,
+           (pendingScrollTargetTask != nil || chatScrollTarget != nil || isMessageJumpInFlight) {
+            cancelPendingScrollTargetCommand()
+        }
     }
 }

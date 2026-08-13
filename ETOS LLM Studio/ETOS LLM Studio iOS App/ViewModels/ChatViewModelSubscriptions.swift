@@ -35,6 +35,7 @@ extension ChatViewModel {
         enableStreaming = appConfig.enableStreaming
         enableResponseSpeedMetrics = appConfig.enableResponseSpeedMetrics
         enableOpenAIStreamIncludeUsage = appConfig.enableOpenAIStreamIncludeUsage
+        automaticHistoryLoadingEnabled = appConfig.automaticHistoryLoadingEnabled
         lazyLoadMessageCount = appConfig.lazyLoadMessageCount
         currentBackgroundImage = appConfig.currentBackgroundImage
         enableAutoRotateBackground = appConfig.enableAutoRotateBackground

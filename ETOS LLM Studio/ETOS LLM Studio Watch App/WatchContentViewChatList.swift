@@ -134,13 +134,6 @@ extension ContentView {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
                     }
                 )
-                .onAppear {
-                    loadMoreAutomaticHistoryIfNeeded(
-                        proxy: proxy,
-                        anchorMessageID: state.id,
-                        isFirstDisplayedMessage: index == 0
-                    )
-                }
 
                 if let contexts = outgoingContinuationContextsByMessageID[message.id] {
                     ForEach(contexts) { context in
@@ -282,10 +275,6 @@ extension ContentView {
                         isAtBottom = true
                         shouldKeepBottomPinned = true
                         showScrollToBottomButton = false
-                        if !isWatchInputLayoutSettling,
-                           viewModel.resetAutomaticHistoryWindowIfNeeded() {
-                            scheduleDeferredBottomSnap(proxy: proxy)
-                        }
                     }
                     .onDisappear {
                         bottomAnchorVisibilityWorkItem?.cancel()
@@ -309,8 +298,13 @@ extension ContentView {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .modifier(WatchChatScrollStateObserverModifier { distanceToBottom, isUserInteracting in
-            updateWatchScrollState(distanceToBottom: distanceToBottom, isUserInteracting: isUserInteracting)
+        .modifier(WatchChatScrollStateObserverModifier { distanceToTop, distanceToBottom, isUserInteracting in
+            updateWatchScrollState(
+                distanceToTop: distanceToTop,
+                distanceToBottom: distanceToBottom,
+                isUserInteracting: isUserInteracting,
+                proxy: proxy
+            )
         })
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -400,9 +394,7 @@ extension ContentView {
         }
         .onChange(of: pendingJumpRequest) { _, request in
             guard let request else { return }
-            withAnimation {
-                proxy.scrollTo(request.messageID, anchor: .center)
-            }
+            scheduleWatchMessageJump(request, proxy: proxy)
         }
         .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
             resolvePendingSearchJumpIfNeeded()
@@ -410,6 +402,11 @@ extension ContentView {
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            automaticHistoryAnchorTask?.cancel()
+            automaticHistoryAnchorTask = nil
+            pendingAutomaticHistoryLoadRequest = nil
+            isAutomaticHistoryLoadInFlight = false
+            lastAutomaticHistoryLoadAnchorID = nil
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
@@ -427,12 +424,8 @@ extension ContentView {
             if shouldRestorePendingJumpOnAppear {
                 shouldRestorePendingJumpOnAppear = false
                 resolvePendingSearchJumpIfNeeded()
-                DispatchQueue.main.async {
-                    if let request = pendingJumpRequest {
-                        withAnimation {
-                            proxy.scrollTo(request.messageID, anchor: .center)
-                        }
-                    }
+                if let request = pendingJumpRequest {
+                    scheduleWatchMessageJump(request, proxy: proxy)
                 }
                 return
             }
@@ -564,18 +557,44 @@ extension ContentView {
         }
     }
 
-    func loadMoreAutomaticHistoryIfNeeded(
+    func performAutomaticHistoryLoad(
         proxy: ScrollViewProxy,
-        anchorMessageID: UUID,
-        isFirstDisplayedMessage: Bool
+        request: WatchAutomaticHistoryLoadRequest
     ) {
-        guard isFirstDisplayedMessage, viewModel.usesAutomaticHistoryWindow else { return }
+        guard viewModel.usesAutomaticHistoryWindow,
+              !isAutomaticHistoryLoadInFlight,
+              lastAutomaticHistoryLoadAnchorID != request.anchorMessageID else {
+            return
+        }
+        lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
+        isAutomaticHistoryLoadInFlight = true
         suppressAutoScrollOnce = true
         shouldKeepBottomPinned = false
-        let didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
-        guard didLoad else { return }
-        DispatchQueue.main.async {
-            proxy.scrollTo(anchorMessageID, anchor: .top)
+        let didLoad: Bool
+        switch request.direction {
+        case .earlier:
+            didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
+        case .later:
+            didLoad = viewModel.loadMoreAutomaticLaterHistoryIfNeeded()
+        }
+        guard didLoad else {
+            suppressAutoScrollOnce = false
+            isAutomaticHistoryLoadInFlight = false
+            return
+        }
+
+        automaticHistoryAnchorTask?.cancel()
+        automaticHistoryAnchorTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            proxy.scrollTo(
+                request.anchorMessageID,
+                anchor: request.direction == .earlier ? .top : .bottom
+            )
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else { return }
+            isAutomaticHistoryLoadInFlight = false
+            automaticHistoryAnchorTask = nil
         }
     }
 
@@ -585,18 +604,34 @@ extension ContentView {
             return false
         }
 
-        prepareForMessageJump()
-
-        let targetMessageID = viewModel.allMessagesForSession[targetZeroBasedIndex].id
-        let isVisible = viewModel.displayMessages.contains(where: { $0.id == targetMessageID })
-        if !isVisible {
-            viewModel.loadEntireHistory()
+        guard let targetMessageID = ChatJumpTargetSupport.messageID(
+            at: targetZeroBasedIndex,
+            in: viewModel.allMessagesForSession,
+            hiddenToolCallResultIDs: viewModel.toolCallResultIDs
+        ) else {
+            return false
         }
 
+        prepareForMessageJump()
+        guard viewModel.prepareHistoryWindow(containing: targetMessageID) else { return false }
         DispatchQueue.main.async {
             pendingJumpRequest = MessageJumpRequest(messageID: targetMessageID)
         }
         return true
+    }
+
+    func scheduleWatchMessageJump(_ request: MessageJumpRequest, proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            // List 需要先把新窗口提交到布局树，再接收 scrollTo。
+            await Task.yield()
+            await Task.yield()
+            guard pendingJumpRequest == request else { return }
+            withAnimation {
+                proxy.scrollTo(request.messageID, anchor: .center)
+            }
+            pendingJumpRequest = nil
+            shouldRestorePendingJumpOnAppear = false
+        }
     }
 
     func prepareForMessageJump() {
@@ -606,6 +641,10 @@ extension ContentView {
         pendingBottomSnapTask = nil
         watchInputLayoutSettleTask?.cancel()
         watchInputLayoutSettleTask = nil
+        automaticHistoryAnchorTask?.cancel()
+        automaticHistoryAnchorTask = nil
+        pendingAutomaticHistoryLoadRequest = nil
+        isAutomaticHistoryLoadInFlight = false
         isWatchInputLayoutSettling = false
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
@@ -696,9 +735,46 @@ extension ContentView {
         colorScheme == .dark ? Color.white.opacity(0.35) : Color.black.opacity(0.12)
     }
 
-    func updateWatchScrollState(distanceToBottom: CGFloat, isUserInteracting: Bool) {
+    func updateWatchScrollState(
+        distanceToTop: CGFloat,
+        distanceToBottom: CGFloat,
+        isUserInteracting: Bool,
+        proxy: ScrollViewProxy
+    ) {
         let normalizedDistance = max(distanceToBottom, 0)
         let isNearBottom = normalizedDistance < watchBottomPinnedDistanceThreshold
+
+        if viewModel.usesAutomaticHistoryWindow, !isAutomaticHistoryLoadInFlight {
+            let firstMessageID = viewModel.displayMessages.first?.id
+            let lastMessageID = viewModel.displayMessages.last?.id
+            if isUserInteracting,
+               distanceToTop < watchAutomaticHistoryLoadTriggerDistance,
+               !viewModel.isHistoryFullyLoaded,
+               let firstMessageID,
+               firstMessageID != lastAutomaticHistoryLoadAnchorID {
+                pendingAutomaticHistoryLoadRequest = WatchAutomaticHistoryLoadRequest(
+                    direction: .earlier,
+                    anchorMessageID: firstMessageID
+                )
+            } else if isUserInteracting,
+                      distanceToBottom < watchAutomaticHistoryLoadTriggerDistance,
+                      !viewModel.isLaterHistoryFullyLoaded,
+                      let lastMessageID,
+                      lastMessageID != lastAutomaticHistoryLoadAnchorID {
+                pendingAutomaticHistoryLoadRequest = WatchAutomaticHistoryLoadRequest(
+                    direction: .later,
+                    anchorMessageID: lastMessageID
+                )
+            } else if !isUserInteracting, let request = pendingAutomaticHistoryLoadRequest {
+                pendingAutomaticHistoryLoadRequest = nil
+                let remainsNearRequestedEdge = request.direction == .earlier
+                    ? distanceToTop < watchAutomaticHistoryLoadTriggerDistance
+                    : distanceToBottom < watchAutomaticHistoryLoadTriggerDistance
+                if remainsNearRequestedEdge {
+                    performAutomaticHistoryLoad(proxy: proxy, request: request)
+                }
+            }
+        }
 
         if isNearBottom {
             bottomAnchorVisibilityWorkItem?.cancel()
@@ -729,20 +805,28 @@ extension ContentView {
 }
 
 private struct WatchChatScrollStateObserverModifier: ViewModifier {
-    let onDistanceChange: (CGFloat, Bool) -> Void
+    let onDistanceChange: (CGFloat, CGFloat, Bool) -> Void
     @State private var isUserInteracting = false
 
     func body(content: Content) -> some View {
         if #available(watchOS 11.0, *) {
             content
                 .onScrollPhaseChange { _, newPhase, context in
-                    isUserInteracting = Self.isUserInitiatedScrollPhase(newPhase)
-                    onDistanceChange(Self.distanceToBottom(from: context.geometry), isUserInteracting)
+                    let newIsUserInteracting = Self.isUserInitiatedScrollPhase(newPhase)
+                    isUserInteracting = newIsUserInteracting
+                    onDistanceChange(
+                        Self.distanceToTop(from: context.geometry),
+                        Self.distanceToBottom(from: context.geometry),
+                        newIsUserInteracting
+                    )
                 }
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    Self.distanceToBottom(from: geometry)
-                } action: { _, newDistance in
-                    onDistanceChange(newDistance, isUserInteracting)
+                .onScrollGeometryChange(for: WatchChatScrollDistances.self) { geometry in
+                    WatchChatScrollDistances(
+                        top: Self.distanceToTop(from: geometry),
+                        bottom: Self.distanceToBottom(from: geometry)
+                    )
+                } action: { _, newDistances in
+                    onDistanceChange(newDistances.top, newDistances.bottom, isUserInteracting)
                 }
         } else {
             content
@@ -755,6 +839,11 @@ private struct WatchChatScrollStateObserverModifier: ViewModifier {
     }
 
     @available(watchOS 11.0, *)
+    private static func distanceToTop(from geometry: ScrollGeometry) -> CGFloat {
+        max(geometry.visibleRect.minY, 0)
+    }
+
+    @available(watchOS 11.0, *)
     private static func isUserInitiatedScrollPhase(_ phase: ScrollPhase) -> Bool {
         switch phase {
         case .tracking, .interacting, .decelerating:
@@ -763,4 +852,9 @@ private struct WatchChatScrollStateObserverModifier: ViewModifier {
             return false
         }
     }
+}
+
+private struct WatchChatScrollDistances: Equatable {
+    let top: CGFloat
+    let bottom: CGFloat
 }

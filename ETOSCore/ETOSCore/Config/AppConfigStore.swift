@@ -211,6 +211,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var conversationRuntimeExecutionBudget: Int { didSet { write(.conversationRuntimeExecutionBudget, conversationRuntimeExecutionBudget) } }
     @Published public var enableOpenAIStreamIncludeUsage: Bool { didSet { write(.enableOpenAIStreamIncludeUsage, enableOpenAIStreamIncludeUsage) } }
     @Published public var reasoningContentEchoMode: String { didSet { write(.reasoningContentEchoMode, reasoningContentEchoMode) } }
+    @Published public var automaticHistoryLoadingEnabled: Bool {
+        didSet { write(.automaticHistoryLoadingEnabled, automaticHistoryLoadingEnabled) }
+    }
     @Published public var lazyLoadMessageCount: Int { didSet { write(.lazyLoadMessageCount, lazyLoadMessageCount) } }
     @Published public var enableAutoSessionNaming: Bool { didSet { write(.enableAutoSessionNaming, enableAutoSessionNaming) } }
     @Published public var chatSendDelaySeconds: Double { didSet { write(.chatSendDelaySeconds, chatSendDelaySeconds) } }
@@ -617,6 +620,7 @@ public final class AppConfigStore: ObservableObject {
         reasoningContentEchoMode = ReasoningContentEchoMode.normalized(
             Self.textValue(.reasoningContentEchoMode, userDefaults: userDefaults)
         ).rawValue
+        automaticHistoryLoadingEnabled = Self.boolValue(.automaticHistoryLoadingEnabled, userDefaults: userDefaults)
         lazyLoadMessageCount = Self.integerValue(.lazyLoadMessageCount, userDefaults: userDefaults)
         enableAutoSessionNaming = Self.boolValue(.enableAutoSessionNaming, userDefaults: userDefaults)
         chatSendDelaySeconds = Self.realValue(.chatSendDelaySeconds, userDefaults: userDefaults)
@@ -1173,6 +1177,7 @@ public final class AppConfigStore: ObservableObject {
         case .conversationRuntimeExecutionBudget: return .integer(conversationRuntimeExecutionBudget)
         case .enableOpenAIStreamIncludeUsage: return .bool(enableOpenAIStreamIncludeUsage)
         case .reasoningContentEchoMode: return .text(reasoningContentEchoMode)
+        case .automaticHistoryLoadingEnabled: return .bool(automaticHistoryLoadingEnabled)
         case .lazyLoadMessageCount: return .integer(lazyLoadMessageCount)
         case .enableAutoSessionNaming: return .bool(enableAutoSessionNaming)
         case .chatSendDelaySeconds: return .real(chatSendDelaySeconds)
@@ -1359,6 +1364,7 @@ public final class AppConfigStore: ObservableObject {
         case .requestLogPlainMessageEnabled: requestLogPlainMessageEnabled = value
         case .performanceTelemetryEnabled: performanceTelemetryEnabled = value
         case .enableOpenAIStreamIncludeUsage: enableOpenAIStreamIncludeUsage = value
+        case .automaticHistoryLoadingEnabled: automaticHistoryLoadingEnabled = value
         case .enableAutoSessionNaming: enableAutoSessionNaming = value
         case .enableVideoAnalysisForNonNativeModels: enableVideoAnalysisForNonNativeModels = value
         case .enableMemory: enableMemory = value
