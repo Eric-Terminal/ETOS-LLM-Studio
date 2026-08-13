@@ -59,6 +59,7 @@ struct ChatBubble: View {
     let onOpenSourceConversation: (() -> Void)?
     let onOpenConversation: ((UUID) -> Void)?
     let reportsSendFlightTarget: Bool
+    let layoutRecoveryRevision: UInt
     let providers: [Provider]
     
     @StateObject var audioPlayer = AudioPlayerManager()
@@ -114,6 +115,7 @@ struct ChatBubble: View {
         onOpenSourceConversation: (() -> Void)? = nil,
         onOpenConversation: ((UUID) -> Void)? = nil,
         reportsSendFlightTarget: Bool = false,
+        layoutRecoveryRevision: UInt = 0,
         providers: [Provider] = []
     ) {
         self.messageState = messageState
@@ -158,6 +160,7 @@ struct ChatBubble: View {
         self.onOpenSourceConversation = onOpenSourceConversation
         self.onOpenConversation = onOpenConversation
         self.reportsSendFlightTarget = reportsSendFlightTarget
+        self.layoutRecoveryRevision = layoutRecoveryRevision
         self.providers = providers
     }
     
@@ -246,6 +249,7 @@ struct ChatBubble: View {
             .id(ChatBubbleLayoutIdentity(
                 messageID: messageState.id,
                 structuralRevision: messageState.layoutRevision,
+                layoutRecoveryRevision: layoutRecoveryRevision,
                 isStreaming: showsStreamingIndicators,
                 isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
                 hasPreparedMarkdown: preparedMarkdownPayload != nil,

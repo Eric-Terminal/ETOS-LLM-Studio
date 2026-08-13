@@ -30,6 +30,18 @@ struct ETStreamingMarkdownPolicyTests {
         #expect(state.layoutRevision == 1)
     }
 
+    @Test("静态渲染器交接会主动使旧行高失效")
+    @MainActor
+    func rendererHandoffAdvancesLayoutRevision() {
+        let state = ChatMessageRenderState(
+            message: ChatMessage(role: .assistant, content: "静态正文")
+        )
+
+        state.invalidateLayoutAfterRendererHandoff()
+
+        #expect(state.layoutRevision == 1)
+    }
+
     @Test("静态 Markdown 准备完成前保留本次流式交接状态")
     @MainActor
     func staticMarkdownHandoffTracksChannels() {

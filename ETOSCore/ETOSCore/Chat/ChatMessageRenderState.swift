@@ -50,4 +50,11 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         layoutRevision &+= 1
         roleplayHTML = extraction
     }
+
+    /// UIKit Markdown 与 SwiftUI 静态视图完成交接后，强制刷新气泡的测量身份。
+    /// 这里不改变消息内容，只用于让懒加载容器丢弃交接期间可能缓存的旧高度。
+    public func invalidateLayoutAfterRendererHandoff() {
+        objectWillChange.send()
+        layoutRevision &+= 1
+    }
 }

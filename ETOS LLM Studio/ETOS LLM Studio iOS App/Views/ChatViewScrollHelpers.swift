@@ -289,6 +289,7 @@ extension ChatView {
         distanceToTop: CGFloat,
         isUserInteracting: Bool
     ) {
+        updateChatScrollInteractionState(isUserInteracting)
         updateScrollToBottomVisibility(
             distanceToBottom: distanceToBottom,
             isUserInteracting: isUserInteracting

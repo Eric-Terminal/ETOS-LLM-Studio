@@ -108,6 +108,8 @@ struct ChatView: View {
     @State var activeBottomScrollCommandTarget: ChatScrollTargetID?
     @State var needsImmediateBottomSnap: Bool = true
     @State var isChatLayoutSettling: Bool = false
+    @State var isChatScrollUserInteracting: Bool = false
+    @StateObject var chatLayoutIntegrityMonitor = ChatLayoutIntegrityMonitor()
     @State var isComposerRequestControlsExpanded = false
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?
@@ -932,8 +934,14 @@ extension ChatView {
                                         _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
                                     },
                                     reportsSendFlightTarget: reportsSendFlightTarget,
+                                    layoutRecoveryRevision: chatLayoutIntegrityMonitor.recoveryRevision(
+                                        for: message.id
+                                    ),
                                     providers: viewModel.providers
                                 )
+                                .background {
+                                    ChatMessageLayoutFrameReporter(messageID: message.id)
+                                }
                                 // 发送入场动画：用户气泡走 Overlay 飞行（见 flightOverlayLayer），
                                 // 真实气泡在飞行期间无动画隐身，避免两份白字文本叠加。
                                 .transition(
@@ -995,6 +1003,16 @@ extension ChatView {
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
+                .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
+                .onPreferenceChange(ChatMessageLayoutFramePreferenceKey.self) { frames in
+                    chatLayoutIntegrityMonitor.updateFrames(
+                        frames,
+                        orderedMessageIDs: viewModel.displayMessages.map(\.id)
+                    )
+                }
+                .onChange(of: chatLayoutAuditContext) { _, context in
+                    chatLayoutIntegrityMonitor.updateContext(context)
+                }
                 // 静态尺寸变化由 SwiftUI 锚定；流式增长改由 UIKit 只动画 contentOffset。
                 // 两套机制不会同时接管，用户主动离底后也不会抢回阅读位置。
                 .chatDefaultSizeChangeScrollAnchor(
@@ -1048,12 +1066,14 @@ extension ChatView {
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
                     chatScrollTarget = nil
+                    chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
                     handleDisplayedMessageIdentityChange()
                 }
                 .onAppear {
+                    chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
                     if shouldRestorePendingJumpOnAppear {
                         shouldRestorePendingJumpOnAppear = false
                         resolvePendingSearchJumpIfNeeded()
@@ -1234,6 +1254,7 @@ extension ChatView {
                 pendingBottomSnapTask = nil
                 chatLayoutSettleTask?.cancel()
                 chatLayoutSettleTask = nil
+                chatLayoutIntegrityMonitor.stop()
                 cancelPendingScrollTargetCommand()
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil

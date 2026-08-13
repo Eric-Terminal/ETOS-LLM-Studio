@@ -8,6 +8,7 @@
 
 import Foundation
 import ETOSCore
+import SwiftUI
 
 extension ChatViewModel {
     var usesAutomaticHistoryWindow: Bool {
@@ -198,7 +199,7 @@ extension ChatViewModel {
         if preparedMarkdownByMessageID[messageID]?.sourceText == sourceText {
             markdownPrepareTasks[messageID]?.cancel()
             markdownPrepareTasks.removeValue(forKey: messageID)
-            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(channel: .content)
+            finishPreparedMarkdownHandoff(for: messageID, channel: .content)
             return
         }
 
@@ -210,8 +211,11 @@ extension ChatViewModel {
             guard !Task.isCancelled, let self else { return }
             guard self.markdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.visualMessage.content == sourceText else { return }
-            self.preparedMarkdownByMessageID[messageID] = prepared
-            self.messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(channel: .content)
+            self.finishPreparedMarkdownHandoff(
+                prepared,
+                for: messageID,
+                channel: .content
+            )
             if self.markdownPrepareGenerations[messageID] == generation {
                 self.markdownPrepareTasks[messageID] = nil
             }
@@ -298,18 +302,21 @@ extension ChatViewModel {
             message: message,
             isStreaming: isStreamingReasoningMessage
         ), let sourceText = message.reasoningContent else {
-            preparedReasoningMarkdownByMessageID.removeValue(forKey: messageID)
+            finishPreparedMarkdownHandoff(
+                for: messageID,
+                channel: .reasoning,
+                removesPreparedPayload: true
+            )
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
             reasoningMarkdownPrepareGenerations.removeValue(forKey: messageID)
-            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(channel: .reasoning)
             return
         }
 
         if preparedReasoningMarkdownByMessageID[messageID]?.sourceText == sourceText {
             reasoningMarkdownPrepareTasks[messageID]?.cancel()
             reasoningMarkdownPrepareTasks.removeValue(forKey: messageID)
-            messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(channel: .reasoning)
+            finishPreparedMarkdownHandoff(for: messageID, channel: .reasoning)
             return
         }
 
@@ -321,11 +328,72 @@ extension ChatViewModel {
             guard !Task.isCancelled, let self else { return }
             guard self.reasoningMarkdownPrepareGenerations[messageID] == generation else { return }
             guard self.messageStateByID[messageID]?.message.reasoningContent == sourceText else { return }
-            self.preparedReasoningMarkdownByMessageID[messageID] = prepared
-            self.messageStateByID[messageID]?.streamingMarkdownState.completeStaticHandoff(channel: .reasoning)
+            self.finishPreparedMarkdownHandoff(
+                prepared,
+                for: messageID,
+                channel: .reasoning
+            )
             if self.reasoningMarkdownPrepareGenerations[messageID] == generation {
                 self.reasoningMarkdownPrepareTasks[messageID] = nil
             }
+        }
+    }
+
+    /// prepared payload、流式视图结束和布局 revision 必须在同一事务中发布，
+    /// 防止 SwiftUI 在 UIKit/静态 Markdown 交接的中间状态缓存错误行高。
+    func finishPreparedMarkdownHandoff(
+        _ prepared: ETPreparedMarkdownRenderPayload? = nil,
+        for messageID: UUID,
+        channel: ETStreamingMarkdownChannel,
+        removesPreparedPayload: Bool = false
+    ) {
+        let state = messageStateByID[messageID]
+        let isAwaitingHandoff = state?.streamingMarkdownState.isAwaitingStaticHandoff(
+            channel: channel
+        ) == true
+        let payloadNeedsUpdate: Bool
+        switch channel {
+        case .content:
+            if removesPreparedPayload {
+                payloadNeedsUpdate = preparedMarkdownByMessageID[messageID] != nil
+            } else if let prepared {
+                payloadNeedsUpdate = preparedMarkdownByMessageID[messageID]?.sourceText != prepared.sourceText
+            } else {
+                payloadNeedsUpdate = false
+            }
+        case .reasoning:
+            if removesPreparedPayload {
+                payloadNeedsUpdate = preparedReasoningMarkdownByMessageID[messageID] != nil
+            } else if let prepared {
+                payloadNeedsUpdate = preparedReasoningMarkdownByMessageID[messageID]?.sourceText != prepared.sourceText
+            } else {
+                payloadNeedsUpdate = false
+            }
+        }
+        guard payloadNeedsUpdate || isAwaitingHandoff else { return }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            switch channel {
+            case .content:
+                if removesPreparedPayload {
+                    preparedMarkdownByMessageID.removeValue(forKey: messageID)
+                } else if let prepared {
+                    preparedMarkdownByMessageID[messageID] = prepared
+                }
+            case .reasoning:
+                if removesPreparedPayload {
+                    preparedReasoningMarkdownByMessageID.removeValue(forKey: messageID)
+                } else if let prepared {
+                    preparedReasoningMarkdownByMessageID[messageID] = prepared
+                }
+            }
+            if isAwaitingHandoff {
+                state?.streamingMarkdownState.completeStaticHandoff(channel: channel)
+            }
+            state?.invalidateLayoutAfterRendererHandoff()
         }
     }
 

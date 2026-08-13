@@ -95,6 +95,7 @@ struct MessageJumpRequest: Equatable {
 struct ChatBubbleLayoutIdentity: Hashable {
     let messageID: UUID
     let structuralRevision: UInt
+    let layoutRecoveryRevision: UInt
     let isStreaming: Bool
     let hasPreparedMarkdown: Bool
     let hasPreparedReasoningMarkdown: Bool
@@ -102,6 +103,7 @@ struct ChatBubbleLayoutIdentity: Hashable {
     init(
         messageID: UUID,
         structuralRevision: UInt,
+        layoutRecoveryRevision: UInt = 0,
         isStreaming: Bool,
         isStaticMarkdownHandoffInProgress: Bool = false,
         hasPreparedMarkdown: Bool,
@@ -110,6 +112,7 @@ struct ChatBubbleLayoutIdentity: Hashable {
         let preservesStreamingView = isStreaming || isStaticMarkdownHandoffInProgress
         self.messageID = messageID
         self.structuralRevision = preservesStreamingView ? 0 : structuralRevision
+        self.layoutRecoveryRevision = layoutRecoveryRevision
         self.isStreaming = preservesStreamingView
         // 交接期间冻结完整身份，避免任一通道先完成时重建另一通道的流式子树。
         self.hasPreparedMarkdown = preservesStreamingView ? false : hasPreparedMarkdown
