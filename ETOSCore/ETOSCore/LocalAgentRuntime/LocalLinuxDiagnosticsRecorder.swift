@@ -12,16 +12,8 @@ import Foundation
 public actor LocalLinuxDiagnosticsRecorder {
     public static let shared = LocalLinuxDiagnosticsRecorder()
 
-    private struct RecentEvent {
-        let jobID: UUID
-        let event: LocalLinuxBridgeDiagnosticEvent
-        let capturedAt: Date
-        var diagnosticID: UUID?
-    }
-
     private let storage: LocalLinuxStorageManager
     private var eventsByJobID: [UUID: [LocalLinuxBridgeDiagnosticEvent]] = [:]
-    private var mostRecentEvent: RecentEvent?
 
     public init(storage: LocalLinuxStorageManager = .shared) {
         self.storage = storage
@@ -30,16 +22,6 @@ public actor LocalLinuxDiagnosticsRecorder {
     public func append(_ events: [LocalLinuxBridgeDiagnosticEvent], jobID: UUID) async {
         guard !events.isEmpty else { return }
         eventsByJobID[jobID, default: []].append(contentsOf: events)
-        if let latest = events
-            .filter({ $0.scope == 3 })
-            .max(by: { $0.sequence < $1.sequence }) {
-            mostRecentEvent = RecentEvent(
-                jobID: jobID,
-                event: latest,
-                capturedAt: Date(),
-                diagnosticID: nil
-            )
-        }
         do {
             let layout = try await storage.prepareLayout()
             let url = layout.diagnostics.appendingPathComponent("\(jobID.uuidString).ndjson")
@@ -62,19 +44,6 @@ public actor LocalLinuxDiagnosticsRecorder {
 
     public func latestEvent(jobID: UUID) -> LocalLinuxBridgeDiagnosticEvent? {
         eventsByJobID[jobID]?.last
-    }
-
-    /// 最近一次兼容性故障会短暂随下一次 Agent 请求发送，避免模型还要调用诊断工具。
-    public func recentModelContext(maximumAge: TimeInterval = 10 * 60) -> String? {
-        guard let mostRecentEvent,
-              Date().timeIntervalSince(mostRecentEvent.capturedAt) <= maximumAge else {
-            return nil
-        }
-        return LocalLinuxDiagnosticPresentation.modelContext(
-            jobID: mostRecentEvent.jobID,
-            event: mostRecentEvent.event,
-            diagnosticID: mostRecentEvent.diagnosticID
-        )
     }
 
     public func finalize(
@@ -130,9 +99,6 @@ public actor LocalLinuxDiagnosticsRecorder {
             createdAt: Date()
         )
         _ = Persistence.saveLocalLinuxDiagnostic(diagnostic)
-        if mostRecentEvent?.jobID == job.id {
-            mostRecentEvent?.diagnosticID = id
-        }
         return id
     }
 
@@ -174,7 +140,6 @@ public actor LocalLinuxDiagnosticsRecorder {
 
 enum LocalLinuxDiagnosticPresentation {
     private static let userSummaryByteLimit = 256
-    private static let modelContextByteLimit = 768
 
     static func userSummary(_ event: LocalLinuxBridgeDiagnosticEvent) -> String {
         var fields: [(isOptional: Bool, value: String)] = [
@@ -240,28 +205,6 @@ enum LocalLinuxDiagnosticPresentation {
         value["syscall_number"] = event.systemCallNumber == 0 ? nil : event.systemCallNumber
         value["syscall_name"] = event.systemCallName
         return value
-    }
-
-    static func modelContext(
-        jobID: UUID,
-        event: LocalLinuxBridgeDiagnosticEvent,
-        diagnosticID: UUID?
-    ) -> String? {
-        var value = livePayload(jobID: jobID, event: event, diagnosticID: diagnosticID)
-        let removableKeys = [
-            "build_identity", "syscall_name", "process_name", "guest_thread_group_id",
-            "request_id", "sequence", "state", "kind", "scope"
-        ]
-        for key in [nil] + removableKeys.map(Optional.some) {
-            if let key { value.removeValue(forKey: key) }
-            guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) else {
-                return nil
-            }
-            if data.count <= modelContextByteLimit {
-                return String(data: data, encoding: .utf8)
-            }
-        }
-        return nil
     }
 
     private static func category(rawValue: UInt32) -> String {

@@ -25,8 +25,7 @@ extension ChatService {
         worldbookANBottom: [WorldbookInjection] = [],
         roleplayPrompt: String? = nil,
         includeLocalLinuxInstructions: Bool = false,
-        localAgentPrompt: String? = nil,
-        localLinuxDiagnosticContext: String? = nil
+        localAgentPrompt: String? = nil
     ) -> String {
         var parts: [String] = []
 
@@ -72,11 +71,6 @@ extension ChatService {
            let localAgentPrompt,
            !localAgentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append("<local_linux_runtime_instructions>\n\(localAgentPrompt)\n</local_linux_runtime_instructions>")
-        }
-
-        if let localLinuxDiagnosticContext,
-           !localLinuxDiagnosticContext.isEmpty {
-            parts.append("<local_linux_compatibility_diagnostic>\n\(localLinuxDiagnosticContext)\n</local_linux_compatibility_diagnostic>")
         }
 
         if let topic, !topic.isEmpty {

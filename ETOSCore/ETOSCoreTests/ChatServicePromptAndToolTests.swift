@@ -639,16 +639,13 @@ extension ChatServiceTests {
             conversationProfile: nil,
             includeSystemTime: false,
             includeLocalLinuxInstructions: true,
-            localAgentPrompt: "只描述 Linux 操作边界",
-            localLinuxDiagnosticContext: #"{"category":"unsupported_instruction","process_name":"pip"}"#
+            localAgentPrompt: "只描述 Linux 操作边界"
         )
 
         let personaRange = try #require(prompt.range(of: "用户定义的人设"))
         let linuxRange = try #require(prompt.range(of: "<local_linux_runtime_instructions>"))
         #expect(personaRange.lowerBound < linuxRange.lowerBound)
         #expect(prompt.contains("只描述 Linux 操作边界"))
-        #expect(prompt.contains("<local_linux_compatibility_diagnostic>"))
-        #expect(prompt.contains(#""process_name":"pip""#))
         #expect(!prompt.contains("<local_agent_runtime>"))
     }
 
@@ -693,19 +690,6 @@ extension ChatServiceTests {
         )
         #expect(!chatPrompt.contains("<local_linux_runtime_instructions>"))
         #expect(!chatPrompt.contains("不应进入 Chat 请求"))
-
-        let diagnosticPrompt = chatService.buildFinalSystemPrompt(
-            global: nil,
-            topic: nil,
-            memories: [],
-            recentConversationSummaries: [],
-            conversationProfile: nil,
-            includeSystemTime: false,
-            includeLocalLinuxInstructions: false,
-            localAgentPrompt: nil,
-            localLinuxDiagnosticContext: #"{"category":"unsupported_instruction"}"#
-        )
-        #expect(diagnosticPrompt.contains("<local_linux_compatibility_diagnostic>"))
     }
 
     @Test("search_memory 工具结果可按设置隐藏更新时间")

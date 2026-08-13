@@ -710,8 +710,8 @@ struct LocalAgentRuntimeTests {
         #expect(!pythonRecipe.requiredPackages.isSubset(of: installed))
     }
 
-    @Test("终端兼容性诊断直接显示并生成有界模型上下文")
-    func terminalDiagnosticsAreVisibleAndModelReadable() async throws {
+    @Test("终端兼容性诊断直接显示且保持长度边界")
+    func terminalDiagnosticsAreVisibleAndBounded() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let recorder = LocalLinuxDiagnosticsRecorder(
@@ -761,11 +761,7 @@ struct LocalAgentRuntimeTests {
         await recorder.append([olderEvent], jobID: olderJobID)
         await recorder.append([newerEvent], jobID: newerJobID)
 
-        let modelContext = try #require(await recorder.recentModelContext())
         let summary = LocalLinuxDiagnosticPresentation.userSummary(newerEvent)
-        #expect(modelContext.contains(#""process_name":"pip""#))
-        #expect(modelContext.contains(#""guest_process_id":202"#))
-        #expect(modelContext.utf8.count <= 768)
         #expect(summary.contains("process=pip"))
         #expect(summary.contains("signal=SIGILL"))
         #expect(summary.contains("opcode=0xd4200000"))
@@ -792,9 +788,6 @@ struct LocalAgentRuntimeTests {
             buildIdentity: String(repeating: "超长构建", count: 100)
         )
         await recorder.append([oversizedEvent], jobID: newerJobID)
-        let boundedContext = try #require(await recorder.recentModelContext())
-        #expect(boundedContext.utf8.count <= 768)
-        #expect(try JSONSerialization.jsonObject(with: Data(boundedContext.utf8)) is [String: Any])
         #expect(LocalLinuxDiagnosticPresentation.userSummary(oversizedEvent).utf8.count <= 256)
 
         let collector = try LocalLinuxOutputCollector(
