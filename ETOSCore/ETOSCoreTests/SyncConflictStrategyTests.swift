@@ -274,7 +274,8 @@ struct SyncConflictStrategyTests {
         #expect(summary.skippedImageFiles == 1)
         #expect(sessionsAfterRepeat.count == 2)
         #expect(forkedMessagesAfterRepeat.first?.audioFileName == localAudioName)
-        #expect(forkedMessagesAfterRepeat.first?.imageFileNames == [localImageName])
+        #expect(forkedMessagesAfterRepeat[1].imageFileNames == [localImageName])
+        #expect(forkedMessagesAfterRepeat[2].content == "远端带附件的问题")
     }
 
     @Test("远端尾部追加不会误判为离线分支")

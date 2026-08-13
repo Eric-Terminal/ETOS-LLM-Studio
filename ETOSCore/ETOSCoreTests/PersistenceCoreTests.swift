@@ -248,11 +248,14 @@ struct PersistenceCoreTests {
         let loadedMessages = await Persistence.loadMessagesAsync(for: session.id)
         let messageCount = await Persistence.loadMessageCountAsync(for: session.id)
 
-        #expect(messageCount == messages.count)
-        #expect(loadedMessages.map(\.id) == messages.map(\.id))
+        #expect(messageCount == 3)
+        #expect(loadedMessages.first?.id == messages.first?.id)
+        #expect(loadedMessages[1].imageFileNames == ["image.png"])
+        #expect(loadedMessages[1].content == "[图片]")
+        #expect(loadedMessages.last?.id == assistantMessage.id)
         #expect(loadedMessages.last?.getAllVersions() == ["第一版", "第二版"])
         #expect(loadedMessages.last?.getCurrentVersionIndex() == 0)
-        #expect(loadedMessages.last?.imageFileNames == ["image.png"])
+        #expect(loadedMessages.last?.imageFileNames == nil)
         #expect(loadedMessages.last?.responseAttemptID == assistantMessage.responseAttemptID)
 
         cleanup(sessions: [session])

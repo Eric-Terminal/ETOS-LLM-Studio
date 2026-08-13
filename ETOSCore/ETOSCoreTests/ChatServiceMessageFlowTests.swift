@@ -281,7 +281,7 @@ extension ChatServiceTests {
         #expect(requestedAt <= finishedAt.addingTimeInterval(1))
     }
 
-    @Test("文件附件会在发送前转换为纯文本并清空原始附件")
+    @Test("每个文件附件会独立转换为文本消息并保留正文消息")
     func testFileAttachmentsAreTextifiedBeforeSending() async throws {
         await cleanup()
         let session = createPermanentTestSession()
@@ -319,7 +319,9 @@ extension ChatServiceTests {
         let userMessages = sentMessages.filter { $0.role == .user }
         let combinedContent = userMessages.map(\.content).joined(separator: "\n")
         #expect(userMessages.count == 3)
-        #expect(userMessages.first?.content == "请处理这个附件")
+        #expect(userMessages[0].content.contains("<file name=\"notes.txt\">"))
+        #expect(userMessages[1].content.contains("<file name=\"todo.txt\">"))
+        #expect(userMessages[2].content == "请处理这个附件")
         #expect(combinedContent.components(separatedBy: "<file_attachments>").count - 1 == 2)
         #expect(combinedContent.contains("<file name=\"notes.txt\">"))
         #expect(combinedContent.contains("<file name=\"todo.txt\">"))
@@ -331,8 +333,8 @@ extension ChatServiceTests {
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
     }
 
-    @Test("视频与问题保存在同一消息并保留原文件供模型切换")
-    func testVideoAndPromptShareMessageAndKeepOriginalAttachment() async throws {
+    @Test("视频与问题保存为独立消息并保留原文件供模型切换")
+    func testVideoAndPromptRemainIndependentAndKeepOriginalAttachment() async throws {
         await cleanup()
         let videoAdapter = MockAPIAdapter()
         let configuration = URLSessionConfiguration.ephemeral
@@ -383,14 +385,17 @@ extension ChatServiceTests {
 
         let storedUserMessages = Persistence.loadMessages(for: session.id)
             .filter { $0.role == .user }
-        let storedMessage = try #require(storedUserMessages.first)
+        let storedVideoMessage = try #require(storedUserMessages.first)
+        let storedTextMessage = try #require(storedUserMessages.last)
         let sentMessage = try #require(videoAdapter.receivedMessages?.first {
-            $0.id == storedMessage.id
+            $0.id == storedVideoMessage.id
         })
 
-        #expect(storedUserMessages.count == 1)
-        #expect(storedMessage.content == "概括这段视频")
-        #expect(storedMessage.fileFileNames == [fileName])
+        #expect(storedUserMessages.count == 2)
+        #expect(storedVideoMessage.content == "[视频]")
+        #expect(storedVideoMessage.fileFileNames == [fileName])
+        #expect(storedTextMessage.content == "概括这段视频")
+        #expect(storedTextMessage.fileFileNames == nil)
         #expect(videoAdapter.receivedFileAttachments?[sentMessage.id]?.first?.data == attachment.data)
     }
 
@@ -502,7 +507,9 @@ extension ChatServiceTests {
         let userMessages = sentMessages.filter { $0.role == .user }
         let combinedContent = userMessages.map(\.content).joined(separator: "\n")
         #expect(userMessages.count == 3)
-        #expect(userMessages.first?.content == "请读取图片文字")
+        #expect(userMessages[0].content.contains("<image name=\"receipt.png\">"))
+        #expect(userMessages[1].content.contains("<image name=\"menu.png\">"))
+        #expect(userMessages[2].content == "请读取图片文字")
         #expect(combinedContent.components(separatedBy: "<image_ocr_attachments>").count - 1 == 2)
         #expect(combinedContent.contains("<image name=\"receipt.png\">"))
         #expect(combinedContent.contains("<image name=\"menu.png\">"))
@@ -627,24 +634,113 @@ extension ChatServiceTests {
 
         let storedUserMessages = Persistence.loadMessages(for: session.id).filter { $0.role == .user }
         #expect(storedUserMessages.count == 4)
-        #expect(storedUserMessages[0].content == "请看这些附件")
-        #expect(storedUserMessages[0].audioFileName == nil)
+        #expect(storedUserMessages[0].audioFileName != nil)
         #expect(storedUserMessages[0].imageFileNames == nil)
         #expect(storedUserMessages[0].fileFileNames == nil)
-        #expect(storedUserMessages[1].audioFileName != nil)
-        #expect(storedUserMessages[1].imageFileNames == nil)
+        #expect(storedUserMessages[1].audioFileName == nil)
+        #expect(storedUserMessages[1].imageFileNames == ["snapshot.png"])
         #expect(storedUserMessages[1].fileFileNames == nil)
-        #expect(storedUserMessages[2].imageFileNames == ["snapshot.png"])
-        #expect(storedUserMessages[3].fileFileNames == ["notes.md"])
+        #expect(storedUserMessages[2].fileFileNames == ["notes.md"])
+        #expect(storedUserMessages[3].content == "请看这些附件")
+        #expect(storedUserMessages[3].audioFileName == nil)
+        #expect(storedUserMessages[3].imageFileNames == nil)
+        #expect(storedUserMessages[3].fileFileNames == nil)
 
         let sentMessages = try #require(mockAdapter.receivedMessages)
         let sentUserMessages = sentMessages.filter { $0.role == .user }
         #expect(sentUserMessages.map(\.id) == storedUserMessages.map(\.id))
-        #expect(mockAdapter.receivedAudioAttachments?.keys.contains(storedUserMessages[1].id) == true)
-        #expect(mockAdapter.receivedImageAttachments?[storedUserMessages[2].id]?.first?.fileName == "snapshot.png")
+        #expect(mockAdapter.receivedAudioAttachments?.keys.contains(storedUserMessages[0].id) == true)
+        #expect(mockAdapter.receivedImageAttachments?[storedUserMessages[1].id]?.first?.fileName == "snapshot.png")
         #expect(mockAdapter.receivedFileAttachments?.isEmpty == true)
-        #expect(sentUserMessages[3].content.contains("notes.md"))
-        #expect(sentUserMessages[3].content.contains("# 标题"))
+        #expect(sentUserMessages[2].content.contains("notes.md"))
+        #expect(sentUserMessages[2].content.contains("# 标题"))
+    }
+
+    @Test("三张图片与正文按用户选择顺序保存并作为四条消息发送")
+    func testThreeImagesAndTextAreStoredAndSentAsFourAtomicMessages() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "三图正文原子消息测试")
+        defer { chatService.deleteSessions([session]) }
+
+        setupMockResponsesForChatAndTitle()
+        mockAdapter.responseToReturn = ChatMessage(role: .assistant, content: "已比较")
+
+        let visionModel = Model(
+            modelName: "three-image-chat-model",
+            isActivated: true,
+            kind: .chat,
+            inputModalities: [.text, .image]
+        )
+        let visionProvider = Provider(
+            name: "Three Image Chat Test Provider",
+            baseURL: "https://fake.url",
+            apiKeys: ["key-three-image"],
+            apiFormat: "openai-compatible",
+            models: [visionModel]
+        )
+        chatService.setSelectedModel(RunnableModel(provider: visionProvider, model: visionModel))
+
+        let imageNames = ["a.png", "b.png", "c.png"]
+        let imageAttachments = imageNames.map { fileName in
+            ImageAttachment(
+                data: Data([0x89, 0x50, 0x4E, 0x47]),
+                mimeType: "image/png",
+                fileName: fileName
+            )
+        }
+
+        await chatService.sendAndProcessMessage(
+            content: "比较三张图片",
+            aiTemperature: 0.2,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 10,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            imageAttachments: imageAttachments
+        )
+
+        let stored = Persistence.loadMessages(for: session.id).filter { $0.role == .user }
+        #expect(stored.count == 4)
+        #expect(stored.prefix(3).flatMap { $0.imageFileNames ?? [] } == imageNames)
+        #expect(stored[3].content == "比较三张图片")
+        #expect(stored[3].imageFileNames == nil)
+        #expect(stored.allSatisfy { message in
+            (message.imageFileNames?.count ?? 0) + (message.content == "比较三张图片" ? 1 : 0) == 1
+        })
+
+        let sent = try #require(mockAdapter.receivedMessages).filter { $0.role == .user }
+        #expect(sent.map(\.id) == stored.map(\.id))
+        #expect(sent.prefix(3).flatMap { $0.imageFileNames ?? [] } == imageNames)
+        #expect(sent.last?.content == "比较三张图片")
+    }
+
+    @Test("旧复合图片消息首次读取后会稳定迁移为独立消息")
+    func testLegacyCompoundImageMessageAtomizesOnceWithStableIDs() async throws {
+        await cleanup()
+        let session = createPermanentTestSession(name: "旧复合消息迁移测试")
+        defer { chatService.deleteSessions([session]) }
+        let compound = ChatMessage(
+            role: .user,
+            content: "比较三张图片",
+            imageFileNames: ["legacy-a.png", "legacy-b.png", "legacy-c.png"]
+        )
+        Persistence.saveMessages([compound], for: session.id)
+
+        let firstLoad = Persistence.loadMessages(for: session.id)
+        let secondLoad = Persistence.loadMessages(for: session.id)
+
+        #expect(firstLoad.count == 4)
+        #expect(firstLoad.prefix(3).flatMap { $0.imageFileNames ?? [] } == [
+            "legacy-a.png", "legacy-b.png", "legacy-c.png"
+        ])
+        #expect(firstLoad.last?.id == compound.id)
+        #expect(firstLoad.last?.content == "比较三张图片")
+        #expect(secondLoad.map(\.id) == firstLoad.map(\.id))
+        #expect(secondLoad == firstLoad)
     }
 
     @Test("文件附件文本提取失败时会阻断请求")

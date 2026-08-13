@@ -118,8 +118,11 @@ extension SyncEngine {
         for payload in incoming {
             var session = payload.session
             session.isTemporary = false
+            // 同步包可能来自仍保存“正文 + 多附件”复合消息的旧端。
+            // 先归一化为当前原子消息结构，避免首次导入落库拆分后，重复同步被误判成新分支。
+            let incomingMessages = payload.messages.flatMap(ChatMessageAtomicContentSupport.atomized)
 
-            let incomingHash = computeSessionContentHash(session: session, messages: payload.messages)
+            let incomingHash = computeSessionContentHash(session: session, messages: incomingMessages)
             if containsSessionHash(
                 incomingHash,
                 sessions: sessions,
@@ -138,14 +141,14 @@ extension SyncEngine {
 
                 if shouldForkParallelSession(
                     localMessages: localMessages,
-                    incomingMessages: payload.messages
+                    incomingMessages: incomingMessages
                 ) {
                     session = makeForkedSession(
                         from: session,
                         sourcePlatform: sourcePlatform,
                         existingSessions: sessions
                     )
-                    let forkedMessages = cloneMessagesForFork(payload.messages)
+                    let forkedMessages = cloneMessagesForFork(incomingMessages)
                     Persistence.saveMessages(forkedMessages, for: session.id)
                     sessions.insert(session, at: 0)
                     messagesBySessionID[session.id] = forkedMessages
@@ -157,7 +160,7 @@ extension SyncEngine {
                     localSession: localSession,
                     localMessages: localMessages,
                     incomingSession: session,
-                    incomingMessages: payload.messages
+                    incomingMessages: incomingMessages
                 ) {
                 case .unchanged((let mergedSession, let mergedMessages)):
                     sessions[candidateIndex] = mergedSession
@@ -180,9 +183,9 @@ extension SyncEngine {
                 session = makeNewSession(from: session)
             }
 
-            Persistence.saveMessages(payload.messages, for: session.id)
+            Persistence.saveMessages(incomingMessages, for: session.id)
             sessions.insert(session, at: 0)
-            messagesBySessionID[session.id] = payload.messages
+            messagesBySessionID[session.id] = incomingMessages
             imported += 1
         }
 

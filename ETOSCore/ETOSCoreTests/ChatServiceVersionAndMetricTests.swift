@@ -475,6 +475,44 @@ extension ChatServiceTests {
         await cleanup()
     }
 
+    @Test("删除三图输入中的第二张后重试上下文只保留其余原子消息")
+    func testDeleteOneImageAtomKeepsOtherImagesAndTextInRetryContext() async throws {
+        await cleanup()
+        let sessionID = try #require(chatService.currentSessionSubject.value?.id)
+        let compound = ChatMessage(
+            role: .user,
+            content: "比较三张图片",
+            imageFileNames: ["a.png", "b.png", "c.png"]
+        )
+        let userAtoms = ChatMessageAtomicContentSupport.atomized(compound)
+        let response = ChatMessage(role: .assistant, content: "旧回答")
+        chatService.updateMessages(userAtoms + [response], for: sessionID)
+
+        chatService.deleteMessage(userAtoms[1])
+
+        let remaining = chatService.messagesForSessionSubject.value
+        #expect(remaining.map(\.id) == [
+            userAtoms[0].id,
+            userAtoms[2].id,
+            userAtoms[3].id,
+            response.id
+        ])
+        #expect(remaining.flatMap { $0.imageFileNames ?? [] } == ["a.png", "c.png"])
+
+        let retry = try #require(
+            chatService.prepareMessageRetry(targetMessage: response, in: remaining)
+        )
+        #expect(Array(retry.requestMessages.prefix(3).map(\.id)) == [
+            userAtoms[0].id,
+            userAtoms[2].id,
+            userAtoms[3].id
+        ])
+        #expect(!retry.requestMessages.contains(where: { $0.id == userAtoms[1].id }))
+        #expect(retry.requestMessages.last?.id == retry.loadingMessage.id)
+
+        await cleanup()
+    }
+
     @Test("删除用户锚点后回复版本仍保持折叠展示")
     func testDeleteAnchorUserKeepsResponseAttemptsGrouped() async throws {
         await cleanup()
