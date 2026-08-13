@@ -247,11 +247,14 @@ private struct LocalLinuxTerminalDockedPreview: View {
 
 private struct LocalLinuxDockedPreviewBackground: View {
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     let isLiquidGlassEnabled: Bool
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        // 停靠预览与消息输入框属于同一底部操作区，沿用同一套材质参数，
+        // 避免壁纸透过时出现两层透明度不同的“拼接感”。
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         Group {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {
@@ -260,6 +263,7 @@ private struct LocalLinuxDockedPreviewBackground: View {
                         .glassEffect(.clear, in: shape)
                         .overlay(shape.fill(overlayColor))
                         .overlay(shape.stroke(strokeColor, lineWidth: 0.5))
+                        .shadow(color: shadowColor, radius: 6, x: 0, y: 2)
                 } else {
                     materialBackground(shape: shape)
                 }
@@ -274,14 +278,20 @@ private struct LocalLinuxDockedPreviewBackground: View {
             .fill(.ultraThinMaterial)
             .overlay(shape.fill(overlayColor))
             .overlay(shape.stroke(strokeColor, lineWidth: 0.5))
+            .shadow(color: shadowColor, radius: 6, x: 0, y: 2)
     }
 
     private var overlayColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+        let opacity = LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity)
+        return colorScheme == .dark ? Color.black.opacity(opacity) : Color.white.opacity(opacity)
     }
 
     private var strokeColor: Color {
         Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+
+    private var shadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.3 : 0.1)
     }
 }
 
