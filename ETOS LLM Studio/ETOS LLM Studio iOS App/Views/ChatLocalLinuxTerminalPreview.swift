@@ -25,6 +25,8 @@ struct LocalLinuxChatFloatingPreview: View {
     let onOpenTerminal: (UUID) -> Void
     let onOpenBrowser: () -> Void
 
+    @State private var isCollapsed = false
+
     @ViewBuilder
     var body: some View {
         switch mode {
@@ -38,6 +40,7 @@ struct LocalLinuxChatFloatingPreview: View {
                 topPadding: topPadding,
                 bottomPadding: bottomPadding,
                 offset: $offset,
+                isCollapsed: $isCollapsed,
                 isLiquidGlassEnabled: isLiquidGlassEnabled,
                 onOpenBrowser: onOpenBrowser
             )
@@ -48,6 +51,7 @@ struct LocalLinuxChatFloatingPreview: View {
                 topPadding: topPadding,
                 bottomPadding: bottomPadding,
                 offset: $offset,
+                isCollapsed: $isCollapsed,
                 isLiquidGlassEnabled: isLiquidGlassEnabled,
                 onOpen: onOpenTerminal
             )
@@ -65,6 +69,7 @@ struct AgentToolExecutionFloatingPreview: View {
     let topPadding: CGFloat
     let bottomPadding: CGFloat
     @Binding var offset: CGSize
+    @Binding var isCollapsed: Bool
     let isLiquidGlassEnabled: Bool
     let onOpenBrowser: () -> Void
 
@@ -72,27 +77,34 @@ struct AgentToolExecutionFloatingPreview: View {
     @State private var dragStartOffset: CGSize?
     @State private var isShowingDetail = false
 
-    private let panelSize = CGSize(width: 168, height: 112)
+    private let expandedPanelSize = CGSize(width: 168, height: 112)
+    private let collapsedPanelSize = CGSize(width: 44, height: 44)
+
+    private var panelSize: CGSize {
+        isCollapsed ? collapsedPanelSize : expandedPanelSize
+    }
 
     var body: some View {
         Group {
             if let preview {
-                Button {
-                    isShowingDetail = true
-                } label: {
-                    panelContent(preview)
+                Group {
+                    if isCollapsed {
+                        collapsedPanelContent(preview)
+                            .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                    } else {
+                        panelContent(preview)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                 }
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .simultaneousGesture(dragGesture)
                 .position(
                     x: defaultCenter.x + clampedOffset.width,
                     y: defaultCenter.y + clampedOffset.height
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
             }
         }
+        .animation(.spring(response: 0.32, dampingFraction: 1), value: isCollapsed)
         .task(id: browserSnapshotObservationID) {
             await observeBrowserSnapshot()
         }
@@ -102,10 +114,35 @@ struct AgentToolExecutionFloatingPreview: View {
                     preview: preview,
                     displayName: displayName(for: preview.toolName),
                     iconName: iconName(for: preview.toolName),
+                    browserImage: browserImage,
                     onOpenBrowser: isBrowserTool(preview.toolName) ? onOpenBrowser : nil
                 )
             }
         }
+    }
+
+    private func collapsedPanelContent(_ preview: AgentToolExecutionPreviewSnapshot) -> some View {
+        Button {
+            setCollapsed(false)
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: iconName(for: preview.toolName))
+                    .etFont(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(TelegramColors.attachButtonColor)
+
+                Circle()
+                    .fill(preview.state == .running ? Color.orange : Color.green)
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
+                    .offset(x: 2, y: 2)
+            }
+            .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
+            .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
+            .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
     }
 
     private func panelContent(_ preview: AgentToolExecutionPreviewSnapshot) -> some View {
@@ -130,35 +167,58 @@ struct AgentToolExecutionFloatingPreview: View {
                     .etFont(.system(size: 9, weight: .semibold))
                     .foregroundStyle(preview.state == .running ? Color.orange : Color.green)
 
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .etFont(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                Button {
+                    setCollapsed(true)
+                } label: {
+                    Image(systemName: "minus")
+                        .etFont(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("收起 Agent 工具预览", comment: "Collapse Agent tool execution preview"))
+
+                Button {
+                    isShowingDetail = true
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .etFont(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
             }
             .padding(.horizontal, 9)
             .frame(height: 30)
 
-            Group {
-                if isBrowserTool(preview.toolName), let browserImage {
-                    Image(uiImage: browserImage)
-                        .resizable()
-                        .scaledToFill()
-                } else if preview.previewText.isEmpty {
-                    Text(NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(preview.previewText)
-                        .font(.system(size: 7, design: .monospaced))
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .padding(6)
+            Button {
+                isShowingDetail = true
+            } label: {
+                Group {
+                    if isBrowserTool(preview.toolName), let browserImage {
+                        Image(uiImage: browserImage)
+                            .resizable()
+                            .scaledToFill()
+                    } else if preview.previewText.isEmpty {
+                        Text(NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(preview.previewText)
+                            .font(.system(size: 7, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                            .padding(6)
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(previewCanvasColor)
+                .clipped()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(previewCanvasColor)
-            .clipped()
+            .buttonStyle(.plain)
         }
-        .frame(width: panelSize.width, height: panelSize.height)
-        .background(panelBackground)
+        .frame(width: expandedPanelSize.width, height: expandedPanelSize.height)
+        .background(panelBackground(cornerRadius: 14))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -174,7 +234,7 @@ struct AgentToolExecutionFloatingPreview: View {
             guard !Task.isCancelled else { return }
             if let webView = browserManager.selectedWebView(sessionID: sessionID) {
                 let configuration = WKSnapshotConfiguration()
-                configuration.snapshotWidth = NSNumber(value: panelSize.width * 2)
+                configuration.snapshotWidth = NSNumber(value: expandedPanelSize.width * 2)
                 browserImage = try? await webView.takeSnapshot(configuration: configuration)
             } else {
                 browserImage = nil
@@ -244,7 +304,8 @@ struct AgentToolExecutionFloatingPreview: View {
                     CGSize(
                         width: startOffset.width + value.translation.width,
                         height: startOffset.height + value.translation.height
-                    )
+                    ),
+                    panelSize: panelSize
                 )
             }
             .onEnded { value in
@@ -253,15 +314,26 @@ struct AgentToolExecutionFloatingPreview: View {
                     CGSize(
                         width: startOffset.width + value.translation.width,
                         height: startOffset.height + value.translation.height
-                    )
+                    ),
+                    panelSize: panelSize
                 )
                 dragStartOffset = nil
             }
     }
 
-    private var clampedOffset: CGSize { clamp(offset) }
+    private var clampedOffset: CGSize {
+        clamp(offset, panelSize: panelSize)
+    }
 
-    private func clamp(_ candidate: CGSize) -> CGSize {
+    private func setCollapsed(_ collapsed: Bool) {
+        let targetSize = collapsed ? collapsedPanelSize : expandedPanelSize
+        withAnimation(.spring(response: 0.32, dampingFraction: 1)) {
+            isCollapsed = collapsed
+            offset = clamp(offset, panelSize: targetSize)
+        }
+    }
+
+    private func clamp(_ candidate: CGSize, panelSize: CGSize) -> CGSize {
         let minX = panelSize.width / 2 + 12
         let maxX = max(minX, containerSize.width - panelSize.width / 2 - 12)
         let minY = topPadding + panelSize.height / 2
@@ -273,10 +345,10 @@ struct AgentToolExecutionFloatingPreview: View {
 
     private var defaultCenter: CGPoint {
         CGPoint(
-            x: panelSize.width / 2 + 16,
+            x: expandedPanelSize.width / 2 + 16,
             y: max(
-                topPadding + panelSize.height / 2,
-                containerSize.height - bottomPadding - panelSize.height / 2
+                topPadding + expandedPanelSize.height / 2,
+                containerSize.height - bottomPadding - expandedPanelSize.height / 2
             )
         )
     }
@@ -285,8 +357,8 @@ struct AgentToolExecutionFloatingPreview: View {
         colorScheme == .dark ? .black : Color(uiColor: .secondarySystemBackground)
     }
 
-    private var panelBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+    private func panelBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return Group {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {
@@ -332,6 +404,7 @@ private struct AgentToolExecutionPreviewDetail: View {
     let preview: AgentToolExecutionPreviewSnapshot
     let displayName: String
     let iconName: String
+    let browserImage: UIImage?
     let onOpenBrowser: (() -> Void)?
 
     var body: some View {
@@ -346,6 +419,24 @@ private struct AgentToolExecutionPreviewDetail: View {
                     )
                     LabeledContent(NSLocalizedString("工具", comment: "Agent tool preview detail tool")) {
                         Label(displayName, systemImage: iconName)
+                    }
+                }
+
+                if browserImage != nil || !preview.previewText.isEmpty {
+                    Section {
+                        if let browserImage {
+                            Image(uiImage: browserImage)
+                                .resizable()
+                                .scaledToFit()
+                        } else {
+                            Text(preview.previewText)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                    } header: {
+                        Text(NSLocalizedString("浮窗内容", comment: "Agent tool floating preview content"))
+                    } footer: {
+                        Text(NSLocalizedString("这里显示的内容与聊天浮窗一致；执行中显示参数摘要，完成后显示结果末尾。", comment: "Agent tool floating preview content footer"))
                     }
                 }
 
@@ -405,6 +496,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
     let topPadding: CGFloat
     let bottomPadding: CGFloat
     @Binding var offset: CGSize
+    @Binding var isCollapsed: Bool
     let isLiquidGlassEnabled: Bool
     let onOpen: (UUID) -> Void
 
@@ -413,33 +505,75 @@ struct LocalLinuxTerminalFloatingPreview: View {
     @State private var presentation = LocalLinuxTerminalPresentation.empty
     @State private var dragStartOffset: CGSize?
 
-    private let panelSize = CGSize(width: 168, height: 112)
+    private let expandedPanelSize = CGSize(width: 168, height: 112)
+    private let collapsedPanelSize = CGSize(width: 44, height: 44)
+
+    private var panelSize: CGSize {
+        isCollapsed ? collapsedPanelSize : expandedPanelSize
+    }
 
     var body: some View {
         Group {
             if let activeTerminalID {
-                Button {
-                    onOpen(activeTerminalID)
-                } label: {
-                    panelContent(jobID: activeTerminalID)
+                Group {
+                    if isCollapsed {
+                        collapsedPanelContent()
+                            .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                    } else {
+                        panelContent(jobID: activeTerminalID)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                 }
-                .buttonStyle(.plain)
-                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .simultaneousGesture(dragGesture)
                 .position(
                     x: defaultCenter.x + clampedOffset.width,
                     y: defaultCenter.y + clampedOffset.height
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
             }
         }
+        .animation(.spring(response: 0.32, dampingFraction: 1), value: isCollapsed)
         .task(id: isEnabled) {
             await observeTerminalActivity()
         }
         .task(id: terminalOutputObservationID) {
             await observeTerminalOutput()
         }
+    }
+
+    private func collapsedPanelContent() -> some View {
+        Button {
+            setCollapsed(false)
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "terminal.fill")
+                    .etFont(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(TelegramColors.attachButtonColor)
+
+                if activeTerminalCount > 1 {
+                    Text("\(activeTerminalCount)")
+                        .etFont(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(TelegramColors.attachButtonColor))
+                        .offset(x: 4, y: 4)
+                } else {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
+                }
+            }
+            .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
+            .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
+            .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .accessibilityLabel(NSLocalizedString("展开用户终端预览", comment: "Expand user Linux terminal preview"))
     }
 
     private func panelContent(jobID: UUID) -> some View {
@@ -467,29 +601,52 @@ struct LocalLinuxTerminalFloatingPreview: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .etFont(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                Button {
+                    setCollapsed(true)
+                } label: {
+                    Image(systemName: "minus")
+                        .etFont(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("收起用户终端预览", comment: "Collapse user Linux terminal preview"))
+
+                Button {
+                    onOpen(jobID)
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .etFont(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 30)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
             }
             .padding(.horizontal, 9)
             .frame(height: 30)
 
-            Group {
-                if presentation.plainText.isEmpty {
-                    Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(presentation.attributedText)
+            Button {
+                onOpen(jobID)
+            } label: {
+                Group {
+                    if presentation.plainText.isEmpty {
+                        Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(presentation.attributedText)
+                    }
                 }
+                .font(.system(size: 6, design: .monospaced))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(6)
+                .background(terminalCanvasColor)
+                .clipped()
             }
-            .font(.system(size: 6, design: .monospaced))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .padding(6)
-            .background(terminalCanvasColor)
-            .clipped()
+            .buttonStyle(.plain)
         }
-        .frame(width: panelSize.width, height: panelSize.height)
-        .background(panelBackground)
+        .frame(width: expandedPanelSize.width, height: expandedPanelSize.height)
+        .background(panelBackground(cornerRadius: 14))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -557,7 +714,8 @@ struct LocalLinuxTerminalFloatingPreview: View {
                     CGSize(
                         width: startOffset.width + value.translation.width,
                         height: startOffset.height + value.translation.height
-                    )
+                    ),
+                    panelSize: panelSize
                 )
             }
             .onEnded { value in
@@ -566,14 +724,15 @@ struct LocalLinuxTerminalFloatingPreview: View {
                     CGSize(
                         width: startOffset.width + value.translation.width,
                         height: startOffset.height + value.translation.height
-                    )
+                    ),
+                    panelSize: panelSize
                 )
                 dragStartOffset = nil
             }
     }
 
     private var clampedOffset: CGSize {
-        clamp(offset)
+        clamp(offset, panelSize: panelSize)
     }
 
     private var terminalAppearance: LocalLinuxTerminalAppearance {
@@ -588,7 +747,15 @@ struct LocalLinuxTerminalFloatingPreview: View {
         "\(activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
     }
 
-    private func clamp(_ candidate: CGSize) -> CGSize {
+    private func setCollapsed(_ collapsed: Bool) {
+        let targetSize = collapsed ? collapsedPanelSize : expandedPanelSize
+        withAnimation(.spring(response: 0.32, dampingFraction: 1)) {
+            isCollapsed = collapsed
+            offset = clamp(offset, panelSize: targetSize)
+        }
+    }
+
+    private func clamp(_ candidate: CGSize, panelSize: CGSize) -> CGSize {
         let minX = panelSize.width / 2 + 12
         let maxX = max(minX, containerSize.width - panelSize.width / 2 - 12)
         let minY = topPadding + panelSize.height / 2
@@ -600,16 +767,16 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
     private var defaultCenter: CGPoint {
         CGPoint(
-            x: panelSize.width / 2 + 16,
+            x: expandedPanelSize.width / 2 + 16,
             y: max(
-                topPadding + panelSize.height / 2,
-                containerSize.height - bottomPadding - panelSize.height / 2
+                topPadding + expandedPanelSize.height / 2,
+                containerSize.height - bottomPadding - expandedPanelSize.height / 2
             )
         )
     }
 
-    private var panelBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+    private func panelBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return Group {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {

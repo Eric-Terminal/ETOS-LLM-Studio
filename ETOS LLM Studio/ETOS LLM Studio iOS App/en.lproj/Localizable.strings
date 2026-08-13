@@ -6477,6 +6477,11 @@
 "聊天缩略图" = "Chat Preview";
 "开启后可使用终端、Agent Linux 工具与本地 MCP；系统仍会在首次使用时按需准备。" = "Enable terminals, Agent Linux tools, and local MCP. The system is still prepared on first use.";
 "展开 Agent 工具预览" = "Expand Agent tool preview";
+"收起 Agent 工具预览" = "Collapse Agent tool preview";
+"浮窗内容" = "Floating Preview Content";
+"这里显示的内容与聊天浮窗一致；执行中显示参数摘要，完成后显示结果末尾。" = "This is the same content shown in the chat preview. While running it summarizes arguments; when complete it shows the end of the result.";
+"展开用户终端预览" = "Expand user terminal preview";
+"收起用户终端预览" = "Collapse user terminal preview";
 "等待工具输出…" = "Waiting for tool output…";
 "Linux" = "Linux";
 "打开浏览器" = "Open Browser";
