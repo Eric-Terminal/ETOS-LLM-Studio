@@ -24,6 +24,7 @@ extension ChatService {
         worldbookANTop: [WorldbookInjection] = [],
         worldbookANBottom: [WorldbookInjection] = [],
         roleplayPrompt: String? = nil,
+        includeLocalLinuxInstructions: Bool = false,
         localAgentPrompt: String? = nil
     ) -> String {
         var parts: [String] = []
@@ -66,7 +67,8 @@ extension ChatService {
             parts.append(roleplayPrompt)
         }
 
-        if let localAgentPrompt,
+        if includeLocalLinuxInstructions,
+           let localAgentPrompt,
            !localAgentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append("<local_linux_runtime_instructions>\n\(localAgentPrompt)\n</local_linux_runtime_instructions>")
         }

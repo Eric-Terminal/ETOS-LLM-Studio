@@ -190,6 +190,32 @@ extension ChatService {
         return resolved.isEmpty ? nil : resolved
     }
 
+    /// Linux 操作说明必须与模型实际可调用的 Linux 工具同时出现，避免 Chat
+    /// 或不支持工具调用的模型承担无用上下文和错误的能力暗示。
+    func shouldIncludeLocalLinuxInstructions(
+        tools: [InternalToolDefinition]?,
+        modelSupportsToolCalling: Bool,
+        localLinuxToolsEnabled: Bool
+    ) -> Bool {
+        guard modelSupportsToolCalling, localLinuxToolsEnabled else { return false }
+        return tools?.contains {
+            $0.kind == .openAIResponsesLocalShell
+                || LocalLinuxToolDefinitions.containsExposedName($0.name)
+        } == true
+    }
+
+    func activeRequestIncludesLocalLinuxTools(sessionID: UUID) -> Bool {
+        guard let runID = conversationRunIDs(for: sessionID)?.runID,
+              let run = Persistence.loadConversationRun(id: runID) else {
+            return false
+        }
+        if let localLinuxToolsEnabled = run.requestConfiguration.localLinuxToolsEnabled {
+            return localLinuxToolsEnabled
+        }
+        // 旧版本的持久化 Run 没有能力快照时，只接受真实 Agent 上下文作为兼容依据。
+        return Persistence.loadLocalAgentRun(id: runID)?.context.mode == .agent
+    }
+
     func preparedMessagesForRequest(
         from messages: [ChatMessage],
         loadingMessageID: UUID,

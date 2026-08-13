@@ -638,6 +638,7 @@ extension ChatServiceTests {
             recentConversationSummaries: [],
             conversationProfile: nil,
             includeSystemTime: false,
+            includeLocalLinuxInstructions: true,
             localAgentPrompt: "只描述 Linux 操作边界"
         )
 
@@ -646,6 +647,49 @@ extension ChatServiceTests {
         #expect(personaRange.lowerBound < linuxRange.lowerBound)
         #expect(prompt.contains("只描述 Linux 操作边界"))
         #expect(!prompt.contains("<local_agent_runtime>"))
+    }
+
+    @Test("Linux 操作说明只随实际可调用的 Linux 工具发送")
+    func testLocalLinuxInstructionsRequireCallableLinuxTools() {
+        let chatTool = InternalToolDefinition(
+            name: "remote_search",
+            description: "普通聊天工具",
+            parameters: .dictionary(["type": .string("object")])
+        )
+
+        #expect(!chatService.shouldIncludeLocalLinuxInstructions(
+            tools: [chatTool],
+            modelSupportsToolCalling: true,
+            localLinuxToolsEnabled: false
+        ))
+        #expect(!chatService.shouldIncludeLocalLinuxInstructions(
+            tools: LocalLinuxToolDefinitions.all,
+            modelSupportsToolCalling: true,
+            localLinuxToolsEnabled: false
+        ))
+        #expect(!chatService.shouldIncludeLocalLinuxInstructions(
+            tools: LocalLinuxToolDefinitions.all,
+            modelSupportsToolCalling: false,
+            localLinuxToolsEnabled: true
+        ))
+        #expect(chatService.shouldIncludeLocalLinuxInstructions(
+            tools: LocalLinuxToolDefinitions.all,
+            modelSupportsToolCalling: true,
+            localLinuxToolsEnabled: true
+        ))
+
+        let chatPrompt = chatService.buildFinalSystemPrompt(
+            global: nil,
+            topic: nil,
+            memories: [],
+            recentConversationSummaries: [],
+            conversationProfile: nil,
+            includeSystemTime: false,
+            includeLocalLinuxInstructions: false,
+            localAgentPrompt: "不应进入 Chat 请求"
+        )
+        #expect(!chatPrompt.contains("<local_linux_runtime_instructions>"))
+        #expect(!chatPrompt.contains("不应进入 Chat 请求"))
     }
 
     @Test("search_memory 工具结果可按设置隐藏更新时间")

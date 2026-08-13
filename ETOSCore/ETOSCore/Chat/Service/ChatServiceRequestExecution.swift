@@ -275,6 +275,11 @@ extension ChatService {
         var messagesToSend: [ChatMessage] = []
         let includesConversationTools = runnableModel.model.supportsToolCalling
             && (tools?.contains { ConversationToolDefinitions.containsExposedName($0.name) } == true)
+        let includesLocalLinuxInstructions = shouldIncludeLocalLinuxInstructions(
+            tools: tools,
+            modelSupportsToolCalling: runnableModel.model.supportsToolCalling,
+            localLinuxToolsEnabled: activeRequestIncludesLocalLinuxTools(sessionID: currentSessionID)
+        )
         var finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             conversationSystem: sessionForRequest?.systemPrompt,
@@ -290,6 +295,7 @@ extension ChatService {
             worldbookANTop: worldbookResult.anTop,
             worldbookANBottom: worldbookResult.anBottom,
             roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt),
+            includeLocalLinuxInstructions: includesLocalLinuxInstructions,
             localAgentPrompt: localAgentPrompt
         )
         if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {

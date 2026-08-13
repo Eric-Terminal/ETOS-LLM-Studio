@@ -365,7 +365,7 @@ struct MCPManagerToolExposureTests {
     }
 
     @MainActor
-    @Test("浏览器与会话工具在 Chat 中服从 MCP 总开关")
+    @Test("Chat 保留普通工具但不暴露本地 Linux 工具")
     func testNonLinuxBuiltInsRemainChatTools() throws {
         let previousPersistenceOverride = enableRelationalPersistence()
         defer { restorePersistenceOverride(previousPersistenceOverride) }
@@ -400,7 +400,8 @@ struct MCPManagerToolExposureTests {
 
         let browserServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .browser)
         let conversationServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .conversation)
-        for server in [browserServer, conversationServer] {
+        let linuxServer = MCPBuiltInAppToolServer.defaultConfiguration(for: .linux)
+        for server in [browserServer, conversationServer, linuxServer] {
             let category = try #require(MCPBuiltInAppToolServer.category(for: server.id))
             MCPServerStore.save(server)
             MCPServerStore.saveMetadata(
@@ -423,6 +424,14 @@ struct MCPManagerToolExposureTests {
         )
         #expect(chatTools.contains(where: { $0.description.contains(browserServer.displayName) }))
         #expect(chatTools.contains(where: { $0.description.contains(conversationServer.displayName) }))
+        #expect(!chatTools.contains(where: { $0.description.contains(linuxServer.displayName) }))
+
+        let agentTools = manager.chatToolsForLLM(
+            includeConversationAgentTools: true,
+            includeLocalLinuxTools: true,
+            includeBrowserAgentTools: true
+        )
+        #expect(agentTools.contains(where: { $0.description.contains(linuxServer.displayName) }))
 
         manager.setChatToolsEnabled(false)
         let disabledTools = manager.chatToolsForLLM(
