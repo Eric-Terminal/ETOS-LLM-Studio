@@ -189,6 +189,10 @@ public extension Persistence {
         try? activeGRDBStore()?.loadLocalLinuxDiagnostic(id: id)
     }
 
+    static func loadRecentLocalLinuxDiagnostics(limit: Int) -> [LinuxExecutionDiagnostic] {
+        (try? activeGRDBStore()?.loadRecentLocalLinuxDiagnostics(limit: limit)) ?? []
+    }
+
     @discardableResult
     static func saveLocalLinuxAudit(_ audit: LocalLinuxAuditRecord) -> Bool {
         do {

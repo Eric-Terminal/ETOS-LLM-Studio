@@ -42,6 +42,20 @@ public actor LocalLinuxDiagnosticsRecorder {
         }
     }
 
+    public func latestEvent(jobID: UUID) -> LocalLinuxBridgeDiagnosticEvent? {
+        eventsByJobID[jobID]?.last
+    }
+
+    public func recentEvents(maximumCount: Int) -> [LocalLinuxLiveDiagnostic] {
+        guard maximumCount > 0 else { return [] }
+        return eventsByJobID.flatMap { jobID, events in
+            events.map { LocalLinuxLiveDiagnostic(jobID: jobID, event: $0) }
+        }
+        .sorted { $0.event.sequence > $1.event.sequence }
+        .prefix(maximumCount)
+        .map { $0 }
+    }
+
     public func finalize(
         job: LocalLinuxJob,
         completionReason: LocalLinuxCompletionReason,
@@ -84,6 +98,9 @@ public actor LocalLinuxDiagnosticsRecorder {
             completionReason: completionReason,
             guestProgramCounter: first.map(\.guestProgramCounter),
             opcode: first.map(\.opcode),
+            guestProcessID: first.flatMap { $0.guestProcessID == 0 ? nil : $0.guestProcessID },
+            guestThreadGroupID: first.flatMap { $0.guestThreadGroupID == 0 ? nil : $0.guestThreadGroupID },
+            processName: first?.processName,
             systemCallNumber: first.map(\.systemCallNumber),
             systemCallName: first?.systemCallName,
             occurrenceCount: max(1, events.count),

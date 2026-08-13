@@ -68,6 +68,9 @@ private func localLinuxDiagnosticCallback(
     requestID: UInt64,
     guestProgramCounter: UInt64,
     systemCallNumber: UInt64,
+    guestProcessID: UInt32,
+    guestThreadGroupID: UInt32,
+    processName: UnsafePointer<CChar>?,
     systemCallName: UnsafePointer<CChar>?,
     buildIdentity: UnsafePointer<CChar>?
 ) {
@@ -88,6 +91,9 @@ private func localLinuxDiagnosticCallback(
             requestID: requestID,
             guestProgramCounter: guestProgramCounter,
             systemCallNumber: systemCallNumber,
+            guestProcessID: guestProcessID,
+            guestThreadGroupID: guestThreadGroupID,
+            processName: processName.map(String.init(cString:)).flatMap { $0.isEmpty ? nil : $0 },
             systemCallName: syscall,
             buildIdentity: buildIdentity.map(String.init(cString:)) ?? ""
         )

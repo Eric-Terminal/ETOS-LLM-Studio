@@ -12,11 +12,12 @@ enum LocalLinuxToolName: String, CaseIterable {
     case run = "linux_run"
     case shell = "linux_shell"
     case process = "linux_process"
+    case diagnostics = "linux_diagnostics"
 }
 
 enum LocalLinuxToolDefinitions {
     static var all: [InternalToolDefinition] {
-        [run, shell, process]
+        [run, shell, process, diagnostics]
     }
 
     static func contains(_ name: String) -> Bool {
@@ -111,6 +112,22 @@ enum LocalLinuxToolDefinitions {
                     "active_limit": integerProperty(NSLocalizedString("list 每页返回的活跃任务数，默认 50，最大 200；这只是响应分页，不是调度上限。", comment: "Linux process active page size"))
                 ]),
                 "required": .array([.string("action")])
+            ])
+        )
+    }
+
+    private static var diagnostics: InternalToolDefinition {
+        InternalToolDefinition(
+            name: LocalLinuxToolName.diagnostics.rawValue,
+            description: NSLocalizedString(
+                "命令失败时会保留退出码、信号、errno 和 iSH 兼容性诊断。反馈助手可以引用诊断编号，不会把未打码的环境变量输出交给模型。",
+                comment: "Linux diagnostics tool description"
+            ),
+            parameters: .dictionary([
+                "type": .string("object"),
+                "properties": .dictionary([
+                    "limit": integerProperty(NSLocalizedString("最多返回的条目数；省略时返回 20 项。", comment: "Linux diagnostics result limit"))
+                ])
             ])
         )
     }

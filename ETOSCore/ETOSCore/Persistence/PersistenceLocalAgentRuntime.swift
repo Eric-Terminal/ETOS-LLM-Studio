@@ -550,6 +550,24 @@ extension PersistenceGRDBStore {
         }
     }
 
+    func loadRecentLocalLinuxDiagnostics(limit: Int) throws -> [LinuxExecutionDiagnostic] {
+        try dbPool.read { db in
+            let payloads = try Data.fetchAll(
+                db,
+                sql: """
+                SELECT payload_json
+                FROM local_linux_diagnostics
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                arguments: [max(0, limit)]
+            )
+            return try payloads.map {
+                try LocalAgentPersistenceCoding.decoder.decode(LinuxExecutionDiagnostic.self, from: $0)
+            }
+        }
+    }
+
     func saveLocalLinuxAudit(_ audit: LocalLinuxAuditRecord) throws {
         try dbPool.write { db in
             if let sessionID = audit.sessionID {

@@ -127,6 +127,10 @@ public actor LocalLinuxJobScheduler {
         return Persistence.loadLocalLinuxJob(id: id)
     }
 
+    public func latestDiagnosticEvent(jobID: UUID) async -> LocalLinuxBridgeDiagnosticEvent? {
+        await diagnostics.latestEvent(jobID: jobID)
+    }
+
     /// 活跃任务不分页；只给终态历史加 cursor，避免较早活跃任务被历史淹没。
     public func jobsPage(
         sessionID: UUID? = nil,

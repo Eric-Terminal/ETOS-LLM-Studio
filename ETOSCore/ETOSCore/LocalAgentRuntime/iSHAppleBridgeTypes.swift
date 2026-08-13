@@ -180,6 +180,9 @@ public struct LocalLinuxBridgeDiagnosticEvent: Codable, Equatable, Sendable {
     public let requestID: UInt64
     public let guestProgramCounter: UInt64
     public let systemCallNumber: UInt64
+    public let guestProcessID: UInt32
+    public let guestThreadGroupID: UInt32
+    public let processName: String?
     public let systemCallName: String?
     public let buildIdentity: String
 }

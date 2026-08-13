@@ -739,19 +739,25 @@ int32_t etos_ish_diagnostics_drain(uint32_t scope, uint64_t request_id,
     uint32_t count = 0;
     status = ish_apple_diagnostics_drain(scope, request_id, events, capacity, &count);
     for (uint32_t index = 0; status == 0 && index < count; index++) {
+        char process_name[ISH_APPLE_DIAGNOSTIC_PROCESS_NAME_BYTES_MAX + 1];
         char syscall_name[ISH_APPLE_DIAGNOSTIC_SYSCALL_NAME_BYTES_MAX + 1];
         char build_identity[ISH_APPLE_DIAGNOSTIC_BUILD_IDENTITY_BYTES_MAX + 1];
+        memcpy(process_name, events[index].process_name,
+                ISH_APPLE_DIAGNOSTIC_PROCESS_NAME_BYTES_MAX);
         memcpy(syscall_name, events[index].syscall_name,
                 ISH_APPLE_DIAGNOSTIC_SYSCALL_NAME_BYTES_MAX);
         memcpy(build_identity, events[index].build_identity,
                 ISH_APPLE_DIAGNOSTIC_BUILD_IDENTITY_BYTES_MAX);
+        process_name[ISH_APPLE_DIAGNOSTIC_PROCESS_NAME_BYTES_MAX] = '\0';
         syscall_name[ISH_APPLE_DIAGNOSTIC_SYSCALL_NAME_BYTES_MAX] = '\0';
         build_identity[ISH_APPLE_DIAGNOSTIC_BUILD_IDENTITY_BYTES_MAX] = '\0';
         callback(context, events[index].category, events[index].kind,
                 events[index].scope, events[index].architecture, events[index].backend,
                 events[index].linux_error, events[index].signal, events[index].opcode,
                 events[index].sequence, events[index].request_id, events[index].guest_pc,
-                events[index].syscall_number, syscall_name, build_identity);
+                events[index].syscall_number, events[index].guest_process_id,
+                events[index].guest_thread_group_id, process_name, syscall_name,
+                build_identity);
     }
     *drained_out = status == 0 ? count : 0;
     free(events);

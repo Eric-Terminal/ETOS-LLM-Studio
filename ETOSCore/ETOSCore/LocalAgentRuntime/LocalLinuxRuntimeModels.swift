@@ -863,12 +863,20 @@ public struct LinuxExecutionDiagnostic: Codable, Equatable, Identifiable, Sendab
     public let completionReason: LocalLinuxCompletionReason?
     public let guestProgramCounter: UInt64?
     public let opcode: UInt32?
+    public let guestProcessID: UInt32?
+    public let guestThreadGroupID: UInt32?
+    public let processName: String?
     public let systemCallNumber: UInt64?
     public let systemCallName: String?
     public let occurrenceCount: Int
     public let outputRelativePath: String?
     public let redactedSummary: String
     public let createdAt: Date
+}
+
+public struct LocalLinuxLiveDiagnostic: Equatable, Sendable {
+    public let jobID: UUID
+    public let event: LocalLinuxBridgeDiagnosticEvent
 }
 
 public enum LocalLinuxRuntimeError: LocalizedError, Equatable {

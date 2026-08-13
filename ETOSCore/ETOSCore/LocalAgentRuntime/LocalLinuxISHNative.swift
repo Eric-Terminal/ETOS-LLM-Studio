@@ -40,7 +40,8 @@ typealias ETOSISHGuestFileInfoCallback = @convention(c) (
 typealias ETOSISHDiagnosticCallback = @convention(c) (
     UnsafeMutableRawPointer?, UInt32, UInt32, UInt32, UInt32, UInt32,
     Int32, Int32, UInt32, UInt64, UInt64, UInt64, UInt64,
-    UnsafePointer<CChar>?, UnsafePointer<CChar>?
+    UInt32, UInt32, UnsafePointer<CChar>?, UnsafePointer<CChar>?,
+    UnsafePointer<CChar>?
 ) -> Void
 
 @_silgen_name("etos_ish_is_available")

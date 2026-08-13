@@ -710,9 +710,65 @@ struct LocalAgentRuntimeTests {
         #expect(!pythonRecipe.requiredPackages.isSubset(of: installed))
     }
 
+    @Test("运行中的 Linux 诊断按序列返回并保留进程身份")
+    func liveLinuxDiagnosticsExposeProcessIdentity() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recorder = LocalLinuxDiagnosticsRecorder(
+            storage: LocalLinuxStorageManager(documentsDirectory: directory, appGroupLayout: nil)
+        )
+        let olderJobID = UUID()
+        let newerJobID = UUID()
+        let olderEvent = LocalLinuxBridgeDiagnosticEvent(
+            category: 1,
+            kind: 1,
+            scope: 1,
+            architecture: 2,
+            backend: 1,
+            linuxError: 0,
+            signal: 4,
+            opcode: 0xd503201f,
+            sequence: 7,
+            requestID: 31,
+            guestProgramCounter: 0x4000,
+            systemCallNumber: 0,
+            guestProcessID: 101,
+            guestThreadGroupID: 101,
+            processName: "python3",
+            systemCallName: nil,
+            buildIdentity: "test-build"
+        )
+        let newerEvent = LocalLinuxBridgeDiagnosticEvent(
+            category: 1,
+            kind: 1,
+            scope: 1,
+            architecture: 2,
+            backend: 1,
+            linuxError: 0,
+            signal: 4,
+            opcode: 0xd4200000,
+            sequence: 9,
+            requestID: 32,
+            guestProgramCounter: 0x5000,
+            systemCallNumber: 0,
+            guestProcessID: 202,
+            guestThreadGroupID: 202,
+            processName: "pip",
+            systemCallName: nil,
+            buildIdentity: "test-build"
+        )
+
+        await recorder.append([olderEvent], jobID: olderJobID)
+        await recorder.append([newerEvent], jobID: newerJobID)
+
+        let recent = await recorder.recentEvents(maximumCount: 1)
+        #expect(recent == [LocalLinuxLiveDiagnostic(jobID: newerJobID, event: newerEvent)])
+        #expect(await recorder.latestEvent(jobID: olderJobID) == olderEvent)
+    }
+
     @Test("Linux、Browser 与反馈工具协议暴露完整动作")
     func toolDefinitionsExposeExpectedContract() throws {
-        #expect(Set(LocalLinuxToolDefinitions.all.map(\.name)) == ["linux_run", "linux_shell", "linux_process"])
+        #expect(Set(LocalLinuxToolDefinitions.all.map(\.name)) == ["linux_run", "linux_shell", "linux_process", "linux_diagnostics"])
         #expect(BrowserAgentToolDefinitions.all.map(\.name) == ["browser_control"])
 
         let browserData = try JSONEncoder().encode(BrowserAgentToolDefinitions.all[0].parameters)

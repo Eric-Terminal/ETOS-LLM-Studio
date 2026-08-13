@@ -206,6 +206,9 @@ extension AppToolManager {
             safeDiagnostic["completion_reason"] = diagnostic.completionReason?.rawValue
             safeDiagnostic["guest_pc"] = diagnostic.guestProgramCounter
             safeDiagnostic["opcode"] = diagnostic.opcode
+            safeDiagnostic["guest_process_id"] = diagnostic.guestProcessID
+            safeDiagnostic["guest_thread_group_id"] = diagnostic.guestThreadGroupID
+            safeDiagnostic["process_name"] = diagnostic.processName
             safeDiagnostic["syscall_number"] = diagnostic.systemCallNumber
             safeDiagnostic["syscall_name"] = diagnostic.systemCallName
             let serializedDiagnostic = prettyPrintedJSONString(from: safeDiagnostic)

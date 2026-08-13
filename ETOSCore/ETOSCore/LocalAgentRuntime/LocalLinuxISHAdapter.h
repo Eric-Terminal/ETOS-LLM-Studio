@@ -81,6 +81,9 @@ typedef void (*etos_ish_diagnostic_callback)(
         uint64_t request_id,
         uint64_t guest_pc,
         uint64_t syscall_number,
+        uint32_t guest_process_id,
+        uint32_t guest_thread_group_id,
+        const char *process_name,
         const char *syscall_name,
         const char *build_identity);
 
