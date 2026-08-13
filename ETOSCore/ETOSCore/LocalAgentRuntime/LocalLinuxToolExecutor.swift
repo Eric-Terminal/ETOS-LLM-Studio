@@ -72,25 +72,18 @@ public actor LocalLinuxToolExecutor {
         }
     }
 
-    private struct DiagnosticsArguments: Decodable {
-        var limit: Int?
-    }
-
     private let scheduler: LocalLinuxJobScheduler
     private let contextManager: LocalAgentRuntimeContextManager
     private let approvalPolicy: LocalLinuxApprovalPolicy
-    private let diagnostics: LocalLinuxDiagnosticsRecorder
 
     public init(
         scheduler: LocalLinuxJobScheduler = .shared,
         contextManager: LocalAgentRuntimeContextManager = .shared,
-        approvalPolicy: LocalLinuxApprovalPolicy = .shared,
-        diagnostics: LocalLinuxDiagnosticsRecorder = .shared
+        approvalPolicy: LocalLinuxApprovalPolicy = .shared
     ) {
         self.scheduler = scheduler
         self.contextManager = contextManager
         self.approvalPolicy = approvalPolicy
-        self.diagnostics = diagnostics
     }
 
     public func commandRuleMatch(
@@ -125,7 +118,7 @@ public actor LocalLinuxToolExecutor {
                 shellScript: arguments.script
             )
             kind = .shell
-        case .process, .diagnostics, nil:
+        case .process, nil:
             return nil
         }
         return await approvalPolicy.evaluate(request: request, kind: kind, isEnabled: true)
@@ -202,10 +195,6 @@ public actor LocalLinuxToolExecutor {
         case .process:
             let arguments: ProcessArguments = try decode(argumentsJSON)
             return try await process(arguments, run: run, toolCallID: toolCallID)
-
-        case .diagnostics:
-            let arguments: DiagnosticsArguments = try decode(argumentsJSON)
-            return try await diagnosticResults(limit: arguments.limit)
 
         case nil:
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -371,49 +360,13 @@ public actor LocalLinuxToolExecutor {
         return try encode(value)
     }
 
-    private func diagnosticResults(limit requestedLimit: Int?) async throws -> String {
-        let limit = min(200, max(1, requestedLimit ?? 20))
-        let live = await diagnostics.recentEvents(maximumCount: limit)
-        let stored = Persistence.loadRecentLocalLinuxDiagnostics(limit: limit)
-        return try encode([
-            "live_events": live.map { liveDiagnosticPayload($0) },
-            "stored_diagnostics": stored.map(storedDiagnosticPayload)
-        ])
-    }
-
     private func diagnosticPayload(for job: LocalLinuxJob) async -> [String: Any]? {
         if let diagnosticID = job.diagnosticID,
            let diagnostic = Persistence.loadLocalLinuxDiagnostic(id: diagnosticID) {
             return storedDiagnosticPayload(diagnostic)
         }
         guard let event = await scheduler.latestDiagnosticEvent(jobID: job.id) else { return nil }
-        return liveDiagnosticPayload(LocalLinuxLiveDiagnostic(jobID: job.id, event: event))
-    }
-
-    private func liveDiagnosticPayload(_ diagnostic: LocalLinuxLiveDiagnostic) -> [String: Any] {
-        let event = diagnostic.event
-        var value: [String: Any] = [
-            "state": "live",
-            "job_id": diagnostic.jobID.uuidString,
-            "request_id": event.requestID,
-            "sequence": event.sequence,
-            "category": diagnosticCategory(rawValue: event.category),
-            "kind": event.kind,
-            "scope": diagnosticScope(rawValue: event.scope),
-            "guest_architecture": event.architecture == 1 ? "aarch64" : "unknown_\(event.architecture)",
-            "backend": diagnosticBackend(rawValue: event.backend),
-            "build_identity": event.buildIdentity,
-            "guest_pc": event.guestProgramCounter,
-            "opcode": event.opcode
-        ]
-        value["guest_process_id"] = event.guestProcessID == 0 ? nil : event.guestProcessID
-        value["guest_thread_group_id"] = event.guestThreadGroupID == 0 ? nil : event.guestThreadGroupID
-        value["process_name"] = event.processName
-        value["signal"] = event.signal == 0 ? nil : event.signal
-        value["linux_errno"] = event.linuxError == 0 ? nil : event.linuxError
-        value["syscall_number"] = event.systemCallNumber == 0 ? nil : event.systemCallNumber
-        value["syscall_name"] = event.systemCallName
-        return value
+        return LocalLinuxDiagnosticPresentation.livePayload(jobID: job.id, event: event)
     }
 
     private func storedDiagnosticPayload(_ diagnostic: LinuxExecutionDiagnostic) -> [String: Any] {
@@ -442,34 +395,6 @@ public actor LocalLinuxToolExecutor {
         value["syscall_number"] = diagnostic.systemCallNumber
         value["syscall_name"] = diagnostic.systemCallName
         return value
-    }
-
-    private func diagnosticCategory(rawValue: UInt32) -> String {
-        switch rawValue {
-        case 1: return LinuxExecutionDiagnosticCategory.unsupportedInstruction.rawValue
-        case 2: return LinuxExecutionDiagnosticCategory.unsupportedSystemCall.rawValue
-        case 3: return LinuxExecutionDiagnosticCategory.fileSystem.rawValue
-        case 4: return LinuxExecutionDiagnosticCategory.bridge.rawValue
-        default: return "unknown_\(rawValue)"
-        }
-    }
-
-    private func diagnosticBackend(rawValue: UInt32) -> String {
-        switch rawValue {
-        case 1: return "c"
-        case 2: return "threaded"
-        default: return "unknown_\(rawValue)"
-        }
-    }
-
-    private func diagnosticScope(rawValue: UInt32) -> String {
-        switch rawValue {
-        case 1: return "runtime"
-        case 2: return "command"
-        case 3: return "terminal"
-        case 4: return "guest_file"
-        default: return "unknown_\(rawValue)"
-        }
     }
 
     private func jobSummary(_ job: LocalLinuxJob) -> [String: Any] {

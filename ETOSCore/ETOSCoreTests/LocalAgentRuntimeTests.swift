@@ -710,8 +710,8 @@ struct LocalAgentRuntimeTests {
         #expect(!pythonRecipe.requiredPackages.isSubset(of: installed))
     }
 
-    @Test("运行中的 Linux 诊断按序列返回并保留进程身份")
-    func liveLinuxDiagnosticsExposeProcessIdentity() async throws {
+    @Test("终端兼容性诊断直接显示并生成有界模型上下文")
+    func terminalDiagnosticsAreVisibleAndModelReadable() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let recorder = LocalLinuxDiagnosticsRecorder(
@@ -722,7 +722,7 @@ struct LocalAgentRuntimeTests {
         let olderEvent = LocalLinuxBridgeDiagnosticEvent(
             category: 1,
             kind: 1,
-            scope: 1,
+            scope: 3,
             architecture: 2,
             backend: 1,
             linuxError: 0,
@@ -741,7 +741,7 @@ struct LocalAgentRuntimeTests {
         let newerEvent = LocalLinuxBridgeDiagnosticEvent(
             category: 1,
             kind: 1,
-            scope: 1,
+            scope: 3,
             architecture: 2,
             backend: 1,
             linuxError: 0,
@@ -761,14 +761,63 @@ struct LocalAgentRuntimeTests {
         await recorder.append([olderEvent], jobID: olderJobID)
         await recorder.append([newerEvent], jobID: newerJobID)
 
-        let recent = await recorder.recentEvents(maximumCount: 1)
-        #expect(recent == [LocalLinuxLiveDiagnostic(jobID: newerJobID, event: newerEvent)])
+        let modelContext = try #require(await recorder.recentModelContext())
+        let summary = LocalLinuxDiagnosticPresentation.userSummary(newerEvent)
+        #expect(modelContext.contains(#""process_name":"pip""#))
+        #expect(modelContext.contains(#""guest_process_id":202"#))
+        #expect(modelContext.utf8.count <= 768)
+        #expect(summary.contains("process=pip"))
+        #expect(summary.contains("signal=SIGILL"))
+        #expect(summary.contains("opcode=0xd4200000"))
+        #expect(summary.utf8.count <= 256)
         #expect(await recorder.latestEvent(jobID: olderJobID) == olderEvent)
+
+        let oversizedEvent = LocalLinuxBridgeDiagnosticEvent(
+            category: 1,
+            kind: 1,
+            scope: 3,
+            architecture: 2,
+            backend: 1,
+            linuxError: 0,
+            signal: 4,
+            opcode: 0xd4200000,
+            sequence: 10,
+            requestID: 33,
+            guestProgramCounter: 0x6000,
+            systemCallNumber: 0,
+            guestProcessID: 303,
+            guestThreadGroupID: 303,
+            processName: String(repeating: "超长进程", count: 100),
+            systemCallName: String(repeating: "超长调用", count: 100),
+            buildIdentity: String(repeating: "超长构建", count: 100)
+        )
+        await recorder.append([oversizedEvent], jobID: newerJobID)
+        let boundedContext = try #require(await recorder.recentModelContext())
+        #expect(boundedContext.utf8.count <= 768)
+        #expect(try JSONSerialization.jsonObject(with: Data(boundedContext.utf8)) is [String: Any])
+        #expect(LocalLinuxDiagnosticPresentation.userSummary(oversizedEvent).utf8.count <= 256)
+
+        let collector = try LocalLinuxOutputCollector(
+            rawURL: directory.appendingPathComponent("terminal.raw"),
+            modelURL: directory.appendingPathComponent("terminal.model"),
+            redactionValues: [],
+            privacyEnabled: false,
+            modelByteLimit: 4_096,
+            terminalColumns: 80,
+            terminalRows: 24
+        )
+        collector.append(stream: .terminal, data: Data("ETOS:/mnt/home# ".utf8))
+        collector.appendTerminalDiagnostic(newerEvent)
+        collector.finish()
+        let presentation = try #require(collector.userVisibleTerminalPresentation())
+        #expect(presentation.plainText.contains(summary))
+        #expect(collector.userVisiblePreview() == "ETOS:/mnt/home#")
+        #expect(try String(contentsOf: directory.appendingPathComponent("terminal.model"), encoding: .utf8).contains(summary))
     }
 
     @Test("Linux、Browser 与反馈工具协议暴露完整动作")
     func toolDefinitionsExposeExpectedContract() throws {
-        #expect(Set(LocalLinuxToolDefinitions.all.map(\.name)) == ["linux_run", "linux_shell", "linux_process", "linux_diagnostics"])
+        #expect(Set(LocalLinuxToolDefinitions.all.map(\.name)) == ["linux_run", "linux_shell", "linux_process"])
         #expect(BrowserAgentToolDefinitions.all.map(\.name) == ["browser_control"])
 
         let browserData = try JSONEncoder().encode(BrowserAgentToolDefinitions.all[0].parameters)

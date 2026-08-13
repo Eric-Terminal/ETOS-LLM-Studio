@@ -515,7 +515,16 @@ public actor LocalLinuxJobScheduler {
             terminalResponseRelay.bind(to: session)
             job.state = .running
             _ = Persistence.saveLocalLinuxJob(job)
-            let diagnosticTask = diagnosticDrainTask(scope: 3, requestID: requestID, jobID: job.id)
+            let diagnosticTask = diagnosticDrainTask(
+                scope: 3,
+                requestID: requestID,
+                jobID: job.id,
+                onEvents: { [weak collector] events in
+                    for event in events {
+                        collector?.appendTerminalDiagnostic(event)
+                    }
+                }
+            )
             activeTerminals[job.id] = ActiveTerminal(
                 job: job,
                 session: session,
@@ -735,7 +744,7 @@ public actor LocalLinuxJobScheduler {
         }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
-        await drainRemainingDiagnostics(scope: 2, requestID: active.job.requestID, jobID: jobID)
+        _ = await drainRemainingDiagnostics(scope: 2, requestID: active.job.requestID, jobID: jobID)
         active.collector.finish()
         let completionReason = suspensionInterruptedJobIDs.remove(jobID) != nil
             ? LocalLinuxCompletionReason.interruptedBySuspension
@@ -770,7 +779,14 @@ public actor LocalLinuxJobScheduler {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
-        await drainRemainingDiagnostics(scope: 3, requestID: active.job.requestID, jobID: jobID)
+        let remainingDiagnostics = await drainRemainingDiagnostics(
+            scope: 3,
+            requestID: active.job.requestID,
+            jobID: jobID
+        )
+        for event in remainingDiagnostics {
+            active.collector.appendTerminalDiagnostic(event)
+        }
         active.collector.finish()
         let completionReason = suspensionInterruptedJobIDs.remove(jobID) != nil
             ? LocalLinuxCompletionReason.interruptedBySuspension
@@ -804,7 +820,14 @@ public actor LocalLinuxJobScheduler {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
-        await drainRemainingDiagnostics(scope: 3, requestID: active.job.requestID, jobID: jobID)
+        let remainingDiagnostics = await drainRemainingDiagnostics(
+            scope: 3,
+            requestID: active.job.requestID,
+            jobID: jobID
+        )
+        for event in remainingDiagnostics {
+            active.collector.appendTerminalDiagnostic(event)
+        }
         active.collector.finish()
         let wasInterruptedBySuspension = suspensionInterruptedJobIDs.remove(jobID) != nil
         active.job.state = wasInterruptedBySuspension ? .interrupted : .failed
@@ -826,7 +849,12 @@ public actor LocalLinuxJobScheduler {
         await publishActivityCounts()
     }
 
-    private func diagnosticDrainTask(scope: UInt32, requestID: UInt64, jobID: UUID) -> Task<Void, Never> {
+    private func diagnosticDrainTask(
+        scope: UInt32,
+        requestID: UInt64,
+        jobID: UUID,
+        onEvents: (@Sendable ([LocalLinuxBridgeDiagnosticEvent]) -> Void)? = nil
+    ) -> Task<Void, Never> {
         let bridge = bridge
         let diagnostics = diagnostics
         return Task.detached(priority: .utility) {
@@ -837,20 +865,28 @@ public actor LocalLinuxJobScheduler {
                     maximumCount: 128
                 ) {
                     await diagnostics.append(events, jobID: jobID)
+                    if !events.isEmpty { onEvents?(events) }
                 }
                 try? await Task<Never, Never>.sleep(nanoseconds: 200_000_000)
             }
         }
     }
 
-    private func drainRemainingDiagnostics(scope: UInt32, requestID: UInt64, jobID: UUID) async {
+    private func drainRemainingDiagnostics(
+        scope: UInt32,
+        requestID: UInt64,
+        jobID: UUID
+    ) async -> [LocalLinuxBridgeDiagnosticEvent] {
+        var drained: [LocalLinuxBridgeDiagnosticEvent] = []
         while let events = try? await bridge.drainDiagnostics(
             scope: scope,
             requestID: requestID,
             maximumCount: 128
         ), !events.isEmpty {
             await diagnostics.append(events, jobID: jobID)
+            drained.append(contentsOf: events)
         }
+        return drained
     }
 
     private func makeJob(

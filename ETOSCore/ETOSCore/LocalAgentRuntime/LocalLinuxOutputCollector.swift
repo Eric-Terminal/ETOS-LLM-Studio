@@ -54,6 +54,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
     private var terminalPreviewMaximumLines = 0
     private var terminalPreviewAppearance: LocalLinuxTerminalAppearance?
     private var terminalPreviewNeedsRefresh = false
+    private var terminalDiagnosticSummaries: [String] = []
 
     public init(
         rawURL: URL,
@@ -126,6 +127,23 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         }
     }
 
+    /// 兼容性诊断是宿主注解，不写回 PTY 字节流；这样不会扰乱 guest 的光标与行编辑状态。
+    public func appendTerminalDiagnostic(_ event: LocalLinuxBridgeDiagnosticEvent) {
+        let summary = LocalLinuxDiagnosticPresentation.userSummary(event)
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isFinished else { return }
+        if terminalDiagnosticSummaries.last != summary {
+            terminalDiagnosticSummaries.append(summary)
+            terminalDiagnosticSummaries = Array(terminalDiagnosticSummaries.suffix(3))
+        }
+        appendModelBytes(
+            stream: .terminal,
+            data: Data("\n\(summary)\n".utf8),
+            flush: true
+        )
+    }
+
     public func finish() {
         lock.lock()
         guard !isFinished else {
@@ -193,7 +211,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             terminalPresentationAppearance = appearance
             terminalPresentationNeedsRefresh = false
         }
-        return terminalPresentation
+        return terminalPresentation.map(presentationWithDiagnostics)
     }
 
     /// 浮窗只需要末尾少量屏幕行，避免每次刷新都复制完整回滚缓冲区。
@@ -216,7 +234,7 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
             terminalPreviewAppearance = appearance
             terminalPreviewNeedsRefresh = false
         }
-        return terminalPreviewPresentation
+        return terminalPreviewPresentation.map(presentationWithDiagnostics)
     }
 
     public func resizeTerminalPreview(columns: Int, rows: Int) {
@@ -268,6 +286,20 @@ public final class LocalLinuxOutputCollector: @unchecked Sendable {
         if userPreview.count > userPreviewLimit {
             userPreview.removeFirst(userPreview.count - userPreviewLimit)
         }
+    }
+
+    private func presentationWithDiagnostics(
+        _ presentation: LocalLinuxTerminalPresentation
+    ) -> LocalLinuxTerminalPresentation {
+        guard !terminalDiagnosticSummaries.isEmpty else { return presentation }
+        let summaries = terminalDiagnosticSummaries.joined(separator: "\n")
+        let separator = presentation.plainText.isEmpty ? "" : "\n"
+        var attributedText = presentation.attributedText
+        attributedText.append(AttributedString(separator + summaries))
+        return LocalLinuxTerminalPresentation(
+            plainText: presentation.plainText + separator + summaries,
+            attributedText: attributedText
+        )
     }
 
     private func appendModelBytes(stream: LocalLinuxOutputStream, data: Data, flush: Bool) {

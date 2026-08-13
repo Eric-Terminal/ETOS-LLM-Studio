@@ -280,6 +280,7 @@ extension ChatService {
             modelSupportsToolCalling: runnableModel.model.supportsToolCalling,
             localLinuxToolsEnabled: activeRequestIncludesLocalLinuxTools(sessionID: currentSessionID)
         )
+        let localLinuxDiagnosticContext = await LocalLinuxDiagnosticsRecorder.shared.recentModelContext()
         var finalSystemPrompt = buildFinalSystemPrompt(
             global: systemPrompt,
             conversationSystem: sessionForRequest?.systemPrompt,
@@ -296,7 +297,8 @@ extension ChatService {
             worldbookANBottom: worldbookResult.anBottom,
             roleplayPrompt: resolvedRoleplay.map(RoleplayRuntime.roleplaySystemPrompt),
             includeLocalLinuxInstructions: includesLocalLinuxInstructions,
-            localAgentPrompt: localAgentPrompt
+            localAgentPrompt: localAgentPrompt,
+            localLinuxDiagnosticContext: localLinuxDiagnosticContext
         )
         if !helperScriptIDs.isEmpty, finalSystemPrompt.contains("{{") {
             finalSystemPrompt = await RoleplayMacroExpansionBridge.shared.expand(

@@ -874,11 +874,6 @@ public struct LinuxExecutionDiagnostic: Codable, Equatable, Identifiable, Sendab
     public let createdAt: Date
 }
 
-public struct LocalLinuxLiveDiagnostic: Equatable, Sendable {
-    public let jobID: UUID
-    public let event: LocalLinuxBridgeDiagnosticEvent
-}
-
 public enum LocalLinuxRuntimeError: LocalizedError, Equatable {
     case featureDisabled
     case unsupportedPlatform
