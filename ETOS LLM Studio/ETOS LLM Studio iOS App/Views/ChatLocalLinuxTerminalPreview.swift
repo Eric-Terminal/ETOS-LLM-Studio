@@ -252,9 +252,8 @@ private struct LocalLinuxDockedPreviewBackground: View {
     let isLiquidGlassEnabled: Bool
 
     var body: some View {
-        // 停靠预览与消息输入框属于同一底部操作区，沿用同一套材质参数，
-        // 避免壁纸透过时出现两层透明度不同的“拼接感”。
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        // 停靠预览沿用输入框的材质参数，但保留适合双行内容高度的圆角比例。
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         Group {
             if isLiquidGlassEnabled {
                 if #available(iOS 26.0, *) {

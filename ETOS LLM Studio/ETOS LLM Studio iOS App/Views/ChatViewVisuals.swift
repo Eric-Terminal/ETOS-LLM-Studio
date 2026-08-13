@@ -280,9 +280,9 @@ extension ChatView {
                 }
                 .overlay(
                     Capsule()
-                        .stroke(historyBannerStrokeColor, lineWidth: 0.8)
+                        .stroke(scrollToBottomButtonMaterialStrokeColor, lineWidth: 0.5)
                 )
-                .shadow(color: scrollToBottomButtonShadowColor, radius: 6, x: 0, y: 2)
+                .shadow(color: scrollToBottomButtonMaterialShadowColor, radius: 6, x: 0, y: 2)
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -299,19 +299,19 @@ extension ChatView {
         if isLiquidGlassEnabled {
             if #available(iOS 26.0, *) {
                 shape
-                    .fill(Color(uiColor: .systemBackground).opacity(0.62))
-                    .glassEffect(.regular.tint(scrollToBottomButtonGlassTintColor).interactive(), in: shape)
-                    .clipShape(shape)
+                    .fill(Color.clear)
+                    .glassEffect(.clear.interactive(), in: shape)
+                    .overlay(shape.fill(scrollToBottomButtonMaterialOverlayColor))
             } else {
-                shape.fill(Color(uiColor: .systemBackground).opacity(0.9))
+                shape
+                    .fill(.ultraThinMaterial)
+                    .overlay(shape.fill(scrollToBottomButtonMaterialOverlayColor))
             }
         } else {
-            shape.fill(Color(uiColor: .systemBackground).opacity(0.9))
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay(shape.fill(scrollToBottomButtonMaterialOverlayColor))
         }
-    }
-
-    var historyBannerStrokeColor: Color {
-        isLiquidGlassEnabled ? scrollToBottomButtonGlassStrokeColor : scrollToBottomButtonBorderColor
     }
 }
 
