@@ -173,6 +173,28 @@ public enum LocalLinuxChatPreviewMode: String, CaseIterable, Identifiable, Senda
     }
 }
 
+public enum LocalLinuxChatPreviewPlacement: String, CaseIterable, Identifiable, Sendable {
+    case floating
+    case aboveInput = "above_input"
+
+    public static let defaultPlacement: LocalLinuxChatPreviewPlacement = .floating
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .floating:
+            return NSLocalizedString("悬浮窗", comment: "Floating Local Linux chat preview placement")
+        case .aboveInput:
+            return NSLocalizedString("输入栏上方", comment: "Local Linux chat preview above the composer")
+        }
+    }
+
+    public static func normalized(_ rawValue: String) -> LocalLinuxChatPreviewPlacement {
+        LocalLinuxChatPreviewPlacement(rawValue: rawValue) ?? defaultPlacement
+    }
+}
+
 public enum LiquidGlassTintSetting {
     public static let minimumOpacity = 0.0
     public static let maximumOpacity = 0.6
@@ -246,6 +268,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localLinuxWorkspaceCleanupPolicy = "localLinux.workspace.cleanupPolicy"
     case localLinuxTerminalShortcutIDs = "localLinux.terminal.shortcutIDs"
     case localLinuxChatPreviewMode = "localLinux.chat.previewMode"
+    case localLinuxChatPreviewPlacement = "localLinux.chat.previewPlacement"
     case browserAgentDelegateToIPhone = "browserAgent.delegateToIPhone"
     case appToolsChatToolsEnabled = "appTools.chatToolsEnabled"
     case appToolsEnabledToolIDs = "appTools.enabledToolIDs"
@@ -472,6 +495,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text(LocalLinuxTerminalShortcutConfiguration.defaultEncodedValue)
         case .localLinuxChatPreviewMode:
             return .text(LocalLinuxChatPreviewMode.defaultMode.rawValue)
+        case .localLinuxChatPreviewPlacement:
+            return .text(LocalLinuxChatPreviewPlacement.defaultPlacement.rawValue)
         case .browserAgentDelegateToIPhone:
             return .bool(false)
         case .appToolsChatToolsEnabled,

@@ -57,6 +57,11 @@ struct AgentToolExecutionPreviewTests {
         #expect(LocalLinuxChatPreviewMode.normalized("user_terminal") == .userTerminal)
         #expect(LocalLinuxChatPreviewMode.normalized("unknown") == .agentTools)
         #expect(AppConfigKey.localLinuxChatPreviewMode.defaultValue == .text("agent_tools"))
+
+        #expect(LocalLinuxChatPreviewPlacement.defaultPlacement == .floating)
+        #expect(LocalLinuxChatPreviewPlacement.normalized("above_input") == .aboveInput)
+        #expect(LocalLinuxChatPreviewPlacement.normalized("unknown") == .floating)
+        #expect(AppConfigKey.localLinuxChatPreviewPlacement.defaultValue == .text("floating"))
     }
 
     @Test("仍在执行的工具优先于之后完成的工具")

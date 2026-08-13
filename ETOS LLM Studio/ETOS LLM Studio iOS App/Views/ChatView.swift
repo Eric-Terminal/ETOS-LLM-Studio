@@ -1176,9 +1176,33 @@ extension ChatView {
                 // Telegram 风格：底部输入栏
                 .safeAreaInset(edge: .bottom) {
                     VStack(spacing: 0) {
+                        if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .aboveInput {
+                            LocalLinuxChatDockedPreview(
+                                mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                                isLocalLinuxEnabled: appConfig.localLinuxEnabled,
+                                agentToolPreview: viewModel.latestAgentToolExecutionPreview,
+                                isLiquidGlassEnabled: isLiquidGlassEnabled,
+                                onOpenTerminal: { jobID in
+                                    localTerminalInitialJobID = jobID
+                                    navigationDestination = .localTerminal
+                                },
+                                onOpenBrowser: {
+                                    navigationDestination = .browser
+                                }
+                            )
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 6)
+                        }
+
                         telegramInputBar
                         RoleplayScriptButtonBar(sessionID: viewModel.currentSession?.id)
                     }
+                        .animation(
+                            accessibilityReduceMotion
+                                ? nil
+                                : .spring(response: 0.32, dampingFraction: 1),
+                            value: appConfig.localLinuxChatPreviewPlacement
+                        )
                         .frame(width: chatViewportWidth)
                         .background(
                             GeometryReader { proxy in
@@ -1221,25 +1245,28 @@ extension ChatView {
                     .zIndex(24)
                 }
 
-                LocalLinuxChatFloatingPreview(
-                    mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
-                    isLocalLinuxEnabled: appConfig.localLinuxEnabled,
-                    agentToolPreview: viewModel.latestAgentToolExecutionPreview,
-                    sessionID: viewModel.currentSession?.id,
-                    containerSize: chatViewportSize,
-                    topPadding: navBarHeight + 12,
-                    bottomPadding: max(16, chatInputBarHeight + 16),
-                    offset: $localTerminalPreviewOffset,
-                    isLiquidGlassEnabled: isLiquidGlassEnabled,
-                    onOpenTerminal: { jobID in
-                        localTerminalInitialJobID = jobID
-                        navigationDestination = .localTerminal
-                    },
-                    onOpenBrowser: {
-                        navigationDestination = .browser
-                    }
-                )
-                .zIndex(25)
+                if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .floating {
+                    LocalLinuxChatFloatingPreview(
+                        mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                        isLocalLinuxEnabled: appConfig.localLinuxEnabled,
+                        agentToolPreview: viewModel.latestAgentToolExecutionPreview,
+                        sessionID: viewModel.currentSession?.id,
+                        containerSize: chatViewportSize,
+                        topPadding: navBarHeight + 12,
+                        bottomPadding: max(16, chatInputBarHeight + 16),
+                        offset: $localTerminalPreviewOffset,
+                        isLiquidGlassEnabled: isLiquidGlassEnabled,
+                        onOpenTerminal: { jobID in
+                            localTerminalInitialJobID = jobID
+                            navigationDestination = .localTerminal
+                        },
+                        onOpenBrowser: {
+                            navigationDestination = .browser
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(25)
+                }
 
                 VStack {
                     Spacer()

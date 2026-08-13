@@ -59,6 +59,273 @@ struct LocalLinuxChatFloatingPreview: View {
     }
 }
 
+struct LocalLinuxChatDockedPreview: View {
+    let mode: LocalLinuxChatPreviewMode
+    let isLocalLinuxEnabled: Bool
+    let agentToolPreview: AgentToolExecutionPreviewSnapshot?
+    let isLiquidGlassEnabled: Bool
+    let onOpenTerminal: (UUID) -> Void
+    let onOpenBrowser: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        switch mode {
+        case .off:
+            EmptyView()
+        case .agentTools:
+            AgentToolExecutionDockedPreview(
+                preview: agentToolPreview,
+                isLiquidGlassEnabled: isLiquidGlassEnabled,
+                onOpenBrowser: onOpenBrowser
+            )
+        case .userTerminal:
+            LocalLinuxTerminalDockedPreview(
+                isEnabled: isLocalLinuxEnabled,
+                isLiquidGlassEnabled: isLiquidGlassEnabled,
+                onOpen: onOpenTerminal
+            )
+        }
+    }
+}
+
+private struct AgentToolExecutionDockedPreview: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+
+    let preview: AgentToolExecutionPreviewSnapshot?
+    let isLiquidGlassEnabled: Bool
+    let onOpenBrowser: () -> Void
+
+    @State private var isShowingDetail = false
+
+    var body: some View {
+        Group {
+            if let preview {
+                Button {
+                    isShowingDetail = true
+                } label: {
+                    HStack {
+                        Image(systemName: AgentToolPreviewMetadata.iconName(for: preview.toolName))
+                            .etFont(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(TelegramColors.attachButtonColor)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AgentToolPreviewMetadata.displayName(for: preview.toolName))
+                                .etFont(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+
+                            Text(preview.previewText.isEmpty
+                                 ? NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder")
+                                 : preview.previewText)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: preview.state == .running ? "clock" : "checkmark.circle.fill")
+                            .etFont(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(preview.state == .running ? Color.orange : Color.green)
+
+                        Image(systemName: "chevron.right")
+                            .etFont(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 9)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(LocalLinuxDockedPreviewBackground(isLiquidGlassEnabled: isLiquidGlassEnabled))
+                .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .sheet(isPresented: $isShowingDetail) {
+                    AgentToolExecutionPreviewDetail(
+                        preview: preview,
+                        displayName: AgentToolPreviewMetadata.displayName(for: preview.toolName),
+                        iconName: AgentToolPreviewMetadata.iconName(for: preview.toolName),
+                        browserImage: nil,
+                        onOpenBrowser: AgentToolPreviewMetadata.isBrowserTool(preview.toolName) ? onOpenBrowser : nil
+                    )
+                }
+            }
+        }
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.32, dampingFraction: 1),
+            value: preview?.id
+        )
+    }
+}
+
+private struct LocalLinuxTerminalDockedPreview: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var terminalPreview = LocalLinuxTerminalPreviewModel()
+
+    let isEnabled: Bool
+    let isLiquidGlassEnabled: Bool
+    let onOpen: (UUID) -> Void
+
+    var body: some View {
+        Group {
+            if let activeTerminalID = terminalPreview.activeTerminalID {
+                Button {
+                    onOpen(activeTerminalID)
+                } label: {
+                    HStack {
+                        Image(systemName: "terminal.fill")
+                            .etFont(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(TelegramColors.attachButtonColor)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(NSLocalizedString("用户终端", comment: "User terminal preview title"))
+                                    .etFont(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.primary)
+
+                                if terminalPreview.activeTerminalCount > 1 {
+                                    Label("\(terminalPreview.activeTerminalCount)", systemImage: "rectangle.stack")
+                                        .labelStyle(.titleAndIcon)
+                                        .etFont(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Group {
+                                if terminalPreview.presentation.plainText.isEmpty {
+                                    Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
+                                } else {
+                                    Text(terminalPreview.presentation.attributedText)
+                                }
+                            }
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "chevron.right")
+                            .etFont(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 9)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(LocalLinuxDockedPreviewBackground(isLiquidGlassEnabled: isLiquidGlassEnabled))
+                .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(
+            accessibilityReduceMotion ? nil : .spring(response: 0.32, dampingFraction: 1),
+            value: terminalPreview.activeTerminalID
+        )
+        .task(id: isEnabled) {
+            await terminalPreview.observeActivity(isEnabled: isEnabled)
+        }
+        .task(id: terminalOutputObservationID) {
+            await terminalPreview.observeOutput(appearance: terminalAppearance, maximumLines: 2)
+        }
+    }
+
+    private var terminalAppearance: LocalLinuxTerminalAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var terminalOutputObservationID: String {
+        "\(terminalPreview.activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
+    }
+}
+
+private struct LocalLinuxDockedPreviewBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let isLiquidGlassEnabled: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        Group {
+            if isLiquidGlassEnabled {
+                if #available(iOS 26.0, *) {
+                    shape
+                        .fill(Color.clear)
+                        .glassEffect(.clear, in: shape)
+                        .overlay(shape.fill(overlayColor))
+                        .overlay(shape.stroke(strokeColor, lineWidth: 0.5))
+                } else {
+                    materialBackground(shape: shape)
+                }
+            } else {
+                materialBackground(shape: shape)
+            }
+        }
+    }
+
+    private func materialBackground(shape: RoundedRectangle) -> some View {
+        shape
+            .fill(.ultraThinMaterial)
+            .overlay(shape.fill(overlayColor))
+            .overlay(shape.stroke(strokeColor, lineWidth: 0.5))
+    }
+
+    private var overlayColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.white.opacity(0.2)
+    }
+
+    private var strokeColor: Color {
+        Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28)
+    }
+}
+
+private enum AgentToolPreviewMetadata {
+    static func displayName(for toolName: String) -> String {
+        if isBrowserTool(toolName) {
+            return NSLocalizedString("浏览器", comment: "Browser Agent tool preview title")
+        }
+        if isLinuxTool(toolName) {
+            return NSLocalizedString("Linux", comment: "Linux Agent tool preview title")
+        }
+        if let label = MCPManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = SkillManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        if let label = AppToolManager.shared.displayLabel(for: toolName) {
+            return label
+        }
+        return toolName
+    }
+
+    static func iconName(for toolName: String) -> String {
+        if isBrowserTool(toolName) { return "safari" }
+        if isLinuxTool(toolName) { return "terminal" }
+        if toolName.localizedCaseInsensitiveContains("file") { return "doc.text" }
+        return "wrench.and.screwdriver"
+    }
+
+    static func isBrowserTool(_ toolName: String) -> Bool {
+        toolName == "browser_control" || toolName.hasSuffix("/browser_control")
+    }
+
+    static func isLinuxTool(_ toolName: String) -> Bool {
+        ["linux_run", "linux_shell", "linux_process"].contains { candidate in
+            toolName == candidate || toolName.hasSuffix("/\(candidate)") || toolName.hasSuffix("_\(candidate)")
+        }
+    }
+}
+
 struct AgentToolExecutionFloatingPreview: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var browserManager = BrowserSessionManager.shared
@@ -244,42 +511,19 @@ struct AgentToolExecutionFloatingPreview: View {
     }
 
     private func displayName(for toolName: String) -> String {
-        if isBrowserTool(toolName) {
-            return NSLocalizedString("浏览器", comment: "Browser Agent tool preview title")
-        }
-        if isLinuxTool(toolName) {
-            return NSLocalizedString("Linux", comment: "Linux Agent tool preview title")
-        }
-        if let label = MCPManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = ShortcutToolManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = SkillManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        if let label = AppToolManager.shared.displayLabel(for: toolName) {
-            return label
-        }
-        return toolName
+        AgentToolPreviewMetadata.displayName(for: toolName)
     }
 
     private func iconName(for toolName: String) -> String {
-        if isBrowserTool(toolName) { return "safari" }
-        if isLinuxTool(toolName) { return "terminal" }
-        if toolName.localizedCaseInsensitiveContains("file") { return "doc.text" }
-        return "wrench.and.screwdriver"
+        AgentToolPreviewMetadata.iconName(for: toolName)
     }
 
     private func isBrowserTool(_ toolName: String) -> Bool {
-        toolName == "browser_control" || toolName.hasSuffix("/browser_control")
+        AgentToolPreviewMetadata.isBrowserTool(toolName)
     }
 
     private func isLinuxTool(_ toolName: String) -> Bool {
-        ["linux_run", "linux_shell", "linux_process"].contains { candidate in
-            toolName == candidate || toolName.hasSuffix("/\(candidate)") || toolName.hasSuffix("_\(candidate)")
-        }
+        AgentToolPreviewMetadata.isLinuxTool(toolName)
     }
 
     private var browserSnapshotObservationID: String {
@@ -434,9 +678,9 @@ private struct AgentToolExecutionPreviewDetail: View {
                                 .textSelection(.enabled)
                         }
                     } header: {
-                        Text(NSLocalizedString("浮窗内容", comment: "Agent tool floating preview content"))
+                        Text(NSLocalizedString("缩略图内容", comment: "Agent tool chat preview content"))
                     } footer: {
-                        Text(NSLocalizedString("这里显示的内容与聊天浮窗一致；执行中显示参数摘要，完成后显示结果末尾。", comment: "Agent tool floating preview content footer"))
+                        Text(NSLocalizedString("这里显示的内容与聊天缩略图一致；执行中显示参数摘要，完成后显示结果末尾。", comment: "Agent tool chat preview content footer"))
                     }
                 }
 
@@ -490,6 +734,7 @@ private struct AgentToolExecutionPreviewDetail: View {
 
 struct LocalLinuxTerminalFloatingPreview: View {
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var terminalPreview = LocalLinuxTerminalPreviewModel()
 
     let isEnabled: Bool
     let containerSize: CGSize
@@ -500,9 +745,6 @@ struct LocalLinuxTerminalFloatingPreview: View {
     let isLiquidGlassEnabled: Bool
     let onOpen: (UUID) -> Void
 
-    @State private var activeTerminalID: UUID?
-    @State private var activeTerminalCount = 0
-    @State private var presentation = LocalLinuxTerminalPresentation.empty
     @State private var dragStartOffset: CGSize?
 
     private let expandedPanelSize = CGSize(width: 168, height: 112)
@@ -514,7 +756,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
     var body: some View {
         Group {
-            if let activeTerminalID {
+            if let activeTerminalID = terminalPreview.activeTerminalID {
                 Group {
                     if isCollapsed {
                         collapsedPanelContent()
@@ -538,10 +780,10 @@ struct LocalLinuxTerminalFloatingPreview: View {
         }
         .animation(.spring(response: 0.32, dampingFraction: 1), value: isCollapsed)
         .task(id: isEnabled) {
-            await observeTerminalActivity()
+            await terminalPreview.observeActivity(isEnabled: isEnabled)
         }
         .task(id: terminalOutputObservationID) {
-            await observeTerminalOutput()
+            await terminalPreview.observeOutput(appearance: terminalAppearance, maximumLines: 10)
         }
     }
 
@@ -551,8 +793,8 @@ struct LocalLinuxTerminalFloatingPreview: View {
                 .etFont(.system(size: 17, weight: .semibold))
                 .foregroundStyle(TelegramColors.attachButtonColor)
 
-            if activeTerminalCount > 1 {
-                Text("\(activeTerminalCount)")
+            if terminalPreview.activeTerminalCount > 1 {
+                Text("\(terminalPreview.activeTerminalCount)")
                     .etFont(.system(size: 8, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -592,8 +834,8 @@ struct LocalLinuxTerminalFloatingPreview: View {
 
                     Spacer(minLength: 4)
 
-                    if activeTerminalCount > 1 {
-                        Label("\(activeTerminalCount)", systemImage: "rectangle.stack")
+                    if terminalPreview.activeTerminalCount > 1 {
+                        Label("\(terminalPreview.activeTerminalCount)", systemImage: "rectangle.stack")
                             .labelStyle(.titleAndIcon)
                             .etFont(.system(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
@@ -621,11 +863,11 @@ struct LocalLinuxTerminalFloatingPreview: View {
             .frame(height: 30)
 
             Group {
-                if presentation.plainText.isEmpty {
+                if terminalPreview.presentation.plainText.isEmpty {
                     Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(presentation.attributedText)
+                    Text(terminalPreview.presentation.attributedText)
                 }
             }
             .font(.system(size: 6, design: .monospaced))
@@ -642,59 +884,6 @@ struct LocalLinuxTerminalFloatingPreview: View {
         .frame(width: expandedPanelSize.width, height: expandedPanelSize.height)
         .background(panelBackground(cornerRadius: 14))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private func observeTerminalActivity() async {
-        guard isEnabled else {
-            activeTerminalID = nil
-            activeTerminalCount = 0
-            presentation = .empty
-            return
-        }
-
-        let updates = await LocalLinuxRuntimeController.shared.updates()
-        for await snapshot in updates {
-            guard !Task.isCancelled else { return }
-            if snapshot.activeTerminalCount == 0 {
-                activeTerminalID = nil
-                activeTerminalCount = 0
-                presentation = .empty
-                continue
-            }
-            let terminals = await LocalLinuxJobScheduler.shared.activeStandaloneUserTerminals()
-            let terminalIDs = terminals.map(\.id)
-            activeTerminalCount = terminalIDs.count
-            let nextID = activeTerminalID.flatMap { terminalIDs.contains($0) ? $0 : nil }
-                ?? terminalIDs.first
-            if activeTerminalID != nextID {
-                activeTerminalID = nextID
-                presentation = .empty
-            }
-        }
-    }
-
-    private func observeTerminalOutput() async {
-        guard let terminalID = activeTerminalID else { return }
-        let appearance = terminalAppearance
-        while !Task.isCancelled, activeTerminalID == terminalID {
-            do {
-                presentation = try await LocalLinuxJobScheduler.shared
-                    .userVisibleTerminalPreviewPresentation(
-                        jobID: terminalID,
-                        maximumLines: 10,
-                        appearance: appearance
-                    )
-            } catch {
-                activeTerminalID = nil
-                presentation = .empty
-                return
-            }
-            do {
-                try await Task.sleep(nanoseconds: 350_000_000)
-            } catch {
-                return
-            }
-        }
     }
 
     private var dragGesture: some Gesture {
@@ -744,7 +933,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
     }
 
     private var terminalOutputObservationID: String {
-        "\(activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
+        "\(terminalPreview.activeTerminalID?.uuidString ?? "none")|\(terminalAppearance)"
     }
 
     private func setCollapsed(_ collapsed: Bool) {

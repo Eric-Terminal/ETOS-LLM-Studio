@@ -146,6 +146,22 @@ struct LocalLinuxFeatureView: View {
                     }
                 }
                 .pickerStyle(.navigationLink)
+
+                if LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode) != .off {
+                    Picker(
+                        NSLocalizedString("显示位置", comment: "Local Linux chat preview placement setting"),
+                        selection: $appConfig.localLinuxChatPreviewPlacement
+                    ) {
+                        ForEach(LocalLinuxChatPreviewPlacement.allCases) { placement in
+                            Text(placement.displayName).tag(placement.rawValue)
+                        }
+                    }
+                    .pickerStyle(.navigationLink)
+                }
+            } footer: {
+                if LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode) != .off {
+                    Text(NSLocalizedString("悬浮窗可以拖动和收起；输入栏上方会固定在输入区，不遮挡聊天内容。", comment: "Local Linux chat preview placement footer"))
+                }
             }
 
             Section {

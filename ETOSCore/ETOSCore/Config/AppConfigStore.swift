@@ -188,6 +188,7 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localLinuxWorkspaceCleanupPolicy: String { didSet { write(.localLinuxWorkspaceCleanupPolicy, localLinuxWorkspaceCleanupPolicy) } }
     @Published public var localLinuxTerminalShortcutIDs: String { didSet { write(.localLinuxTerminalShortcutIDs, localLinuxTerminalShortcutIDs) } }
     @Published public var localLinuxChatPreviewMode: String { didSet { write(.localLinuxChatPreviewMode, localLinuxChatPreviewMode) } }
+    @Published public var localLinuxChatPreviewPlacement: String { didSet { write(.localLinuxChatPreviewPlacement, localLinuxChatPreviewPlacement) } }
 
     @Published public var aiTemperature: Double { didSet { write(.aiTemperature, aiTemperature) } }
     @Published public var aiTopP: Double { didSet { write(.aiTopP, aiTopP) } }
@@ -590,6 +591,9 @@ public final class AppConfigStore: ObservableObject {
         localLinuxTerminalShortcutIDs = Self.textValue(.localLinuxTerminalShortcutIDs, userDefaults: userDefaults)
         localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(
             Self.textValue(.localLinuxChatPreviewMode, userDefaults: userDefaults)
+        ).rawValue
+        localLinuxChatPreviewPlacement = LocalLinuxChatPreviewPlacement.normalized(
+            Self.textValue(.localLinuxChatPreviewPlacement, userDefaults: userDefaults)
         ).rawValue
 
         aiTemperature = Self.realValue(.aiTemperature, userDefaults: userDefaults)
@@ -1149,6 +1153,7 @@ public final class AppConfigStore: ObservableObject {
         case .localLinuxWorkspaceCleanupPolicy: return .text(localLinuxWorkspaceCleanupPolicy)
         case .localLinuxTerminalShortcutIDs: return .text(localLinuxTerminalShortcutIDs)
         case .localLinuxChatPreviewMode: return .text(localLinuxChatPreviewMode)
+        case .localLinuxChatPreviewPlacement: return .text(localLinuxChatPreviewPlacement)
 
         case .aiTemperature: return .real(aiTemperature)
         case .aiTopP: return .real(aiTopP)
@@ -1505,6 +1510,8 @@ public final class AppConfigStore: ObservableObject {
             localLinuxTerminalShortcutIDs = value
         case .localLinuxChatPreviewMode:
             localLinuxChatPreviewMode = LocalLinuxChatPreviewMode.normalized(value).rawValue
+        case .localLinuxChatPreviewPlacement:
+            localLinuxChatPreviewPlacement = LocalLinuxChatPreviewPlacement.normalized(value).rawValue
         case .reasoningContentEchoMode:
             reasoningContentEchoMode = ReasoningContentEchoMode.normalized(value).rawValue
         case .videoFrameExtractionMode:
@@ -1880,6 +1887,8 @@ public final class AppConfigStore: ObservableObject {
             return value == "automatic" ? "automatic" : "manual"
         case .localLinuxChatPreviewMode:
             return LocalLinuxChatPreviewMode.normalized(value).rawValue
+        case .localLinuxChatPreviewPlacement:
+            return LocalLinuxChatPreviewPlacement.normalized(value).rawValue
         default:
             return value
         }
