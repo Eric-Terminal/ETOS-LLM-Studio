@@ -294,6 +294,21 @@ struct MCPToolListView: View {
                     .padding(.vertical, 2)
                 }
             }
+
+            Section(
+                header: Text(NSLocalizedString("工具调用标题", comment: "MCP tool call title section")),
+                footer: Text(NSLocalizedString("开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。", comment: "MCP tool call title setting footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            ) {
+                Toggle(
+                    NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP tool call title setting"),
+                    isOn: Binding(
+                        get: { manager.toolCallTitleEnabled },
+                        set: { manager.setToolCallTitleEnabled($0) }
+                    )
+                )
+            }
         }
         .navigationTitle(NSLocalizedString("工具列表", comment: ""))
     }

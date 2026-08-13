@@ -78,6 +78,7 @@ public final class MCPManager: ObservableObject {
     }
     @Published public internal(set) var isBusy: Bool = false
     @Published public internal(set) var chatToolsEnabled: Bool
+    @Published public internal(set) var toolCallTitleEnabled: Bool
 
     public weak var samplingHandler: MCPSamplingHandler? {
         didSet {
@@ -129,6 +130,10 @@ public final class MCPManager: ObservableObject {
         chatToolsEnabled = AppConfigStore.boolValue(
             for: .mcpChatToolsEnabled,
             legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
+        toolCallTitleEnabled = AppConfigStore.boolValue(
+            for: .mcpToolCallTitleEnabled,
             defaultValue: true
         )
         reloadServers()

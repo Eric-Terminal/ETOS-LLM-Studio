@@ -1119,6 +1119,7 @@ public final class AppConfigStore: ObservableObject {
              .appToolsKnownDefaultToolIDs,
              .appToolsToolApprovalPolicies,
              .mcpChatToolsEnabled,
+             .mcpToolCallTitleEnabled,
              .mcpDeletedBuiltInServerIDs,
              .skillsChatToolsEnabled,
              .skillsEnabledNames,
@@ -1333,6 +1334,7 @@ public final class AppConfigStore: ObservableObject {
         case .syncBackupCreateOnLaunch: syncBackupCreateOnLaunch = value
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
+             .mcpToolCallTitleEnabled,
              .skillsChatToolsEnabled,
              .shortcutChatToolsEnabled,
              .browserAgentDelegateToIPhone:

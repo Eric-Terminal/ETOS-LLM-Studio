@@ -170,6 +170,7 @@ struct MCPManagerToolExposureTests {
             (server.id, MCPServerStore.loadMetadata(for: server.id))
         })
         let originalGlobalSwitch = manager.chatToolsEnabled
+        let originalTitleSwitch = manager.toolCallTitleEnabled
 
         defer {
             for server in MCPServerStore.loadServers() {
@@ -182,7 +183,9 @@ struct MCPManagerToolExposureTests {
                 }
             }
             manager.chatToolsEnabled = originalGlobalSwitch
+            manager.toolCallTitleEnabled = originalTitleSwitch
             AppConfigStore.persistSynchronously(.bool(originalGlobalSwitch), for: .mcpChatToolsEnabled)
+            AppConfigStore.persistSynchronously(.bool(originalTitleSwitch), for: .mcpToolCallTitleEnabled)
             manager.reloadServers()
         }
 
@@ -191,6 +194,7 @@ struct MCPManagerToolExposureTests {
         }
         manager.reloadServers()
         manager.setChatToolsEnabled(true)
+        manager.setToolCallTitleEnabled(true)
 
         let server = MCPServerConfiguration(
             displayName: "Test MCP Server",
@@ -225,10 +229,42 @@ struct MCPManagerToolExposureTests {
         let exposedTools = manager.chatToolsForLLM()
         let exposedTool = try #require(exposedTools.first(where: { $0.name == "mcp_tool_alpha" }))
         #expect(exposedTool.name == "mcp_tool_alpha")
+        guard case .dictionary(let titledSchema) = exposedTool.parameters,
+              case .dictionary(let titledProperties) = titledSchema["properties"],
+              case .array(let titledRequired) = titledSchema["required"] else {
+            Issue.record("开启标题后应把 ETOS 保留字段加入 MCP Schema")
+            return
+        }
+        #expect(titledProperties[MCPToolCallTitleMetadata.argumentKey] != nil)
+        #expect(titledRequired.contains(.string(MCPToolCallTitleMetadata.argumentKey)))
+
+        manager.setToolCallTitleEnabled(false)
+        let untitledTool = try #require(manager.chatToolsForLLM().first(where: { $0.name == "mcp_tool_alpha" }))
+        if case .dictionary(let untitledSchema) = untitledTool.parameters,
+           case .dictionary(let untitledProperties) = untitledSchema["properties"] {
+            #expect(untitledProperties[MCPToolCallTitleMetadata.argumentKey] == nil)
+        }
 
         manager.setChatToolsEnabled(false)
         #expect(manager.chatToolsForLLM().isEmpty)
         #expect(manager.approvalPolicy(for: exposedTool.name) == .alwaysDeny)
+    }
+
+    @Test("MCP 标题元数据只保留在 ETOS 并从执行参数移除")
+    func testToolCallTitleMetadataIsRemovedFromExecutionArguments() throws {
+        #expect(AppConfigKey.mcpToolCallTitleEnabled.defaultValue == .bool(true))
+
+        let parsed = MCPToolCallTitleMetadata.parse(
+            argumentsJSON: #"{"__etos_tool_title":"  搜索相关问题  ","query":"Linux"}"#
+        )
+        #expect(parsed.title == "搜索相关问题")
+
+        let data = try #require(parsed.argumentsJSON.data(using: .utf8))
+        let dictionary = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        #expect(dictionary[MCPToolCallTitleMetadata.argumentKey] == nil)
+        #expect(dictionary["query"] as? String == "Linux")
     }
 
     @MainActor

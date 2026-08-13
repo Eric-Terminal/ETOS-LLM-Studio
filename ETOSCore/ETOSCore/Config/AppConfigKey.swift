@@ -275,6 +275,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case appToolsKnownDefaultToolIDs = "appTools.knownDefaultToolIDs"
     case appToolsToolApprovalPolicies = "appTools.toolApprovalPolicies"
     case mcpChatToolsEnabled = "mcp.chatToolsEnabled"
+    case mcpToolCallTitleEnabled = "mcp.toolCallTitle.enabled"
     case mcpDeletedBuiltInServerIDs = "mcp.deletedBuiltInServerIDs"
     case skillsChatToolsEnabled = "skills.chatToolsEnabled"
     case skillsEnabledNames = "skills.enabledNames"
@@ -501,6 +502,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .bool(false)
         case .appToolsChatToolsEnabled,
              .mcpChatToolsEnabled,
+             .mcpToolCallTitleEnabled,
              .skillsChatToolsEnabled,
              .shortcutChatToolsEnabled:
             return .bool(true)

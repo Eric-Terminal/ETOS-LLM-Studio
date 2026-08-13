@@ -116,4 +116,20 @@ struct AgentToolExecutionPreviewTests {
         #expect(preview.result?.count == 6_000)
         #expect(preview.resultWasTruncated)
     }
+
+    @Test("MCP 工具标题用于缩略图且不会混入展示参数")
+    func usesMCPToolDisplayTitle() throws {
+        let snapshot = AgentToolExecutionPreviewSnapshot(
+            messageID: UUID(),
+            toolCall: InternalToolCall(
+                id: "mcp-running",
+                toolName: "mcp_search_issues",
+                arguments: #"{"__etos_tool_title":"搜索相关问题","query":"Linux"}"#
+            )
+        )
+
+        #expect(snapshot.displayTitle == "搜索相关问题")
+        #expect(snapshot.arguments.contains(#""query":"Linux""#))
+        #expect(!snapshot.arguments.contains(MCPToolCallTitleMetadata.argumentKey))
+    }
 }

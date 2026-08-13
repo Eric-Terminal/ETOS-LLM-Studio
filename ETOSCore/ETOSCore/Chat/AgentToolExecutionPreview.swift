@@ -18,6 +18,7 @@ public struct AgentToolExecutionPreviewSnapshot: Equatable, Identifiable, Sendab
     public let messageID: UUID
     public let toolCallID: String
     public let toolName: String
+    public let displayTitle: String?
     public let arguments: String
     public let result: String?
     public let argumentsWereTruncated: Bool
@@ -32,7 +33,11 @@ public struct AgentToolExecutionPreviewSnapshot: Equatable, Identifiable, Sendab
         self.messageID = messageID
         toolCallID = toolCall.id
         toolName = toolCall.toolName
-        let boundedArguments = Self.boundedPrefix(toolCall.arguments, limit: 6_000)
+        let presentedArguments = MCPManager.isMCPToolName(toolCall.toolName)
+            ? MCPToolCallTitleMetadata.parse(argumentsJSON: toolCall.arguments)
+            : MCPToolCallTitleMetadata.ParsedArguments(title: nil, argumentsJSON: toolCall.arguments)
+        displayTitle = presentedArguments.title
+        let boundedArguments = Self.boundedPrefix(presentedArguments.argumentsJSON, limit: 6_000)
         let boundedResult = Self.boundedTail(toolCall.result ?? "", limit: 6_000)
         arguments = boundedArguments.text
         result = hasResult ? boundedResult.text : nil

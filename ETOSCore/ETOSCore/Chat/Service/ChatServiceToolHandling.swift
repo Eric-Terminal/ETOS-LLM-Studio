@@ -219,6 +219,8 @@ extension ChatService {
             logger.info("  - search_memory 检索完成: mode=\(mode), queryLength=\(query.count), resultCount=\(resolvedMemories.count)")
 
         case _ where MCPManager.isMCPToolName(toolCall.toolName):
+            let presentedArguments = MCPToolCallTitleMetadata.parse(argumentsJSON: toolCall.arguments)
+            let executableArguments = presentedArguments.argumentsJSON
             let toolLabel = await MainActor.run {
                 MCPManager.shared.displayLabel(for: toolCall.toolName)
             } ?? toolCall.toolName
@@ -235,7 +237,7 @@ extension ChatService {
             if let localLinuxToolID {
                 commandRuleMatch = try? await LocalLinuxToolExecutor.shared.commandRuleMatch(
                     toolName: localLinuxToolID,
-                    argumentsJSON: toolCall.arguments
+                    argumentsJSON: executableArguments
                 )
             } else {
                 commandRuleMatch = await MCPManager.shared.localStdioCommandRuleMatch(
@@ -275,7 +277,7 @@ extension ChatService {
                 do {
                     let result = try await MCPManager.shared.executeToolFromChat(
                         toolName: toolCall.toolName,
-                        argumentsJSON: toolCall.arguments,
+                        argumentsJSON: executableArguments,
                         sourceSessionID: sessionID,
                         sourceToolCallID: toolCall.id,
                         sourceAgentRunID: agentRunID,
@@ -296,7 +298,7 @@ extension ChatService {
                 let permissionDecision = await ToolPermissionCenter.shared.requestPermission(
                     toolName: toolCall.toolName,
                     displayName: approvalDisplayName,
-                    arguments: toolCall.arguments,
+                    arguments: executableArguments,
                     sourceSessionID: sessionID,
                     toolCallID: toolCall.id
                 )
@@ -316,7 +318,7 @@ extension ChatService {
                     do {
                         let result = try await MCPManager.shared.executeToolFromChat(
                             toolName: toolCall.toolName,
-                            argumentsJSON: toolCall.arguments,
+                            argumentsJSON: executableArguments,
                             sourceSessionID: sessionID,
                             sourceToolCallID: toolCall.id,
                             sourceAgentRunID: agentRunID,

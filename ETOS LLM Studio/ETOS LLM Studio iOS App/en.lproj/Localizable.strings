@@ -6726,3 +6726,7 @@
 "已根据当前网络选择响应最快的可用下载源。测速只访问各站的 Alpine 软件索引，不会读取位置。" = "Selected the fastest available download source on the current network. The test only accesses each site's Alpine package index and does not read your location.";
 "测速只访问各站的 Alpine 软件索引，不会读取位置。安装命令只在本次执行中使用所示下载源，不会修改 /etc/apk/repositories。" = "The test only accesses each site's Alpine package index and does not read your location. The installation command uses the shown source only for that run and does not modify /etc/apk/repositories.";
 "测速仅访问 Alpine 软件索引，不读取位置，也不修改系统软件源配置。" = "The test only accesses Alpine package indexes, does not read location, and does not modify the system repository configuration.";
+"工具调用标题" = "Tool Call Titles";
+"让 AI 描述 MCP 任务" = "Have AI Describe MCP Tasks";
+"开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。" = "When enabled, the model generates a short title for each MCP tool call and shows it in the chat preview. Titles are only displayed by ETOS and are not sent to the MCP Server. When disabled, the existing argument and result previews remain unchanged.";
+"为这次 MCP 工具调用提供简短的用户可见任务标题，使用与用户相同的语言。中文尽量不超过 15 个字，其他语言使用 5 到 10 个词。此字段仅供 ETOS 界面显示，不会发送给 MCP Server。" = "Provide a short, user-visible task title for this MCP tool call in the same language as the user. Keep Chinese titles under about 15 characters and other languages to 5–10 words. This field is only for the ETOS interface and is not sent to the MCP Server.";

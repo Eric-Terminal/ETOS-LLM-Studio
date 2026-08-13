@@ -110,7 +110,7 @@ private struct AgentToolExecutionDockedPreview: View {
                             .frame(width: 24)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(AgentToolPreviewMetadata.displayName(for: preview.toolName))
+                            Text(preview.displayTitle ?? AgentToolPreviewMetadata.displayName(for: preview.toolName))
                                 .etFont(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
@@ -421,7 +421,7 @@ struct AgentToolExecutionFloatingPreview: View {
                         .etFont(.system(size: 11, weight: .semibold))
                         .foregroundStyle(TelegramColors.attachButtonColor)
 
-                    Text(displayName(for: preview.toolName))
+                    Text(preview.displayTitle ?? displayName(for: preview.toolName))
                         .etFont(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -663,6 +663,12 @@ private struct AgentToolExecutionPreviewDetail: View {
                     )
                     LabeledContent(NSLocalizedString("工具", comment: "Agent tool preview detail tool")) {
                         Label(displayName, systemImage: iconName)
+                    }
+                    if let displayTitle = preview.displayTitle {
+                        LabeledContent(
+                            NSLocalizedString("任务", comment: "Agent tool preview task title"),
+                            value: displayTitle
+                        )
                     }
                 }
 

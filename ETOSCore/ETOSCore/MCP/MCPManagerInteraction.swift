@@ -221,11 +221,21 @@ extension MCPManager {
         }
     }
 
+    public func setToolCallTitleEnabled(_ isEnabled: Bool) {
+        guard toolCallTitleEnabled != isEnabled else { return }
+        toolCallTitleEnabled = isEnabled
+        AppConfigStore.persistSynchronously(.bool(isEnabled), for: .mcpToolCallTitleEnabled)
+    }
+
     public func reloadAppConfigBackedState() {
         let previousValue = chatToolsEnabled
         chatToolsEnabled = AppConfigStore.boolValue(
             for: .mcpChatToolsEnabled,
             legacyUserDefaultsKey: Self.chatToolsEnabledUserDefaultsKey,
+            defaultValue: true
+        )
+        toolCallTitleEnabled = AppConfigStore.boolValue(
+            for: .mcpToolCallTitleEnabled,
             defaultValue: true
         )
         if chatToolsEnabled {
@@ -290,10 +300,13 @@ extension MCPManager {
                 )
                 description = "[\(available.server.displayName)] \(fallback)"
             }
-            let parameters = available.tool.inputSchema ?? .dictionary([
+            let baseParameters = available.tool.inputSchema ?? .dictionary([
                 "type": .string("object"),
                 "additionalProperties": .bool(true)
             ])
+            let parameters = toolCallTitleEnabled
+                ? MCPToolCallTitleMetadata.injectingTitle(into: baseParameters)
+                : baseParameters
             return InternalToolDefinition(name: available.internalName, description: description, parameters: parameters, isBlocking: true)
         }
         return chatTools
@@ -346,6 +359,8 @@ extension MCPManager {
         let startedAt = Date()
         appendGovernanceLog(level: .info, category: .toolCall, serverID: routed.server.id, message: String(format: NSLocalizedString("开始执行聊天工具：%@", comment: "MCP governance chat tool started"), routed.tool.toolId))
         var inputs = try decodeJSONDictionary(from: argumentsJSON)
+        // 标题是 ETOS 与模型之间的展示元数据，任何 MCP Server 都不应看到它。
+        inputs.removeValue(forKey: MCPToolCallTitleMetadata.argumentKey)
         if builtInCategory == .conversation || builtInCategory == .linux || builtInCategory == .file || builtInCategory == .browser || builtInCategory == .mediaEnvironment {
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument)
             inputs.removeValue(forKey: MCPBuiltInAppToolServer.conversationToolCallIDArgument)
