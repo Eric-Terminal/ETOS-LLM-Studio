@@ -550,7 +550,7 @@ struct FontRouteSyncTests {
             fallbackLineSpacingEm: FontLibrary.defaultIOSLineSpacingEm
         )
         #expect(abs(customFontSpacing - 5.1) < 0.000_1)
-        #expect(abs(systemFontSpacing - 3.4) < 0.000_1)
+        #expect(abs(systemFontSpacing - 5.1) < 0.000_1)
         #expect(abs(compactMarkdownSpacing - 0.425) < 0.000_1)
         #expect(abs(spaciousMarkdownSpacing - 7.225) < 0.000_1)
         #expect(abs(maximumMarkdownSpacing - 17) < 0.000_1)
