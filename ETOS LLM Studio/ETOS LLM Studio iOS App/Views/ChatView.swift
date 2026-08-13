@@ -93,6 +93,7 @@ struct ChatView: View {
     @State var bottomSafeAreaInset: CGFloat = 0
     @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
+    @State var chatScrollViewportWidth: CGFloat = 0
     @State var chatScrollViewportHeight: CGFloat = 0
     @State var scrollDistanceToBottom: CGFloat = 0
     @State var pendingHistoryResetWorkItem: DispatchWorkItem?
@@ -771,7 +772,11 @@ extension ChatView {
                             streamingDisplayMode: ChatStreamingDisplayMode.normalized(
                                 appConfig.chatStreamingDisplayMode
                             ),
-                            reduceMotion: accessibilityReduceMotion
+                            reduceMotion: accessibilityReduceMotion,
+                            anchorAdjustment: chatLayoutIntegrityMonitor.pendingAnchorAdjustment,
+                            onAnchorAdjustmentApplied: { adjustmentID in
+                                chatLayoutIntegrityMonitor.completeAnchorAdjustment(id: adjustmentID)
+                            }
                         ) { distanceToBottom, distanceToTop, isUserInteracting in
                             handleChatScrollMetrics(
                                 distanceToBottom: distanceToBottom,
@@ -934,13 +939,61 @@ extension ChatView {
                                         _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
                                     },
                                     reportsSendFlightTarget: reportsSendFlightTarget,
+                                    reportsLayoutIntegrityFrame: true,
                                     layoutRecoveryRevision: chatLayoutIntegrityMonitor.recoveryRevision(
                                         for: message.id
                                     ),
                                     providers: viewModel.providers
                                 )
                                 .background {
-                                    ChatMessageLayoutFrameReporter(messageID: message.id)
+                                    ChatMessageLayoutFrameReporter(
+                                        messageID: message.id,
+                                        metadata: ChatMessageLayoutMetadata(
+                                            role: message.role.rawValue,
+                                            contentUTF8Length: preparedMarkdownPayload?.sourceUTF8Length ?? 0,
+                                            reasoningUTF8Length: preparedReasoningMarkdownPayload?.sourceUTF8Length ?? 0,
+                                            isAwaitingStaticHandoff: state.streamingMarkdownState
+                                                .isAwaitingStaticHandoff(channel: .content)
+                                                || state.streamingMarkdownState
+                                                    .isAwaitingStaticHandoff(channel: .reasoning),
+                                            hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                                            hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
+                                            layoutRevision: state.layoutRevision,
+                                            recoveryRevision: chatLayoutIntegrityMonitor
+                                                .recoveryRevision(for: message.id),
+                                            rendererHandoffRevision: state.rendererHandoffRevision,
+                                            rendererHandoffAt: state.lastRendererHandoffAt,
+                                            usesNoBubbleStyle: viewModel.enableNoBubbleUI
+                                                && message.role != .error
+                                                && !(message.role == .user && message.authorKind == .user),
+                                            contentRenderer: ChatBubbleRendererIdentity.resolved(
+                                                hasContent: !message.content.isEmpty,
+                                                enableMarkdown: viewModel.enableMarkdown,
+                                                isStreaming: showsStreamingIndicators,
+                                                isAwaitingStaticHandoff: state.streamingMarkdownState
+                                                    .isAwaitingStaticHandoff(channel: .content),
+                                                hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                                                usesWebRenderer: viewModel.enableAdvancedRenderer
+                                                    && preparedMarkdownPayload?.containsMermaidContent == true,
+                                                hasRoleplayHTML: state.roleplayHTML?.containsHTML == true
+                                            ),
+                                            reasoningRenderer: ChatBubbleRendererIdentity.resolved(
+                                                hasContent: !(message.reasoningContent?.isEmpty ?? true),
+                                                enableMarkdown: viewModel.enableMarkdown,
+                                                isStreaming: showsStreamingIndicators,
+                                                isAwaitingStaticHandoff: state.streamingMarkdownState
+                                                    .isAwaitingStaticHandoff(channel: .reasoning),
+                                                hasPreparedMarkdown: preparedReasoningMarkdownPayload != nil,
+                                                usesWebRenderer: viewModel.enableAdvancedRenderer
+                                                    && preparedReasoningMarkdownPayload?.containsMermaidContent == true
+                                            ),
+                                            layoutWidthBucket: ChatBubbleLayoutIdentity.widthBucket(
+                                                for: messageLayoutWidth
+                                            )
+                                        ),
+                                        probeRevision: chatLayoutIntegrityMonitor.layoutProbeRevision,
+                                        stackRecoveryRevision: chatLayoutIntegrityMonitor.stackRecoveryRevision
+                                    )
                                 }
                                 // 发送入场动画：用户气泡走 Overlay 飞行（见 flightOverlayLayer），
                                 // 真实气泡在飞行期间无动画隐身，避免两份白字文本叠加。
@@ -995,6 +1048,7 @@ extension ChatView {
                                 .frame(height: 8)
                                 .id(ChatScrollTargetID.bottom)
                         }
+                        .id(chatLayoutIntegrityMonitor.stackRecoveryRevision)
                         .scrollTargetLayout()
                     }
                     .padding(.horizontal, 8)
@@ -1005,13 +1059,27 @@ extension ChatView {
                 .frame(width: chatViewportWidth)
                 .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
                 .onPreferenceChange(ChatMessageLayoutFramePreferenceKey.self) { frames in
-                    chatLayoutIntegrityMonitor.updateFrames(
+                    chatLayoutIntegrityMonitor.updateSnapshot(
                         frames,
                         orderedMessageIDs: viewModel.displayMessages.map(\.id)
                     )
                 }
                 .onChange(of: chatLayoutAuditContext) { _, context in
                     chatLayoutIntegrityMonitor.updateContext(context)
+                }
+                .onChange(of: chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        if let newValue {
+                            chatScrollTargetAnchor = .center
+                            chatScrollTarget = .message(newValue)
+                        } else if let oldValue,
+                                  chatScrollTarget == .message(oldValue) {
+                            chatScrollTarget = nil
+                        }
+                    }
                 }
                 // 静态尺寸变化由 SwiftUI 锚定；流式增长改由 UIKit 只动画 contentOffset。
                 // 两套机制不会同时接管，用户主动离底后也不会抢回阅读位置。
@@ -1021,10 +1089,11 @@ extension ChatView {
                         isStreaming: viewModel.isSendingMessage
                     )
                 )
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { newHeight in
-                    chatScrollViewportHeight = newHeight
+                .onGeometryChange(for: CGSize.self) { proxy in
+                    proxy.size
+                } action: { newSize in
+                    chatScrollViewportWidth = newSize.width
+                    chatScrollViewportHeight = newSize.height
                 }
                 .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
                 .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in

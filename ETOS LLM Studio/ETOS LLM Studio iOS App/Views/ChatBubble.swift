@@ -59,6 +59,7 @@ struct ChatBubble: View {
     let onOpenSourceConversation: (() -> Void)?
     let onOpenConversation: ((UUID) -> Void)?
     let reportsSendFlightTarget: Bool
+    let reportsLayoutIntegrityFrame: Bool
     let layoutRecoveryRevision: UInt
     let providers: [Provider]
     
@@ -115,6 +116,7 @@ struct ChatBubble: View {
         onOpenSourceConversation: (() -> Void)? = nil,
         onOpenConversation: ((UUID) -> Void)? = nil,
         reportsSendFlightTarget: Bool = false,
+        reportsLayoutIntegrityFrame: Bool = false,
         layoutRecoveryRevision: UInt = 0,
         providers: [Provider] = []
     ) {
@@ -160,6 +162,7 @@ struct ChatBubble: View {
         self.onOpenSourceConversation = onOpenSourceConversation
         self.onOpenConversation = onOpenConversation
         self.reportsSendFlightTarget = reportsSendFlightTarget
+        self.reportsLayoutIntegrityFrame = reportsLayoutIntegrityFrame
         self.layoutRecoveryRevision = layoutRecoveryRevision
         self.providers = providers
     }
@@ -253,8 +256,36 @@ struct ChatBubble: View {
                 isStreaming: showsStreamingIndicators,
                 isStaticMarkdownHandoffInProgress: isStaticMarkdownHandoffInProgress,
                 hasPreparedMarkdown: preparedMarkdownPayload != nil,
-                hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil
+                hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
+                usesNoBubbleStyle: usesNoBubbleStyle,
+                contentRenderer: ChatBubbleRendererIdentity.resolved(
+                    hasContent: !message.content.isEmpty,
+                    enableMarkdown: enableMarkdown,
+                    isStreaming: showsStreamingIndicators,
+                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                        .isAwaitingStaticHandoff(channel: .content),
+                    hasPreparedMarkdown: preparedMarkdownPayload != nil,
+                    usesWebRenderer: enableAdvancedRenderer
+                        && preparedMarkdownPayload?.containsMermaidContent == true,
+                    hasRoleplayHTML: messageState.roleplayHTML?.containsHTML == true
+                ),
+                reasoningRenderer: ChatBubbleRendererIdentity.resolved(
+                    hasContent: !(message.reasoningContent?.isEmpty ?? true),
+                    enableMarkdown: enableMarkdown,
+                    isStreaming: showsStreamingIndicators,
+                    isAwaitingStaticHandoff: messageState.streamingMarkdownState
+                        .isAwaitingStaticHandoff(channel: .reasoning),
+                    hasPreparedMarkdown: preparedReasoningMarkdownPayload != nil,
+                    usesWebRenderer: enableAdvancedRenderer
+                        && preparedReasoningMarkdownPayload?.containsMermaidContent == true
+                ),
+                layoutWidthBucket: ChatBubbleLayoutIdentity.widthBucket(for: layoutWidth)
             ))
+            .background {
+                if reportsLayoutIntegrityFrame {
+                    ChatMessageRenderedContentFrameReporter(messageID: messageState.id)
+                }
+            }
             
             // AI 普通气泡靠左；关闭助手气泡后的助手消息保留对称右侧 Spacer。
             if !isOutgoing || usesNoBubbleStyle {

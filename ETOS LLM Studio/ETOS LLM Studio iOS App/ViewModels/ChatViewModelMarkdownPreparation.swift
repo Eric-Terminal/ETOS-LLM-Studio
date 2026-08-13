@@ -13,6 +13,7 @@ import ETOSCore
 
 struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
     let sourceText: String
+    let sourceUTF8Length: Int
     let normalizedText: String
     let mathRenderText: String
     let markdownContent: MarkdownContent
@@ -36,6 +37,7 @@ struct ETPreparedMarkdownRenderPayload: Equatable, @unchecked Sendable {
         let containsMermaid = containsMermaidFence(in: normalizedText)
         return ETPreparedMarkdownRenderPayload(
             sourceText: sourceText,
+            sourceUTF8Length: sourceText.utf8.count,
             normalizedText: normalizedText,
             mathRenderText: ETMathContentParser.normalizedMathDelimiters(in: normalizedText),
             markdownContent: MarkdownContent(normalizedText),

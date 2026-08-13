@@ -16,6 +16,8 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     @Published public private(set) var visualMessage: ChatMessage
     @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
     public private(set) var layoutRevision: UInt = 0
+    public private(set) var rendererHandoffRevision: UInt = 0
+    public private(set) var lastRendererHandoffAt: Date?
     public let streamingMarkdownState: ETStreamingMarkdownRenderState
     
     public init(message: ChatMessage) {
@@ -23,6 +25,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         self.message = message
         self.visualMessage = message
         self.roleplayHTML = nil
+        self.lastRendererHandoffAt = nil
         self.streamingMarkdownState = ETStreamingMarkdownRenderState()
     }
     
@@ -56,5 +59,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public func invalidateLayoutAfterRendererHandoff() {
         objectWillChange.send()
         layoutRevision &+= 1
+        rendererHandoffRevision &+= 1
+        lastRendererHandoffAt = Date()
     }
 }

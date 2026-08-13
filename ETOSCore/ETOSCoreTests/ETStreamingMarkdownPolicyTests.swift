@@ -40,6 +40,8 @@ struct ETStreamingMarkdownPolicyTests {
         state.invalidateLayoutAfterRendererHandoff()
 
         #expect(state.layoutRevision == 1)
+        #expect(state.rendererHandoffRevision == 1)
+        #expect(state.lastRendererHandoffAt != nil)
     }
 
     @Test("静态 Markdown 准备完成前保留本次流式交接状态")
