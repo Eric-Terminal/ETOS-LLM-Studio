@@ -91,12 +91,16 @@ struct AgentToolExecutionFloatingPreview: View {
                     if isCollapsed {
                         collapsedPanelContent(preview)
                             .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                            .gesture(
+                                dragGesture.exclusively(
+                                    before: TapGesture().onEnded { setCollapsed(false) }
+                                )
+                            )
                     } else {
                         panelContent(preview)
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
-                .simultaneousGesture(dragGesture)
                 .position(
                     x: defaultCenter.x + clampedOffset.width,
                     y: defaultCenter.y + clampedOffset.height
@@ -122,50 +126,51 @@ struct AgentToolExecutionFloatingPreview: View {
     }
 
     private func collapsedPanelContent(_ preview: AgentToolExecutionPreviewSnapshot) -> some View {
-        Button {
-            setCollapsed(false)
-        } label: {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: iconName(for: preview.toolName))
-                    .etFont(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(TelegramColors.attachButtonColor)
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: iconName(for: preview.toolName))
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundStyle(TelegramColors.attachButtonColor)
 
-                Circle()
-                    .fill(preview.state == .running ? Color.orange : Color.green)
-                    .frame(width: 9, height: 9)
-                    .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
-                    .offset(x: 2, y: 2)
-            }
-            .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
-            .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
-            .clipShape(Circle())
+            Circle()
+                .fill(preview.state == .running ? Color.orange : Color.green)
+                .frame(width: 9, height: 9)
+                .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
+                .offset(x: 2, y: 2)
         }
-        .buttonStyle(.plain)
+        .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
+        .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
+        .clipShape(Circle())
         .contentShape(Circle())
         .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { setCollapsed(false) }
     }
 
     private func panelContent(_ preview: AgentToolExecutionPreviewSnapshot) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: iconName(for: preview.toolName))
-                    .etFont(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TelegramColors.attachButtonColor)
+                HStack(spacing: 6) {
+                    Image(systemName: iconName(for: preview.toolName))
+                        .etFont(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TelegramColors.attachButtonColor)
 
-                Text(displayName(for: preview.toolName))
-                    .etFont(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    Text(displayName(for: preview.toolName))
+                        .etFont(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                Spacer(minLength: 4)
+                    Spacer(minLength: 4)
 
-                Label(preview.state == .running
-                      ? NSLocalizedString("执行中", comment: "Agent tool preview running")
-                      : NSLocalizedString("已完成", comment: "Agent tool preview completed"),
-                      systemImage: preview.state == .running ? "clock" : "checkmark.circle.fill")
-                    .labelStyle(.iconOnly)
-                    .etFont(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(preview.state == .running ? Color.orange : Color.green)
+                    Label(preview.state == .running
+                          ? NSLocalizedString("执行中", comment: "Agent tool preview running")
+                          : NSLocalizedString("已完成", comment: "Agent tool preview completed"),
+                          systemImage: preview.state == .running ? "clock" : "checkmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                        .etFont(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(preview.state == .running ? Color.orange : Color.green)
+                }
+                .contentShape(Rectangle())
+                .gesture(expandedInteractionGesture)
 
                 Button {
                     setCollapsed(true)
@@ -177,45 +182,34 @@ struct AgentToolExecutionFloatingPreview: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(NSLocalizedString("收起 Agent 工具预览", comment: "Collapse Agent tool execution preview"))
-
-                Button {
-                    isShowingDetail = true
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .etFont(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 30)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
             }
             .padding(.horizontal, 9)
             .frame(height: 30)
 
-            Button {
-                isShowingDetail = true
-            } label: {
-                Group {
-                    if isBrowserTool(preview.toolName), let browserImage {
-                        Image(uiImage: browserImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else if preview.previewText.isEmpty {
-                        Text(NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder"))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(preview.previewText)
-                            .font(.system(size: 7, design: .monospaced))
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                            .padding(6)
-                    }
+            Group {
+                if isBrowserTool(preview.toolName), let browserImage {
+                    Image(uiImage: browserImage)
+                        .resizable()
+                        .scaledToFill()
+                } else if preview.previewText.isEmpty {
+                    Text(NSLocalizedString("等待工具输出…", comment: "Agent tool preview waiting placeholder"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(preview.previewText)
+                        .font(.system(size: 7, design: .monospaced))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(6)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(previewCanvasColor)
-                .clipped()
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(previewCanvasColor)
+            .contentShape(Rectangle())
+            .clipped()
+            .gesture(expandedInteractionGesture)
+            .accessibilityLabel(NSLocalizedString("展开 Agent 工具预览", comment: "Expand Agent tool execution preview"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { isShowingDetail = true }
         }
         .frame(width: expandedPanelSize.width, height: expandedPanelSize.height)
         .background(panelBackground(cornerRadius: 14))
@@ -294,7 +288,7 @@ struct AgentToolExecutionFloatingPreview: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
                 if dragStartOffset == nil {
                     dragStartOffset = offset
@@ -319,6 +313,12 @@ struct AgentToolExecutionFloatingPreview: View {
                 )
                 dragStartOffset = nil
             }
+    }
+
+    private var expandedInteractionGesture: some Gesture {
+        dragGesture.exclusively(
+            before: TapGesture().onEnded { isShowingDetail = true }
+        )
     }
 
     private var clampedOffset: CGSize {
@@ -519,12 +519,16 @@ struct LocalLinuxTerminalFloatingPreview: View {
                     if isCollapsed {
                         collapsedPanelContent()
                             .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                            .gesture(
+                                dragGesture.exclusively(
+                                    before: TapGesture().onEnded { setCollapsed(false) }
+                                )
+                            )
                     } else {
                         panelContent(jobID: activeTerminalID)
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
-                .simultaneousGesture(dragGesture)
                 .position(
                     x: defaultCenter.x + clampedOffset.width,
                     y: defaultCenter.y + clampedOffset.height
@@ -542,64 +546,65 @@ struct LocalLinuxTerminalFloatingPreview: View {
     }
 
     private func collapsedPanelContent() -> some View {
-        Button {
-            setCollapsed(false)
-        } label: {
-            ZStack(alignment: .bottomTrailing) {
-                Image(systemName: "terminal.fill")
-                    .etFont(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(TelegramColors.attachButtonColor)
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "terminal.fill")
+                .etFont(.system(size: 17, weight: .semibold))
+                .foregroundStyle(TelegramColors.attachButtonColor)
 
-                if activeTerminalCount > 1 {
-                    Text("\(activeTerminalCount)")
-                        .etFont(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(width: 16, height: 16)
-                        .background(Circle().fill(TelegramColors.attachButtonColor))
-                        .offset(x: 4, y: 4)
-                } else {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
-                        .offset(x: 2, y: 2)
-                }
+            if activeTerminalCount > 1 {
+                Text("\(activeTerminalCount)")
+                    .etFont(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: 16, height: 16)
+                    .background(Circle().fill(TelegramColors.attachButtonColor))
+                    .offset(x: 4, y: 4)
+            } else {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 1.5))
+                    .offset(x: 2, y: 2)
             }
-            .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
-            .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
-            .clipShape(Circle())
         }
-        .buttonStyle(.plain)
+        .frame(width: collapsedPanelSize.width, height: collapsedPanelSize.height)
+        .background(panelBackground(cornerRadius: collapsedPanelSize.width / 2))
+        .clipShape(Circle())
         .contentShape(Circle())
         .accessibilityLabel(NSLocalizedString("展开用户终端预览", comment: "Expand user Linux terminal preview"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { setCollapsed(false) }
     }
 
     private func panelContent(jobID: UUID) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "terminal.fill")
-                    .etFont(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TelegramColors.attachButtonColor)
+                HStack(spacing: 6) {
+                    Image(systemName: "terminal.fill")
+                        .etFont(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TelegramColors.attachButtonColor)
 
-                Text(NSLocalizedString("用户终端", comment: "User terminal preview title"))
-                    .etFont(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    Text(NSLocalizedString("用户终端", comment: "User terminal preview title"))
+                        .etFont(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
 
-                Spacer(minLength: 4)
+                    Spacer(minLength: 4)
 
-                if activeTerminalCount > 1 {
-                    Label("\(activeTerminalCount)", systemImage: "rectangle.stack")
-                        .labelStyle(.titleAndIcon)
-                        .etFont(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(String(jobID.uuidString.prefix(4)))
-                        .etFont(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    if activeTerminalCount > 1 {
+                        Label("\(activeTerminalCount)", systemImage: "rectangle.stack")
+                            .labelStyle(.titleAndIcon)
+                            .etFont(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(String(jobID.uuidString.prefix(4)))
+                            .etFont(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .contentShape(Rectangle())
+                .gesture(expandedInteractionGesture(jobID: jobID))
 
                 Button {
                     setCollapsed(true)
@@ -611,39 +616,28 @@ struct LocalLinuxTerminalFloatingPreview: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(NSLocalizedString("收起用户终端预览", comment: "Collapse user Linux terminal preview"))
-
-                Button {
-                    onOpen(jobID)
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .etFont(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 30)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
             }
             .padding(.horizontal, 9)
             .frame(height: 30)
 
-            Button {
-                onOpen(jobID)
-            } label: {
-                Group {
-                    if presentation.plainText.isEmpty {
-                        Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(presentation.attributedText)
-                    }
+            Group {
+                if presentation.plainText.isEmpty {
+                    Text(NSLocalizedString("终端正在启动…", comment: "Linux terminal starting placeholder"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(presentation.attributedText)
                 }
-                .font(.system(size: 6, design: .monospaced))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(6)
-                .background(terminalCanvasColor)
-                .clipped()
             }
-            .buttonStyle(.plain)
+            .font(.system(size: 6, design: .monospaced))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(6)
+            .background(terminalCanvasColor)
+            .contentShape(Rectangle())
+            .clipped()
+            .gesture(expandedInteractionGesture(jobID: jobID))
+            .accessibilityLabel(NSLocalizedString("打开用户终端", comment: "Open user Linux terminal"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { onOpen(jobID) }
         }
         .frame(width: expandedPanelSize.width, height: expandedPanelSize.height)
         .background(panelBackground(cornerRadius: 14))
@@ -704,7 +698,7 @@ struct LocalLinuxTerminalFloatingPreview: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
                 if dragStartOffset == nil {
                     dragStartOffset = offset
@@ -729,6 +723,12 @@ struct LocalLinuxTerminalFloatingPreview: View {
                 )
                 dragStartOffset = nil
             }
+    }
+
+    private func expandedInteractionGesture(jobID: UUID) -> some Gesture {
+        dragGesture.exclusively(
+            before: TapGesture().onEnded { onOpen(jobID) }
+        )
     }
 
     private var clampedOffset: CGSize {
