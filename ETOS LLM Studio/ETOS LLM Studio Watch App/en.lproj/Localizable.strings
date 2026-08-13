@@ -6547,3 +6547,4 @@
 "没有可接收该请求的聊天界面。" = "No chat interface is available to receive this request.";
 "离开聊天时继续播放" = "Continue playing outside chat";
 "开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。" = "When enabled, the video keeps playing while you browse settings and other pages, preserving its timeline when you return. Playback still pauses when the app enters the background.";
+"本地模型文件不完整：%@（当前 %@，至少需要 %@）。请重新下载后再导入。" = "The local model file is incomplete: %@ (current %@, at least %@ required). Download it again and re-import it.";

@@ -644,6 +644,40 @@ struct LocalModelStoreTests {
         #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent(firstShard.lastPathComponent).path))
     }
 
+    @Test("导入张量数据被截断的 GGUF 会报告所需大小并清理副本")
+    func truncatedGGUFTensorDataReportsRequiredSize() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("truncated.gguf")
+        try writeMinimalGGUF(
+            to: source,
+            declaredTensorByteCount: 32,
+            writtenTensorByteCount: 16
+        )
+        let actualSize = try #require(
+            FileManager.default.attributesOfItem(atPath: source.path)[.size] as? NSNumber
+        ).uint64Value
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: source)
+            Issue.record("张量数据被截断的 GGUF 文件不应导入成功。")
+        } catch let error as LocalLLMEngineError {
+            guard case .modelFileIncomplete(let fileName, let reportedSize, let requiredSize) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == source.lastPathComponent)
+            #expect(reportedSize == actualSize)
+            #expect(requiredSize == actualSize + 16)
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent(source.lastPathComponent).path))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("LocalModelStoreTests-\(UUID().uuidString)", isDirectory: true)
@@ -655,12 +689,15 @@ struct LocalModelStoreTests {
         to url: URL,
         architecture: String = "llama",
         splitCount: UInt16? = nil,
-        splitNumber: UInt16? = nil
+        splitNumber: UInt16? = nil,
+        declaredTensorByteCount: Int? = nil,
+        writtenTensorByteCount: Int? = nil
     ) throws {
+        precondition(declaredTensorByteCount.map { $0 > 0 && $0.isMultiple(of: 4) } ?? true)
         let splitPairCount = splitCount == nil ? 0 : (splitNumber == nil ? 1 : 2)
         var data = Data([0x47, 0x47, 0x55, 0x46])
         appendLittleEndian(UInt32(3), to: &data)
-        appendLittleEndian(UInt64(0), to: &data)
+        appendLittleEndian(UInt64(declaredTensorByteCount == nil ? 0 : 1), to: &data)
         appendLittleEndian(UInt64(1 + splitPairCount), to: &data)
         appendGGUFString("general.architecture", to: &data)
         appendLittleEndian(Int32(8), to: &data)
@@ -674,6 +711,20 @@ struct LocalModelStoreTests {
             appendGGUFString("split.no", to: &data)
             appendLittleEndian(Int32(2), to: &data)
             appendLittleEndian(splitNumber, to: &data)
+        }
+        if let declaredTensorByteCount {
+            appendGGUFString("test.weight", to: &data)
+            appendLittleEndian(UInt32(1), to: &data)
+            appendLittleEndian(UInt64(declaredTensorByteCount / 4), to: &data)
+            appendLittleEndian(Int32(0), to: &data)
+            appendLittleEndian(UInt64(0), to: &data)
+            while !data.count.isMultiple(of: 32) {
+                data.append(0)
+            }
+            data.append(Data(
+                repeating: 0,
+                count: writtenTensorByteCount ?? declaredTensorByteCount
+            ))
         }
         try data.write(to: url)
     }

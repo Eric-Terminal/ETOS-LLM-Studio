@@ -6786,3 +6786,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "没有可接收该请求的聊天界面。" = "Aucune interface de discussion n’est disponible pour recevoir cette demande.";
 "离开聊天时继续播放" = "Continuer la lecture hors du chat";
 "开启后，进入设置等页面时视频会继续播放，返回聊天时保持原有进度；App 进入后台后仍会暂停。" = "Lorsque cette option est activée, la vidéo continue pendant la consultation des réglages et des autres pages, puis conserve sa progression au retour dans le chat. La lecture se met toujours en pause lorsque l’app passe en arrière-plan.";
+"本地模型文件不完整：%@（当前 %@，至少需要 %@）。请重新下载后再导入。" = "Le fichier du modèle local est incomplet : %@ (taille actuelle %@, au moins %@ requis). Téléchargez-le à nouveau, puis réimportez-le.";

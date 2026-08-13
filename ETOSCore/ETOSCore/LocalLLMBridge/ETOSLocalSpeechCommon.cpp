@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <limits>
 #include <map>
+#include <sys/stat.h>
 
 namespace etos_local_speech {
 namespace {
@@ -515,6 +517,53 @@ architecture architecture_from_name(const std::string & name) {
     return architecture::unknown;
 }
 
+namespace {
+
+std::string file_name_from_path(const std::string & path) {
+    const size_t separator = path.find_last_of("/\\");
+    return separator == std::string::npos ? path : path.substr(separator + 1);
+}
+
+void validate_gguf_file_extent(
+    const std::string & path,
+    const gguf_context * context
+) {
+    uint64_t required_data_bytes = 0;
+    const int64_t tensor_count = gguf_get_n_tensors(context);
+    for (int64_t index = 0; index < tensor_count; ++index) {
+        const uint64_t offset = gguf_get_tensor_offset(context, index);
+        const uint64_t size = gguf_get_tensor_size(context, index);
+        if (offset > std::numeric_limits<uint64_t>::max() - size) {
+            throw std::runtime_error("GGUF 张量范围溢出。文件可能已损坏。");
+        }
+        required_data_bytes = std::max(required_data_bytes, offset + size);
+    }
+
+    const uint64_t data_offset = gguf_get_data_offset(context);
+    if (data_offset > std::numeric_limits<uint64_t>::max() - required_data_bytes) {
+        throw std::runtime_error("GGUF 文件范围溢出。文件可能已损坏。");
+    }
+    const uint64_t required_file_bytes = data_offset + required_data_bytes;
+
+    struct stat file_info = {};
+    if (stat(path.c_str(), &file_info) != 0 || file_info.st_size < 0) {
+        throw std::runtime_error("无法读取 GGUF 文件大小。");
+    }
+    const uint64_t actual_file_bytes = static_cast<uint64_t>(file_info.st_size);
+    if (actual_file_bytes < required_file_bytes) {
+        throw std::runtime_error(
+            "etos.local_model_file_incomplete|"
+            + std::to_string(actual_file_bytes)
+            + "|"
+            + std::to_string(required_file_bytes)
+            + "|"
+            + file_name_from_path(path)
+        );
+    }
+}
+
+} // namespace
+
 std::string architecture_name(const std::string & model_path) {
     gguf_init_params params = {true, nullptr};
     std::unique_ptr<gguf_context, decltype(&gguf_free)> context(
@@ -524,6 +573,7 @@ std::string architecture_name(const std::string & model_path) {
     if (!context) {
         throw std::runtime_error("无法读取 GGUF 模型元数据。");
     }
+    validate_gguf_file_extent(model_path, context.get());
     const int64_t key = gguf_find_key(context.get(), "general.architecture");
     if (key < 0) {
         throw std::runtime_error("GGUF 模型缺少 general.architecture。");
@@ -577,14 +627,21 @@ std::string architecture_name(const std::string & model_path) {
                 }
                 FILE * file = std::fopen(split_path.data(), "rb");
                 if (!file) {
-                    const std::string path(split_path.data());
-                    const size_t separator = path.find_last_of("/\\");
-                    const std::string file_name = separator == std::string::npos
-                        ? path
-                        : path.substr(separator + 1);
-                    throw std::runtime_error("etos.local_model_file_missing|" + file_name);
+                    throw std::runtime_error(
+                        "etos.local_model_file_missing|"
+                        + file_name_from_path(split_path.data())
+                    );
                 }
                 std::fclose(file);
+
+                std::unique_ptr<gguf_context, decltype(&gguf_free)> split_context(
+                    gguf_init_from_file(split_path.data(), params),
+                    gguf_free
+                );
+                if (!split_context) {
+                    throw std::runtime_error("无法读取 GGUF 分片模型元数据。");
+                }
+                validate_gguf_file_extent(split_path.data(), split_context.get());
             }
         }
     }

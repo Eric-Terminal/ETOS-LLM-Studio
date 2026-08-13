@@ -167,6 +167,7 @@ public struct LocalLLMEmbeddingInput: Hashable, Sendable {
 public enum LocalLLMEngineError: LocalizedError {
     case backendUnavailable
     case modelFileMissing(String)
+    case modelFileIncomplete(fileName: String, actualBytes: UInt64, requiredBytes: UInt64)
     case generationFailed(String)
 
     public var errorDescription: String? {
@@ -175,6 +176,13 @@ public enum LocalLLMEngineError: LocalizedError {
             return NSLocalizedString("本地推理后端尚未完成编译接入。", comment: "Local LLM backend unavailable")
         case .modelFileMissing(let fileName):
             return String(format: NSLocalizedString("本地模型文件不存在：%@", comment: "Local model file missing"), fileName)
+        case .modelFileIncomplete(let fileName, let actualBytes, let requiredBytes):
+            return String(
+                format: NSLocalizedString("本地模型文件不完整：%@（当前 %@，至少需要 %@）。请重新下载后再导入。", comment: "Incomplete local model file"),
+                fileName,
+                StorageUtility.formatSize(Int64(clamping: actualBytes)),
+                StorageUtility.formatSize(Int64(clamping: requiredBytes))
+            )
         case .generationFailed(let message):
             return message
         }

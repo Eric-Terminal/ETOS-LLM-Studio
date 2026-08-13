@@ -42,6 +42,27 @@ public enum LocalGGUFMetadata {
                     .map(String.init) ?? ""
                 throw LocalLLMEngineError.modelFileMissing(fileName)
             }
+            let incompleteFilePrefix = "etos.local_model_file_incomplete|"
+            if message.hasPrefix(incompleteFilePrefix) {
+                let fields = message.split(
+                    separator: "|",
+                    maxSplits: 3,
+                    omittingEmptySubsequences: false
+                )
+                if fields.count == 4,
+                   let actualBytes = UInt64(fields[1]),
+                   let requiredBytes = UInt64(fields[2]) {
+                    let fileName = fields[3]
+                        .split(whereSeparator: \.isNewline)
+                        .first
+                        .map(String.init) ?? modelURL.lastPathComponent
+                    throw LocalLLMEngineError.modelFileIncomplete(
+                        fileName: fileName,
+                        actualBytes: actualBytes,
+                        requiredBytes: requiredBytes
+                    )
+                }
+            }
             throw LocalLLMEngineError.generationFailed(String(
                 format: NSLocalizedString("无法加载文件: %@", comment: "Unable to load imported GGUF file"),
                 message
