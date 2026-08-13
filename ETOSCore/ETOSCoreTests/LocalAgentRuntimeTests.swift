@@ -606,20 +606,28 @@ struct LocalAgentRuntimeTests {
             $0.command.hasPrefix("printf '%s' '") && $0.command.hasSuffix("' | base64 -d | /bin/sh")
         })
         let bashRecipe = try #require(LocalLinuxEnvironmentRecipes.all.first { $0.id == "bash" })
-        #expect(bashRecipe.displayedCommand == "apk add bash")
+        #expect(bashRecipe.summaryCommand == "apk add bash")
+        #expect(bashRecipe.displayedCommand.contains(LocalLinuxPackageMirrors.official.baseURL.absoluteString))
         #expect(bashRecipe.requiredPackages == ["bash"])
         #expect(
             String(data: bashRecipe.terminalInput, encoding: .utf8)
                 == "\(bashRecipe.command); exit $?\n"
         )
 
-        let script = LocalLinuxEnvironmentRecipes.installationScript(packages: ["nodejs", "npm"])
-        #expect(script.contains("CURRENT_REPOSITORIES=\"$(sed"))
-        #expect(script.contains("probe_mirror \"$mirror\" &"))
-        #expect(script.contains("head -c 131072"))
+        let aliyunRecipe = try #require(
+            LocalLinuxEnvironmentRecipes.all(using: LocalLinuxPackageMirrors.aliyun)
+                .first { $0.id == "node" }
+        )
+        #expect(aliyunRecipe.displayedCommand.contains("https://mirrors.aliyun.com/alpine"))
+        let script = LocalLinuxEnvironmentRecipes.installationScript(
+            packages: ["nodejs", "npm"],
+            mirror: LocalLinuxPackageMirrors.aliyun
+        )
+        #expect(script.contains("SELECTED_MIRROR='https://mirrors.aliyun.com/alpine'"))
         #expect(script.contains("mktemp -d /tmp/etos-apk.XXXXXX"))
-        #expect(script.contains("--repositories-file \"$REPOSITORIES_FILE\""))
-        #expect(script.contains("apk --timeout 30 --progress add 'nodejs' 'npm'"))
+        #expect(script.contains("--repositories-file \"$TEMP_REPOSITORIES\""))
+        #expect(script.contains("--progress add 'nodejs' 'npm'"))
+        #expect(!script.contains("probe_mirror"))
         #expect(!script.contains("setup-apkrepos"))
 
         var job = LocalLinuxJob(
@@ -639,6 +647,33 @@ struct LocalAgentRuntimeTests {
         #expect(LocalLinuxEnvironmentInstallationResult(job: job, output: "OK").succeeded)
         job.exitCode = 1
         #expect(!LocalLinuxEnvironmentInstallationResult(job: job, output: "ERROR").succeeded)
+    }
+
+    @Test("环境下载源按实测耗时推荐，并在失败时按地区回退")
+    func environmentMirrorRecommendation() {
+        let measured = LocalLinuxPackageMirrors.recommendation(
+            from: [
+                LocalLinuxMirrorProbeResult(mirror: LocalLinuxPackageMirrors.official, latencyMilliseconds: 180),
+                LocalLinuxMirrorProbeResult(mirror: LocalLinuxPackageMirrors.aliyun, latencyMilliseconds: 42),
+                LocalLinuxMirrorProbeResult(mirror: LocalLinuxPackageMirrors.tsinghua, latencyMilliseconds: 67)
+            ],
+            regionCode: "US"
+        )
+        #expect(measured.selectedMirror.id == LocalLinuxPackageMirrors.aliyun.id)
+        #expect(measured.selectedLatencyMilliseconds == 42)
+        #expect(measured.isMeasured)
+
+        let unavailable = LocalLinuxPackageMirrors.all.map {
+            LocalLinuxMirrorProbeResult(mirror: $0, latencyMilliseconds: nil)
+        }
+        #expect(
+            LocalLinuxPackageMirrors.recommendation(from: unavailable, regionCode: "CN")
+                .selectedMirror.id == LocalLinuxPackageMirrors.aliyun.id
+        )
+        #expect(
+            LocalLinuxPackageMirrors.recommendation(from: unavailable, regionCode: "DE")
+                .selectedMirror.id == LocalLinuxPackageMirrors.official.id
+        )
     }
 
     @Test("Linux 环境安装状态以 apk 数据库为准")

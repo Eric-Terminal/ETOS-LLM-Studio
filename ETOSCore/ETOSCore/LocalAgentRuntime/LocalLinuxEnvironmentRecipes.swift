@@ -9,42 +9,201 @@
 
 import Foundation
 
+public struct LocalLinuxPackageMirror: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let baseURL: URL
+
+    public var displayName: String {
+        switch id {
+        case "aliyun":
+            return NSLocalizedString("阿里云镜像", comment: "Alibaba Cloud Alpine mirror name")
+        case "tsinghua":
+            return NSLocalizedString("清华大学镜像", comment: "Tsinghua Alpine mirror name")
+        default:
+            return NSLocalizedString("Alpine 官方 CDN", comment: "Official Alpine CDN name")
+        }
+    }
+}
+
+public struct LocalLinuxMirrorProbeResult: Equatable, Sendable {
+    public let mirror: LocalLinuxPackageMirror
+    public let latencyMilliseconds: Int?
+
+    public init(mirror: LocalLinuxPackageMirror, latencyMilliseconds: Int?) {
+        self.mirror = mirror
+        self.latencyMilliseconds = latencyMilliseconds
+    }
+}
+
+public struct LocalLinuxMirrorRecommendation: Equatable, Sendable {
+    public let selectedMirror: LocalLinuxPackageMirror
+    public let probeResults: [LocalLinuxMirrorProbeResult]
+
+    public init(
+        selectedMirror: LocalLinuxPackageMirror,
+        probeResults: [LocalLinuxMirrorProbeResult]
+    ) {
+        self.selectedMirror = selectedMirror
+        self.probeResults = probeResults
+    }
+
+    public var selectedLatencyMilliseconds: Int? {
+        probeResults.first { $0.mirror.id == selectedMirror.id }?.latencyMilliseconds
+    }
+
+    public var isMeasured: Bool {
+        selectedLatencyMilliseconds != nil
+    }
+}
+
+public enum LocalLinuxPackageMirrors {
+    public static let official = LocalLinuxPackageMirror(
+        id: "official",
+        baseURL: URL(string: "https://dl-cdn.alpinelinux.org/alpine")!
+    )
+    public static let aliyun = LocalLinuxPackageMirror(
+        id: "aliyun",
+        baseURL: URL(string: "https://mirrors.aliyun.com/alpine")!
+    )
+    public static let tsinghua = LocalLinuxPackageMirror(
+        id: "tsinghua",
+        baseURL: URL(string: "https://mirrors.tuna.tsinghua.edu.cn/alpine")!
+    )
+
+    public static let all = [official, aliyun, tsinghua]
+
+    /// 不依赖定位权限；地区只在网络测速全部失败时决定默认建议。
+    public static func regionalFallback(regionCode: String? = Locale.current.region?.identifier) -> LocalLinuxPackageMirror {
+        regionCode?.uppercased() == "CN" ? aliyun : official
+    }
+
+    public static func recommend(
+        regionCode: String? = Locale.current.region?.identifier
+    ) async -> LocalLinuxMirrorRecommendation {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 10
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let results = await withTaskGroup(of: LocalLinuxMirrorProbeResult.self) { group in
+            for mirror in all {
+                group.addTask {
+                    LocalLinuxMirrorProbeResult(
+                        mirror: mirror,
+                        latencyMilliseconds: await Self.probe(mirror, session: session)
+                    )
+                }
+            }
+
+            var measured: [LocalLinuxMirrorProbeResult] = []
+            for await result in group {
+                measured.append(result)
+            }
+            return all.compactMap { mirror in
+                measured.first { $0.mirror.id == mirror.id }
+            }
+        }
+
+        return recommendation(from: results, regionCode: regionCode)
+    }
+
+    static func recommendation(
+        from results: [LocalLinuxMirrorProbeResult],
+        regionCode: String?
+    ) -> LocalLinuxMirrorRecommendation {
+        let selected = results
+            .filter { $0.latencyMilliseconds != nil }
+            .min { lhs, rhs in
+                let lhsLatency = lhs.latencyMilliseconds ?? .max
+                let rhsLatency = rhs.latencyMilliseconds ?? .max
+                if lhsLatency != rhsLatency { return lhsLatency < rhsLatency }
+                return Self.candidateIndex(lhs.mirror) < Self.candidateIndex(rhs.mirror)
+            }?
+            .mirror ?? regionalFallback(regionCode: regionCode)
+        return LocalLinuxMirrorRecommendation(selectedMirror: selected, probeResults: results)
+    }
+
+    private static func candidateIndex(_ mirror: LocalLinuxPackageMirror) -> Int {
+        all.firstIndex { $0.id == mirror.id } ?? .max
+    }
+
+    /// HEAD 同时验证 main/community，避免只测首页却选到缺仓库的镜像。
+    private static func probe(_ mirror: LocalLinuxPackageMirror, session: URLSession) async -> Int? {
+        let startedAt = Date()
+        for repository in ["main", "community"] {
+            let indexURL = mirror.baseURL
+                .appendingPathComponent("latest-stable")
+                .appendingPathComponent(repository)
+                .appendingPathComponent("aarch64")
+                .appendingPathComponent("APKINDEX.tar.gz")
+            var request = URLRequest(url: indexURL)
+            request.httpMethod = "HEAD"
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 5
+
+            do {
+                let (_, response) = try await session.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200..<400).contains(httpResponse.statusCode) else {
+                    return nil
+                }
+            } catch {
+                return nil
+            }
+        }
+        return max(1, Int((Date().timeIntervalSince(startedAt) * 1_000).rounded()))
+    }
+}
+
 public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
     public let id: String
     public let title: String
     public let detail: String
+    public let summaryCommand: String
     public let displayedCommand: String
     public let command: String
     public let requiredPackages: Set<String>
     public let providedCommands: Set<String>
+    public let mirror: LocalLinuxPackageMirror
 
     public init(
         id: String,
         title: String,
         detail: String,
+        summaryCommand: String,
         displayedCommand: String,
         command: String,
         requiredPackages: Set<String>,
-        providedCommands: Set<String>
+        providedCommands: Set<String>,
+        mirror: LocalLinuxPackageMirror
     ) {
         self.id = id
         self.title = title
         self.detail = detail
+        self.summaryCommand = summaryCommand
         self.displayedCommand = displayedCommand
         self.command = command
         self.requiredPackages = requiredPackages
         self.providedCommands = providedCommands
+        self.mirror = mirror
     }
 
     public var confirmationDetail: String {
         [
             detail,
             String(
+                format: NSLocalizedString("下载源：%@", comment: "Local Linux recipe mirror"),
+                mirror.displayName
+            ),
+            String(
                 format: NSLocalizedString("命令：%@", comment: "Local Linux recipe exact command"),
                 displayedCommand
             ),
             NSLocalizedString(
-                "使用内置初始源时，执行前会临时测试可用镜像；若你已修改 /etc/apk/repositories，则保持当前配置不变。",
+                "所选下载源只用于本次安装，不会修改 /etc/apk/repositories。",
                 comment: "Local Linux recipe repository explanation"
             ),
             NSLocalizedString(
@@ -52,7 +211,7 @@ public struct LocalLinuxEnvironmentRecipe: Identifiable, Hashable, Sendable {
                 comment: "Local Linux recipe storage impact"
             ),
             NSLocalizedString(
-                "安装终端会显示测速结果与 apk 下载进度；如果网络长时间没有进展，可以中断后重试或手动更换软件源。",
+                "安装终端会显示所用下载源与 apk 下载进度；如果网络长时间没有进展，可以中断后重新测速。",
                 comment: "Local Linux recipe network progress explanation"
             )
         ].joined(separator: "\n\n")
@@ -117,50 +276,51 @@ public enum LocalLinuxEnvironmentInstaller {
 }
 
 public enum LocalLinuxEnvironmentRecipes {
-    private static let defaultMirror = "https://dl-cdn.alpinelinux.org/alpine"
-    private static let mirrorCandidates = [
-        defaultMirror,
-        "https://mirrors.tuna.tsinghua.edu.cn/alpine",
-        "https://mirrors.ustc.edu.cn/alpine",
-        "https://mirror.nju.edu.cn/alpine"
-    ]
-
     public static var all: [LocalLinuxEnvironmentRecipe] {
+        all(using: LocalLinuxPackageMirrors.official)
+    }
+
+    public static func all(using mirror: LocalLinuxPackageMirror) -> [LocalLinuxEnvironmentRecipe] {
         [
             recipe(
                 id: "bash",
                 title: NSLocalizedString("安装 Bash", comment: "Bash environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 Bash；不会自动改用 Bash 执行失败的脚本。", comment: "Bash environment recipe detail"),
                 packages: ["bash"],
-                providedCommands: ["bash"]
+                providedCommands: ["bash"],
+                mirror: mirror
             ),
             recipe(
                 id: "python",
                 title: NSLocalizedString("安装 Python 环境", comment: "Python environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 python3 与 py3-pip。", comment: "Python environment recipe detail"),
                 packages: ["python3", "py3-pip"],
-                providedCommands: ["python", "python3", "pip", "pip3"]
+                providedCommands: ["python", "python3", "pip", "pip3"],
+                mirror: mirror
             ),
             recipe(
                 id: "node",
                 title: NSLocalizedString("安装 Node.js 环境", comment: "Node environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 nodejs 与 npm；npx 会随 npm 提供。", comment: "Node environment recipe detail"),
                 packages: ["nodejs", "npm"],
-                providedCommands: ["node", "npm", "npx"]
+                providedCommands: ["node", "npm", "npx"],
+                mirror: mirror
             ),
             recipe(
                 id: "build",
                 title: NSLocalizedString("安装编译工具", comment: "Build tools environment recipe name"),
                 detail: NSLocalizedString("安装 build-base 与 cmake；会明显增加系统占用和运行负载。", comment: "Build tools environment recipe detail"),
                 packages: ["build-base", "cmake"],
-                providedCommands: ["cc", "c++", "gcc", "g++", "make", "cmake"]
+                providedCommands: ["cc", "c++", "gcc", "g++", "make", "cmake"],
+                mirror: mirror
             ),
             recipe(
                 id: "uvx",
                 title: NSLocalizedString("安装 uvx 环境", comment: "uvx environment recipe name"),
                 detail: NSLocalizedString("从当前 Alpine 软件源安装 uv；之后由用户决定是否通过 uvx 下载并运行具体工具。", comment: "uvx environment recipe detail"),
                 packages: ["uv"],
-                providedCommands: ["uv", "uvx"]
+                providedCommands: ["uv", "uvx"],
+                mirror: mirror
             )
         ]
     }
@@ -170,101 +330,71 @@ public enum LocalLinuxEnvironmentRecipes {
         title: String,
         detail: String,
         packages: [String],
-        providedCommands: Set<String>
+        providedCommands: Set<String>,
+        mirror: LocalLinuxPackageMirror
     ) -> LocalLinuxEnvironmentRecipe {
-        let displayedCommand = "apk add \(packages.joined(separator: " "))"
-        let script = installationScript(packages: packages)
+        let summaryCommand = "apk add \(packages.joined(separator: " "))"
+        let displayedCommand = copyableCommand(packages: packages, mirror: mirror)
+        let script = installationScript(packages: packages, mirror: mirror)
         return LocalLinuxEnvironmentRecipe(
             id: id,
             title: title,
             detail: detail,
+            summaryCommand: summaryCommand,
             displayedCommand: displayedCommand,
             command: encodedShellCommand(script: script),
             requiredPackages: Set(packages),
-            providedCommands: providedCommands
+            providedCommands: providedCommands,
+            mirror: mirror
         )
     }
 
-    /// 只有 RootFS 仍使用内置默认源时才自动测速，避免覆盖用户的仓库选择。
-    static func installationScript(packages: [String]) -> String {
-        let checkingMessage = NSLocalizedString("正在检测可用的 Alpine 软件源…", comment: "Linux recipe mirror checking status")
-        let customMessage = NSLocalizedString("检测到自定义软件源，保持当前配置。", comment: "Linux recipe custom repository status")
-        let fallbackMessage = NSLocalizedString("没有镜像在限定时间内完成测速，继续使用内置软件源。", comment: "Linux recipe mirror fallback status")
+    /// 推荐源只绑定到本次 apk 事务，不覆盖用户长期维护的 repositories 文件。
+    static func installationScript(
+        packages: [String],
+        mirror: LocalLinuxPackageMirror = LocalLinuxPackageMirrors.official
+    ) -> String {
         let selectedFormat = NSLocalizedString("使用软件源：%@", comment: "Linux recipe selected repository status")
         let selectedShellFormat = selectedFormat.replacingOccurrences(of: "%@", with: "%s")
         let installingFormat = NSLocalizedString("正在安装：%@", comment: "Linux recipe package installation status")
-        let failureMessage = NSLocalizedString("安装未完成；如果下载长时间没有进展，请重试或在 /etc/apk/repositories 中更换软件源。", comment: "Linux recipe network failure advice")
+        let failureMessage = NSLocalizedString("安装未完成；如果下载长时间没有进展，请返回后重新测速或选择其他网络。", comment: "Linux recipe network failure advice")
         let packageList = packages.joined(separator: " ")
-        let candidates = mirrorCandidates.map(shellQuote).joined(separator: " ")
+        let mirrorURL = mirror.baseURL.absoluteString
 
         return """
         #!/bin/sh
         set -u
-        DEFAULT_MIRROR=\(shellQuote(defaultMirror))
         WORK_DIRECTORY="$(mktemp -d /tmp/etos-apk.XXXXXX)" || exit 1
         TEMP_REPOSITORIES="$WORK_DIRECTORY/repositories"
-        FASTEST_MIRROR="$WORK_DIRECTORY/fastest-mirror"
         cleanup() {
-            rm -f "$TEMP_REPOSITORIES" "$FASTEST_MIRROR"
+            rm -f "$TEMP_REPOSITORIES"
             rmdir "$WORK_DIRECTORY" 2>/dev/null || true
         }
         trap cleanup EXIT HUP INT TERM
 
         printf '\\033[2J\\033[H'
         BRANCH="v$(cut -d. -f1,2 /etc/alpine-release)"
-        ARCH="$(apk --print-arch)"
-        CURRENT_REPOSITORIES="$(sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' -e 's:/*$::' /etc/apk/repositories 2>/dev/null)"
-        DEFAULT_REPOSITORIES="$(printf '%s\\n%s' "$DEFAULT_MIRROR/$BRANCH/main" "$DEFAULT_MIRROR/$BRANCH/community")"
-        REPOSITORIES_FILE=
-
-        if [ "$CURRENT_REPOSITORIES" = "$DEFAULT_REPOSITORIES" ]; then
-            printf '[1/3] %s\\n' \(shellQuote(checkingMessage))
-            probe_mirror() {
-                mirror="$1"
-                main_bytes="$(timeout 8 sh -c 'wget -q -T 4 -O - "$1" 2>/dev/null | head -c 131072 | wc -c' sh "$mirror/$BRANCH/main/$ARCH/APKINDEX.tar.gz")"
-                [ "${main_bytes:-0}" -ge 131072 ] 2>/dev/null || return
-                community_bytes="$(timeout 8 sh -c 'wget -q -T 4 -O - "$1" 2>/dev/null | head -c 131072 | wc -c' sh "$mirror/$BRANCH/community/$ARCH/APKINDEX.tar.gz")"
-                [ "${community_bytes:-0}" -ge 131072 ] 2>/dev/null || return
-                (set -C; printf '%s\\n' "$mirror" > "$FASTEST_MIRROR") 2>/dev/null || true
-            }
-
-            rm -f "$FASTEST_MIRROR"
-            probe_pids=
-            for mirror in \(candidates); do
-                probe_mirror "$mirror" &
-                probe_pids="$probe_pids $!"
-            done
-            for probe_pid in $probe_pids; do
-                wait "$probe_pid" 2>/dev/null || true
-            done
-
-            if [ -s "$FASTEST_MIRROR" ]; then
-                SELECTED_MIRROR="$(head -n 1 "$FASTEST_MIRROR")"
-            else
-                SELECTED_MIRROR="$DEFAULT_MIRROR"
-                printf '[2/3] %s\\n' \(shellQuote(fallbackMessage))
-            fi
-            printf '%s/%s/main\\n%s/%s/community\\n' "$SELECTED_MIRROR" "$BRANCH" "$SELECTED_MIRROR" "$BRANCH" > "$TEMP_REPOSITORIES"
-            REPOSITORIES_FILE="$TEMP_REPOSITORIES"
-            printf '[2/3] '
-            printf \(shellQuote(selectedShellFormat + "\\n")) "$SELECTED_MIRROR"
-        else
-            printf '[1/3] %s\\n' \(shellQuote(customMessage))
-            printf '[2/3] %s\\n' \(shellQuote(String(format: selectedFormat, "/etc/apk/repositories")))
-        fi
-
-        printf '[3/3] %s\\n' \(shellQuote(String(format: installingFormat, packageList)))
-        if [ -n "$REPOSITORIES_FILE" ]; then
-            apk --repositories-file "$REPOSITORIES_FILE" --timeout 30 --progress add \(packages.map(shellQuote).joined(separator: " "))
-        else
-            apk --timeout 30 --progress add \(packages.map(shellQuote).joined(separator: " "))
-        fi
+        SELECTED_MIRROR=\(shellQuote(mirrorURL))
+        printf '%s/%s/main\\n%s/%s/community\\n' "$SELECTED_MIRROR" "$BRANCH" "$SELECTED_MIRROR" "$BRANCH" > "$TEMP_REPOSITORIES"
+        printf '[1/2] '
+        printf \(shellQuote(selectedShellFormat + "\\n")) "$SELECTED_MIRROR"
+        printf '[2/2] %s\\n' \(shellQuote(String(format: installingFormat, packageList)))
+        apk --repositories-file "$TEMP_REPOSITORIES" --timeout 30 --progress add \(packages.map(shellQuote).joined(separator: " "))
         status=$?
         if [ "$status" -ne 0 ]; then
             printf '\\n%s\\n' \(shellQuote(failureMessage))
         fi
         exit "$status"
         """
+    }
+
+    private static func copyableCommand(
+        packages: [String],
+        mirror: LocalLinuxPackageMirror
+    ) -> String {
+        let mirrorURL = shellQuote(mirror.baseURL.absoluteString)
+        let packageList = packages.map(shellQuote).joined(separator: " ")
+        return "REPOSITORIES=\"$(mktemp /tmp/etos-apk.XXXXXX)\" && BRANCH=\"v$(cut -d. -f1,2 /etc/alpine-release)\" && printf '%s/%s/main\\n%s/%s/community\\n' \(mirrorURL) \"$BRANCH\" \(mirrorURL) \"$BRANCH\" > \"$REPOSITORIES\" && apk --repositories-file \"$REPOSITORIES\" --timeout 30 --progress add \(packageList); STATUS=$?; [ -z \"${REPOSITORIES:-}\" ] || rm -f \"$REPOSITORIES\"; (exit \"$STATUS\")"
     }
 
     private static func encodedShellCommand(script: String) -> String {

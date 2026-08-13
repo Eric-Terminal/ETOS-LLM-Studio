@@ -23,24 +23,30 @@ struct LocalLinuxWatchRecipesView: View {
     @State private var result: LocalLinuxEnvironmentInstallationResult?
     @State private var errorMessage: String?
     @State private var installationTerminalTarget: InstallationTerminalTarget?
+    @State private var selectedMirror = LocalLinuxPackageMirrors.regionalFallback()
+    @State private var selectedMirrorLatency: Int?
+    @State private var isTestingMirrors = true
+    @State private var mirrorProbeGeneration = 0
+    @State private var recipes: [LocalLinuxEnvironmentRecipe] = []
 
     var body: some View {
         List {
-            ForEach(LocalLinuxEnvironmentRecipes.all) { recipe in
+            mirrorRecommendationSection
+            ForEach(recipes) { recipe in
                 Button {
                     selectedRecipe = recipe
                 } label: {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(recipe.title)
-                            Text(recipe.displayedCommand).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                            Text(recipe.summaryCommand).font(.caption2.monospaced()).foregroundStyle(.secondary)
                         }
                         Spacer()
                         statusView(for: recipe)
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(activeRecipe != nil)
+                .disabled(activeRecipe != nil || isTestingMirrors)
             }
             if let activeRecipe {
                 Section(activeRecipe.title) {
@@ -98,13 +104,72 @@ struct LocalLinuxWatchRecipesView: View {
         } message: {
             Text(selectedRecipe?.confirmationDetail ?? "")
         }
-        .onAppear {
-            Task { await refreshInstallationStatuses() }
+        .task {
+            await refreshInstallationStatuses()
+        }
+        .task(id: mirrorProbeGeneration) {
+            await refreshMirrorRecommendation()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await refreshInstallationStatuses() }
         }
+    }
+
+    @ViewBuilder
+    private var mirrorRecommendationSection: some View {
+        Section {
+            if isTestingMirrors {
+                HStack {
+                    ProgressView()
+                    Text(NSLocalizedString("正在测试下载源…", comment: "Watch Linux mirror testing status"))
+                }
+            } else {
+                Label(selectedMirror.displayName, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(selectedMirror.baseURL.absoluteString)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                if let selectedMirrorLatency {
+                    Text(
+                        String(
+                            format: NSLocalizedString("检测耗时：%lld 毫秒", comment: "Watch Linux mirror probe latency"),
+                            Int64(selectedMirrorLatency)
+                        )
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text(NSLocalizedString("测速不可用，已按设备地区推荐。", comment: "Watch Linux mirror regional fallback explanation"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    mirrorProbeGeneration += 1
+                } label: {
+                    Label(NSLocalizedString("重新测速", comment: "Watch retest Linux mirrors"), systemImage: "arrow.clockwise")
+                }
+                .disabled(activeRecipe != nil)
+            }
+        } header: {
+            Text(NSLocalizedString("推荐下载源", comment: "Watch recommended Linux mirror section"))
+        } footer: {
+            Text(NSLocalizedString("测速仅访问 Alpine 软件索引，不读取位置，也不修改系统软件源配置。", comment: "Watch Linux mirror recommendation explanation"))
+        }
+    }
+
+    private func refreshMirrorRecommendation() async {
+        isTestingMirrors = true
+        let recommendation = await LocalLinuxPackageMirrors.recommend()
+        let preparedRecipes = await Task.detached(priority: .userInitiated) {
+            LocalLinuxEnvironmentRecipes.all(using: recommendation.selectedMirror)
+        }.value
+        guard !Task.isCancelled else { return }
+        selectedMirror = recommendation.selectedMirror
+        selectedMirrorLatency = recommendation.selectedLatencyMilliseconds
+        recipes = preparedRecipes
+        isTestingMirrors = false
+        await refreshInstallationStatuses()
     }
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
@@ -131,7 +196,7 @@ struct LocalLinuxWatchRecipesView: View {
 
     private func refreshInstallationStatuses() async {
         let installedIDs = await LocalLinuxEnvironmentInstaller.installedRecipeIDs()
-        for recipe in LocalLinuxEnvironmentRecipes.all where activeRecipe?.id != recipe.id {
+        for recipe in recipes where activeRecipe?.id != recipe.id {
             if installedIDs.contains(recipe.id) {
                 recipeStatuses[recipe.id] = .installed
             } else if recipeStatuses[recipe.id] == .installed {

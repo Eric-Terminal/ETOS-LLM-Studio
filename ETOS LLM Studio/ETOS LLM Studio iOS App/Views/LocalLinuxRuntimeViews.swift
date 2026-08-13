@@ -688,11 +688,18 @@ struct LocalLinuxRecipesView: View {
     @State private var result: LocalLinuxEnvironmentInstallationResult?
     @State private var errorMessage: String?
     @State private var installationTerminalTarget: InstallationTerminalTarget?
+    @State private var selectedMirror = LocalLinuxPackageMirrors.regionalFallback()
+    @State private var selectedMirrorLatency: Int?
+    @State private var mirrorRecommendationIsMeasured = false
+    @State private var isTestingMirrors = true
+    @State private var mirrorProbeGeneration = 0
+    @State private var recipes: [LocalLinuxEnvironmentRecipe] = []
 
     var body: some View {
         List {
+            mirrorRecommendationSection
             Section {
-                ForEach(LocalLinuxEnvironmentRecipes.all) { recipe in
+                ForEach(recipes) { recipe in
                     Button {
                         selectedRecipe = recipe
                     } label: {
@@ -700,17 +707,17 @@ struct LocalLinuxRecipesView: View {
                             VStack(alignment: .leading) {
                                 Text(recipe.title).foregroundStyle(.primary)
                                 Text(recipe.detail).font(.caption).foregroundStyle(.secondary)
-                                Text(recipe.displayedCommand).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                Text(recipe.summaryCommand).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
                             Spacer()
                             statusView(for: recipe)
                         }
                     }
                     .buttonStyle(.plain)
-                    .disabled(activeRecipe != nil)
+                    .disabled(activeRecipe != nil || isTestingMirrors)
                 }
             } footer: {
-                Text(NSLocalizedString("ETOS 默认不安装任何开发环境。点击后会先展示准确命令，由你确认后执行。", comment: "Linux recipes footer"))
+                Text(NSLocalizedString("ETOS 默认不安装任何开发环境。确认下载源后，点击环境即可复制准确命令或直接执行。", comment: "Linux recipes footer"))
             }
             installationResultSection
         }
@@ -740,13 +747,78 @@ struct LocalLinuxRecipesView: View {
         } message: {
             Text(selectedRecipe?.confirmationDetail ?? "")
         }
-        .onAppear {
-            Task { await refreshInstallationStatuses() }
+        .task {
+            await refreshInstallationStatuses()
+        }
+        .task(id: mirrorProbeGeneration) {
+            await refreshMirrorRecommendation()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await refreshInstallationStatuses() }
         }
+    }
+
+    @ViewBuilder
+    private var mirrorRecommendationSection: some View {
+        Section {
+            if isTestingMirrors {
+                HStack {
+                    ProgressView()
+                    Text(NSLocalizedString("正在测试下载源…", comment: "Linux mirror testing status"))
+                }
+            } else {
+                Label(selectedMirror.displayName, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(selectedMirror.baseURL.absoluteString)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                if let selectedMirrorLatency {
+                    Text(
+                        String(
+                            format: NSLocalizedString("检测耗时：%lld 毫秒", comment: "Linux mirror probe latency"),
+                            Int64(selectedMirrorLatency)
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text(NSLocalizedString("测速不可用，已按设备地区推荐。", comment: "Linux mirror regional fallback explanation"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    mirrorProbeGeneration += 1
+                } label: {
+                    Label(NSLocalizedString("重新测速", comment: "Retest Linux mirrors"), systemImage: "arrow.clockwise")
+                }
+                .disabled(activeRecipe != nil)
+            }
+        } header: {
+            Text(NSLocalizedString("推荐下载源", comment: "Recommended Linux mirror section"))
+        } footer: {
+            Text(
+                mirrorRecommendationIsMeasured
+                    ? NSLocalizedString("已根据当前网络选择响应最快的可用下载源。测速只访问各站的 Alpine 软件索引，不会读取位置。", comment: "Measured Linux mirror recommendation explanation")
+                    : NSLocalizedString("测速只访问各站的 Alpine 软件索引，不会读取位置。安装命令只在本次执行中使用所示下载源，不会修改 /etc/apk/repositories。", comment: "Linux mirror recommendation privacy explanation")
+            )
+        }
+    }
+
+    private func refreshMirrorRecommendation() async {
+        isTestingMirrors = true
+        let recommendation = await LocalLinuxPackageMirrors.recommend()
+        let preparedRecipes = await Task.detached(priority: .userInitiated) {
+            LocalLinuxEnvironmentRecipes.all(using: recommendation.selectedMirror)
+        }.value
+        guard !Task.isCancelled else { return }
+        selectedMirror = recommendation.selectedMirror
+        selectedMirrorLatency = recommendation.selectedLatencyMilliseconds
+        mirrorRecommendationIsMeasured = recommendation.isMeasured
+        recipes = preparedRecipes
+        isTestingMirrors = false
+        await refreshInstallationStatuses()
     }
 
     private func run(_ recipe: LocalLinuxEnvironmentRecipe) {
@@ -773,7 +845,7 @@ struct LocalLinuxRecipesView: View {
 
     private func refreshInstallationStatuses() async {
         let installedIDs = await LocalLinuxEnvironmentInstaller.installedRecipeIDs()
-        for recipe in LocalLinuxEnvironmentRecipes.all where activeRecipe?.id != recipe.id {
+        for recipe in recipes where activeRecipe?.id != recipe.id {
             if installedIDs.contains(recipe.id) {
                 recipeStatuses[recipe.id] = .installed
             } else if recipeStatuses[recipe.id] == .installed {
@@ -810,9 +882,10 @@ struct LocalLinuxRecipesView: View {
                     ProgressView()
                     Text(NSLocalizedString("正在安装", comment: "Linux recipe installing status"))
                 }
-                Text(activeRecipe.command)
+                Text(activeRecipe.displayedCommand)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         } else if let result {
             Section(NSLocalizedString("最近结果", comment: "Linux recipe result")) {
