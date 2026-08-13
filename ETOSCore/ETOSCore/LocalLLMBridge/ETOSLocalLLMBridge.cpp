@@ -326,6 +326,7 @@ int32_t etos_local_gguf_architecture(
         return etos_local_llm_bridge::fail("GGUF 架构探测参数无效。", error_message);
     }
 
+    etos_local_llm_bridge::native_log_capture log_capture;
     try {
         const std::string name = etos_local_speech::architecture_name(model_path);
         *architecture = etos_local_llm_bridge::copy_string(name);
@@ -333,7 +334,13 @@ int32_t etos_local_gguf_architecture(
             ? 0
             : etos_local_llm_bridge::fail("GGUF 架构名称内存分配失败。", error_message);
     } catch (const std::exception & exception) {
-        return etos_local_llm_bridge::fail(exception.what(), error_message);
+        std::string message = exception.what();
+        const std::string native_log = log_capture.text();
+        if (!native_log.empty()) {
+            message.append("\n\nllama.cpp:\n");
+            message.append(native_log);
+        }
+        return etos_local_llm_bridge::fail(message, error_message);
     }
 }
 

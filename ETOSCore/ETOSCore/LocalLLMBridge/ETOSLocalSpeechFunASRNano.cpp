@@ -689,19 +689,22 @@ std::string transcribe_fun_asr_nano(
         encoder_model_path,
         options.use_model_cache
     );
-    std::call_once(etos_local_llm_bridge::backend_init_once, [] {
-        ggml_backend_load_all();
-    });
+    etos_local_llm_bridge::initialize_backend();
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = options.gpu_layers;
+    std::string decoder_load_log;
     const etos_local_llm_bridge::llama_model_shared_handle decoder =
         etos_local_llm_bridge::load_model(
             options.decoder_model_path.c_str(),
             model_params,
-            options.use_model_cache
+            options.use_model_cache,
+            &decoder_load_log
         );
     if (!decoder) {
-        throw std::runtime_error("无法加载 Fun-ASR-Nano 的 Qwen3 解码模型。");
+        throw std::runtime_error(etos_local_llm_bridge::diagnostic_message(
+            "无法加载 Fun-ASR-Nano 的 Qwen3 解码模型。",
+            decoder_load_log
+        ));
     }
     if (llama_model_n_embd(decoder.get()) != encoder->config.llm_dimension) {
         throw std::runtime_error("Fun-ASR-Nano 编码器与解码模型的嵌入维度不匹配。");

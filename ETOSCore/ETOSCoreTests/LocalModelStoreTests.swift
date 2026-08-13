@@ -18,7 +18,7 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let source = root.appendingPathComponent("source.gguf")
-        try Data([1, 2, 3, 4]).write(to: source)
+        try writeMinimalGGUF(to: source)
         let projector = root.appendingPathComponent("mmproj.gguf")
         try Data([5, 6, 7]).write(to: projector)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
@@ -67,8 +67,8 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let downloadedFile = root.appendingPathComponent("downloaded.tmp")
-        let payload = Data([9, 8, 7, 6])
-        try payload.write(to: downloadedFile)
+        try writeMinimalGGUF(to: downloadedFile)
+        let payload = try Data(contentsOf: downloadedFile)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
 
         let record = try store.registerDownloadedModel(
@@ -351,7 +351,7 @@ struct LocalModelStoreTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         let source = root.appendingPathComponent("source.gguf")
-        try Data([1, 2, 3, 4]).write(to: source)
+        try writeMinimalGGUF(to: source)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
         let record = try store.importModel(from: source, displayName: "原名")
         var model = LocalModelProviderBridge.model(for: record)
@@ -596,10 +596,98 @@ struct LocalModelStoreTests {
         }
     }
 
+    @Test("导入损坏文件会报告错误并清理副本")
+    func invalidGGUFImportLeavesNoOrphanedFile() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("broken.gguf")
+        try Data([0x00, 0x01, 0x02]).write(to: source)
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: source)
+            Issue.record("损坏的 GGUF 文件不应导入成功。")
+        } catch {
+            #expect(!error.localizedDescription.isEmpty)
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent("broken.gguf").path))
+    }
+
+    @Test("导入缺少后续文件的 GGUF 分片会指出具体文件")
+    func splitGGUFImportReportsMissingShard() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstShard = root.appendingPathComponent("tiny-00001-of-00002.gguf")
+        try writeMinimalGGUF(
+            to: firstShard,
+            splitCount: 2,
+            splitNumber: 0
+        )
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+
+        do {
+            _ = try store.importModel(from: firstShard)
+            Issue.record("缺少后续分片的 GGUF 文件不应导入成功。")
+        } catch let error as LocalLLMEngineError {
+            guard case .modelFileMissing(let fileName) = error else {
+                Issue.record("错误类型不符合预期：\(error.localizedDescription)")
+                return
+            }
+            #expect(fileName == "tiny-00002-of-00002.gguf")
+        } catch {
+            Issue.record("抛出了非预期错误：\(error.localizedDescription)")
+        }
+
+        #expect(store.models.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.directoryURL.appendingPathComponent(firstShard.lastPathComponent).path))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("LocalModelStoreTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private func writeMinimalGGUF(
+        to url: URL,
+        architecture: String = "llama",
+        splitCount: UInt16? = nil,
+        splitNumber: UInt16? = nil
+    ) throws {
+        let splitPairCount = splitCount == nil ? 0 : (splitNumber == nil ? 1 : 2)
+        var data = Data([0x47, 0x47, 0x55, 0x46])
+        appendLittleEndian(UInt32(3), to: &data)
+        appendLittleEndian(UInt64(0), to: &data)
+        appendLittleEndian(UInt64(1 + splitPairCount), to: &data)
+        appendGGUFString("general.architecture", to: &data)
+        appendLittleEndian(Int32(8), to: &data)
+        appendGGUFString(architecture, to: &data)
+        if let splitCount {
+            appendGGUFString("split.count", to: &data)
+            appendLittleEndian(Int32(2), to: &data)
+            appendLittleEndian(splitCount, to: &data)
+        }
+        if let splitNumber {
+            appendGGUFString("split.no", to: &data)
+            appendLittleEndian(Int32(2), to: &data)
+            appendLittleEndian(splitNumber, to: &data)
+        }
+        try data.write(to: url)
+    }
+
+    private func appendGGUFString(_ value: String, to data: inout Data) {
+        let bytes = Array(value.utf8)
+        appendLittleEndian(UInt64(bytes.count), to: &data)
+        data.append(contentsOf: bytes)
+    }
+
+    private func appendLittleEndian<Integer: FixedWidthInteger>(_ value: Integer, to data: inout Data) {
+        var littleEndianValue = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndianValue) {
+            data.append(contentsOf: $0)
+        }
     }
 }

@@ -517,20 +517,76 @@ architecture architecture_from_name(const std::string & name) {
 
 std::string architecture_name(const std::string & model_path) {
     gguf_init_params params = {true, nullptr};
-    gguf_context * context = gguf_init_from_file(model_path.c_str(), params);
+    std::unique_ptr<gguf_context, decltype(&gguf_free)> context(
+        gguf_init_from_file(model_path.c_str(), params),
+        gguf_free
+    );
     if (!context) {
         throw std::runtime_error("无法读取 GGUF 模型元数据。");
     }
-    const int64_t key = gguf_find_key(context, "general.architecture");
+    const int64_t key = gguf_find_key(context.get(), "general.architecture");
     if (key < 0) {
-        gguf_free(context);
         throw std::runtime_error("GGUF 模型缺少 general.architecture。");
     }
-    const char * raw_value = gguf_get_val_str(context, key);
+    const char * raw_value = gguf_get_val_str(context.get(), key);
     const std::string result = raw_value ? raw_value : "";
-    gguf_free(context);
     if (result.empty()) {
         throw std::runtime_error("GGUF 模型架构为空。");
+    }
+
+    const int64_t split_count_key = gguf_find_key(context.get(), "split.count");
+    if (split_count_key >= 0) {
+        if (gguf_get_kv_type(context.get(), split_count_key) != GGUF_TYPE_UINT16) {
+            throw std::runtime_error("GGUF 模型的 split.count 类型无效。");
+        }
+        const uint16_t split_count = gguf_get_val_u16(context.get(), split_count_key);
+        if (split_count == 0) {
+            throw std::runtime_error("GGUF 模型的 split.count 不能为 0。");
+        }
+        if (split_count > 1) {
+            const int64_t split_no_key = gguf_find_key(context.get(), "split.no");
+            if (split_no_key < 0
+                || gguf_get_kv_type(context.get(), split_no_key) != GGUF_TYPE_UINT16) {
+                throw std::runtime_error("GGUF 分片模型缺少有效的 split.no。");
+            }
+            const uint16_t split_no = gguf_get_val_u16(context.get(), split_no_key);
+            if (split_no != 0) {
+                throw std::runtime_error("GGUF 分片模型必须从第一个分片导入。");
+            }
+
+            std::vector<char> prefix(model_path.size() + 1, 0);
+            if (llama_split_prefix(
+                    prefix.data(),
+                    prefix.size(),
+                    model_path.c_str(),
+                    split_no,
+                    split_count
+                ) <= 0) {
+                throw std::runtime_error("GGUF 分片文件名与分片元数据不匹配。");
+            }
+            for (uint16_t index = 1; index < split_count; ++index) {
+                std::vector<char> split_path(model_path.size() + 64, 0);
+                if (llama_split_path(
+                        split_path.data(),
+                        split_path.size(),
+                        prefix.data(),
+                        index,
+                        split_count
+                    ) <= 0) {
+                    throw std::runtime_error("无法解析 GGUF 分片文件名。");
+                }
+                FILE * file = std::fopen(split_path.data(), "rb");
+                if (!file) {
+                    const std::string path(split_path.data());
+                    const size_t separator = path.find_last_of("/\\");
+                    const std::string file_name = separator == std::string::npos
+                        ? path
+                        : path.substr(separator + 1);
+                    throw std::runtime_error("etos.local_model_file_missing|" + file_name);
+                }
+                std::fclose(file);
+            }
+        }
     }
     return result;
 }

@@ -152,10 +152,16 @@ llama_model_shared_handle make_model_handle(llama_model * model) {
 llama_model_shared_handle load_model(
     const char * model_path,
     const llama_model_params & model_params,
-    bool use_model_cache
+    bool use_model_cache,
+    std::string * diagnostic_log
 ) {
     if (!use_model_cache) {
-        return make_model_handle(llama_model_load_from_file(model_path, model_params));
+        native_log_capture capture;
+        llama_model_shared_handle loaded_model = make_model_handle(llama_model_load_from_file(model_path, model_params));
+        if (!loaded_model && diagnostic_log) {
+            *diagnostic_log = capture.text();
+        }
+        return loaded_model;
     }
 
     std::lock_guard<std::mutex> lock(model_cache_mutex);
@@ -165,11 +171,14 @@ llama_model_shared_handle load_model(
         return cached_model;
     }
 
+    native_log_capture capture;
     llama_model_shared_handle loaded_model = make_model_handle(llama_model_load_from_file(model_path, model_params));
     if (loaded_model) {
         cached_model = loaded_model;
         cached_model_path = model_path;
         cached_model_gpu_layers = model_params.n_gpu_layers;
+    } else if (diagnostic_log) {
+        *diagnostic_log = capture.text();
     }
     return loaded_model;
 }
@@ -241,10 +250,7 @@ int32_t generate(
         return cancelled(error_message);
     }
 
-    std::call_once(backend_init_once, [] {
-        llama_backend_init();
-        ggml_backend_load_all();
-    });
+    initialize_backend();
 
     llama_model_params model_params = llama_model_default_params();
 #if TARGET_OS_WATCH || TARGET_OS_SIMULATOR
@@ -253,13 +259,24 @@ int32_t generate(
     model_params.n_gpu_layers = generation_params.gpu_layers < 0 ? 999 : generation_params.gpu_layers;
 #endif
 
-    llama_model_shared_handle model = load_model(model_path, model_params, generation_params.use_model_cache);
+    std::string model_load_log;
+    llama_model_shared_handle model = load_model(
+        model_path,
+        model_params,
+        generation_params.use_model_cache,
+        &model_load_log
+    );
     if (!model) {
-        return fail("无法加载本地模型权重。", error_message);
+        return fail(
+            diagnostic_message("无法加载本地模型权重。", model_load_log),
+            error_message
+        );
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
     }
+
+    native_log_capture runtime_log_capture;
 
     const llama_vocab * vocab = llama_model_get_vocab(model.get());
     const int32_t requested_context = std::max<int32_t>(1, generation_params.context_size);
@@ -323,7 +340,10 @@ int32_t generate(
         mtmd_params.image_max_tokens = generation_params.image_max_tokens;
         mtmd_ctx.reset(mtmd_init_from_file(generation_params.mmproj_path.c_str(), model.get(), mtmd_params));
         if (!mtmd_ctx) {
-            return fail("无法加载本地模型的 mmproj 多模态投影器。", error_message);
+            return fail(diagnostic_message(
+                "无法加载本地模型的 mmproj 多模态投影器。",
+                runtime_log_capture.text()
+            ), error_message);
         }
 
         std::map<std::string, local_generation_params::media_attachment> media_by_id;
@@ -478,7 +498,10 @@ int32_t generate(
         ctx.reset(llama_init_from_model(model.get(), ctx_params));
     }
     if (!ctx) {
-        return fail(context_creation_failure_message(ctx_params, generation_params), error_message);
+        return fail(diagnostic_message(
+            context_creation_failure_message(ctx_params, generation_params),
+            runtime_log_capture.text()
+        ), error_message);
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
@@ -514,7 +537,10 @@ int32_t generate(
             &new_n_past
         );
         if (status != 0) {
-            return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+            return fail(diagnostic_message(
+                decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params),
+                runtime_log_capture.text()
+            ), error_message);
         }
         n_past = new_n_past;
     } else {
@@ -531,7 +557,10 @@ int32_t generate(
             llama_batch prompt_batch = llama_batch_get_one(prompt_tokens.data() + offset, chunk_size);
             const int status = llama_decode(ctx.get(), prompt_batch);
             if (status != 0) {
-                return fail(decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params), error_message);
+                return fail(diagnostic_message(
+                    decode_failure_message(status, "提示词", generated_tokens, ctx_params, generation_params),
+                    runtime_log_capture.text()
+                ), error_message);
             }
             decoded_text_tokens.insert(
                 decoded_text_tokens.end(),
@@ -554,7 +583,10 @@ int32_t generate(
                 ? decode_token_with_position(ctx.get(), pending_decode_token, n_past++)
                 : llama_decode(ctx.get(), llama_batch_get_one(&pending_decode_token, 1));
             if (status != 0) {
-                return fail(decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params), error_message);
+                return fail(diagnostic_message(
+                    decode_failure_message(status, "生成", generated_tokens, ctx_params, generation_params),
+                    runtime_log_capture.text()
+                ), error_message);
             }
             if (!uses_multimodal_prompt) {
                 decoded_text_tokens.push_back(pending_decode_token);

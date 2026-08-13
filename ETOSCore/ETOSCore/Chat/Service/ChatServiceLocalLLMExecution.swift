@@ -40,41 +40,45 @@ extension ChatService {
             throw LocalLLMEngineError.modelFileMissing(record.fileName)
         }
 
+        let modelURL = localModelStore.fileURL(for: record)
+        var diagnosticOptions: LocalLLMGenerationOptions?
         do {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
+            let options = LocalLLMGenerationOptions(
+                mmprojPath: localModelStore.mmprojURL(for: record)?.path,
+                contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
+                temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
+                topP: overrides.localDoubleValue(for: "top_p") ?? record.effectiveTopP,
+                gpuLayers: localGPULayers(overrides: overrides, record: record),
+                batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
+                ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
+                kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
+                flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
+                useModelCache: localModelCacheEnabled,
+                seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
+                topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
+                minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
+                repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
+                repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
+                frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
+                presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
+                grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
+                ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
+                imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
+                samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
+                chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
+                advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
+                toolCallIDScope: requestLogContext.requestID.uuidString
+            )
+            diagnosticOptions = options
             let parsedOutput = try await LocalLLMEngine.shared.generateParsed(
                 messages: LocalLLMChatMessageBuilder.templateCompatibleMessages(from: requestMessages),
-                modelURL: localModelStore.fileURL(for: record),
-                options: LocalLLMGenerationOptions(
-                    mmprojPath: localModelStore.mmprojURL(for: record)?.path,
-                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
-                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
-                    topP: overrides.localDoubleValue(for: "top_p") ?? record.effectiveTopP,
-                    gpuLayers: localGPULayers(overrides: overrides, record: record),
-                    batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
-                    ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
-                    kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
-                    flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
-                    useModelCache: localModelCacheEnabled,
-                    seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
-                    topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
-                    minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
-                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
-                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
-                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
-                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
-                    grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
-                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
-                    imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
-                    imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
-                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
-                    chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
-                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
-                    toolCallIDScope: requestLogContext.requestID.uuidString
-                )
+                modelURL: modelURL,
+                options: options
             )
             persistRequestLog(
                 context: requestLogContext,
@@ -98,6 +102,15 @@ extension ChatService {
         } catch {
             let errorKind = isCancellationError(error) ? "cancelled" : "local_generation_failed"
             let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
+            if status == .failed, let diagnosticOptions {
+                _ = recordLocalLLMFailure(
+                    error,
+                    record: record,
+                    modelURL: modelURL,
+                    options: diagnosticOptions,
+                    context: requestLogContext
+                )
+            }
             persistRequestLog(
                 context: requestLogContext,
                 status: status,
@@ -148,6 +161,8 @@ extension ChatService {
             return
         }
 
+        let modelURL = localModelStore.fileURL(for: record)
+        var diagnosticOptions: LocalLLMGenerationOptions?
         var messages = messagesSnapshot(for: currentSessionID)
         let streamingDisplayMode = await MainActor.run {
             ChatStreamingDisplayMode.normalized(AppConfigStore.shared.chatStreamingDisplayMode)
@@ -174,40 +189,42 @@ extension ChatService {
                 imageAttachments: imageAttachments
             )
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
+            let options = LocalLLMGenerationOptions(
+                mmprojPath: localModelStore.mmprojURL(for: record)?.path,
+                kvCacheKey: currentSessionID.uuidString,
+                contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
+                maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
+                temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
+                topP: overrides.localDoubleValue(for: "top_p") ?? record.topP ?? (globalTopPEnabled ? aiTopP : nil) ?? LocalModelRecord.defaultTopP,
+                gpuLayers: localGPULayers(overrides: overrides, record: record),
+                batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
+                ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
+                kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
+                flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
+                useModelCache: localModelCacheEnabled,
+                reuseKVCache: localModelKVCacheEnabled,
+                seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
+                topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
+                minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
+                repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
+                repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
+                frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
+                presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
+                grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
+                ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
+                imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
+                imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
+                samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
+                chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
+                advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
+                toolCallIDScope: loadingMessageID.uuidString
+            )
+            diagnosticOptions = options
             let stream = try LocalLLMEngine.shared.streamParsed(
                 messages: localMessagesToSend,
                 tools: localTools,
-                modelURL: localModelStore.fileURL(for: record),
-                options: LocalLLMGenerationOptions(
-                    mmprojPath: localModelStore.mmprojURL(for: record)?.path,
-                    kvCacheKey: currentSessionID.uuidString,
-                    contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
-                    maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
-                    temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? aiTemperature : nil) ?? LocalModelRecord.defaultTemperature,
-                    topP: overrides.localDoubleValue(for: "top_p") ?? record.topP ?? (globalTopPEnabled ? aiTopP : nil) ?? LocalModelRecord.defaultTopP,
-                    gpuLayers: localGPULayers(overrides: overrides, record: record),
-                    batchSize: overrides.localIntValue(for: "batch_size") ?? overrides.localIntValue(for: "n_batch") ?? record.effectiveBatchSize,
-                    ubatchSize: overrides.localIntValue(for: "ubatch_size") ?? overrides.localIntValue(for: "n_ubatch") ?? record.effectiveUbatchSize,
-                    kvOffload: overrides.localBoolValue(for: "kv_offload") ?? record.effectiveKVOffload,
-                    flashAttention: overrides.localFlashAttentionValue(for: "flash_attn") ?? record.effectiveFlashAttention,
-                    useModelCache: localModelCacheEnabled,
-                    reuseKVCache: localModelKVCacheEnabled,
-                    seed: overrides.localUInt32Value(for: "seed") ?? record.effectiveSeed,
-                    topK: overrides.localIntValue(for: "top_k") ?? record.effectiveTopK,
-                    minP: overrides.localDoubleValue(for: "min_p") ?? record.effectiveMinP,
-                    repeatLastN: overrides.localIntValue(for: "repeat_last_n") ?? record.effectiveRepeatLastN,
-                    repeatPenalty: overrides.localDoubleValue(for: "repeat_penalty") ?? record.effectiveRepeatPenalty,
-                    frequencyPenalty: overrides.localDoubleValue(for: "frequency_penalty") ?? record.effectiveFrequencyPenalty,
-                    presencePenalty: overrides.localDoubleValue(for: "presence_penalty") ?? record.effectivePresencePenalty,
-                    grammar: overrides.localStringValue(for: "grammar") ?? record.effectiveGrammar,
-                    ignoreEOS: overrides.localBoolValue(for: "ignore_eos") ?? record.effectiveIgnoreEOS,
-                    imageMinTokens: overrides.localIntValue(for: "image_min_tokens") ?? record.effectiveImageMinTokens,
-                    imageMaxTokens: overrides.localIntValue(for: "image_max_tokens") ?? record.effectiveImageMaxTokens,
-                    samplerKinds: overrides.localSamplerKindsValue(for: "sampler_seq") ?? record.effectiveSamplerKinds,
-                    chatTemplateKwargs: try overrides.localChatTemplateKwargsValue(),
-                    advancedArguments: overrides.localStringValue(for: "llama_cli_args") ?? record.advancedArguments,
-                    toolCallIDScope: loadingMessageID.uuidString
-                )
+                modelURL: modelURL,
+                options: options
             )
 
             var outputForMetrics = ""
@@ -407,17 +424,26 @@ extension ChatService {
                 errorKind: "cancelled"
             )
         } catch {
-            logger.error("本地推理失败: \(error.localizedDescription, privacy: .public)")
             messages = flushPendingStreamingMessages(
                 messages,
                 loadingMessageID: loadingMessageID,
                 sessionID: currentSessionID,
                 coalescer: &streamingPublishCoalescer
             )
-            addErrorMessage(String(
+            let displayError = diagnosticOptions.map {
+                recordLocalLLMFailure(
+                    error,
+                    record: record,
+                    modelURL: modelURL,
+                    options: $0,
+                    context: requestLogContext
+                )
+            } ?? String(
                 format: NSLocalizedString("本地推理失败: %@", comment: "Local LLM generation failed"),
                 error.localizedDescription
-            ), sessionID: currentSessionID)
+            )
+            logger.error("\(displayError, privacy: .public)")
+            addErrorMessage(displayError, sessionID: currentSessionID)
             emitSessionRequestStatus(.error, sessionID: currentSessionID)
             persistRequestLog(
                 context: requestLogContext,

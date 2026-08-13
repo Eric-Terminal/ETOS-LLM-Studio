@@ -175,10 +175,7 @@ int32_t embed(
         return fail("当前本地嵌入输入包含媒体，但尚未导入 mmproj 多模态投影器。", error_message);
     }
 
-    std::call_once(backend_init_once, [] {
-        llama_backend_init();
-        ggml_backend_load_all();
-    });
+    initialize_backend();
 
     llama_model_params model_params = llama_model_default_params();
 #if TARGET_OS_WATCH || TARGET_OS_SIMULATOR
@@ -187,10 +184,15 @@ int32_t embed(
     model_params.n_gpu_layers = config->n_gpu_layers < 0 ? 999 : config->n_gpu_layers;
 #endif
 
-    llama_model_handle model(llama_model_load_from_file(model_path, model_params));
+    std::string model_load_log;
+    llama_model_shared_handle model = load_model(model_path, model_params, false, &model_load_log);
     if (!model) {
-        return fail("无法加载本地嵌入模型权重。", error_message);
+        return fail(
+            diagnostic_message("无法加载本地嵌入模型权重。", model_load_log),
+            error_message
+        );
     }
+    native_log_capture runtime_log_capture;
     if (llama_model_has_encoder(model.get()) && llama_model_has_decoder(model.get())) {
         return fail("当前 llama.cpp 不支持 encoder-decoder 模型生成嵌入。", error_message);
     }
@@ -211,7 +213,10 @@ int32_t embed(
         mtmd_params.image_max_tokens = config->image_max_tokens;
         mtmd_ctx.reset(mtmd_init_from_file(config->mmproj_path, model.get(), mtmd_params));
         if (!mtmd_ctx) {
-            return fail("无法加载本地嵌入模型的 mmproj 多模态投影器。", error_message);
+            return fail(diagnostic_message(
+                "无法加载本地嵌入模型的 mmproj 多模态投影器。",
+                runtime_log_capture.text()
+            ), error_message);
         }
     }
 
@@ -279,7 +284,10 @@ int32_t embed(
 
     llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
-        return fail("无法创建本地嵌入上下文。", error_message);
+        return fail(diagnostic_message(
+            "无法创建本地嵌入上下文。",
+            runtime_log_capture.text()
+        ), error_message);
     }
     llama_set_embeddings(ctx.get(), true);
 
@@ -323,7 +331,10 @@ int32_t embed(
                 ? llama_encode(ctx.get(), batch.get())
                 : llama_decode(ctx.get(), batch.get());
             if (status < 0) {
-                return fail("本地嵌入模型解码失败。", error_message);
+                return fail(diagnostic_message(
+                    "本地嵌入模型解码失败。",
+                    runtime_log_capture.text()
+                ), error_message);
             }
         }
 

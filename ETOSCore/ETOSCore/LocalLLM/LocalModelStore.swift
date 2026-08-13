@@ -102,23 +102,39 @@ public final class LocalModelStore: ObservableObject {
         let sourceFileName = sourceURL.lastPathComponent
         let destinationFileName = uniqueFileName(for: sourceFileName)
         let destinationURL = directoryURL.appendingPathComponent(destinationFileName)
-        try fileManager.copyItem(at: sourceURL, to: destinationURL)
-        let importedProjector = try mmprojURL.map { try copyProjectorFile(from: $0) }
-        return try registerImportedFile(
-            fileName: destinationFileName,
-            displayName: displayName ?? sourceURL.deletingPathExtension().lastPathComponent,
-            importedProjector: importedProjector
-        )
+        var importedProjector: ImportedProjectorFile?
+        do {
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            importedProjector = try mmprojURL.map { try copyProjectorFile(from: $0) }
+            return try registerImportedFile(
+                fileName: destinationFileName,
+                displayName: displayName ?? sourceURL.deletingPathExtension().lastPathComponent,
+                importedProjector: importedProjector
+            )
+        } catch {
+            try? fileManager.removeItem(at: destinationURL)
+            if let importedProjector {
+                try? fileManager.removeItem(
+                    at: directoryURL.appendingPathComponent(importedProjector.relativePath)
+                )
+            }
+            throw error
+        }
     }
 
     public func registerDownloadedModel(fileAt sourceURL: URL, suggestedFileName: String, displayName: String? = nil) throws -> LocalModelRecord {
         let destinationFileName = uniqueFileName(for: suggestedFileName)
         let destinationURL = directoryURL.appendingPathComponent(destinationFileName)
         try fileManager.moveItem(at: sourceURL, to: destinationURL)
-        return try registerImportedFile(
-            fileName: destinationFileName,
-            displayName: displayName ?? URL(fileURLWithPath: suggestedFileName).deletingPathExtension().lastPathComponent
-        )
+        do {
+            return try registerImportedFile(
+                fileName: destinationFileName,
+                displayName: displayName ?? URL(fileURLWithPath: suggestedFileName).deletingPathExtension().lastPathComponent
+            )
+        } catch {
+            try? fileManager.removeItem(at: destinationURL)
+            throw error
+        }
     }
 
     public func update(_ record: LocalModelRecord) {
@@ -240,6 +256,7 @@ public final class LocalModelStore: ObservableObject {
         let destinationURL = directoryURL.appendingPathComponent(fileName)
         let attributes = try fileManager.attributesOfItem(atPath: destinationURL.path)
         let size = attributes[.size] as? Int64 ?? 0
+        let architecture = try LocalGGUFMetadata.validatedArchitecture(at: destinationURL)
         let now = Date()
         var record = LocalModelRecord(
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -250,7 +267,7 @@ public final class LocalModelStore: ObservableObject {
             mmprojFileName: importedProjector?.fileName,
             mmprojRelativePath: importedProjector?.relativePath,
             mmprojFileSize: importedProjector?.fileSize,
-            ggufArchitecture: LocalGGUFMetadata.architecture(at: destinationURL),
+            ggufArchitecture: architecture,
             createdAt: now,
             updatedAt: now
         )

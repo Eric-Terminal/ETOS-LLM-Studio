@@ -331,18 +331,19 @@ int32_t parse_chat_response(
         return fail("本地对话解析参数无效。", error_message);
     }
 
-    std::call_once(backend_init_once, [] {
-        llama_backend_init();
-        ggml_backend_load_all();
-    });
+    initialize_backend();
 
     llama_model_params model_params = llama_model_default_params();
     model_params.no_alloc = true;
     model_params.n_gpu_layers = 0;
 
-    llama_model_shared_handle model = load_model(model_path, model_params, false);
+    std::string model_load_log;
+    llama_model_shared_handle model = load_model(model_path, model_params, false, &model_load_log);
     if (!model) {
-        return fail("无法读取本地模型 GGUF 元数据。", error_message);
+        return fail(
+            diagnostic_message("无法读取本地模型 GGUF 元数据。", model_load_log),
+            error_message
+        );
     }
 
     local_chat_template_result chat_template = apply_chat_template(

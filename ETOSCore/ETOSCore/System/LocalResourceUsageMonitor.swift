@@ -110,7 +110,7 @@ public final class LocalResourceUsageMonitor: ObservableObject {
             + Double(info.user_time.microseconds + info.system_time.microseconds) / 1_000_000
     }
 
-    private nonisolated static func currentMemoryFootprintBytes() -> UInt64? {
+    nonisolated static func currentMemoryFootprintBytes() -> UInt64? {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let result = withUnsafeMutablePointer(to: &info) { pointer in

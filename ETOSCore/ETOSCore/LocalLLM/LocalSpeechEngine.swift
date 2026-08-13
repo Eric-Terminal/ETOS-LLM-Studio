@@ -13,6 +13,10 @@ import Dispatch
 
 public enum LocalGGUFMetadata {
     public static func architecture(at modelURL: URL) -> String? {
+        try? validatedArchitecture(at: modelURL)
+    }
+
+    public static func validatedArchitecture(at modelURL: URL) throws -> String {
         var architecturePointer: UnsafeMutablePointer<CChar>?
         var errorPointer: UnsafeMutablePointer<CChar>?
         let status = modelURL.path.withCString {
@@ -26,10 +30,25 @@ public enum LocalGGUFMetadata {
             architecturePointer.map(etos_local_llm_free)
             errorPointer.map(etos_local_llm_free)
         }
-        guard status == 0, let architecturePointer else { return nil }
+        guard status == 0, let architecturePointer else {
+            let message = errorPointer.map { String(cString: $0) }
+                ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+            let missingFilePrefix = "etos.local_model_file_missing|"
+            if message.hasPrefix(missingFilePrefix) {
+                let fileName = message
+                    .dropFirst(missingFilePrefix.count)
+                    .split(whereSeparator: \.isNewline)
+                    .first
+                    .map(String.init) ?? ""
+                throw LocalLLMEngineError.modelFileMissing(fileName)
+            }
+            throw LocalLLMEngineError.generationFailed(String(
+                format: NSLocalizedString("无法加载文件: %@", comment: "Unable to load imported GGUF file"),
+                message
+            ))
+        }
         return String(cString: architecturePointer)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
     }
 }
 
