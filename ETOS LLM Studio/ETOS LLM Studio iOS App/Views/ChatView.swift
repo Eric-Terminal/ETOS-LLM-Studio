@@ -45,6 +45,7 @@ struct ChatView: View {
     @State var messageToDelete: ChatMessage?
     @State var messageVersionToDelete: MessageVersionDeletePayload?
     @State var messageActionSheetPayload: MessageActionSheetPayload?
+    @State var pendingMessageActionJumpIndex: Int?
     @State var fullErrorContent: FullErrorContentPayload?
     @State var editingSessionID: UUID?
     @State var sessionDraftName: String = ""
@@ -81,6 +82,7 @@ struct ChatView: View {
     @State var isSelectedMessagesExportPresented = false
     @State var showSelectedMessagesDeleteConfirm = false
     @State var activeChatPickerSheet: ChatPickerSheet?
+    @State var awaitsChatPickerDismissalForMessageJump = false
     @State var chatPickerDismissDestination: ChatQuickAction?
     @State var activeChatPickerDetent: PresentationDetent = .medium
     @State var quickModelSettingsTarget: RunnableModel?
@@ -155,6 +157,7 @@ struct ChatView: View {
     let bottomScrollCommandArrivalTolerance: CGFloat = 1
     let scrollToBottomButtonRevealDistance: CGFloat = 48
     let automaticHistoryLoadTriggerDistance: CGFloat = 240
+    let historyJumpBatchSize = 12
     let scrollToBottomButtonSize: CGFloat = 40
     let scrollToBottomButtonInputSpacing: CGFloat = 16
     let landscapeSessionSidebarMinWidth: CGFloat = 220
@@ -317,6 +320,7 @@ struct ChatView: View {
                 reloadChatQuickActions()
                 refreshTemporaryChatState()
                 refreshChatToolPermissionAutoPresentationBlocker()
+                resolvePendingSearchJumpIfNeeded()
             }
             .onDisappear {
                 isChatVisible = false
@@ -1054,10 +1058,6 @@ extension ChatView {
                         frames,
                         orderedMessageIDs: viewModel.displayMessages.map(\.id)
                     )
-                    if let messageID = pendingJumpRequest?.messageID,
-                       frames.samples[messageID] != nil {
-                        applyPendingMessageJumpIfReady(messageID)
-                    }
                 }
                 .onChange(of: chatLayoutAuditContext) { _, context in
                     chatLayoutIntegrityMonitor.updateContext(context)

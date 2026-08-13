@@ -626,8 +626,12 @@ extension ContentView {
             await Task.yield()
             await Task.yield()
             guard pendingJumpRequest == request else { return }
-            withAnimation {
-                proxy.scrollTo(request.messageID, anchor: .center)
+            if accessibilityReduceMotion {
+                proxy.scrollTo(request.messageID, anchor: .top)
+            } else {
+                withAnimation(.timingCurve(0.65, 0, 0.35, 1, duration: 0.8)) {
+                    proxy.scrollTo(request.messageID, anchor: .top)
+                }
             }
             pendingJumpRequest = nil
             shouldRestorePendingJumpOnAppear = false
@@ -655,6 +659,7 @@ extension ContentView {
     func resolvePendingSearchJumpIfNeeded() {
         guard let target = viewModel.pendingSearchJumpTarget,
               viewModel.currentSession?.id == target.sessionID,
+              viewModel.historyWindowSessionID == target.sessionID,
               !viewModel.allMessagesForSession.isEmpty else {
             return
         }

@@ -65,6 +65,61 @@ struct ChatHistoryWindowTests {
         #expect(window?.range.contains(40) == true)
     }
 
+    @Test("消息跳转可以判断目标位于窗口的哪个方向")
+    func testWindowPositionAndDistanceForJumpTarget() {
+        let messages = makeMessages(count: 80)
+        let window = ChatHistoryWindow(lowerBound: 30, upperBound: 67)
+
+        #expect(ChatHistoryWindowSupport.position(
+            of: messages[12].id,
+            in: messages,
+            window: window
+        ) == .earlier)
+        #expect(ChatHistoryWindowSupport.position(
+            of: messages[42].id,
+            in: messages,
+            window: window
+        ) == .visible)
+        #expect(ChatHistoryWindowSupport.position(
+            of: messages[72].id,
+            in: messages,
+            window: window
+        ) == .later)
+        #expect(ChatHistoryWindowSupport.distance(
+            to: messages[12].id,
+            in: messages,
+            window: window
+        ) == 18)
+        #expect(ChatHistoryWindowSupport.distance(
+            to: messages[72].id,
+            in: messages,
+            window: window
+        ) == 6)
+    }
+
+    @Test("长距离分段跳转会保留旧边界作为连续滚动锚点")
+    func testLargeJumpStepKeepsPreviousBoundary() {
+        let messages = makeMessages(count: 120)
+        let trailingWindow = ChatHistoryWindow(lowerBound: 83, upperBound: 120)
+        let earlierWindow = ChatHistoryWindowSupport.expandingEarlier(
+            trailingWindow,
+            in: messages,
+            weightedBatchSize: 12,
+            maximumWeightedCount: 37
+        )
+        let laterWindow = ChatHistoryWindowSupport.expandingLater(
+            earlierWindow,
+            in: messages,
+            weightedBatchSize: 12,
+            maximumWeightedCount: 37
+        )
+
+        #expect(earlierWindow == ChatHistoryWindow(lowerBound: 71, upperBound: 108))
+        #expect(earlierWindow.range.contains(trailingWindow.lowerBound))
+        #expect(laterWindow == trailingWindow)
+        #expect(laterWindow.range.contains(earlierWindow.upperBound - 1))
+    }
+
     @Test("自动历史管理设置默认开启")
     func testAutomaticHistoryLoadingDefaultsToEnabled() {
         #expect(AppConfigKey.automaticHistoryLoadingEnabled.defaultValue == .bool(true))

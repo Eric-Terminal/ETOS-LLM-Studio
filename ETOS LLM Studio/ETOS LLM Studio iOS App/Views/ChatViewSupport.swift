@@ -101,6 +101,13 @@ struct ChatAutomaticHistoryLoadRequest: Equatable {
     let anchorMessageID: UUID
 }
 
+enum ChatMessageJumpAnimationPhase {
+    case accelerating
+    case cruising
+    case decelerating
+    case complete
+}
+
 enum ChatBubbleRendererIdentity: String, Hashable, Sendable {
     case none
     case plainText

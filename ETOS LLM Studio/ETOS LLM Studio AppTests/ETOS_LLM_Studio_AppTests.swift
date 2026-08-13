@@ -574,6 +574,37 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("跨会话消息跳转会等待目标历史和选择器就绪")
+    func testPendingMessageJumpWaitsForTargetSessionHistory() {
+        let oldSessionID = UUID()
+        let targetSessionID = UUID()
+
+        #expect(!ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: oldSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: false
+        ))
+        #expect(!ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: targetSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: true
+        ))
+        #expect(ChatView.isPendingMessageJumpReady(
+            targetSessionID: targetSessionID,
+            currentSessionID: targetSessionID,
+            loadedHistorySessionID: targetSessionID,
+            hasMessages: true,
+            isChatVisible: true,
+            awaitsPickerDismissal: false
+        ))
+    }
+
     @Test("发送气泡落位前只延后同轮回复")
     func testSendFlightDefersOnlyCurrentReplyGroup() {
         let startedAt = Date()

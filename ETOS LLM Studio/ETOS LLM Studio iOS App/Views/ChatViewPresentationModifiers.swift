@@ -45,7 +45,10 @@ extension ChatView {
                 }
                 .presentationDetents([.medium, .large])
             }
-            .sheet(item: $messageActionSheetPayload) { payload in
+            .sheet(
+                item: $messageActionSheetPayload,
+                onDismiss: performPendingMessageActionJumpIfNeeded
+            ) { payload in
                 MessageActionSheet(
                     payload: payload,
                     hasDisplayVersions: viewModel.hasDisplayVersions(for: payload.message),
@@ -163,7 +166,7 @@ extension ChatView {
                         }
                     },
                     onJumpToMessage: { displayIndex in
-                        jumpToMessage(displayIndex: displayIndex)
+                        queueMessageActionJumpAfterDismiss(displayIndex: displayIndex)
                     }
                 )
                 .presentationDetents([.medium, .large])

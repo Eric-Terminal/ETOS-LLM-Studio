@@ -83,17 +83,75 @@ extension ChatViewModel {
         return true
     }
 
-    @discardableResult
-    func prepareHistoryWindow(containing messageID: UUID) -> Bool {
+    func historyWindowPosition(of messageID: UUID) -> ChatHistoryWindowPosition? {
         ensureVisibleMessagesCachePrepared()
-        if messages.contains(where: { $0.id == messageID }) {
-            return true
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return nil }
+        return ChatHistoryWindowSupport.position(
+            of: messageID,
+            in: visibleMessagesCache,
+            window: historyWindow
+        )
+    }
+
+    func historyWindowDistance(to messageID: UUID) -> Int? {
+        ensureVisibleMessagesCachePrepared()
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return nil }
+        return ChatHistoryWindowSupport.distance(
+            to: messageID,
+            in: visibleMessagesCache,
+            window: historyWindow
+        )
+    }
+
+    @discardableResult
+    func shiftHistoryWindow(toward messageID: UUID, weightedBatchSize: Int) -> Bool {
+        ensureVisibleMessagesCachePrepared()
+        ensureHistoryWindowPrepared()
+        guard let historyWindow,
+              let position = ChatHistoryWindowSupport.position(
+                of: messageID,
+                in: visibleMessagesCache,
+                window: historyWindow
+              ) else {
+            return false
         }
+
+        let updated: ChatHistoryWindow
+        switch position {
+        case .earlier:
+            updated = ChatHistoryWindowSupport.expandingEarlier(
+                historyWindow,
+                in: visibleMessagesCache,
+                weightedBatchSize: weightedBatchSize,
+                maximumWeightedCount: automaticHistoryMaximumWindowSize
+            )
+        case .later:
+            updated = ChatHistoryWindowSupport.expandingLater(
+                historyWindow,
+                in: visibleMessagesCache,
+                weightedBatchSize: weightedBatchSize,
+                maximumWeightedCount: automaticHistoryMaximumWindowSize
+            )
+        case .visible:
+            return false
+        }
+
+        guard updated != historyWindow else { return false }
+        self.historyWindow = updated
+        updateDisplayedMessages()
+        return true
+    }
+
+    @discardableResult
+    func centerHistoryWindow(on messageID: UUID) -> Bool {
+        ensureVisibleMessagesCachePrepared()
         guard let centeredWindow = ChatHistoryWindowSupport.centered(
             on: messageID,
             in: visibleMessagesCache,
             maximumWeightedCount: automaticHistoryMaximumWindowSize
-        ) else {
+        ), centeredWindow != historyWindow else {
             return false
         }
         historyWindow = centeredWindow
@@ -130,7 +188,8 @@ extension ChatViewModel {
         let previousVisibleMessages = visibleMessagesCache
         let previousHistoryWindow = historyWindow
         let sessionID = currentSession?.id
-        if historyWindowSessionID != sessionID {
+        let didChangeSession = historyWindowSessionID != sessionID
+        if didChangeSession {
             historyWindowSessionID = sessionID
             historyWindow = nil
             retainedRenderMessageIDs.removeAll(keepingCapacity: true)
@@ -156,7 +215,7 @@ extension ChatViewModel {
         syncAutoOpenedPendingToolCallIDs(with: incomingMessages)
         updateAutoReasoningPreviewState(with: incomingMessages)
 
-        if hasSameMessageIdentity {
+        if hasSameMessageIdentity, !didChangeSession {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
             return
         }

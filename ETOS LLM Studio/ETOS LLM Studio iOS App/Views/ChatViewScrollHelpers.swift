@@ -103,10 +103,31 @@ extension ChatView {
             && distanceToEdge >= triggerDistance
     }
 
+    nonisolated static func isPendingMessageJumpReady(
+        targetSessionID: UUID,
+        currentSessionID: UUID?,
+        loadedHistorySessionID: UUID?,
+        hasMessages: Bool,
+        isChatVisible: Bool,
+        awaitsPickerDismissal: Bool
+    ) -> Bool {
+        currentSessionID == targetSessionID
+            && loadedHistorySessionID == targetSessionID
+            && hasMessages
+            && isChatVisible
+            && !awaitsPickerDismissal
+    }
+
     func resolvePendingSearchJumpIfNeeded() {
         guard let target = viewModel.pendingSearchJumpTarget,
-              viewModel.currentSession?.id == target.sessionID,
-              !viewModel.allMessagesForSession.isEmpty else {
+              Self.isPendingMessageJumpReady(
+                targetSessionID: target.sessionID,
+                currentSessionID: viewModel.currentSession?.id,
+                loadedHistorySessionID: viewModel.historyWindowSessionID,
+                hasMessages: !viewModel.allMessagesForSession.isEmpty,
+                isChatVisible: isChatVisible,
+                awaitsPickerDismissal: awaitsChatPickerDismissalForMessageJump
+              ) else {
             return
         }
         guard jumpToMessage(displayIndex: target.messageOrdinal) else { return }
@@ -128,13 +149,34 @@ extension ChatView {
         }
 
         prepareForMessageJump()
-        guard viewModel.prepareHistoryWindow(containing: targetMessageID) else {
+        guard viewModel.historyWindowPosition(of: targetMessageID) != nil else {
             isMessageJumpInFlight = false
             return false
         }
 
         scheduleMessageJump(to: targetMessageID)
         return true
+    }
+
+    func queueMessageActionJumpAfterDismiss(displayIndex: Int) -> Bool {
+        let targetZeroBasedIndex = displayIndex - 1
+        guard targetZeroBasedIndex >= 0,
+              targetZeroBasedIndex < viewModel.allMessagesForSession.count,
+              ChatJumpTargetSupport.messageID(
+                at: targetZeroBasedIndex,
+                in: viewModel.allMessagesForSession,
+                hiddenToolCallResultIDs: viewModel.toolCallResultIDs
+              ) != nil else {
+            return false
+        }
+        pendingMessageActionJumpIndex = displayIndex
+        return true
+    }
+
+    func performPendingMessageActionJumpIfNeeded() {
+        guard let displayIndex = pendingMessageActionJumpIndex else { return }
+        pendingMessageActionJumpIndex = nil
+        _ = jumpToMessage(displayIndex: displayIndex)
     }
 
     func prepareForMessageJump() {
@@ -410,8 +452,8 @@ extension ChatView {
     }
 
     func restorePendingMessageJumpIfNeeded() {
-        guard let request = pendingJumpRequest else { return }
-        applyPendingMessageJumpIfReady(request.messageID)
+        guard pendingScrollTargetTask == nil, let request = pendingJumpRequest else { return }
+        scheduleMessageJump(to: request.messageID)
     }
 
     var bottomScrollTarget: ChatScrollTargetID {
@@ -590,50 +632,213 @@ extension ChatView {
         cancelPendingScrollTargetCommand()
         isMessageJumpInFlight = true
         shouldRestorePendingJumpOnAppear = true
-        pendingJumpRequest = MessageJumpRequest(messageID: messageID)
-        if chatLayoutIntegrityMonitor.hasLayoutFrame(for: messageID) {
-            applyPendingMessageJumpIfReady(messageID)
+        let request = MessageJumpRequest(messageID: messageID)
+        pendingJumpRequest = request
+        let generation = scrollTargetGeneration
+        let sessionID = viewModel.currentSession?.id
+        let initialDistance = viewModel.historyWindowDistance(to: messageID) ?? 0
+        let estimatedSegmentCount = max(
+            1,
+            (initialDistance + historyJumpBatchSize - 1) / historyJumpBatchSize
+        )
+
+        pendingScrollTargetTask = Task { @MainActor in
+            defer {
+                if generation == scrollTargetGeneration {
+                    releaseMessageJumpScrollTarget()
+                    pendingJumpRequest = nil
+                    isMessageJumpInFlight = false
+                    shouldRestorePendingJumpOnAppear = false
+                    pendingScrollTargetTask = nil
+                }
+            }
+
+            // 先让选择器关闭与跳转状态进入当前事务，下一轮再开始移动列表。
+            await Task.yield()
+            var completedSegmentCount = 0
+
+            while !Task.isCancelled,
+                  generation == scrollTargetGeneration,
+                  sessionID == viewModel.currentSession?.id,
+                  pendingJumpRequest == request,
+                  let position = viewModel.historyWindowPosition(of: messageID) {
+                if position == .visible {
+                    let duration = estimatedSegmentCount == 1 ? 0.9 : 0.52
+                    await animateMessageJump(
+                        to: messageID,
+                        anchor: .top,
+                        duration: duration,
+                        phase: estimatedSegmentCount == 1 ? .complete : .decelerating,
+                        generation: generation,
+                        sessionID: sessionID
+                    )
+                    return
+                }
+
+                let preservedAnchorID: UUID?
+                let preservedAnchor: UnitPoint
+                switch position {
+                case .earlier:
+                    preservedAnchorID = viewModel.displayMessages.first?.id
+                    preservedAnchor = .top
+                case .later:
+                    preservedAnchorID = viewModel.displayMessages.last?.id
+                    preservedAnchor = .bottom
+                case .visible:
+                    return
+                }
+
+                guard let preservedAnchorID,
+                      viewModel.shiftHistoryWindow(
+                        toward: messageID,
+                        weightedBatchSize: historyJumpBatchSize
+                      ) else {
+                    return
+                }
+
+                // 数据窗口移动后先把原边界钉回原位；这一帧不动画，避免窗口裁切形成瞬移。
+                await Task.yield()
+                guard !Task.isCancelled,
+                      generation == scrollTargetGeneration,
+                      sessionID == viewModel.currentSession?.id,
+                      viewModel.displayMessages.contains(where: { $0.id == preservedAnchorID }) else {
+                    return
+                }
+                applyScrollTargetWithoutAnimation(
+                    .message(preservedAnchorID),
+                    anchor: preservedAnchor
+                )
+                await Task.yield()
+
+                completedSegmentCount += 1
+                let updatedPosition = viewModel.historyWindowPosition(of: messageID)
+                let isFinalSegment = updatedPosition == .visible
+                if isFinalSegment, viewModel.centerHistoryWindow(on: messageID) {
+                    await Task.yield()
+                    guard !Task.isCancelled,
+                          generation == scrollTargetGeneration,
+                          sessionID == viewModel.currentSession?.id,
+                          viewModel.displayMessages.contains(where: { $0.id == preservedAnchorID }) else {
+                        return
+                    }
+                }
+                let destinationID: UUID?
+                let destinationAnchor: UnitPoint
+                if isFinalSegment {
+                    destinationID = messageID
+                    destinationAnchor = .top
+                } else if position == .earlier {
+                    destinationID = viewModel.displayMessages.first?.id
+                    destinationAnchor = .top
+                } else {
+                    destinationID = viewModel.displayMessages.last?.id
+                    destinationAnchor = .bottom
+                }
+                guard let destinationID else { return }
+
+                let phase: ChatMessageJumpAnimationPhase
+                if estimatedSegmentCount == 1 {
+                    phase = .complete
+                } else if completedSegmentCount == 1 {
+                    phase = .accelerating
+                } else if isFinalSegment {
+                    phase = .decelerating
+                } else {
+                    phase = .cruising
+                }
+                let duration = historyJumpSegmentDuration(
+                    estimatedSegmentCount: estimatedSegmentCount
+                )
+                await animateMessageJump(
+                    to: destinationID,
+                    anchor: destinationAnchor,
+                    duration: duration,
+                    phase: phase,
+                    generation: generation,
+                    sessionID: sessionID
+                )
+                if isFinalSegment { return }
+            }
         }
     }
 
-    func applyPendingMessageJumpIfReady(_ messageID: UUID) {
-        guard isMessageJumpInFlight,
-              pendingJumpRequest?.messageID == messageID,
-              chatLayoutIntegrityMonitor.hasLayoutFrame(for: messageID),
-              viewModel.displayMessages.contains(where: { $0.id == messageID }) else {
+    private func animateMessageJump(
+        to messageID: UUID,
+        anchor: UnitPoint,
+        duration: TimeInterval,
+        phase: ChatMessageJumpAnimationPhase,
+        generation: UInt,
+        sessionID: UUID?
+    ) async {
+        guard canApplyScrollTarget(
+            .message(messageID),
+            generation: generation,
+            sessionID: sessionID
+        ) else {
+            return
+        }
+        releaseMessageJumpScrollTarget()
+        await Task.yield()
+        guard !Task.isCancelled,
+              generation == scrollTargetGeneration,
+              sessionID == viewModel.currentSession?.id else {
             return
         }
 
-        pendingJumpRequest = nil
-        cancelPendingScrollTargetCommand()
-        isMessageJumpInFlight = true
-        let generation = scrollTargetGeneration
-        let sessionID = viewModel.currentSession?.id
-        let target = ChatScrollTargetID.message(messageID)
+        let animation: Animation
+        if accessibilityReduceMotion {
+            animation = .linear(duration: 0)
+        } else {
+            switch phase {
+            case .accelerating:
+                animation = .timingCurve(0.55, 0, 0.82, 0.32, duration: duration)
+            case .cruising:
+                animation = .linear(duration: duration)
+            case .decelerating:
+                animation = .timingCurve(0.18, 0.68, 0.35, 1, duration: duration)
+            case .complete:
+                animation = .timingCurve(0.65, 0, 0.35, 1, duration: duration)
+            }
+        }
         applyScrollTarget(
-            target,
-            anchor: .center,
-            animated: true,
-            animation: .easeInOut(duration: 0.25)
+            .message(messageID),
+            anchor: anchor,
+            animated: !accessibilityReduceMotion,
+            animation: animation
         )
-        pendingScrollTargetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled,
-                  generation == scrollTargetGeneration,
-                  sessionID == viewModel.currentSession?.id else {
-                return
-            }
-            var transaction = Transaction()
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                if chatScrollTarget == target {
-                    chatScrollTarget = nil
-                }
-            }
-            isMessageJumpInFlight = false
-            shouldRestorePendingJumpOnAppear = false
-            pendingScrollTargetTask = nil
+        guard !accessibilityReduceMotion else { return }
+        try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+    }
+
+    private func historyJumpSegmentDuration(estimatedSegmentCount: Int) -> TimeInterval {
+        switch estimatedSegmentCount {
+        case ...1: return 0.9
+        case 2: return 0.68
+        case 3: return 0.56
+        default: return max(0.3, min(0.5, 2.4 / Double(estimatedSegmentCount)))
+        }
+    }
+
+    private func applyScrollTargetWithoutAnimation(
+        _ target: ChatScrollTargetID,
+        anchor: UnitPoint
+    ) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            chatScrollTargetAnchor = anchor
+            chatScrollTarget = target
+        }
+    }
+
+    private func releaseMessageJumpScrollTarget() {
+        guard chatScrollTarget != nil else { return }
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            chatScrollTarget = nil
         }
     }
 

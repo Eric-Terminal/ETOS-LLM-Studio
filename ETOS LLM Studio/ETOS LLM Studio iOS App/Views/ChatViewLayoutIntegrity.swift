@@ -510,10 +510,6 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         recoveryRevisionByMessageID[messageID, default: 0]
     }
 
-    func hasLayoutFrame(for messageID: UUID) -> Bool {
-        snapshot.samples[messageID] != nil
-    }
-
     func updateContext(_ newContext: ChatLayoutAuditContext) {
         if context.sessionID != newContext.sessionID {
             reset()

@@ -30,6 +30,12 @@ public struct ChatHistoryWindow: Equatable, Sendable {
     }
 }
 
+public enum ChatHistoryWindowPosition: Equatable, Sendable {
+    case earlier
+    case visible
+    case later
+}
+
 public enum ChatHistoryWindowSupport {
     public static func weights(in messages: [ChatMessage]) -> [Int] {
         var hasAssistantSinceLatestUser = false
@@ -210,6 +216,38 @@ public enum ChatHistoryWindowSupport {
         let range = window.clamped(to: messages.count).range
         guard !range.isEmpty else { return [] }
         return Array(messages[range])
+    }
+
+    public static func position(
+        of messageID: UUID,
+        in messages: [ChatMessage],
+        window: ChatHistoryWindow
+    ) -> ChatHistoryWindowPosition? {
+        guard let messageIndex = messages.firstIndex(where: { $0.id == messageID }) else {
+            return nil
+        }
+        let current = window.clamped(to: messages.count)
+        if messageIndex < current.lowerBound { return .earlier }
+        if messageIndex >= current.upperBound { return .later }
+        return .visible
+    }
+
+    public static func distance(
+        to messageID: UUID,
+        in messages: [ChatMessage],
+        window: ChatHistoryWindow
+    ) -> Int? {
+        guard let messageIndex = messages.firstIndex(where: { $0.id == messageID }) else {
+            return nil
+        }
+        let current = window.clamped(to: messages.count)
+        if messageIndex < current.lowerBound {
+            return current.lowerBound - messageIndex
+        }
+        if messageIndex >= current.upperBound {
+            return messageIndex - current.upperBound + 1
+        }
+        return 0
     }
 
     private static func lowerBound(

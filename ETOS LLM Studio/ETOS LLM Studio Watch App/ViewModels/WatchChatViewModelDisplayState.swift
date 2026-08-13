@@ -23,7 +23,8 @@ extension ChatViewModel {
         let previousVisibleMessages = visibleMessagesCache
         let previousHistoryWindow = historyWindow
         let sessionID = currentSession?.id
-        if historyWindowSessionID != sessionID {
+        let didChangeSession = historyWindowSessionID != sessionID
+        if didChangeSession {
             historyWindowSessionID = sessionID
             historyWindow = nil
             retainedRenderMessageIDs.removeAll(keepingCapacity: true)
@@ -48,7 +49,7 @@ extension ChatViewModel {
         syncAutoOpenedPendingToolCallIDs(with: incomingMessages)
         updateAutoReasoningPreviewState(with: incomingMessages)
 
-        if hasSameMessageIdentity {
+        if hasSameMessageIdentity, !didChangeSession {
             applyIncrementalMessageUpdates(previousMessages: previousMessages, incomingMessages: incomingMessages)
             return
         }

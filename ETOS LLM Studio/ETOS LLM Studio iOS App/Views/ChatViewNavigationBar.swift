@@ -276,6 +276,7 @@ extension ChatView {
     }
 
     func handleChatPickerSheetDismissed() {
+        awaitsChatPickerDismissalForMessageJump = false
         activeChatPickerDetent = .medium
         quickModelSettingsTarget = nil
         isQuickPromptEditorPresented = false
@@ -292,6 +293,7 @@ extension ChatView {
             chatPickerDismissDestination = nil
             navigationDestination = destination
         }
+        resolvePendingSearchJumpIfNeeded()
     }
 
     func handleChatLayoutChange(isLandscape: Bool) {

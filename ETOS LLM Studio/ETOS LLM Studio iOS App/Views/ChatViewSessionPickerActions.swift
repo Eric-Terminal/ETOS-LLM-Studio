@@ -469,6 +469,9 @@ extension ChatView {
     }
 
     func selectSessionFromPicker(_ session: ChatSession, messageOrdinal: Int? = nil) {
+        if messageOrdinal != nil {
+            awaitsChatPickerDismissalForMessageJump = !usesLandscapeSessionSidebar
+        }
         if session.isTemporary {
             editingSessionID = nil
             if let messageOrdinal {
