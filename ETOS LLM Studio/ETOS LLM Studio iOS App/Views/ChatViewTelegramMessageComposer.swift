@@ -23,6 +23,7 @@ struct TelegramMessageComposer: View {
     @ObservedObject private var customSlashCommandStore = CustomChatSlashCommandStore.shared
     @Binding var text: String
     @Binding var isRequestControlsExpanded: Bool
+    @Binding var localAgentMode: LocalAgentMode
     let isSending: Bool
     let sendAction: () -> Void
     let stopAction: () -> Void

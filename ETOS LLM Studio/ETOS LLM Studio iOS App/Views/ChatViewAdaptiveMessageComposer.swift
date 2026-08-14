@@ -257,7 +257,11 @@ extension TelegramMessageComposer {
                 if let selectedModel = viewModel.selectedModel {
                     if appConfig.localLinuxEnabled,
                        let sessionID = viewModel.currentSession?.id {
-                        LocalAgentModePicker(sessionID: sessionID, isLocked: isSending)
+                        LocalAgentModePicker(
+                            sessionID: sessionID,
+                            isLocked: isSending,
+                            mode: $localAgentMode
+                        )
                     }
 
                     if adaptiveRequestControls.isEmpty && viewModel.currentSession == nil {
@@ -741,7 +745,7 @@ extension TelegramMessageComposer {
 private struct LocalAgentModePicker: View {
     let sessionID: UUID
     let isLocked: Bool
-    @State private var mode = LocalAgentMode.chat
+    @Binding var mode: LocalAgentMode
     @State private var hasActiveRun = false
 
     var body: some View {
@@ -766,7 +770,7 @@ private struct LocalAgentModePicker: View {
             await reloadSessionState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
-            Task { await reloadRunState() }
+            Task { await reloadSessionState() }
         }
     }
 

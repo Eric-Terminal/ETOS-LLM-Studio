@@ -122,6 +122,7 @@ struct ChatView: View {
     @State var localResourceUsagePanelOffset: CGSize = .zero
     @State var localTerminalPreviewOffset: CGSize = .zero
     @State var localTerminalInitialJobID: UUID?
+    @State var currentLocalAgentMode = LocalAgentMode.chat
     // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
@@ -333,6 +334,7 @@ struct ChatView: View {
                 reloadChatQuickActions()
             }
             .onChange(of: viewModel.currentSession?.id) { _, _ in
+                currentLocalAgentMode = .chat
                 refreshTemporaryChatState()
                 continuationExpansionState = .collapsed
                 if isMessageSelectionMode {
@@ -341,6 +343,12 @@ struct ChatView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .temporaryChatStateDidChange)) { _ in
                 refreshTemporaryChatState()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
+                Task { await reloadCurrentLocalAgentMode() }
+            }
+            .task(id: viewModel.currentSession?.id) {
+                await reloadCurrentLocalAgentMode()
             }
             .task(id: conversationContinuationRelationshipRefreshKey) {
                 await reloadConversationContinuationRelationships()
@@ -1170,7 +1178,9 @@ extension ChatView {
                     VStack(spacing: 0) {
                         if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .aboveInput {
                             LocalLinuxChatDockedPreview(
-                                mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                                mode: LocalLinuxChatPreviewMode
+                                    .normalized(appConfig.localLinuxChatPreviewMode)
+                                    .resolved(for: currentLocalAgentMode),
                                 isLocalLinuxEnabled: appConfig.localLinuxEnabled,
                                 agentToolPreview: viewModel.latestAgentToolExecutionPreview,
                                 isLiquidGlassEnabled: isLiquidGlassEnabled,
@@ -1239,7 +1249,9 @@ extension ChatView {
 
                 if LocalLinuxChatPreviewPlacement.normalized(appConfig.localLinuxChatPreviewPlacement) == .floating {
                     LocalLinuxChatFloatingPreview(
-                        mode: LocalLinuxChatPreviewMode.normalized(appConfig.localLinuxChatPreviewMode),
+                        mode: LocalLinuxChatPreviewMode
+                            .normalized(appConfig.localLinuxChatPreviewMode)
+                            .resolved(for: currentLocalAgentMode),
                         isLocalLinuxEnabled: appConfig.localLinuxEnabled,
                         agentToolPreview: viewModel.latestAgentToolExecutionPreview,
                         sessionID: viewModel.currentSession?.id,

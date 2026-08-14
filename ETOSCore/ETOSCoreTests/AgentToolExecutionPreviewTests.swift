@@ -58,6 +58,10 @@ struct AgentToolExecutionPreviewTests {
         #expect(LocalLinuxChatPreviewMode.normalized("unknown") == .agentTools)
         #expect(AppConfigKey.localLinuxChatPreviewMode.defaultValue == .text("agent_tools"))
 
+        #expect(LocalLinuxChatPreviewMode.agentTools.resolved(for: .chat) == .off)
+        #expect(LocalLinuxChatPreviewMode.agentTools.resolved(for: .agent) == .agentTools)
+        #expect(LocalLinuxChatPreviewMode.userTerminal.resolved(for: .chat) == .userTerminal)
+
         #expect(LocalLinuxChatPreviewPlacement.defaultPlacement == .floating)
         #expect(LocalLinuxChatPreviewPlacement.normalized("above_input") == .aboveInput)
         #expect(LocalLinuxChatPreviewPlacement.normalized("unknown") == .floating)

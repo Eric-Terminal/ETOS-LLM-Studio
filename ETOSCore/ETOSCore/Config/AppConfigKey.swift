@@ -171,6 +171,12 @@ public enum LocalLinuxChatPreviewMode: String, CaseIterable, Identifiable, Senda
     public static func normalized(_ rawValue: String) -> LocalLinuxChatPreviewMode {
         LocalLinuxChatPreviewMode(rawValue: rawValue) ?? defaultMode
     }
+
+    /// Agent 工具缩略图只属于 Agent 会话；用户终端是独立能力，不受会话模式限制。
+    public func resolved(for sessionMode: LocalAgentMode) -> LocalLinuxChatPreviewMode {
+        guard self == .agentTools, sessionMode == .chat else { return self }
+        return .off
+    }
 }
 
 public enum LocalLinuxChatPreviewPlacement: String, CaseIterable, Identifiable, Sendable {

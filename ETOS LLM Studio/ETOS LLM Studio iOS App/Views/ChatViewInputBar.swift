@@ -10,6 +10,20 @@ import SwiftUI
 import ETOSCore
 
 extension ChatView {
+    @MainActor
+    func reloadCurrentLocalAgentMode() async {
+        guard let sessionID = viewModel.currentSession?.id else {
+            currentLocalAgentMode = .chat
+            return
+        }
+
+        let storedMode = await Task.detached(priority: .userInitiated) {
+            Persistence.localAgentMode(sessionID: sessionID)
+        }.value
+        guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
+        currentLocalAgentMode = storedMode
+    }
+
     /// Telegram 风格输入栏
     @ViewBuilder
     var telegramInputBar: some View {
@@ -39,6 +53,7 @@ extension ChatView {
                     }
                 ),
                 isRequestControlsExpanded: $isComposerRequestControlsExpanded,
+                localAgentMode: $currentLocalAgentMode,
                 isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
