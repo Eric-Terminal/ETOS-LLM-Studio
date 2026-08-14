@@ -25,7 +25,17 @@ public struct AppLockOverlayView: View {
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
 
+            #if os(watchOS)
+            GeometryReader { geometry in
+                ScrollView(.vertical) {
+                    lockContent
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: geometry.size.height)
+                }
+            }
+            #else
             lockContent
+            #endif
         }
         .onAppear {
             password = ""
