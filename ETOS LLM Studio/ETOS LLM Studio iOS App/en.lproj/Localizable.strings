@@ -6734,3 +6734,7 @@
 "自动管理历史消息" = "Automatically Manage History";
 "手动加载轮次" = "Manual Load Turns";
 "接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Automatically loads nearby messages at the edges of a conversation and recycles complex bubbles far from your reading position. When disabled, choose a manual load size; set it to 0 to show all history.";
+"输入栏样式" = "Composer Style";
+"胶囊" = "Capsule";
+"卡片" = "Card";
+"胶囊样式保持紧凑；卡片样式会将附件、请求控制、语音和发送操作收进同一输入区域，并随文本自然增高。" = "Capsule stays compact. Card keeps attachments, request controls, voice input, and send actions in one composer that grows naturally with your text.";

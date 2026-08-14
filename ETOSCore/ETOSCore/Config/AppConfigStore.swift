@@ -464,6 +464,7 @@ public final class AppConfigStore: ObservableObject {
         didSet { write(.temporaryChatMemoryEnabled, temporaryChatMemoryEnabled) }
     }
     @Published public var enableSlashCommands: Bool { didSet { write(.enableSlashCommands, enableSlashCommands) } }
+    @Published public var chatComposerStyle: String { didSet { write(.chatComposerStyle, chatComposerStyle) } }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
@@ -729,6 +730,9 @@ public final class AppConfigStore: ObservableObject {
         chatQuickActionIDs = Self.textValue(.chatQuickActionIDs, userDefaults: userDefaults)
         temporaryChatMemoryEnabled = Self.boolValue(.temporaryChatMemoryEnabled, userDefaults: userDefaults)
         enableSlashCommands = Self.boolValue(.enableSlashCommands, userDefaults: userDefaults)
+        chatComposerStyle = ChatComposerStyle.normalized(
+            Self.textValue(.chatComposerStyle, userDefaults: userDefaults)
+        ).rawValue
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)
@@ -1266,6 +1270,7 @@ public final class AppConfigStore: ObservableObject {
         case .chatQuickActionIDs: return .text(chatQuickActionIDs)
         case .temporaryChatMemoryEnabled: return .bool(temporaryChatMemoryEnabled)
         case .enableSlashCommands: return .bool(enableSlashCommands)
+        case .chatComposerStyle: return .text(chatComposerStyle)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .restoreLastSessionOnlyIfRecent: return .bool(restoreLastSessionOnlyIfRecent)
@@ -1554,6 +1559,8 @@ public final class AppConfigStore: ObservableObject {
         case .modelPickerFolderPathsByProvider:
             modelPickerFolderPathsByProvider = Self.decodeStringDictionary(from: value) ?? [:]
         case .chatQuickActionIDs: chatQuickActionIDs = value
+        case .chatComposerStyle:
+            chatComposerStyle = ChatComposerStyle.normalized(value).rawValue
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
         case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value
@@ -1887,6 +1894,8 @@ public final class AppConfigStore: ObservableObject {
             return VideoFrameExtractionMode.normalized(value).rawValue
         case .chatStreamingDisplayMode:
             return ChatStreamingDisplayMode.normalized(value).rawValue
+        case .chatComposerStyle:
+            return ChatComposerStyle.normalized(value).rawValue
         case .localLinuxDefaultSessionMode:
             return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
         case .localLinuxDefaultShellPath:

@@ -401,6 +401,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case temporaryChatMemoryEnabled = "chat.temporary.memoryEnabled"
     case enableSlashCommands = "chat.slashCommands.enabled"
     case customChatSlashCommands = "chat.slashCommands.custom"
+    case chatComposerStyle = "chat.composer.style"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
@@ -710,6 +711,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .watchBackgroundLastSource,
              .chatComposerDraft:
             return .text("")
+        case .chatComposerStyle:
+            return .text(ChatComposerStyle.capsule.rawValue)
         case .watchAttachmentSourceHistory,
              .watchBackgroundSourceHistory:
             return .text("[]")

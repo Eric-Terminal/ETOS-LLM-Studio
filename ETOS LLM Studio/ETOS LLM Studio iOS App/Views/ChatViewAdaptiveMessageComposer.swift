@@ -236,7 +236,7 @@ extension TelegramMessageComposer {
         .contentShape(shape)
     }
 
-    private var adaptiveRequestControlsPanel: some View {
+    var adaptiveRequestControlsPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
@@ -365,7 +365,7 @@ extension TelegramMessageComposer {
         )
     }
 
-    private var adaptiveShowsRequestControlsButton: Bool {
+    var adaptiveShowsRequestControlsButton: Bool {
         (!adaptiveRequestControls.isEmpty
             || (appConfig.localLinuxEnabled && viewModel.currentSession != nil && viewModel.selectedModel != nil))
             && adaptivePresentation != .expandedText
@@ -424,7 +424,7 @@ extension TelegramMessageComposer {
     }
 
     @ViewBuilder
-    private var adaptiveSpeechContent: some View {
+    var adaptiveSpeechContent: some View {
         switch inlineSpeechRecorder.phase {
         case .idle:
             EmptyView()
@@ -523,14 +523,16 @@ extension TelegramMessageComposer {
         }
     }
 
-    private func adaptiveActionButton(
+    func adaptiveActionButton(
         size: CGFloat,
-        participatesInGlassContainer: Bool
+        participatesInGlassContainer: Bool,
+        embeddedInCard: Bool = false
     ) -> some View {
         Button(action: adaptiveHandleAction) {
             adaptiveActionLabel(
                 size: size,
-                participatesInGlassContainer: participatesInGlassContainer
+                participatesInGlassContainer: participatesInGlassContainer,
+                embeddedInCard: embeddedInCard
             )
         }
         .buttonStyle(
@@ -546,14 +548,27 @@ extension TelegramMessageComposer {
     @ViewBuilder
     private func adaptiveActionLabel(
         size: CGFloat,
-        participatesInGlassContainer: Bool
+        participatesInGlassContainer: Bool,
+        embeddedInCard: Bool
     ) -> some View {
         let label = Image(systemName: adaptiveActionIconName)
             .etFont(.system(size: min(17, max(14, size * 0.45)), weight: .semibold))
             .foregroundStyle(adaptiveActionForegroundColor)
             .frame(width: size, height: size)
+        let emphasizesAction = (isSending && !adaptiveHasContent)
+            || adaptiveHasContent
+            || (viewModel.canQuickRetryLatestMessage && !inlineSpeechRecorder.phase.isActive)
 
-        if #available(iOS 26.0, *),
+        if embeddedInCard {
+            label
+                .background {
+                    if emphasizesAction {
+                        adaptiveActionBackground
+                    } else {
+                        Circle().fill(Color.primary.opacity(0.08))
+                    }
+                }
+        } else if #available(iOS 26.0, *),
            viewModel.enableLiquidGlass,
            participatesInGlassContainer {
             label
@@ -669,7 +684,7 @@ extension TelegramMessageComposer {
         return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
     }
 
-    private func adaptiveToggleRequestControls() {
+    func adaptiveToggleRequestControls() {
         let willExpand = !isRequestControlsExpanded
         if willExpand {
             adaptiveRefreshRequestControls()
@@ -695,7 +710,7 @@ extension TelegramMessageComposer {
         }
     }
 
-    private func adaptiveStartSpeechInput() {
+    func adaptiveStartSpeechInput() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation(adaptiveComposerAnimation) {
             isRequestControlsExpanded = false

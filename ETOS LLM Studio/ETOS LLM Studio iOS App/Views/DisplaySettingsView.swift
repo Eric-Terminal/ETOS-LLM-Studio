@@ -248,12 +248,25 @@ struct DisplaySettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section(NSLocalizedString("聊天界面", comment: "设置聊天界面分组")) {
+                Section {
+                    Picker(NSLocalizedString("输入栏样式", comment: "聊天输入栏样式选择器"), selection: chatComposerStyleBinding) {
+                        ForEach(ChatComposerStyle.allCases) { style in
+                            Text(chatComposerStyleTitle(style))
+                                .tag(style)
+                        }
+                    }
+
                     NavigationLink {
                         ChatQuickActionSettingsView()
                     } label: {
                         SettingsListIconLabel("聊天快捷功能", icon: .chatQuickAction)
                     }
+                } header: {
+                    Text(NSLocalizedString("聊天界面", comment: "设置聊天界面分组"))
+                } footer: {
+                    Text(NSLocalizedString("胶囊样式保持紧凑；卡片样式会将附件、请求控制、语音和发送操作收进同一输入区域，并随文本自然增高。", comment: "聊天输入栏样式说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
             .tabItem {
@@ -278,6 +291,22 @@ struct DisplaySettingsView: View {
             get: { LiquidGlassTintSetting.normalized(appConfig.liquidGlassTintOpacity) },
             set: { appConfig.liquidGlassTintOpacity = LiquidGlassTintSetting.normalized($0) }
         )
+    }
+
+    private var chatComposerStyleBinding: Binding<ChatComposerStyle> {
+        Binding(
+            get: { ChatComposerStyle.normalized(appConfig.chatComposerStyle) },
+            set: { appConfig.chatComposerStyle = $0.rawValue }
+        )
+    }
+
+    private func chatComposerStyleTitle(_ style: ChatComposerStyle) -> String {
+        switch style {
+        case .capsule:
+            return NSLocalizedString("胶囊", comment: "胶囊聊天输入栏样式")
+        case .card:
+            return NSLocalizedString("卡片", comment: "卡片聊天输入栏样式")
+        }
     }
 
     private var isAnyChatAnimationEnabled: Bool {

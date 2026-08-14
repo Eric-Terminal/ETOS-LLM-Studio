@@ -6811,3 +6811,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "自动管理历史消息" = "Gestionar historial automáticamente";
 "手动加载轮次" = "Turnos de carga manual";
 "接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Carga automáticamente mensajes cercanos en los extremos de una conversación y libera las burbujas complejas alejadas de la posición de lectura. Al desactivarlo, elige una cantidad manual; 0 muestra todo el historial.";
+"输入栏样式" = "Estilo de entrada";
+"胶囊" = "Cápsula";
+"卡片" = "Tarjeta";
+"胶囊样式保持紧凑；卡片样式会将附件、请求控制、语音和发送操作收进同一输入区域，并随文本自然增高。" = "La cápsula se mantiene compacta. La tarjeta reúne adjuntos, controles de solicitud, entrada de voz y envío en un área que crece de forma natural con el texto.";

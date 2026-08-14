@@ -97,12 +97,17 @@ struct TelegramMessageComposer: View {
                 )
             }
 
-            Color.clear
-                .frame(height: composerReservedHeight)
-                .overlay(alignment: .bottom) {
-                    composerOverlayContent
-                }
-                .zIndex(1)
+            if usesCardComposer {
+                cardComposerLayout
+                    .zIndex(1)
+            } else {
+                Color.clear
+                    .frame(height: composerReservedHeight)
+                    .overlay(alignment: .bottom) {
+                        composerOverlayContent
+                    }
+                    .zIndex(1)
+            }
         }
         .padding(.bottom, 6)
         .animation(
@@ -151,6 +156,13 @@ struct TelegramMessageComposer: View {
         }
         .onChange(of: appConfig.enableSlashCommands) { _, _ in
             refreshSlashCommandState(for: text)
+        }
+        .onChange(of: appConfig.chatComposerStyle) { _, _ in
+            withAnimation(adaptiveComposerAnimation) {
+                isExpandedComposer = false
+                isRequestControlsExpanded = false
+            }
+            handleAutoExpand(for: text)
         }
         .onChange(of: customSlashCommandStore.commands) { _, _ in
             refreshSlashCommandState(for: text)
@@ -263,7 +275,8 @@ struct TelegramMessageComposer: View {
 
     func attachmentMenuButton(
         size: CGFloat,
-        participatesInGlassContainer: Bool = false
+        participatesInGlassContainer: Bool = false,
+        embeddedInCard: Bool = false
     ) -> some View {
         Menu {
             Button {
@@ -300,7 +313,8 @@ struct TelegramMessageComposer: View {
         } label: {
             attachmentMenuLabel(
                 size: size,
-                participatesInGlassContainer: participatesInGlassContainer
+                participatesInGlassContainer: participatesInGlassContainer,
+                embeddedInCard: embeddedInCard
             )
         }
         .buttonStyle(
@@ -309,19 +323,24 @@ struct TelegramMessageComposer: View {
                     && isLiquidGlassEnabled
             )
         )
+        .accessibilityLabel(NSLocalizedString("添加附件", comment: "聊天输入栏附件菜单"))
     }
 
     @ViewBuilder
     private func attachmentMenuLabel(
         size: CGFloat,
-        participatesInGlassContainer: Bool
+        participatesInGlassContainer: Bool,
+        embeddedInCard: Bool
     ) -> some View {
-        let label = Image(systemName: "paperclip")
+        let label = Image(systemName: embeddedInCard ? "plus" : "paperclip")
             .etFont(.system(size: max(14, size * 0.45), weight: .semibold))
             .foregroundColor(TelegramColors.attachButtonColor)
             .frame(width: size, height: size)
 
-        if #available(iOS 26.0, *),
+        if embeddedInCard {
+            label
+                .background(Circle().fill(Color.primary.opacity(0.08)))
+        } else if #available(iOS 26.0, *),
            isLiquidGlassEnabled,
            participatesInGlassContainer {
             label
@@ -499,6 +518,10 @@ struct TelegramMessageComposer: View {
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         // 复用自动展开时的文本规整结果，避免视图渲染时重复扫描草稿。
         adaptiveHasSendableText = !trimmed.isEmpty
+        guard !usesCardComposer else {
+            isExpandedComposer = false
+            return
+        }
         if trimmed.isEmpty {
             if isExpandedComposer {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
