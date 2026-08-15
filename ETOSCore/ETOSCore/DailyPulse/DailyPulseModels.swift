@@ -231,6 +231,67 @@ public struct DailyPulseDeliveryBatch: Identifiable, Codable, Hashable, Sendable
     }
 }
 
+struct DailyPulseGenerationCheckpoint: Codable, Hashable, Sendable {
+    var dayKey: String
+    var scheduleSignature: String
+    var sourceDigest: String
+    var generatedCards: [DailyPulseCard]
+    var deliveryBatches: [DailyPulseDeliveryBatch]
+    var firstHeadline: String?
+    var startedAt: Date
+    var updatedAt: Date
+
+    init(
+        dayKey: String,
+        scheduleSignature: String,
+        sourceDigest: String,
+        generatedCards: [DailyPulseCard] = [],
+        deliveryBatches: [DailyPulseDeliveryBatch] = [],
+        firstHeadline: String? = nil,
+        startedAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.dayKey = dayKey
+        self.scheduleSignature = scheduleSignature
+        self.sourceDigest = sourceDigest
+        self.generatedCards = generatedCards
+        self.deliveryBatches = deliveryBatches
+        self.firstHeadline = firstHeadline
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+    }
+
+    func hasCompletedDeliveryGroup(_ deliveryTimes: [DailyPulseDeliveryTime]) -> Bool {
+        let cardIDs = Set(generatedCards.map(\.id))
+        var referencedCardIDs = Set<UUID>()
+        for deliveryTime in deliveryTimes {
+            guard let batch = deliveryBatches.first(where: { $0.deliveryTimeID == deliveryTime.id }),
+                  batch.cardIDs.count == 1,
+                  let cardID = batch.cardIDs.first else {
+                return false
+            }
+            guard cardIDs.contains(cardID), referencedCardIDs.insert(cardID).inserted else {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+struct DailyPulseGenerationAttempt: Codable, Hashable, Sendable {
+    var dayKey: String
+    var lastAttemptAt: Date
+    var retryAfter: Date
+    var consecutiveFailureCount: Int
+}
+
+struct DailyPulseGenerationRuntimeState: Codable, Hashable, Sendable {
+    var checkpoints: [DailyPulseGenerationCheckpoint]
+    var attempts: [DailyPulseGenerationAttempt]
+
+    static let empty = DailyPulseGenerationRuntimeState(checkpoints: [], attempts: [])
+}
+
 public enum DailyPulseGenerationError: LocalizedError {
     case noModelSelected
     case insufficientContext

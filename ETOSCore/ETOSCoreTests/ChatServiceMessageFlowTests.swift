@@ -12,6 +12,51 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("独立请求响应校验失败会保留 Token 并计为错误")
+    func detachedResponseValidationFailureRecordsFailedUsage() async {
+        await cleanup()
+        Persistence.clearUsageAnalyticsData()
+        defer { Persistence.clearUsageAnalyticsData() }
+
+        let chatURL = URL(string: "https://fake.url/chat")!
+        let response = HTTPURLResponse(
+            url: chatURL,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
+        MockURLProtocol.mockResponses[chatURL] = .success((response, Data()))
+        mockAdapter.responseToReturn = ChatMessage(
+            role: .assistant,
+            content: "不是合法的每日脉冲 JSON",
+            tokenUsage: MessageTokenUsage(
+                promptTokens: 120,
+                completionTokens: 30,
+                totalTokens: 150
+            )
+        )
+
+        do {
+            _ = try await chatService.generateDetachedChatCompletion(
+                userPrompt: "生成每日脉冲",
+                runnableModel: dummyModel,
+                requestSource: .dailyPulse,
+                responseValidator: { _ in
+                    throw DailyPulseGenerationError.invalidModelOutput
+                }
+            )
+            Issue.record("响应校验失败时不应返回成功")
+        } catch {
+            #expect(error is DailyPulseGenerationError)
+        }
+
+        let events = Persistence.loadUsageStatsDayBundles().flatMap(\.events)
+        #expect(events.count == 1)
+        #expect(events.first?.status == .failed)
+        #expect(events.first?.errorKind == "response_validation_failed")
+        #expect(events.first?.tokenUsage?.totalTokens == 150)
+    }
+
     @Test("Chat request writes independent request log")
     func testChatRequestWritesIndependentRequestLog() async {
         await cleanup()

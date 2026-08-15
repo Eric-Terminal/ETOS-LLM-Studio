@@ -244,4 +244,43 @@ extension Persistence {
             return []
         }
     }
+
+    static func saveDailyPulseGenerationRuntimeState(_ state: DailyPulseGenerationRuntimeState) {
+        if let store = activeGRDBStore() {
+            store.saveDailyPulseGenerationRuntimeState(state)
+            return
+        }
+
+        let fileURL = dailyPulseGenerationRuntimeFileURL()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let data = try encoder.encode(state)
+            try data.write(to: fileURL, options: [.atomicWrite, .completeFileProtection])
+        } catch {
+            logger.error("保存每日脉冲生成进度失败: \(error.localizedDescription)")
+        }
+    }
+
+    static func loadDailyPulseGenerationRuntimeState() -> DailyPulseGenerationRuntimeState {
+        if let store = activeGRDBStore() {
+            return store.loadDailyPulseGenerationRuntimeState()
+        }
+
+        let fileURL = dailyPulseGenerationRuntimeFileURL()
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return .empty }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            return try decoder.decode(DailyPulseGenerationRuntimeState.self, from: data)
+        } catch {
+            logger.error("读取每日脉冲生成进度失败: \(error.localizedDescription)")
+            return .empty
+        }
+    }
 }

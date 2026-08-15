@@ -90,6 +90,10 @@ public final class WatchSyncManager: NSObject, ObservableObject {
     @Published public private(set) var lastSummary: SyncMergeSummary = .empty
     @Published public private(set) var lastUpdatedAt: Date?
     @Published public private(set) var isCompanionAvailable: Bool = false
+
+    public var isCompanionReachable: Bool {
+        session?.isReachable == true
+    }
     
     /// 自动同步开关的配置键
     public static let autoSyncEnabledKey = "sync.autoSyncEnabled"

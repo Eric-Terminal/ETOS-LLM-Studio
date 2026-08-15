@@ -52,4 +52,12 @@ extension PersistenceGRDBStore {
     func loadDailyPulseTasks() -> [DailyPulseTask] {
         loadBlob([DailyPulseTask].self, forKey: BlobKey.dailyPulseTasks) ?? []
     }
+
+    func saveDailyPulseGenerationRuntimeState(_ state: DailyPulseGenerationRuntimeState) {
+        saveBlob(state, forKey: BlobKey.dailyPulseGenerationRuntime)
+    }
+
+    func loadDailyPulseGenerationRuntimeState() -> DailyPulseGenerationRuntimeState {
+        loadBlob(DailyPulseGenerationRuntimeState.self, forKey: BlobKey.dailyPulseGenerationRuntime) ?? .empty
+    }
 }

@@ -15,7 +15,8 @@ extension ChatService {
         runnableModel: RunnableModel,
         requestMessages: [ChatMessage],
         temperature: Double,
-        requestLogContext: RequestLogContext
+        requestLogContext: RequestLogContext,
+        responseValidator: (@Sendable (String) throws -> Void)? = nil
     ) async throws -> String {
         guard let recordID = LocalModelProviderBridge.localRecordID(from: runnableModel.id),
               let record = localModelStore.models.first(where: { $0.id == recordID }) else {
@@ -42,6 +43,7 @@ extension ChatService {
 
         let modelURL = localModelStore.fileURL(for: record)
         var diagnosticOptions: LocalLLMGenerationOptions?
+        var didPersistTerminalStatus = false
         do {
             let overrides = runnableModel.effectiveOverrideParameters
             let globalTemperatureEnabled = await MainActor.run { AppConfigStore.shared.aiTemperatureEnabled }
@@ -80,29 +82,45 @@ extension ChatService {
                 modelURL: modelURL,
                 options: options
             )
+            let content = !parsedOutput.content.isEmpty
+                ? parsedOutput.content
+                : (parsedOutput.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                try responseValidator?(content)
+            } catch {
+                didPersistTerminalStatus = true
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "response_validation_failed"
+                )
+                throw error
+            }
+            didPersistTerminalStatus = true
             persistRequestLog(
                 context: requestLogContext,
                 status: .success,
                 tokenUsage: nil,
                 finishedAt: Date()
             )
-            if !parsedOutput.content.isEmpty {
-                return parsedOutput.content
-            }
-            return (parsedOutput.reasoningContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return content
         } catch is CancellationError {
-            persistRequestLog(
-                context: requestLogContext,
-                status: .cancelled,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: "cancelled"
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
+                )
+            }
             throw CancellationError()
         } catch {
             let errorKind = isCancellationError(error) ? "cancelled" : "local_generation_failed"
             let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
-            if status == .failed, let diagnosticOptions {
+            if !didPersistTerminalStatus, status == .failed, let diagnosticOptions {
                 _ = recordLocalLLMFailure(
                     error,
                     record: record,
@@ -111,13 +129,15 @@ extension ChatService {
                     context: requestLogContext
                 )
             }
-            persistRequestLog(
-                context: requestLogContext,
-                status: status,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: errorKind
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: status,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: errorKind
+                )
+            }
             throw error
         }
     }

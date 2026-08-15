@@ -236,6 +236,7 @@ public enum Persistence {
     static let dailyPulsePendingCurationFileName = "pending-curation.json"
     static let dailyPulseExternalSignalsFileName = "external-signals.json"
     static let dailyPulseTasksFileName = "tasks.json"
+    static let dailyPulseGenerationRuntimeFileName = "generation-runtime.json"
     static let legacySessionDirectoryName = "v3"
     static let legacyArchiveDirectoryName = "legacy"
 

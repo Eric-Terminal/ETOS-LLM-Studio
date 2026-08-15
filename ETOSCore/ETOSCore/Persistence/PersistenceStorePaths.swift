@@ -262,6 +262,10 @@ extension Persistence {
         dailyPulseDirectoryURL().appendingPathComponent(dailyPulseTasksFileName)
     }
 
+    static func dailyPulseGenerationRuntimeFileURL() -> URL {
+        dailyPulseDirectoryURL().appendingPathComponent(dailyPulseGenerationRuntimeFileName)
+    }
+
     static func sessionRecordFileURL(for sessionID: UUID) -> URL {
         currentSessionRecordsDirectory().appendingPathComponent("\(sessionID.uuidString).json")
     }

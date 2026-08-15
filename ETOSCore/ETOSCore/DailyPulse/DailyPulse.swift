@@ -36,6 +36,7 @@ public final class DailyPulseManager: ObservableObject {
     @Published public internal(set) var lastDeliveryAttemptDayKey: String?
     @Published public internal(set) var preparingDayKey: String?
     @Published public internal(set) var lastPreparationStartedAt: Date?
+    var generationRuntimeState: DailyPulseGenerationRuntimeState
     @Published public var focusText: String {
         didSet {
             guard !isApplyingPersistedState else { return }
@@ -99,6 +100,7 @@ public final class DailyPulseManager: ObservableObject {
     private var syncNotificationObserver: NSObjectProtocol?
     private var appConfigNotificationObserver: NSObjectProtocol?
     private var persistedReloadTask: Task<Void, Never>?
+    var generationRuntimePersistenceTask: Task<Void, Never>?
     private var isApplyingPersistedState = false
 
     private nonisolated static let dailyPulseEnabledDefaultsKey = "dailyPulse.enabled"
@@ -129,6 +131,7 @@ public final class DailyPulseManager: ObservableObject {
         let pendingCuration: DailyPulseCurationNote?
         let externalSignals: [DailyPulseExternalSignal]
         let tasks: [DailyPulseTask]
+        let generationRuntimeState: DailyPulseGenerationRuntimeState
         let settings: PersistedSettings?
     }
 #if os(iOS)
@@ -149,6 +152,7 @@ public final class DailyPulseManager: ObservableObject {
         self.pendingCuration = nil
         self.externalSignals = []
         self.tasks = []
+        self.generationRuntimeState = .empty
         self.focusText = ""
         self.tomorrowCurationText = ""
         self.lastViewedDayKey = nil
@@ -190,6 +194,7 @@ public final class DailyPulseManager: ObservableObject {
 
     deinit {
         persistedReloadTask?.cancel()
+        generationRuntimePersistenceTask?.cancel()
         if let syncNotificationObserver {
             NotificationCenter.default.removeObserver(syncNotificationObserver)
         }
@@ -400,6 +405,11 @@ public final class DailyPulseManager: ObservableObject {
         )
         let storedTasks = Persistence.loadDailyPulseTasks()
         let tasks = sortedTasks(storedTasks)
+        let storedGenerationRuntimeState = Persistence.loadDailyPulseGenerationRuntimeState()
+        let generationRuntimeState = normalizedGenerationRuntimeState(
+            storedGenerationRuntimeState,
+            referenceDate: referenceDate
+        )
 
         let settings: PersistedSettings?
         if includeDatabaseSettings {
@@ -432,6 +442,7 @@ public final class DailyPulseManager: ObservableObject {
             pendingCuration: pendingCuration,
             externalSignals: externalSignals,
             tasks: tasks,
+            generationRuntimeState: generationRuntimeState,
             settings: settings
         )
         guard !Task.isCancelled else { return state }
@@ -448,6 +459,9 @@ public final class DailyPulseManager: ObservableObject {
         }
         if !Task.isCancelled, tasks != storedTasks {
             Persistence.saveDailyPulseTasks(tasks)
+        }
+        if !Task.isCancelled, generationRuntimeState != storedGenerationRuntimeState {
+            Persistence.saveDailyPulseGenerationRuntimeState(generationRuntimeState)
         }
 
         return state
@@ -473,6 +487,7 @@ public final class DailyPulseManager: ObservableObject {
         tomorrowCurationText = state.pendingCuration?.text ?? ""
         externalSignals = state.externalSignals
         tasks = state.tasks
+        generationRuntimeState = state.generationRuntimeState
 
         if let settings = state.settings {
             focusText = settings.focusText
@@ -548,9 +563,16 @@ public final class DailyPulseManager: ObservableObject {
 
     internal func invalidatePreparedTomorrowRun(referenceDate: Date = Date()) {
         let tomorrowKey = Self.nextDayKey(from: referenceDate)
-        guard runs.contains(where: { $0.dayKey == tomorrowKey }) else { return }
-        runs.removeAll(where: { $0.dayKey == tomorrowKey })
-        persistRuns()
+        if runs.contains(where: { $0.dayKey == tomorrowKey }) {
+            runs.removeAll(where: { $0.dayKey == tomorrowKey })
+            persistRuns()
+        }
+        if generationRuntimeState.checkpoints.contains(where: { $0.dayKey == tomorrowKey })
+            || generationRuntimeState.attempts.contains(where: { $0.dayKey == tomorrowKey }) {
+            generationRuntimeState.checkpoints.removeAll(where: { $0.dayKey == tomorrowKey })
+            generationRuntimeState.attempts.removeAll(where: { $0.dayKey == tomorrowKey })
+            persistGenerationRuntimeStateInBackground()
+        }
         Task {
             await DailyPulseDeliveryCoordinator.shared.refreshReminderSchedule(referenceDate: referenceDate)
         }

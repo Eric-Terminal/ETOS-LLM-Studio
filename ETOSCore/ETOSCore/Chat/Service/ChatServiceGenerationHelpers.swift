@@ -348,7 +348,8 @@ extension ChatService {
         temperature: Double = 0.4,
         runnableModel: RunnableModel? = nil,
         requestSource: UsageRequestSource,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        responseValidator: (@Sendable (String) throws -> Void)? = nil
     ) async throws -> String {
         let trimmedUserPrompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserPrompt.isEmpty else { return "" }
@@ -370,7 +371,8 @@ extension ChatService {
             temperature: temperature,
             runnableModel: runnableModel,
             requestSource: requestSource,
-            sessionID: sessionID
+            sessionID: sessionID,
+            responseValidator: responseValidator
         )
     }
 
@@ -383,7 +385,8 @@ extension ChatService {
         sessionID: UUID? = nil,
         audioAttachments: [UUID: AudioAttachment] = [:],
         imageAttachments: [UUID: [ImageAttachment]] = [:],
-        fileAttachments: [UUID: [FileAttachment]] = [:]
+        fileAttachments: [UUID: [FileAttachment]] = [:],
+        responseValidator: (@Sendable (String) throws -> Void)? = nil
     ) async throws -> String {
         let requestMessages = messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !requestMessages.isEmpty else { return "" }
@@ -410,7 +413,8 @@ extension ChatService {
                 runnableModel: targetModel,
                 requestMessages: requestMessages,
                 temperature: temperature,
-                requestLogContext: requestContext
+                requestLogContext: requestContext,
+                responseValidator: responseValidator
             )
         }
 
@@ -451,18 +455,14 @@ extension ChatService {
             throw DetachedCompletionError.buildRequestFailed
         }
 
+        var didPersistTerminalStatus = false
         do {
             let data = try await fetchData(for: request, provider: targetModel.provider)
+            let responseMessage: ChatMessage
             do {
-                let responseMessage = try adapter.parseResponse(data: data)
-                persistRequestLog(
-                    context: requestContext,
-                    status: .success,
-                    tokenUsage: responseMessage.tokenUsage,
-                    finishedAt: Date()
-                )
-                return responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                responseMessage = try adapter.parseResponse(data: data)
             } catch {
+                didPersistTerminalStatus = true
                 persistRequestLog(
                     context: requestContext,
                     status: .failed,
@@ -472,35 +472,65 @@ extension ChatService {
                 )
                 throw error
             }
-        } catch is CancellationError {
+
+            let content = responseMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                try responseValidator?(content)
+            } catch {
+                didPersistTerminalStatus = true
+                persistRequestLog(
+                    context: requestContext,
+                    status: .failed,
+                    tokenUsage: responseMessage.tokenUsage,
+                    finishedAt: Date(),
+                    errorKind: "response_validation_failed"
+                )
+                throw error
+            }
+
+            didPersistTerminalStatus = true
             persistRequestLog(
                 context: requestContext,
-                status: .cancelled,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: "cancelled"
+                status: .success,
+                tokenUsage: responseMessage.tokenUsage,
+                finishedAt: Date()
             )
+            return content
+        } catch is CancellationError {
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: .cancelled,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: "cancelled"
+                )
+            }
             throw CancellationError()
         } catch NetworkError.badStatusCode(let code, let bodyData) {
-            persistRequestLog(
-                context: requestContext,
-                status: .failed,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                httpStatusCode: code,
-                errorKind: "bad_status_code"
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: .failed,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    httpStatusCode: code,
+                    errorKind: "bad_status_code"
+                )
+            }
             throw NetworkError.badStatusCode(code: code, responseBody: bodyData)
         } catch {
             let errorKind = isCancellationError(error) ? "cancelled" : "network_error"
             let status: RequestLogStatus = isCancellationError(error) ? .cancelled : .failed
-            persistRequestLog(
-                context: requestContext,
-                status: status,
-                tokenUsage: nil,
-                finishedAt: Date(),
-                errorKind: errorKind
-            )
+            if !didPersistTerminalStatus {
+                persistRequestLog(
+                    context: requestContext,
+                    status: status,
+                    tokenUsage: nil,
+                    finishedAt: Date(),
+                    errorKind: errorKind
+                )
+            }
             throw error
         }
     }

@@ -38,6 +38,7 @@ final class PersistenceGRDBStore {
         static let dailyPulsePendingCuration = "daily_pulse_pending_curation"
         static let dailyPulseExternalSignals = "daily_pulse_external_signals"
         static let dailyPulseTasks = "daily_pulse_tasks"
+        static let dailyPulseGenerationRuntime = "daily_pulse_generation_runtime"
     }
 
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "PersistenceGRDB")

@@ -66,6 +66,87 @@ extension DailyPulseManager {
             .sorted(by: { $0.generatedAt > $1.generatedAt })
     }
 
+    internal nonisolated static func normalizedGenerationRuntimeState(
+        _ state: DailyPulseGenerationRuntimeState,
+        referenceDate: Date
+    ) -> DailyPulseGenerationRuntimeState {
+        let retainedDayKeys = Set([
+            dayKey(for: referenceDate),
+            nextDayKey(from: referenceDate)
+        ])
+        return DailyPulseGenerationRuntimeState(
+            checkpoints: state.checkpoints
+                .filter { retainedDayKeys.contains($0.dayKey) }
+                .sorted(by: { $0.updatedAt > $1.updatedAt }),
+            attempts: state.attempts
+                .filter { retainedDayKeys.contains($0.dayKey) }
+                .sorted(by: { $0.lastAttemptAt > $1.lastAttemptAt })
+        )
+    }
+
+    internal nonisolated static func generationScheduleSignature(
+        deliveryTimes: [DailyPulseDeliveryTime],
+        modelIdentifier: String
+    ) -> String {
+        let schedule = DailyPulseDeliveryCoordinator
+            .groupedCardDeliveryTimes(deliveryTimes)
+            .flatMap { $0 }
+            .map { "\($0.id.uuidString)@\($0.totalMinutes)" }
+            .joined(separator: "|")
+        return "\(modelIdentifier)|\(schedule)"
+    }
+
+    internal nonisolated static func resumableCheckpoint(
+        from checkpoints: [DailyPulseGenerationCheckpoint],
+        dayKey: String,
+        scheduleSignature: String
+    ) -> DailyPulseGenerationCheckpoint? {
+        checkpoints.first {
+            $0.dayKey == dayKey && $0.scheduleSignature == scheduleSignature
+        }
+    }
+
+    internal nonisolated static func retryDelay(consecutiveFailureCount: Int) -> TimeInterval {
+        let exponent = min(max(consecutiveFailureCount - 1, 0), 5)
+        let baseDelay: TimeInterval = 15 * 60
+        let maximumDelay: TimeInterval = 6 * 60 * 60
+        return min(baseDelay * pow(2, Double(exponent)), maximumDelay)
+    }
+
+    internal nonisolated static func failedGenerationAttempt(
+        dayKey: String,
+        previousAttempt: DailyPulseGenerationAttempt?,
+        referenceDate: Date
+    ) -> DailyPulseGenerationAttempt {
+        let failureCount = max(0, previousAttempt?.consecutiveFailureCount ?? 0) + 1
+        return DailyPulseGenerationAttempt(
+            dayKey: dayKey,
+            lastAttemptAt: referenceDate,
+            retryAfter: referenceDate.addingTimeInterval(retryDelay(consecutiveFailureCount: failureCount)),
+            consecutiveFailureCount: failureCount
+        )
+    }
+
+    internal nonisolated static func shouldAttemptGeneration(
+        trigger: DailyPulseTrigger,
+        attempt: DailyPulseGenerationAttempt?,
+        referenceDate: Date
+    ) -> Bool {
+        guard trigger != .manual else { return true }
+        guard let attempt else { return true }
+        return referenceDate >= attempt.retryAfter
+    }
+
+    internal nonisolated static func shouldGenerateOnCurrentDevice(
+        trigger: DailyPulseTrigger,
+        isWatchOS: Bool,
+        syncEnabled: Bool,
+        companionReachable: Bool
+    ) -> Bool {
+        guard trigger != .manual else { return true }
+        return !(isWatchOS && syncEnabled && companionReachable)
+    }
+
     internal nonisolated static func partitionedSessionExcerpts(
         _ excerpts: [DailyPulseSessionExcerpt],
         cardCounts: [Int],
