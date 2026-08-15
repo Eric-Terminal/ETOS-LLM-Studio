@@ -34,9 +34,8 @@ extension View {
         let codeBorderColor = isOutgoing
             ? Color.white.opacity(0.24)
             : Color.primary.opacity(0.16)
-        let codeHeaderTextColor = isOutgoing
-            ? Color.white.opacity(0.9)
-            : Color.secondary
+        // 标题与操作按钮沿用正文色，避免自定义气泡颜色下固定白色失去对比度。
+        let codeHeaderTextColor = textColor
         let bodyFontName = FontLibrary.resolvePostScriptName(for: .body, sampleText: sampleText)
         let emphasisFontName = FontLibrary.resolvePostScriptName(for: .emphasis, sampleText: sampleText)
         let strongFontName = FontLibrary.resolvePostScriptName(for: .strong, sampleText: sampleText)
