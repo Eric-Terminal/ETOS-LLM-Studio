@@ -5964,7 +5964,7 @@
 "复制后的目标路径，必须与源路径使用相同后端。" = "The copied target path must use the same backend as the source path.";
 "复制命令" = "copy command";
 "外部挂载" = "external mount";
-"外部目录使用系统授权书签；只读权限会在 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。" = "External directories use system authorization bookmarks; read-only permissions are enforced at the Linux mount level. iCloud Drive is always mapped to /mnt/icloud.";
+"外部目录使用系统授权书签；只读权限会在存储管理和 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。" = "External directories use system authorization bookmarks; read-only permissions are enforced in Storage Management and at the Linux mount level. iCloud Drive is always mapped to /mnt/icloud.";
 "存储" = "storage";
 "安全策略" = "security policy";
 "安装 Bash" = "Install Bash";
@@ -6738,3 +6738,9 @@
 "胶囊" = "Capsule";
 "卡片" = "Card";
 "胶囊样式保持紧凑；卡片样式会将附件、请求控制、语音和发送操作收进同一输入区域，并随文本自然增高。" = "Capsule stays compact. Card keeps attachments, request controls, voice input, and send actions in one composer that grows naturally with your text.";
+"外部文件夹" = "External Folders";
+"挂载记录与本地 Linux 共用；选择只读时，存储管理和 Linux 都不会提供删除或写入操作。" = "Mounts are shared with Local Linux. In read-only mode, neither Storage Management nor Linux can delete or write files.";
+"移除只会撤销 ETOS 对此文件夹的入口，不会删除文件夹中的内容。正在使用它的 Linux 任务需要先停止。" = "Removing the mount only revokes ETOS access to this folder; it does not delete its contents. Stop any Linux tasks using it first.";
+"打开文件夹失败" = "Couldn't Open Folder";
+"此文件夹以只读方式挂载；可以浏览和预览内容，不能从这里删除文件。" = "This folder is mounted read-only. You can browse and preview its contents, but you cannot delete files here.";
+"此文件夹同时用于存储管理和本地 Linux；删除操作会直接修改原文件。" = "This folder is shared by Storage Management and Local Linux. Deleting an item modifies the original files.";

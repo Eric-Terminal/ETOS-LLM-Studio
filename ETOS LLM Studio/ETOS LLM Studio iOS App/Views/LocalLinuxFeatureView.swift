@@ -787,7 +787,7 @@ private struct LocalLinuxMountsView: View {
                     }
                 }
             } footer: {
-                Text(NSLocalizedString("外部目录使用系统授权书签；只读权限会在 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。", comment: "Linux mount behavior footer"))
+                Text(NSLocalizedString("外部目录使用系统授权书签；只读权限会在存储管理和 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。", comment: "Linux mount behavior footer"))
             }
 
             Section(NSLocalizedString("外部挂载", comment: "External Linux mounts section")) {

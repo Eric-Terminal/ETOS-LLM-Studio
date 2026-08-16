@@ -36,6 +36,9 @@ struct StorageManagementView: View {
             
             // 清理工具
             cleanupToolsSection
+
+            // 与本地 Linux 共用授权的外部文件夹
+            ExternalStorageMountSection()
         }
         .navigationTitle(NSLocalizedString("存储管理", comment: ""))
         .refreshable {

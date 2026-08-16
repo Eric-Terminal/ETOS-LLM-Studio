@@ -61,11 +61,11 @@ public final class LocalLinuxMountLease: @unchecked Sendable {
     }
 }
 
-private final class LocalLinuxSecurityScopedResource: @unchecked Sendable {
-    let url: URL
+public final class LocalLinuxDirectoryAccess: @unchecked Sendable {
+    public let url: URL
     private let shouldStop: Bool
 
-    init(url: URL, shouldStop: Bool) {
+    fileprivate init(url: URL, shouldStop: Bool) {
         self.url = url
         self.shouldStop = shouldStop
     }
@@ -89,7 +89,7 @@ public actor LocalLinuxMountManager {
 
     private let storage: LocalLinuxStorageManager
     private let bridge: iSHAppleBridgeAdapter
-    private var scopedResources: [UUID: LocalLinuxSecurityScopedResource] = [:]
+    private var scopedResources: [UUID: LocalLinuxDirectoryAccess] = [:]
     private struct TransientSkillMount {
         let id: UUID
         let canonicalHostPath: String
@@ -107,6 +107,16 @@ public actor LocalLinuxMountManager {
 
     public func records() -> [LocalLinuxMountRecord] {
         Persistence.loadLocalLinuxMounts()
+    }
+
+    /// 为宿主界面保留一次安全作用域访问，调用方应在文件浏览界面存续期间持有返回值。
+    public func accessExternalDirectory(id: UUID) throws -> LocalLinuxDirectoryAccess {
+        guard let record = records().first(where: { $0.id == id }) else {
+            throw LocalLinuxRuntimeError.invalidPath(id.uuidString)
+        }
+        let resource = try prepareExternalDirectory(record)
+        persistAuthorizationState(record, state: .available)
+        return resource
     }
 
     public func addExternalDirectory(
@@ -480,7 +490,30 @@ public actor LocalLinuxMountManager {
 
     private func prepareExternalMount(
         _ record: LocalLinuxMountRecord
-    ) throws -> (mount: LocalLinuxBridgeMount, descriptor: Int32, resource: LocalLinuxSecurityScopedResource) {
+    ) throws -> (mount: LocalLinuxBridgeMount, descriptor: Int32, resource: LocalLinuxDirectoryAccess) {
+        let resource = try prepareExternalDirectory(record)
+        let descriptor = openDirectory(resource.url)
+        guard descriptor >= 0 else {
+            persistAuthorizationState(record, state: .unavailable)
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("无法打开已授权目录。", comment: "Open authorized Linux directory failure")
+            )
+        }
+        return (
+            LocalLinuxBridgeMount(
+                id: record.id,
+                hostDirectoryDescriptor: descriptor,
+                guestDirectory: record.guestPath,
+                access: record.access
+            ),
+            descriptor,
+            resource
+        )
+    }
+
+    private func prepareExternalDirectory(
+        _ record: LocalLinuxMountRecord
+    ) throws -> LocalLinuxDirectoryAccess {
         guard let bookmark = record.bookmark else {
             persistAuthorizationState(record, state: .needsReauthorization)
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -501,7 +534,7 @@ public actor LocalLinuxMountManager {
             )
         }
         let shouldStop = url.startAccessingSecurityScopedResource()
-        let resource = LocalLinuxSecurityScopedResource(url: url, shouldStop: shouldStop)
+        let resource = LocalLinuxDirectoryAccess(url: url, shouldStop: shouldStop)
         persistAuthorizationState(record, state: .materializing)
         do {
             try materializeDirectory(url)
@@ -514,23 +547,7 @@ public actor LocalLinuxMountManager {
                 )
             )
         }
-        let descriptor = openDirectory(url)
-        guard descriptor >= 0 else {
-            persistAuthorizationState(record, state: .unavailable)
-            throw LocalLinuxRuntimeError.runtimeUnavailable(
-                NSLocalizedString("无法打开已授权目录。", comment: "Open authorized Linux directory failure")
-            )
-        }
-        return (
-            LocalLinuxBridgeMount(
-                id: record.id,
-                hostDirectoryDescriptor: descriptor,
-                guestDirectory: record.guestPath,
-                access: record.access
-            ),
-            descriptor,
-            resource
-        )
+        return resource
     }
 
     private func materializeDirectory(_ url: URL) throws {

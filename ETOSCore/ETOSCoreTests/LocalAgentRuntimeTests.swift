@@ -523,6 +523,37 @@ struct LocalAgentRuntimeTests {
         }
     }
 
+    @Test("外部目录授权可在不启动 Linux 时用于文件浏览")
+    func externalDirectoryAccessDoesNotRequireLinuxRuntime() async throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("note.txt")
+        try "external".write(to: file, atomically: true, encoding: .utf8)
+
+        let mountID = UUID()
+        let bookmark = try directory.bookmarkData(
+            options: .minimalBookmark,
+            includingResourceValuesForKeys: [.isDirectoryKey],
+            relativeTo: nil
+        )
+        let record = LocalLinuxMountRecord(
+            id: mountID,
+            displayName: "External",
+            bookmark: bookmark,
+            access: .readOnly,
+            guestPath: "/mnt/etos/\(mountID.uuidString.lowercased())",
+            authorizationState: .needsReauthorization
+        )
+        #expect(Persistence.saveLocalLinuxMount(record))
+        defer { _ = Persistence.deleteLocalLinuxMount(id: mountID) }
+
+        let access = try await LocalLinuxMountManager().accessExternalDirectory(id: mountID)
+
+        #expect(access.url.standardizedFileURL == directory.standardizedFileURL)
+        #expect(try String(contentsOf: access.url.appendingPathComponent("note.txt"), encoding: .utf8) == "external")
+        #expect(Persistence.loadLocalLinuxMounts().first(where: { $0.id == mountID })?.authorizationState == .available)
+    }
+
     @Test("RootFS 版本标识与 iSH 安装收据保持一致")
     func rootFSVersionUsesInstallationReceiptDigest() {
         let metadata = LocalLinuxSeedMetadata(
