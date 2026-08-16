@@ -131,6 +131,71 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink(destination: SessionListView(
+                        sessions: $viewModel.chatSessions,
+                        folders: $viewModel.sessionFolders,
+                        tags: viewModel.sessionTags,
+                        currentSession: $viewModel.currentSession,
+                        runningSessionIDs: viewModel.runningSessionIDs,
+                        conversationRuntimeStates: viewModel.conversationRuntimeStates,
+                        deleteSessionAction: { session in
+                            viewModel.deleteSessions([session])
+                        },
+                        branchAction: { session, copyMessages in
+                            viewModel.branchSession(from: session, copyMessages: copyMessages)
+                        },
+                        deleteLastMessageAction: { session in
+                            viewModel.deleteLastMessage(for: session)
+                        },
+                        sendSessionToCompanionAction: { session in
+                            WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
+                        },
+                        onSessionSelected: { selectedSession, messageOrdinal in
+                            if let messageOrdinal {
+                                viewModel.requestMessageJump(
+                                    sessionID: selectedSession.id,
+                                    messageOrdinal: messageOrdinal
+                                )
+                            } else {
+                                viewModel.clearPendingMessageJumpTarget()
+                            }
+                            ChatService.shared.setCurrentSession(selectedSession)
+                            dismiss()
+                        },
+                        updateSessionAction: { session in
+                            viewModel.updateSession(session)
+                        },
+                        createFolderAction: { name, parentID in
+                            viewModel.createSessionFolder(name: name, parentID: parentID)
+                        },
+                        renameFolderAction: { folder, newName in
+                            viewModel.renameSessionFolder(folder, newName: newName)
+                        },
+                        deleteFolderAction: { folder in
+                            viewModel.deleteSessionFolder(folder)
+                        },
+                        moveSessionToFolderAction: { session, folderID in
+                            viewModel.moveSession(session, toFolderID: folderID)
+                        },
+                        moveFolderToFolderAction: { folder, parentID in
+                            viewModel.moveSessionFolder(folder, toParentID: parentID)
+                        },
+                        createTagAction: { name, color in
+                            viewModel.createSessionTag(name: name, color: color)
+                        },
+                        updateTagAction: { tag, name, color in
+                            viewModel.updateSessionTag(tag, name: name, color: color)
+                        },
+                        deleteTagAction: { tag in
+                            viewModel.deleteSessionTag(tag)
+                        },
+                        setSessionTagsAction: { session, tagIDs in
+                            viewModel.setSessionTags(for: session, tagIDs: tagIDs)
+                        }
+                    )) {
+                        settingsNavigationLabel("历史会话管理", icon: .sessionHistory)
+                    }
+
                     NavigationLink(destination: ProviderListView().environmentObject(viewModel)) {
                         settingsNavigationLabel("模型管理", icon: .providerManagement)
                     }
@@ -450,6 +515,11 @@ extension SettingsListIcon {
     static let newConversation = SettingsListIcon(systemName: "plus", backgroundColor: .green, legacySystemName: "plus.message")
     static let slashCommands = SettingsListIcon(systemName: "terminal", backgroundColor: .indigo)
     static let backgroundGeneration = SettingsListIcon(systemName: "location", backgroundColor: .green)
+    static let sessionHistory = SettingsListIcon(
+        systemName: "clock",
+        backgroundColor: .indigo,
+        legacySystemName: "list.bullet.rectangle"
+    )
     static let providerManagement = SettingsListIcon(
         systemName: "cube",
         backgroundColor: .orange,
