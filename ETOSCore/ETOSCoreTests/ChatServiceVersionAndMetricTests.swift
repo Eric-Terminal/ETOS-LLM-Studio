@@ -436,8 +436,8 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("批量删除只移除明确选中的消息")
-    func testDeleteSelectedMessagesDoesNotExpandDeletionScope() async {
+    @Test("批量删除会清理所选气泡内联的工具结果消息")
+    func testDeleteSelectedMessagesIncludesInlineToolResults() async {
         await cleanup()
 
         guard let sessionID = chatService.currentSessionSubject.value?.id else {
@@ -467,10 +467,7 @@ extension ChatServiceTests {
 
         chatService.deleteMessages(withIDs: [assistantMessage.id, nextUserMessage.id])
 
-        #expect(chatService.messagesForSessionSubject.value.map(\.id) == [
-            userMessage.id,
-            toolMessage.id
-        ])
+        #expect(chatService.messagesForSessionSubject.value.map(\.id) == [userMessage.id])
 
         await cleanup()
     }

@@ -544,12 +544,16 @@ extension ChatService {
         logger.info("已删除消息: \(targetMessage.id.uuidString)")
     }
 
-    /// 仅删除明确选中的消息，不扩展到相邻工具结果或同组回复版本。
+    /// 删除明确选中的消息，并清理已经合并进所选气泡的隐藏工具结果记录。
     public func deleteMessages(withIDs messageIDs: Set<UUID>) {
         guard !messageIDs.isEmpty,
               let currentSession = currentSessionSubject.value else { return }
         var messages = messagesForSessionSubject.value
-        let deletedMessages = messages.filter { messageIDs.contains($0.id) }
+        let resolvedMessageIDs = BatchSelectionSupport.deletionIDs(
+            selectedIDs: messageIDs,
+            in: messages
+        )
+        let deletedMessages = messages.filter { resolvedMessageIDs.contains($0.id) }
         guard !deletedMessages.isEmpty else { return }
 
         for deletedMessage in deletedMessages {
@@ -557,9 +561,9 @@ extension ChatService {
         }
         reanchorResponseGroupsAfterDeletingUsers(
             in: &messages,
-            deletingMessageIDs: messageIDs
+            deletingMessageIDs: resolvedMessageIDs
         )
-        messages.removeAll { messageIDs.contains($0.id) }
+        messages.removeAll { resolvedMessageIDs.contains($0.id) }
         repairSelectedResponseAttempts(in: &messages, affectedBy: deletedMessages)
 
         publishMessages(messages)
