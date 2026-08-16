@@ -86,6 +86,16 @@ public actor LocalLinuxMountManager {
     public static let workspaceMountGuestPath = "/mnt/workspaces"
     public static let sharedMountGuestPath = "/mnt/shared"
     public static let iCloudGuestPath = "/mnt/icloud"
+    public static let appMountsDirectoryName = "ETOSMounts"
+    public static let appMountsDisplayPath = "Documents/ETOSMounts"
+
+    public static func appMountDisplayPath(id: UUID) -> String {
+        "\(appMountsDisplayPath)/\(id.uuidString.lowercased())"
+    }
+
+    public static func appMountURI(id: UUID) -> String {
+        "app://\(appMountsDirectoryName)/\(id.uuidString.lowercased())"
+    }
 
     private let storage: LocalLinuxStorageManager
     private let bridge: iSHAppleBridgeAdapter

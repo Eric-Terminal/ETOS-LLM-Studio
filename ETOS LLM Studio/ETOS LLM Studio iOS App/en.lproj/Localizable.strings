@@ -6739,8 +6739,9 @@
 "卡片" = "Card";
 "胶囊样式保持紧凑；卡片样式会将附件、请求控制、语音和发送操作收进同一输入区域，并随文本自然增高。" = "Capsule stays compact. Card keeps attachments, request controls, voice input, and send actions in one composer that grows naturally with your text.";
 "外部文件夹" = "External Folders";
-"挂载记录与本地 Linux 共用；选择只读时，存储管理和 Linux 都不会提供删除或写入操作。" = "Mounts are shared with Local Linux. In read-only mode, neither Storage Management nor Linux can delete or write files.";
+"挂载记录与本地 Linux 共用；AI 无需启动 Linux 即可通过 app://ETOSMounts/<挂载 ID> 访问。选择只读时，存储管理、AI 文件工具和 Linux 都不会提供删除或写入操作。" = "Mounts are shared with Local Linux. AI can access them through app://ETOSMounts/<mount ID> without starting Linux. In read-only mode, Storage Management, AI file tools, and Linux cannot delete or write files.";
 "移除只会撤销 ETOS 对此文件夹的入口，不会删除文件夹中的内容。正在使用它的 Linux 任务需要先停止。" = "Removing the mount only revokes ETOS access to this folder; it does not delete its contents. Stop any Linux tasks using it first.";
 "打开文件夹失败" = "Couldn't Open Folder";
 "此文件夹以只读方式挂载；可以浏览和预览内容，不能从这里删除文件。" = "This folder is mounted read-only. You can browse and preview its contents, but you cannot delete files here.";
 "此文件夹同时用于存储管理和本地 Linux；删除操作会直接修改原文件。" = "This folder is shared by Storage Management and Local Linux. Deleting an item modifies the original files.";
+"此外部文件夹为只读挂载，不能修改内容。" = "This external folder is mounted read-only and cannot be modified.";

@@ -6649,3 +6649,4 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "自动管理历史消息" = "Gestionar historial automáticamente";
 "手动加载轮次" = "Turnos de carga manual";
 "接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Carga automáticamente mensajes cercanos en los extremos de una conversación y libera las burbujas complejas alejadas de la posición de lectura. Al desactivarlo, elige una cantidad manual; 0 muestra todo el historial.";
+"此外部文件夹为只读挂载，不能修改内容。" = "Esta carpeta externa está montada como solo lectura y no se puede modificar.";

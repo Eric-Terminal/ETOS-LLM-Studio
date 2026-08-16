@@ -7,12 +7,33 @@
 import Foundation
 
 extension SandboxFileToolSupport {
+    struct FileSpace: Sendable {
+        let rootDirectory: URL
+        let displayRoot: String
+        let retainedAccess: LocalLinuxDirectoryAccess?
+    }
+
     struct SandboxUndoContext: Sendable {
         let runID: UUID
         let mutationID: UUID
     }
 
+    @TaskLocal static var fileSpace: FileSpace?
     @TaskLocal internal static var undoContext: SandboxUndoContext?
+
+    static var activeRootDirectory: URL {
+        fileSpace?.rootDirectory ?? StorageUtility.documentsDirectory
+    }
+
+    static func activeDisplayPath(relativePath: String, allowRoot: Bool) throws -> String {
+        let rootDirectory = activeRootDirectory
+        let url = try resolveURL(
+            relativePath: relativePath,
+            rootDirectory: rootDirectory,
+            allowRoot: allowRoot
+        )
+        return normalizedDisplayPath(for: url, rootDirectory: rootDirectory)
+    }
 
     struct SandboxUndoEntry {
         let rootPath: String
@@ -20,6 +41,8 @@ extension SandboxFileToolSupport {
         let operation: String
         let recordedAt: Date
         let rollbackURLs: [URL]
+        // 外部目录的安全作用域必须覆盖撤销入口的整个存续期。
+        let retainedAccess: LocalLinuxDirectoryAccess?
         let undo: () throws -> Void
         let discard: () -> Void
     }
@@ -35,9 +58,9 @@ extension SandboxFileToolSupport {
     private static let maxUndoEntries = 64
 
     public static func undoLastMutation(
-        rootDirectory: URL = StorageUtility.documentsDirectory
+        rootDirectory: URL? = nil
     ) throws -> SandboxFileUndoResult {
-        let rootPath = rootDirectory.standardizedFileURL.path
+        let rootPath = rootDirectory?.standardizedFileURL.path
         guard let reserved = reserveUndoEntry(for: rootPath, context: nil) else {
             throw SandboxFileToolError.noUndoHistory
         }
@@ -591,14 +614,17 @@ extension SandboxFileToolSupport {
     ) -> String {
         let rootPath = rootDirectory.standardizedFileURL.path
         let targetPath = url.standardizedFileURL.path
+        let displayRoot = fileSpace?.rootDirectory.standardizedFileURL.path == rootPath
+            ? fileSpace?.displayRoot ?? "Documents"
+            : "Documents"
 
         if targetPath == rootPath {
-            return "Documents"
+            return displayRoot
         }
 
         let relative = String(targetPath.dropFirst(rootPath.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return relative.isEmpty ? "Documents" : "Documents/\(relative)"
+        return relative.isEmpty ? displayRoot : "\(displayRoot)/\(relative)"
     }
 
     internal static func pushUndoEntry(
@@ -614,6 +640,7 @@ extension SandboxFileToolSupport {
             operation: operation,
             recordedAt: Date(),
             rollbackURLs: rollbackURLs,
+            retainedAccess: fileSpace?.retainedAccess,
             undo: undo,
             discard: discard
         )
@@ -632,14 +659,15 @@ extension SandboxFileToolSupport {
     }
 
     private static func reserveUndoEntry(
-        for rootPath: String,
+        for rootPath: String?,
         context: SandboxUndoContext?
     ) -> (entry: SandboxUndoEntry, index: Int)? {
         undoLock.lock()
         defer { undoLock.unlock() }
-        guard let index = undoStack.lastIndex(where: {
-            $0.rootPath == rootPath && $0.context?.runID == context?.runID &&
-                $0.context?.mutationID == context?.mutationID
+        guard let index = undoStack.lastIndex(where: { entry in
+            (rootPath.map { $0 == entry.rootPath } ?? true) &&
+                entry.context?.runID == context?.runID &&
+                entry.context?.mutationID == context?.mutationID
         }) else {
             return nil
         }

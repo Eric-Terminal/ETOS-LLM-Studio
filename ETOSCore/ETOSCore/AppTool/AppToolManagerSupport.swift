@@ -47,11 +47,14 @@ extension AppToolManager {
         _ operation: @escaping () throws -> T
     ) async throws -> T {
         let undoContext = SandboxFileToolSupport.undoContext
+        let fileSpace = SandboxFileToolSupport.fileSpace
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let result = try SandboxFileToolSupport.$undoContext.withValue(undoContext) {
-                        try operation()
+                    let result = try SandboxFileToolSupport.$fileSpace.withValue(fileSpace) {
+                        try SandboxFileToolSupport.$undoContext.withValue(undoContext) {
+                            try operation()
+                        }
                     }
                     continuation.resume(returning: result)
                 } catch {

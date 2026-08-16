@@ -18,10 +18,16 @@ extension AppToolManager {
         let args = argsData.flatMap { try? JSONDecoder().decode(ListDirectoryArgs.self, from: $0) }
         let relativePath = args?.path ?? ""
         let items = try await Self.runSandboxFileOperationOffMainThread {
-            try SandboxFileToolSupport.listDirectory(relativePath: relativePath)
+            try SandboxFileToolSupport.listDirectory(
+                relativePath: relativePath,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
+            )
         }
         let payload: [String: Any] = [
-            "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
+            "path": try SandboxFileToolSupport.activeDisplayPath(
+                relativePath: relativePath,
+                allowRoot: true
+            ),
             "items": items.map { item in
                 [
                     "path": item.path,
@@ -48,10 +54,16 @@ extension AppToolManager {
         }
 
         let content = try await Self.runSandboxFileOperationOffMainThread {
-            try SandboxFileToolSupport.readTextFile(relativePath: args.path)
+            try SandboxFileToolSupport.readTextFile(
+                relativePath: args.path,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
+            )
         }
         let payload: [String: Any] = [
-            "path": args.path,
+            "path": try SandboxFileToolSupport.activeDisplayPath(
+                relativePath: args.path,
+                allowRoot: false
+            ),
             "characterCount": content.count,
             "content": content
         ]
@@ -76,7 +88,8 @@ extension AppToolManager {
             try SandboxFileToolSupport.writeTextFile(
                 relativePath: args.path,
                 content: args.content,
-                createIntermediateDirectories: args.create_parent_directories ?? true
+                createIntermediateDirectories: args.create_parent_directories ?? true,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.path])
@@ -108,11 +121,15 @@ extension AppToolManager {
                 contentQuery: args?.content_query,
                 maxResults: args?.max_results ?? 20,
                 includeDirectories: args?.include_directories ?? false,
-                caseSensitive: args?.case_sensitive ?? false
+                caseSensitive: args?.case_sensitive ?? false,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         let payload: [String: Any] = [
-            "path": relativePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Documents" : relativePath,
+            "path": try SandboxFileToolSupport.activeDisplayPath(
+                relativePath: relativePath,
+                allowRoot: true
+            ),
             "count": results.count,
             "items": results.map { result in
                 [
@@ -151,7 +168,8 @@ extension AppToolManager {
                 startLine: args.start_line ?? 1,
                 maxLines: args.max_lines ?? 200,
                 byteOffset: args.byte_offset,
-                maxBytes: args.max_bytes ?? 262_144
+                maxBytes: args.max_bytes ?? 262_144,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         let payload: [String: Any] = [
@@ -188,7 +206,8 @@ extension AppToolManager {
                 from: args.source_path,
                 to: args.destination_path,
                 overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
+                createIntermediateDirectories: args.create_parent_directories ?? true,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         refreshCurrentSessionMessagesIfNeeded(
@@ -224,7 +243,8 @@ extension AppToolManager {
                 from: args.source_path,
                 to: args.destination_path,
                 overwrite: args.overwrite ?? false,
-                createIntermediateDirectories: args.create_parent_directories ?? true
+                createIntermediateDirectories: args.create_parent_directories ?? true,
+                rootDirectory: SandboxFileToolSupport.activeRootDirectory
             )
         }
         refreshCurrentSessionMessagesIfNeeded(mutatedPaths: [result.destinationPath])

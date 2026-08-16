@@ -523,7 +523,7 @@ struct LocalAgentRuntimeTests {
         }
     }
 
-    @Test("外部目录授权可在不启动 Linux 时用于文件浏览")
+    @Test("外部目录无需启动 Linux 即可通过 App 文件工具访问")
     func externalDirectoryAccessDoesNotRequireLinuxRuntime() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -547,11 +547,52 @@ struct LocalAgentRuntimeTests {
         #expect(Persistence.saveLocalLinuxMount(record))
         defer { _ = Persistence.deleteLocalLinuxMount(id: mountID) }
 
-        let access = try await LocalLinuxMountManager().accessExternalDirectory(id: mountID)
-
-        #expect(access.url.standardizedFileURL == directory.standardizedFileURL)
-        #expect(try String(contentsOf: access.url.appendingPathComponent("note.txt"), encoding: .utf8) == "external")
+        do {
+            let access = try await LocalLinuxMountManager().accessExternalDirectory(id: mountID)
+            #expect(access.url.standardizedFileURL == directory.standardizedFileURL)
+            #expect(try String(contentsOf: access.url.appendingPathComponent("note.txt"), encoding: .utf8) == "external")
+        }
         #expect(Persistence.loadLocalLinuxMounts().first(where: { $0.id == mountID })?.authorizationState == .available)
+
+        let executor = LocalAgentFileToolExecutor()
+        let documents = try await executor.execute(
+            toolName: AppToolKind.listSandboxDirectory.toolName,
+            argumentsJSON: #"{"path":"Documents"}"#
+        )
+        #expect(documents.contains(LocalLinuxMountManager.appMountsDisplayPath))
+
+        let mounts = try await executor.execute(
+            toolName: AppToolKind.listSandboxDirectory.toolName,
+            argumentsJSON: #"{"path":"Documents/ETOSMounts"}"#
+        )
+        #expect(mounts.contains(LocalLinuxMountManager.appMountURI(id: mountID)))
+
+        let read = try await executor.execute(
+            toolName: AppToolKind.readSandboxFile.toolName,
+            argumentsJSON: "{\"path\":\"\(LocalLinuxMountManager.appMountURI(id: mountID))/note.txt\"}"
+        )
+        #expect(read.contains("external"))
+        #expect(read.contains("\(LocalLinuxMountManager.appMountDisplayPath(id: mountID))/note.txt"))
+
+        await #expect(throws: LocalLinuxRuntimeError.self) {
+            try await executor.execute(
+                toolName: AppToolKind.writeSandboxFile.toolName,
+                argumentsJSON: "{\"path\":\"\(LocalLinuxMountManager.appMountURI(id: mountID))/note.txt\",\"content\":\"changed\"}"
+            )
+        }
+        #expect(try String(contentsOf: file, encoding: .utf8) == "external")
+
+        var writableRecord = record
+        writableRecord.access = .readWrite
+        writableRecord.authorizationState = .available
+        #expect(Persistence.saveLocalLinuxMount(writableRecord))
+        _ = try await executor.execute(
+            toolName: AppToolKind.writeSandboxFile.toolName,
+            argumentsJSON: "{\"path\":\"\(LocalLinuxMountManager.appMountURI(id: mountID))/note.txt\",\"content\":\"changed\"}"
+        )
+        #expect(try String(contentsOf: file, encoding: .utf8) == "changed")
+        _ = try SandboxFileToolSupport.undoLastMutation(rootDirectory: directory)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "external")
     }
 
     @Test("RootFS 版本标识与 iSH 安装收据保持一致")

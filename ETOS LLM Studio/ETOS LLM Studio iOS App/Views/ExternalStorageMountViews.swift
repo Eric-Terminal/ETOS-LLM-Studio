@@ -67,7 +67,7 @@ struct ExternalStorageMountSection: View {
         } header: {
             Text(NSLocalizedString("外部文件夹", comment: "External storage folders section"))
         } footer: {
-            Text(NSLocalizedString("挂载记录与本地 Linux 共用；选择只读时，存储管理和 Linux 都不会提供删除或写入操作。", comment: "External storage mounts footer"))
+            Text(NSLocalizedString("挂载记录与本地 Linux 共用；AI 无需启动 Linux 即可通过 app://ETOSMounts/<挂载 ID> 访问。选择只读时，存储管理、AI 文件工具和 Linux 都不会提供删除或写入操作。", comment: "External storage mounts footer"))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -171,6 +171,9 @@ private struct ExternalStorageMountRow: View {
                 Text("\(record.access.displayName) · \(record.authorizationState.displayName)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text(LocalLinuxMountManager.appMountURI(id: record.id))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.tertiary)
             }
         }
     }

@@ -3,7 +3,8 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 复用现有文件工具名称，并按 URI 路由到 Documents、Linux guest 或公开挂载。
+// 复用现有文件工具名称，并按 URI 路由到 Documents、外部目录、Linux guest 或公开挂载。
+// 外部目录通过 Documents/ETOSMounts 虚拟命名空间访问，不要求启动 Linux。
 // Linux 路径始终经过 iSH guest API，不能直接修改 fakefs 的宿主 data 目录。
 // ============================================================================
 
@@ -14,12 +15,14 @@ public actor LocalAgentFileToolExecutor {
 
     enum Backend: Equatable {
         case app
+        case appMountRoot
+        case appMount(UUID)
         case linux
         case mount(UUID)
 
         var requiresLinux: Bool {
             switch self {
-            case .app: return false
+            case .app, .appMountRoot, .appMount: return false
             case .linux, .mount: return true
             }
         }
@@ -45,7 +48,7 @@ public actor LocalAgentFileToolExecutor {
     }
 
     private enum MutationPayload: Sendable {
-        case app(mutationID: UUID)
+        case app(mutationID: UUID, rootDirectory: URL)
         case guest(preparation: LocalAgentGuestUndoPreparation, mounts: [MountedTarget])
     }
 
@@ -125,12 +128,33 @@ public actor LocalAgentFileToolExecutor {
             return try await executeUndo(context: trustedContext)
         }
 
+        if routedPaths.contains(where: { $0.1.backend == .appMountRoot }) {
+            return try listAppMounts(toolName: toolName, routedPaths: routedPaths)
+        }
+
+        if routedPaths.contains(where: {
+            if case .appMount = $0.1.backend { return true }
+            return false
+        }) {
+            return try await executeAppMountTool(
+                toolName: toolName,
+                arguments: arguments,
+                routedPaths: routedPaths,
+                trustedContext: trustedContext
+            )
+        }
+
         guard routedPaths.contains(where: { $0.1.backend.requiresLinux }) else {
             for (key, routed) in routedPaths where routed.backend == .app {
                 arguments[key] = routed.path
             }
             guard isMutatingFileTool(toolName), let trustedContext else {
-                return try await executeAppTool(toolName: toolName, arguments: arguments)
+                let result = try await executeAppTool(toolName: toolName, arguments: arguments)
+                return try addingAppMountRootIfNeeded(
+                    to: result,
+                    toolName: toolName,
+                    arguments: arguments
+                )
             }
             let mutationID = UUID()
             let result = try await executeAppTool(
@@ -143,7 +167,10 @@ public actor LocalAgentFileToolExecutor {
                     MutationEntry(
                         id: mutationID,
                         operation: toolName,
-                        payload: .app(mutationID: mutationID)
+                        payload: .app(
+                            mutationID: mutationID,
+                            rootDirectory: StorageUtility.documentsDirectory
+                        )
                     ),
                     runID: trustedContext.runID
                 )
@@ -341,6 +368,144 @@ public actor LocalAgentFileToolExecutor {
         }
     }
 
+    private func executeAppMountTool(
+        toolName: String,
+        arguments: [String: Any],
+        routedPaths: [(String, RoutedPath)],
+        trustedContext: TrustedContext?
+    ) async throws -> String {
+        let mountIDs = Set(routedPaths.compactMap { _, routed -> UUID? in
+            guard case .appMount(let id) = routed.backend else { return nil }
+            return id
+        })
+        guard mountIDs.count == 1,
+              let mountID = mountIDs.first,
+              routedPaths.allSatisfy({ _, routed in
+                  routed.backend == .appMount(mountID)
+              }),
+              let record = Persistence.loadLocalLinuxMounts().first(where: { $0.id == mountID }) else {
+            throw LocalLinuxRuntimeError.invalidPath(
+                routedPaths.map(\.1.original).joined(separator: ", ")
+            )
+        }
+        if isMutatingFileTool(toolName), record.access != .readWrite {
+            throw LocalLinuxRuntimeError.runtimeUnavailable(
+                NSLocalizedString("此外部文件夹为只读挂载，不能修改内容。", comment: "Read-only app mount mutation error")
+            )
+        }
+
+        let directoryAccess = try await mountManager.accessExternalDirectory(id: mountID)
+        var rewrittenArguments = arguments
+        for (key, routed) in routedPaths {
+            rewrittenArguments[key] = routed.path
+        }
+        let fileSpace = SandboxFileToolSupport.FileSpace(
+            rootDirectory: directoryAccess.url,
+            displayRoot: LocalLinuxMountManager.appMountDisplayPath(id: mountID),
+            retainedAccess: directoryAccess
+        )
+
+        return try await SandboxFileToolSupport.$fileSpace.withValue(fileSpace) {
+            guard isMutatingFileTool(toolName), let trustedContext else {
+                return try await executeAppTool(
+                    toolName: toolName,
+                    arguments: rewrittenArguments
+                )
+            }
+            let mutationID = UUID()
+            let result = try await executeAppTool(
+                toolName: toolName,
+                arguments: rewrittenArguments,
+                undoContext: .init(runID: trustedContext.runID, mutationID: mutationID)
+            )
+            if SandboxFileToolSupport.hasUndoMutation(id: mutationID, runID: trustedContext.runID) {
+                await commitMutation(
+                    MutationEntry(
+                        id: mutationID,
+                        operation: toolName,
+                        payload: .app(
+                            mutationID: mutationID,
+                            rootDirectory: directoryAccess.url
+                        )
+                    ),
+                    runID: trustedContext.runID
+                )
+            }
+            return result
+        }
+    }
+
+    private func listAppMounts(
+        toolName: String,
+        routedPaths: [(String, RoutedPath)]
+    ) throws -> String {
+        guard toolName == AppToolKind.listSandboxDirectory.toolName,
+              routedPaths.count == 1,
+              routedPaths[0].0 == "path" else {
+            throw LocalLinuxRuntimeError.invalidPath(
+                routedPaths.map(\.1.original).joined(separator: ", ")
+            )
+        }
+        let formatter = ISO8601DateFormatter()
+        let items: [[String: Any]] = Persistence.loadLocalLinuxMounts()
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            .map { record in
+                [
+                    "path": LocalLinuxMountManager.appMountDisplayPath(id: record.id),
+                    "uri": LocalLinuxMountManager.appMountURI(id: record.id),
+                    "name": record.displayName,
+                    "isDirectory": true,
+                    "size": 0,
+                    "modifiedAt": formatter.string(from: record.updatedAt),
+                    "mountID": record.id.uuidString.lowercased(),
+                    "access": record.access.rawValue,
+                    "authorizationState": record.authorizationState.rawValue
+                ]
+            }
+        return try encode([
+            "path": LocalLinuxMountManager.appMountsDisplayPath,
+            "items": items
+        ])
+    }
+
+    private func addingAppMountRootIfNeeded(
+        to result: String,
+        toolName: String,
+        arguments: [String: Any]
+    ) throws -> String {
+        guard toolName == AppToolKind.listSandboxDirectory.toolName,
+              isDocumentsRootPath(arguments["path"] as? String) else {
+            return result
+        }
+        let records = Persistence.loadLocalLinuxMounts()
+        guard !records.isEmpty else { return result }
+
+        var payload = try decode(result)
+        var items = payload["items"] as? [[String: Any]] ?? []
+        guard !items.contains(where: {
+            ($0["path"] as? String) == LocalLinuxMountManager.appMountsDisplayPath
+        }) else { return result }
+        items.append([
+            "path": LocalLinuxMountManager.appMountsDisplayPath,
+            "name": LocalLinuxMountManager.appMountsDirectoryName,
+            "isDirectory": true,
+            "size": 0,
+            "modifiedAt": ISO8601DateFormatter().string(
+                from: records.map(\.updatedAt).max() ?? Date()
+            ),
+            "virtual": true
+        ])
+        payload["items"] = items
+        return try encode(payload)
+    }
+
+    private func isDocumentsRootPath(_ path: String?) -> Bool {
+        let normalized = (path ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return normalized.isEmpty || normalized.caseInsensitiveCompare("Documents") == .orderedSame
+    }
+
     private func executeUndo(context: TrustedContext) async throws -> String {
         guard var entries = mutationsByRunID[context.runID], let entry = entries.popLast() else {
             throw LocalLinuxRuntimeError.runtimeUnavailable(
@@ -356,14 +521,15 @@ public actor LocalAgentFileToolExecutor {
         var shouldRestoreHistory = true
         do {
             switch entry.payload {
-            case .app(let mutationID):
+            case .app(let mutationID, let rootDirectory):
                 guard SandboxFileToolSupport.hasUndoMutation(id: mutationID, runID: context.runID) else {
                     shouldRestoreHistory = false
                     throw SandboxFileToolError.noUndoHistory
                 }
                 let result = try SandboxFileToolSupport.undoMutation(
                     id: mutationID,
-                    runID: context.runID
+                    runID: context.runID,
+                    rootDirectory: rootDirectory
                 )
                 return try encode([
                     "operation": result.operation,
@@ -431,7 +597,7 @@ public actor LocalAgentFileToolExecutor {
 
     private func discardMutation(_ entry: MutationEntry, runID: UUID) async {
         switch entry.payload {
-        case .app(let mutationID):
+        case .app(let mutationID, _):
             SandboxFileToolSupport.discardUndoMutation(id: mutationID, runID: runID)
         case .guest(let preparation, _):
             await guestFileSupport.discard(preparation)
@@ -692,16 +858,43 @@ public actor LocalAgentFileToolExecutor {
         }
         if value.hasPrefix("app://") {
             let relative = String(value.dropFirst("app://".count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            return RoutedPath(backend: .app, original: rawPath, path: relative)
+            return try routeAppPath(relative, original: rawPath)
         }
-        return RoutedPath(backend: .app, original: rawPath, path: rawPath)
+        return try routeAppPath(rawPath, original: rawPath)
+    }
+
+    private func routeAppPath(_ path: String, original: String) throws -> RoutedPath {
+        let normalized = path
+            .replacingOccurrences(of: "\\", with: "/")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let relative: String
+        if normalized == "Documents" {
+            relative = ""
+        } else if normalized.hasPrefix("Documents/") {
+            relative = String(normalized.dropFirst("Documents/".count))
+        } else {
+            relative = normalized
+        }
+
+        let components = relative.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.first.map(String.init) == LocalLinuxMountManager.appMountsDirectoryName else {
+            return RoutedPath(backend: .app, original: original, path: path)
+        }
+        guard components.count > 1 else {
+            return RoutedPath(backend: .appMountRoot, original: original, path: "")
+        }
+        guard let id = UUID(uuidString: String(components[1])) else {
+            throw LocalLinuxRuntimeError.invalidPath(original)
+        }
+        let relativePath = components.dropFirst(2).joined(separator: "/")
+        return RoutedPath(backend: .appMount(id), original: original, path: relativePath)
     }
 
     private func guestPath(for routed: RoutedPath, context: AgentRuntimeContext) throws -> String {
         switch routed.backend {
         case .linux:
             return routed.path
-        case .app:
+        case .app, .appMountRoot, .appMount:
             throw LocalLinuxRuntimeError.invalidPath(routed.original)
         case .mount(let id):
             let base: String

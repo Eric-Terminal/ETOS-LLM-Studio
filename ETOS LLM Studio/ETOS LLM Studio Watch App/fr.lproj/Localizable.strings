@@ -6649,3 +6649,4 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "自动管理历史消息" = "Gérer automatiquement l’historique";
 "手动加载轮次" = "Tours à charger manuellement";
 "接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Charge automatiquement les messages voisins aux extrémités d’une conversation et libère les bulles complexes éloignées de la position de lecture. Une fois désactivé, choisissez une taille de chargement manuel ; 0 affiche tout l’historique.";
+"此外部文件夹为只读挂载，不能修改内容。" = "Ce dossier externe est monté en lecture seule et ne peut pas être modifié.";
