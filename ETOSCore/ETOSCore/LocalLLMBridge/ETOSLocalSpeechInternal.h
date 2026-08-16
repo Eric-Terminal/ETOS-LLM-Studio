@@ -57,6 +57,7 @@ using speech_segment = std::pair<int32_t, int32_t>;
 
 architecture architecture_from_name(const std::string & name);
 std::string architecture_name(const std::string & model_path);
+void validate_lora_adapter(const std::string & adapter_path, const std::string & expected_architecture);
 std::vector<float> compute_fbank(const std::vector<float> & waveform, int32_t & frame_count);
 void add_positional_encoding(std::vector<float> & values, int32_t frame_count, int32_t depth);
 std::vector<speech_segment> speech_segments(

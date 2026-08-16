@@ -242,6 +242,8 @@ final class CloudEmbeddingService: MemoryEmbeddingGenerating {
                 contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                 gpuLayers: overrides.localIntValue(for: "n_gpu_layers") ?? record.effectiveGPULayers,
                 mmprojPath: LocalModelStore.shared.mmprojURL(for: record)?.path,
+                loraPath: LocalModelStore.shared.loraURL(for: record)?.path,
+                loraScale: record.effectiveLoRAScale,
                 flashAttention: overrides.localIntValue(for: "flash_attn")
                     .flatMap { LocalLLMFlashAttentionMode(rawValue: Int32(clamping: $0)) }
                     ?? record.effectiveFlashAttention,

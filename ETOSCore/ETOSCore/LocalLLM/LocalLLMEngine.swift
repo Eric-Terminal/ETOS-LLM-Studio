@@ -12,6 +12,8 @@ import Dispatch
 
 public struct LocalLLMGenerationOptions: Hashable, Sendable {
     public var mmprojPath: String?
+    public var loraPath: String?
+    public var loraScale: Double
     public var kvCacheKey: String?
     public var contextSize: Int
     public var maxOutputTokens: Int
@@ -42,6 +44,8 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
 
     public init(
         mmprojPath: String? = nil,
+        loraPath: String? = nil,
+        loraScale: Double = LocalModelRecord.defaultLoRAScale,
         kvCacheKey: String? = nil,
         contextSize: Int,
         maxOutputTokens: Int,
@@ -71,6 +75,8 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
         toolCallIDScope: String = UUID().uuidString
     ) {
         self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraPath = loraPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraScale = loraScale.clamped(to: -100...100)
         self.kvCacheKey = kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.contextSize = contextSize.clamped(to: 1...1_048_576)
         self.maxOutputTokens = maxOutputTokens.clamped(to: 1...131_072)
@@ -105,6 +111,8 @@ public struct LocalLLMGenerationOptions: Hashable, Sendable {
 
 public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
     public var mmprojPath: String?
+    public var loraPath: String?
+    public var loraScale: Double
     public var contextSize: Int
     public var gpuLayers: Int
     public var flashAttention: LocalLLMFlashAttentionMode
@@ -115,11 +123,15 @@ public struct LocalLLMEmbeddingOptions: Hashable, Sendable {
         contextSize: Int,
         gpuLayers: Int = LocalModelRecord.defaultGPULayers,
         mmprojPath: String? = nil,
+        loraPath: String? = nil,
+        loraScale: Double = LocalModelRecord.defaultLoRAScale,
         flashAttention: LocalLLMFlashAttentionMode = LocalModelRecord.defaultFlashAttention,
         imageMinTokens: Int = LocalModelRecord.defaultImageMinTokens,
         imageMaxTokens: Int = LocalModelRecord.defaultImageMaxTokens
     ) {
         self.mmprojPath = mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraPath = loraPath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraScale = loraScale.clamped(to: -100...100)
         self.contextSize = max(1, contextSize)
         self.gpuLayers = gpuLayers
         self.flashAttention = flashAttention
@@ -853,6 +865,8 @@ private func parseChatResponseJSON(
 
 private struct ETOSLocalLLMGenerationConfig {
     var mmprojPath: UnsafePointer<CChar>?
+    var loraPath: UnsafePointer<CChar>?
+    var loraScale: Float
     var kvCacheKey: UnsafePointer<CChar>?
     var contextSize: Int32
     var maxOutputTokens: Int32
@@ -907,6 +921,7 @@ private struct ETOSLocalLLMGenerationConfig {
 
 private final class PreparedLocalLLMGenerationConfig {
     private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let loraPathPointer: UnsafeMutablePointer<CChar>
     private let kvCacheKeyPointer: UnsafeMutablePointer<CChar>
     private let drySequenceBreakerPointers: [UnsafeMutablePointer<CChar>]
     private let bridgedDrySequenceBreakers: [UnsafePointer<CChar>?]
@@ -925,6 +940,7 @@ private final class PreparedLocalLLMGenerationConfig {
 
     init(_ config: LocalLLMGenerationConfig, mediaAttachments: [LocalLLMMediaAttachment]) throws {
         let mmprojPathPointer = try Self.duplicate(config.mmprojPath)
+        let loraPathPointer = try Self.duplicate(config.loraPath)
         let kvCacheKeyPointer = try Self.duplicate(config.kvCacheKey)
         let drySequenceBreakerPointers = try config.drySequenceBreakers.map(Self.duplicate)
         let grammarPointer = try Self.duplicate(config.grammar)
@@ -936,6 +952,7 @@ private final class PreparedLocalLLMGenerationConfig {
         let mediaIDPointers = try validMediaAttachments.map { try Self.duplicate($0.id) }
 
         self.mmprojPathPointer = mmprojPathPointer
+        self.loraPathPointer = loraPathPointer
         self.kvCacheKeyPointer = kvCacheKeyPointer
         self.drySequenceBreakerPointers = drySequenceBreakerPointers
         self.bridgedDrySequenceBreakers = drySequenceBreakerPointers.map { UnsafePointer($0) }
@@ -952,6 +969,8 @@ private final class PreparedLocalLLMGenerationConfig {
         self.bridgedMediaIDs = mediaIDPointers.map { UnsafePointer($0) }
         self.bridgedConfig = ETOSLocalLLMGenerationConfig(
             mmprojPath: UnsafePointer(mmprojPathPointer),
+            loraPath: UnsafePointer(loraPathPointer),
+            loraScale: config.loraScale,
             kvCacheKey: UnsafePointer(kvCacheKeyPointer),
             contextSize: config.contextSize,
             maxOutputTokens: config.maxOutputTokens,
@@ -1007,6 +1026,7 @@ private final class PreparedLocalLLMGenerationConfig {
 
     deinit {
         free(mmprojPathPointer)
+        free(loraPathPointer)
         free(kvCacheKeyPointer)
         drySequenceBreakerPointers.forEach { free($0) }
         free(grammarPointer)
@@ -1093,6 +1113,8 @@ private final class PreparedLocalLLMGenerationConfig {
 
 private struct ETOSLocalLLMEmbeddingConfig {
     var mmprojPath: UnsafePointer<CChar>?
+    var loraPath: UnsafePointer<CChar>?
+    var loraScale: Float
     var contextSize: Int32
     var gpuLayers: Int32
     var flashAttention: Int32
@@ -1107,6 +1129,7 @@ private struct ETOSLocalLLMEmbeddingConfig {
 
 private final class PreparedLocalLLMEmbeddingConfig {
     private let mmprojPathPointer: UnsafeMutablePointer<CChar>
+    private let loraPathPointer: UnsafeMutablePointer<CChar>
     private let mediaDataPointers: [UnsafeMutablePointer<UInt8>]
     private let bridgedMediaDataPointers: [UnsafePointer<UInt8>?]
     private let mediaDataByteCounts: [Int64]
@@ -1120,10 +1143,12 @@ private final class PreparedLocalLLMEmbeddingConfig {
         mediaEntries: [(attachment: LocalLLMMediaAttachment, inputIndex: Int32)]
     ) throws {
         let mmprojPathPointer = try Self.duplicate(options.mmprojPath ?? "")
+        let loraPathPointer = try Self.duplicate(options.loraPath ?? "")
         let mediaDataPointers = try mediaEntries.map { try Self.duplicate($0.attachment.data) }
         let mediaIDPointers = try mediaEntries.map { try Self.duplicate($0.attachment.id) }
 
         self.mmprojPathPointer = mmprojPathPointer
+        self.loraPathPointer = loraPathPointer
         self.mediaDataPointers = mediaDataPointers
         self.bridgedMediaDataPointers = mediaDataPointers.map { UnsafePointer($0) }
         self.mediaDataByteCounts = mediaEntries.map { Int64($0.attachment.data.count) }
@@ -1132,6 +1157,8 @@ private final class PreparedLocalLLMEmbeddingConfig {
         self.mediaInputIndices = mediaEntries.map(\.inputIndex)
         self.bridgedConfig = ETOSLocalLLMEmbeddingConfig(
             mmprojPath: UnsafePointer(mmprojPathPointer),
+            loraPath: UnsafePointer(loraPathPointer),
+            loraScale: Float(options.loraScale),
             contextSize: Int32(clamping: options.contextSize),
             gpuLayers: Int32(clamping: options.gpuLayers),
             flashAttention: options.flashAttention.rawValue,
@@ -1147,6 +1174,7 @@ private final class PreparedLocalLLMEmbeddingConfig {
 
     deinit {
         free(mmprojPathPointer)
+        free(loraPathPointer)
         mediaDataPointers.forEach { $0.deallocate() }
         mediaIDPointers.forEach { free($0) }
     }

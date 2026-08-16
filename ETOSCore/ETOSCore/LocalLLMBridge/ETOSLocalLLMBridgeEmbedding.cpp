@@ -282,12 +282,32 @@ int32_t embed(
     ctx_params.n_threads_batch = ctx_params.n_threads;
     ctx_params.flash_attn_type = static_cast<llama_flash_attn_type>(config->flash_attention);
 
+    llama_adapter_lora_handle lora_adapter;
+    if (config->lora_path && config->lora_path[0] != '\0') {
+        lora_adapter.reset(llama_adapter_lora_init(model.get(), config->lora_path));
+        if (!lora_adapter) {
+            return fail(diagnostic_message(
+                "无法加载或匹配本地嵌入模型的 LoRA Adapter。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
+    }
     llama_context_handle ctx(llama_init_from_model(model.get(), ctx_params));
     if (!ctx) {
         return fail(diagnostic_message(
             "无法创建本地嵌入上下文。",
             runtime_log_capture.text()
         ), error_message);
+    }
+    if (lora_adapter) {
+        llama_adapter_lora * adapters[] = {lora_adapter.get()};
+        float scales[] = {std::clamp(config->lora_scale, -100.0f, 100.0f)};
+        if (llama_set_adapters_lora(ctx.get(), adapters, 1, scales) != 0) {
+            return fail(diagnostic_message(
+                "无法将 LoRA Adapter 应用到本地嵌入上下文。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
     }
     llama_set_embeddings(ctx.get(), true);
 

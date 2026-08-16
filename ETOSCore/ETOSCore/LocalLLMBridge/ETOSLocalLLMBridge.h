@@ -34,6 +34,8 @@ typedef enum etos_local_llm_sampler_kind {
 
 typedef struct etos_local_llm_generation_config {
     const char * mmproj_path;
+    const char * lora_path;
+    float lora_scale;
     const char * kv_cache_key;
     int32_t context_size;
     int32_t max_output_tokens;
@@ -88,6 +90,8 @@ typedef struct etos_local_llm_generation_config {
 
 typedef struct etos_local_llm_embedding_config {
     const char * mmproj_path;
+    const char * lora_path;
+    float lora_scale;
     int32_t context_size;
     int32_t n_gpu_layers;
     int32_t flash_attention;
@@ -201,6 +205,12 @@ int32_t etos_local_llm_embed(
 int32_t etos_local_gguf_architecture(
     const char * model_path,
     char ** architecture,
+    char ** error_message
+);
+
+int32_t etos_local_gguf_validate_lora_adapter(
+    const char * adapter_path,
+    const char * expected_architecture,
     char ** error_message
 );
 

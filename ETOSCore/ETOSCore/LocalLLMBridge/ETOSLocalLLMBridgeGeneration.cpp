@@ -69,6 +69,8 @@ int32_t cached_model_gpu_layers = std::numeric_limits<int32_t>::min();
 struct text_kv_cache_state {
     std::string cache_key;
     std::string model_path;
+    std::string lora_path;
+    float lora_scale = 1.0f;
     int32_t gpu_layers = std::numeric_limits<int32_t>::min();
     uint32_t context_size = 0;
     uint32_t batch_size = 0;
@@ -76,6 +78,7 @@ struct text_kv_cache_state {
     bool kv_offload = true;
     llama_flash_attn_type flash_attention = LLAMA_FLASH_ATTN_TYPE_AUTO;
     llama_model_shared_handle model;
+    llama_adapter_lora_handle lora_adapter;
     llama_context_handle context;
     std::vector<llama_token> decoded_tokens;
 };
@@ -86,10 +89,13 @@ text_kv_cache_state text_kv_cache;
 
 void reset_text_kv_cache() {
     text_kv_cache.context.reset();
+    text_kv_cache.lora_adapter.reset();
     text_kv_cache.model.reset();
     text_kv_cache.decoded_tokens.clear();
     text_kv_cache.cache_key.clear();
     text_kv_cache.model_path.clear();
+    text_kv_cache.lora_path.clear();
+    text_kv_cache.lora_scale = 1.0f;
     text_kv_cache.gpu_layers = std::numeric_limits<int32_t>::min();
     text_kv_cache.context_size = 0;
     text_kv_cache.batch_size = 0;
@@ -99,12 +105,17 @@ void reset_text_kv_cache() {
 bool text_kv_cache_matches(
     const std::string & cache_key,
     const std::string & model_path,
+    const std::string & lora_path,
+    float lora_scale,
     int32_t gpu_layers,
     const llama_context_params & context_params
 ) {
     return text_kv_cache.context
         && text_kv_cache.cache_key == cache_key
         && text_kv_cache.model_path == model_path
+        && text_kv_cache.lora_path == lora_path
+        && text_kv_cache.lora_scale == lora_scale
+        && (lora_path.empty() || text_kv_cache.lora_adapter)
         && text_kv_cache.gpu_layers == gpu_layers
         && text_kv_cache.context_size == context_params.n_ctx
         && text_kv_cache.batch_size == context_params.n_batch
@@ -441,6 +452,7 @@ int32_t generate(
 
     const bool can_reuse_text_kv_cache = wants_text_kv_cache && !uses_multimodal_prompt;
     std::unique_lock<std::mutex> text_kv_cache_lock;
+    llama_adapter_lora_handle lora_adapter;
     llama_context_handle ctx;
     std::vector<llama_token> decoded_text_tokens;
     size_t reusable_prompt_tokens = 0;
@@ -451,11 +463,14 @@ int32_t generate(
             && text_kv_cache_matches(
                 generation_params.kv_cache_key,
                 model_path,
+                generation_params.lora_path,
+                generation_params.lora_scale,
                 model_params.n_gpu_layers,
                 ctx_params
             )) {
             ctx = std::move(text_kv_cache.context);
             model = text_kv_cache.model;
+            lora_adapter = std::move(text_kv_cache.lora_adapter);
             decoded_text_tokens = std::move(text_kv_cache.decoded_tokens);
             vocab = llama_model_get_vocab(model.get());
         }
@@ -494,6 +509,15 @@ int32_t generate(
         }
     }
 
+    if (!ctx && !generation_params.lora_path.empty()) {
+        lora_adapter.reset(llama_adapter_lora_init(model.get(), generation_params.lora_path.c_str()));
+        if (!lora_adapter) {
+            return fail(diagnostic_message(
+                "无法加载或匹配 LoRA Adapter。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
+    }
     if (!ctx) {
         ctx.reset(llama_init_from_model(model.get(), ctx_params));
     }
@@ -505,6 +529,16 @@ int32_t generate(
     }
     if (should_cancel(cancel_callback, user_data)) {
         return cancelled(error_message);
+    }
+    if (lora_adapter) {
+        llama_adapter_lora * adapters[] = {lora_adapter.get()};
+        float scales[] = {generation_params.lora_scale};
+        if (llama_set_adapters_lora(ctx.get(), adapters, 1, scales) != 0) {
+            return fail(diagnostic_message(
+                "无法将 LoRA Adapter 应用到本地模型上下文。",
+                runtime_log_capture.text()
+            ), error_message);
+        }
     }
 
     llama_sampler_handle sampler = create_sampler(model.get(), vocab, generation_params);
@@ -675,6 +709,8 @@ int32_t generate(
     if (can_reuse_text_kv_cache) {
         text_kv_cache.cache_key = generation_params.kv_cache_key;
         text_kv_cache.model_path = model_path;
+        text_kv_cache.lora_path = generation_params.lora_path;
+        text_kv_cache.lora_scale = generation_params.lora_scale;
         text_kv_cache.gpu_layers = model_params.n_gpu_layers;
         text_kv_cache.context_size = ctx_params.n_ctx;
         text_kv_cache.batch_size = ctx_params.n_batch;
@@ -682,6 +718,7 @@ int32_t generate(
         text_kv_cache.kv_offload = ctx_params.offload_kqv;
         text_kv_cache.flash_attention = ctx_params.flash_attn_type;
         text_kv_cache.model = model;
+        text_kv_cache.lora_adapter = std::move(lora_adapter);
         text_kv_cache.context = std::move(ctx);
         text_kv_cache.decoded_tokens = std::move(decoded_text_tokens);
     }

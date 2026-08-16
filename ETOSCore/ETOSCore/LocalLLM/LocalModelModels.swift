@@ -81,6 +81,7 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public static let defaultUbatchSize = 0
     public static let defaultKVOffload = true
     public static let defaultFlashAttention = LocalLLMFlashAttentionMode.auto
+    public static let defaultLoRAScale = 1.0
     public static let defaultAdvancedArguments = ""
     public static let defaultSeed = UInt32.max
     public static let defaultTemperature = 1.0
@@ -110,6 +111,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public var mmprojFileName: String?
     public var mmprojRelativePath: String?
     public var mmprojFileSize: Int64?
+    public var loraFileName: String?
+    public var loraRelativePath: String?
+    public var loraFileSize: Int64?
+    public var loraScale: Double?
     public var ggufArchitecture: String?
     public var speechDecoderModelID: UUID?
     public var speechVADModelID: UUID?
@@ -149,6 +154,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         mmprojFileName: String? = nil,
         mmprojRelativePath: String? = nil,
         mmprojFileSize: Int64? = nil,
+        loraFileName: String? = nil,
+        loraRelativePath: String? = nil,
+        loraFileSize: Int64? = nil,
+        loraScale: Double? = nil,
         ggufArchitecture: String? = nil,
         speechDecoderModelID: UUID? = nil,
         speechVADModelID: UUID? = nil,
@@ -187,6 +196,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         self.mmprojFileName = mmprojFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.mmprojRelativePath = mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.mmprojFileSize = mmprojFileSize
+        self.loraFileName = loraFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraRelativePath = loraRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.loraFileSize = loraFileSize
+        self.loraScale = loraScale
         self.ggufArchitecture = ggufArchitecture?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.speechDecoderModelID = speechDecoderModelID
         self.speechVADModelID = speechVADModelID
@@ -316,6 +329,14 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
+    public var hasLoRAAdapter: Bool {
+        loraRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    public var effectiveLoRAScale: Double {
+        loraScale ?? Self.defaultLoRAScale
+    }
+
     public var speechArchitecture: LocalSpeechModelArchitecture? {
         guard let ggufArchitecture else { return nil }
         return LocalSpeechModelArchitecture(rawValue: ggufArchitecture)
@@ -338,6 +359,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
         case mmprojFileName
         case mmprojRelativePath
         case mmprojFileSize
+        case loraFileName
+        case loraRelativePath
+        case loraFileSize
+        case loraScale
         case ggufArchitecture
         case speechDecoderModelID
         case speechVADModelID
@@ -380,6 +405,10 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
             mmprojFileName: try container.decodeIfPresent(String.self, forKey: .mmprojFileName),
             mmprojRelativePath: try container.decodeIfPresent(String.self, forKey: .mmprojRelativePath),
             mmprojFileSize: try container.decodeIfPresent(Int64.self, forKey: .mmprojFileSize),
+            loraFileName: try container.decodeIfPresent(String.self, forKey: .loraFileName),
+            loraRelativePath: try container.decodeIfPresent(String.self, forKey: .loraRelativePath),
+            loraFileSize: try container.decodeIfPresent(Int64.self, forKey: .loraFileSize),
+            loraScale: try container.decodeIfPresent(Double.self, forKey: .loraScale),
             ggufArchitecture: try container.decodeIfPresent(String.self, forKey: .ggufArchitecture),
             speechDecoderModelID: try container.decodeIfPresent(UUID.self, forKey: .speechDecoderModelID),
             speechVADModelID: try container.decodeIfPresent(UUID.self, forKey: .speechVADModelID),
@@ -415,10 +444,22 @@ public struct LocalModelRecord: Codable, Identifiable, Hashable, Sendable {
     public mutating func normalizeGenerationParameters() {
         mmprojFileName = mmprojFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         mmprojRelativePath = mmprojRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        loraFileName = loraFileName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        loraRelativePath = loraRelativePath?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ggufArchitecture = ggufArchitecture?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         if mmprojRelativePath == nil {
             mmprojFileName = nil
             mmprojFileSize = nil
+        }
+        if loraRelativePath == nil {
+            loraFileName = nil
+            loraFileSize = nil
+            loraScale = nil
+        } else {
+            if loraFileName == nil, let loraRelativePath {
+                loraFileName = URL(fileURLWithPath: loraRelativePath).lastPathComponent.nilIfEmpty
+            }
+            loraScale = (loraScale ?? Self.defaultLoRAScale).clamped(to: -100...100)
         }
         contextSize = contextSize?.clamped(to: 1...1_048_576)
         maxOutputTokens = maxOutputTokens?.clamped(to: 1...131_072)

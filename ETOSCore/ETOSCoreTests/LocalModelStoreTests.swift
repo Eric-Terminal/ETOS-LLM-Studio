@@ -21,6 +21,8 @@ struct LocalModelStoreTests {
         try writeMinimalGGUF(to: source)
         let projector = root.appendingPathComponent("mmproj.gguf")
         try Data([5, 6, 7]).write(to: projector)
+        let lora = root.appendingPathComponent("style-lora.gguf")
+        try writeMinimalLoRAGGUF(to: lora)
         let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
 
         var record = try store.importModel(from: source, displayName: "  小模型  ", mmprojURL: projector)
@@ -30,8 +32,13 @@ struct LocalModelStoreTests {
         #expect(record.mmprojFileName == "mmproj.gguf")
         #expect(record.mmprojFileSize == 3)
         #expect(store.mmprojFileExists(for: record))
+        _ = try store.copyLoRAAdapter(from: lora, into: &record)
+        #expect(record.loraFileName == "style-lora.gguf")
+        #expect(record.loraScale == LocalModelRecord.defaultLoRAScale)
+        #expect(store.loraFileExists(for: record))
 
         record.displayName = "新名字"
+        record.loraScale = 0.65
         record.contextSize = 0
         record.maxOutputTokens = 0
         record.gpuLayers = 7
@@ -52,13 +59,43 @@ struct LocalModelStoreTests {
         #expect(updatedRecord.imageMinTokens == -1)
         #expect(updatedRecord.imageMaxTokens == 1_048_576)
         #expect(reloaded.mmprojFileExists(for: updatedRecord))
+        #expect(updatedRecord.loraFileName == "style-lora.gguf")
+        #expect(updatedRecord.loraScale == 0.65)
+        #expect(reloaded.loraFileExists(for: updatedRecord))
 
         if let saved = reloaded.models.first {
             reloaded.delete(saved)
             #expect(reloaded.models.isEmpty)
             #expect(!reloaded.fileExists(for: saved))
             #expect(!reloaded.mmprojFileExists(for: saved))
+            #expect(!reloaded.loraFileExists(for: saved))
         }
+    }
+
+    @Test("LoRA 必须是与基础模型架构匹配的 Adapter GGUF")
+    func loraAdapterValidationRejectsMismatchedArchitecture() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lora = root.appendingPathComponent("mismatched.gguf")
+        try writeMinimalLoRAGGUF(to: lora, architecture: "qwen3")
+        let store = LocalModelStore(directoryURL: root.appendingPathComponent("LocalModels"))
+        var record = LocalModelRecord(
+            displayName: "Llama",
+            fileName: "llama.gguf",
+            relativePath: "llama.gguf",
+            fileSize: 8,
+            ggufArchitecture: "llama"
+        )
+
+        #expect(throws: LocalLLMEngineError.self) {
+            _ = try store.copyLoRAAdapter(from: lora, into: &record)
+        }
+        #expect(!record.hasLoRAAdapter)
+        let storedFiles = try FileManager.default.contentsOfDirectory(
+            at: store.directoryURL,
+            includingPropertiesForKeys: nil
+        )
+        #expect(storedFiles.isEmpty)
     }
 
     @Test("下载落盘文件会移动登记为本地模型")
@@ -726,6 +763,38 @@ struct LocalModelStoreTests {
                 count: writtenTensorByteCount ?? declaredTensorByteCount
             ))
         }
+        try data.write(to: url)
+    }
+
+    private func writeMinimalLoRAGGUF(to url: URL, architecture: String = "llama") throws {
+        var data = Data([0x47, 0x47, 0x55, 0x46])
+        appendLittleEndian(UInt32(3), to: &data)
+        appendLittleEndian(UInt64(2), to: &data)
+        appendLittleEndian(UInt64(3), to: &data)
+        for (key, value) in [
+            ("general.architecture", architecture),
+            ("general.type", "adapter"),
+            ("adapter.type", "lora")
+        ] {
+            appendGGUFString(key, to: &data)
+            appendLittleEndian(Int32(8), to: &data)
+            appendGGUFString(value, to: &data)
+        }
+        for (name, offset) in [
+            ("blk.0.attn_q.weight.lora_a", UInt64(0)),
+            ("blk.0.attn_q.weight.lora_b", UInt64(32))
+        ] {
+            appendGGUFString(name, to: &data)
+            appendLittleEndian(UInt32(2), to: &data)
+            appendLittleEndian(UInt64(1), to: &data)
+            appendLittleEndian(UInt64(1), to: &data)
+            appendLittleEndian(Int32(0), to: &data)
+            appendLittleEndian(offset, to: &data)
+        }
+        while !data.count.isMultiple(of: 32) {
+            data.append(0)
+        }
+        data.append(Data(repeating: 0, count: 36))
         try data.write(to: url)
     }
 

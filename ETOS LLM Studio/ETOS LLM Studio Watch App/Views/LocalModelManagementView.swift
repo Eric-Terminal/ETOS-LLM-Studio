@@ -240,6 +240,11 @@ private struct LocalModelRow: View {
                     .etFont(.caption2)
                     .foregroundStyle(.secondary)
             }
+            if record.hasLoRAAdapter {
+                Label(NSLocalizedString("已挂载 LoRA", comment: "Local model has LoRA"), systemImage: "link")
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if let architecture = record.speechArchitecture {
                 Label(architecture.localizedTitle, systemImage: "waveform")
                     .etFont(.caption2)
@@ -266,6 +271,10 @@ private struct LocalModelDetailView: View {
     @State private var showUnsavedChangesAlert = false
     @State private var showCLIImport = false
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
+    @State private var loraDownloadURLText = ""
+    @State private var isDownloadingLoRA = false
+    @State private var loraDownloadProgress: SyncPackageDownloadProgress?
+    @State private var loraStatusMessage: String?
     @State private var contextSizeText: String
     @State private var maxOutputTokensText: String
     @State private var seedText: String
@@ -279,6 +288,7 @@ private struct LocalModelDetailView: View {
     @State private var presencePenaltyText: String
     @State private var imageMinTokensText: String
     @State private var imageMaxTokensText: String
+    @State private var loraScaleText: String
 
     private static let watchOSGPULayers = 0
     private let savedSnapshot: LocalModelRecord
@@ -301,6 +311,7 @@ private struct LocalModelDetailView: View {
         _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectivePresencePenalty))
         _imageMinTokensText = State(initialValue: "\(initialDraft.effectiveImageMinTokens)")
         _imageMaxTokensText = State(initialValue: "\(initialDraft.effectiveImageMaxTokens)")
+        _loraScaleText = State(initialValue: LocalModelFormat.decimal(initialDraft.effectiveLoRAScale))
     }
 
     var body: some View {
@@ -329,6 +340,7 @@ private struct LocalModelDetailView: View {
 
             speechSection
             runtimeSection
+            loraSection
             multimodalSection
             samplingSection
             grammarSection
@@ -401,14 +413,14 @@ private struct LocalModelDetailView: View {
                 dismiss()
             }
         } message: {
-            Text(NSLocalizedString("会同时删除手表上保存的权重文件和 mmproj 投影器。", comment: "Watch delete local model alert message"))
+            Text(NSLocalizedString("会同时删除手表上保存的权重文件、mmproj 投影器和 LoRA Adapter。", comment: "Watch delete local model alert message"))
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
                 saveAndDismiss()
             }
             Button(NSLocalizedString("放弃更改", comment: "Discard changes"), role: .destructive) {
-                dismiss()
+                discardAndDismiss()
             }
             Button(NSLocalizedString("继续编辑", comment: "Continue editing"), role: .cancel) {}
         } message: {
@@ -519,6 +531,85 @@ private struct LocalModelDetailView: View {
             Text(NSLocalizedString("watchOS 本地推理只能使用 CPU 路径，GPU 层数固定为 0。", comment: "Watch fixed GPU layers footer"))
                 .etFont(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var loraSection: some View {
+        if !draft.isSpeechTranscriptionModel && !draft.isSpeechAuxiliaryModel {
+            Section {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label"))
+                    Text(draft.loraFileName ?? NSLocalizedString("未挂载", comment: "No local LoRA adapter"))
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    if let size = draft.loraFileSize {
+                        Text(StorageUtility.formatSize(size))
+                            .etFont(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if draft.hasLoRAAdapter {
+                    TextField(
+                        NSLocalizedString("LoRA 强度", comment: "Local LoRA scale field"),
+                        text: $loraScaleText.watchKeyboardNewlineBinding()
+                    )
+                    .textInputAutocapitalization(.never)
+                }
+
+                TextField(
+                    NSLocalizedString("LoRA 文件链接", comment: "Watch LoRA download URL"),
+                    text: $loraDownloadURLText.watchKeyboardNewlineBinding()
+                )
+                .textInputAutocapitalization(.never)
+
+                Button {
+                    downloadLoRA()
+                } label: {
+                    if isDownloadingLoRA {
+                        ProgressView()
+                    } else {
+                        Label(draft.hasLoRAAdapter
+                            ? NSLocalizedString("下载并替换 LoRA", comment: "Watch replace LoRA")
+                            : NSLocalizedString("下载并挂载 LoRA", comment: "Watch attach LoRA"),
+                              systemImage: "arrow.down.circle")
+                    }
+                }
+                .disabled(isDownloadingLoRA || normalizedLoRAURL == nil)
+
+                if let loraDownloadProgress {
+                    LocalModelDownloadProgressView(progress: loraDownloadProgress)
+                }
+                if let loraStatusMessage {
+                    Text(loraStatusMessage)
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if draft.hasLoRAAdapter {
+                    Button(role: .destructive) {
+                        if let relativePath = draft.loraRelativePath,
+                           relativePath != savedSnapshot.loraRelativePath {
+                            store.deleteLoRAFile(relativePath: relativePath)
+                        }
+                        draft.loraFileName = nil
+                        draft.loraRelativePath = nil
+                        draft.loraFileSize = nil
+                        draft.loraScale = nil
+                        loraScaleText = LocalModelFormat.decimal(LocalModelRecord.defaultLoRAScale)
+                    } label: {
+                        Label(NSLocalizedString("移除 LoRA", comment: "Remove local LoRA adapter"), systemImage: "xmark.circle")
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("LoRA", comment: "Local LoRA section title"))
+            } footer: {
+                Text(NSLocalizedString("请下载与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。", comment: "Watch local LoRA footer"))
+                    .etFont(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -746,6 +837,96 @@ private struct LocalModelDetailView: View {
         dismiss()
     }
 
+    private func discardAndDismiss() {
+        cleanupUnsavedLoRAIfNeeded()
+        dismiss()
+    }
+
+    private func cleanupUnsavedLoRAIfNeeded() {
+        guard let relativePath = draft.loraRelativePath,
+              relativePath != savedSnapshot.loraRelativePath else {
+            return
+        }
+        store.deleteLoRAFile(relativePath: relativePath)
+    }
+
+    private var normalizedLoRAURL: URL? {
+        let text = loraDownloadURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        return url
+    }
+
+    private func downloadLoRA() {
+        guard let url = normalizedLoRAURL else { return }
+        isDownloadingLoRA = true
+        loraDownloadProgress = nil
+        loraStatusMessage = nil
+        Task {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = NetworkSessionConfiguration.minimumRequestTimeout
+                let (downloadedURL, response) = try await SyncPackageUploadService.downloadTemporaryFile(
+                    request: request,
+                    progress: { progress in
+                        Task { @MainActor in
+                            loraDownloadProgress = progress
+                        }
+                    }
+                )
+                defer {
+                    Task.detached(priority: .utility) {
+                        try? FileManager.default.removeItem(at: downloadedURL)
+                    }
+                }
+                try validateLoRADownloadResponse(response)
+                let previousUnsavedLoRA = draft.loraRelativePath == savedSnapshot.loraRelativePath
+                    ? nil
+                    : draft.loraRelativePath
+                let responseFileName = response.suggestedFilename?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suggestedFileName: String
+                if let responseFileName, !responseFileName.isEmpty {
+                    suggestedFileName = responseFileName
+                } else {
+                    suggestedFileName = url.lastPathComponent.isEmpty ? "adapter.gguf" : url.lastPathComponent
+                }
+                let updatedDraft = try await store.copyLoRAAdapter(
+                    from: downloadedURL,
+                    for: draft,
+                    suggestedFileName: suggestedFileName
+                )
+                if let previousUnsavedLoRA {
+                    store.deleteLoRAFile(relativePath: previousUnsavedLoRA)
+                }
+                draft = updatedDraft
+                loraScaleText = LocalModelFormat.decimal(updatedDraft.effectiveLoRAScale)
+                loraDownloadURLText = ""
+                loraStatusMessage = NSLocalizedString("LoRA 已挂载。", comment: "Watch LoRA attached")
+                isDownloadingLoRA = false
+            } catch {
+                loraStatusMessage = error.localizedDescription
+                loraDownloadProgress = nil
+                isDownloadingLoRA = false
+            }
+        }
+    }
+
+    private func validateLoRADownloadResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse,
+              !(200..<300).contains(httpResponse.statusCode) else {
+            return
+        }
+        throw NSError(domain: "ETOSWatchLoRADownload", code: httpResponse.statusCode, userInfo: [
+            NSLocalizedDescriptionKey: String(
+                format: NSLocalizedString("下载 LoRA 失败（HTTP %d）。", comment: "Watch LoRA download HTTP failure"),
+                httpResponse.statusCode
+            )
+        ])
+    }
+
     private func draftApplyingTextFields(_ source: LocalModelRecord, clearsAdvancedArguments: Bool) -> LocalModelRecord {
         var updatedDraft = source
         if updatedDraft.contextSize != nil, let contextSize = Int(contextSizeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
@@ -788,6 +969,10 @@ private struct LocalModelDetailView: View {
         if updatedDraft.imageMaxTokens != nil, let imageMaxTokens = Int(imageMaxTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             updatedDraft.imageMaxTokens = imageMaxTokens
         }
+        if updatedDraft.hasLoRAAdapter,
+           let loraScale = Double(loraScaleText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.loraScale = loraScale
+        }
         if clearsAdvancedArguments {
             updatedDraft.advancedArguments = ""
         }
@@ -810,6 +995,7 @@ private struct LocalModelDetailView: View {
         presencePenaltyText = LocalModelFormat.decimal(draft.effectivePresencePenalty)
         imageMinTokensText = "\(draft.effectiveImageMinTokens)"
         imageMaxTokensText = "\(draft.effectiveImageMaxTokens)"
+        loraScaleText = LocalModelFormat.decimal(draft.effectiveLoRAScale)
     }
 
     private func parseSeed(_ rawValue: String) -> UInt32? {
@@ -881,6 +1067,10 @@ private struct LocalModelAdvancedIntroView: View {
                 LocalModelWatchGuideRow(
                     title: NSLocalizedString("采样", comment: "Local model sampling section"),
                     detail: NSLocalizedString("不确定时先只调 Temperature；复读明显时再看重复检查窗口和重复惩罚。", comment: "Watch local model guide sampling detail")
+                )
+                LocalModelWatchGuideRow(
+                    title: NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label"),
+                    detail: NSLocalizedString("请下载与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。", comment: "Watch local LoRA footer")
                 )
             } header: {
                 Text(NSLocalizedString("参数怎么调", comment: "Watch local model guide parameters section"))

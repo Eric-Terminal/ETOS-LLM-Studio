@@ -6745,3 +6745,17 @@
 "此文件夹以只读方式挂载；可以浏览和预览内容，不能从这里删除文件。" = "This folder is mounted read-only. You can browse and preview its contents, but you cannot delete files here.";
 "此文件夹同时用于存储管理和本地 Linux；删除操作会直接修改原文件。" = "This folder is shared by Storage Management and Local Linux. Deleting an item modifies the original files.";
 "此外部文件夹为只读挂载，不能修改内容。" = "This external folder is mounted read-only and cannot be modified.";
+"LoRA Adapter" = "LoRA Adapter";
+"未挂载" = "Not attached";
+"LoRA 强度" = "LoRA Scale";
+"替换 LoRA" = "Replace LoRA";
+"选择 LoRA" = "Select LoRA";
+"移除 LoRA" = "Remove LoRA";
+"LoRA" = "LoRA";
+"请选择与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。" = "Choose a LoRA GGUF compatible with the base model architecture. Scale 1 uses its original effect; 0 keeps it attached without changing output.";
+"会同时删除本机保存的权重文件、mmproj 投影器和 LoRA Adapter。" = "This also deletes the locally stored weight file, mmproj projector, and LoRA adapter.";
+"已挂载 LoRA" = "LoRA attached";
+"LoRA 会在推理时叠加到当前基础模型，不会改写原始 GGUF。" = "LoRA is applied over the current base model during inference without modifying the original GGUF.";
+"先确认 LoRA 已转换为 GGUF Adapter，并且 general.architecture 与基础模型一致。" = "First confirm that the LoRA has been converted to a GGUF adapter and its general.architecture matches the base model.";
+"强度 1 使用 LoRA 的原始效果；降低数值会减弱影响，设为 0 可以暂时比较基础模型输出。" = "Scale 1 uses the LoRA’s original effect; lower values reduce its influence, and 0 lets you compare the base model output.";
+"替换或移除 LoRA 后，下一次请求会使用新的 Adapter 配置，对话 KV 缓存不会混用旧结果。" = "After replacing or removing LoRA, the next request uses the new adapter configuration and does not reuse incompatible conversation KV cache results.";

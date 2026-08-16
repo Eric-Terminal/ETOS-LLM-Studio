@@ -50,6 +50,8 @@ extension ChatService {
             let localModelCacheEnabled = await MainActor.run { AppConfigStore.shared.localModelCacheEnabled }
             let options = LocalLLMGenerationOptions(
                 mmprojPath: localModelStore.mmprojURL(for: record)?.path,
+                loraPath: localModelStore.loraURL(for: record)?.path,
+                loraScale: record.effectiveLoRAScale,
                 contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                 maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),
                 temperature: overrides.localDoubleValue(for: "temperature") ?? record.temperature ?? (globalTemperatureEnabled ? temperature : nil) ?? LocalModelRecord.defaultTemperature,
@@ -211,6 +213,8 @@ extension ChatService {
             let localTools = LocalLLMChatMessageBuilder.toolDefinitions(from: availableTools)
             let options = LocalLLMGenerationOptions(
                 mmprojPath: localModelStore.mmprojURL(for: record)?.path,
+                loraPath: localModelStore.loraURL(for: record)?.path,
+                loraScale: record.effectiveLoRAScale,
                 kvCacheKey: currentSessionID.uuidString,
                 contextSize: max(1, overrides.localIntValue(for: "context_size") ?? overrides.localIntValue(for: "n_ctx") ?? record.effectiveContextSize),
                 maxOutputTokens: max(1, overrides.localIntValue(for: "max_output_tokens") ?? overrides.localIntValue(for: "max_tokens") ?? record.effectiveMaxOutputTokens),

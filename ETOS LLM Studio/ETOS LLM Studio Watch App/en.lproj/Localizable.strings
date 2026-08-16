@@ -6573,3 +6573,16 @@
 "手动加载轮次" = "Manual Load Turns";
 "接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。" = "Automatically loads nearby messages at the edges of a conversation and recycles complex bubbles far from your reading position. When disabled, choose a manual load size; set it to 0 to show all history.";
 "此外部文件夹为只读挂载，不能修改内容。" = "This external folder is mounted read-only and cannot be modified.";
+"LoRA Adapter" = "LoRA Adapter";
+"未挂载" = "Not attached";
+"LoRA 强度" = "LoRA Scale";
+"LoRA 文件链接" = "LoRA File URL";
+"下载并挂载 LoRA" = "Download and Attach LoRA";
+"下载并替换 LoRA" = "Download and Replace LoRA";
+"移除 LoRA" = "Remove LoRA";
+"LoRA" = "LoRA";
+"请下载与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。" = "Download a LoRA GGUF compatible with the base model architecture. Scale 1 uses its original effect; 0 keeps it attached without changing output.";
+"LoRA 已挂载。" = "LoRA attached.";
+"下载 LoRA 失败（HTTP %d）。" = "LoRA download failed (HTTP %d).";
+"会同时删除手表上保存的权重文件、mmproj 投影器和 LoRA Adapter。" = "This also deletes the weight file, mmproj projector, and LoRA adapter stored on the watch.";
+"已挂载 LoRA" = "LoRA attached";

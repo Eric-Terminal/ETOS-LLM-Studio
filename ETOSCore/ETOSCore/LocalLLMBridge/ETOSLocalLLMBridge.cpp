@@ -344,6 +344,29 @@ int32_t etos_local_gguf_architecture(
     }
 }
 
+int32_t etos_local_gguf_validate_lora_adapter(
+    const char * adapter_path,
+    const char * expected_architecture,
+    char ** error_message
+) {
+    if (error_message) {
+        *error_message = nullptr;
+    }
+    if (!adapter_path) {
+        return etos_local_llm_bridge::fail("LoRA 校验参数无效。", error_message);
+    }
+
+    try {
+        etos_local_speech::validate_lora_adapter(
+            adapter_path,
+            expected_architecture ? expected_architecture : ""
+        );
+        return 0;
+    } catch (const std::exception & exception) {
+        return etos_local_llm_bridge::fail(exception.what(), error_message);
+    }
+}
+
 int32_t etos_local_speech_transcribe(
     const char * model_path,
     const float * audio_samples,

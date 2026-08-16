@@ -37,7 +37,7 @@
 *   **会话管理增强**：支持会话全文检索、命中上下文预览、消息序号定位、文件夹分类、Finder 式彩色标签、快捷筛选、嵌套移动、批量操作、全屏会话管理入口与单会话跨端发送，会话历史改为无限滚动加载。
 *   **多模型支持**：原生适配 OpenAI Chat、OpenAI Responses、Anthropic（Claude）和 Google（Gemini）等接口格式，支持在 App 内动态管理提供商与模型，拉取模型列表，并可长按拖动调整提供商顺序。
 *   **端侧本地模型**：支持导入 GGUF 权重并作为“本地模型”提供商使用，底层通过 llama.cpp C ABI 桥接执行；支持流式输出、GGUF Jinja chat template、本地工具调用解析、思考内容解析、本地嵌入模型路由与后台 detached completion。
-*   **本地模型高级调参**：每个 GGUF 权重可按需覆盖上下文长度、输出上限、GPU 层数、batch / ubatch、KV offload、flash attention、seed、采样链、grammar、重复惩罚与对话模板透传等参数，也支持常用 llama.cpp-style CLI 参数导入、模型缓存开关和 iOS 高内存限制。
+*   **本地模型高级调参**：每个 GGUF 权重可挂载独立的 LoRA GGUF Adapter 并调节强度，也可按需覆盖上下文长度、输出上限、GPU 层数、batch / ubatch、KV offload、flash attention、seed、采样链、grammar、重复惩罚与对话模板透传等参数；同时支持常用 llama.cpp-style CLI 参数导入、模型缓存开关和 iOS 高内存限制。
 *   **高级请求配置**：支持自定义请求头、参数表达式、结构化请求控制、键值对 Payload 编辑、原始 JSON 请求体与请求预览，方便折腾兼容接口和特殊模型。
 *   **消息正则替换规则**：支持对发送与接收消息按规则批量改写，可在偏好设置中管理多条规则并随提供商页快速进入。
 *   **单条 AI 回复重写**：可以对历史中某条 AI 回复单独重写，重写时可引用同一消息的其他版本，避免为了局部调整重跑整段会话。

@@ -10,6 +10,8 @@ import Foundation
 
 struct LocalLLMGenerationConfig: Hashable, Sendable {
     var mmprojPath: String
+    var loraPath: String
+    var loraScale: Float
     var kvCacheKey: String
     var contextSize: Int32
     var maxOutputTokens: Int32
@@ -55,6 +57,8 @@ struct LocalLLMGenerationConfig: Hashable, Sendable {
 
     init(options: LocalLLMGenerationOptions) throws {
         self.mmprojPath = options.mmprojPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.loraPath = options.loraPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.loraScale = Float(options.loraScale.clamped(to: -100...100))
         self.kvCacheKey = options.kvCacheKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         self.contextSize = Int32(clamping: options.contextSize.clamped(to: 1...1_048_576))
         self.maxOutputTokens = Int32(clamping: options.maxOutputTokens.clamped(to: 1...131_072))

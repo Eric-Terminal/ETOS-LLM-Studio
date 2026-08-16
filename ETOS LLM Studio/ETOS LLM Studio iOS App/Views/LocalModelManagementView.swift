@@ -204,6 +204,11 @@ private struct LocalModelRow: View {
                         .etFont(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                if record.hasLoRAAdapter {
+                    Label(NSLocalizedString("已挂载 LoRA", comment: "Local model has LoRA"), systemImage: "link")
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                }
                 if let architecture = record.speechArchitecture {
                     Label(architecture.localizedTitle, systemImage: "waveform")
                         .etFont(.caption2)
@@ -236,6 +241,8 @@ private struct LocalModelDetailView: View {
     @State private var showAdvancedIntro = false
     @State private var showCLIImport = false
     @State private var isImportingProjector = false
+    @State private var isImportingLoRA = false
+    @State private var isProcessingLoRA = false
     @State private var detailErrorMessage: String?
     @State private var cliImportResult: LocalLLMCLIStyleImportResult?
     @State private var contextSizeText: String
@@ -254,6 +261,7 @@ private struct LocalModelDetailView: View {
     @State private var presencePenaltyText: String
     @State private var imageMinTokensText: String
     @State private var imageMaxTokensText: String
+    @State private var loraScaleText: String
 
     private let savedSnapshot: LocalModelRecord
 
@@ -276,6 +284,7 @@ private struct LocalModelDetailView: View {
         _presencePenaltyText = State(initialValue: LocalModelFormat.decimal(record.effectivePresencePenalty))
         _imageMinTokensText = State(initialValue: "\(record.effectiveImageMinTokens)")
         _imageMaxTokensText = State(initialValue: "\(record.effectiveImageMaxTokens)")
+        _loraScaleText = State(initialValue: LocalModelFormat.decimal(record.effectiveLoRAScale))
     }
 
     var body: some View {
@@ -296,6 +305,7 @@ private struct LocalModelDetailView: View {
 
             speechSection
             runtimeSection
+            loraSection
             multimodalSection
             metalStabilitySection
             samplingSection
@@ -341,6 +351,13 @@ private struct LocalModelDetailView: View {
         ) { result in
             importProjector(result)
         }
+        .fileImporter(
+            isPresented: $isImportingLoRA,
+            allowedContentTypes: [UTType(filenameExtension: "gguf") ?? .data, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            importLoRA(result)
+        }
         .toolbar {
             if hasUnsavedChanges {
                 ToolbarItem(placement: .cancellationAction) {
@@ -367,7 +384,7 @@ private struct LocalModelDetailView: View {
                 dismiss()
             }
         } message: {
-            Text(NSLocalizedString("会同时删除本机保存的权重文件和 mmproj 投影器。", comment: "Delete local model alert message"))
+            Text(NSLocalizedString("会同时删除本机保存的权重文件、mmproj 投影器和 LoRA Adapter。", comment: "Delete local model alert message"))
         }
         .alert(NSLocalizedString("未保存更改", comment: "Unsaved changes alert title"), isPresented: $showUnsavedChangesAlert) {
             Button(NSLocalizedString("保存并离开", comment: "Save changes and leave")) {
@@ -504,6 +521,70 @@ private struct LocalModelDetailView: View {
             )
         } header: {
             Text(NSLocalizedString("运行时", comment: "Local model runtime section"))
+        }
+    }
+
+    @ViewBuilder
+    private var loraSection: some View {
+        if !draft.isSpeechTranscriptionModel && !draft.isSpeechAuxiliaryModel {
+            Section {
+                LabeledContent(NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label")) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(draft.loraFileName ?? NSLocalizedString("未挂载", comment: "No local LoRA adapter"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let size = draft.loraFileSize {
+                            Text(StorageUtility.formatSize(size))
+                                .etFont(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if draft.hasLoRAAdapter {
+                    TextField(
+                        NSLocalizedString("LoRA 强度", comment: "Local LoRA scale field"),
+                        text: $loraScaleText
+                    )
+                    .keyboardType(.numbersAndPunctuation)
+                }
+
+                Button {
+                    isImportingLoRA = true
+                } label: {
+                    if isProcessingLoRA {
+                        ProgressView()
+                    } else {
+                        Label(draft.hasLoRAAdapter
+                            ? NSLocalizedString("替换 LoRA", comment: "Replace local LoRA adapter")
+                            : NSLocalizedString("选择 LoRA", comment: "Select local LoRA adapter"),
+                              systemImage: "link.badge.plus")
+                    }
+                }
+                .disabled(isProcessingLoRA)
+
+                if draft.hasLoRAAdapter {
+                    Button(role: .destructive) {
+                        if let relativePath = draft.loraRelativePath,
+                           relativePath != savedSnapshot.loraRelativePath {
+                            store.deleteLoRAFile(relativePath: relativePath)
+                        }
+                        draft.loraFileName = nil
+                        draft.loraRelativePath = nil
+                        draft.loraFileSize = nil
+                        draft.loraScale = nil
+                        loraScaleText = LocalModelFormat.decimal(LocalModelRecord.defaultLoRAScale)
+                    } label: {
+                        Label(NSLocalizedString("移除 LoRA", comment: "Remove local LoRA adapter"), systemImage: "xmark.circle")
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("LoRA", comment: "Local LoRA section title"))
+            } footer: {
+                Text(NSLocalizedString("请选择与基础模型架构匹配的 LoRA GGUF。强度 1 使用原始效果，0 保留挂载但不改变输出。", comment: "Local LoRA section footer"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -743,16 +824,19 @@ private struct LocalModelDetailView: View {
     }
 
     private func discardAndDismiss() {
-        cleanupUnsavedProjectorIfNeeded()
+        cleanupUnsavedFilesIfNeeded()
         dismiss()
     }
 
-    private func cleanupUnsavedProjectorIfNeeded() {
-        guard let relativePath = draft.mmprojRelativePath,
-              relativePath != savedSnapshot.mmprojRelativePath else {
-            return
+    private func cleanupUnsavedFilesIfNeeded() {
+        if let relativePath = draft.mmprojRelativePath,
+           relativePath != savedSnapshot.mmprojRelativePath {
+            store.deleteProjectorFile(relativePath: relativePath)
         }
-        store.deleteProjectorFile(relativePath: relativePath)
+        if let relativePath = draft.loraRelativePath,
+           relativePath != savedSnapshot.loraRelativePath {
+            store.deleteLoRAFile(relativePath: relativePath)
+        }
     }
 
     private func importProjector(_ result: Result<[URL], Error>) {
@@ -764,6 +848,31 @@ private struct LocalModelDetailView: View {
             _ = try store.copyMultimodalProjector(from: url, into: &draft)
             if let previousUnsavedProjector {
                 store.deleteProjectorFile(relativePath: previousUnsavedProjector)
+            }
+        } catch {
+            detailErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func importLoRA(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let previousUnsavedLoRA = draft.loraRelativePath == savedSnapshot.loraRelativePath
+                ? nil
+                : draft.loraRelativePath
+            isProcessingLoRA = true
+            Task {
+                do {
+                    let updatedDraft = try await store.copyLoRAAdapter(from: url, for: draft)
+                    if let previousUnsavedLoRA {
+                        store.deleteLoRAFile(relativePath: previousUnsavedLoRA)
+                    }
+                    draft = updatedDraft
+                    loraScaleText = LocalModelFormat.decimal(updatedDraft.effectiveLoRAScale)
+                } catch {
+                    detailErrorMessage = error.localizedDescription
+                }
+                isProcessingLoRA = false
             }
         } catch {
             detailErrorMessage = error.localizedDescription
@@ -820,6 +929,10 @@ private struct LocalModelDetailView: View {
         if updatedDraft.imageMaxTokens != nil, let imageMaxTokens = Int(imageMaxTokensText.trimmingCharacters(in: .whitespacesAndNewlines)) {
             updatedDraft.imageMaxTokens = imageMaxTokens
         }
+        if updatedDraft.hasLoRAAdapter,
+           let loraScale = Double(loraScaleText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            updatedDraft.loraScale = loraScale
+        }
         if clearsAdvancedArguments {
             updatedDraft.advancedArguments = ""
         }
@@ -844,6 +957,7 @@ private struct LocalModelDetailView: View {
         presencePenaltyText = LocalModelFormat.decimal(draft.effectivePresencePenalty)
         imageMinTokensText = "\(draft.effectiveImageMinTokens)"
         imageMaxTokensText = "\(draft.effectiveImageMaxTokens)"
+        loraScaleText = LocalModelFormat.decimal(draft.effectiveLoRAScale)
     }
 
     private func parseSeed(_ rawValue: String) -> UInt32? {
@@ -1018,6 +1132,16 @@ private struct LocalModelTuningGuideView: View {
                         NSLocalizedString("Top-P、Top-K、Min-P 会一起过滤候选 token；不确定时先只调 Temperature。", comment: "Local model guide sampling filters"),
                         NSLocalizedString("重复检查窗口和重复惩罚用来减少复读；长回复重复时，提高惩罚或扩大窗口。", comment: "Local model guide sampling repeat"),
                         NSLocalizedString("固定随机种子可以复现实验；想每次都自然变化就保持随机。", comment: "Local model guide sampling seed")
+                    ]
+                )
+
+                LocalModelTuningGuideSection(
+                    title: NSLocalizedString("LoRA Adapter", comment: "Local model LoRA adapter label"),
+                    summary: NSLocalizedString("LoRA 会在推理时叠加到当前基础模型，不会改写原始 GGUF。", comment: "Local model guide LoRA summary"),
+                    items: [
+                        NSLocalizedString("先确认 LoRA 已转换为 GGUF Adapter，并且 general.architecture 与基础模型一致。", comment: "Local model guide LoRA compatibility"),
+                        NSLocalizedString("强度 1 使用 LoRA 的原始效果；降低数值会减弱影响，设为 0 可以暂时比较基础模型输出。", comment: "Local model guide LoRA scale"),
+                        NSLocalizedString("替换或移除 LoRA 后，下一次请求会使用新的 Adapter 配置，对话 KV 缓存不会混用旧结果。", comment: "Local model guide LoRA cache")
                     ]
                 )
 

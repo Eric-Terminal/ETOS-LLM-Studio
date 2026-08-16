@@ -60,6 +60,12 @@ struct LocalLLMFailureDiagnostic {
                 with: URL(fileURLWithPath: mmprojPath).lastPathComponent
             )
         }
+        if let loraPath = options.loraPath {
+            nativeDetail = nativeDetail.replacingOccurrences(
+                of: loraPath,
+                with: URL(fileURLWithPath: loraPath).lastPathComponent
+            )
+        }
 
         let resourceValues = try? modelURL.resourceValues(forKeys: [.fileSizeKey])
         let actualFileSize = resourceValues?.fileSize.map(Int64.init)
@@ -108,6 +114,10 @@ struct LocalLLMFailureDiagnostic {
         }
         if let mmprojPath = options.mmprojPath {
             runtimeLines.append("mmproj_file=\(URL(fileURLWithPath: mmprojPath).lastPathComponent)")
+        }
+        if let loraPath = options.loraPath {
+            runtimeLines.append("lora_file=\(URL(fileURLWithPath: loraPath).lastPathComponent)")
+            runtimeLines.append("lora_scale=\(options.loraScale)")
         }
 
         let compactRuntimeLines = [

@@ -71,6 +71,28 @@ public enum LocalGGUFMetadata {
         return String(cString: architecturePointer)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    public static func validateLoRAAdapter(at adapterURL: URL, compatibleWith architecture: String?) throws {
+        var errorPointer: UnsafeMutablePointer<CChar>?
+        let status = adapterURL.path.withCString { adapterPath in
+            (architecture ?? "").withCString { expectedArchitecture in
+                etos_local_gguf_validate_lora_adapter(
+                    adapterPath,
+                    expectedArchitecture,
+                    &errorPointer
+                )
+            }
+        }
+        defer { errorPointer.map(etos_local_llm_free) }
+        guard status == 0 else {
+            let message = errorPointer.map { String(cString: $0) }
+                ?? LocalLLMEngineError.backendUnavailable.localizedDescription
+            throw LocalLLMEngineError.generationFailed(String(
+                format: NSLocalizedString("无法加载文件: %@", comment: "Unable to load imported GGUF file"),
+                message
+            ))
+        }
+    }
 }
 
 public struct LocalSpeechTranscriptionOptions: Hashable, Sendable {
@@ -368,6 +390,13 @@ private let localSpeechShouldCancel: @convention(c) (UnsafeMutableRawPointer?) -
 private func etos_local_gguf_architecture(
     _ modelPath: UnsafePointer<CChar>,
     _ architecture: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
+    _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32
+
+@_silgen_name("etos_local_gguf_validate_lora_adapter")
+private func etos_local_gguf_validate_lora_adapter(
+    _ adapterPath: UnsafePointer<CChar>,
+    _ expectedArchitecture: UnsafePointer<CChar>,
     _ error: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 

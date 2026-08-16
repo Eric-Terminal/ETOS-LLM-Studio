@@ -648,6 +648,78 @@ std::string architecture_name(const std::string & model_path) {
     return result;
 }
 
+void validate_lora_adapter(const std::string & adapter_path, const std::string & expected_architecture) {
+    gguf_init_params params = {true, nullptr};
+    std::unique_ptr<gguf_context, decltype(&gguf_free)> context(
+        gguf_init_from_file(adapter_path.c_str(), params),
+        gguf_free
+    );
+    if (!context) {
+        throw std::runtime_error("无法读取 LoRA GGUF 元数据。");
+    }
+    validate_gguf_file_extent(adapter_path, context.get());
+
+    const auto required_string = [&](const char * key) -> std::string {
+        const int64_t index = gguf_find_key(context.get(), key);
+        if (index < 0 || gguf_get_kv_type(context.get(), index) != GGUF_TYPE_STRING) {
+            throw std::runtime_error(std::string("LoRA GGUF 缺少有效的 ") + key + "。");
+        }
+        const char * value = gguf_get_val_str(context.get(), index);
+        return value ? value : "";
+    };
+
+    if (required_string("general.type") != "adapter") {
+        throw std::runtime_error("所选 GGUF 不是 Adapter 文件。");
+    }
+    if (required_string("adapter.type") != "lora") {
+        throw std::runtime_error("所选 Adapter 不是 LoRA 类型。");
+    }
+    const std::string architecture = required_string("general.architecture");
+    if (architecture.empty()) {
+        throw std::runtime_error("LoRA GGUF 的基础模型架构为空。");
+    }
+    if (!expected_architecture.empty() && architecture != expected_architecture) {
+        throw std::runtime_error(
+            "LoRA 架构与基础模型不匹配（LoRA=" + architecture
+            + "，模型=" + expected_architecture + "）。"
+        );
+    }
+
+    std::map<std::string, std::pair<bool, bool>> tensor_pairs;
+    const auto register_tensor = [&](const std::string & name, const std::string & suffix, bool is_a) -> bool {
+        if (name.size() < suffix.size()
+            || name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            return false;
+        }
+        auto & pair = tensor_pairs[name.substr(0, name.size() - suffix.size())];
+        if (is_a) {
+            pair.first = true;
+        } else {
+            pair.second = true;
+        }
+        return true;
+    };
+    const int64_t tensor_count = gguf_get_n_tensors(context.get());
+    for (int64_t index = 0; index < tensor_count; ++index) {
+        const char * raw_name = gguf_get_tensor_name(context.get(), index);
+        const std::string name = raw_name ? raw_name : "";
+        if (register_tensor(name, ".lora_a", true)
+            || register_tensor(name, ".lora_b", false)
+            || (name.size() >= 12 && name.compare(name.size() - 12, 12, "_norm.weight") == 0)) {
+            continue;
+        }
+        throw std::runtime_error("LoRA GGUF 包含无法识别的张量：" + name);
+    }
+    if (tensor_pairs.empty()) {
+        throw std::runtime_error("LoRA GGUF 不包含 Adapter 张量。");
+    }
+    for (const auto & entry : tensor_pairs) {
+        if (!entry.second.first || !entry.second.second) {
+            throw std::runtime_error("LoRA GGUF 张量配对不完整：" + entry.first);
+        }
+    }
+}
+
 std::vector<float> compute_fbank(const std::vector<float> & waveform, int32_t & frame_count) {
     return apply_lfr(
         compute_mel_frames(waveform),
