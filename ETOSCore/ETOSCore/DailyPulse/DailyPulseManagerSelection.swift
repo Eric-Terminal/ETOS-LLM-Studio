@@ -47,7 +47,7 @@ extension DailyPulseManager {
         )
     }
 
-    static func makeCards(
+    internal nonisolated static func makeCards(
         from cards: [DailyPulseModelCard],
         fallbackFocus: String,
         profile: DailyPulsePreferenceProfile,
