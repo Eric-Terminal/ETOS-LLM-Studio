@@ -45,6 +45,24 @@ private enum CoreSettingsNavigationDestination: Hashable {
     case sync
 }
 
+struct SettingsCoreGridLayout: Equatable {
+    private static let compactCardHeight: CGFloat = 100
+    private static let wideCardHeight: CGFloat = 140
+
+    let columnCount: Int
+    let preferredCardHeight: CGFloat
+
+    static func resolved(
+        horizontalSizeClass: UserInterfaceSizeClass?,
+        verticalSizeClass: UserInterfaceSizeClass?
+    ) -> SettingsCoreGridLayout {
+        let usesWideLayout = horizontalSizeClass == .regular || verticalSizeClass == .compact
+        return usesWideLayout
+            ? SettingsCoreGridLayout(columnCount: 3, preferredCardHeight: wideCardHeight)
+            : SettingsCoreGridLayout(columnCount: 2, preferredCardHeight: compactCardHeight)
+    }
+}
+
 struct SettingsView: View {
     private static let portraitCoreSettingsColumns = Array(
         repeating: GridItem(.flexible()),
@@ -54,8 +72,8 @@ struct SettingsView: View {
         repeating: GridItem(.flexible()),
         count: 3
     )
-    private static let maximumCoreSettingsCardPreferredHeight: CGFloat = 160
-
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var announcementManager = AnnouncementManager.shared
     @ObservedObject private var pulseManager = DailyPulseManager.shared
@@ -63,7 +81,6 @@ struct SettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @Binding private var requestedDestination: SettingsNavigationDestination?
     @State private var coreSettingsDestination: CoreSettingsNavigationDestination?
-    @State private var viewportSize = CGSize.zero
     @State private var settingsResearchTask: Task<Void, Never>?
 
     init(requestedDestination: Binding<SettingsNavigationDestination?> = .constant(nil)) {
@@ -212,11 +229,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .onGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
-        } action: { newSize in
-            viewportSize = newSize
-        }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
         .onAppear {
             scheduleSettingsResearchAchievementIfNeeded()
@@ -280,54 +292,52 @@ struct SettingsView: View {
         }
     }
 
-    /// 纵向保留两列，横向使用三列；宽屏卡片停止按宽度无限增高。
+    /// 使用导航开始前已经确定的尺寸等级，避免在 List 布局过程中切换网格结构。
     private var coreSettingsGrid: some View {
-        let isLandscape = viewportSize.width > viewportSize.height
-        let columnCount = isLandscape ? 3 : 2
-        let columns = isLandscape
+        let layout = SettingsCoreGridLayout.resolved(
+            horizontalSizeClass: horizontalSizeClass,
+            verticalSizeClass: verticalSizeClass
+        )
+        let columns = layout.columnCount == 3
             ? Self.landscapeCoreSettingsColumns
             : Self.portraitCoreSettingsColumns
-        let preferredCardHeight = min(
-            viewportSize.width / CGFloat(columnCount) / 2,
-            Self.maximumCoreSettingsCardPreferredHeight
-        )
 
         return LazyVGrid(columns: columns) {
             coreSettingsButton(
                 titleKey: "模型管理",
                 icon: .providerManagement,
                 destination: .modelManagement,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
             coreSettingsButton(
                 titleKey: "会话",
                 icon: .conversationSettings,
                 destination: .conversation,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
             coreSettingsButton(
                 titleKey: "提示词",
                 icon: .promptSettings,
                 destination: .prompts,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
             coreSettingsButton(
                 titleKey: "输出",
                 icon: .outputSettings,
                 destination: .output,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
             coreSettingsButton(
                 titleKey: "背景与视觉",
                 icon: .display,
                 destination: .display,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
             coreSettingsButton(
                 titleKey: "同步与备份",
                 icon: .sync,
                 destination: .sync,
-                preferredHeight: preferredCardHeight
+                preferredHeight: layout.preferredCardHeight
             )
         }
     }
