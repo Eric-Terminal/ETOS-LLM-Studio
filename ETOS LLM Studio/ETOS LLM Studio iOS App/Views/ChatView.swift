@@ -1031,7 +1031,9 @@ extension ChatView {
                                                 configuredOffset: scrollAnimOffset,
                                                 isEnabled: scrollAnimEnabled,
                                                 isConnectedToAdjacentBubble: mergeWithPrevious || mergeWithNext,
-                                                isBottomPinnedStreamingBubble: isBottomPinnedStreamingBubble
+                                                isBottomPinnedStreamingBubble: isBottomPinnedStreamingBubble,
+                                                isViewportTransitioning: isChatLayoutSettling
+                                                    && !isChatScrollUserInteracting
                                             )
                                         )
                                 }

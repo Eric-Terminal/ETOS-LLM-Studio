@@ -42,14 +42,24 @@ extension ChatView {
         configuredOffset: Double,
         isEnabled: Bool,
         isConnectedToAdjacentBubble: Bool,
-        isBottomPinnedStreamingBubble: Bool = false
+        isBottomPinnedStreamingBubble: Bool = false,
+        isViewportTransitioning: Bool = false
     ) -> CGFloat {
         guard isEnabled,
               !isConnectedToAdjacentBubble,
-              !isBottomPinnedStreamingBubble else {
+              !isBottomPinnedStreamingBubble,
+              !isViewportTransitioning else {
             return 0
         }
         return phaseValue * CGFloat(configuredOffset)
+    }
+
+    /// 输入区弹簧会连续上报中间高度，只在稳定期开始时写入一次滚动目标。
+    nonisolated static func shouldSnapToBottomAtLayoutSettleStart(
+        keepBottomPinned: Bool,
+        isAlreadySettling: Bool
+    ) -> Bool {
+        keepBottomPinned && !isAlreadySettling
     }
 
     /// 消息版本切换可能让当前滚动目标退出可见集合，必须先释放失效目标。
@@ -528,17 +538,29 @@ extension ChatView {
             return
         }
 
-        let keepBottomPinned = shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
+        let keepBottomPinned = Self.resolvedBottomPinIntent(
+            currentIntent: shouldKeepBottomPinned,
+            distanceToBottom: scrollDistanceToBottom,
+            threshold: bottomPinnedDistanceThreshold,
+            isUserInteracting: isChatScrollUserInteracting,
+            isLayoutSettling: isChatLayoutSettling
+        )
         chatInputBarHeight = newHeight
         beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
     }
 
     func beginChatLayoutSettling(keepBottomPinned: Bool) {
         chatLayoutSettleTask?.cancel()
+        let wasAlreadySettling = isChatLayoutSettling
         isChatLayoutSettling = true
 
         if keepBottomPinned {
             shouldKeepBottomPinned = true
+        }
+        if Self.shouldSnapToBottomAtLayoutSettleStart(
+            keepBottomPinned: keepBottomPinned,
+            isAlreadySettling: wasAlreadySettling
+        ) {
             scrollToBottom(animated: false)
         }
 

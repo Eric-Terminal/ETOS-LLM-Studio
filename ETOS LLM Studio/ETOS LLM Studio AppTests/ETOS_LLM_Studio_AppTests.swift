@@ -108,6 +108,31 @@ struct ETOS_LLM_Studio_AppTests {
             isBottomPinnedStreamingBubble: true
         )
         #expect(bottomPinnedStreamingOffset == 0)
+
+        let viewportTransitionOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: true,
+            isConnectedToAdjacentBubble: false,
+            isViewportTransitioning: true
+        )
+        #expect(viewportTransitionOffset == 0)
+    }
+
+    @Test("输入栏连续变高时只在稳定期开始吸底一次")
+    func testChatLayoutSettleOnlyStartsOneBottomSnap() {
+        #expect(ChatView.shouldSnapToBottomAtLayoutSettleStart(
+            keepBottomPinned: true,
+            isAlreadySettling: false
+        ))
+        #expect(!ChatView.shouldSnapToBottomAtLayoutSettleStart(
+            keepBottomPinned: true,
+            isAlreadySettling: true
+        ))
+        #expect(!ChatView.shouldSnapToBottomAtLayoutSettleStart(
+            keepBottomPinned: false,
+            isAlreadySettling: false
+        ))
     }
 
     @Test("消息版本切换会释放已经消失的滚动目标")
