@@ -54,14 +54,6 @@ extension ChatView {
         return phaseValue * CGFloat(configuredOffset)
     }
 
-    /// 输入区弹簧会连续上报中间高度，只在稳定期开始时写入一次滚动目标。
-    nonisolated static func shouldSnapToBottomAtLayoutSettleStart(
-        keepBottomPinned: Bool,
-        isAlreadySettling: Bool
-    ) -> Bool {
-        keepBottomPinned && !isAlreadySettling
-    }
-
     /// 只有贴底内容随视口变化时才暂停气泡波浪，历史阅读与用户手势始终保留直接反馈。
     nonisolated static func shouldSuppressScrollTransitionForViewportChange(
         isLayoutSettling: Bool,
@@ -580,24 +572,13 @@ extension ChatView {
 
     func beginChatLayoutSettling(keepBottomPinned: Bool) {
         chatLayoutSettleTask?.cancel()
-        let wasAlreadySettling = isChatLayoutSettling
         isChatLayoutSettling = true
         shouldKeepBottomPinned = keepBottomPinned
-        if Self.shouldSnapToBottomAtLayoutSettleStart(
-            keepBottomPinned: keepBottomPinned,
-            isAlreadySettling: wasAlreadySettling
-        ) {
-            scrollToBottom(animated: false)
-        }
 
         chatLayoutSettleTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 450_000_000)
             guard !Task.isCancelled else { return }
             isChatLayoutSettling = false
-            // 等待期间用户可能已经拖动列表；此时不能用旧的贴底意图把阅读位置抢回来。
-            if keepBottomPinned, shouldKeepBottomPinned {
-                scrollToBottom(animated: false)
-            }
             chatLayoutSettleTask = nil
         }
     }
@@ -939,6 +920,7 @@ extension ChatView {
             guard canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else { return }
             if releasesAtBottom {
                 activeBottomScrollCommandTarget = target
+                bottomScrollCommandGeneration &+= 1
             }
             applyScrollTarget(
                 target,
@@ -965,6 +947,7 @@ extension ChatView {
             }
             if releasesAtBottom {
                 activeBottomScrollCommandTarget = target
+                bottomScrollCommandGeneration &+= 1
             }
             applyScrollTarget(
                 target,

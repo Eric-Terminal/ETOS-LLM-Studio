@@ -111,6 +111,7 @@ struct ChatView: View {
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var activeBottomScrollCommandTarget: ChatScrollTargetID?
+    @State var bottomScrollCommandGeneration: UInt = 0
     @State var needsImmediateBottomSnap: Bool = true
     @State var isChatLayoutSettling: Bool = false
     @State var isChatScrollUserInteracting: Bool = false
@@ -776,7 +777,11 @@ extension ChatView {
                                 appConfig.chatStreamingDisplayMode
                             ),
                             reduceMotion: accessibilityReduceMotion,
-                            forcesMetricsRefresh: activeBottomScrollCommandTarget != nil,
+                            metricsRefreshGeneration: bottomScrollCommandGeneration,
+                            isViewportTransitioning: isChatLayoutSettling,
+                            hasProgrammaticScrollCommand: chatScrollTarget != nil
+                                || pendingScrollTargetTask != nil
+                                || activeBottomScrollCommandTarget != nil,
                             anchorAdjustment: chatLayoutIntegrityMonitor.pendingAnchorAdjustment,
                             onAnchorAdjustmentApplied: { adjustmentID in
                                 chatLayoutIntegrityMonitor.completeAnchorAdjustment(id: adjustmentID)
@@ -1107,6 +1112,7 @@ extension ChatView {
                 }
                 .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
                 .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in
+                    updateChatScrollInteractionState(isUserInteracting)
                     updateScrollToBottomVisibility(
                         distanceToBottom: distanceToBottom,
                         isUserInteracting: isUserInteracting

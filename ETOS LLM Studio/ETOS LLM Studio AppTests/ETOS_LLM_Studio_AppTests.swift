@@ -119,22 +119,6 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(viewportTransitionOffset == 0)
     }
 
-    @Test("输入栏连续变高时只在稳定期开始吸底一次")
-    func testChatLayoutSettleOnlyStartsOneBottomSnap() {
-        #expect(ChatView.shouldSnapToBottomAtLayoutSettleStart(
-            keepBottomPinned: true,
-            isAlreadySettling: false
-        ))
-        #expect(!ChatView.shouldSnapToBottomAtLayoutSettleStart(
-            keepBottomPinned: true,
-            isAlreadySettling: true
-        ))
-        #expect(!ChatView.shouldSnapToBottomAtLayoutSettleStart(
-            keepBottomPinned: false,
-            isAlreadySettling: false
-        ))
-    }
-
     @MainActor
     @Test("吸底命令使用消息栈的真实尾部锚点")
     func testChatBottomScrollTargetsTrueStackEnd() {
@@ -169,8 +153,16 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("无位移的吸底命令仍会请求真实滚动指标")
+    @Test("无位移吸底命令按代次只越过去重边界一次")
     func testActiveBottomCommandForcesMetricsCallback() {
+        #expect(ChatScrollMetricsObserver.shouldForceMetricsRefresh(
+            generation: 8,
+            lastServicedGeneration: 7
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldForceMetricsRefresh(
+            generation: 8,
+            lastServicedGeneration: 8
+        ))
         #expect(ChatScrollMetricsObserver.shouldNotifyMetrics(
             forcesRefresh: true,
             hasReportedDistance: true,
@@ -359,6 +351,31 @@ struct ETOS_LLM_Studio_AppTests {
             targetOffsetY: 76,
             minimumOffsetY: 0
         ) == 72)
+
+        #expect(ChatScrollMetricsObserver.viewportFollowTargetOffsetY(
+            requestedContentHeight: 1_000,
+            actualContentHeight: 1_000,
+            boundsHeight: 600,
+            topInset: 0,
+            bottomInset: 0,
+            forcesMinimumOffset: false
+        ) == 400)
+        #expect(ChatScrollMetricsObserver.viewportFollowTargetOffsetY(
+            requestedContentHeight: 1_000,
+            actualContentHeight: 900,
+            boundsHeight: 600,
+            topInset: 0,
+            bottomInset: 0,
+            forcesMinimumOffset: false
+        ) == 300)
+        #expect(ChatScrollMetricsObserver.viewportFollowTargetOffsetY(
+            requestedContentHeight: 1_000,
+            actualContentHeight: 1_000,
+            boundsHeight: 600,
+            topInset: 12,
+            bottomInset: 0,
+            forcesMinimumOffset: true
+        ) == -12)
     }
 
     @Test("流式 Markdown 只在 Block 准备完成前冻结结构变化")

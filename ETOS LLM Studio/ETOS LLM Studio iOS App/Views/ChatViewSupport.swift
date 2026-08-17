@@ -252,7 +252,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     let isStreaming: Bool
     let streamingDisplayMode: ChatStreamingDisplayMode
     let reduceMotion: Bool
-    let forcesMetricsRefresh: Bool
+    let metricsRefreshGeneration: UInt
+    let isViewportTransitioning: Bool
+    let hasProgrammaticScrollCommand: Bool
     let anchorAdjustment: ChatScrollAnchorAdjustment?
     let onAnchorAdjustmentApplied: (UUID) -> Void
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
@@ -307,6 +309,32 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         bottomInset: CGFloat
     ) -> CGFloat {
         max(-topInset, contentHeight - boundsHeight + bottomInset)
+    }
+
+    /// 延迟跟随保留内容高度语义，到真正执行时才使用最新视口换算并钳制合法范围。
+    nonisolated static func viewportFollowTargetOffsetY(
+        requestedContentHeight: CGFloat?,
+        actualContentHeight: CGFloat,
+        boundsHeight: CGFloat,
+        topInset: CGFloat,
+        bottomInset: CGFloat,
+        forcesMinimumOffset: Bool
+    ) -> CGFloat {
+        let minimumOffsetY = -topInset
+        guard !forcesMinimumOffset else { return minimumOffsetY }
+        let requestedOffsetY = maximumContentOffsetY(
+            contentHeight: requestedContentHeight ?? actualContentHeight,
+            boundsHeight: boundsHeight,
+            topInset: topInset,
+            bottomInset: bottomInset
+        )
+        let actualMaximumOffsetY = maximumContentOffsetY(
+            contentHeight: actualContentHeight,
+            boundsHeight: boundsHeight,
+            topInset: topInset,
+            bottomInset: bottomInset
+        )
+        return min(requestedOffsetY, actualMaximumOffsetY)
     }
 
     nonisolated static func anchorAdjustedContentOffsetY(
@@ -369,13 +397,23 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         forcesRefresh || !hasReportedDistance || metricsChanged || interactionChanged
     }
 
+    /// 无位移命令只越过去重边界一次，后续回执仍由真实几何变化驱动。
+    nonisolated static func shouldForceMetricsRefresh(
+        generation: UInt,
+        lastServicedGeneration: UInt
+    ) -> Bool {
+        generation != lastServicedGeneration
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
             isStreaming: isStreaming,
             streamingDisplayMode: streamingDisplayMode,
             reduceMotion: reduceMotion,
-            forcesMetricsRefresh: forcesMetricsRefresh,
+            metricsRefreshGeneration: metricsRefreshGeneration,
+            isViewportTransitioning: isViewportTransitioning,
+            hasProgrammaticScrollCommand: hasProgrammaticScrollCommand,
             anchorAdjustment: anchorAdjustment,
             onAnchorAdjustmentApplied: onAnchorAdjustmentApplied,
             usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
@@ -395,12 +433,16 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onMetricsChange = onMetricsChange
         coordinator.keepsBottomPinned = $keepsBottomPinned
-        coordinator.isStreaming = isStreaming
         coordinator.streamingDisplayMode = streamingDisplayMode
         coordinator.reduceMotion = reduceMotion
-        coordinator.forcesMetricsRefresh = forcesMetricsRefresh
+        coordinator.metricsRefreshGeneration = metricsRefreshGeneration
         coordinator.anchorAdjustment = anchorAdjustment
         coordinator.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
+        coordinator.updateScrollOwnership(
+            isStreaming: isStreaming,
+            isViewportTransitioning: isViewportTransitioning,
+            hasProgrammaticScrollCommand: hasProgrammaticScrollCommand
+        )
         uiView.coordinator = coordinator
         DispatchQueue.main.async {
             uiView.attachToScrollViewIfNeeded()
@@ -413,13 +455,20 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         uiView.coordinator = nil
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject {
+        private enum ViewportFollowMode {
+            case animated
+            case immediate
+        }
+
         var onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
         var keepsBottomPinned: Binding<Bool>
         var isStreaming: Bool
         var streamingDisplayMode: ChatStreamingDisplayMode
         var reduceMotion: Bool
-        var forcesMetricsRefresh: Bool
+        var metricsRefreshGeneration: UInt
+        var isViewportTransitioning: Bool
+        var hasProgrammaticScrollCommand: Bool
         var anchorAdjustment: ChatScrollAnchorAdjustment?
         var onAnchorAdjustmentApplied: (UUID) -> Void
         let usesNativeSizeChangeAnchor: Bool
@@ -427,26 +476,33 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var contentOffsetObservation: NSKeyValueObservation?
         private var contentSizeObservation: NSKeyValueObservation?
         private var boundsObservation: NSKeyValueObservation?
-        private var pendingBottomPin: DispatchWorkItem?
-        private var pendingStreamingFollow: DispatchWorkItem?
+        private var pendingViewportFollow: DispatchWorkItem?
+        private var pendingViewportFollowMode: ViewportFollowMode?
+        private var pendingViewportFollowContentHeight: CGFloat?
+        private var pendingViewportFollowForcesMinimumOffset = false
         private var pendingStreamingLayoutSettle: DispatchWorkItem?
-        private var pendingStreamingLayoutTargetOffsetY: CGFloat?
+        private var pendingStreamingLayoutSafeContentHeight: CGFloat?
+        private var pendingStreamingLayoutStableContentHeight: CGFloat?
+        private var pendingStreamingLayoutStableContentOverflowsViewport: Bool?
         private var pendingDistanceNotification: DispatchWorkItem?
+        private var streamingFollowAnimator: UIViewPropertyAnimator?
+        private var awaitsStreamingEndHandoff = false
         private var lastBoundsSize: CGSize?
-        private var restoresBottomAfterContentSizeChange = false
-        private var restoresBottomAfterViewportResize = false
         private var lastDistanceToBottom: CGFloat = 0
         private var lastDistanceToTop: CGFloat = 0
         private var hasReportedDistance = false
         private var lastReportedInteractionState = false
         private var lastAppliedAnchorAdjustmentID: UUID?
+        private var lastServicedMetricsRefreshGeneration: UInt
 
         init(
             keepsBottomPinned: Binding<Bool>,
             isStreaming: Bool,
             streamingDisplayMode: ChatStreamingDisplayMode,
             reduceMotion: Bool,
-            forcesMetricsRefresh: Bool,
+            metricsRefreshGeneration: UInt,
+            isViewportTransitioning: Bool,
+            hasProgrammaticScrollCommand: Bool,
             anchorAdjustment: ChatScrollAnchorAdjustment?,
             onAnchorAdjustmentApplied: @escaping (UUID) -> Void,
             usesNativeSizeChangeAnchor: Bool,
@@ -456,11 +512,15 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             self.isStreaming = isStreaming
             self.streamingDisplayMode = streamingDisplayMode
             self.reduceMotion = reduceMotion
-            self.forcesMetricsRefresh = forcesMetricsRefresh
+            self.metricsRefreshGeneration = metricsRefreshGeneration
+            self.isViewportTransitioning = isViewportTransitioning
+            self.hasProgrammaticScrollCommand = hasProgrammaticScrollCommand
             self.anchorAdjustment = anchorAdjustment
             self.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
             self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
             self.onMetricsChange = onMetricsChange
+            self.lastServicedMetricsRefreshGeneration = metricsRefreshGeneration
+            super.init()
         }
 
         private var reliesOnNativeSizeChangeAnchor: Bool {
@@ -477,24 +537,31 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             contentOffsetObservation?.invalidate()
             contentSizeObservation?.invalidate()
             boundsObservation?.invalidate()
-            pendingBottomPin?.cancel()
-            pendingBottomPin = nil
-            pendingStreamingFollow?.cancel()
-            pendingStreamingFollow = nil
+            self.scrollView?.panGestureRecognizer.removeTarget(
+                self,
+                action: #selector(handlePanGesture(_:))
+            )
+            cancelPendingViewportFollow()
             pendingStreamingLayoutSettle?.cancel()
             pendingStreamingLayoutSettle = nil
-            pendingStreamingLayoutTargetOffsetY = nil
+            pendingStreamingLayoutSafeContentHeight = nil
+            pendingStreamingLayoutStableContentHeight = nil
+            pendingStreamingLayoutStableContentOverflowsViewport = nil
+            awaitsStreamingEndHandoff = false
+            stopStreamingFollowAnimator(preservingVisiblePosition: false)
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
             lastBoundsSize = scrollView.bounds.size
-            restoresBottomAfterContentSizeChange = false
-            restoresBottomAfterViewportResize = false
             hasReportedDistance = false
             lastDistanceToBottom = 0
             lastDistanceToTop = 0
             lastReportedInteractionState = false
             lastAppliedAnchorAdjustmentID = nil
             self.scrollView = scrollView
+            scrollView.panGestureRecognizer.addTarget(
+                self,
+                action: #selector(handlePanGesture(_:))
+            )
             contentOffsetObservation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
                 self?.scheduleDistanceChangeNotification()
             }
@@ -514,21 +581,26 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         }
 
         func detach() {
+            scrollView?.panGestureRecognizer.removeTarget(
+                self,
+                action: #selector(handlePanGesture(_:))
+            )
             contentOffsetObservation?.invalidate()
             contentOffsetObservation = nil
             contentSizeObservation?.invalidate()
             contentSizeObservation = nil
             boundsObservation?.invalidate()
             boundsObservation = nil
-            pendingBottomPin?.cancel()
-            pendingBottomPin = nil
-            pendingStreamingFollow?.cancel()
-            pendingStreamingFollow = nil
+            cancelPendingViewportFollow()
             pendingStreamingLayoutSettle?.cancel()
             pendingStreamingLayoutSettle = nil
-            pendingStreamingLayoutTargetOffsetY = nil
+            pendingStreamingLayoutSafeContentHeight = nil
+            pendingStreamingLayoutStableContentHeight = nil
+            pendingStreamingLayoutStableContentOverflowsViewport = nil
+            awaitsStreamingEndHandoff = false
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
+            stopStreamingFollowAnimator(preservingVisiblePosition: false)
             lastAppliedAnchorAdjustmentID = nil
             scrollView = nil
         }
@@ -536,13 +608,24 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         func applyAnchorAdjustmentIfNeeded() {
             guard let anchorAdjustment,
                   anchorAdjustment.id != lastAppliedAnchorAdjustmentID,
-                  let scrollView else {
+                  let scrollView,
+                  !isStreaming,
+                  !isViewportTransitioning,
+                  !hasProgrammaticScrollCommand else {
                 return
             }
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
             guard !isUserInteracting else { return }
+
+            cancelPendingViewportFollow()
+            pendingStreamingLayoutSettle?.cancel()
+            pendingStreamingLayoutSettle = nil
+            pendingStreamingLayoutSafeContentHeight = nil
+            pendingStreamingLayoutStableContentHeight = nil
+            pendingStreamingLayoutStableContentOverflowsViewport = nil
+            stopStreamingFollowAnimator(preservingVisiblePosition: true)
 
             let minimumOffsetY = -scrollView.adjustedContentInset.top
             let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
@@ -568,36 +651,124 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             onAnchorAdjustmentApplied(anchorAdjustment.id)
         }
 
+        func updateScrollOwnership(
+            isStreaming: Bool,
+            isViewportTransitioning: Bool,
+            hasProgrammaticScrollCommand: Bool
+        ) {
+            let didEndStreaming = self.isStreaming && !isStreaming
+            let didEndViewportTransition = self.isViewportTransitioning
+                && !isViewportTransitioning
+            self.isStreaming = isStreaming
+            self.isViewportTransitioning = isViewportTransitioning
+            self.hasProgrammaticScrollCommand = hasProgrammaticScrollCommand
+            if isStreaming {
+                awaitsStreamingEndHandoff = false
+            }
+
+            if hasProgrammaticScrollCommand {
+                awaitsStreamingEndHandoff = false
+                cancelPendingViewportFollow()
+                pendingStreamingLayoutSettle?.cancel()
+                pendingStreamingLayoutSettle = nil
+                pendingStreamingLayoutSafeContentHeight = nil
+                pendingStreamingLayoutStableContentHeight = nil
+                pendingStreamingLayoutStableContentOverflowsViewport = nil
+                stopStreamingFollowAnimator(preservingVisiblePosition: true)
+            } else if didEndStreaming {
+                awaitsStreamingEndHandoff = true
+                cancelPendingViewportFollow()
+                pendingStreamingLayoutSettle?.cancel()
+                pendingStreamingLayoutSettle = nil
+                pendingStreamingLayoutSafeContentHeight = nil
+                pendingStreamingLayoutStableContentHeight = nil
+                pendingStreamingLayoutStableContentOverflowsViewport = nil
+                stopStreamingFollowAnimator(preservingVisiblePosition: true)
+                DispatchQueue.main.async { [weak self] in
+                    self?.completeStreamingEndHandoff()
+                }
+            } else if didEndViewportTransition, awaitsStreamingEndHandoff {
+                DispatchQueue.main.async { [weak self] in
+                    self?.completeStreamingEndHandoff()
+                }
+            } else if didEndViewportTransition,
+                      isStreaming,
+                      pendingStreamingLayoutSettle == nil {
+                cancelPendingViewportFollow()
+                pendingStreamingLayoutStableContentHeight = nil
+                pendingStreamingLayoutStableContentOverflowsViewport = nil
+                scheduleViewportFollow(mode: .animated)
+            }
+        }
+
         private func handleContentSizeChange(from oldSize: CGSize?, to newSize: CGSize) {
             let isUserInteracting = scrollView?.isDragging == true
                 || scrollView?.isTracking == true
                 || scrollView?.isDecelerating == true
-            let didHandleStreamingChange: Bool
-            if let oldSize {
+            if isStreaming, let oldSize {
                 let heightDelta = newSize.height - oldSize.height
-                if isStreaming,
-                   (pendingStreamingLayoutSettle != nil
+                if pendingStreamingLayoutSettle != nil
                     || ChatScrollMetricsObserver.requiresStreamingLayoutSettle(
                         heightDelta: heightDelta
-                    )) {
-                    scheduleStreamingLayoutSettle()
-                    didHandleStreamingChange = true
+                    ) {
+                    scheduleStreamingLayoutSettle(stableContentHeight: oldSize.height)
+                } else if isViewportTransitioning {
+                    captureStableStreamingLayoutIfNeeded(
+                        contentHeight: oldSize.height,
+                        boundsHeight: scrollView?.bounds.height
+                    )
+                    pendingStreamingLayoutStableContentHeight = newSize.height
+                    scheduleViewportFollow(
+                        mode: .immediate,
+                        contentHeight: pendingStreamingLayoutStableContentHeight,
+                        forcesMinimumOffset:
+                            pendingStreamingLayoutStableContentOverflowsViewport == false
+                    )
                 } else {
-                    didHandleStreamingChange = followStreamingContentSizeChange()
+                    scheduleViewportFollow(mode: .animated)
                 }
-            } else {
-                didHandleStreamingChange = false
+            } else if ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
+                keepsBottomPinned: keepsBottomPinned.wrappedValue,
+                isUserInteracting: isUserInteracting,
+                usesNativeSizeChangeAnchor: reliesOnNativeSizeChangeAnchor
+            ) {
+                scheduleViewportFollow(mode: .immediate)
             }
-            if !didHandleStreamingChange,
-               ChatScrollMetricsObserver.shouldRestoreBottomAfterContentSizeChange(
-                   keepsBottomPinned: keepsBottomPinned.wrappedValue,
-                   isUserInteracting: isUserInteracting,
-                   usesNativeSizeChangeAnchor: reliesOnNativeSizeChangeAnchor
-               ) {
-                restoresBottomAfterContentSizeChange = true
+            scheduleDistanceChangeNotification()
+        }
+
+        /// 流式所有权交回原生尺寸锚点前闭合最后一小段距离，避免停在缓动半程。
+        private func completeStreamingEndHandoff() {
+            guard awaitsStreamingEndHandoff else { return }
+            guard !isViewportTransitioning else { return }
+            guard !isStreaming,
+                  !hasProgrammaticScrollCommand,
+                  anchorAdjustment == nil,
+                  keepsBottomPinned.wrappedValue,
+                  let scrollView else {
+                awaitsStreamingEndHandoff = false
+                return
             }
-            if !reliesOnNativeSizeChangeAnchor && !didHandleStreamingChange {
-                scheduleBottomPin()
+            let isUserInteracting = scrollView.isDragging
+                || scrollView.isTracking
+                || scrollView.isDecelerating
+            guard !isUserInteracting else {
+                awaitsStreamingEndHandoff = false
+                return
+            }
+            awaitsStreamingEndHandoff = false
+            let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
+                contentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height,
+                topInset: scrollView.adjustedContentInset.top,
+                bottomInset: scrollView.adjustedContentInset.bottom
+            )
+            guard abs(scrollView.contentOffset.y - maximumOffsetY) > 0.5 else { return }
+            UIView.performWithoutAnimation {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: maximumOffsetY),
+                    animated: false
+                )
             }
             scheduleDistanceChangeNotification()
         }
@@ -621,110 +792,176 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             ) else {
                 return
             }
-
-            // 先记住尺寸变化前的贴底意图，避免随后上报的新距离覆盖判断依据。
-            restoresBottomAfterViewportResize = true
-            scheduleBottomPin()
+            if isStreaming,
+               isViewportTransitioning,
+               pendingStreamingLayoutStableContentHeight == nil,
+               let scrollView {
+                captureStableStreamingLayoutIfNeeded(
+                    contentHeight: scrollView.contentSize.height,
+                    boundsHeight: lastBoundsSize.height
+                )
+            }
+            scheduleViewportFollow(
+                mode: .immediate,
+                contentHeight: pendingStreamingLayoutStableContentHeight,
+                forcesMinimumOffset: pendingStreamingLayoutStableContentOverflowsViewport == false
+            )
         }
 
-        /// contentSize 的 KVO 正处在 UIKit/SwiftUI 布局栈内，不能同步改 contentOffset。
-        /// 合并到下一轮主循环可避免删除高气泡时发生重入布局。
-        private func scheduleBottomPin() {
-            guard pendingBottomPin == nil else { return }
+        private func captureStableStreamingLayoutIfNeeded(
+            contentHeight: CGFloat,
+            boundsHeight: CGFloat?
+        ) {
+            guard pendingStreamingLayoutStableContentHeight == nil,
+                  let scrollView else {
+                return
+            }
+            pendingStreamingLayoutStableContentHeight = contentHeight
+            if hasReportedDistance {
+                pendingStreamingLayoutStableContentOverflowsViewport =
+                    lastDistanceToTop > 0.5 || lastDistanceToBottom > 0.5
+            } else {
+                pendingStreamingLayoutStableContentOverflowsViewport =
+                    ChatScrollMetricsObserver.streamingContentOverflowsViewport(
+                        contentHeight: contentHeight,
+                        boundsHeight: boundsHeight ?? scrollView.bounds.height,
+                        bottomInset: scrollView.adjustedContentInset.bottom
+                    )
+            }
+        }
+
+        /// bounds 与 contentSize 可能在同一布局批次交错变化；统一到下一轮只写一次偏移。
+        private func scheduleViewportFollow(
+            mode: ViewportFollowMode,
+            contentHeight: CGFloat? = nil,
+            forcesMinimumOffset: Bool = false
+        ) {
+            guard !reliesOnNativeSizeChangeAnchor else { return }
+            if pendingViewportFollowMode != .immediate {
+                pendingViewportFollowMode = mode
+            }
+            if let contentHeight {
+                if let pendingHeight = pendingViewportFollowContentHeight {
+                    pendingViewportFollowContentHeight = min(pendingHeight, contentHeight)
+                } else {
+                    pendingViewportFollowContentHeight = contentHeight
+                }
+            }
+            pendingViewportFollowForcesMinimumOffset =
+                pendingViewportFollowForcesMinimumOffset || forcesMinimumOffset
+            guard pendingViewportFollow == nil else { return }
+
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self else { return }
-                self.pendingBottomPin = nil
-                self.pinToBottomIfNeeded()
+                let mode = self.pendingViewportFollowMode ?? .immediate
+                let contentHeight = self.pendingViewportFollowContentHeight
+                let forcesMinimumOffset = self.pendingViewportFollowForcesMinimumOffset
+                self.pendingViewportFollow = nil
+                self.pendingViewportFollowMode = nil
+                self.pendingViewportFollowContentHeight = nil
+                self.pendingViewportFollowForcesMinimumOffset = false
+                self.performViewportFollow(
+                    mode: mode,
+                    contentHeight: contentHeight,
+                    forcesMinimumOffset: forcesMinimumOffset
+                )
             }
-            pendingBottomPin = workItem
+            pendingViewportFollow = workItem
             DispatchQueue.main.async(execute: workItem)
         }
 
-        private func pinToBottomIfNeeded() {
-            guard !reliesOnNativeSizeChangeAnchor, let scrollView else { return }
+        private func cancelPendingViewportFollow() {
+            pendingViewportFollow?.cancel()
+            pendingViewportFollow = nil
+            pendingViewportFollowMode = nil
+            pendingViewportFollowContentHeight = nil
+            pendingViewportFollowForcesMinimumOffset = false
+        }
+
+        private func performViewportFollow(
+            mode: ViewportFollowMode,
+            contentHeight requestedContentHeight: CGFloat?,
+            forcesMinimumOffset: Bool
+        ) {
+            guard let scrollView else { return }
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
-            let shouldRestoreAfterContentSizeChange = restoresBottomAfterContentSizeChange
-            restoresBottomAfterContentSizeChange = false
-            let shouldRestoreAfterResize = restoresBottomAfterViewportResize
-            restoresBottomAfterViewportResize = false
-            let wasPinnedBeforeLayoutChange = hasReportedDistance
-                && ETScrollBottomPinPolicy.shouldKeepPinned(
-                    keepsBottomPinned: keepsBottomPinned.wrappedValue,
-                    previousDistanceToBottom: lastDistanceToBottom,
-                    isUserInteracting: isUserInteracting
-                )
-            let shouldPin = keepsBottomPinned.wrappedValue
-                && !isUserInteracting
-                && (shouldRestoreAfterContentSizeChange
-                    || shouldRestoreAfterResize
-                    || wasPinnedBeforeLayoutChange)
+            guard keepsBottomPinned.wrappedValue,
+                  !isUserInteracting,
+                  !hasProgrammaticScrollCommand else {
+                return
+            }
 
-            if shouldPin {
-                let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
-                    contentHeight: scrollView.contentSize.height,
-                    boundsHeight: scrollView.bounds.height,
-                    topInset: scrollView.adjustedContentInset.top,
-                    bottomInset: scrollView.adjustedContentInset.bottom
-                )
-                if abs(scrollView.contentOffset.y - maximumOffsetY) > 0.5 {
-                    scrollView.setContentOffset(
-                        CGPoint(x: scrollView.contentOffset.x, y: maximumOffsetY),
-                        animated: false
-                    )
+            let targetOffsetY = ChatScrollMetricsObserver.viewportFollowTargetOffsetY(
+                requestedContentHeight: requestedContentHeight,
+                actualContentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height,
+                topInset: scrollView.adjustedContentInset.top,
+                bottomInset: scrollView.adjustedContentInset.bottom,
+                forcesMinimumOffset: forcesMinimumOffset
+            )
+            if mode == .immediate || !isStreaming {
+                stopStreamingFollowAnimator(preservingVisiblePosition: false)
+                if abs(scrollView.contentOffset.y - targetOffsetY) > 0.5 {
+                    UIView.performWithoutAnimation {
+                        scrollView.setContentOffset(
+                            CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY),
+                            animated: false
+                        )
+                    }
                 }
+                scheduleDistanceChangeNotification()
+                return
             }
-            scheduleDistanceChangeNotification()
-        }
-
-        /// KVO 发生在 SwiftUI 布局栈内；这里只合并通知，避免动画误捕获尚未稳定的 bounds.size。
-        @discardableResult
-        private func followStreamingContentSizeChange() -> Bool {
-            guard isStreaming, scrollView != nil else { return false }
-            scheduleStreamingFollow()
-            return true
-        }
-
-        private func scheduleStreamingFollow() {
-            guard pendingStreamingFollow == nil else { return }
-            let workItem = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                self.pendingStreamingFollow = nil
-                self.followSettledStreamingContent()
-            }
-            pendingStreamingFollow = workItem
-            DispatchQueue.main.async(execute: workItem)
+            followSettledStreamingContent(targetOffsetY: targetOffsetY)
         }
 
         /// MarkdownUI 会在同一批内容内先后给出高、低两套测量值；窗口内只追最低安全底部。
         /// 保留已经开始的向上动画，避免每次测量都删除动画后让视口永久停在原位。
-        private func scheduleStreamingLayoutSettle() {
+        private func scheduleStreamingLayoutSettle(stableContentHeight: CGFloat) {
             guard let scrollView else { return }
-            pendingStreamingFollow?.cancel()
-            pendingStreamingFollow = nil
-            let candidateTargetOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
-                contentHeight: scrollView.contentSize.height,
-                boundsHeight: scrollView.bounds.height,
-                topInset: scrollView.adjustedContentInset.top,
-                bottomInset: scrollView.adjustedContentInset.bottom
+            cancelPendingViewportFollow()
+            captureStableStreamingLayoutIfNeeded(
+                contentHeight: stableContentHeight,
+                boundsHeight: scrollView.bounds.height
             )
-            if let pendingStreamingLayoutTargetOffsetY {
-                self.pendingStreamingLayoutTargetOffsetY = min(
-                    pendingStreamingLayoutTargetOffsetY,
-                    candidateTargetOffsetY
+            let candidateContentHeight = scrollView.contentSize.height
+            if let pendingStreamingLayoutSafeContentHeight {
+                self.pendingStreamingLayoutSafeContentHeight = min(
+                    pendingStreamingLayoutSafeContentHeight,
+                    candidateContentHeight
                 )
             } else {
-                pendingStreamingLayoutTargetOffsetY = candidateTargetOffsetY
+                pendingStreamingLayoutSafeContentHeight = candidateContentHeight
+            }
+            if isViewportTransitioning {
+                scheduleViewportFollow(
+                    mode: .immediate,
+                    contentHeight: pendingStreamingLayoutStableContentHeight,
+                    forcesMinimumOffset:
+                        pendingStreamingLayoutStableContentOverflowsViewport == false
+                )
             }
             guard pendingStreamingLayoutSettle == nil else { return }
 
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.pendingStreamingLayoutSettle = nil
-                let safeTargetOffsetY = self.pendingStreamingLayoutTargetOffsetY
-                self.pendingStreamingLayoutTargetOffsetY = nil
-                self.followSettledStreamingContent(targetOffsetY: safeTargetOffsetY)
+                let safeContentHeight = self.pendingStreamingLayoutSafeContentHeight
+                self.pendingStreamingLayoutSafeContentHeight = nil
+                if self.isViewportTransitioning {
+                    self.pendingStreamingLayoutStableContentHeight = safeContentHeight
+                } else {
+                    self.pendingStreamingLayoutStableContentHeight = nil
+                    self.pendingStreamingLayoutStableContentOverflowsViewport = nil
+                }
+                self.scheduleViewportFollow(
+                    mode: self.isViewportTransitioning ? .immediate : .animated,
+                    contentHeight: safeContentHeight,
+                    forcesMinimumOffset:
+                        self.pendingStreamingLayoutStableContentOverflowsViewport == false
+                )
             }
             pendingStreamingLayoutSettle = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.09, execute: workItem)
@@ -736,7 +973,12 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             let isUserInteracting = scrollView.isDragging
                 || scrollView.isTracking
                 || scrollView.isDecelerating
-            guard isStreaming, keepsBottomPinned.wrappedValue, !isUserInteracting else { return }
+            guard isStreaming,
+                  keepsBottomPinned.wrappedValue,
+                  !isUserInteracting,
+                  !hasProgrammaticScrollCommand else {
+                return
+            }
 
             let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
                 contentHeight: scrollView.contentSize.height,
@@ -756,6 +998,11 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 visibleOffsetY: visibleOffsetY,
                 targetOffsetY: targetOffsetY
             ) else {
+                // 高度回落时先停止仍朝旧高点运行的自有动画，保持用户当前可见位置。
+                stopStreamingFollowAnimator(
+                    preservingVisiblePosition: true,
+                    clampsWithoutOwnedAnimator: true
+                )
                 return
             }
             let minimumOffsetY = -scrollView.adjustedContentInset.top
@@ -771,8 +1018,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 reduceMotion: reduceMotion
             )
 
-            // removeAllAnimations 与模型层回写发生在同一提交前，屏幕不会看见中间跳帧。
-            scrollView.layer.removeAllAnimations()
+            stopStreamingFollowAnimator(preservingVisiblePosition: false)
             UIView.performWithoutAnimation {
                 scrollView.setContentOffset(
                     CGPoint(x: scrollView.contentOffset.x, y: startOffsetY),
@@ -781,18 +1027,70 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             }
             let targetOffset = CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY)
             if shouldAnimate {
-                UIView.animate(
-                    withDuration: streamingDisplayMode.viewportFollowDuration,
-                    delay: 0,
-                    options: [.curveEaseOut, .allowUserInteraction]
+                let animator = UIViewPropertyAnimator(
+                    duration: streamingDisplayMode.viewportFollowDuration,
+                    curve: .easeOut
                 ) {
                     scrollView.setContentOffset(targetOffset, animated: false)
                 }
+                streamingFollowAnimator = animator
+                animator.addCompletion { [weak self, weak animator] _ in
+                    guard let self, self.streamingFollowAnimator === animator else { return }
+                    self.streamingFollowAnimator = nil
+                }
+                animator.startAnimation()
             } else {
                 UIView.performWithoutAnimation {
                     scrollView.setContentOffset(targetOffset, animated: false)
                 }
             }
+        }
+
+        private func stopStreamingFollowAnimator(
+            preservingVisiblePosition: Bool,
+            clampsWithoutOwnedAnimator: Bool = false
+        ) {
+            guard streamingFollowAnimator != nil || clampsWithoutOwnedAnimator else { return }
+            let visibleOffsetY = scrollView?.layer.presentation()?.bounds.origin.y
+                ?? scrollView?.bounds.origin.y
+            if let animator = streamingFollowAnimator {
+                animator.stopAnimation(true)
+                streamingFollowAnimator = nil
+            }
+            guard preservingVisiblePosition,
+                  let scrollView,
+                  let visibleOffsetY,
+                  visibleOffsetY.isFinite else {
+                return
+            }
+            let minimumOffsetY = -scrollView.adjustedContentInset.top
+            let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
+                contentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height,
+                topInset: scrollView.adjustedContentInset.top,
+                bottomInset: scrollView.adjustedContentInset.bottom
+            )
+            let interruptedOffsetY = min(max(visibleOffsetY, minimumOffsetY), maximumOffsetY)
+            UIView.performWithoutAnimation {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: interruptedOffsetY),
+                    animated: false
+                )
+            }
+        }
+
+        @objc private func handlePanGesture(_ gestureRecognizer: UIPanGestureRecognizer) {
+            guard gestureRecognizer.state == .began else { return }
+            awaitsStreamingEndHandoff = false
+            cancelPendingViewportFollow()
+            pendingStreamingLayoutSettle?.cancel()
+            pendingStreamingLayoutSettle = nil
+            pendingStreamingLayoutSafeContentHeight = nil
+            pendingStreamingLayoutStableContentHeight = nil
+            pendingStreamingLayoutStableContentOverflowsViewport = nil
+            stopStreamingFollowAnimator(preservingVisiblePosition: true)
+            keepsBottomPinned.wrappedValue = false
+            notifyDistanceChange(forcesRefresh: true)
         }
 
         private func scheduleDistanceChangeNotification() {
@@ -806,7 +1104,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             DispatchQueue.main.async(execute: workItem)
         }
 
-        private func notifyDistanceChange() {
+        private func notifyDistanceChange(forcesRefresh explicitRefresh: Bool = false) {
             guard let scrollView else { return }
             let visibleMaxY = scrollView.contentOffset.y + scrollView.bounds.height - scrollView.adjustedContentInset.bottom
             let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
@@ -814,13 +1112,20 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             let isUserInteracting = scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
             let metricsChanged = abs(lastDistanceToBottom - distanceToBottom) > 0.5
                 || abs(lastDistanceToTop - distanceToTop) > 0.5
+            let generationForcesRefresh = ChatScrollMetricsObserver.shouldForceMetricsRefresh(
+                generation: metricsRefreshGeneration,
+                lastServicedGeneration: lastServicedMetricsRefreshGeneration
+            )
             guard ChatScrollMetricsObserver.shouldNotifyMetrics(
-                forcesRefresh: forcesMetricsRefresh,
+                forcesRefresh: explicitRefresh || generationForcesRefresh,
                 hasReportedDistance: hasReportedDistance,
                 metricsChanged: metricsChanged,
                 interactionChanged: lastReportedInteractionState != isUserInteracting
             ) else {
                 return
+            }
+            if generationForcesRefresh {
+                lastServicedMetricsRefreshGeneration = metricsRefreshGeneration
             }
             lastDistanceToBottom = distanceToBottom
             lastDistanceToTop = distanceToTop
