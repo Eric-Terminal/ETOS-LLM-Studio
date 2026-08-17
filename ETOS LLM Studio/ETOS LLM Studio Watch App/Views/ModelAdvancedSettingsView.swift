@@ -63,7 +63,6 @@ struct ModelAdvancedSettingsView: View {
     let updateSelectedGlobalSystemPromptContent: (String) -> Void
     let updateGlobalSystemPromptEntry: (UUID, String, String) -> Void
     let deleteGlobalSystemPromptEntry: (UUID) -> Void
-    let onSessionSelected: () -> Void
     let destination: ModelAdvancedSettingsDestination
 
     private let samplingParameterStep = 0.01
@@ -226,14 +225,6 @@ struct ModelAdvancedSettingsView: View {
             }
 
             if destination == .conversation {
-                Section {
-                    NavigationLink {
-                        sessionHistoryDestination
-                    } label: {
-                        Label(NSLocalizedString("历史会话管理", comment: ""), systemImage: "clock")
-                    }
-                }
-
                 Section(header: Text(NSLocalizedString("消息规则", comment: ""))) {
                     NavigationLink {
                         MessageRegexRulesView()
@@ -473,71 +464,6 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .onDisappear(perform: commitContextCompressionReminderThresholdDraft)
-    }
-
-    private var sessionHistoryDestination: some View {
-        SessionListView(
-            sessions: $viewModel.chatSessions,
-            folders: $viewModel.sessionFolders,
-            tags: viewModel.sessionTags,
-            currentSession: $viewModel.currentSession,
-            runningSessionIDs: viewModel.runningSessionIDs,
-            conversationRuntimeStates: viewModel.conversationRuntimeStates,
-            deleteSessionAction: { session in
-                viewModel.deleteSessions([session])
-            },
-            branchAction: { session, copyMessages in
-                viewModel.branchSession(from: session, copyMessages: copyMessages)
-            },
-            deleteLastMessageAction: { session in
-                viewModel.deleteLastMessage(for: session)
-            },
-            sendSessionToCompanionAction: { session in
-                WatchSyncManager.shared.sendSessionToCompanion(sessionID: session.id)
-            },
-            onSessionSelected: { selectedSession, messageOrdinal in
-                if let messageOrdinal {
-                    viewModel.requestMessageJump(
-                        sessionID: selectedSession.id,
-                        messageOrdinal: messageOrdinal
-                    )
-                } else {
-                    viewModel.clearPendingMessageJumpTarget()
-                }
-                ChatService.shared.setCurrentSession(selectedSession)
-                onSessionSelected()
-            },
-            updateSessionAction: { session in
-                viewModel.updateSession(session)
-            },
-            createFolderAction: { name, parentID in
-                viewModel.createSessionFolder(name: name, parentID: parentID)
-            },
-            renameFolderAction: { folder, newName in
-                viewModel.renameSessionFolder(folder, newName: newName)
-            },
-            deleteFolderAction: { folder in
-                viewModel.deleteSessionFolder(folder)
-            },
-            moveSessionToFolderAction: { session, folderID in
-                viewModel.moveSession(session, toFolderID: folderID)
-            },
-            moveFolderToFolderAction: { folder, parentID in
-                viewModel.moveSessionFolder(folder, toParentID: parentID)
-            },
-            createTagAction: { name, color in
-                viewModel.createSessionTag(name: name, color: color)
-            },
-            updateTagAction: { tag, name, color in
-                viewModel.updateSessionTag(tag, name: name, color: color)
-            },
-            deleteTagAction: { tag in
-                viewModel.deleteSessionTag(tag)
-            },
-            setSessionTagsAction: { session, tagIDs in
-                viewModel.setSessionTags(for: session, tagIDs: tagIDs)
-            }
-        )
     }
 
     private var conversationRuntimeBudgetBinding: Binding<Int> {

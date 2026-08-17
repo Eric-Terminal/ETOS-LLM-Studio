@@ -492,7 +492,6 @@ struct SettingsView: View {
             updateSelectedGlobalSystemPromptContent: viewModel.updateSelectedGlobalSystemPromptContent,
             updateGlobalSystemPromptEntry: viewModel.updateGlobalSystemPromptEntry,
             deleteGlobalSystemPromptEntry: { viewModel.deleteGlobalSystemPromptEntry(id: $0) },
-            onSessionSelected: { dismiss() },
             destination: destination
         )
     }
