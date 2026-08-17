@@ -62,6 +62,30 @@ extension ChatView {
         keepBottomPinned && !isAlreadySettling
     }
 
+    /// 只有贴底内容随视口变化时才暂停气泡波浪，历史阅读与用户手势始终保留直接反馈。
+    nonisolated static func shouldSuppressScrollTransitionForViewportChange(
+        isLayoutSettling: Bool,
+        keepsBottomPinned: Bool,
+        isUserInteracting: Bool
+    ) -> Bool {
+        isLayoutSettling && keepsBottomPinned && !isUserInteracting
+    }
+
+    nonisolated static func shouldReleaseActiveBottomScrollCommand(
+        hasActiveTarget: Bool,
+        distanceToBottom: CGFloat,
+        isUserInteracting: Bool,
+        arrivalTolerance: CGFloat
+    ) -> Bool {
+        hasActiveTarget
+            && (isUserInteracting || distanceToBottom <= arrivalTolerance)
+    }
+
+    /// 最后一条消息之后仍可能存在续聊链接与尾部留白，吸底必须定位消息栈的真实末端。
+    static var resolvedBottomScrollTarget: ChatScrollTargetID {
+        .bottom
+    }
+
     /// 消息版本切换可能让当前滚动目标退出可见集合，必须先释放失效目标。
     nonisolated static func retainedChatScrollTarget(
         _ target: ChatScrollTargetID?,
@@ -467,10 +491,7 @@ extension ChatView {
     }
 
     var bottomScrollTarget: ChatScrollTargetID {
-        if let lastMessageID = viewModel.displayMessages.last?.id {
-            return .message(lastMessageID)
-        }
-        return .bottom
+        Self.resolvedBottomScrollTarget
     }
 
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat, isUserInteracting: Bool) {
@@ -507,8 +528,12 @@ extension ChatView {
         distanceToBottom: CGFloat,
         isUserInteracting: Bool
     ) {
-        guard activeBottomScrollCommandTarget != nil else { return }
-        guard isUserInteracting || distanceToBottom <= bottomScrollCommandArrivalTolerance else { return }
+        guard Self.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: activeBottomScrollCommandTarget != nil,
+            distanceToBottom: distanceToBottom,
+            isUserInteracting: isUserInteracting,
+            arrivalTolerance: bottomScrollCommandArrivalTolerance
+        ) else { return }
         releaseActiveBottomScrollCommand()
     }
 

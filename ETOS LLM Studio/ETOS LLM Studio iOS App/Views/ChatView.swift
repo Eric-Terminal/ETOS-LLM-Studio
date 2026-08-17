@@ -1032,8 +1032,12 @@ extension ChatView {
                                                 isEnabled: scrollAnimEnabled,
                                                 isConnectedToAdjacentBubble: mergeWithPrevious || mergeWithNext,
                                                 isBottomPinnedStreamingBubble: isBottomPinnedStreamingBubble,
-                                                isViewportTransitioning: isChatLayoutSettling
-                                                    && !isChatScrollUserInteracting
+                                                isViewportTransitioning: Self
+                                                    .shouldSuppressScrollTransitionForViewportChange(
+                                                        isLayoutSettling: isChatLayoutSettling,
+                                                        keepsBottomPinned: shouldKeepBottomPinned,
+                                                        isUserInteracting: isChatScrollUserInteracting
+                                                    )
                                             )
                                         )
                                 }
@@ -1356,6 +1360,7 @@ extension ChatView {
                 pendingBottomSnapTask = nil
                 chatLayoutSettleTask?.cancel()
                 chatLayoutSettleTask = nil
+                isChatLayoutSettling = false
                 chatLayoutIntegrityMonitor.stop()
                 if isMessageJumpInFlight,
                    case .message(let messageID)? = chatScrollTarget {

@@ -135,6 +135,64 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @MainActor
+    @Test("吸底命令使用消息栈的真实尾部锚点")
+    func testChatBottomScrollTargetsTrueStackEnd() {
+        #expect(ChatView.resolvedBottomScrollTarget == .bottom)
+    }
+
+    @Test("吸底命令仅在抵达真实底部或用户接管后释放")
+    func testChatBottomScrollCommandReleaseLifecycle() {
+        #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: true,
+            distanceToBottom: 0,
+            isUserInteracting: false,
+            arrivalTolerance: 1
+        ))
+        #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: true,
+            distanceToBottom: 8,
+            isUserInteracting: false,
+            arrivalTolerance: 1
+        ))
+        #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: true,
+            distanceToBottom: 8,
+            isUserInteracting: true,
+            arrivalTolerance: 1
+        ))
+        #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: false,
+            distanceToBottom: 0,
+            isUserInteracting: false,
+            arrivalTolerance: 1
+        ))
+    }
+
+    @Test("只有贴底的布局变化暂停气泡滚动波浪")
+    func testChatViewportTransitionSuppressionKeepsUserControl() {
+        #expect(ChatView.shouldSuppressScrollTransitionForViewportChange(
+            isLayoutSettling: true,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+        #expect(!ChatView.shouldSuppressScrollTransitionForViewportChange(
+            isLayoutSettling: true,
+            keepsBottomPinned: false,
+            isUserInteracting: false
+        ))
+        #expect(!ChatView.shouldSuppressScrollTransitionForViewportChange(
+            isLayoutSettling: true,
+            keepsBottomPinned: true,
+            isUserInteracting: true
+        ))
+        #expect(!ChatView.shouldSuppressScrollTransitionForViewportChange(
+            isLayoutSettling: false,
+            keepsBottomPinned: true,
+            isUserInteracting: false
+        ))
+    }
+
     @Test("消息版本切换会释放已经消失的滚动目标")
     func testChatScrollTargetDropsInvisibleMessage() {
         let visibleMessageID = UUID()
