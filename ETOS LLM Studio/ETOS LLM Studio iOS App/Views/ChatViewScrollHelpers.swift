@@ -563,25 +563,26 @@ extension ChatView {
             return
         }
 
-        let keepBottomPinned = Self.resolvedBottomPinIntent(
+        let keepBottomPinned = resolvedBottomPinIntentForViewportChange()
+        chatInputBarHeight = newHeight
+        beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
+    }
+
+    func resolvedBottomPinIntentForViewportChange() -> Bool {
+        Self.resolvedBottomPinIntent(
             currentIntent: shouldKeepBottomPinned,
             distanceToBottom: scrollDistanceToBottom,
             threshold: bottomPinnedDistanceThreshold,
             isUserInteracting: isChatScrollUserInteracting,
             isLayoutSettling: isChatLayoutSettling
         )
-        chatInputBarHeight = newHeight
-        beginChatLayoutSettling(keepBottomPinned: keepBottomPinned)
     }
 
     func beginChatLayoutSettling(keepBottomPinned: Bool) {
         chatLayoutSettleTask?.cancel()
         let wasAlreadySettling = isChatLayoutSettling
         isChatLayoutSettling = true
-
-        if keepBottomPinned {
-            shouldKeepBottomPinned = true
-        }
+        shouldKeepBottomPinned = keepBottomPinned
         if Self.shouldSnapToBottomAtLayoutSettleStart(
             keepBottomPinned: keepBottomPinned,
             isAlreadySettling: wasAlreadySettling
@@ -939,7 +940,12 @@ extension ChatView {
             if releasesAtBottom {
                 activeBottomScrollCommandTarget = target
             }
-            applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
+            applyScrollTarget(
+                target,
+                anchor: anchor,
+                animated: animated,
+                animation: animation
+            )
             return
         }
 
@@ -960,7 +966,12 @@ extension ChatView {
             if releasesAtBottom {
                 activeBottomScrollCommandTarget = target
             }
-            applyScrollTarget(target, anchor: anchor, animated: animated, animation: animation)
+            applyScrollTarget(
+                target,
+                anchor: anchor,
+                animated: animated,
+                animation: animation
+            )
         }
     }
 }

@@ -169,6 +169,28 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("无位移的吸底命令仍会请求真实滚动指标")
+    func testActiveBottomCommandForcesMetricsCallback() {
+        #expect(ChatScrollMetricsObserver.shouldNotifyMetrics(
+            forcesRefresh: true,
+            hasReportedDistance: true,
+            metricsChanged: false,
+            interactionChanged: false
+        ))
+        #expect(!ChatScrollMetricsObserver.shouldNotifyMetrics(
+            forcesRefresh: false,
+            hasReportedDistance: true,
+            metricsChanged: false,
+            interactionChanged: false
+        ))
+        #expect(ChatScrollMetricsObserver.shouldNotifyMetrics(
+            forcesRefresh: false,
+            hasReportedDistance: true,
+            metricsChanged: true,
+            interactionChanged: false
+        ))
+    }
+
     @Test("只有贴底的布局变化暂停气泡滚动波浪")
     func testChatViewportTransitionSuppressionKeepsUserControl() {
         #expect(ChatView.shouldSuppressScrollTransitionForViewportChange(

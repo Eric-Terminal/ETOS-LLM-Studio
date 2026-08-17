@@ -776,6 +776,7 @@ extension ChatView {
                                 appConfig.chatStreamingDisplayMode
                             ),
                             reduceMotion: accessibilityReduceMotion,
+                            forcesMetricsRefresh: activeBottomScrollCommandTarget != nil,
                             anchorAdjustment: chatLayoutIntegrityMonitor.pendingAnchorAdjustment,
                             onAnchorAdjustmentApplied: { adjustmentID in
                                 chatLayoutIntegrityMonitor.completeAnchorAdjustment(id: adjustmentID)
@@ -1339,7 +1340,7 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
                 )
                 if !isKeyboardVisible {
                     isKeyboardVisible = true
@@ -1347,7 +1348,7 @@ extension ChatView {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 beginChatLayoutSettling(
-                    keepBottomPinned: shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold
+                    keepBottomPinned: resolvedBottomPinIntentForViewportChange()
                 )
                 if isKeyboardVisible {
                     isKeyboardVisible = false

@@ -252,6 +252,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     let isStreaming: Bool
     let streamingDisplayMode: ChatStreamingDisplayMode
     let reduceMotion: Bool
+    let forcesMetricsRefresh: Bool
     let anchorAdjustment: ChatScrollAnchorAdjustment?
     let onAnchorAdjustmentApplied: (UUID) -> Void
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
@@ -358,12 +359,23 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         return max(clampedVisible, targetOffsetY - max(maximumLag, 0))
     }
 
+    /// 一次性滚动命令需要收到真实几何回执，即使当前位置没有产生任何偏移变化。
+    nonisolated static func shouldNotifyMetrics(
+        forcesRefresh: Bool,
+        hasReportedDistance: Bool,
+        metricsChanged: Bool,
+        interactionChanged: Bool
+    ) -> Bool {
+        forcesRefresh || !hasReportedDistance || metricsChanged || interactionChanged
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             keepsBottomPinned: $keepsBottomPinned,
             isStreaming: isStreaming,
             streamingDisplayMode: streamingDisplayMode,
             reduceMotion: reduceMotion,
+            forcesMetricsRefresh: forcesMetricsRefresh,
             anchorAdjustment: anchorAdjustment,
             onAnchorAdjustmentApplied: onAnchorAdjustmentApplied,
             usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
@@ -386,6 +398,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         coordinator.isStreaming = isStreaming
         coordinator.streamingDisplayMode = streamingDisplayMode
         coordinator.reduceMotion = reduceMotion
+        coordinator.forcesMetricsRefresh = forcesMetricsRefresh
         coordinator.anchorAdjustment = anchorAdjustment
         coordinator.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
         uiView.coordinator = coordinator
@@ -406,6 +419,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         var isStreaming: Bool
         var streamingDisplayMode: ChatStreamingDisplayMode
         var reduceMotion: Bool
+        var forcesMetricsRefresh: Bool
         var anchorAdjustment: ChatScrollAnchorAdjustment?
         var onAnchorAdjustmentApplied: (UUID) -> Void
         let usesNativeSizeChangeAnchor: Bool
@@ -432,6 +446,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             isStreaming: Bool,
             streamingDisplayMode: ChatStreamingDisplayMode,
             reduceMotion: Bool,
+            forcesMetricsRefresh: Bool,
             anchorAdjustment: ChatScrollAnchorAdjustment?,
             onAnchorAdjustmentApplied: @escaping (UUID) -> Void,
             usesNativeSizeChangeAnchor: Bool,
@@ -441,6 +456,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             self.isStreaming = isStreaming
             self.streamingDisplayMode = streamingDisplayMode
             self.reduceMotion = reduceMotion
+            self.forcesMetricsRefresh = forcesMetricsRefresh
             self.anchorAdjustment = anchorAdjustment
             self.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
             self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
@@ -796,10 +812,14 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             let distanceToBottom = max(scrollView.contentSize.height - visibleMaxY, 0)
             let distanceToTop = max(scrollView.contentOffset.y + scrollView.adjustedContentInset.top, 0)
             let isUserInteracting = scrollView.isDragging || scrollView.isTracking || scrollView.isDecelerating
-            guard !hasReportedDistance
-                    || abs(lastDistanceToBottom - distanceToBottom) > 0.5
-                    || abs(lastDistanceToTop - distanceToTop) > 0.5
-                    || lastReportedInteractionState != isUserInteracting else {
+            let metricsChanged = abs(lastDistanceToBottom - distanceToBottom) > 0.5
+                || abs(lastDistanceToTop - distanceToTop) > 0.5
+            guard ChatScrollMetricsObserver.shouldNotifyMetrics(
+                forcesRefresh: forcesMetricsRefresh,
+                hasReportedDistance: hasReportedDistance,
+                metricsChanged: metricsChanged,
+                interactionChanged: lastReportedInteractionState != isUserInteracting
+            ) else {
                 return
             }
             lastDistanceToBottom = distanceToBottom
