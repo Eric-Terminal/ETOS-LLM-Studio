@@ -74,6 +74,37 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(handingOff != staticMarkdown)
     }
 
+    @Test("助手开始流式输出后锁定气泡宽度")
+    func testStreamingAssistantBubbleUsesStableWidth() {
+        #expect(ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            hasAudio: false,
+            preservesStreamingLayout: true,
+            hasStreamingContent: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            hasAudio: false,
+            preservesStreamingLayout: true,
+            hasStreamingContent: false,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: true,
+            hasAudio: false,
+            preservesStreamingLayout: true,
+            hasStreamingContent: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+    }
+
     @Test("弹性滚动不会拉开同轮相连气泡")
     func testChatScrollTransitionKeepsConnectedBubblesTogether() {
         let standaloneOffset = ChatView.chatScrollTransitionOffset(

@@ -101,7 +101,7 @@ extension ChatBubble {
             )
         }
 
-        if shouldForceMergedWidth {
+        if shouldForceBubbleWidth {
             row
                 .frame(width: bubbleMaxWidth, alignment: messageActionBarAlignment)
                 .padding(.top, 2)
@@ -480,14 +480,38 @@ extension ChatBubble {
         max(1, bubbleLayoutBaseWidth * 0.65)
     }
 
-    var shouldForceMergedWidth: Bool {
+    var shouldForceBubbleWidth: Bool {
+        Self.shouldForceBubbleWidth(
+            usesNoBubbleStyle: usesNoBubbleStyle,
+            isOutgoing: isOutgoing,
+            hasAudio: message.audioFileName != nil,
+            preservesStreamingLayout: showsStreamingIndicators || isStaticMarkdownHandoffInProgress,
+            hasStreamingContent: !message.content.isEmpty
+                || !(message.reasoningContent?.isEmpty ?? true),
+            mergesWithAdjacentBubble: mergeWithPrevious || mergeWithNext,
+            rendersReasoningToolTimeline: shouldRenderReasoningToolTimeline
+        )
+    }
+
+    nonisolated static func shouldForceBubbleWidth(
+        usesNoBubbleStyle: Bool,
+        isOutgoing: Bool,
+        hasAudio: Bool,
+        preservesStreamingLayout: Bool,
+        hasStreamingContent: Bool,
+        mergesWithAdjacentBubble: Bool,
+        rendersReasoningToolTimeline: Bool
+    ) -> Bool {
         if usesNoBubbleStyle {
             return true
         }
-        if isOutgoing && message.audioFileName != nil {
+        if isOutgoing && hasAudio {
             return true
         }
-        return !isOutgoing && (mergeWithPrevious || mergeWithNext || shouldRenderReasoningToolTimeline)
+        guard !isOutgoing else { return false }
+        return mergesWithAdjacentBubble
+            || rendersReasoningToolTimeline
+            || (preservesStreamingLayout && hasStreamingContent)
     }
 
     var rowSideSpacerMinLength: CGFloat {
@@ -566,7 +590,11 @@ extension ChatBubble {
         }
         .padding(.horizontal, usesNoBubbleStyle ? 2 : 12)
         .padding(.vertical, bubbleContentVerticalPadding)
-        .frame(width: shouldForceMergedWidth ? bubbleMaxWidth : nil, alignment: isOutgoing ? .trailing : .leading)
+        // 流式内容开始后固定横向几何；token、换行和 Markdown Block 交接只改变高度。
+        .frame(
+            width: shouldForceBubbleWidth ? bubbleMaxWidth : nil,
+            alignment: isOutgoing ? .trailing : .leading
+        )
         .background(
             bubbleDecoratedBackground(
                 shape: shape,
