@@ -130,6 +130,19 @@ struct DisplaySettingsView: View {
                 }
 
                 Section {
+                    Toggle(
+                        NSLocalizedString("四键消息导航", comment: "Chat timeline navigation toggle"),
+                        isOn: $appConfig.chatTimelineNavigationEnabled
+                    )
+                } header: {
+                    Text(NSLocalizedString("聊天导航", comment: "Chat navigation settings section"))
+                } footer: {
+                    Text(NSLocalizedString("开启后，滚动聊天时会显示前往顶部、上一条消息、下一条消息和底部的按钮；关闭后仍保留原有的回到底部按钮。", comment: "Chat timeline navigation description"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
                     Picker(
                         NSLocalizedString("流式显示", comment: "Streaming response display mode"),
                         selection: $appConfig.chatStreamingDisplayMode

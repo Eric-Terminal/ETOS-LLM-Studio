@@ -1152,24 +1152,26 @@ extension ChatView {
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
                 .accessibilityActions {
-                    if canNavigateToTimelineTop {
-                        Button(NSLocalizedString("滚动到顶部", comment: "")) {
-                            handleScrollToTopButtonTap()
+                    if appConfig.chatTimelineNavigationEnabled {
+                        if canNavigateToTimelineTop {
+                            Button(NSLocalizedString("滚动到顶部", comment: "")) {
+                                handleScrollToTopButtonTap()
+                            }
                         }
-                    }
-                    if previousMessageNavigationTargetID != nil {
-                        Button(NSLocalizedString("滚动到上一条消息", comment: "")) {
-                            handleAdjacentMessageNavigation(.previous)
+                        if previousMessageNavigationTargetID != nil {
+                            Button(NSLocalizedString("滚动到上一条消息", comment: "")) {
+                                handleAdjacentMessageNavigation(.previous)
+                            }
                         }
-                    }
-                    if nextMessageNavigationTargetID != nil {
-                        Button(NSLocalizedString("滚动到下一条消息", comment: "")) {
-                            handleAdjacentMessageNavigation(.next)
+                        if nextMessageNavigationTargetID != nil {
+                            Button(NSLocalizedString("滚动到下一条消息", comment: "")) {
+                                handleAdjacentMessageNavigation(.next)
+                            }
                         }
-                    }
-                    if canNavigateToTimelineBottom {
-                        Button(NSLocalizedString("滚动到底部", comment: "")) {
-                            handleScrollToBottomButtonTap()
+                        if canNavigateToTimelineBottom {
+                            Button(NSLocalizedString("滚动到底部", comment: "")) {
+                                handleScrollToBottomButtonTap()
+                            }
                         }
                     }
                 }
@@ -1215,6 +1217,16 @@ extension ChatView {
                     refreshMessageNavigationIndex()
                     if accessibilityVoiceOverEnabled {
                         revealScrollNavigationPanel()
+                    }
+                }
+                .onChange(of: appConfig.chatTimelineNavigationEnabled) { _, isEnabled in
+                    if isEnabled {
+                        refreshMessageNavigationIndex()
+                        if accessibilityVoiceOverEnabled {
+                            revealScrollNavigationPanel()
+                        }
+                    } else {
+                        hideScrollNavigationPanel()
                     }
                 }
                 .onAppear {
@@ -1296,13 +1308,18 @@ extension ChatView {
                         )
                         // 按钮锚定整个底部输入区顶部，角色脚本栏出现时与输入框同步上移。
                         .overlay(alignment: .topTrailing) {
-                            if showScrollNavigationPanel && canPresentExpandedScrollNavigationPanel {
+                            if appConfig.chatTimelineNavigationEnabled
+                                && showScrollNavigationPanel
+                                && canPresentExpandedScrollNavigationPanel {
                                 telegramScrollNavigationButtons
                                 .padding(.trailing, 16)
                                 .offset(y: -(scrollNavigationPanelHeight + scrollToBottomButtonInputSpacing))
                                 .transition(scrollNavigationPanelTransition)
-                            } else if showScrollToBottom
-                                || (showScrollNavigationPanel && canNavigateToTimelineBottom) {
+                            } else if showScrollToBottom || (
+                                appConfig.chatTimelineNavigationEnabled
+                                    && showScrollNavigationPanel
+                                    && canNavigateToTimelineBottom
+                            ) {
                                 telegramScrollToBottomButton(isEnabled: canNavigateToTimelineBottom) {
                                     handleScrollToBottomButtonTap()
                                 }

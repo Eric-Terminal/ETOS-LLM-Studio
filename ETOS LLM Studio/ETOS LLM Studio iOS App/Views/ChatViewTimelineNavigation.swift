@@ -55,7 +55,7 @@ extension ChatView {
     }
 
     var canNavigateToTimelineBottom: Bool {
-        !chatNavigationMessageIDs.isEmpty
+        !viewModel.displayMessages.isEmpty
             && Self.shouldEnableTimelineBottomNavigation(
                 isLaterHistoryBoundaryLoaded: viewModel.isLaterHistoryFullyLoaded,
                 keepsBottomPinned: shouldKeepBottomPinned,
@@ -64,7 +64,8 @@ extension ChatView {
     }
 
     func handleScrollToTopButtonTap() {
-        guard let firstMessageID = viewModel.messageNavigationIDs().first else { return }
+        guard appConfig.chatTimelineNavigationEnabled,
+              let firstMessageID = viewModel.messageNavigationIDs().first else { return }
         revealScrollNavigationPanel()
         prepareForMessageJump()
         messageNavigationCursorID = firstMessageID
@@ -118,7 +119,8 @@ extension ChatView {
     }
 
     func handleAdjacentMessageNavigation(_ direction: ChatMessageNavigationDirection) {
-        guard !awaitsFreshBottomNavigationSnapshot else { return }
+        guard appConfig.chatTimelineNavigationEnabled,
+              !awaitsFreshBottomNavigationSnapshot else { return }
         let navigationMessageIDs = viewModel.messageNavigationIDs()
         guard let targetMessageID = chatLayoutIntegrityMonitor.adjacentMessageID(
             in: navigationMessageIDs,
@@ -167,6 +169,7 @@ extension ChatView {
     }
 
     func refreshMessageNavigationIndex() {
+        guard appConfig.chatTimelineNavigationEnabled else { return }
         let messageIDs = viewModel.messageNavigationIDs()
         guard chatNavigationMessageIDs != messageIDs else {
             refreshMessageNavigationTargets()
@@ -184,6 +187,7 @@ extension ChatView {
     }
 
     func refreshMessageNavigationTargets() {
+        guard appConfig.chatTimelineNavigationEnabled else { return }
         if awaitsFreshBottomNavigationSnapshot {
             let shouldSuspend = Self.shouldSuspendAdjacentNavigationForBottomArrival(
                 awaitsFreshSnapshot: true,
@@ -225,7 +229,8 @@ extension ChatView {
     }
 
     func revealScrollNavigationPanel() {
-        guard !viewModel.displayMessages.isEmpty else { return }
+        guard appConfig.chatTimelineNavigationEnabled,
+              !viewModel.displayMessages.isEmpty else { return }
         scrollNavigationHideTask?.cancel()
         scrollNavigationHideTask = nil
         if !showScrollNavigationPanel {

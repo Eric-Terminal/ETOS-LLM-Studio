@@ -365,6 +365,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableLiquidGlass = "enableLiquidGlass"
     case liquidGlassTintOpacity = "liquidGlass.tintOpacity"
     case enableChatTopBlurFade = "enableChatTopBlurFade"
+    case chatTimelineNavigationEnabled = "chat.timelineNavigation.enabled"
     case enableNoBubbleUI = "enableNoBubbleUI"
     case chatScrollAnimationEnabled = "chat.scrollAnimation.enabled"
     case chatScrollAnimationSpringResponse = "chat.scrollAnimation.springResponse"
@@ -650,7 +651,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .enableAutoReasoningPreview,
              .enableResponsiveReasoningPreviewHeight,
              .enableBackground,
-             .enableChatTopBlurFade:
+             .enableChatTopBlurFade,
+             .chatTimelineNavigationEnabled:
             return .bool(true)
         case .enableAutoRotateBackground,
              .continueVideoBackgroundPlaybackWhenChatHidden,

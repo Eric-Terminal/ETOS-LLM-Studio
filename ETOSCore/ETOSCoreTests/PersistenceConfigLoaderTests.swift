@@ -242,6 +242,24 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == true)
     }
 
+    @Test("四键消息导航默认开启并支持配置快照")
+    @MainActor
+    func chatTimelineNavigationDefaultAndPersistence() {
+        let key = AppConfigKey.chatTimelineNavigationEnabled
+        let previousSnapshot = AppConfigStore.shared.snapshot(includeLocalOnly: true)
+
+        defer {
+            AppConfigStore.shared.apply(snapshot: previousSnapshot)
+        }
+
+        #expect(key.defaultValue == .bool(true))
+
+        AppConfigStore.shared.apply(snapshot: [key.rawValue: false])
+
+        #expect(AppConfigStore.shared.chatTimelineNavigationEnabled == false)
+        #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? Bool == false)
+    }
+
     private func restoreAppConfigValue(_ value: Any, for key: AppConfigKey) {
         switch key.defaultValue {
         case .bool:

@@ -284,6 +284,9 @@ public final class AppConfigStore: ObservableObject {
         }
     }
     @Published public var enableChatTopBlurFade: Bool { didSet { write(.enableChatTopBlurFade, enableChatTopBlurFade) } }
+    @Published public var chatTimelineNavigationEnabled: Bool {
+        didSet { write(.chatTimelineNavigationEnabled, chatTimelineNavigationEnabled) }
+    }
     @Published public var enableNoBubbleUI: Bool { didSet { write(.enableNoBubbleUI, enableNoBubbleUI) } }
     @Published public var chatScrollAnimationEnabled: Bool { didSet { write(.chatScrollAnimationEnabled, chatScrollAnimationEnabled) } }
     @Published public var chatScrollAnimationSpringResponse: Double { didSet { write(.chatScrollAnimationSpringResponse, chatScrollAnimationSpringResponse) } }
@@ -677,6 +680,7 @@ public final class AppConfigStore: ObservableObject {
         enableLiquidGlass = Self.boolValue(.enableLiquidGlass, userDefaults: userDefaults)
         liquidGlassTintOpacity = Self.realValue(.liquidGlassTintOpacity, userDefaults: userDefaults)
         enableChatTopBlurFade = Self.boolValue(.enableChatTopBlurFade, userDefaults: userDefaults)
+        chatTimelineNavigationEnabled = Self.boolValue(.chatTimelineNavigationEnabled, userDefaults: userDefaults)
         enableNoBubbleUI = Self.boolValue(.enableNoBubbleUI, userDefaults: userDefaults)
         chatScrollAnimationEnabled = Self.boolValue(.chatScrollAnimationEnabled, userDefaults: userDefaults)
         chatScrollAnimationSpringResponse = Self.realValue(.chatScrollAnimationSpringResponse, userDefaults: userDefaults)
@@ -1233,6 +1237,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableLiquidGlass: return .bool(enableLiquidGlass)
         case .liquidGlassTintOpacity: return .real(liquidGlassTintOpacity)
         case .enableChatTopBlurFade: return .bool(enableChatTopBlurFade)
+        case .chatTimelineNavigationEnabled: return .bool(chatTimelineNavigationEnabled)
         case .enableNoBubbleUI: return .bool(enableNoBubbleUI)
         case .chatScrollAnimationEnabled: return .bool(chatScrollAnimationEnabled)
         case .chatScrollAnimationSpringResponse: return .real(chatScrollAnimationSpringResponse)
@@ -1392,6 +1397,7 @@ public final class AppConfigStore: ObservableObject {
         case .enableReasoningSummary: enableReasoningSummary = value
         case .enableLiquidGlass: enableLiquidGlass = value
         case .enableChatTopBlurFade: enableChatTopBlurFade = value
+        case .chatTimelineNavigationEnabled: chatTimelineNavigationEnabled = value
         case .enableNoBubbleUI: enableNoBubbleUI = value
         case .chatScrollAnimationEnabled: chatScrollAnimationEnabled = value
         case .chatSendAnimationEnabled: chatSendAnimationEnabled = value
