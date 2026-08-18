@@ -179,7 +179,7 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
     ) {
         self.runnableModel = RunnableModel(provider: provider, model: model)
         self.service = service
-        self.results = Self.makeInitialResults()
+        self.results = Self.makeInitialResults(for: model.kind)
     }
 
     deinit {
@@ -195,9 +195,9 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
     }
 
     public func start() {
-        guard !isRunning else { return }
+        guard !isRunning, !results.isEmpty else { return }
         testTask?.cancel()
-        results = Self.makeInitialResults()
+        results = Self.makeInitialResults(for: runnableModel.model.kind)
         completedCount = 0
         isRunning = true
 
@@ -213,8 +213,19 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
         isRunning = false
     }
 
-    private static func makeInitialResults() -> [SingleModelConnectivityTestResult] {
-        SingleModelConnectivityTestResult.Kind.allCases.map {
+    private static func makeInitialResults(for kind: ModelKind) -> [SingleModelConnectivityTestResult] {
+        let testKinds: [SingleModelConnectivityTestResult.Kind]
+        switch kind {
+        case .chat:
+            testKinds = [.nonStreaming, .streaming, .toolCalling]
+        case .embedding:
+            testKinds = [.embedding]
+        case .image:
+            testKinds = [.imageGeneration]
+        case .rerank, .textToSpeech:
+            testKinds = []
+        }
+        return testKinds.map {
             SingleModelConnectivityTestResult(kind: $0)
         }
     }
@@ -224,11 +235,10 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
             isRunning = false
         }
 
-        await runTest(.nonStreaming)
-        guard !Task.isCancelled else { return }
-        await runTest(.streaming)
-        guard !Task.isCancelled else { return }
-        await runTest(.toolCalling)
+        for kind in results.map(\.kind) {
+            guard !Task.isCancelled else { return }
+            await runTest(kind)
+        }
     }
 
     private func runTest(_ kind: SingleModelConnectivityTestResult.Kind) async {
@@ -247,6 +257,10 @@ public final class SingleModelConnectivityTestViewModel: ObservableObject {
             testResult = await service.testSingleModelStreamingConnectivity(for: runnableModel)
         case .toolCalling:
             testResult = await service.testSingleModelToolCallingConnectivity(for: runnableModel)
+        case .embedding:
+            testResult = await service.testSingleModelEmbeddingConnectivity(for: runnableModel)
+        case .imageGeneration:
+            testResult = await service.testSingleModelImageGenerationConnectivity(for: runnableModel)
         }
 
         updateResult(kind) { result in

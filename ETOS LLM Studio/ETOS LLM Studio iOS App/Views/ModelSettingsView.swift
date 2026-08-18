@@ -56,7 +56,7 @@ struct ModelSettingsView: View {
                 )
             }
 
-            if model.isChatModel && !LocalModelProviderBridge.isLocalProvider(provider) {
+            if ModelKind.allCases.contains(model.kind) && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
                         SingleModelConnectivityTestView(provider: provider, model: model)
@@ -64,7 +64,7 @@ struct ModelSettingsView: View {
                         Label(NSLocalizedString("模型测试", comment: "Model connectivity test title"), systemImage: "checkmark.seal")
                     }
                 } footer: {
-                    Text(NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer"))
+                    Text(modelConnectivityTestFooter)
                 }
             }
 
@@ -188,6 +188,19 @@ struct ModelSettingsView: View {
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
+    }
+
+    private var modelConnectivityTestFooter: String {
+        switch model.kind {
+        case .chat:
+            return NSLocalizedString("测试该模型的非流式、流式和工具调用能力。", comment: "Single model connectivity test entry footer")
+        case .embedding:
+            return NSLocalizedString("测试该模型能否返回有效的嵌入向量。", comment: "Embedding model connectivity test entry footer")
+        case .image:
+            return NSLocalizedString("测试该模型能否返回有效图片，可能产生费用。", comment: "Image model connectivity test entry footer")
+        case .rerank, .textToSpeech:
+            return ""
+        }
     }
 
     private var pickerGroupNameBinding: Binding<String> {

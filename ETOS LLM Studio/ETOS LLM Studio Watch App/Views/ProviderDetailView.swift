@@ -113,7 +113,7 @@ struct ProviderDetailView: View {
                         )
                     }
                 } footer: {
-                    Text(NSLocalizedString("模型测试会向每个已添加的聊天模型发送一条轻量请求，用于确认 API Key、地址和模型 ID 是否可用。", comment: "Watch model test explanation"))
+                    Text(NSLocalizedString("模型测试会按用途向每个已添加模型发送真实请求，用于确认 API Key、地址、模型 ID 和响应格式是否可用。", comment: "Watch model test explanation"))
                         .etFont(.footnote)
                         .foregroundColor(.secondary)
                 }
