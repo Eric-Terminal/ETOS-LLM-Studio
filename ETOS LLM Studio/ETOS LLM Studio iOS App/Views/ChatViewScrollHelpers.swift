@@ -5,12 +5,31 @@
 //
 // 本文件承载 ChatView 的消息跳转、滚动到底部和消息时间线合并判断。
 // ============================================================================
-
 import SwiftUI
 import UIKit
 import ETOSCore
 
 extension ChatView {
+    var hasChatProgrammaticScrollOwnership: Bool {
+        isMessageJumpInFlight
+            || pendingHistoryResetWorkItem != nil
+            || pendingBottomSnapTask != nil
+            || pendingScrollTargetTask != nil
+            || chatScrollTarget != nil
+            || activeBottomScrollCommandTarget != nil
+    }
+
+    var hasExplicitChatNavigationCommand: Bool {
+        Self.shouldSuspendAutomaticHistoryNavigation(
+            isMessageJumpInFlight: isMessageJumpInFlight,
+            hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
+            hasPendingBottomSnap: pendingBottomSnapTask != nil,
+            hasActiveBottomTarget: activeBottomScrollCommandTarget != nil,
+            hasPendingOrAppliedTarget: pendingScrollTargetTask != nil || chatScrollTarget != nil,
+            isAutomaticHistoryLoadInFlight: isAutomaticHistoryLoadInFlight
+        )
+    }
+
     /// 非流式尺寸变化交给 SwiftUI；流式期间由 UIKit 单独动画真实滚动偏移，避免双重吸底。
     nonisolated static func chatSizeChangeScrollAnchor(
         keepsBottomPinned: Bool,
@@ -66,11 +85,41 @@ extension ChatView {
     nonisolated static func shouldReleaseActiveBottomScrollCommand(
         hasActiveTarget: Bool,
         distanceToBottom: CGFloat,
-        isUserInteracting: Bool,
         arrivalTolerance: CGFloat
     ) -> Bool {
         hasActiveTarget
-            && (isUserInteracting || distanceToBottom <= arrivalTolerance)
+            && distanceToBottom <= arrivalTolerance
+    }
+
+    nonisolated static func shouldCancelProgrammaticScrollOnPanBegan(
+        hasPendingHistoryReset: Bool,
+        hasPendingBottomSnap: Bool,
+        hasPendingTargetTask: Bool,
+        hasScrollTarget: Bool,
+        hasActiveBottomTarget: Bool,
+        isMessageJumpInFlight: Bool
+    ) -> Bool {
+        hasPendingHistoryReset
+            || hasPendingBottomSnap
+            || hasPendingTargetTask
+            || hasScrollTarget
+            || hasActiveBottomTarget
+            || isMessageJumpInFlight
+    }
+
+    nonisolated static func shouldSuspendAutomaticHistoryNavigation(
+        isMessageJumpInFlight: Bool,
+        hasPendingHistoryReset: Bool,
+        hasPendingBottomSnap: Bool,
+        hasActiveBottomTarget: Bool,
+        hasPendingOrAppliedTarget: Bool,
+        isAutomaticHistoryLoadInFlight: Bool
+    ) -> Bool {
+        isMessageJumpInFlight
+            || hasPendingHistoryReset
+            || hasPendingBottomSnap
+            || hasActiveBottomTarget
+            || (hasPendingOrAppliedTarget && !isAutomaticHistoryLoadInFlight)
     }
 
     /// 最后一条消息之后仍可能存在续聊链接与尾部留白，吸底必须定位消息栈的真实末端。
@@ -93,7 +142,7 @@ extension ChatView {
         visibleMessageIDs: Set<UUID>
     ) -> Bool {
         switch target {
-        case .bottom:
+        case .top, .bottom:
             return true
         case .message(let messageID):
             return visibleMessageIDs.contains(messageID)
@@ -206,11 +255,13 @@ extension ChatView {
     }
 
     func prepareForMessageJump() {
+        awaitsFreshBottomNavigationSnapshot = false
         pendingHistoryResetWorkItem?.cancel()
         pendingHistoryResetWorkItem = nil
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         cancelPendingScrollTargetCommand()
+        messageNavigationCursorID = nil
         pendingJumpRequest = nil
         isMessageJumpInFlight = true
         needsImmediateBottomSnap = false
@@ -311,39 +362,6 @@ extension ChatView {
         )
     }
 
-    func handleScrollToBottomButtonTap() {
-        pendingHistoryResetWorkItem?.cancel()
-        pendingHistoryResetWorkItem = nil
-        shouldRestorePendingJumpOnAppear = false
-        lastAutomaticHistoryLoadAnchorID = nil
-
-        let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading || viewModel.usesAutomaticHistoryWindow
-        shouldKeepBottomPinned = true
-        showScrollToBottom = false
-
-        guard shouldResetHistoryWindow else {
-            scrollToBottom(animated: true, animation: scrollToBottomButtonAnimation)
-            return
-        }
-
-        let workItem = DispatchWorkItem {
-            pendingBottomSnapTask?.cancel()
-            pendingBottomSnapTask = nil
-            cancelPendingScrollTargetCommand()
-            chatScrollTarget = nil
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                viewModel.resetLazyLoadState()
-            }
-            pendingHistoryResetWorkItem = nil
-            scheduleDeferredBottomSnap()
-        }
-        pendingHistoryResetWorkItem = workItem
-
-        DispatchQueue.main.async(execute: workItem)
-    }
-
     func performAutomaticHistoryLoad(_ request: ChatAutomaticHistoryLoadRequest) {
         guard viewModel.usesAutomaticHistoryWindow,
               !isAutomaticHistoryLoadInFlight,
@@ -380,14 +398,14 @@ extension ChatView {
         distanceToTop: CGFloat,
         isUserInteracting: Bool
     ) {
+        scrollDistanceToTop = max(distanceToTop, 0)
         updateChatScrollInteractionState(isUserInteracting)
         updateScrollToBottomVisibility(
             distanceToBottom: distanceToBottom,
             isUserInteracting: isUserInteracting
         )
         resolveActiveBottomScrollCommand(
-            distanceToBottom: distanceToBottom,
-            isUserInteracting: isUserInteracting
+            distanceToBottom: distanceToBottom
         )
         let activeEdgeDistance = automaticHistoryLoadDirection == .later
             ? distanceToBottom
@@ -402,6 +420,11 @@ extension ChatView {
             isAutomaticHistoryLoadInFlight = false
             awaitsAutomaticHistoryAnchorMetrics = false
             automaticHistoryLoadDirection = nil
+        }
+
+        guard !hasExplicitChatNavigationCommand else {
+            pendingAutomaticHistoryLoadRequest = nil
+            return
         }
 
         let firstMessageID = viewModel.displayMessages.first?.id
@@ -491,6 +514,7 @@ extension ChatView {
         scrollDistanceToBottom = normalizedDistance
         guard !viewModel.displayMessages.isEmpty else {
             shouldKeepBottomPinned = true
+            hideScrollNavigationPanel()
             if showScrollToBottom {
                 withAnimation(.easeInOut(duration: 0.18)) {
                     showScrollToBottom = false
@@ -516,14 +540,10 @@ extension ChatView {
 
     /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
     /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
-    func resolveActiveBottomScrollCommand(
-        distanceToBottom: CGFloat,
-        isUserInteracting: Bool
-    ) {
+    func resolveActiveBottomScrollCommand(distanceToBottom: CGFloat) {
         guard Self.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: activeBottomScrollCommandTarget != nil,
             distanceToBottom: distanceToBottom,
-            isUserInteracting: isUserInteracting,
             arrivalTolerance: bottomScrollCommandArrivalTolerance
         ) else { return }
         releaseActiveBottomScrollCommand()
@@ -532,13 +552,18 @@ extension ChatView {
     func releaseActiveBottomScrollCommand() {
         guard let target = activeBottomScrollCommandTarget else { return }
         activeBottomScrollCommandTarget = nil
-        guard chatScrollTarget == target else { return }
-
-        var transaction = Transaction()
-        transaction.animation = nil
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            chatScrollTarget = nil
+        if chatScrollTarget == target {
+            var transaction = Transaction()
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                chatScrollTarget = nil
+            }
+        }
+        if awaitsFreshBottomNavigationSnapshot {
+            bottomNavigationSnapshotBaselineRevision =
+                chatLayoutIntegrityMonitor.requestFreshNavigationSnapshot()
+            refreshMessageNavigationTargets()
         }
     }
 
@@ -657,7 +682,10 @@ extension ChatView {
         }
     }
 
-    private func scheduleMessageJump(to messageID: UUID) {
+    func scheduleMessageJump(
+        to messageID: UUID,
+        usesAdjacentAnimation: Bool = false
+    ) {
         cancelPendingScrollTargetCommand()
         isMessageJumpInFlight = true
         shouldRestorePendingJumpOnAppear = true
@@ -692,7 +720,9 @@ extension ChatView {
                   pendingJumpRequest == request,
                   let position = viewModel.historyWindowPosition(of: messageID) {
                 if position == .visible {
-                    let duration = estimatedSegmentCount == 1 ? 0.9 : 0.52
+                    let duration = usesAdjacentAnimation
+                        ? 0.36
+                        : (estimatedSegmentCount == 1 ? 0.9 : 0.52)
                     await animateMessageJump(
                         to: messageID,
                         anchor: .top,
@@ -835,7 +865,11 @@ extension ChatView {
             animated: !accessibilityReduceMotion,
             animation: animation
         )
-        guard !accessibilityReduceMotion else { return }
+        guard !accessibilityReduceMotion else {
+            // 无动画仍需跨过 SwiftUI 的布局消费边沿，不能在同一更新周期清空目标。
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            return
+        }
         try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
     }
 
@@ -861,7 +895,7 @@ extension ChatView {
         }
     }
 
-    private func releaseMessageJumpScrollTarget() {
+    func releaseMessageJumpScrollTarget() {
         guard chatScrollTarget != nil else { return }
         var transaction = Transaction()
         transaction.animation = nil
@@ -871,7 +905,7 @@ extension ChatView {
         }
     }
 
-    private func canApplyScrollTarget(
+    func canApplyScrollTarget(
         _ target: ChatScrollTargetID,
         generation: UInt,
         sessionID: UUID?

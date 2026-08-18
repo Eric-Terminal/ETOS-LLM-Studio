@@ -245,6 +245,9 @@
 "清空输入" = "Clear input";
 "渲染 Markdown" = "Render Markdown";
 "滚动到底部" = "Scroll to bottom";
+"滚动到顶部" = "Scroll to top";
+"滚动到上一条消息" = "Scroll to previous message";
+"滚动到下一条消息" = "Scroll to next message";
 "点击开始录音" = "Tap to record";
 "版本信息" = "Version info";
 "版本管理" = "Version control";

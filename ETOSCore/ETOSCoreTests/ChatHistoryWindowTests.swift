@@ -35,6 +35,15 @@ struct ChatHistoryWindowTests {
         #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: secondExpansion) == 37)
     }
 
+    @Test("顶部窗口从完整会话起点建立并保持权重上限")
+    func testLeadingWindowStartsAtConversationOrigin() {
+        let messages = makeMessages(count: 80)
+        let window = ChatHistoryWindowSupport.leading(in: messages, weightedLimit: 25)
+
+        #expect(window == ChatHistoryWindow(lowerBound: 0, upperBound: 25))
+        #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: window) == 25)
+    }
+
     @Test("自动历史窗口向后浏览时保留原尾部锚点")
     func testLaterExpansionKeepsAnchorAndBound() {
         let messages = makeMessages(count: 80)
@@ -150,6 +159,29 @@ struct ChatHistoryWindowTests {
         )
 
         #expect(targetID == assistant.id)
+    }
+
+    @Test("气泡导航索引排除隐藏工具结果")
+    func testRenderedMessageIDsExcludeHiddenToolResult() {
+        let user = ChatMessage(role: .user, content: "问题")
+        let assistant = ChatMessage(role: .assistant, content: "正在调用工具")
+        let tool = ChatMessage(
+            role: .tool,
+            content: "工具结果",
+            toolCalls: [
+                InternalToolCall(
+                    id: "hidden-result",
+                    toolName: "search",
+                    arguments: "{}",
+                    result: "完成"
+                )
+            ]
+        )
+
+        #expect(ChatJumpTargetSupport.renderedMessageIDs(
+            in: [user, assistant, tool],
+            hiddenToolCallResultIDs: ["hidden-result"]
+        ) == [user.id, assistant.id])
     }
 
     private func makeMessages(count: Int) -> [ChatMessage] {

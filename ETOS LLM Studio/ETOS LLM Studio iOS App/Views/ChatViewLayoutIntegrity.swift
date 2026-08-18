@@ -125,6 +125,11 @@ struct ChatLayoutViewportAnchor: Equatable, Sendable {
     }
 }
 
+enum ChatMessageNavigationDirection: Sendable {
+    case previous
+    case next
+}
+
 enum ChatLayoutRecoveryAction: Equatable, Sendable {
     case rebuildMessages
     case rebuildStack
@@ -219,6 +224,67 @@ enum ChatMessageLayoutAudit {
         }
 
         return bestCandidate?.anchor
+    }
+
+    /// 从已上报的可见 frame 中解析最靠前的真实气泡，避免扫描完整历史。
+    nonisolated static func navigationAnchorMessageID(
+        indexByMessageID: [UUID: Int],
+        frames: [UUID: CGRect],
+        viewportHeight: CGFloat,
+        retainedAnchorID: UUID?,
+        topRevealInset: CGFloat = 0
+    ) -> UUID? {
+        if let retainedAnchorID, indexByMessageID[retainedAnchorID] != nil {
+            return retainedAnchorID
+        }
+        guard viewportHeight > topRevealInset else { return nil }
+
+        var bestCandidate: (messageID: UUID, index: Int)?
+        for (messageID, frame) in frames {
+            guard let index = indexByMessageID[messageID],
+                  isUsable(frame),
+                  frame.maxY > topRevealInset + 0.5,
+                  frame.minY < viewportHeight else {
+                continue
+            }
+            if bestCandidate == nil || index < bestCandidate!.index {
+                bestCandidate = (messageID, index)
+            }
+        }
+        return bestCandidate?.messageID
+    }
+
+    /// 连续点击沿用上一目标；首次点击则以顶部下方第一条仍可见的气泡为锚点。
+    nonisolated static func adjacentMessageID(
+        orderedMessageIDs: [UUID],
+        frames: [UUID: CGRect],
+        viewportHeight: CGFloat,
+        retainedAnchorID: UUID?,
+        direction: ChatMessageNavigationDirection,
+        topRevealInset: CGFloat = 0
+    ) -> UUID? {
+        guard !orderedMessageIDs.isEmpty, viewportHeight > topRevealInset else { return nil }
+
+        let indexByMessageID = Dictionary(
+            uniqueKeysWithValues: orderedMessageIDs.enumerated().map { ($0.element, $0.offset) }
+        )
+        guard let anchorMessageID = navigationAnchorMessageID(
+            indexByMessageID: indexByMessageID,
+            frames: frames,
+            viewportHeight: viewportHeight,
+            retainedAnchorID: retainedAnchorID,
+            topRevealInset: topRevealInset
+        ), let anchorIndex = indexByMessageID[anchorMessageID] else { return nil }
+
+        let targetIndex: Int
+        switch direction {
+        case .previous:
+            targetIndex = anchorIndex - 1
+        case .next:
+            targetIndex = anchorIndex + 1
+        }
+        guard orderedMessageIDs.indices.contains(targetIndex) else { return nil }
+        return orderedMessageIDs[targetIndex]
     }
 
     nonisolated static func recoveryAction(
@@ -510,6 +576,22 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         recoveryRevisionByMessageID[messageID, default: 0]
     }
 
+    var currentSnapshotRevision: UInt {
+        snapshotRevision
+    }
+
+    /// 回底完成后主动请求一帧新几何，避免相邻导航复用滚动前的气泡位置。
+    func requestFreshNavigationSnapshot() -> UInt {
+        let baselineRevision = snapshotRevision
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            layoutProbeRevision &+= 1
+        }
+        return baselineRevision
+    }
+
     func updateContext(_ newContext: ChatLayoutAuditContext) {
         if context.sessionID != newContext.sessionID {
             reset()
@@ -543,6 +625,40 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         }
         guard !context.isBlocked else { return }
         scheduleAuditIfPossible()
+    }
+
+    func adjacentMessageID(
+        in navigationMessageIDs: [UUID],
+        viewportHeight: CGFloat,
+        retainedAnchorID: UUID?,
+        direction: ChatMessageNavigationDirection
+    ) -> UUID? {
+        ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: navigationMessageIDs,
+            frames: ChatMessageLayoutAudit.effectiveFrames(
+                samples: snapshot.samples,
+                contentFrames: snapshot.contentFrames
+            ),
+            viewportHeight: viewportHeight,
+            retainedAnchorID: retainedAnchorID,
+            direction: direction
+        )
+    }
+
+    func navigationAnchorMessageID(
+        in indexByMessageID: [UUID: Int],
+        viewportHeight: CGFloat,
+        retainedAnchorID: UUID?
+    ) -> UUID? {
+        ChatMessageLayoutAudit.navigationAnchorMessageID(
+            indexByMessageID: indexByMessageID,
+            frames: ChatMessageLayoutAudit.effectiveFrames(
+                samples: snapshot.samples,
+                contentFrames: snapshot.contentFrames
+            ),
+            viewportHeight: viewportHeight,
+            retainedAnchorID: retainedAnchorID
+        )
     }
 
     func completeAnchorAdjustment(id: UUID) {
@@ -853,9 +969,7 @@ extension ChatView {
             isSendingMessage: viewModel.isSendingMessage,
             isLayoutSettling: isChatLayoutSettling,
             isHistoryLoadInFlight: isAutomaticHistoryLoadInFlight,
-            hasProgrammaticScrollTarget: chatScrollTarget != nil
-                || pendingScrollTargetTask != nil
-                || activeBottomScrollCommandTarget != nil,
+            hasProgrammaticScrollTarget: hasChatProgrammaticScrollOwnership,
             hasSendFlight: flightState != nil,
             scrollAnimationEnabled: appConfig.chatScrollAnimationEnabled,
             settleDelayNanoseconds: UInt64(transitionSettleDelay * 1_000_000_000),
@@ -871,6 +985,11 @@ extension ChatView {
     func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
         guard isChatScrollUserInteracting != isUserInteracting else { return }
         isChatScrollUserInteracting = isUserInteracting
+        if isUserInteracting {
+            revealScrollNavigationPanel()
+        } else {
+            scheduleScrollNavigationPanelHide()
+        }
         if isUserInteracting,
            (pendingScrollTargetTask != nil || chatScrollTarget != nil || isMessageJumpInFlight) {
             cancelPendingScrollTargetCommand()

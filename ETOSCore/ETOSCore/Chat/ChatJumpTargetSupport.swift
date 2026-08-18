@@ -9,6 +9,17 @@
 import Foundation
 
 public enum ChatJumpTargetSupport {
+    public static func renderedMessageIDs(
+        in messages: [ChatMessage],
+        hiddenToolCallResultIDs: Set<String>
+    ) -> [UUID] {
+        ChatResponseAttemptSupport.visibleMessages(from: messages).compactMap { message in
+            isRenderedAsBubble(message, hiddenToolCallResultIDs: hiddenToolCallResultIDs)
+                ? message.id
+                : nil
+        }
+    }
+
     public static func messageID(
         at rawMessageIndex: Int,
         in messages: [ChatMessage],
@@ -56,7 +67,7 @@ public enum ChatJumpTargetSupport {
         return nil
     }
 
-    private static func isRenderedAsBubble(
+    public static func isRenderedAsBubble(
         _ message: ChatMessage,
         hiddenToolCallResultIDs: Set<String>
     ) -> Bool {

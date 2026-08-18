@@ -180,6 +180,7 @@ struct ChatBubbleLayoutIdentity: Hashable {
 }
 
 enum ChatScrollTargetID: Hashable {
+    case top
     case message(UUID)
     case bottom
 }
@@ -257,6 +258,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     let hasProgrammaticScrollCommand: Bool
     let anchorAdjustment: ChatScrollAnchorAdjustment?
     let onAnchorAdjustmentApplied: (UUID) -> Void
+    let onUserPanBegan: () -> Void
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
     /// iOS 18 起静态尺寸变化使用原生锚点；流式期间暂时交由 UIKit 单独接管偏移。
@@ -416,6 +418,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             hasProgrammaticScrollCommand: hasProgrammaticScrollCommand,
             anchorAdjustment: anchorAdjustment,
             onAnchorAdjustmentApplied: onAnchorAdjustmentApplied,
+            onUserPanBegan: onUserPanBegan,
             usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
             onMetricsChange: onMetricsChange
         )
@@ -438,6 +441,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         coordinator.metricsRefreshGeneration = metricsRefreshGeneration
         coordinator.anchorAdjustment = anchorAdjustment
         coordinator.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
+        coordinator.onUserPanBegan = onUserPanBegan
         coordinator.updateScrollOwnership(
             isStreaming: isStreaming,
             isViewportTransitioning: isViewportTransitioning,
@@ -471,6 +475,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         var hasProgrammaticScrollCommand: Bool
         var anchorAdjustment: ChatScrollAnchorAdjustment?
         var onAnchorAdjustmentApplied: (UUID) -> Void
+        var onUserPanBegan: () -> Void
         let usesNativeSizeChangeAnchor: Bool
         weak var scrollView: UIScrollView?
         private var contentOffsetObservation: NSKeyValueObservation?
@@ -505,6 +510,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             hasProgrammaticScrollCommand: Bool,
             anchorAdjustment: ChatScrollAnchorAdjustment?,
             onAnchorAdjustmentApplied: @escaping (UUID) -> Void,
+            onUserPanBegan: @escaping () -> Void,
             usesNativeSizeChangeAnchor: Bool,
             onMetricsChange: @escaping (CGFloat, CGFloat, Bool) -> Void
         ) {
@@ -517,6 +523,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             self.hasProgrammaticScrollCommand = hasProgrammaticScrollCommand
             self.anchorAdjustment = anchorAdjustment
             self.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
+            self.onUserPanBegan = onUserPanBegan
             self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
             self.onMetricsChange = onMetricsChange
             self.lastServicedMetricsRefreshGeneration = metricsRefreshGeneration
@@ -1081,6 +1088,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
 
         @objc private func handlePanGesture(_ gestureRecognizer: UIPanGestureRecognizer) {
             guard gestureRecognizer.state == .began else { return }
+            // 新的触摸边沿必须无条件抢占；减速阶段 interaction Bool 可能仍为 true。
+            onUserPanBegan()
             awaitsStreamingEndHandoff = false
             cancelPendingViewportFollow()
             pendingStreamingLayoutSettle?.cancel()

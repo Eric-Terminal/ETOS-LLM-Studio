@@ -164,6 +164,24 @@ extension ChatViewModel {
         updateDisplayedMessages()
     }
 
+    /// 顶部导航直接切换到首个有界窗口，避免长会话逐段播放数十秒滚动动画。
+    func moveHistoryWindowToStart() {
+        ensureVisibleMessagesCachePrepared()
+        let weightedLimit: Int
+        if usesAutomaticHistoryWindow {
+            weightedLimit = automaticHistoryMaximumWindowSize
+        } else if usesManualHistoryLoading {
+            weightedLimit = max(1, lazyLoadMessageCount)
+        } else {
+            weightedLimit = max(1, visibleMessagesCache.count)
+        }
+        historyWindow = ChatHistoryWindowSupport.leading(
+            in: visibleMessagesCache,
+            weightedLimit: weightedLimit
+        )
+        updateDisplayedMessages()
+    }
+
     func hasAutoOpenedPendingToolCall(_ toolCallID: String) -> Bool {
         autoOpenedPendingToolCallIDs.contains(toolCallID)
     }
@@ -872,12 +890,21 @@ extension ChatViewModel {
 
     func filterDisplayMessages(_ source: [ChatMessageRenderState]) -> [ChatMessageRenderState] {
         guard !toolCallResultIDs.isEmpty else { return source }
-        return source.filter { state in
-            let message = state.message
-            guard message.role == .tool else { return true }
-            guard let toolCalls = message.toolCalls, !toolCalls.isEmpty else { return true }
-            return toolCalls.allSatisfy { !toolCallResultIDs.contains($0.id) }
+        return source.filter {
+            ChatJumpTargetSupport.isRenderedAsBubble(
+                $0.message,
+                hiddenToolCallResultIDs: toolCallResultIDs
+            )
         }
+    }
+
+    /// 导航索引与真实消息栈使用同一套过滤规则，避免跳到已折叠进工具卡片的隐藏消息。
+    func messageNavigationIDs() -> [UUID] {
+        ensureVisibleMessagesCachePrepared()
+        return ChatJumpTargetSupport.renderedMessageIDs(
+            in: visibleMessagesCache,
+            hiddenToolCallResultIDs: toolCallResultIDs
+        )
     }
 
     nonisolated static func lazyLoadWeight(for message: ChatMessage) -> Int {

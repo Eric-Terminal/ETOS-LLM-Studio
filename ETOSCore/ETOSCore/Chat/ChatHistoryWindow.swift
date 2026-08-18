@@ -90,6 +90,21 @@ public enum ChatHistoryWindowSupport {
         return ChatHistoryWindow(lowerBound: lower, upperBound: messages.count)
     }
 
+    public static func leading(
+        in messages: [ChatMessage],
+        weightedLimit: Int
+    ) -> ChatHistoryWindow {
+        guard weightedLimit > 0, !messages.isEmpty else {
+            return ChatHistoryWindow(lowerBound: 0, upperBound: 0)
+        }
+        let upper = upperBound(
+            startingAt: 0,
+            weights: weights(in: messages),
+            weightedLimit: weightedLimit
+        )
+        return ChatHistoryWindow(lowerBound: 0, upperBound: upper)
+    }
+
     public static func centered(
         on messageID: UUID,
         in messages: [ChatMessage],

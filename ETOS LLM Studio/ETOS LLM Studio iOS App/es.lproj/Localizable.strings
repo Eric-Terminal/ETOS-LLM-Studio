@@ -169,7 +169,10 @@
 "添加附件" = "Agregar attachment";
 "清空输入" = "Limpiar Entrada";
 "渲染 Markdown" = "Renderizar Markdown";
-"滚动到底部" = "Scroll a bottom";
+"滚动到底部" = "Desplazarse hasta el final";
+"滚动到顶部" = "Desplazarse hasta el principio";
+"滚动到上一条消息" = "Ir al mensaje anterior";
+"滚动到下一条消息" = "Ir al mensaje siguiente";
 "点击开始录音" = "Toca para grabar";
 "版本信息" = "Versión Info";
 "版本管理" = "Versión Control";

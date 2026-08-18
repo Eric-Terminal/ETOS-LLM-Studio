@@ -229,6 +229,65 @@ struct ChatLayoutIntegrityTests {
         #expect(anchor == ChatLayoutViewportAnchor(messageID: second, minY: 80))
     }
 
+    @Test("相邻气泡导航以顶部第一条可见消息为锚点")
+    func adjacentNavigationUsesFirstVisibleMessageBelowTop() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        let fourth = UUID()
+        let ids = [first, second, third, fourth]
+        let frames = [
+            second: CGRect(x: 0, y: -40, width: 300, height: 100),
+            third: CGRect(x: 0, y: 60, width: 300, height: 180),
+            fourth: CGRect(x: 0, y: 240, width: 300, height: 120)
+        ]
+
+        #expect(ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: ids,
+            frames: frames,
+            viewportHeight: 500,
+            retainedAnchorID: nil,
+            direction: .previous
+        ) == first)
+        #expect(ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: ids,
+            frames: frames,
+            viewportHeight: 500,
+            retainedAnchorID: nil,
+            direction: .next
+        ) == third)
+    }
+
+    @Test("相邻气泡导航连续点击沿用稳定消息游标并服从首尾边界")
+    func adjacentNavigationRetainsCursorAndStopsAtBoundaries() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        let ids = [first, second, third]
+
+        #expect(ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: ids,
+            frames: [:],
+            viewportHeight: 500,
+            retainedAnchorID: second,
+            direction: .next
+        ) == third)
+        #expect(ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: ids,
+            frames: [:],
+            viewportHeight: 500,
+            retainedAnchorID: first,
+            direction: .previous
+        ) == nil)
+        #expect(ChatMessageLayoutAudit.adjacentMessageID(
+            orderedMessageIDs: ids,
+            frames: [:],
+            viewportHeight: 500,
+            retainedAnchorID: third,
+            direction: .next
+        ) == nil)
+    }
+
     @Test("阅读锚点校正保持相对位置并服从滚动边界")
     func anchorAdjustmentPreservesRelativePositionWithinBounds() {
         #expect(ChatScrollMetricsObserver.anchorAdjustedContentOffsetY(

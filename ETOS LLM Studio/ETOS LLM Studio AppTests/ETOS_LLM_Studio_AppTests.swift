@@ -165,30 +165,21 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(ChatView.resolvedBottomScrollTarget == .bottom)
     }
 
-    @Test("吸底命令仅在抵达真实底部或用户接管后释放")
+    @Test("吸底命令仅在抵达真实底部后释放")
     func testChatBottomScrollCommandReleaseLifecycle() {
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
             distanceToBottom: 0,
-            isUserInteracting: false,
             arrivalTolerance: 1
         ))
         #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
             distanceToBottom: 8,
-            isUserInteracting: false,
-            arrivalTolerance: 1
-        ))
-        #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
-            hasActiveTarget: true,
-            distanceToBottom: 8,
-            isUserInteracting: true,
             arrivalTolerance: 1
         ))
         #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: false,
             distanceToBottom: 0,
-            isUserInteracting: false,
             arrivalTolerance: 1
         ))
     }
@@ -261,6 +252,10 @@ struct ETOS_LLM_Studio_AppTests {
             visibleMessageIDs: [visibleMessageID]
         ) == nil)
         #expect(ChatView.retainedChatScrollTarget(
+            .top,
+            visibleMessageIDs: []
+        ) == .top)
+        #expect(ChatView.retainedChatScrollTarget(
             .bottom,
             visibleMessageIDs: []
         ) == .bottom)
@@ -273,8 +268,152 @@ struct ETOS_LLM_Studio_AppTests {
             visibleMessageIDs: [visibleMessageID]
         ))
         #expect(ChatView.isChatScrollTargetAvailable(
+            .top,
+            visibleMessageIDs: []
+        ))
+        #expect(ChatView.isChatScrollTargetAvailable(
             .bottom,
             visibleMessageIDs: []
+        ))
+    }
+
+    @Test("新的拖动边沿会抢占任何正在进行的程序滚动")
+    func testPanBeganCancelsEveryProgrammaticScrollOwner() {
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: true,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: false,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: false
+        ))
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: true,
+            hasPendingTargetTask: false,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: false
+        ))
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: true,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: false
+        ))
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: false,
+            hasScrollTarget: true,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: false
+        ))
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: false,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: true,
+            isMessageJumpInFlight: false
+        ))
+        #expect(ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: false,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: true
+        ))
+        #expect(!ChatView.shouldCancelProgrammaticScrollOnPanBegan(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasPendingTargetTask: false,
+            hasScrollTarget: false,
+            hasActiveBottomTarget: false,
+            isMessageJumpInFlight: false
+        ))
+    }
+
+    @Test("时间线首尾按钮同时考虑全局窗口边界和真实距离")
+    func testTimelineEdgeNavigationAvailability() {
+        #expect(ChatView.shouldEnableTimelineEdgeNavigation(
+            isHistoryBoundaryLoaded: false,
+            distanceToEdge: 0
+        ))
+        #expect(ChatView.shouldEnableTimelineEdgeNavigation(
+            isHistoryBoundaryLoaded: true,
+            distanceToEdge: 20
+        ))
+        #expect(!ChatView.shouldEnableTimelineEdgeNavigation(
+            isHistoryBoundaryLoaded: true,
+            distanceToEdge: 0.5
+        ))
+        #expect(ChatView.shouldEnableTimelineBottomNavigation(
+            isLaterHistoryBoundaryLoaded: false,
+            keepsBottomPinned: true,
+            distanceToBottom: 0
+        ))
+        #expect(!ChatView.shouldEnableTimelineBottomNavigation(
+            isLaterHistoryBoundaryLoaded: true,
+            keepsBottomPinned: true,
+            distanceToBottom: 100
+        ))
+    }
+
+    @Test("回底命令必须等新几何快照后才能恢复相邻导航")
+    func testAdjacentNavigationWaitsForFreshBottomSnapshot() {
+        #expect(ChatView.shouldSuspendAdjacentNavigationForBottomArrival(
+            awaitsFreshSnapshot: true,
+            hasProgrammaticScrollOwnership: true,
+            currentSnapshotRevision: 12,
+            baselineSnapshotRevision: 10
+        ))
+        #expect(ChatView.shouldSuspendAdjacentNavigationForBottomArrival(
+            awaitsFreshSnapshot: true,
+            hasProgrammaticScrollOwnership: false,
+            currentSnapshotRevision: 10,
+            baselineSnapshotRevision: 10
+        ))
+        #expect(!ChatView.shouldSuspendAdjacentNavigationForBottomArrival(
+            awaitsFreshSnapshot: true,
+            hasProgrammaticScrollOwnership: false,
+            currentSnapshotRevision: 11,
+            baselineSnapshotRevision: 10
+        ))
+    }
+
+    @Test("显式导航期间暂停自动历史请求但保留自动锚点回执")
+    func testExplicitNavigationSuspendsAutomaticHistoryRequests() {
+        #expect(ChatView.shouldSuspendAutomaticHistoryNavigation(
+            isMessageJumpInFlight: true,
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasActiveBottomTarget: false,
+            hasPendingOrAppliedTarget: true,
+            isAutomaticHistoryLoadInFlight: false
+        ))
+        #expect(!ChatView.shouldSuspendAutomaticHistoryNavigation(
+            isMessageJumpInFlight: false,
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasActiveBottomTarget: false,
+            hasPendingOrAppliedTarget: true,
+            isAutomaticHistoryLoadInFlight: true
+        ))
+    }
+
+    @Test("紧凑聊天视口不会挤入完整四键导航栏")
+    func testExpandedScrollNavigationRequiresVerticalClearance() {
+        #expect(ChatView.canPresentExpandedScrollNavigation(
+            viewportHeight: 240,
+            panelHeight: 188
+        ))
+        #expect(!ChatView.canPresentExpandedScrollNavigation(
+            viewportHeight: 210,
+            panelHeight: 188
         ))
     }
 
