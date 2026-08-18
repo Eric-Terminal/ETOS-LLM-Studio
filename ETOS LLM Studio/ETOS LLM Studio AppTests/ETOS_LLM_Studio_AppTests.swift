@@ -79,6 +79,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(ChatBubble.shouldForceBubbleWidth(
             usesNoBubbleStyle: false,
             isOutgoing: false,
+            isAssistant: true,
             hasAudio: false,
             locksStreamingAssistantWidth: true,
             mergesWithAdjacentBubble: false,
@@ -87,6 +88,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(!ChatBubble.shouldForceBubbleWidth(
             usesNoBubbleStyle: false,
             isOutgoing: false,
+            isAssistant: true,
             hasAudio: false,
             locksStreamingAssistantWidth: false,
             mergesWithAdjacentBubble: false,
@@ -95,6 +97,16 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(!ChatBubble.shouldForceBubbleWidth(
             usesNoBubbleStyle: false,
             isOutgoing: true,
+            isAssistant: false,
+            hasAudio: false,
+            locksStreamingAssistantWidth: true,
+            mergesWithAdjacentBubble: false,
+            rendersReasoningToolTimeline: false
+        ))
+        #expect(!ChatBubble.shouldForceBubbleWidth(
+            usesNoBubbleStyle: false,
+            isOutgoing: false,
+            isAssistant: false,
             hasAudio: false,
             locksStreamingAssistantWidth: true,
             mergesWithAdjacentBubble: false,

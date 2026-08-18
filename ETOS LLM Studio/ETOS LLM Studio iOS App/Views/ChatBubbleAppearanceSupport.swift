@@ -484,6 +484,7 @@ extension ChatBubble {
         Self.shouldForceBubbleWidth(
             usesNoBubbleStyle: usesNoBubbleStyle,
             isOutgoing: isOutgoing,
+            isAssistant: message.role == .assistant,
             hasAudio: message.audioFileName != nil,
             locksStreamingAssistantWidth: messageState.retainsStreamingAssistantWidth
                 || showsStreamingIndicators
@@ -496,6 +497,7 @@ extension ChatBubble {
     nonisolated static func shouldForceBubbleWidth(
         usesNoBubbleStyle: Bool,
         isOutgoing: Bool,
+        isAssistant: Bool,
         hasAudio: Bool,
         locksStreamingAssistantWidth: Bool,
         mergesWithAdjacentBubble: Bool,
@@ -510,7 +512,7 @@ extension ChatBubble {
         guard !isOutgoing else { return false }
         return mergesWithAdjacentBubble
             || rendersReasoningToolTimeline
-            || locksStreamingAssistantWidth
+            || (isAssistant && locksStreamingAssistantWidth)
     }
 
     var rowSideSpacerMinLength: CGFloat {
