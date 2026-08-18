@@ -355,6 +355,13 @@ struct ChatBubble: View {
         .onChange(of: toolCallAutoPresentationSignature) { _, _ in
             autoPresentPendingToolCallIfNeeded()
         }
+        .onChange(
+            of: showsStreamingIndicators || isStaticMarkdownHandoffInProgress,
+            initial: true
+        ) { _, preservesStreamingLayout in
+            guard preservesStreamingLayout else { return }
+            messageState.retainStreamingAssistantWidth()
+        }
     }
 
     @ViewBuilder

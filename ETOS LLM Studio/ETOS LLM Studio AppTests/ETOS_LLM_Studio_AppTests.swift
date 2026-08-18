@@ -80,8 +80,7 @@ struct ETOS_LLM_Studio_AppTests {
             usesNoBubbleStyle: false,
             isOutgoing: false,
             hasAudio: false,
-            preservesStreamingLayout: true,
-            hasStreamingContent: true,
+            locksStreamingAssistantWidth: true,
             mergesWithAdjacentBubble: false,
             rendersReasoningToolTimeline: false
         ))
@@ -89,8 +88,7 @@ struct ETOS_LLM_Studio_AppTests {
             usesNoBubbleStyle: false,
             isOutgoing: false,
             hasAudio: false,
-            preservesStreamingLayout: true,
-            hasStreamingContent: false,
+            locksStreamingAssistantWidth: false,
             mergesWithAdjacentBubble: false,
             rendersReasoningToolTimeline: false
         ))
@@ -98,8 +96,7 @@ struct ETOS_LLM_Studio_AppTests {
             usesNoBubbleStyle: false,
             isOutgoing: true,
             hasAudio: false,
-            preservesStreamingLayout: true,
-            hasStreamingContent: true,
+            locksStreamingAssistantWidth: true,
             mergesWithAdjacentBubble: false,
             rendersReasoningToolTimeline: false
         ))

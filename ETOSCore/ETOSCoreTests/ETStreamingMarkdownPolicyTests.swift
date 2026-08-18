@@ -12,6 +12,40 @@ import Testing
 
 @Suite("流式 Markdown UI 策略")
 struct ETStreamingMarkdownPolicyTests {
+    @Test("助手加载占位从创建起保留流式气泡宽度")
+    @MainActor
+    func assistantLoadingPlaceholderRetainsStreamingWidth() {
+        let attemptID = UUID()
+        let placeholder = ChatMessage(
+            role: .assistant,
+            content: "",
+            responseAttemptID: attemptID
+        )
+        let state = ChatMessageRenderState(message: placeholder)
+
+        #expect(state.retainsStreamingAssistantWidth)
+
+        var completed = placeholder
+        completed.content = "好的。"
+        state.update(with: completed)
+
+        #expect(state.retainsStreamingAssistantWidth)
+    }
+
+    @Test("运行中途建立的消息状态可单调保留流式气泡宽度")
+    @MainActor
+    func streamingWidthRetentionSurvivesRendererLifecycle() {
+        let state = ChatMessageRenderState(
+            message: ChatMessage(role: .assistant, content: "正在生成")
+        )
+        #expect(!state.retainsStreamingAssistantWidth)
+
+        state.retainStreamingAssistantWidth()
+        state.invalidateLayoutAfterRendererHandoff()
+
+        #expect(state.retainsStreamingAssistantWidth)
+    }
+
     @Test("纯流式追加不会反复重建气泡，结构变化会推进布局版本")
     @MainActor
     func layoutRevisionOnlyTracksStructuralChanges() {

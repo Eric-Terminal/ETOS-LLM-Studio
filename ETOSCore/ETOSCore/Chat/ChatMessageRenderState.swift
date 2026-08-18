@@ -18,6 +18,8 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public private(set) var layoutRevision: UInt = 0
     public private(set) var rendererHandoffRevision: UInt = 0
     public private(set) var lastRendererHandoffAt: Date?
+    /// 流式气泡一旦占用稳定宽度便不再释放，直到该消息的渲染状态被销毁。
+    public private(set) var retainsStreamingAssistantWidth: Bool
     public let streamingMarkdownState: ETStreamingMarkdownRenderState
     
     public init(message: ChatMessage) {
@@ -26,6 +28,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         self.visualMessage = message
         self.roleplayHTML = nil
         self.lastRendererHandoffAt = nil
+        self.retainsStreamingAssistantWidth = Self.isAssistantLoadingPlaceholder(message)
         self.streamingMarkdownState = ETStreamingMarkdownRenderState()
     }
     
@@ -61,5 +64,17 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         layoutRevision &+= 1
         rendererHandoffRevision &+= 1
         lastRendererHandoffAt = Date()
+    }
+
+    public func retainStreamingAssistantWidth() {
+        retainsStreamingAssistantWidth = true
+    }
+
+    private static func isAssistantLoadingPlaceholder(_ message: ChatMessage) -> Bool {
+        message.role == .assistant
+            && message.responseAttemptID != nil
+            && message.content.isEmpty
+            && (message.reasoningContent?.isEmpty ?? true)
+            && (message.toolCalls?.isEmpty ?? true)
     }
 }

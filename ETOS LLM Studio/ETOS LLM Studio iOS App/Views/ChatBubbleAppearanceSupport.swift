@@ -485,9 +485,9 @@ extension ChatBubble {
             usesNoBubbleStyle: usesNoBubbleStyle,
             isOutgoing: isOutgoing,
             hasAudio: message.audioFileName != nil,
-            preservesStreamingLayout: showsStreamingIndicators || isStaticMarkdownHandoffInProgress,
-            hasStreamingContent: !message.content.isEmpty
-                || !(message.reasoningContent?.isEmpty ?? true),
+            locksStreamingAssistantWidth: messageState.retainsStreamingAssistantWidth
+                || showsStreamingIndicators
+                || isStaticMarkdownHandoffInProgress,
             mergesWithAdjacentBubble: mergeWithPrevious || mergeWithNext,
             rendersReasoningToolTimeline: shouldRenderReasoningToolTimeline
         )
@@ -497,8 +497,7 @@ extension ChatBubble {
         usesNoBubbleStyle: Bool,
         isOutgoing: Bool,
         hasAudio: Bool,
-        preservesStreamingLayout: Bool,
-        hasStreamingContent: Bool,
+        locksStreamingAssistantWidth: Bool,
         mergesWithAdjacentBubble: Bool,
         rendersReasoningToolTimeline: Bool
     ) -> Bool {
@@ -511,7 +510,7 @@ extension ChatBubble {
         guard !isOutgoing else { return false }
         return mergesWithAdjacentBubble
             || rendersReasoningToolTimeline
-            || (preservesStreamingLayout && hasStreamingContent)
+            || locksStreamingAssistantWidth
     }
 
     var rowSideSpacerMinLength: CGFloat {
