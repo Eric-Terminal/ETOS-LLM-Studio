@@ -417,6 +417,30 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
+    @Test("四键导航仅响应聊天区右缘向左横扫")
+    func testScrollNavigationEdgeRevealGestureIntent() {
+        #expect(ChatView.shouldRevealScrollNavigationForEdgeSwipe(
+            startLocationX: 370,
+            viewportWidth: 390,
+            translation: CGSize(width: -24, height: 4)
+        ))
+        #expect(!ChatView.shouldRevealScrollNavigationForEdgeSwipe(
+            startLocationX: 300,
+            viewportWidth: 390,
+            translation: CGSize(width: -24, height: 4)
+        ))
+        #expect(!ChatView.shouldRevealScrollNavigationForEdgeSwipe(
+            startLocationX: 370,
+            viewportWidth: 390,
+            translation: CGSize(width: 24, height: 2)
+        ))
+        #expect(!ChatView.shouldRevealScrollNavigationForEdgeSwipe(
+            startLocationX: 370,
+            viewportWidth: 390,
+            translation: CGSize(width: -18, height: 24)
+        ))
+    }
+
     @Test("输入栏收缩扩大聊天视口时会恢复底部锚点")
     func testChatScrollViewportResizeRestoresBottomAnchor() {
         let expandedComposerViewport = CGSize(width: 390, height: 248)

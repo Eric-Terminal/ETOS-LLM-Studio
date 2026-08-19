@@ -35,6 +35,21 @@ extension ChatView {
         viewportHeight >= panelHeight + minimumClearance
     }
 
+    nonisolated static func shouldRevealScrollNavigationForEdgeSwipe(
+        startLocationX: CGFloat,
+        viewportWidth: CGFloat,
+        translation: CGSize,
+        edgeActivationWidth: CGFloat = 56,
+        minimumHorizontalDistance: CGFloat = 14
+    ) -> Bool {
+        guard viewportWidth > 0,
+              startLocationX >= viewportWidth - edgeActivationWidth,
+              translation.width <= -minimumHorizontalDistance else {
+            return false
+        }
+        return abs(translation.width) > abs(translation.height) * 1.2
+    }
+
     nonisolated static func shouldSuspendAdjacentNavigationForBottomArrival(
         awaitsFreshSnapshot: Bool,
         hasProgrammaticScrollOwnership: Bool,
@@ -266,8 +281,25 @@ extension ChatView {
         }
     }
 
+    var scrollNavigationEdgeRevealGesture: some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .onChanged { value in
+                guard appConfig.chatTimelineNavigationEnabled,
+                      !showScrollNavigationPanel,
+                      Self.shouldRevealScrollNavigationForEdgeSwipe(
+                        startLocationX: value.startLocation.x,
+                        viewportWidth: chatScrollViewportWidth,
+                        translation: value.translation
+                      ) else { return }
+                revealScrollNavigationPanel()
+            }
+            .onEnded { _ in
+                guard showScrollNavigationPanel else { return }
+                scheduleScrollNavigationPanelHide()
+            }
+    }
+
     func handleChatScrollPanBegan() {
-        revealScrollNavigationPanel()
         awaitsFreshBottomNavigationSnapshot = false
         messageNavigationCursorID = nil
         refreshMessageNavigationTargets()

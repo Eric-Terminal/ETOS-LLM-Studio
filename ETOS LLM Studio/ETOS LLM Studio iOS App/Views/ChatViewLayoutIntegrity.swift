@@ -986,7 +986,8 @@ extension ChatView {
         guard isChatScrollUserInteracting != isUserInteracting else { return }
         isChatScrollUserInteracting = isUserInteracting
         if isUserInteracting {
-            revealScrollNavigationPanel()
+            scrollNavigationHideTask?.cancel()
+            scrollNavigationHideTask = nil
         } else {
             scheduleScrollNavigationPanelHide()
         }

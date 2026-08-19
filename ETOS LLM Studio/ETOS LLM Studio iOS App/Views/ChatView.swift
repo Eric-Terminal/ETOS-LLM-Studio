@@ -1151,6 +1151,7 @@ extension ChatView {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)
+                .simultaneousGesture(scrollNavigationEdgeRevealGesture)
                 .accessibilityActions {
                     if appConfig.chatTimelineNavigationEnabled {
                         if canNavigateToTimelineTop {

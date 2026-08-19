@@ -137,7 +137,7 @@ struct DisplaySettingsView: View {
                 } header: {
                     Text(NSLocalizedString("聊天导航", comment: "Chat navigation settings section"))
                 } footer: {
-                    Text(NSLocalizedString("开启后，滚动聊天时会显示前往顶部、上一条消息、下一条消息和底部的按钮；关闭后仍保留原有的回到底部按钮。", comment: "Chat timeline navigation description"))
+                    Text(NSLocalizedString("开启后，从聊天区右侧向左轻扫可展开四个导航按钮，停止操作后会自动收起；关闭后仍保留原有的回到底部按钮。", comment: "Chat timeline navigation description"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
