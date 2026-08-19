@@ -83,6 +83,22 @@ struct OpenAIAdapterAdvancedTests {
         #expect(part.reasoningContent == nil)
     }
 
+    @Test("OpenAI 流式结束标记和 finish_reason 会确认请求完成")
+    func testOpenAIStreamingTerminationSignalsCompleteRequest() throws {
+        let donePart = try #require(adapter.parseStreamingResponse(line: "data: [DONE]"))
+        let finishReasonLine = """
+        data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+        """
+        let finishReasonPart = try #require(adapter.parseStreamingResponse(line: finishReasonLine))
+        let failedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"error":{"message":"上游服务不可用"}}"#
+        ))
+
+        #expect(donePart.streamTermination == .completed)
+        #expect(finishReasonPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "上游服务不可用"))
+    }
+
     @Test("OpenAI 流式 usage-only 片段可解析 DeepSeek prompt cache 字段")
     func testStreamingUsageOnlyChunkParsesDeepSeekPromptCacheHitTokens() throws {
         let line = """
@@ -1365,6 +1381,17 @@ struct OpenAIAdapterAdvancedTests {
         #expect(usage.thinkingTokens == 2)
         #expect(usage.cacheReadTokens == 4)
         #expect(usage.totalTokens == 16)
+        #expect(completedPart.streamTermination == .completed)
+    }
+
+    @Test("OpenAI Responses 未完成事件会报告流式失败")
+    func testParseResponsesIncompleteEventReportsFailure() throws {
+        let line = """
+        data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}
+        """
+
+        let part = try #require(adapter.parseStreamingResponse(line: line))
+        #expect(part.streamTermination == .failed(reason: "max_output_tokens"))
     }
 
     @Test("OpenAI Responses 流式工具参数完成事件可从 item 补齐工具信息")

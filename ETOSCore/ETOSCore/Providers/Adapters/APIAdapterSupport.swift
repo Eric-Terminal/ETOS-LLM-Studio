@@ -225,6 +225,11 @@ func logImageGenerationRequestSnapshot(
 
 /// 代表从流式 API 响应中解析出的单个数据片段。
 public struct ChatMessagePart {
+    public enum StreamTermination: Equatable, Sendable {
+        case completed
+        case failed(reason: String?)
+    }
+
     public struct ToolCallDelta {
         public var id: String?
         public var index: Int?
@@ -240,6 +245,7 @@ public struct ChatMessagePart {
     public var providerResponseMetadata: [String: JSONValue]?
     public var toolCallDeltas: [ToolCallDelta]?
     public var tokenUsage: MessageTokenUsage?
+    public var streamTermination: StreamTermination? = nil
 }
 
 /// 生图响应中的单张图片结果。
@@ -262,6 +268,9 @@ public struct GeneratedImageResult: Sendable {
 /// `APIAdapter` 协议定义了一个标准接口，用于处理不同 LLM 提供商的 API 请求构建和响应解析。
 /// 这使得 `ChatService` 无需关心特定 API 的细节，从而轻松支持多种后端。
 public protocol APIAdapter {
+    /// 流式响应必须由适配器明确确认结束，不能把传输层 EOF 当成模型正常完成。
+    var requiresExplicitStreamingTermination: Bool { get }
+
     func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest?
     func buildModelListRequest(for provider: Provider) -> URLRequest?
     func parseModelListResponse(data: Data) throws -> [Model]

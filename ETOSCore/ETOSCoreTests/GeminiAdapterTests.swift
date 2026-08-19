@@ -770,6 +770,22 @@ struct GeminiAdapterTests {
         #expect(delta.providerSpecificFields?["thought_signature"] == .string("sig-stream"))
     }
 
+    @Test("Gemini 流式 finishReason 和错误响应会报告终止状态")
+    func testGeminiStreamingTerminationEvents() throws {
+        let completedLine = """
+        data: {"candidates":[{"content":{"parts":[{"text":"完成"}]},"finishReason":"STOP"}]}
+        """
+        let failedLine = """
+        data: {"error":{"code":503,"message":"服务暂时不可用","status":"UNAVAILABLE"}}
+        """
+
+        let completedPart = try #require(adapter.parseStreamingResponse(line: completedLine))
+        let failedPart = try #require(adapter.parseStreamingResponse(line: failedLine))
+
+        #expect(completedPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "服务暂时不可用"))
+    }
+
     @Test("Gemini 文生图请求走 generateContent 端点并带 key 参数")
     func testGeminiImageGenerationRequestUsesGenerateContentEndpoint() throws {
         let request = try #require(

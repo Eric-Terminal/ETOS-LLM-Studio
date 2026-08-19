@@ -25,6 +25,7 @@ struct TelegramMessageComposer: View {
     @Binding var isRequestControlsExpanded: Bool
     @Binding var localAgentMode: LocalAgentMode
     let isSending: Bool
+    let isSendActionPending: Bool
     let sendAction: () -> Void
     let stopAction: () -> Void
     let slashCommandAction: (ChatSlashCommand) -> Void

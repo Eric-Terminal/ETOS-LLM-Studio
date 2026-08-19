@@ -170,6 +170,8 @@ struct ChatServiceModelConnectivityTests {
 }
 
 private final class ConnectivityProbeMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     var chatRequestCount = 0
     var embeddingRequestCount = 0
     var imageRequestCount = 0

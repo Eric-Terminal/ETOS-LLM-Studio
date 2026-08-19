@@ -152,7 +152,9 @@ struct WatchInputBubbleView: View {
         let hasTrimmedText = !viewModel.userInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let canSend = hasTrimmedText || hasPendingAttachments
         let inputActionState = WatchChatInputActionState.resolve(
-            isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
+            isSending: viewModel.isSendingMessage
+                || viewModel.isSendDelayPending
+                || viewModel.isSendSubmissionPending,
             hasSendableContent: canSend,
             canQuickRetry: viewModel.canQuickRetryLatestMessage,
             isSpeechInputEnabled: viewModel.enableSpeechInput
@@ -185,7 +187,11 @@ struct WatchInputBubbleView: View {
                             }
                             .buttonStyle(.plain)
                             .glassEffect(.clear, in: Circle())
-                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                            .disabled(
+                                inputActionState.isDisabled
+                                    || viewModel.attachmentImportInProgress
+                                    || viewModel.isSendSubmissionPending
+                            )
                         } else {
                             ZStack {
                                 Capsule()
@@ -209,7 +215,11 @@ struct WatchInputBubbleView: View {
                                 Circle()
                                     .stroke(inputStrokeColor, lineWidth: 0.8)
                             )
-                            .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                            .disabled(
+                                inputActionState.isDisabled
+                                    || viewModel.attachmentImportInProgress
+                                    || viewModel.isSendSubmissionPending
+                            )
                         }
                     }
                     .frame(height: inputControlHeight)
@@ -240,7 +250,11 @@ struct WatchInputBubbleView: View {
                             Circle()
                                 .stroke(inputStrokeColor, lineWidth: 0.8)
                         )
-                        .disabled(inputActionState.isDisabled || viewModel.attachmentImportInProgress)
+                        .disabled(
+                            inputActionState.isDisabled
+                                || viewModel.attachmentImportInProgress
+                                || viewModel.isSendSubmissionPending
+                        )
                     }
                     .frame(height: inputControlHeight)
                     .padding(.horizontal, 10)

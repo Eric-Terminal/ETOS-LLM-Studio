@@ -472,6 +472,14 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(
             WatchChatInputActionState.resolve(
                 isSending: true,
+                hasSendableContent: false,
+                canQuickRetry: true,
+                isSpeechInputEnabled: true
+            ) == .stop
+        )
+        #expect(
+            WatchChatInputActionState.resolve(
+                isSending: true,
                 hasSendableContent: true,
                 canQuickRetry: true,
                 isSpeechInputEnabled: true

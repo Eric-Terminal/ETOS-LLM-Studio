@@ -653,6 +653,9 @@ extension TelegramMessageComposer {
     }
 
     private var adaptiveActionIsDisabled: Bool {
+        if isSendActionPending {
+            return true
+        }
         if inlineSpeechRecorder.phase.isActive, !isSending {
             return true
         }

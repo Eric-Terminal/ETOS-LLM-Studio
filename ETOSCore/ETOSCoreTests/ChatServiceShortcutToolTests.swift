@@ -255,6 +255,8 @@ struct ChatServiceShortcutToolTests {
 }
 
 private final class ShortcutInjectionMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     var receivedTools: [InternalToolDefinition]?
     var receivedMessages: [ChatMessage]?
 

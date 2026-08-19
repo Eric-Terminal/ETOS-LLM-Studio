@@ -10,6 +10,8 @@ import Foundation
 @testable import ETOSCore
 
 final class MockAPIAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     var receivedMessages: [ChatMessage]?
     var receivedTitleMessages: [ChatMessage]?
     var receivedReasoningSummaryMessages: [ChatMessage]?
@@ -100,6 +102,8 @@ final class MockAPIAdapter: APIAdapter {
 }
 
 final class RetryStreamingMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String : Any],

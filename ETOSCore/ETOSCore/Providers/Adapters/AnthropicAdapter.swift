@@ -16,6 +16,7 @@ public class AnthropicAdapter: APIAdapter {
     
     private let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "AnthropicAdapter")
     private static let toolNameRegex = try! NSRegularExpression(pattern: "[^a-zA-Z0-9_.-]", options: [])
+    public let requiresExplicitStreamingTermination = true
 
     private func sanitizedToolName(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -77,6 +78,7 @@ public class AnthropicAdapter: APIAdapter {
         let delta: Delta?
         let usage: AnthropicResponse.Usage?
         let message: AnthropicResponse?
+        let error: AnthropicResponse.Error?
         
         struct Delta: Decodable {
             let type: String?
@@ -599,18 +601,27 @@ public class AnthropicAdapter: APIAdapter {
                 return nil
                 
             case "message_delta":
-                if let usage = event.usage ?? event.delta?.usage {
-                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                let usage = event.usage ?? event.delta?.usage
+                let streamTermination: ChatMessagePart.StreamTermination? = {
+                    guard let stopReason = event.delta?.stop_reason,
+                          !stopReason.isEmpty else { return nil }
+                    return .completed
+                }()
+                if usage != nil || streamTermination != nil {
+                    return ChatMessagePart(
+                        tokenUsage: makeTokenUsage(from: usage),
+                        streamTermination: streamTermination
+                    )
                 }
                 return nil
                 
             case "message_stop":
                 logger.info("Anthropic 流式传输结束。")
-                return nil
+                return ChatMessagePart(streamTermination: .completed)
                 
             case "error":
                 logger.error("Anthropic 流式错误: \(dataString)")
-                return nil
+                return ChatMessagePart(streamTermination: .failed(reason: event.error?.message))
                 
             default:
                 return nil

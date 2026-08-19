@@ -107,6 +107,7 @@ extension OpenAIAdapter {
             }
             let message: Message?
             let delta: Message?
+            let finish_reason: String?
         }
         let choices: [Choice]
         struct Usage: Decodable {

@@ -208,6 +208,8 @@ struct ChatServiceImageRoutingTests {
 }
 
 private final class ImageRoutingMockAdapter: APIAdapter {
+    let requiresExplicitStreamingTermination = false
+
     var chatRequestCount = 0
     var imageRequestCount = 0
     var lastPrompt: String?

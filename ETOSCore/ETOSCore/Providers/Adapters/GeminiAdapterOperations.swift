@@ -417,13 +417,26 @@ extension GeminiAdapter {
         
         do {
             let chunk = try JSONDecoder().decode(GeminiResponse.self, from: data)
-            
-            guard let candidate = chunk.candidates?.first,
+            if let error = chunk.error {
+                return ChatMessagePart(streamTermination: .failed(reason: error.message))
+            }
+
+            let candidate = chunk.candidates?.first
+            let streamTermination: ChatMessagePart.StreamTermination? = {
+                guard let finishReason = candidate?.finishReason,
+                      !finishReason.isEmpty else { return nil }
+                return .completed
+            }()
+
+            guard let candidate,
                   let content = candidate.content,
                   let parts = content.parts else {
                 // 可能只有 usageMetadata
-                if let usage = chunk.usageMetadata {
-                    return ChatMessagePart(tokenUsage: makeTokenUsage(from: usage))
+                if chunk.usageMetadata != nil || streamTermination != nil {
+                    return ChatMessagePart(
+                        tokenUsage: makeTokenUsage(from: chunk.usageMetadata),
+                        streamTermination: streamTermination
+                    )
                 }
                 return nil
             }
@@ -479,7 +492,8 @@ extension GeminiAdapter {
                 content: textContent,
                 reasoningContent: reasoningContent,
                 toolCallDeltas: toolCallDeltas,
-                tokenUsage: makeTokenUsage(from: chunk.usageMetadata)
+                tokenUsage: makeTokenUsage(from: chunk.usageMetadata),
+                streamTermination: streamTermination
             )
         } catch {
             logger.warning("Gemini 流式 JSON 解析失败: \(error.localizedDescription) - 原始数据: '\(dataString)'")

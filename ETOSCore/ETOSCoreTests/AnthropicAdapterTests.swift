@@ -186,6 +186,19 @@ struct AnthropicAdapterTests {
         #expect(part.reasoningProviderSpecificFields?["anthropic_signature"] == .string("sig-stream"))
     }
 
+    @Test("Anthropic 流式停止和错误事件会报告终止状态")
+    func testAnthropicStreamingTerminationEvents() throws {
+        let stoppedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"type":"message_stop"}"#
+        ))
+        let failedPart = try #require(adapter.parseStreamingResponse(
+            line: #"data: {"type":"error","error":{"type":"overloaded_error","message":"服务暂时过载"}}"#
+        ))
+
+        #expect(stoppedPart.streamTermination == .completed)
+        #expect(failedPart.streamTermination == .failed(reason: "服务暂时过载"))
+    }
+
     @Test("Anthropic 请求体支持自适应思考和 effort")
     func testAnthropicBuildRequestUsesAdaptiveThinkingControls() throws {
         let provider = Provider(

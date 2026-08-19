@@ -16,6 +16,8 @@ import os.log
 public class OpenAIAdapter: APIAdapter {
     public init() {}
 
+    public let requiresExplicitStreamingTermination = true
+
     let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "OpenAIAdapter")
     public static let streamIncludeUsageControlKey = "openai_stream_include_usage"
     public static let reasoningContentEchoModeControlKey = ReasoningContentEchoPayload.key

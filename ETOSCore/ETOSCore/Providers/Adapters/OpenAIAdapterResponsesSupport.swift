@@ -799,7 +799,7 @@ extension OpenAIAdapter {
             }
             return nil
 
-        case "response.created", "response.completed", "response.incomplete":
+        case "response.created":
             guard let response = payload["response"] as? [String: Any] else {
                 return nil
             }
@@ -810,8 +810,52 @@ extension OpenAIAdapter {
             }
             return ChatMessagePart(providerResponseMetadata: metadata, tokenUsage: usage)
 
+        case "response.completed":
+            let response = payload["response"] as? [String: Any]
+            return ChatMessagePart(
+                providerResponseMetadata: responsesProviderMetadata(response: response),
+                tokenUsage: makeResponsesTokenUsage(from: response?["usage"]),
+                streamTermination: .completed
+            )
+
+        case "response.incomplete", "response.failed", "response.cancelled", "response.error", "error":
+            let response = payload["response"] as? [String: Any]
+            return ChatMessagePart(
+                providerResponseMetadata: responsesProviderMetadata(response: response),
+                tokenUsage: makeResponsesTokenUsage(from: response?["usage"]),
+                streamTermination: .failed(reason: responsesStreamingFailureReason(
+                    payload: payload,
+                    response: response
+                ))
+            )
+
         default:
             return nil
         }
+    }
+
+    private func responsesStreamingFailureReason(
+        payload: [String: Any],
+        response: [String: Any]?
+    ) -> String? {
+        if let error = response?["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.isEmpty {
+            return message
+        }
+        if let error = payload["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.isEmpty {
+            return message
+        }
+        if let message = payload["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let details = response?["incomplete_details"] as? [String: Any],
+           let reason = details["reason"] as? String,
+           !reason.isEmpty {
+            return reason
+        }
+        return nil
     }
 }

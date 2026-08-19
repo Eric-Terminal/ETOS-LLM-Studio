@@ -54,7 +54,10 @@ extension ChatView {
                 ),
                 isRequestControlsExpanded: $isComposerRequestControlsExpanded,
                 localAgentMode: $currentLocalAgentMode,
-                isSending: viewModel.isSendingMessage || viewModel.isSendDelayPending,
+                isSending: viewModel.isSendingMessage
+                    || viewModel.isSendDelayPending
+                    || viewModel.isSendSubmissionPending,
+                isSendActionPending: viewModel.isSendSubmissionPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
                     shouldKeepBottomPinned = true

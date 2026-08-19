@@ -463,10 +463,28 @@ extension ChatService {
         var toolCallOrder: [Int] = []
         var toolCallIndexByID: [String: Int] = [:]
         var parsedEventCount = 0
+        var streamTermination: ChatMessagePart.StreamTermination?
 
         for try await line in bytes.lines {
             guard let part = adapter.parseStreamingResponse(line: line) else { continue }
-            parsedEventCount += 1
+            if part.content != nil
+                || part.reasoningContent != nil
+                || part.reasoningProviderSpecificFields != nil
+                || part.providerResponseMetadata != nil
+                || part.toolCallDeltas != nil
+                || part.tokenUsage != nil {
+                parsedEventCount += 1
+            }
+            if let incomingTermination = part.streamTermination {
+                switch incomingTermination {
+                case .completed:
+                    if streamTermination == nil {
+                        streamTermination = .completed
+                    }
+                case .failed:
+                    streamTermination = incomingTermination
+                }
+            }
             if let incomingUsage = part.tokenUsage {
                 tokenUsage = mergeTokenUsage(existing: tokenUsage, incoming: incomingUsage)
             }
@@ -514,6 +532,23 @@ extension ChatService {
                     }
                 }
             }
+        }
+
+        if case .failed(let reason) = streamTermination {
+            let trimmedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedReason = trimmedReason.flatMap { $0.isEmpty ? nil : $0 }
+                ?? URLError(.badServerResponse).localizedDescription
+            throw NSError(
+                domain: "StreamingResponse",
+                code: -1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: resolvedReason
+                ]
+            )
+        }
+        if adapter.requiresExplicitStreamingTermination,
+           streamTermination != .completed {
+            throw URLError(.networkConnectionLost)
         }
 
         guard parsedEventCount > 0 else {

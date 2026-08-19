@@ -53,6 +53,7 @@ extension ChatService {
         var rawStreamingResponseLines: [String]? = shouldCaptureRawStreamingResponse ? [] : nil
         var streamingResponseByteCount = 0
         var hasReceivedStreamingLine = false
+        var streamTermination: ChatMessagePart.StreamTermination?
         let streamingSignpost = TelemetrySignpost.begin(
             .streamingResponseProcessing,
             correlatingWith: requestLogContext.requestID
@@ -118,6 +119,16 @@ extension ChatService {
                         httpStatusCode: &trailingUnparsedHTTPStatusCode
                     )
                     continue
+                }
+                if let incomingTermination = part.streamTermination {
+                    switch incomingTermination {
+                    case .completed:
+                        if streamTermination == nil {
+                            streamTermination = .completed
+                        }
+                    case .failed:
+                        streamTermination = incomingTermination
+                    }
                 }
                 trailingUnparsedResponseBody = ""
                 trailingUnparsedHTTPStatusCode = nil
@@ -339,6 +350,52 @@ extension ChatService {
                     finishedAt: Date(),
                     httpStatusCode: unparsedError.httpStatusCode,
                     errorKind: "streaming_unparsed_error_response"
+                )
+                return
+            }
+
+            let terminationFailure: (reason: String, errorKind: String)?
+            switch streamTermination {
+            case .some(.failed(let reason)):
+                let trimmedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+                terminationFailure = (
+                    trimmedReason.flatMap { $0.isEmpty ? nil : $0 }
+                        ?? URLError(.badServerResponse).localizedDescription,
+                    "streaming_provider_failure"
+                )
+            case .some(.completed):
+                terminationFailure = nil
+            case nil:
+                terminationFailure = adapter.requiresExplicitStreamingTermination
+                    ? (URLError(.networkConnectionLost).localizedDescription, "streaming_unexpected_eof")
+                    : nil
+            }
+
+            if let terminationFailure {
+                logCapturedStreamingResponse(isPartial: true)
+                messages = await persistAndPublishStreamingMessages(
+                    messages,
+                    loadingMessageID: loadingMessageID,
+                    sessionID: currentSessionID
+                )
+                await finalizeInterruptedReasoningMessageIfNeeded(
+                    loadingMessageID: loadingMessageID,
+                    in: currentSessionID
+                )
+                addErrorMessage(
+                    String(
+                        format: NSLocalizedString("流式传输错误: %@", comment: "Streaming error with description"),
+                        terminationFailure.reason
+                    ),
+                    sessionID: currentSessionID
+                )
+                emitSessionRequestStatus(.error, sessionID: currentSessionID)
+                persistRequestLog(
+                    context: requestLogContext,
+                    status: .failed,
+                    tokenUsage: latestTokenUsage,
+                    finishedAt: Date(),
+                    errorKind: terminationFailure.errorKind
                 )
                 return
             }

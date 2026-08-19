@@ -16,6 +16,8 @@ public final class OpenAIResponsesAdapter: APIAdapter {
 
     public init() {}
 
+    public let requiresExplicitStreamingTermination = true
+
     public func buildChatRequest(
         for model: RunnableModel,
         commonPayload: [String: Any],
@@ -60,7 +62,7 @@ public final class OpenAIResponsesAdapter: APIAdapter {
         let dataString = String(line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines))
         if dataString == "[DONE]" {
             logger.info("Responses 流式传输结束信号 [DONE] 已收到。")
-            return nil
+            return ChatMessagePart(streamTermination: .completed)
         }
 
         guard !dataString.isEmpty, let data = dataString.data(using: .utf8) else {
@@ -68,14 +70,23 @@ public final class OpenAIResponsesAdapter: APIAdapter {
         }
 
         guard let object = try? JSONSerialization.jsonObject(with: data, options: []),
-              let payload = object as? [String: Any],
-              let eventType = payload["type"] as? String,
-              eventType.hasPrefix("response.") else {
+              let payload = object as? [String: Any] else {
             logger.warning("Responses 流式 JSON 解析失败或事件类型不匹配: '\(dataString)'")
             return nil
         }
 
-        return openAIAdapter.parseResponsesStreamingEvent(payload)
+        if let eventType = payload["type"] as? String,
+           eventType.hasPrefix("response.") || eventType == "error" {
+            return openAIAdapter.parseResponsesStreamingEvent(payload)
+        }
+        if let error = payload["error"] as? [String: Any] {
+            return ChatMessagePart(
+                streamTermination: .failed(reason: error["message"] as? String)
+            )
+        }
+
+        logger.warning("Responses 流式 JSON 事件类型不匹配: '\(dataString)'")
+        return nil
     }
 
     public func buildTranscriptionRequest(
