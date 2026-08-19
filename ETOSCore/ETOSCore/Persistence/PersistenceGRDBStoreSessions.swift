@@ -516,7 +516,7 @@ extension PersistenceGRDBStore {
         guard atomizedMessages != messages else { return messages }
         saveMessagesIncrementally(atomizedMessages, for: sessionID)
         WatchDatabaseSyncService.markDatabaseChanged(.chat)
-        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        Persistence.postCloudSyncLocalDataDidChange()
         logger.info("会话 \(sessionID.uuidString) 的复合消息已拆分为独立附件消息。")
         return atomizedMessages
     }

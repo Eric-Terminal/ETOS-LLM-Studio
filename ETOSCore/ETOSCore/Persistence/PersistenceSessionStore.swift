@@ -17,7 +17,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveChatSessions(sessions)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -46,7 +46,7 @@ extension Persistence {
             try writeSessionIndexFile(index)
             logger.info("会话索引保存成功。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话索引失败: \(error.localizedDescription)")
         }
@@ -109,7 +109,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveSessionFolders(folders)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -129,7 +129,7 @@ extension Persistence {
             try data.write(to: sessionFoldersFileURL(), options: .atomic)
             logger.info("会话文件夹保存成功，共 \(normalizedFolders.count) 个。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话文件夹失败: \(error.localizedDescription)")
         }
@@ -171,7 +171,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveSessionTags(tags)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -191,7 +191,7 @@ extension Persistence {
             try data.write(to: sessionTagsFileURL(), options: .atomic)
             logger.info("会话标签保存成功，共 \(normalizedTags.count) 个。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话标签失败: \(error.localizedDescription)")
         }
@@ -243,7 +243,7 @@ extension Persistence {
         if let store = activeGRDBStore() {
             store.saveMessages(messages, for: sessionID)
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
             return
         }
 
@@ -256,7 +256,7 @@ extension Persistence {
             try writeSessionRecordFile(record, for: sessionID)
             logger.info("会话 \(sessionID.uuidString) 的消息已保存到会话存储（\(normalized.messages.count) 条）。")
             WatchDatabaseSyncService.markDatabaseChanged(.chat)
-            NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+            postCloudSyncLocalDataDidChange()
         } catch {
             logger.error("保存会话 \(sessionID.uuidString) 消息失败: \(error.localizedDescription)")
         }

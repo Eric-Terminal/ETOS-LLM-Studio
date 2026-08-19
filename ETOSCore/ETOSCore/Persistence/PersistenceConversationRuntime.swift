@@ -1548,7 +1548,7 @@ extension PersistenceGRDBStore {
 extension Persistence {
     private static func markConversationRuntimeChanged() {
         WatchDatabaseSyncService.markDatabaseChanged(.chat)
-        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        postCloudSyncLocalDataDidChange()
     }
 
     public static func appendConversationMessage(

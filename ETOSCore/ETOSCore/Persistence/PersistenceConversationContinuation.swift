@@ -310,7 +310,7 @@ extension Persistence {
             try createFileBackedConversationContinuationSession(session: session, context: context)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.chat)
-        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        postCloudSyncLocalDataDidChange()
     }
 
     public static func saveConversationContinuationContext(
@@ -332,7 +332,7 @@ extension Persistence {
             try writeSessionRecordFile(record, for: context.childSessionID)
         }
         WatchDatabaseSyncService.markDatabaseChanged(.chat)
-        NotificationCenter.default.post(name: .cloudSyncLocalDataDidChange, object: nil)
+        postCloudSyncLocalDataDidChange()
     }
 
     public static func loadConversationContinuationContext(
