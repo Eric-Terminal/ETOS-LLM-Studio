@@ -1188,6 +1188,12 @@ extension ChatView {
                 .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
                     resolvePendingSearchJumpIfNeeded()
                 }
+                .onChange(of: viewModel.automaticHistoryLoadingEnabled) { _, _ in
+                    cancelAutomaticHistoryNavigation()
+                }
+                .onChange(of: viewModel.lazyLoadMessageCount) { _, _ in
+                    cancelAutomaticHistoryNavigation()
+                }
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
                     pendingHistoryResetWorkItem?.cancel()
                     pendingHistoryResetWorkItem = nil

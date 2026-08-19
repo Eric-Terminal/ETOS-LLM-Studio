@@ -52,6 +52,8 @@ struct ContentView: View {
     @State var automaticHistoryAnchorTask: Task<Void, Never>?
     @State var isAutomaticHistoryLoadInFlight = false
     @State var lastAutomaticHistoryLoadAnchorID: UUID?
+    @State var automaticHistoryBoundaryBlockedAnchorID: UUID?
+    @State var deferredAutomaticHistoryBoundaryRequest: WatchAutomaticHistoryLoadRequest?
     @State var launchRecoveryNoticeMessage: String?
     @State var launchRecoveryRequest: Persistence.LaunchRecoveryRequest?
     @State var launchRecoveryErrorMessage: String?
@@ -239,10 +241,7 @@ struct ContentView: View {
             pendingBottomSnapTask = nil
             watchInputLayoutSettleTask?.cancel()
             watchInputLayoutSettleTask = nil
-            automaticHistoryAnchorTask?.cancel()
-            automaticHistoryAnchorTask = nil
-            pendingAutomaticHistoryLoadRequest = nil
-            isAutomaticHistoryLoadInFlight = false
+            cancelAutomaticHistoryNavigation()
             bottomAnchorVisibilityWorkItem?.cancel()
             bottomAnchorVisibilityWorkItem = nil
             chatTransientNoticeDismissTask?.cancel()

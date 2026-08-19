@@ -258,7 +258,10 @@ struct ModelAdvancedSettingsView: View {
                     .monospacedDigit()
                 }
 
-                Section(header: Text(NSLocalizedString("上下文窗口管理", comment: ""))) {
+                Section(
+                    header: Text(NSLocalizedString("上下文窗口管理", comment: "")),
+                    footer: Text(NSLocalizedString("开启后会在接近边缘时自动加载并回收历史气泡。关闭后按设置显示最近消息，每次向上加载 5 条；回到底部时恢复初始范围。设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明"))
+                ) {
                     HStack {
                         Text(NSLocalizedString("最大上下文消息数", comment: ""))
                         Spacer()
@@ -274,7 +277,7 @@ struct ModelAdvancedSettingsView: View {
 
                     if !viewModel.automaticHistoryLoadingEnabled {
                         HStack {
-                            Text(NSLocalizedString("手动加载轮次", comment: "手动加载聊天历史轮次设置"))
+                            Text(NSLocalizedString("初始显示消息数", comment: "手动模式初始显示聊天消息数设置"))
                             Spacer()
                             TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
                                 .multilineTextAlignment(.trailing)
@@ -612,7 +615,7 @@ struct ModelAdvancedSettingsView: View {
                 (
                     NSLocalizedString("上下文窗口管理", comment: ""),
                     [
-                        NSLocalizedString("设置进入历史会话时默认加载的最近对话轮次（从最近一条用户消息开始向后）。数值越小，长对话加载越快；设置为 0 表示加载全部历史。", comment: ""),
+                        NSLocalizedString("开启后会在接近边缘时自动加载并回收历史气泡。关闭后按设置显示最近消息，每次向上加载 5 条；回到底部时恢复初始范围。设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明"),
                         NSLocalizedString("达到阈值后，系统会发送通知；点击通知会立即按默认参数创建续聊会话，原会话会完整保留。", comment: "Watch context compression reminder settings explanation")
                     ].joined(separator: "\n\n")
                 ),

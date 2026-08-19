@@ -34,7 +34,7 @@ extension ContentView {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.up.circle")
                             .etFont(.system(size: 13, weight: .semibold))
-                        Text(String(format: NSLocalizedString("向上加载 %d 条记录", comment: ""), chunk))
+                        Text(String(format: NSLocalizedString("向上加载 %d 条记录", comment: "手动加载更早消息"), chunk))
                             .etFont(.caption)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -134,6 +134,17 @@ extension ContentView {
                         messageActionsTarget = WatchMessageActionsNavigationTarget(id: message.id)
                     }
                 )
+                .onAppear {
+                    loadAutomaticHistoryAtVisibleBoundary(
+                        proxy: proxy,
+                        anchorMessageID: state.id,
+                        isFirstDisplayedMessage: index == 0,
+                        isLastDisplayedMessage: index == displayedMessages.count - 1
+                    )
+                }
+                .onDisappear {
+                    releaseAutomaticHistoryBoundaryBlockIfNeeded(for: state.id)
+                }
 
                 if let contexts = outgoingContinuationContextsByMessageID[message.id] {
                     ForEach(contexts) { context in
@@ -399,14 +410,16 @@ extension ContentView {
         .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
             resolvePendingSearchJumpIfNeeded()
         }
+        .onChange(of: viewModel.automaticHistoryLoadingEnabled) { _, _ in
+            cancelAutomaticHistoryNavigation()
+        }
+        .onChange(of: viewModel.lazyLoadMessageCount) { _, _ in
+            cancelAutomaticHistoryNavigation()
+        }
         .onChange(of: viewModel.currentSession?.id) { _, _ in
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
-            automaticHistoryAnchorTask?.cancel()
-            automaticHistoryAnchorTask = nil
-            pendingAutomaticHistoryLoadRequest = nil
-            isAutomaticHistoryLoadInFlight = false
-            lastAutomaticHistoryLoadAnchorID = nil
+            cancelAutomaticHistoryNavigation()
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             needsImmediateBottomSnap = true
@@ -441,6 +454,7 @@ extension ContentView {
         let scrollAction = {
             pendingHistoryResetWorkItem?.cancel()
             pendingHistoryResetWorkItem = nil
+            cancelAutomaticHistoryNavigation()
             shouldRestorePendingJumpOnAppear = false
             shouldKeepBottomPinned = true
             showScrollToBottomButton = false
@@ -452,21 +466,22 @@ extension ContentView {
                 return
             }
 
+            pendingBottomSnapTask?.cancel()
+            pendingBottomSnapTask = nil
+            watchInputLayoutSettleTask?.cancel()
+            watchInputLayoutSettleTask = nil
+            isWatchInputLayoutSettling = false
             let workItem = DispatchWorkItem {
-                pendingBottomSnapTask?.cancel()
-                pendingBottomSnapTask = nil
-                watchInputLayoutSettleTask?.cancel()
-                watchInputLayoutSettleTask = nil
-                isWatchInputLayoutSettling = false
-                var transaction = Transaction()
-                transaction.animation = nil
-                withTransaction(transaction) {
-                    viewModel.resetLazyLoadState()
-                }
                 pendingHistoryResetWorkItem = nil
                 scheduleDeferredBottomSnap(proxy: proxy)
             }
+            // 先标记显式回底，防止重置后的新首行在同一布局周期立即反向扩窗。
             pendingHistoryResetWorkItem = workItem
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                viewModel.resetLazyLoadState()
+            }
             DispatchQueue.main.async(execute: workItem)
         }
 
@@ -567,6 +582,7 @@ extension ContentView {
             return
         }
         lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
+        automaticHistoryBoundaryBlockedAnchorID = request.anchorMessageID
         isAutomaticHistoryLoadInFlight = true
         suppressAutoScrollOnce = true
         shouldKeepBottomPinned = false
@@ -580,6 +596,9 @@ extension ContentView {
         guard didLoad else {
             suppressAutoScrollOnce = false
             isAutomaticHistoryLoadInFlight = false
+            if automaticHistoryBoundaryBlockedAnchorID == request.anchorMessageID {
+                automaticHistoryBoundaryBlockedAnchorID = nil
+            }
             return
         }
 
@@ -596,6 +615,94 @@ extension ContentView {
             isAutomaticHistoryLoadInFlight = false
             automaticHistoryAnchorTask = nil
         }
+    }
+
+    func loadAutomaticHistoryAtVisibleBoundary(
+        proxy: ScrollViewProxy,
+        anchorMessageID: UUID,
+        isFirstDisplayedMessage: Bool,
+        isLastDisplayedMessage: Bool
+    ) {
+        guard !shouldRestorePendingJumpOnAppear, pendingJumpRequest == nil else { return }
+        guard let direction = Self.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
+            isLoadInFlight: isAutomaticHistoryLoadInFlight,
+            isFirstDisplayedMessage: isFirstDisplayedMessage,
+            isLastDisplayedMessage: isLastDisplayedMessage,
+            isEarlierHistoryFullyLoaded: viewModel.isHistoryFullyLoaded,
+            isLaterHistoryFullyLoaded: viewModel.isLaterHistoryFullyLoaded
+        ) else { return }
+
+        let request = WatchAutomaticHistoryLoadRequest(
+            direction: direction,
+            anchorMessageID: anchorMessageID
+        )
+        let isNavigationBlocked = Self.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
+            hasPendingBottomSnap: pendingBottomSnapTask != nil,
+            needsImmediateBottomSnap: needsImmediateBottomSnap,
+            isInputLayoutSettling: isWatchInputLayoutSettling,
+            hasBlockedBoundaryAnchor: automaticHistoryBoundaryBlockedAnchorID != nil
+        )
+        guard !isNavigationBlocked else {
+            if needsImmediateBottomSnap {
+                deferredAutomaticHistoryBoundaryRequest = request
+            }
+            return
+        }
+        performAutomaticHistoryLoad(proxy: proxy, request: request)
+    }
+
+    nonisolated static func isAutomaticHistoryBoundaryNavigationBlocked(
+        hasPendingHistoryReset: Bool,
+        hasPendingBottomSnap: Bool,
+        needsImmediateBottomSnap: Bool,
+        isInputLayoutSettling: Bool,
+        hasBlockedBoundaryAnchor: Bool
+    ) -> Bool {
+        hasPendingHistoryReset
+            || hasPendingBottomSnap
+            || needsImmediateBottomSnap
+            || isInputLayoutSettling
+            || hasBlockedBoundaryAnchor
+    }
+
+    func releaseAutomaticHistoryBoundaryBlockIfNeeded(for messageID: UUID) {
+        guard automaticHistoryBoundaryBlockedAnchorID == messageID else { return }
+        // onDisappear 与新边界的 onAppear 可能同批到达，延后解锁避免布局周期内连续扩窗。
+        DispatchQueue.main.async {
+            guard automaticHistoryBoundaryBlockedAnchorID == messageID else { return }
+            automaticHistoryBoundaryBlockedAnchorID = nil
+        }
+    }
+
+    nonisolated static func automaticHistoryDirectionForVisibleBoundary(
+        usesAutomaticHistoryWindow: Bool,
+        isLoadInFlight: Bool,
+        isFirstDisplayedMessage: Bool,
+        isLastDisplayedMessage: Bool,
+        isEarlierHistoryFullyLoaded: Bool,
+        isLaterHistoryFullyLoaded: Bool
+    ) -> WatchAutomaticHistoryDirection? {
+        guard usesAutomaticHistoryWindow, !isLoadInFlight else { return nil }
+        if isFirstDisplayedMessage, !isEarlierHistoryFullyLoaded {
+            return .earlier
+        }
+        if isLastDisplayedMessage, !isLaterHistoryFullyLoaded {
+            return .later
+        }
+        return nil
+    }
+
+    func cancelAutomaticHistoryNavigation() {
+        automaticHistoryAnchorTask?.cancel()
+        automaticHistoryAnchorTask = nil
+        pendingAutomaticHistoryLoadRequest = nil
+        isAutomaticHistoryLoadInFlight = false
+        lastAutomaticHistoryLoadAnchorID = nil
+        automaticHistoryBoundaryBlockedAnchorID = nil
+        deferredAutomaticHistoryBoundaryRequest = nil
+        suppressAutoScrollOnce = false
     }
 
     func jumpToMessage(displayIndex: Int) -> Bool {
@@ -645,10 +752,7 @@ extension ContentView {
         pendingBottomSnapTask = nil
         watchInputLayoutSettleTask?.cancel()
         watchInputLayoutSettleTask = nil
-        automaticHistoryAnchorTask?.cancel()
-        automaticHistoryAnchorTask = nil
-        pendingAutomaticHistoryLoadRequest = nil
-        isAutomaticHistoryLoadInFlight = false
+        cancelAutomaticHistoryNavigation()
         isWatchInputLayoutSettling = false
         needsImmediateBottomSnap = false
         shouldRestorePendingJumpOnAppear = true
@@ -700,6 +804,10 @@ extension ContentView {
             guard !Task.isCancelled else { return }
             needsImmediateBottomSnap = false
             pendingBottomSnapTask = nil
+            if let request = deferredAutomaticHistoryBoundaryRequest {
+                deferredAutomaticHistoryBoundaryRequest = nil
+                performAutomaticHistoryLoad(proxy: proxy, request: request)
+            }
         }
     }
 

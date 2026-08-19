@@ -416,7 +416,7 @@ struct ModelAdvancedSettingsView: View {
                 )
 
                 if !viewModel.automaticHistoryLoadingEnabled {
-                    LabeledContent(NSLocalizedString("手动加载轮次", comment: "手动加载聊天历史轮次设置")) {
+                    LabeledContent(NSLocalizedString("初始显示消息数", comment: "手动模式初始显示聊天消息数设置")) {
                         TextField(NSLocalizedString("数量", comment: ""), value: $lazyLoadMessageCount, formatter: numberFormatter)
                             .multilineTextAlignment(.trailing)
                             .frame(width: 80)
@@ -789,7 +789,7 @@ struct ModelAdvancedSettingsView: View {
             ),
             (
                 NSLocalizedString("自动管理历史消息", comment: "自动管理聊天历史窗口设置"),
-                NSLocalizedString("接近会话边缘时自动加载相邻消息，并回收远离阅读位置的复杂气泡。关闭后可选择手动加载轮次；设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明")
+                NSLocalizedString("开启后会在接近边缘时自动加载并回收历史气泡。关闭后按设置显示最近消息，每次向上加载 5 条；回到底部时恢复初始范围。设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明")
             ),
             (
                 NSLocalizedString("上下文压缩提醒", comment: "Context compression reminder toggle"),

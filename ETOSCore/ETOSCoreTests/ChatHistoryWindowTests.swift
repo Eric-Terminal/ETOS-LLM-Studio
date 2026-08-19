@@ -134,6 +134,56 @@ struct ChatHistoryWindowTests {
         #expect(AppConfigKey.automaticHistoryLoadingEnabled.defaultValue == .bool(true))
     }
 
+    @Test("尾随窗口随新消息增长到自动管理基线")
+    func testAutomaticRebaseHonorsMinimumTrailingCount() {
+        let previousMessages = makeMessages(count: 2)
+        let messages = makeMessages(count: 4)
+        let previousWindow = ChatHistoryWindowSupport.full(messageCount: previousMessages.count)
+
+        let rebased = ChatHistoryWindowSupport.rebased(
+            previousWindow,
+            from: previousMessages,
+            to: messages,
+            minimumTrailingWeightedCount: 3
+        )
+
+        #expect(rebased == ChatHistoryWindow(lowerBound: 1, upperBound: 4))
+    }
+
+    @Test("手动尾随窗口随新消息增长到设置数量")
+    func testManualRebaseHonorsMinimumWeightedCount() {
+        let previousMessages = makeMessages(count: 2)
+        let messages = makeMessages(count: 6)
+        let previousWindow = ChatHistoryWindowSupport.full(messageCount: previousMessages.count)
+
+        let rebased = ChatHistoryWindowSupport.rebased(
+            previousWindow,
+            from: previousMessages,
+            to: messages,
+            minimumTrailingWeightedCount: 4
+        )
+
+        #expect(rebased == ChatHistoryWindow(lowerBound: 2, upperBound: 6))
+        #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: rebased) == 4)
+    }
+
+    @Test("手动窗口初始显示四条且每次向前加载五条")
+    func testManualWindowUsesConfiguredInitialCountAndFixedBatch() {
+        let messages = makeMessages(count: 12)
+        let initial = ChatHistoryWindowSupport.trailing(in: messages, weightedLimit: 4)
+        let expanded = ChatHistoryWindowSupport.expandingEarlier(
+            initial,
+            in: messages,
+            weightedBatchSize: 5,
+            maximumWeightedCount: nil
+        )
+
+        #expect(initial == ChatHistoryWindow(lowerBound: 8, upperBound: 12))
+        #expect(expanded == ChatHistoryWindow(lowerBound: 3, upperBound: 12))
+        #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: initial) == 4)
+        #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: expanded) == 9)
+    }
+
     @Test("跳转到合并工具结果时会落到相邻的实际气泡")
     func testJumpTargetResolvesHiddenToolResult() {
         let user = ChatMessage(role: .user, content: "问题")

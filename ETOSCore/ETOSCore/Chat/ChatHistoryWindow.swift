@@ -203,12 +203,17 @@ public enum ChatHistoryWindowSupport {
     public static func rebased(
         _ window: ChatHistoryWindow,
         from previousMessages: [ChatMessage],
-        to messages: [ChatMessage]
+        to messages: [ChatMessage],
+        minimumTrailingWeightedCount: Int = 1
     ) -> ChatHistoryWindow? {
         let previous = window.clamped(to: previousMessages.count)
         guard !previous.range.isEmpty else { return nil }
         let followedTail = previous.upperBound == previousMessages.count
-        let previousWeightedCount = max(1, weightedCount(in: previousMessages, window: previous))
+        // 短会话增长时至少扩到平台基线，不能永久继承最初的一两条容量。
+        let previousWeightedCount = max(
+            minimumTrailingWeightedCount,
+            weightedCount(in: previousMessages, window: previous)
+        )
 
         if followedTail {
             return trailing(in: messages, weightedLimit: previousWeightedCount)

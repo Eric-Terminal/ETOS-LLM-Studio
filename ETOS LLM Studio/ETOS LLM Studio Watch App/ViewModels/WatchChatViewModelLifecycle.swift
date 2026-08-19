@@ -214,6 +214,7 @@ extension ChatViewModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] session in
                 guard let self else { return }
+                beginHistorySession(session?.id)
                 currentSession = session
                 refreshSessionScopedAppToolRequests()
                 imageGenerationFeedback = .idle
@@ -225,9 +226,17 @@ extension ChatViewModel {
             .store(in: &cancellables)
 
         chatService.messagesForSessionSubject
+            .map { [chatService] messages in
+                (
+                    sessionID: chatService.currentSessionSubject.value?.id,
+                    messages: messages
+                )
+            }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] messages in
-                self?.applyMessagesUpdate(messages)
+            .sink { [weak self] update in
+                guard let self else { return }
+                guard update.sessionID == chatService.currentSessionSubject.value?.id else { return }
+                applyMessagesUpdate(update.messages, for: update.sessionID)
             }
             .store(in: &cancellables)
 

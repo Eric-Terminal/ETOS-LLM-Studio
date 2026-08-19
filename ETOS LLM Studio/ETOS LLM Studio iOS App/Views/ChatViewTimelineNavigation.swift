@@ -115,21 +115,20 @@ extension ChatView {
             return
         }
 
+        pendingBottomSnapTask?.cancel()
+        pendingBottomSnapTask = nil
+        cancelPendingScrollTargetCommand()
+        chatScrollTarget = nil
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            viewModel.resetLazyLoadState()
+        }
         let workItem = DispatchWorkItem {
-            pendingBottomSnapTask?.cancel()
-            pendingBottomSnapTask = nil
-            cancelPendingScrollTargetCommand()
-            chatScrollTarget = nil
-            var transaction = Transaction()
-            transaction.animation = nil
-            withTransaction(transaction) {
-                viewModel.resetLazyLoadState()
-            }
             pendingHistoryResetWorkItem = nil
             scheduleDeferredBottomSnap()
         }
         pendingHistoryResetWorkItem = workItem
-
         DispatchQueue.main.async(execute: workItem)
     }
 

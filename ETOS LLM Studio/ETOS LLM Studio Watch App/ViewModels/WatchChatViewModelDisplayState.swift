@@ -18,29 +18,49 @@ extension ChatViewModel {
         !automaticHistoryLoadingEnabled && lazyLoadMessageCount > 0
     }
 
-    func applyMessagesUpdate(_ incomingMessages: [ChatMessage]) {
+    func beginHistorySession(_ sessionID: UUID?) {
+        guard historyWindowSessionID != sessionID else { return }
+        historyWindowSessionID = sessionID
+        historyWindow = nil
+        allMessagesForSession = []
+        visibleMessagesCache = []
+        retainedRenderMessageIDs.removeAll(keepingCapacity: true)
+        messageStateByID.removeAll(keepingCapacity: true)
+        cleanupPreparedMarkdownCache(validIDs: [])
+        updateDisplayedStatesIfNeeded([])
+        updateHistoryBoundaryState(for: ChatHistoryWindow(lowerBound: 0, upperBound: 0))
+    }
+
+    func applyMessagesUpdate(_ incomingMessages: [ChatMessage], for sessionID: UUID?) {
+        let didChangeSession = historyWindowSessionID != sessionID
+        if didChangeSession {
+            beginHistorySession(sessionID)
+        }
         let previousMessages = allMessagesForSession
         let previousVisibleMessages = visibleMessagesCache
         let previousHistoryWindow = historyWindow
-        let sessionID = currentSession?.id
-        let didChangeSession = historyWindowSessionID != sessionID
-        if didChangeSession {
-            historyWindowSessionID = sessionID
-            historyWindow = nil
-            retainedRenderMessageIDs.removeAll(keepingCapacity: true)
-            messageStateByID.removeAll(keepingCapacity: true)
-            cleanupPreparedMarkdownCache(validIDs: [])
-        }
         allMessagesForSession = incomingMessages
         refreshVisibleMessagesCache()
-        if let previousHistoryWindow,
-           !previousVisibleMessages.isEmpty,
-           historyWindow != nil {
-            historyWindow = ChatHistoryWindowSupport.rebased(
-                previousHistoryWindow,
-                from: previousVisibleMessages,
-                to: visibleMessagesCache
-            )
+        if previousVisibleMessages.isEmpty, !visibleMessagesCache.isEmpty {
+            historyWindow = nil
+        } else if let previousHistoryWindow, historyWindow != nil {
+            if usesManualHistoryLoading {
+                historyWindow = ChatHistoryWindowSupport.rebased(
+                    previousHistoryWindow,
+                    from: previousVisibleMessages,
+                    to: visibleMessagesCache,
+                    minimumTrailingWeightedCount: lazyLoadMessageCount
+                )
+            } else if usesAutomaticHistoryWindow {
+                historyWindow = ChatHistoryWindowSupport.rebased(
+                    previousHistoryWindow,
+                    from: previousVisibleMessages,
+                    to: visibleMessagesCache,
+                    minimumTrailingWeightedCount: automaticHistoryWindowSize
+                )
+            } else {
+                historyWindow = ChatHistoryWindowSupport.full(messageCount: visibleMessagesCache.count)
+            }
         }
         let hasSameMessageIdentity = hasMatchingMessageIdentity(previousMessages, incomingMessages)
         if !hasSameMessageIdentity {

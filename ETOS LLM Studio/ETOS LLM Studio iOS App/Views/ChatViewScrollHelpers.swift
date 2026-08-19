@@ -632,6 +632,16 @@ extension ChatView {
         pendingAutomaticHistoryLoadRequest = nil
     }
 
+    func cancelAutomaticHistoryNavigation() {
+        if isAutomaticHistoryLoadInFlight || automaticHistoryLoadDirection != nil {
+            cancelPendingScrollTargetCommand()
+        } else {
+            awaitsAutomaticHistoryAnchorMetrics = false
+            pendingAutomaticHistoryLoadRequest = nil
+        }
+        lastAutomaticHistoryLoadAnchorID = nil
+    }
+
     private func scheduleAutomaticHistoryAnchorRestore(_ messageID: UUID, anchor: UnitPoint) {
         cancelPendingScrollTargetCommand()
         isAutomaticHistoryLoadInFlight = true

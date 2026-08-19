@@ -391,6 +391,66 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         #expect(ChatViewModel.lazyLoadWeight(for: messages[1]) == 0)
     }
 
+    @Test("自动历史窗口在短列表边缘可见时仍会加载")
+    func testAutomaticHistoryLoadsAtVisibleBoundary() {
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: true,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: true,
+            isLastDisplayedMessage: true,
+            isEarlierHistoryFullyLoaded: false,
+            isLaterHistoryFullyLoaded: true
+        ) == .earlier)
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: true,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: false,
+            isLastDisplayedMessage: true,
+            isEarlierHistoryFullyLoaded: true,
+            isLaterHistoryFullyLoaded: false
+        ) == .later)
+        #expect(ContentView.automaticHistoryDirectionForVisibleBoundary(
+            usesAutomaticHistoryWindow: false,
+            isLoadInFlight: false,
+            isFirstDisplayedMessage: true,
+            isLastDisplayedMessage: false,
+            isEarlierHistoryFullyLoaded: false,
+            isLaterHistoryFullyLoaded: true
+        ) == nil)
+    }
+
+    @Test("显式回底和布局归位期间不会触发边界扩窗")
+    func testAutomaticHistoryBoundaryWaitsForNavigationToFinish() {
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: true,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: true,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+        #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: true
+        ))
+        #expect(!ContentView.isAutomaticHistoryBoundaryNavigationBlocked(
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            needsImmediateBottomSnap: false,
+            isInputLayoutSettling: false,
+            hasBlockedBoundaryAnchor: false
+        ))
+    }
+
     @Test("懒加载截断会以非工具消息作为权重单位")
     func testSuffixMessagesForLazyLoadUsesWeightedLimit() {
         let olderAssistant = ChatMessage(role: .assistant, content: "旧工具调用")
