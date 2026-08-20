@@ -168,7 +168,10 @@ extension AppToolManager {
 
     func prettyPrintedJSONString(from payload: [String: Any]) -> String {
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+            let data = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            )
             return String(data: data, encoding: .utf8)
                 ?? NSLocalizedString("错误：工具结果序列化失败。", comment: "App tool result serialization fallback")
         } catch {

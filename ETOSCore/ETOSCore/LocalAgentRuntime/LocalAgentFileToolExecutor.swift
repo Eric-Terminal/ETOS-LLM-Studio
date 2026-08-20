@@ -1003,7 +1003,10 @@ public actor LocalAgentFileToolExecutor {
 
     func encode(_ object: [String: Any]) throws -> String {
         guard JSONSerialization.isValidJSONObject(object) else { throw invalidArguments("JSON") }
-        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        let data = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        )
         guard let string = String(data: data, encoding: .utf8) else { throw invalidArguments("JSON") }
         return string
     }
