@@ -153,14 +153,7 @@ enum AppFontAdapter {
             return original
         }
 
-        let pointSize: CGFloat
-        if let explicitSize = descriptor.explicitSize {
-            pointSize = explicitSize * fontScale
-        } else if let textStyle = descriptor.textStyle {
-            pointSize = defaultPointSize(for: textStyle) * fontScale
-        } else {
-            pointSize = 15 * fontScale
-        }
+        let pointSize = scaledSystemPointSize(for: descriptor)
 
 #if canImport(UIKit)
         let weight = descriptor.weight ?? defaultSystemWeight(for: descriptor.textStyle)
@@ -196,6 +189,20 @@ enum AppFontAdapter {
         }
         return mapped
 #endif
+    }
+
+    static func scaledSystemPointSize(from font: Font) -> CGFloat {
+        scaledSystemPointSize(for: FontDescriptorInfo(font: font))
+    }
+
+    private static func scaledSystemPointSize(for descriptor: FontDescriptorInfo) -> CGFloat {
+        if let explicitSize = descriptor.explicitSize {
+            return scaledPointSize(explicitSize)
+        } else if let textStyle = descriptor.textStyle {
+            return scaledPointSize(defaultPointSize(for: textStyle))
+        } else {
+            return scaledPointSize(15)
+        }
     }
 
     private static func resolvedSampleText(for role: FontSemanticRole, override sampleText: String?) -> String {

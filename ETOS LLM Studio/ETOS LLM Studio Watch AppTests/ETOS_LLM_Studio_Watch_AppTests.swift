@@ -42,11 +42,8 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             customFontScale: 1.5
         )
 
-        let smaller = AppFontAdapter.adaptedFont(from: .system(size: 12))
-        let larger = AppFontAdapter.adaptedFont(from: .system(size: 14))
-
-        #expect(explicitPointSize(in: smaller) == 18)
-        #expect(explicitPointSize(in: larger) == 21)
+        #expect(AppFontAdapter.scaledSystemPointSize(from: .system(size: 12)) == 18)
+        #expect(AppFontAdapter.scaledSystemPointSize(from: .system(size: 14)) == 21)
     }
 
     @Test("自动朗读触发条件判断")
@@ -80,28 +77,6 @@ struct ETOS_LLM_Studio_Watch_AppTests {
             isCurrentlySpeaking: true
         )
         #expect(!shouldSkipCurrentlySpeaking)
-    }
-
-    private func explicitPointSize(in font: Font) -> CGFloat? {
-        explicitPointSize(in: font, label: nil, depth: 0)
-    }
-
-    private func explicitPointSize(in value: Any, label: String?, depth: Int) -> CGFloat? {
-        guard depth <= 12 else { return nil }
-        if label == "size" {
-            if let size = value as? CGFloat { return size }
-            if let size = value as? Double { return CGFloat(size) }
-        }
-        for child in Mirror(reflecting: value).children {
-            if let size = explicitPointSize(
-                in: child.value,
-                label: child.label,
-                depth: depth + 1
-            ) {
-                return size
-            }
-        }
-        return nil
     }
 
     @Test("自动预览思考展开与收起条件判断")
