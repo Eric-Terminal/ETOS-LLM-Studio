@@ -173,6 +173,15 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: RoleplayStore.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard notification.userInfo?[RoleplayStore.changeKindUserInfoKey] as? String
+                        == RoleplayStore.libraryChangeKind else { return }
+                self?.refreshVisualMessagesAfterRegexRulesChange()
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: RoleplayDisplayedMessageBridge.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in

@@ -761,6 +761,7 @@ private struct RoleplaySessionBindingView: View {
             get: { selectedPersonaID },
             set: { personaID in
                 selectedPersonaID = personaID
+                ChatService.shared.setPreferredRoleplayPersonaID(personaID)
                 persist()
             }
         )
@@ -817,7 +818,7 @@ private struct RoleplaySessionBindingView: View {
         guard let sessionID = currentSession?.id,
               let binding = ChatService.shared.roleplayBinding(sessionID: sessionID) else {
             selectedCharacterID = nil
-            selectedPersonaID = nil
+            selectedPersonaID = ChatService.shared.preferredRoleplayPersonaID()
             selectedGreetingIndex = 0
             htmlRenderingEnabled = true
             helperScriptsEnabled = true

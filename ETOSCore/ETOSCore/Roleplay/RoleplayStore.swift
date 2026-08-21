@@ -46,6 +46,31 @@ public final class RoleplayStore: @unchecked Sendable {
         queue.sync { loadLibraryUnlocked().bindings.first { $0.sessionID == sessionID } }
     }
 
+    public func preferredPersonaID() -> UUID? {
+        queue.sync {
+            let library = loadLibraryUnlocked()
+            guard let preferredPersonaID = library.preferredPersonaID,
+                  library.personas.contains(where: { $0.id == preferredPersonaID }) else { return nil }
+            return preferredPersonaID
+        }
+    }
+
+    public func setPreferredPersonaID(_ personaID: UUID?) {
+        let didChange = queue.sync {
+            var library = loadLibraryUnlocked()
+            let validPersonaID = personaID.flatMap { candidate in
+                library.personas.contains(where: { $0.id == candidate }) ? candidate : nil
+            }
+            guard library.preferredPersonaID != validPersonaID else { return false }
+            library.preferredPersonaID = validPersonaID
+            saveLibraryUnlocked(library)
+            return true
+        }
+        if didChange {
+            notifyChange(kind: Self.libraryChangeKind)
+        }
+    }
+
     public func upsertCharacter(_ character: RoleplayCharacter) {
         queue.sync {
             var library = loadLibraryUnlocked()
@@ -102,6 +127,9 @@ public final class RoleplayStore: @unchecked Sendable {
         queue.sync {
             var library = loadLibraryUnlocked()
             library.personas.removeAll { $0.id == id }
+            if library.preferredPersonaID == id {
+                library.preferredPersonaID = nil
+            }
             for index in library.bindings.indices where library.bindings[index].personaID == id {
                 library.bindings[index].personaID = nil
             }

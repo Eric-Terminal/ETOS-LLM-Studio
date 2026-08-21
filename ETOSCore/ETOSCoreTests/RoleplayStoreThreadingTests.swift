@@ -79,11 +79,13 @@ struct RoleplayStoreThreadingTests {
     @Test("未绑定角色卡时仍可保存用户身份")
     func persistsPersonaWithoutCharacterBinding() {
         let store = RoleplayStore.shared
+        let previousPreferredPersonaID = store.preferredPersonaID()
         let sessionID = UUID()
         let persona = PersonaProfile(name: "独立用户身份")
         defer {
             store.removeBinding(sessionID: sessionID)
             store.deletePersona(id: persona.id)
+            store.setPreferredPersonaID(previousPreferredPersonaID)
         }
         store.upsertPersona(persona)
         store.upsertBinding(SessionRoleplayBinding(
@@ -95,6 +97,121 @@ struct RoleplayStoreThreadingTests {
         let binding = store.binding(sessionID: sessionID)
         #expect(binding?.characterIDs.isEmpty == true)
         #expect(binding?.personaID == persona.id)
+    }
+
+    @Test("最近使用的用户身份可供新会话复用")
+    func remembersPreferredPersonaAcrossSessions() {
+        let store = RoleplayStore.shared
+        let previousPreferredPersonaID = store.preferredPersonaID()
+        let firstSessionID = UUID()
+        let persona = PersonaProfile(name: "跨会话用户身份")
+        defer {
+            store.removeBinding(sessionID: firstSessionID)
+            store.deletePersona(id: persona.id)
+            store.setPreferredPersonaID(previousPreferredPersonaID)
+        }
+        store.upsertPersona(persona)
+        store.upsertBinding(SessionRoleplayBinding(
+            sessionID: firstSessionID,
+            characterIDs: [],
+            personaID: persona.id
+        ))
+        store.setPreferredPersonaID(persona.id)
+
+        #expect(store.preferredPersonaID() == persona.id)
+    }
+
+    @Test("对话开始后更换用户身份会重算自动开场白宏")
+    func changingPersonaRefreshesSeededGreetingAfterConversationStarted() throws {
+        let store = RoleplayStore.shared
+        let previousPreferredPersonaID = store.preferredPersonaID()
+        let service = ChatService(roleplayStore: store)
+        let character = RoleplayCharacter(
+            name: "开场白宏回归测试",
+            firstMessage: "<div>{{user}} 的状态栏</div>"
+        )
+        let firstPersona = PersonaProfile(name: "初始用户")
+        let secondPersona = PersonaProfile(name: "更新用户")
+        let session = service.createSavedSession(name: "开场白宏回归测试")
+        defer {
+            store.removeBinding(sessionID: session.id)
+            store.deleteCharacter(id: character.id)
+            store.deletePersona(id: firstPersona.id)
+            store.deletePersona(id: secondPersona.id)
+            store.setPreferredPersonaID(previousPreferredPersonaID)
+            service.deleteSessions([session])
+        }
+        store.upsertCharacter(character)
+        store.upsertPersona(firstPersona)
+        store.upsertPersona(secondPersona)
+        service.bindRoleplay(
+            sessionID: session.id,
+            characterIDs: [character.id],
+            personaID: firstPersona.id
+        )
+        var legacyBinding = try #require(store.binding(sessionID: session.id))
+        legacyBinding.seededGreetingMessageID = nil
+        store.upsertBinding(legacyBinding)
+        var messages = Persistence.loadMessages(for: session.id)
+        #expect(messages.first?.content.contains("初始用户") == true)
+        messages.append(ChatMessage(role: .user, content: "继续"))
+        messages.append(ChatMessage(role: .assistant, content: "剧情继续"))
+        service.updateMessages(messages, for: session.id)
+
+        service.bindRoleplay(
+            sessionID: session.id,
+            characterIDs: [character.id],
+            personaID: secondPersona.id,
+            seedGreetingIfEmpty: false
+        )
+
+        let updatedGreeting = try #require(Persistence.loadMessages(for: session.id).first)
+        #expect(updatedGreeting.content.contains("更新用户"))
+        #expect(!updatedGreeting.content.contains("初始用户"))
+    }
+
+    @Test("最终角色回复在变量落盘后通知界面重算 HTML")
+    func finalRoleplayReplyInvalidatesRenderedHTML() async {
+        let store = RoleplayStore.shared
+        let previousPreferredPersonaID = store.preferredPersonaID()
+        let service = ChatService(roleplayStore: store)
+        let character = RoleplayCharacter(name: "HTML 刷新回归测试")
+        let loadingMessage = ChatMessage(role: .assistant, content: "")
+        let session = service.createSavedSession(
+            name: "HTML 刷新回归测试",
+            initialMessages: [loadingMessage]
+        )
+        let collector = SessionNotificationCollector(sessionID: session.id)
+        let token = NotificationCenter.default.addObserver(
+            forName: RoleplayDisplayedMessageBridge.didChangeNotification,
+            object: nil,
+            queue: nil
+        ) { notification in
+            collector.record(notification)
+        }
+        defer {
+            NotificationCenter.default.removeObserver(token)
+            store.removeBinding(sessionID: session.id)
+            store.deleteCharacter(id: character.id)
+            store.setPreferredPersonaID(previousPreferredPersonaID)
+            service.deleteSessions([session])
+        }
+        store.upsertCharacter(character)
+        store.upsertBinding(SessionRoleplayBinding(
+            sessionID: session.id,
+            characterIDs: [character.id]
+        ))
+
+        await service.updateMessage(
+            with: ChatMessage(
+                role: .assistant,
+                content: "<UpdateVariable>_.set('状态', '已更新');</UpdateVariable>"
+            ),
+            for: loadingMessage.id,
+            in: session.id
+        )
+
+        #expect(collector.didReceive)
     }
 }
 
@@ -116,5 +233,28 @@ private final class NotificationObserverToken: @unchecked Sendable {
         if let current {
             NotificationCenter.default.removeObserver(current)
         }
+    }
+}
+
+private final class SessionNotificationCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private let sessionID: UUID
+    private var received = false
+
+    init(sessionID: UUID) {
+        self.sessionID = sessionID
+    }
+
+    var didReceive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return received
+    }
+
+    func record(_ notification: Notification) {
+        guard notification.userInfo?[RoleplayBridgeNotification.sessionIDKey] as? UUID == sessionID else { return }
+        lock.lock()
+        received = true
+        lock.unlock()
     }
 }

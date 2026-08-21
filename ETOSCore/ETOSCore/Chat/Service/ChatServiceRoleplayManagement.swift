@@ -17,6 +17,14 @@ extension ChatService {
         roleplayStore.loadPersonas()
     }
 
+    public func preferredRoleplayPersonaID() -> UUID? {
+        roleplayStore.preferredPersonaID()
+    }
+
+    public func setPreferredRoleplayPersonaID(_ personaID: UUID?) {
+        roleplayStore.setPreferredPersonaID(personaID)
+    }
+
     public func saveRoleplayCharacter(_ character: RoleplayCharacter) {
         roleplayStore.upsertCharacter(character)
     }
@@ -101,6 +109,43 @@ extension ChatService {
         let normalizedGreetingIndex = greetings.isEmpty
             ? 0
             : min(max(0, selectedGreetingIndex), greetings.count - 1)
+        let messages = messagesSnapshot(for: sessionID)
+        let greetingSelectionChanged = previousBinding.map {
+            $0.characterIDs != characterIDs || $0.selectedGreetingIndex != normalizedGreetingIndex
+        } ?? false
+        let canReplaceSeededGreeting = seedGreetingIfEmpty
+            && greetingSelectionChanged
+            && messages.count == 1
+            && messages[0].role == .assistant
+        let shouldSeedGreeting = seedGreetingIfEmpty && (messages.isEmpty || canReplaceSeededGreeting)
+        let inferredSeededGreetingMessageID: UUID? = {
+            guard previousBinding?.seededGreetingMessageID == nil,
+                  !greetingSelectionChanged,
+                  let firstMessage = messages.first,
+                  firstMessage.role == .assistant,
+                  let previousBinding,
+                  let previousResolved = RoleplayRuntime.resolve(
+                    sessionID: sessionID,
+                    messages: [],
+                    store: roleplayStore
+                  ),
+                  let previousCharacter = previousResolved.characters.first else { return nil }
+            let previousGreetings = [previousCharacter.firstMessage] + previousCharacter.alternateGreetings
+            guard previousGreetings.indices.contains(previousBinding.selectedGreetingIndex) else { return nil }
+            let previousGreeting = RoleplayMacroResolver.resolve(
+                previousGreetings[previousBinding.selectedGreetingIndex],
+                context: previousResolved.macroContext
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            return firstMessage.content == previousGreeting ? firstMessage.id : nil
+        }()
+        let seededGreetingMessageID: UUID? = {
+            if shouldSeedGreeting {
+                return canReplaceSeededGreeting ? messages[0].id : UUID()
+            }
+            return greetingSelectionChanged
+                ? nil
+                : previousBinding?.seededGreetingMessageID ?? inferredSeededGreetingMessageID
+        }()
         let binding = SessionRoleplayBinding(
             sessionID: sessionID,
             characterIDs: characterIDs,
@@ -108,9 +153,11 @@ extension ChatService {
             additionalWorldbookIDs: additionalWorldbookIDs,
             selectedGreetingIndex: normalizedGreetingIndex,
             htmlRenderingEnabled: htmlRenderingEnabled,
-            helperScriptsEnabled: helperScriptsEnabled
+            helperScriptsEnabled: helperScriptsEnabled,
+            seededGreetingMessageID: seededGreetingMessageID
         )
         roleplayStore.upsertBinding(binding)
+        roleplayStore.setPreferredPersonaID(personaID)
         var variableSnapshot = roleplayStore.variableSnapshot(sessionID: sessionID)
         if let character = selectedCharacter {
             variableSnapshot.character.merge(character.initialVariables) { _, new in new }
@@ -120,15 +167,34 @@ extension ChatService {
         }
         roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
 
-        let messages = messagesSnapshot(for: sessionID)
-        let greetingSelectionChanged = previousBinding.map {
-            $0.characterIDs != characterIDs || $0.selectedGreetingIndex != normalizedGreetingIndex
-        } ?? false
-        let canReplaceSeededGreeting = seedGreetingIfEmpty
-            && greetingSelectionChanged
-            && messages.count == 1
-            && messages[0].role == .assistant
-        guard messages.isEmpty || canReplaceSeededGreeting,
+        if previousBinding?.personaID != personaID,
+           !shouldSeedGreeting,
+           let seededGreetingMessageID,
+           let seededGreetingIndex = messages.firstIndex(where: { $0.id == seededGreetingMessageID }),
+           let resolved = RoleplayRuntime.resolve(sessionID: sessionID, messages: [], store: roleplayStore),
+           let character = resolved.characters.first {
+            let resolvedGreetings = [character.firstMessage] + character.alternateGreetings
+            if resolvedGreetings.indices.contains(normalizedGreetingIndex) {
+                let greeting = RoleplayMacroResolver.resolve(
+                    resolvedGreetings[normalizedGreetingIndex],
+                    context: resolved.macroContext
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !greeting.isEmpty, messages[seededGreetingIndex].content != greeting {
+                    var updatedMessages = messages
+                    updatedMessages[seededGreetingIndex].content = greeting
+                    variableSnapshot.removeValue(
+                        scope: .message,
+                        path: RoleplayDisplayedMessageBridge.variableKey,
+                        messageID: seededGreetingMessageID,
+                        versionIndex: updatedMessages[seededGreetingIndex].getCurrentVersionIndex()
+                    )
+                    roleplayStore.saveVariableSnapshot(variableSnapshot, sessionID: sessionID)
+                    updateMessages(updatedMessages, for: sessionID)
+                }
+            }
+        }
+
+        guard shouldSeedGreeting,
               let resolved = RoleplayRuntime.resolve(sessionID: sessionID, messages: [], store: roleplayStore),
               let character = resolved.characters.first else { return }
         let resolvedGreetings = [character.firstMessage] + character.alternateGreetings
@@ -162,7 +228,11 @@ extension ChatService {
         let greeting = RoleplayMacroResolver.resolve(rawGreeting, context: initializedSession.macroContext)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !greeting.isEmpty else { return }
-        let greetingMessage = ChatMessage(role: .assistant, content: greeting)
+        let greetingMessage = ChatMessage(
+            id: seededGreetingMessageID ?? UUID(),
+            role: .assistant,
+            content: greeting
+        )
         if canReplaceSeededGreeting {
             variableSnapshot.removeMessageVariables(messageID: messages[0].id)
         }

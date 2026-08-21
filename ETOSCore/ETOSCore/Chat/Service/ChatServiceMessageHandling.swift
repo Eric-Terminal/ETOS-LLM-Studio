@@ -295,7 +295,7 @@ extension ChatService {
     /// 将最终确定的消息更新到消息列表中
     func updateMessage(with newMessage: ChatMessage, for loadingMessageID: UUID, in sessionID: UUID) async {
         let priorMessages = messagesSnapshot(for: sessionID)
-        _ = RoleplayRuntime.processMVU(
+        let didProcessRoleplay = RoleplayRuntime.processMVU(
             content: newMessage.content,
             messageID: loadingMessageID,
             versionIndex: priorMessages.first(where: { $0.id == loadingMessageID })?.getCurrentVersionIndex() ?? 0,
@@ -354,6 +354,10 @@ extension ChatService {
                 for: sessionID,
                 keepingSpeedSamplesFor: loadingMessageID
             )
+            if didProcessRoleplay != nil {
+                // 流式正文可能已与最终消息相同；变量快照落盘后仍需显式重算酒馆 HTML。
+                RoleplayDisplayedMessageBridge.postDidChange(sessionID: sessionID)
+            }
         }
     }
 

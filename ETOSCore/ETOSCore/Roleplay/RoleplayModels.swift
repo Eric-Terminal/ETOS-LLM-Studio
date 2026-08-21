@@ -334,6 +334,7 @@ public struct SessionRoleplayBinding: Codable, Identifiable, Hashable, Sendable 
     public var selectedGreetingIndex: Int
     public var htmlRenderingEnabled: Bool
     public var helperScriptsEnabled: Bool
+    public var seededGreetingMessageID: UUID?
     public var updatedAt: Date
 
     public init(
@@ -344,6 +345,7 @@ public struct SessionRoleplayBinding: Codable, Identifiable, Hashable, Sendable 
         selectedGreetingIndex: Int = 0,
         htmlRenderingEnabled: Bool = true,
         helperScriptsEnabled: Bool = true,
+        seededGreetingMessageID: UUID? = nil,
         updatedAt: Date = Date()
     ) {
         self.sessionID = sessionID
@@ -353,6 +355,7 @@ public struct SessionRoleplayBinding: Codable, Identifiable, Hashable, Sendable 
         self.selectedGreetingIndex = max(0, selectedGreetingIndex)
         self.htmlRenderingEnabled = htmlRenderingEnabled
         self.helperScriptsEnabled = helperScriptsEnabled
+        self.seededGreetingMessageID = seededGreetingMessageID
         self.updatedAt = updatedAt
     }
 }
@@ -361,4 +364,5 @@ struct RoleplayLibrarySnapshot: Codable, Sendable {
     var characters: [RoleplayCharacter] = []
     var personas: [PersonaProfile] = []
     var bindings: [SessionRoleplayBinding] = []
+    var preferredPersonaID: UUID? = nil
 }
