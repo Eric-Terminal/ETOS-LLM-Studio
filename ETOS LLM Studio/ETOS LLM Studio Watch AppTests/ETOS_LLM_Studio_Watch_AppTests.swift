@@ -394,6 +394,16 @@ struct ETOS_LLM_Studio_Watch_AppTests {
         ) == nil)
     }
 
+    @Test("现代 watchOS 不会把消息行重建当作历史滚动")
+    func testAutomaticHistoryRowAppearanceIsLegacyFallbackOnly() {
+        #expect(!ContentView.shouldLoadAutomaticHistoryFromRowAppearance(
+            supportsScrollGeometry: true
+        ))
+        #expect(ContentView.shouldLoadAutomaticHistoryFromRowAppearance(
+            supportsScrollGeometry: false
+        ))
+    }
+
     @Test("显式回底和布局归位期间不会触发边界扩窗")
     func testAutomaticHistoryBoundaryWaitsForNavigationToFinish() {
         #expect(ContentView.isAutomaticHistoryBoundaryNavigationBlocked(

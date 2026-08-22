@@ -165,7 +165,7 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(ChatView.resolvedBottomScrollTarget == .bottom)
     }
 
-    @Test("吸底命令仅在抵达真实底部后释放")
+    @Test("吸底命令抵达底部或超过最长占用时间后释放")
     func testChatBottomScrollCommandReleaseLifecycle() {
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
@@ -177,10 +177,17 @@ struct ETOS_LLM_Studio_AppTests {
             distanceToBottom: 8,
             arrivalTolerance: 1
         ))
+        #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: true,
+            distanceToBottom: 8,
+            arrivalTolerance: 1,
+            hasExceededMaximumLifetime: true
+        ))
         #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: false,
             distanceToBottom: 0,
-            arrivalTolerance: 1
+            arrivalTolerance: 1,
+            hasExceededMaximumLifetime: true
         ))
     }
 

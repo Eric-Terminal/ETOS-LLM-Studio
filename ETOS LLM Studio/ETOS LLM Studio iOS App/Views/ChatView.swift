@@ -115,6 +115,7 @@ struct ChatView: View {
     @State var chatScrollTarget: ChatScrollTargetID?
     @State var chatScrollTargetAnchor: UnitPoint = .bottom
     @State var activeBottomScrollCommandTarget: ChatScrollTargetID?
+    @State var bottomScrollCommandReleaseTask: Task<Void, Never>?
     @State var messageNavigationCursorID: UUID?
     @State var chatNavigationMessageIDs: [UUID] = []
     @State var chatNavigationIndexByMessageID: [UUID: Int] = [:]

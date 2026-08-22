@@ -135,6 +135,9 @@ extension ContentView {
                     }
                 )
                 .onAppear {
+                    guard Self.shouldLoadAutomaticHistoryFromRowAppearance(
+                        supportsScrollGeometry: Self.usesScrollGeometryForAutomaticHistoryLoading
+                    ) else { return }
                     loadAutomaticHistoryAtVisibleBoundary(
                         proxy: proxy,
                         anchorMessageID: state.id,
@@ -143,6 +146,9 @@ extension ContentView {
                     )
                 }
                 .onDisappear {
+                    guard Self.shouldLoadAutomaticHistoryFromRowAppearance(
+                        supportsScrollGeometry: Self.usesScrollGeometryForAutomaticHistoryLoading
+                    ) else { return }
                     releaseAutomaticHistoryBoundaryBlockIfNeeded(for: state.id)
                 }
 
@@ -582,7 +588,6 @@ extension ContentView {
             return
         }
         lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
-        automaticHistoryBoundaryBlockedAnchorID = request.anchorMessageID
         isAutomaticHistoryLoadInFlight = true
         suppressAutoScrollOnce = true
         shouldKeepBottomPinned = false
@@ -615,6 +620,20 @@ extension ContentView {
             isAutomaticHistoryLoadInFlight = false
             automaticHistoryAnchorTask = nil
         }
+    }
+
+    /// watchOS 11 起由真实滚动阶段决定扩窗，行重建不能冒充用户抵达边界。
+    nonisolated static var usesScrollGeometryForAutomaticHistoryLoading: Bool {
+        if #available(watchOS 11.0, *) {
+            return true
+        }
+        return false
+    }
+
+    nonisolated static func shouldLoadAutomaticHistoryFromRowAppearance(
+        supportsScrollGeometry: Bool
+    ) -> Bool {
+        !supportsScrollGeometry
     }
 
     func loadAutomaticHistoryAtVisibleBoundary(
@@ -650,6 +669,14 @@ extension ContentView {
             }
             return
         }
+        performLegacyAutomaticHistoryLoad(proxy: proxy, request: request)
+    }
+
+    private func performLegacyAutomaticHistoryLoad(
+        proxy: ScrollViewProxy,
+        request: WatchAutomaticHistoryLoadRequest
+    ) {
+        automaticHistoryBoundaryBlockedAnchorID = request.anchorMessageID
         performAutomaticHistoryLoad(proxy: proxy, request: request)
     }
 
@@ -806,7 +833,7 @@ extension ContentView {
             pendingBottomSnapTask = nil
             if let request = deferredAutomaticHistoryBoundaryRequest {
                 deferredAutomaticHistoryBoundaryRequest = nil
-                performAutomaticHistoryLoad(proxy: proxy, request: request)
+                performLegacyAutomaticHistoryLoad(proxy: proxy, request: request)
             }
         }
     }

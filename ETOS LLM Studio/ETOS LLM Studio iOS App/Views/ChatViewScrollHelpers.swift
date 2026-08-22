@@ -85,10 +85,11 @@ extension ChatView {
     nonisolated static func shouldReleaseActiveBottomScrollCommand(
         hasActiveTarget: Bool,
         distanceToBottom: CGFloat,
-        arrivalTolerance: CGFloat
+        arrivalTolerance: CGFloat,
+        hasExceededMaximumLifetime: Bool = false
     ) -> Bool {
         hasActiveTarget
-            && distanceToBottom <= arrivalTolerance
+            && (distanceToBottom <= arrivalTolerance || hasExceededMaximumLifetime)
     }
 
     nonisolated static func shouldCancelProgrammaticScrollOnPanBegan(
@@ -550,6 +551,8 @@ extension ChatView {
     }
 
     func releaseActiveBottomScrollCommand() {
+        bottomScrollCommandReleaseTask?.cancel()
+        bottomScrollCommandReleaseTask = nil
         guard let target = activeBottomScrollCommandTarget else { return }
         activeBottomScrollCommandTarget = nil
         if chatScrollTarget == target {
@@ -564,6 +567,34 @@ extension ChatView {
             bottomNavigationSnapshotBaselineRevision =
                 chatLayoutIntegrityMonitor.requestFreshNavigationSnapshot()
             refreshMessageNavigationTargets()
+        }
+    }
+
+    /// 首次打开长消息时 Markdown 可能分多轮完成布局，滚动目标不能在这期间持续拉扯视口。
+    /// 到期后由尺寸变化锚点继续保持底部；真实抵达或用户手势仍会提前释放命令。
+    private func scheduleBottomScrollCommandRelease(
+        target: ChatScrollTargetID,
+        generation: UInt,
+        sessionID: UUID?,
+        animated: Bool
+    ) {
+        bottomScrollCommandReleaseTask?.cancel()
+        let maximumLifetimeNanoseconds: UInt64 = animated ? 900_000_000 : 160_000_000
+        bottomScrollCommandReleaseTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: maximumLifetimeNanoseconds)
+            guard !Task.isCancelled,
+                  generation == scrollTargetGeneration,
+                  sessionID == viewModel.currentSession?.id,
+                  activeBottomScrollCommandTarget == target,
+                  Self.shouldReleaseActiveBottomScrollCommand(
+                    hasActiveTarget: true,
+                    distanceToBottom: scrollDistanceToBottom,
+                    arrivalTolerance: bottomScrollCommandArrivalTolerance,
+                    hasExceededMaximumLifetime: true
+                  ) else {
+                return
+            }
+            releaseActiveBottomScrollCommand()
         }
     }
 
@@ -972,6 +1003,14 @@ extension ChatView {
                 animated: animated,
                 animation: animation
             )
+            if releasesAtBottom {
+                scheduleBottomScrollCommandRelease(
+                    target: target,
+                    generation: generation,
+                    sessionID: sessionID,
+                    animated: animated
+                )
+            }
             return
         }
 
@@ -999,6 +1038,14 @@ extension ChatView {
                 animated: animated,
                 animation: animation
             )
+            if releasesAtBottom {
+                scheduleBottomScrollCommandRelease(
+                    target: target,
+                    generation: generation,
+                    sessionID: sessionID,
+                    animated: animated
+                )
+            }
         }
     }
 }
