@@ -38,9 +38,12 @@ struct RoleplayHTMLCardView: View {
                         set: { heights[document.id] = max(1, $0) }
                     )
                 )
+                // WKWebView 没有可供 SwiftUI 采用的固有宽度；显式吃满气泡宽度，避免只剩高度占位。
+                .frame(maxWidth: .infinity)
                 .frame(height: heights[document.id] ?? 180)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: preparationKey) {
             let key = preparationKey
             let extraction = extraction
