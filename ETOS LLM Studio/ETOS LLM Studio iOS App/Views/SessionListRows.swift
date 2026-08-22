@@ -399,7 +399,7 @@ struct SessionRow: View {
             ))
         }
         if let status = runtimeState.runStatus,
-           let label = conversationRunStatusLabel(status) {
+           let label = Self.sessionListStatusLabel(for: status) {
             parts.append(label)
         }
         if runtimeState.pendingEventCount > 0 {
@@ -411,17 +411,15 @@ struct SessionRow: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func conversationRunStatusLabel(_ status: ConversationRunStatus) -> String? {
+    /// 会话列表只承担进行中活动的总览；终态详情保留在对应消息与运行记录中。
+    static func sessionListStatusLabel(for status: ConversationRunStatus) -> String? {
         switch status {
         case .queued: return NSLocalizedString("排队中", comment: "Conversation run queued")
         case .running, .waitingTool: return NSLocalizedString("生成中", comment: "Conversation run running")
         case .waitingConversation: return NSLocalizedString("等待会话", comment: "Conversation run waiting for conversation")
         case .waitingUser: return NSLocalizedString("等待用户", comment: "Conversation run waiting for user")
         case .pausedByBudget: return NSLocalizedString("已暂停", comment: "Conversation run paused by budget")
-        case .failed: return NSLocalizedString("失败", comment: "Conversation run failed")
-        case .cancelled: return NSLocalizedString("已停止", comment: "Conversation run cancelled")
-        case .interrupted: return NSLocalizedString("已中断", comment: "Conversation run interrupted")
-        case .completed: return nil
+        case .completed, .failed, .cancelled, .interrupted: return nil
         }
     }
 }

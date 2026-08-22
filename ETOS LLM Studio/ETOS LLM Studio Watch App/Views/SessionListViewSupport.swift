@@ -509,23 +509,22 @@ struct SessionRowView: View {
                 origin.parentSessionNameSnapshot
             ))
         }
-        if let status = runtimeState.runStatus, let label = statusLabel(status) {
+        if let status = runtimeState.runStatus,
+           let label = Self.sessionListStatusLabel(for: status) {
             parts.append(label)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func statusLabel(_ status: ConversationRunStatus) -> String? {
+    /// 终态不会继续影响用户操作，因此不在滚动列表中长期占用一行状态信息。
+    static func sessionListStatusLabel(for status: ConversationRunStatus) -> String? {
         switch status {
         case .queued: return NSLocalizedString("排队中", comment: "Conversation run queued")
         case .running, .waitingTool: return NSLocalizedString("生成中", comment: "Conversation run running")
         case .waitingConversation: return NSLocalizedString("等待会话", comment: "Conversation run waiting for conversation")
         case .waitingUser: return NSLocalizedString("等待用户", comment: "Conversation run waiting for user")
         case .pausedByBudget: return NSLocalizedString("已暂停", comment: "Conversation run paused")
-        case .failed: return NSLocalizedString("失败", comment: "Conversation run failed")
-        case .cancelled: return NSLocalizedString("已停止", comment: "Conversation run cancelled")
-        case .interrupted: return NSLocalizedString("已中断", comment: "Conversation run interrupted")
-        case .completed: return nil
+        case .completed, .failed, .cancelled, .interrupted: return nil
         }
     }
 
