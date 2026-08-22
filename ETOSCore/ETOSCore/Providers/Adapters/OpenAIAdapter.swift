@@ -47,7 +47,8 @@ public class OpenAIAdapter: APIAdapter {
         "use_responses_api",
         streamIncludeUsageControlKey,
         reasoningContentEchoModeControlKey,
-        responsesForceFullInputControlKey
+        responsesForceFullInputControlKey,
+        requestLogSuppressionControlKey
     ]
     static let chatCompletionsOnlyKeys: Set<String> = [
         "functions",

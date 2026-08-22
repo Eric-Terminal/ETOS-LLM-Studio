@@ -290,6 +290,9 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case configLoaderDownloadOnceCompleted = "com.ETOS.LLM.Studio.download_once.completed"
     case configLoaderToolCapabilityMigrated = "com.ETOS.LLM.Studio.modelCapability.toolCalling.migrated"
     case feedbackAPIBaseURL = "feedback.apiBaseURL"
+    case guideOverlayEnabled = "guide.overlay.enabled"
+    case guidePreferredRoute = "guide.preferredRoute"
+    case guidePreferredModelIdentifier = "guide.preferredModelIdentifier"
     case appLockEnabled = "security.appLock.enabled"
     case appLockTimeoutSeconds = "security.appLock.timeoutSeconds"
     case appLockBiometricEnabled = "security.appLock.biometricEnabled"
@@ -536,6 +539,12 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
         case .configLoaderToolCapabilityMigrated:
             return .bool(false)
         case .feedbackAPIBaseURL:
+            return .text("")
+        case .guideOverlayEnabled:
+            return .bool(false)
+        case .guidePreferredRoute:
+            return .text("builtIn")
+        case .guidePreferredModelIdentifier:
             return .text("")
         case .appLockTimeoutSeconds:
             return .integer(300)

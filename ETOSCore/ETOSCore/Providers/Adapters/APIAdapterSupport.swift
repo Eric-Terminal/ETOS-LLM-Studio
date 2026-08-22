@@ -8,6 +8,9 @@
 
 import Foundation
 
+/// 向导对话只在内存中存在，因此即使用户开启了普通请求日志也不能暂存向导请求体。
+let requestLogSuppressionControlKey = "etos.request_log.suppressed"
+
 // MARK: - 流式响应的数据片段
 
 func appendSegment(_ segment: String, to target: inout String?, separator: String = "\n\n") {

@@ -15,6 +15,7 @@ extension GeminiAdapter {
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         let reasoningContentEchoMode = resolvedReasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = commonPayload[requestLogSuppressionControlKey] as? Bool ?? false
         guard let baseURL = normalizedGeminiBaseURL(from: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -266,11 +267,14 @@ extension GeminiAdapter {
         }
         
         payload = mergedRequestPayload(payload, with: overrides)
+        payload.removeValue(forKey: requestLogSuppressionControlKey)
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             logger.debug("已构建 Gemini 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
-            logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "Gemini", request: request, payload: payload)
+            }
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil

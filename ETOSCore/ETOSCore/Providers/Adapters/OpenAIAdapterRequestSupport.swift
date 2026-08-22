@@ -52,6 +52,7 @@ extension OpenAIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = boolValue(from: commonPayload[requestLogSuppressionControlKey]) ?? false
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -178,6 +179,7 @@ extension OpenAIAdapter {
         var finalPayload = mergedRequestPayload(commonPayload, with: overrides)
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
+        finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["messages"] = apiMessages
 
@@ -217,7 +219,9 @@ extension OpenAIAdapter {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             logger.debug("已构建聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
-            logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "OpenAI兼容", request: request, payload: finalPayload)
+            }
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -237,6 +241,7 @@ extension OpenAIAdapter {
         fileAttachments: [UUID: [FileAttachment]]
     ) -> URLRequest? {
         let reasoningContentEchoMode = Self.reasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = boolValue(from: commonPayload[requestLogSuppressionControlKey]) ?? false
         if !audioAttachments.isEmpty {
             logger.error("构建 Responses 请求失败: OpenAI Responses API 暂不支持音频附件。")
             return nil
@@ -275,6 +280,7 @@ extension OpenAIAdapter {
         finalPayload.removeValue(forKey: Self.streamIncludeUsageControlKey)
         finalPayload.removeValue(forKey: Self.reasoningContentEchoModeControlKey)
         finalPayload.removeValue(forKey: Self.responsesForceFullInputControlKey)
+        finalPayload.removeValue(forKey: requestLogSuppressionControlKey)
         finalPayload["model"] = resolvedRequestModelName(for: model, overrides: overrides)
         finalPayload["input"] = inputAssembly.items
         if forceFullInput {
@@ -373,7 +379,9 @@ extension OpenAIAdapter {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: finalPayload, options: [.sortedKeys])
             logger.debug("已构建 Responses 请求体，共 \(request.httpBody?.count ?? 0) 字节。")
-            logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "OpenAI兼容 (Responses)", request: request, payload: finalPayload)
+            }
         } catch {
             logger.error("构建 Responses 请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil

@@ -171,6 +171,7 @@ public class AnthropicAdapter: APIAdapter {
     
     public func buildChatRequest(for model: RunnableModel, commonPayload: [String: Any], messages: [ChatMessage], tools: [InternalToolDefinition]?, audioAttachments: [UUID: AudioAttachment], imageAttachments: [UUID: [ImageAttachment]], fileAttachments: [UUID: [FileAttachment]]) -> URLRequest? {
         let reasoningContentEchoMode = resolvedReasoningContentEchoMode(from: commonPayload)
+        let suppressesRequestLog = commonPayload[requestLogSuppressionControlKey] as? Bool ?? false
         guard let baseURL = URL(string: model.provider.baseURL) else {
             logger.error("构建聊天请求失败: 无效的 API 基础 URL - \(model.provider.baseURL)")
             return nil
@@ -387,11 +388,14 @@ public class AnthropicAdapter: APIAdapter {
         }
 
         payload = mergedRequestPayload(payload, with: passthroughAnthropicRequestOverrides(overrides))
+        payload.removeValue(forKey: requestLogSuppressionControlKey)
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             logger.debug("已构建 Anthropic 聊天请求体，共 \(request.httpBody?.count ?? 0) 字节。")
-            logChatRequestSnapshot(adapterName: "Anthropic", request: request, payload: payload)
+            if !suppressesRequestLog {
+                logChatRequestSnapshot(adapterName: "Anthropic", request: request, payload: payload)
+            }
         } catch {
             logger.error("构建聊天请求失败: JSON 序列化错误 - \(error.localizedDescription)")
             return nil
@@ -401,7 +405,9 @@ public class AnthropicAdapter: APIAdapter {
     }
 
     private func passthroughAnthropicRequestOverrides(_ overrides: [String: Any]) -> [String: Any] {
-        overrides.filter { $0.key != "thinking_budget" }
+        overrides.filter {
+            $0.key != "thinking_budget" && $0.key != requestLogSuppressionControlKey
+        }
     }
     
     public func buildModelListRequest(for provider: Provider) -> URLRequest? {

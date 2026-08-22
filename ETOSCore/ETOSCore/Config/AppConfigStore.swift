@@ -393,6 +393,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var watchBackgroundSourceHistory: String { didSet { write(.watchBackgroundSourceHistory, watchBackgroundSourceHistory) } }
     @Published public var watchUseThirdPartyKeyboard: Bool { didSet { write(.watchUseThirdPartyKeyboard, watchUseThirdPartyKeyboard) } }
     @Published public var settingsColorfulIconsEnabled: Bool { didSet { write(.settingsColorfulIconsEnabled, settingsColorfulIconsEnabled) } }
+    @Published public var guideOverlayEnabled: Bool { didSet { write(.guideOverlayEnabled, guideOverlayEnabled) } }
+    @Published public var guidePreferredRoute: String { didSet { write(.guidePreferredRoute, guidePreferredRoute) } }
+    @Published public var guidePreferredModelIdentifier: String { didSet { write(.guidePreferredModelIdentifier, guidePreferredModelIdentifier) } }
     @Published public var iOSModelPickerGroupsByProvider: Bool { didSet { write(.iOSModelPickerGroupsByProvider, iOSModelPickerGroupsByProvider) } }
     @Published public var watchModelPickerGroupsByProvider: Bool { didSet { write(.watchModelPickerGroupsByProvider, watchModelPickerGroupsByProvider) } }
     @Published public var modelPickerPromptShortcutEnabled: Bool { didSet { write(.modelPickerPromptShortcutEnabled, modelPickerPromptShortcutEnabled) } }
@@ -714,6 +717,9 @@ public final class AppConfigStore: ObservableObject {
         watchBackgroundSourceHistory = Self.textValue(.watchBackgroundSourceHistory, userDefaults: userDefaults)
         watchUseThirdPartyKeyboard = Self.boolValue(.watchUseThirdPartyKeyboard, userDefaults: userDefaults)
         settingsColorfulIconsEnabled = Self.boolValue(.settingsColorfulIconsEnabled, userDefaults: userDefaults)
+        guideOverlayEnabled = Self.boolValue(.guideOverlayEnabled, userDefaults: userDefaults)
+        guidePreferredRoute = Self.textValue(.guidePreferredRoute, userDefaults: userDefaults)
+        guidePreferredModelIdentifier = Self.textValue(.guidePreferredModelIdentifier, userDefaults: userDefaults)
         iOSModelPickerGroupsByProvider = Self.boolValue(.iOSModelPickerGroupsByProvider, userDefaults: userDefaults)
         watchModelPickerGroupsByProvider = Self.boolValue(.watchModelPickerGroupsByProvider, userDefaults: userDefaults)
         modelPickerPromptShortcutEnabled = Self.boolValue(.modelPickerPromptShortcutEnabled, userDefaults: userDefaults)
@@ -1262,6 +1268,9 @@ public final class AppConfigStore: ObservableObject {
         case .watchBackgroundSourceHistory: return .text(watchBackgroundSourceHistory)
         case .watchUseThirdPartyKeyboard: return .bool(watchUseThirdPartyKeyboard)
         case .settingsColorfulIconsEnabled: return .bool(settingsColorfulIconsEnabled)
+        case .guideOverlayEnabled: return .bool(guideOverlayEnabled)
+        case .guidePreferredRoute: return .text(guidePreferredRoute)
+        case .guidePreferredModelIdentifier: return .text(guidePreferredModelIdentifier)
         case .iOSModelPickerGroupsByProvider: return .bool(iOSModelPickerGroupsByProvider)
         case .watchModelPickerGroupsByProvider: return .bool(watchModelPickerGroupsByProvider)
         case .modelPickerPromptShortcutEnabled: return .bool(modelPickerPromptShortcutEnabled)
@@ -1404,6 +1413,7 @@ public final class AppConfigStore: ObservableObject {
         case .fontUseCustomFonts: fontUseCustomFonts = value
         case .watchUseThirdPartyKeyboard: watchUseThirdPartyKeyboard = value
         case .settingsColorfulIconsEnabled: settingsColorfulIconsEnabled = value
+        case .guideOverlayEnabled: guideOverlayEnabled = value
         case .iOSModelPickerGroupsByProvider: iOSModelPickerGroupsByProvider = value
         case .watchModelPickerGroupsByProvider: watchModelPickerGroupsByProvider = value
         case .modelPickerPromptShortcutEnabled: modelPickerPromptShortcutEnabled = value
@@ -1570,6 +1580,8 @@ public final class AppConfigStore: ObservableObject {
         case .chatComposerDraft: chatComposerDraft = value
         case .backgroundCropTarget: backgroundCropTarget = value
         case .shortcutBridgeShortcutName: shortcutBridgeShortcutName = value
+        case .guidePreferredRoute: guidePreferredRoute = value
+        case .guidePreferredModelIdentifier: guidePreferredModelIdentifier = value
         case .systemTimeInjectionPosition: systemTimeInjectionPosition = value
         case .audioRecordingFormat: audioRecordingFormat = value
         case .hiddenAnnouncementKeys: hiddenAnnouncementKeys = value
