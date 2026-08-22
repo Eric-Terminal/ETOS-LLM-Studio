@@ -11,6 +11,7 @@ import Foundation
 import ETOSCore
 
 enum SettingsNavigationDestination: Hashable, Identifiable {
+    case modelManagement
     case dailyPulse
     case dailyPulseCard(runID: UUID, cardID: UUID)
     case feedbackCenter
@@ -20,6 +21,8 @@ enum SettingsNavigationDestination: Hashable, Identifiable {
 
     var id: String {
         switch self {
+        case .modelManagement:
+            return "modelManagement"
         case .dailyPulse:
             return "dailyPulse"
         case .dailyPulseCard(let runID, let cardID):
@@ -201,6 +204,15 @@ struct SettingsView: View {
                     SettingsListIconLabel("拓展功能", icon: .extendedFeatures)
                 }
             }
+
+            Section(NSLocalizedString("帮助", comment: "设置帮助分组")) {
+                NavigationLink {
+                    GuideSettingsView()
+                        .environmentObject(viewModel)
+                } label: {
+                    SettingsListIconLabel("页面向导", icon: .guide)
+                }
+            }
             // MARK: - 公告通知 Section
             if announcementManager.shouldShowInSettings {
                 Section(NSLocalizedString("系统公告", comment: "系统公告分组")) {
@@ -230,6 +242,27 @@ struct SettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "settings-root",
+                title: NSLocalizedString("设置", comment: "设置页向导上下文标题"),
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+            ),
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "provider_count": GuideSnapshotField(
+                        label: NSLocalizedString("提供商数量", comment: "设置页向导快照字段"),
+                        value: .int(viewModel.providers.count),
+                        access: .readOnly
+                    ),
+                    "selected_model": GuideSnapshotField(
+                        label: NSLocalizedString("当前模型", comment: "设置页向导快照字段"),
+                        value: .string(viewModel.selectedModel?.model.displayName ?? ""),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
         .onAppear {
             scheduleSettingsResearchAchievementIfNeeded()
         }
@@ -274,6 +307,9 @@ struct SettingsView: View {
         }
         .navigationDestination(item: $requestedDestination) { destination in
             switch destination {
+            case .modelManagement:
+                ProviderListView()
+                    .environmentObject(viewModel)
             case .dailyPulse:
                 DailyPulseView()
                     .environmentObject(viewModel)
@@ -494,6 +530,7 @@ extension SettingsListIcon {
     static let localModels = SettingsListIcon(systemName: "cpu", backgroundColor: .blue)
     static let localLinux = SettingsListIcon(systemName: "terminal", backgroundColor: .green)
     static let browserAgent = SettingsListIcon(systemName: "safari", backgroundColor: .blue)
+    static let guide = SettingsListIcon(systemName: "questionmark.bubble", backgroundColor: .blue)
     static let display = SettingsListIcon(systemName: "sun.max", backgroundColor: .purple)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green)
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)

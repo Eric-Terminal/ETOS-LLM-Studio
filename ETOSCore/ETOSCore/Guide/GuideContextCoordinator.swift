@@ -19,9 +19,9 @@ public final class GuideContextCoordinator: ObservableObject {
         }
     }
 
-    public typealias SnapshotProvider = @MainActor () async -> GuidePageSnapshot
-    public typealias ProposalBuilder = @MainActor (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal
-    public typealias ProposalExecutor = @MainActor (GuideActionProposal) async throws -> GuideActionExecution
+    public typealias SnapshotProvider = @MainActor @Sendable () async -> GuidePageSnapshot
+    public typealias ProposalBuilder = @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal
+    public typealias ProposalExecutor = @MainActor @Sendable (GuideActionProposal) async throws -> GuideActionExecution
 
     private struct Registration {
         let token: RegistrationToken
@@ -35,6 +35,7 @@ public final class GuideContextCoordinator: ObservableObject {
 
     @Published public private(set) var activePage: GuidePageDescriptor?
     private var registrations: [Registration] = []
+    private var pinnedRegistration: Registration?
 
     public init() {}
 
@@ -69,8 +70,19 @@ public final class GuideContextCoordinator: ObservableObject {
         refreshActivePage()
     }
 
+    /// watchOS 进入二级向导页时，暂时保留来源页声明；退出向导后必须解除。
+    public func pinActivePage() {
+        pinnedRegistration = registrations.last
+        refreshActivePage()
+    }
+
+    public func unpinActivePage() {
+        pinnedRegistration = nil
+        refreshActivePage()
+    }
+
     public func currentContext() async throws -> GuidePageContext {
-        guard let registration = registrations.last else {
+        guard let registration = currentRegistration else {
             throw GuideError.noActivePage
         }
         return GuidePageContext(
@@ -80,7 +92,7 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     public func makeProposal(for call: InternalToolCall) async throws -> GuideActionProposal {
-        guard let registration = registrations.last else {
+        guard let registration = currentRegistration else {
             throw GuideError.noActivePage
         }
         guard registration.descriptor.tools.contains(where: {
@@ -93,7 +105,7 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     public func execute(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
-        guard let registration = registrations.last else {
+        guard let registration = currentRegistration else {
             throw GuideError.noActivePage
         }
         guard registration.descriptor.id == proposal.pageID else {
@@ -103,6 +115,10 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     private func refreshActivePage() {
-        activePage = registrations.last?.descriptor
+        activePage = currentRegistration?.descriptor
+    }
+
+    private var currentRegistration: Registration? {
+        registrations.last ?? pinnedRegistration
     }
 }

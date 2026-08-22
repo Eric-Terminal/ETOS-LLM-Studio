@@ -91,6 +91,7 @@ struct ChatView: View {
     @State var quickModelSettingsTarget: RunnableModel?
     @State var isQuickPromptEditorPresented = false
     @State var isQuickWorldbookBindingPresented = false
+    @State var isGuideModelSetupPresented = false
     @State var selectedModelPickerProviderID: UUID?
     @State var modelPickerShowsAllModels = false
     @State var isChatLayoutLandscape = false
@@ -812,6 +813,17 @@ extension ChatView {
                         }
                         .frame(width: 0, height: 0)
 
+                        if viewModel.selectedModel == nil && sessionMessages.isEmpty {
+                            GuideModelSetupEntryCard(
+                                action: { isGuideModelSetupPresented = true },
+                                manualAction: {
+                                    NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
+                                }
+                            )
+                            .padding(.top, navBarHeight + 12)
+                            .padding(.bottom)
+                        }
+
                         LazyVStack(spacing: 0) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear
@@ -1296,6 +1308,10 @@ extension ChatView {
                             )
                             .padding(.horizontal, 12)
                             .padding(.bottom, 6)
+                        }
+
+                        if viewModel.selectedModel == nil && !sessionMessages.isEmpty {
+                            guideModelSetupCompactStatus
                         }
 
                         telegramInputBar

@@ -27,6 +27,8 @@ struct ContentView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appLockManager = AppLockManager.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject private var guideCoordinator = GuideContextCoordinator.shared
+    @StateObject private var guideController = GuideConversationController()
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -202,6 +204,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .requestOpenUpdateTimeline)) { _ in
             openUpdateTimelineFromNotification()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .requestGuideModelManagement)) { _ in
+            pushNativeSettings(destination: .modelManagement)
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: .requestIncomingSnapshotRestore),
             perform: handleIncomingSnapshotRestore
@@ -264,6 +269,15 @@ struct ContentView: View {
                 .navigationDestination(isPresented: $isNativeSettingsPresented) {
                     SettingsView(requestedDestination: $settingsDestination)
                 }
+        }
+        .overlay {
+            if appConfig.guideOverlayEnabled,
+               isNativeSettingsPresented,
+               guideCoordinator.activePage != nil {
+                GuideFloatingOverlay(controller: guideController)
+                    .environmentObject(viewModel)
+                    .zIndex(100)
+            }
         }
     }
 

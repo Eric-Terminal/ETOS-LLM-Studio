@@ -43,7 +43,9 @@ public struct GuideSnapshotField: Codable, Hashable, Sendable {
 
     public init(label: String, value: JSONValue, access: GuideSnapshotAccess = .readWrite) {
         self.label = label
-        self.value = access == .writeOnly ? .string(Self.hiddenValue) : value
+        self.value = access == .writeOnly
+            ? .string(Self.hiddenValue)
+            : GuideSecretRedactor.redact(value)
         self.access = access
     }
 
@@ -58,6 +60,64 @@ public struct GuidePageSnapshot: Codable, Hashable, Sendable {
     }
 
     public static let empty = GuidePageSnapshot()
+}
+
+public enum GuideSecretRedactor {
+    public static func redact(_ value: JSONValue) -> JSONValue {
+        redact(value, fieldName: nil)
+    }
+
+    public static func containsSensitiveField(_ value: JSONValue) -> Bool {
+        switch value {
+        case .dictionary(let values):
+            return values.contains { key, child in
+                isSensitiveFieldName(key) || containsSensitiveField(child)
+            }
+        case .array(let values):
+            return values.contains(where: containsSensitiveField)
+        default:
+            return false
+        }
+    }
+
+    private static func redact(_ value: JSONValue, fieldName: String?) -> JSONValue {
+        if let fieldName, isSensitiveFieldName(fieldName) {
+            return .string(GuideSnapshotField.hiddenValue)
+        }
+        switch value {
+        case .dictionary(let values):
+            return .dictionary(values.reduce(into: [String: JSONValue]()) { result, pair in
+                result[pair.key] = redact(pair.value, fieldName: pair.key)
+            })
+        case .array(let values):
+            return .array(values.map { redact($0, fieldName: nil) })
+        default:
+            return value
+        }
+    }
+
+    private static func isSensitiveFieldName(_ fieldName: String) -> Bool {
+        let normalized = fieldName
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        let exactNames: Set<String> = [
+            "authorization",
+            "proxy_authorization",
+            "cookie",
+            "set_cookie",
+            "api_key",
+            "apikey",
+            "x_api_key",
+            "token",
+            "credential",
+            "credentials"
+        ]
+        return exactNames.contains(normalized)
+            || normalized.contains("password")
+            || normalized.contains("secret")
+            || normalized.hasSuffix("_token")
+    }
 }
 
 public enum GuideToolAccess: String, Codable, Hashable, Sendable {
@@ -75,20 +135,28 @@ public struct GuidePageTool: Codable, Hashable, Sendable {
     }
 }
 
+public enum GuideMode: String, Codable, Hashable, Sendable {
+    case contextualHelp
+    case modelSetup
+}
+
 public struct GuidePageDescriptor: Codable, Hashable, Sendable {
     public let id: GuidePageID
     public let title: String
+    public let mode: GuideMode
     public let documents: [GuideDocumentReference]
     public let tools: [GuidePageTool]
 
     public init(
         id: GuidePageID,
         title: String,
+        mode: GuideMode = .contextualHelp,
         documents: [GuideDocumentReference] = [],
         tools: [GuidePageTool] = []
     ) {
         self.id = id
         self.title = title
+        self.mode = mode
         self.documents = documents
         self.tools = tools
     }

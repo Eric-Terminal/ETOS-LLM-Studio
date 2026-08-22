@@ -84,6 +84,105 @@ struct MCPIntegrationView: View {
                 }
             }
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "mcp-toolbox",
+                title: NSLocalizedString("MCP 工具箱", comment: "MCP 向导上下文标题"),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [GuidePageTool(definition: GuideToolCatalog.updateMCPPreferences, access: .proposeChange)]
+            ),
+            snapshot: mcpGuideSnapshot,
+            buildProposal: buildMCPGuideProposal,
+            execute: executeMCPGuideProposal
+        )
+    }
+
+    private func mcpGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "selected_tab": GuideSnapshotField(
+                label: NSLocalizedString("当前标签页", comment: "MCP 向导快照字段"),
+                value: .string(selectedTab.rawValue),
+                access: .readOnly
+            ),
+            "chat_tools_enabled": GuideSnapshotField(
+                label: NSLocalizedString("向模型暴露 MCP 工具", comment: "MCP 向导快照字段"),
+                value: .bool(manager.chatToolsEnabled)
+            ),
+            "tool_call_title_enabled": GuideSnapshotField(
+                label: NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP 向导快照字段"),
+                value: .bool(manager.toolCallTitleEnabled)
+            ),
+            "server_count": GuideSnapshotField(
+                label: NSLocalizedString("服务器数量", comment: "MCP 向导快照字段"),
+                value: .int(manager.servers.count),
+                access: .readOnly
+            ),
+            "published_tool_count": GuideSnapshotField(
+                label: NSLocalizedString("可用工具数量", comment: "MCP 向导快照字段"),
+                value: .int(manager.tools.count),
+                access: .readOnly
+            )
+        ])
+    }
+
+    private func buildMCPGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        guard call.toolName == GuideToolCatalog.updateMCPPreferences.name else {
+            throw GuideError.unsupportedTool(call.toolName)
+        }
+        let arguments = try GuideToolArguments.decode(call.arguments)
+        let labels: [String: String] = [
+            "chat_tools_enabled": NSLocalizedString("向模型暴露 MCP 工具", comment: "MCP 向导修改字段"),
+            "tool_call_title_enabled": NSLocalizedString("让 AI 描述 MCP 任务", comment: "MCP 向导修改字段")
+        ]
+        try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
+        let mutations = try labels.compactMap { key, label -> GuideSettingMutation? in
+            guard let value = try GuideToolArguments.optionalBool(key, in: arguments) else { return nil }
+            let newValue = JSONValue.bool(value)
+            guard snapshot.fields[key]?.value != newValue else { return nil }
+            return GuideSettingMutation(
+                path: key,
+                label: label,
+                oldValue: snapshot.fields[key]?.value,
+                newValue: newValue
+            )
+        }
+        guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
+        return GuideActionProposal(
+            pageID: "mcp-toolbox",
+            toolCallID: call.id,
+            toolName: call.toolName,
+            summary: NSLocalizedString("修改 MCP 工具箱偏好", comment: "MCP 向导提案摘要"),
+            mutations: mutations,
+            arguments: arguments
+        )
+    }
+
+    private func executeMCPGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        guard proposal.toolName == GuideToolCatalog.updateMCPPreferences.name else {
+            throw GuideError.unsupportedTool(proposal.toolName)
+        }
+        var oldArguments: [String: JSONValue] = [:]
+        if let value = try GuideToolArguments.optionalBool("chat_tools_enabled", in: proposal.arguments) {
+            oldArguments["chat_tools_enabled"] = .bool(manager.chatToolsEnabled)
+            manager.setChatToolsEnabled(value)
+        }
+        if let value = try GuideToolArguments.optionalBool("tool_call_title_enabled", in: proposal.arguments) {
+            oldArguments["tool_call_title_enabled"] = .bool(manager.toolCallTitleEnabled)
+            manager.setToolCallTitleEnabled(value)
+        }
+        let undoSnapshot = await mcpGuideSnapshot()
+        let undoCall = InternalToolCall(
+            id: UUID().uuidString,
+            toolName: proposal.toolName,
+            arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
+        )
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存 MCP 工具箱偏好。", comment: "MCP 向导执行结果"),
+            undoProposal: try buildMCPGuideProposal(call: undoCall, snapshot: undoSnapshot)
+        )
     }
 
     private var managementList: some View {

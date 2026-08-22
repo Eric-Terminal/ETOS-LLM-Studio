@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import GRDB
 import os.log
 
 extension ConfigLoader {
@@ -318,6 +319,63 @@ extension ConfigLoader {
         logger.info("已保存提供商 \(persistedProvider.name) 到 SQLite。")
         WatchDatabaseSyncService.markDatabaseChanged(.config)
         NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
+    }
+
+    /// 首次配置必须让提供商、模型和当前选择在同一个数据库事务中生效，避免留下不可运行的半配置状态。
+    @discardableResult
+    public static func saveProviderAndSelect(
+        _ provider: Provider,
+        selectedRunnableModelID: String
+    ) -> Bool {
+        let normalizedAPIKeys = ProviderCredentialStore.normalizeAPIKeys(provider.apiKeys)
+        var persistedProvider = provider
+        persistedProvider.apiKeys = normalizedAPIKeys
+        persistedProvider.chatEndpointPath = persistedProvider.normalizedChatEndpointPath
+
+        var providers = loadProviders()
+        if let index = providers.firstIndex(where: { $0.id == persistedProvider.id }) {
+            providers[index] = persistedProvider
+        } else {
+            providers.append(persistedProvider)
+        }
+
+        let didSave = Persistence.withConfigDatabaseWrite { db in
+            try replaceProvidersInRelationalStore(db, providers: providers)
+            try db.execute(
+                sql: """
+                INSERT INTO app_config (
+                    key,
+                    value_text,
+                    value_real,
+                    value_integer,
+                    type_hint,
+                    updated_at
+                )
+                VALUES (?, ?, NULL, NULL, 'text', ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_text = excluded.value_text,
+                    value_real = NULL,
+                    value_integer = NULL,
+                    type_hint = 'text',
+                    updated_at = excluded.updated_at
+                """,
+                arguments: [
+                    AppConfigKey.selectedRunnableModelID.rawValue,
+                    selectedRunnableModelID,
+                    Date().timeIntervalSince1970
+                ]
+            )
+            return true
+        } ?? false
+        guard didSave else {
+            logger.error("保存首次模型配置到 SQLite 失败。")
+            return false
+        }
+
+        cleanupLegacyProviderFiles()
+        WatchDatabaseSyncService.markDatabaseChanged(.config)
+        NotificationCenter.default.post(name: .providerConfigurationDidChange, object: nil)
+        return true
     }
 
     public static func deleteProvider(_ provider: Provider) {

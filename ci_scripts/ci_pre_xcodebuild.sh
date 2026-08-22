@@ -6,9 +6,19 @@ ROOT_PATH="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
 IOS_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/Config/iOSInfo.plist"
 WATCH_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/ETOS LLM Studio Watch App/Info.plist"
 
-# 云端构建优先写入 CI_COMMIT 的短哈希，本地调试保留默认占位。
+# 云端构建写入完整 Commit，界面展示时再截为 7 位；源码向导必须依赖精确版本。
 if [ -n "${CI_COMMIT:-}" ]; then
-    COMMIT_HASH="$(printf '%s' "$CI_COMMIT" | cut -c1-7)"
+    COMMIT_HASH="$(printf '%s' "$CI_COMMIT" | tr '[:upper:]' '[:lower:]')"
+    case "$COMMIT_HASH" in
+        *[!0-9a-f]*)
+            echo "CI_COMMIT 不是有效的 Git 提交哈希"
+            exit 1
+            ;;
+    esac
+    if [ "${#COMMIT_HASH}" -ne 40 ]; then
+        echo "CI_COMMIT 必须是完整 40 位 Git 提交哈希"
+        exit 1
+    fi
 else
     COMMIT_HASH="LocalBuild"
 fi

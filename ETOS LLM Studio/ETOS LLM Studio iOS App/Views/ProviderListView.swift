@@ -74,10 +74,14 @@ struct ProviderListView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @State private var selectedTab: ProviderManagementTab = .provider
     @State private var isAddingProvider = false
+    @State private var isGuideModelSetupPresented = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ProviderManagementContentView()
+            ProviderManagementContentView(
+                onOpenGuideSetup: { isGuideModelSetupPresented = true },
+                onAddProvider: { isAddingProvider = true }
+            )
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.provider.title, systemImage: ProviderManagementTab.provider.iconName)
@@ -125,16 +129,35 @@ struct ProviderListView: View {
                 .environmentObject(viewModel)
             }
         }
+        .sheet(isPresented: $isGuideModelSetupPresented) {
+            NavigationStack {
+                GuideModelSetupView()
+                    .environmentObject(viewModel)
+            }
+        }
     }
 }
 
 private struct ProviderManagementContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
+    let onOpenGuideSetup: () -> Void
+    let onAddProvider: () -> Void
     @State private var providerToDelete: Provider?
     @State private var showDeleteAlert = false
 
     var body: some View {
         List {
+            if viewModel.activatedConversationModels.isEmpty {
+                Section {
+                    Text(NSLocalizedString("还没有可运行的聊天模型。向导可以帮你整理 API 地址、接口格式和模型信息。", comment: "模型管理首次配置说明"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button(NSLocalizedString("使用配置向导", comment: "模型管理首次配置向导按钮"), action: onOpenGuideSetup)
+                    Button(NSLocalizedString("手动添加提供商", comment: "模型管理手动配置按钮"), action: onAddProvider)
+                } header: {
+                    Text(NSLocalizedString("连接一个聊天模型", comment: "模型管理首次配置标题"))
+                }
+            }
             Section {
                 ForEach(providersBinding, id: \.id, editActions: .move) { $provider in
                     NavigationLink {

@@ -51,6 +51,7 @@ struct SettingsView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @EnvironmentObject private var guideController: GuideConversationController
     
     // MARK: - 公告管理器
     
@@ -61,6 +62,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
+    @State private var isGuidePresented = false
     private let embedsInNavigationStack: Bool
 
     init(
@@ -93,6 +95,20 @@ struct SettingsView: View {
                         Text(NSLocalizedString("暂无可用模型，请先在“提供商与模型管理”中启用。", comment: "无可用模型提示"))
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
+                        NavigationLink {
+                            WatchGuideModelSetupView(
+                                viewModel: viewModel,
+                                guideController: guideController
+                            )
+                        } label: {
+                            Label(NSLocalizedString("引导配置第一个模型", comment: "手表首次模型配置入口"), systemImage: "wand.and.stars")
+                        }
+                        NavigationLink {
+                            ProviderListView()
+                                .environmentObject(viewModel)
+                        } label: {
+                            Label(NSLocalizedString("手动配置", comment: "手表首次模型配置手动入口"), systemImage: "slider.horizontal.3")
+                        }
                     } else {
                         NavigationLink {
                             ModelSelectionView(
@@ -256,9 +272,24 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle(
+                        NSLocalizedString("页面向导", comment: "手表页面向导开关"),
+                        isOn: $appConfig.guideOverlayEnabled
+                    )
+                    if appConfig.guideOverlayEnabled {
+                        Button {
+                            GuideContextCoordinator.shared.pinActivePage()
+                            isGuidePresented = true
+                        } label: {
+                            settingsNavigationLabel("询问当前页面", icon: .guide)
+                        }
+                        .buttonStyle(.plain)
+                    }
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }
+                } footer: {
+                    Text(NSLocalizedString("向导只读取页面主动提供的脱敏配置；已保存的密钥不可读。对话只保存在内存中。内置向导与我的模型使用不同出口。", comment: "手表向导入口与隐私说明"))
                 }
                 
                 // MARK: - 公告通知 Section
@@ -283,6 +314,27 @@ struct SettingsView: View {
 
             }
             .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
+            .guidePageContext(
+                descriptor: GuidePageDescriptor(
+                    id: "watch-settings-root",
+                    title: NSLocalizedString("设置", comment: "手表设置向导上下文标题"),
+                    documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+                ),
+                snapshot: {
+                    GuidePageSnapshot(fields: [
+                        "provider_count": GuideSnapshotField(
+                            label: NSLocalizedString("提供商数量", comment: "手表设置向导快照字段"),
+                            value: .int(viewModel.providers.count),
+                            access: .readOnly
+                        ),
+                        "selected_model": GuideSnapshotField(
+                            label: NSLocalizedString("当前模型", comment: "手表设置向导快照字段"),
+                            value: .string(viewModel.selectedModel?.model.displayName ?? ""),
+                            access: .readOnly
+                        )
+                    ])
+                }
+            )
             .onAppear {
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
                 scheduleSettingsResearchAchievementIfNeeded()
@@ -292,6 +344,9 @@ struct SettingsView: View {
             }
             .onChange(of: viewModel.activatedModelListVersion) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
+            }
+            .navigationDestination(isPresented: $isGuidePresented) {
+                WatchGuideConversationView(controller: guideController)
             }
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
@@ -547,6 +602,7 @@ extension SettingsListIcon {
     static let keyboard = SettingsListIcon(systemName: "keyboard", backgroundColor: .gray)
     static let sync = SettingsListIcon(systemName: "arrow.clockwise", backgroundColor: .green, legacySystemName: "arrow.triangle.2.circlepath")
     static let security = SettingsListIcon(systemName: "lock", backgroundColor: .red)
+    static let guide = SettingsListIcon(systemName: "questionmark.bubble", backgroundColor: .blue)
     static let about = SettingsListIcon(systemName: "info.circle", backgroundColor: .gray)
     static let achievementJournal = SettingsListIcon(systemName: "star", backgroundColor: .yellow, legacySystemName: "rosette")
     static let feedback = SettingsListIcon(systemName: "bubble", backgroundColor: .blue, legacySystemName: "text.bubble")

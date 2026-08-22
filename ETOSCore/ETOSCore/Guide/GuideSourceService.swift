@@ -40,6 +40,14 @@ public struct GuideSourceTree: Codable, Hashable, Sendable {
         self.truncated = truncated
         self.entries = entries
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case repository
+        case commitSHA = "commit_sha"
+        case truncated
+        case entries
+    }
 }
 
 public enum GuideBuildVersion {
@@ -78,18 +86,21 @@ public actor GuideSourceService {
     private let rawBaseURL: URL
     private let urlSession: URLSession
     private let fileManager: FileManager
+    private let cacheDirectoryOverride: URL?
     private var memoryTree: GuideSourceTree?
 
     public init(
         baseURL: URL = FeedbackServiceConfig.default.baseURL,
         rawBaseURL: URL = URL(string: "https://raw.githubusercontent.com")!,
         urlSession: URLSession = NetworkSessionConfiguration.shared,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        cacheDirectoryURL: URL? = nil
     ) {
         self.baseURL = baseURL
         self.rawBaseURL = rawBaseURL
         self.urlSession = urlSession
         self.fileManager = fileManager
+        self.cacheDirectoryOverride = cacheDirectoryURL
     }
 
     public func searchTree(query: String, commitSHA: String, limit: Int = 40) async throws -> [GuideSourceTreeEntry] {
@@ -108,9 +119,16 @@ public actor GuideSourceService {
         if let memoryTree, memoryTree.commitSHA == sha {
             return memoryTree
         }
-        if let cached = try? loadCachedTree(sha: sha), isValid(cached, sha: sha) {
-            memoryTree = cached
-            return cached
+        do {
+            let cached = try loadCachedTree(sha: sha)
+            if isValid(cached, sha: sha) {
+                memoryTree = cached
+                return cached
+            }
+            try? fileManager.removeItem(at: try cacheFileURL(sha: sha))
+        } catch {
+            // 损坏或半写入的缓存不能阻断恢复；删除后从精确 Commit 重新获取。
+            try? fileManager.removeItem(at: try cacheFileURL(sha: sha))
         }
 
         let url = baseURL
@@ -128,6 +146,21 @@ public actor GuideSourceService {
         try storeTree(tree, sha: sha)
         memoryTree = tree
         return tree
+    }
+
+    public func listDirectory(
+        path: String,
+        commitSHA: String,
+        limit: Int = 100
+    ) async throws -> [GuideSourceTreeEntry] {
+        let directory = try validatedDirectoryPath(path)
+        let tree = try await sourceTree(commitSHA: commitSHA)
+        let prefix = directory.isEmpty ? "" : "\(directory)/"
+        return Array(tree.entries.lazy.filter { entry in
+            guard entry.path.hasPrefix(prefix) else { return false }
+            let remainder = entry.path.dropFirst(prefix.count)
+            return !remainder.isEmpty && !remainder.contains("/")
+        }.prefix(max(1, min(limit, 200))))
     }
 
     public func readSource(
@@ -179,6 +212,17 @@ public actor GuideSourceService {
         return normalized
     }
 
+    private func validatedDirectoryPath(_ path: String) throws -> String {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.hasPrefix("/") else { throw GuideError.sourceUnavailable }
+        let normalized = trimmed
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !normalized.split(separator: "/").contains("..") else {
+            throw GuideError.sourceUnavailable
+        }
+        return normalized
+    }
+
     private func isValid(_ tree: GuideSourceTree, sha: String) -> Bool {
         tree.schemaVersion == 1
             && tree.repository == Self.repository
@@ -187,6 +231,9 @@ public actor GuideSourceService {
     }
 
     private func cacheDirectory() throws -> URL {
+        if let cacheDirectoryOverride {
+            return cacheDirectoryOverride
+        }
         guard let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             throw GuideError.sourceUnavailable
         }
@@ -194,8 +241,12 @@ public actor GuideSourceService {
     }
 
     private func loadCachedTree(sha: String) throws -> GuideSourceTree {
-        let data = try Data(contentsOf: try cacheDirectory().appendingPathComponent("\(sha).json"))
+        let data = try Data(contentsOf: try cacheFileURL(sha: sha))
         return try JSONDecoder().decode(GuideSourceTree.self, from: data)
+    }
+
+    private func cacheFileURL(sha: String) throws -> URL {
+        try cacheDirectory().appendingPathComponent("\(sha).json")
     }
 
     private func storeTree(_ tree: GuideSourceTree, sha: String) throws {

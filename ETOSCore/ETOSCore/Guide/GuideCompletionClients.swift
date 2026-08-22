@@ -86,6 +86,25 @@ public actor GuideEphemeralTokenProvider {
         cachedToken = decoded
         return decoded.token
     }
+
+    public func invalidate() {
+        cachedToken = nil
+    }
+}
+
+private struct GuideHTTPStatusError: LocalizedError {
+    let statusCode: Int
+
+    var errorDescription: String? {
+        switch statusCode {
+        case 401:
+            return NSLocalizedString("内置向导临时令牌已失效。", comment: "向导临时令牌错误")
+        case 429:
+            return NSLocalizedString("当前网络已有向导请求正在生成，请稍后再试。", comment: "向导并发限制错误")
+        default:
+            return NSLocalizedString("内置向导服务暂时不可用。", comment: "向导服务状态错误")
+        }
+    }
 }
 
 public final class GuideBuiltInCompletionClient: GuideCompletionClient, @unchecked Sendable {
@@ -112,15 +131,23 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
         AsyncThrowingStream { continuation in
             let task = Task { [self] in
                 do {
-                    let token = try await tokenProvider.token()
-                    let request = try makeRequest(
-                        messages: messages,
-                        tools: tools,
-                        sessionID: sessionID,
-                        token: token
-                    )
-                    let response = try await consumeStream(request, tools: tools) { delta in
-                        continuation.yield(.contentDelta(delta))
+                    let run: (String) async throws -> ChatMessage = { token in
+                        let request = try self.makeRequest(
+                            messages: messages,
+                            tools: tools,
+                            sessionID: sessionID,
+                            token: token
+                        )
+                        return try await self.consumeStream(request, tools: tools) { delta in
+                            continuation.yield(.contentDelta(delta))
+                        }
+                    }
+                    let response: ChatMessage
+                    do {
+                        response = try await run(tokenProvider.token())
+                    } catch let error as GuideHTTPStatusError where error.statusCode == 401 {
+                        await tokenProvider.invalidate()
+                        response = try await run(tokenProvider.token())
                     }
                     continuation.yield(.completed(response))
                     continuation.finish()
@@ -202,9 +229,11 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
         onDelta: @escaping @Sendable (String) async -> Void
     ) async throws -> ChatMessage {
         let (bytes, response) = try await urlSession.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw GuideHTTPStatusError(statusCode: httpResponse.statusCode)
         }
 
         let responseID = UUID()

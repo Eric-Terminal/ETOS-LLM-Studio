@@ -16,6 +16,8 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
+    @StateObject var guideController = GuideConversationController()
+    @StateObject var guideModelSetupController = GuideConversationController()
     @StateObject var announcementManager = AnnouncementManager.shared
     @StateObject var surveyManager = SurveyManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
@@ -109,6 +111,7 @@ struct ContentView: View {
             NavigationStack {
                 legacyChatRootView
             }
+            .environmentObject(guideController)
             .onReceive(NotificationCenter.default.publisher(for: .requestOpenDailyPulse)) { _ in
                 openDailyPulse()
             }

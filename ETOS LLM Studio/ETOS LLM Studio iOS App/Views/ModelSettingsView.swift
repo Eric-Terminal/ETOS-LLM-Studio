@@ -188,6 +188,195 @@ struct ModelSettingsView: View {
         .navigationTitle(NSLocalizedString("模型信息", comment: ""))
         .onAppear(perform: loadEditorState)
         .onDisappear(perform: saveEditorState)
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: modelGuidePageID,
+                title: NSLocalizedString("模型信息", comment: "模型设置向导上下文标题"),
+                documents: [
+                    GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics"),
+                    GuideDocumentReference(id: "model-request-body", title: "Model Request Body")
+                ],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateModelConfiguration, access: .proposeChange),
+                    GuidePageTool(definition: GuideToolCatalog.replaceModelRequestBody, access: .proposeChange)
+                ]
+            ),
+            snapshot: modelGuideSnapshot,
+            buildProposal: buildModelGuideProposal,
+            execute: executeModelGuideProposal
+        )
+    }
+
+    private var modelGuidePageID: GuidePageID {
+        GuidePageID(rawValue: "model-configuration-\(provider.id)-\(model.id)")
+    }
+
+    private func modelGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "display_name": GuideSnapshotField(
+                label: NSLocalizedString("模型名称", comment: "模型向导快照字段"),
+                value: .string(model.displayName)
+            ),
+            "model_id": GuideSnapshotField(
+                label: NSLocalizedString("模型ID", comment: "模型向导快照字段"),
+                value: .string(model.modelName)
+            ),
+            "picker_group": GuideSnapshotField(
+                label: NSLocalizedString("分组名称", comment: "模型向导快照字段"),
+                value: .string(model.pickerGroupName ?? "")
+            ),
+            "api_format_override": GuideSnapshotField(
+                label: NSLocalizedString("API 格式覆盖", comment: "模型向导快照字段"),
+                value: .string(model.apiFormatOverride ?? "")
+            ),
+            "supports_tool_calling": GuideSnapshotField(
+                label: NSLocalizedString("支持工具调用", comment: "模型向导快照字段"),
+                value: .bool(model.supportsToolCalling)
+            ),
+            "model_kind": GuideSnapshotField(
+                label: NSLocalizedString("模型类型", comment: "模型向导快照字段"),
+                value: .string(model.kind.rawValue),
+                access: .readOnly
+            ),
+            "request_body_mode": GuideSnapshotField(
+                label: NSLocalizedString("自定义请求体编辑方式", comment: "模型向导快照字段"),
+                value: .string(requestBodyMode.rawValue),
+                access: .readOnly
+            ),
+            "request_body_json": GuideSnapshotField(
+                label: NSLocalizedString("自定义请求体", comment: "模型向导快照字段"),
+                value: .dictionary(model.overrideParameters)
+            )
+        ])
+    }
+
+    private func buildModelGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        let arguments = try GuideToolArguments.decode(call.arguments)
+        switch call.toolName {
+        case GuideToolCatalog.updateModelConfiguration.name:
+            if let format = try GuideToolArguments.optionalString("api_format_override", in: arguments),
+               !["", "openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
+                throw GuideError.invalidToolArguments
+            }
+            let labels: [String: String] = [
+                "display_name": NSLocalizedString("模型名称", comment: "模型向导修改字段"),
+                "model_id": NSLocalizedString("模型ID", comment: "模型向导修改字段"),
+                "picker_group": NSLocalizedString("分组名称", comment: "模型向导修改字段"),
+                "api_format_override": NSLocalizedString("API 格式覆盖", comment: "模型向导修改字段"),
+                "supports_tool_calling": NSLocalizedString("支持工具调用", comment: "模型向导修改字段")
+            ]
+            try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
+            _ = try GuideToolArguments.optionalString("display_name", in: arguments)
+            _ = try GuideToolArguments.optionalString("model_id", in: arguments)
+            _ = try GuideToolArguments.optionalString("picker_group", in: arguments)
+            _ = try GuideToolArguments.optionalString("api_format_override", in: arguments)
+            _ = try GuideToolArguments.optionalBool("supports_tool_calling", in: arguments)
+            let mutations = labels.compactMap { key, label -> GuideSettingMutation? in
+                guard let newValue = arguments[key], snapshot.fields[key]?.value != newValue else { return nil }
+                return GuideSettingMutation(
+                    path: key,
+                    label: label,
+                    oldValue: snapshot.fields[key]?.value,
+                    newValue: newValue
+                )
+            }
+            guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
+            return GuideActionProposal(
+                pageID: modelGuidePageID,
+                toolCallID: call.id,
+                toolName: call.toolName,
+                summary: NSLocalizedString("修改模型配置", comment: "模型向导提案摘要"),
+                mutations: mutations,
+                arguments: arguments
+            )
+
+        case GuideToolCatalog.replaceModelRequestBody.name:
+            try GuideToolArguments.requireOnlyKeys(["json"], in: arguments)
+            guard case .dictionary(let body)? = arguments["json"] else { throw GuideError.invalidToolArguments }
+            let newValue = JSONValue.dictionary(body)
+            guard !GuideSecretRedactor.containsSensitiveField(newValue) else {
+                throw GuideError.invalidToolArguments
+            }
+            guard snapshot.fields["request_body_json"]?.value != newValue else { throw GuideError.invalidToolArguments }
+            return GuideActionProposal(
+                pageID: modelGuidePageID,
+                toolCallID: call.id,
+                toolName: call.toolName,
+                summary: NSLocalizedString("替换模型自定义请求体", comment: "模型请求体向导提案摘要"),
+                mutations: [GuideSettingMutation(
+                    path: "request_body_json",
+                    label: NSLocalizedString("自定义请求体", comment: "模型向导修改字段"),
+                    oldValue: snapshot.fields["request_body_json"]?.value,
+                    newValue: newValue
+                )],
+                arguments: arguments
+            )
+
+        default:
+            throw GuideError.unsupportedTool(call.toolName)
+        }
+    }
+
+    private func executeModelGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        let oldArguments: [String: JSONValue]
+        switch proposal.toolName {
+        case GuideToolCatalog.updateModelConfiguration.name:
+            oldArguments = currentModelGuideArguments(for: proposal.arguments.keys)
+            if let value = try GuideToolArguments.optionalString("display_name", in: proposal.arguments) { model.displayName = value }
+            if let value = try GuideToolArguments.optionalString("model_id", in: proposal.arguments) { model.modelName = value }
+            if let value = try GuideToolArguments.optionalString("picker_group", in: proposal.arguments) {
+                model.pickerGroupName = Model.normalizedPickerGroupName(value)
+            }
+            if let value = try GuideToolArguments.optionalString("api_format_override", in: proposal.arguments) {
+                model.apiFormatOverride = Model.normalizedAPIFormatOverride(value)
+            }
+            if let value = try GuideToolArguments.optionalBool("supports_tool_calling", in: proposal.arguments) {
+                capabilityBinding(.toolCalling).wrappedValue = value
+            }
+
+        case GuideToolCatalog.replaceModelRequestBody.name:
+            oldArguments = ["json": .dictionary(model.overrideParameters)]
+            guard case .dictionary(let body)? = proposal.arguments["json"] else {
+                throw GuideError.invalidToolArguments
+            }
+            requestBodyMode = .rawJSON
+            rawJSONInput = JSONValue.dictionary(body).prettyPrintedCompact()
+            validateRawJSON(rawJSONInput)
+            guard rawJSONError == nil else { throw GuideError.invalidToolArguments }
+
+        default:
+            throw GuideError.unsupportedTool(proposal.toolName)
+        }
+
+        saveEditorState()
+        let undoSnapshot = await modelGuideSnapshot()
+        let undoCall = InternalToolCall(
+            id: UUID().uuidString,
+            toolName: proposal.toolName,
+            arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
+        )
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存模型配置。", comment: "模型向导执行结果"),
+            undoProposal: try buildModelGuideProposal(call: undoCall, snapshot: undoSnapshot)
+        )
+    }
+
+    private func currentModelGuideArguments(for keys: Dictionary<String, JSONValue>.Keys) -> [String: JSONValue] {
+        var values: [String: JSONValue] = [:]
+        for key in keys {
+            switch key {
+            case "display_name": values[key] = .string(model.displayName)
+            case "model_id": values[key] = .string(model.modelName)
+            case "picker_group": values[key] = .string(model.pickerGroupName ?? "")
+            case "api_format_override": values[key] = .string(model.apiFormatOverride ?? "")
+            case "supports_tool_calling": values[key] = .bool(model.supportsToolCalling)
+            default: break
+            }
+        }
+        return values
     }
 
     private var modelConnectivityTestFooter: String {

@@ -246,12 +246,35 @@ struct ProviderEditView: View {
         .onChange(of: hasUnsavedChanges) { _, _ in
             notifyUnsavedChanges()
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: providerGuidePageID,
+                title: NSLocalizedString("提供商配置", comment: "提供商配置向导上下文标题"),
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+                tools: [GuidePageTool(definition: GuideToolCatalog.updateProviderConfiguration, access: .proposeChange)]
+            ),
+            snapshot: providerGuideSnapshot,
+            buildProposal: buildProviderGuideProposal,
+            execute: executeProviderGuideProposal
+        )
+    }
+
+    private var providerGuidePageID: GuidePageID {
+        GuidePageID(rawValue: "provider-configuration-\(provider.id)")
     }
     
     private func saveProvider() {
+        guard persistProviderEdits() else { return }
+        if dismissAfterSave {
+            dismiss()
+        }
+    }
+
+    @discardableResult
+    private func persistProviderEdits() -> Bool {
         guard let headerOverrides = buildHeaderOverrides() else {
             notifySaveAvailability()
-            return
+            return false
         }
         var updated = provider
         updated.chatEndpointPath = Provider.normalizedChatEndpointPath(updated.chatEndpointPath)
@@ -263,9 +286,144 @@ struct ProviderEditView: View {
         onSave(updated)
         notifySaveAvailability()
         onUnsavedChangesChange(false)
-        if dismissAfterSave {
-            dismiss()
+        return true
+    }
+
+    private func providerGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "name": GuideSnapshotField(
+                label: NSLocalizedString("提供商名称", comment: "提供商向导快照字段"),
+                value: .string(provider.name)
+            ),
+            "base_url": GuideSnapshotField(
+                label: NSLocalizedString("API 地址", comment: "提供商向导快照字段"),
+                value: .string(provider.baseURL)
+            ),
+            "chat_endpoint_path": GuideSnapshotField(
+                label: NSLocalizedString("聊天端点后缀", comment: "提供商向导快照字段"),
+                value: .string(provider.chatEndpointPath)
+            ),
+            "api_format": GuideSnapshotField(
+                label: NSLocalizedString("API 格式", comment: "提供商向导快照字段"),
+                value: .string(provider.apiFormat)
+            ),
+            "api_key": GuideSnapshotField(
+                label: NSLocalizedString("API Key", comment: "提供商向导快照字段"),
+                value: .string(apiKeysText),
+                access: .writeOnly
+            ),
+            "uses_provider_proxy": GuideSnapshotField(
+                label: NSLocalizedString("使用独立代理", comment: "提供商向导快照字段"),
+                value: .bool(useProviderProxyOverride),
+                access: .readOnly
+            )
+        ])
+    }
+
+    private func buildProviderGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        guard call.toolName == GuideToolCatalog.updateProviderConfiguration.name else {
+            throw GuideError.unsupportedTool(call.toolName)
         }
+        let arguments = try GuideToolArguments.decode(call.arguments)
+        if let format = try GuideToolArguments.optionalString("api_format", in: arguments),
+           !["openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
+            throw GuideError.invalidToolArguments
+        }
+
+        let labels: [String: String] = [
+            "name": NSLocalizedString("提供商名称", comment: "提供商向导修改字段"),
+            "base_url": NSLocalizedString("API 地址", comment: "提供商向导修改字段"),
+            "chat_endpoint_path": NSLocalizedString("聊天端点后缀", comment: "提供商向导修改字段"),
+            "api_format": NSLocalizedString("API 格式", comment: "提供商向导修改字段"),
+            "api_key": NSLocalizedString("API Key", comment: "提供商向导修改字段")
+        ]
+        try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
+        _ = try GuideToolArguments.optionalString("name", in: arguments)
+        _ = try GuideToolArguments.optionalString("base_url", in: arguments)
+        _ = try GuideToolArguments.optionalString("chat_endpoint_path", in: arguments)
+        _ = try GuideToolArguments.optionalString("api_format", in: arguments)
+        _ = try GuideToolArguments.optionalString("api_key", in: arguments)
+        let mutations = labels.compactMap { key, label -> GuideSettingMutation? in
+            guard let newValue = arguments[key] else { return nil }
+            let sensitive = key == "api_key"
+            let oldValue = snapshot.fields[key]?.value
+            guard sensitive || oldValue != newValue else { return nil }
+            return GuideSettingMutation(
+                path: key,
+                label: label,
+                oldValue: oldValue,
+                newValue: newValue,
+                isSensitive: sensitive
+            )
+        }
+        guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
+        return GuideActionProposal(
+            pageID: providerGuidePageID,
+            toolCallID: call.id,
+            toolName: call.toolName,
+            summary: NSLocalizedString("修改提供商配置", comment: "提供商向导提案摘要"),
+            mutations: mutations,
+            arguments: arguments
+        )
+    }
+
+    private func executeProviderGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        guard proposal.toolName == GuideToolCatalog.updateProviderConfiguration.name else {
+            throw GuideError.unsupportedTool(proposal.toolName)
+        }
+        let originalProvider = provider
+        let originalAPIKeysText = apiKeysText
+        let oldArguments = currentProviderGuideArguments(for: proposal.arguments.keys)
+
+        do {
+            if let value = try GuideToolArguments.optionalString("name", in: proposal.arguments) { provider.name = value }
+            if let value = try GuideToolArguments.optionalString("base_url", in: proposal.arguments) { provider.baseURL = value }
+            if let value = try GuideToolArguments.optionalString("chat_endpoint_path", in: proposal.arguments) {
+                provider.chatEndpointPath = value
+            }
+            if let value = try GuideToolArguments.optionalString("api_format", in: proposal.arguments) { provider.apiFormat = value }
+            if let value = try GuideToolArguments.optionalString("api_key", in: proposal.arguments) { apiKeysText = value }
+            guard !isSaveDisabled else { throw GuideError.invalidToolArguments }
+        } catch {
+            provider = originalProvider
+            apiKeysText = originalAPIKeysText
+            throw error
+        }
+
+        let undoSnapshot = await providerGuideSnapshot()
+        let undoCall = InternalToolCall(
+            id: UUID().uuidString,
+            toolName: proposal.toolName,
+            arguments: GuideToolArguments.encodedResult(.dictionary(oldArguments))
+        )
+        let undoProposal = try buildProviderGuideProposal(call: undoCall, snapshot: undoSnapshot)
+        guard persistProviderEdits() else {
+            provider = originalProvider
+            apiKeysText = originalAPIKeysText
+            throw GuideError.invalidToolArguments
+        }
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存提供商配置。", comment: "提供商向导执行结果"),
+            undoProposal: undoProposal
+        )
+    }
+
+    private func currentProviderGuideArguments(for keys: Dictionary<String, JSONValue>.Keys) -> [String: JSONValue] {
+        var values: [String: JSONValue] = [:]
+        for key in keys {
+            switch key {
+            case "name": values[key] = .string(provider.name)
+            case "base_url": values[key] = .string(provider.baseURL)
+            case "chat_endpoint_path": values[key] = .string(provider.chatEndpointPath)
+            case "api_format": values[key] = .string(provider.apiFormat)
+            case "api_key": values[key] = .string(apiKeysText)
+            default: break
+            }
+        }
+        return values
     }
 
     private var hasUnsavedChanges: Bool {

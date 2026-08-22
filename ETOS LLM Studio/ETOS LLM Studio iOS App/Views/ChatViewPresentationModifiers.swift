@@ -17,6 +17,12 @@ extension ChatView {
             .navigationDestination(item: $navigationDestination) { destination in
                 quickActionDestinationView(for: destination)
             }
+            .sheet(isPresented: $isGuideModelSetupPresented) {
+                NavigationStack {
+                    GuideModelSetupView()
+                        .environmentObject(viewModel)
+                }
+            }
             .sheet(item: $editingMessage) { message in
                 NavigationStack {
                     EditMessageView(message: message) { updatedMessage in

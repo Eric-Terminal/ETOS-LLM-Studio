@@ -57,6 +57,18 @@ public final class GuideConversationController: ObservableObject {
         startResponseLoop()
     }
 
+    public func sendSetupChoice(_ choice: GuideModelSetupChoice, displayName: String) {
+        guard !isResponding, pendingProposal == nil else { return }
+        lastError = nil
+        canRetryWithBuiltIn = false
+        messages.append(GuideConversationMessage(role: .user, content: displayName))
+        requestHistory.append(ChatMessage(
+            role: .user,
+            content: "<guide_setup_choice version=\"1\">{\"choice\":\"(choice.rawValue)\"}</guide_setup_choice>"
+        ))
+        startResponseLoop()
+    }
+
     public func retryLastResponse() {
         guard !isResponding, pendingProposal == nil,
               requestHistory.last(where: { $0.role == .user }) != nil else { return }
@@ -202,8 +214,14 @@ public final class GuideConversationController: ObservableObject {
                         currentTask = nil
                         return
                     }
-                    let result = try await executeReadTool(call)
-                    appendToolResult(call: call, content: result, disposition: .completed)
+                    do {
+                        let result = try await executeReadTool(call)
+                        appendToolResult(call: call, content: result, disposition: .completed)
+                    } catch {
+                        // 知识检索失败属于一次工具结果，交还模型改用文档或换关键词，不能终止整段向导会话。
+                        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        appendToolResult(call: call, content: message, disposition: .failed)
+                    }
                 }
                 removeEmptyAssistantMessage(id: placeholderID)
             }
@@ -238,10 +256,22 @@ public final class GuideConversationController: ObservableObject {
                 throw GuideError.invalidToolArguments
             }
             return try encoded(document)
+        case GuideToolCatalog.listProviderTemplates.name:
+            return try encoded(GuideProviderTemplate.cloudTemplates)
+        case GuideToolCatalog.readProviderTemplate.name:
+            let id = try GuideToolArguments.string("id", in: arguments)
+            guard let template = GuideProviderTemplate.cloudTemplates.first(where: { $0.id == id }) else {
+                throw GuideError.invalidToolArguments
+            }
+            return try encoded(template)
         case GuideToolCatalog.searchSourceTree.name:
             let query = try GuideToolArguments.string("query", in: arguments)
             guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
             return try encoded(try await sourceService.searchTree(query: query, commitSHA: sha))
+        case GuideToolCatalog.listSourceDirectory.name:
+            let path = try GuideToolArguments.string("path", in: arguments)
+            guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
+            return try encoded(try await sourceService.listDirectory(path: path, commitSHA: sha))
         case GuideToolCatalog.readSourceFile.name:
             let path = try GuideToolArguments.string("path", in: arguments)
             let start = try GuideToolArguments.integer("start_line", in: arguments)
