@@ -5,6 +5,7 @@
 // ============================================================================
 
 import ETOSCore
+import CoreFoundation
 import Testing
 @testable import ETOS_LLM_Studio_App
 
