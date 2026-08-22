@@ -17,6 +17,10 @@ extension ChatService {
         let shouldAwaitUserSupplement: Bool
         let shouldPauseForConversation: Bool
     }
+
+    static func mcpResultDisposition(for rawResult: String) -> InternalToolCallResultDisposition {
+        MCPToolResultFormatter.isErrorResult(rawResult) ? .failed : .completed
+    }
     
     /// 处理单个工具调用
     func handleToolCall(
@@ -288,10 +292,16 @@ extension ChatService {
                     shouldPauseForConversation = isConversationTool
                         && sessionID.flatMap(Persistence.loadLatestConversationRun)?.status == .waitingConversation
                     displayResult = shouldPauseForConversation ? nil : result
-                    logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                    resultDisposition = Self.mcpResultDisposition(for: result)
+                    if resultDisposition == .failed {
+                        logger.error("  - MCP 工具返回执行错误: \(toolCall.toolName)")
+                    } else {
+                        logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                    }
                 } catch {
                     content = callFailedText(toolLabel, error.localizedDescription)
                     displayResult = content
+                    resultDisposition = .failed
                     logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
                 }
             case .askEveryTime:
@@ -329,10 +339,16 @@ extension ChatService {
                         shouldPauseForConversation = isConversationTool
                             && sessionID.flatMap(Persistence.loadLatestConversationRun)?.status == .waitingConversation
                         displayResult = shouldPauseForConversation ? nil : result
-                        logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                        resultDisposition = Self.mcpResultDisposition(for: result)
+                        if resultDisposition == .failed {
+                            logger.error("  - MCP 工具返回执行错误: \(toolCall.toolName)")
+                        } else {
+                            logger.info("  - MCP 工具调用成功: \(toolCall.toolName)")
+                        }
                     } catch {
                         content = callFailedText(toolLabel, error.localizedDescription)
                         displayResult = content
+                        resultDisposition = .failed
                         logger.error("  - MCP 工具调用失败: \(error.localizedDescription)")
                     }
                 }

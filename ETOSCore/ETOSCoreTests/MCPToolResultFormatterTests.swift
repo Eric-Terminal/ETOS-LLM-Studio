@@ -26,6 +26,20 @@ struct MCPToolResultFormatterTests {
         #expect(display.shouldShowRawSection)
     }
 
+    @Test("MCP isError 只按结构化布尔值识别失败")
+    func testStructuredErrorFlagDetection() {
+        let failed = #"{"content":[{"type":"text","text":"执行失败"}],"isError":true}"#
+        let completed = #"{"content":[{"type":"text","text":"包含错误示例"}],"isError":false}"#
+        let misleadingText = #"{"content":[{"type":"text","text":"isError: true"}]}"#
+
+        #expect(MCPToolResultFormatter.isErrorResult(failed))
+        #expect(!MCPToolResultFormatter.isErrorResult(completed))
+        #expect(!MCPToolResultFormatter.isErrorResult(misleadingText))
+        #expect(!MCPToolResultFormatter.isErrorResult("执行失败"))
+        #expect(ChatService.mcpResultDisposition(for: failed) == .failed)
+        #expect(ChatService.mcpResultDisposition(for: completed) == .completed)
+    }
+
     @Test("标准 MCP 结果缺少文本时会回退结构摘要")
     func testStructuredEnvelopeFallsBackToStructureSummary() {
         let raw = #"{"content":[{"type":"image","mimeType":"image/png"}],"meta":{"source":"demo"}}"#

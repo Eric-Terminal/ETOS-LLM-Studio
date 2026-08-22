@@ -31,6 +31,20 @@ struct MCPBuiltInSearchServerTests {
         #expect(properties["url"] != nil)
         #expect(properties["search_engine"] != nil)
         #expect(properties["timeout_seconds"] != nil)
+        #expect(schema["anyOf"] == .array([
+            .dictionary(["required": .array([.string("query")])]),
+            .dictionary(["required": .array([.string("url")])])
+        ]))
+
+        let missingArgumentsResult = try await client.executeTool(
+            toolId: MCPBuiltInSearchServer.toolID,
+            inputs: [:]
+        )
+        guard case let .dictionary(missingArgumentsObject) = missingArgumentsResult else {
+            Issue.record("缺少搜索目标时应返回结构化错误。")
+            return
+        }
+        #expect(missingArgumentsObject["isError"] == .bool(true))
 
         let result = try await client.executeTool(
             toolId: MCPBuiltInSearchServer.toolID,

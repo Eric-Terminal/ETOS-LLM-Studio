@@ -1295,4 +1295,13 @@ let value = 42
         )
     }
 
+    @Test("iOS 工具执行失败使用红色失败状态")
+    func testFailedToolCallStatusPresentation() {
+        let status = ChatBubble.ToolCallBubbleStatus.failed
+
+        #expect(status.title == NSLocalizedString("执行失败", comment: "Tool execution failed status"))
+        #expect(status.iconName == "xmark.circle.fill")
+        #expect(status.accentColor == .red)
+    }
+
 }

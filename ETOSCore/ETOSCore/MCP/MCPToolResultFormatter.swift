@@ -186,6 +186,18 @@ public enum ToolWidgetPayloadParser {
 }
 
 public enum MCPToolResultFormatter {
+    /// MCP 的 `isError` 是协议级执行结果，不能依赖工具正文中的自然语言判断。
+    public static func isErrorResult(_ rawResult: String) -> Bool {
+        let trimmedRaw = rawResult.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmedRaw.data(using: .utf8),
+              let value = try? JSONDecoder().decode(JSONValue.self, from: data),
+              case .dictionary(let dictionary) = value,
+              case .bool(let isError)? = dictionary["isError"] else {
+            return false
+        }
+        return isError
+    }
+
     public static func displayModel(from rawResult: String, summaryLimit: Int = 90) -> MCPToolResultDisplayModel {
         let trimmedRaw = rawResult.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRaw.isEmpty else {

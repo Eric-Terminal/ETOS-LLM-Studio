@@ -39,6 +39,27 @@ struct AgentToolExecutionPreviewTests {
         #expect(restored.wasRejected)
     }
 
+    @Test("工具执行失败使用独立结构化终态")
+    func preservesFailedDisposition() throws {
+        let failedCall = InternalToolCall(
+            id: "failed-call",
+            toolName: "mcp_search_web",
+            arguments: "{}",
+            result: #"{"isError":true}"#,
+            resultDisposition: .failed
+        )
+
+        #expect(failedCall.executionFailed)
+        #expect(!failedCall.wasRejected)
+
+        let restored = try JSONDecoder().decode(
+            InternalToolCall.self,
+            from: JSONEncoder().encode(failedCall)
+        )
+        #expect(restored.resultDisposition == .failed)
+        #expect(restored.executionFailed)
+    }
+
     @Test("旧工具记录缺少结构化终态时保持可解码")
     func decodesLegacyToolCallWithoutDisposition() throws {
         let legacyJSON = #"{"id":"legacy","toolName":"read_file","arguments":"{}","result":"permission denied 示例"}"#

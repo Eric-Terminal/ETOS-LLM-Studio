@@ -761,8 +761,10 @@ public struct InternalToolDefinition: Codable, Hashable, Sendable {
 
 /// 工具结果的终态来源。正文只负责承载输出，不能再反向推断审批状态。
 public enum InternalToolCallResultDisposition: String, Codable, Hashable, Sendable {
-    /// 调用已经结束；结果正文可能同时包含成功输出或执行错误说明。
+    /// 调用已经结束，工具未报告执行错误。
     case completed
+    /// 调用已经结束，但工具明确报告执行失败。
+    case failed
     /// 调用在执行前被用户或治理策略明确拒绝。
     case rejected
 }
@@ -779,6 +781,11 @@ public struct InternalToolCall: Codable, Hashable, Sendable {
     /// 只认可执行链路写入的结构化终态，避免工具正文中的安全规则或错误示例污染 UI。
     public var wasRejected: Bool {
         resultDisposition == .rejected
+    }
+
+    /// 只认可执行链路写入的失败终态，避免根据任意工具正文猜测执行结果。
+    public var executionFailed: Bool {
+        resultDisposition == .failed
     }
 
     public init(

@@ -281,6 +281,10 @@ actor MCPBuiltInSearchServerEngine {
                             ]
                         ],
                         "required": [],
+                        "anyOf": [
+                            ["required": ["query"]],
+                            ["required": ["url"]]
+                        ],
                         "additionalProperties": false
                     ]
                 ]

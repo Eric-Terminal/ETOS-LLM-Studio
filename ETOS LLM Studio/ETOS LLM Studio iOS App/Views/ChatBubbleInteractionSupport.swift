@@ -450,6 +450,9 @@ extension ChatBubble {
         if call.wasRejected {
             return .rejected
         }
+        if call.executionFailed {
+            return .failed
+        }
         return .finished
     }
 

@@ -252,6 +252,7 @@ extension ChatBubble {
         case pendingApproval
         case running
         case finished
+        case failed
         case rejected
 
         var title: String {
@@ -262,6 +263,8 @@ extension ChatBubble {
                 return NSLocalizedString("执行中", comment: "")
             case .finished:
                 return NSLocalizedString("已完成", comment: "")
+            case .failed:
+                return NSLocalizedString("执行失败", comment: "Tool execution failed status")
             case .rejected:
                 return NSLocalizedString("已拒绝", comment: "")
             }
@@ -275,7 +278,7 @@ extension ChatBubble {
                 return "clock.arrow.trianglehead.counterclockwise.rotate.90"
             case .finished:
                 return "checkmark.circle.fill"
-            case .rejected:
+            case .failed, .rejected:
                 return "xmark.circle.fill"
             }
         }
@@ -288,7 +291,7 @@ extension ChatBubble {
                 return .blue
             case .finished:
                 return .green
-            case .rejected:
+            case .failed, .rejected:
                 return .red
             }
         }

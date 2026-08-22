@@ -1743,6 +1743,7 @@
 "已喜欢 · %@" = "Liked · %@";
 "已在任务中" = "In Tasks";
 "已完成" = "Completed";
+"执行失败" = "Ошибка выполнения";
 "已导入字体" = "Импортированные шрифты";
 "已尝试生成最新的每日脉冲。" = "Tried to generate the latest Daily Pulse.";
 "已打开这张卡片对应的会话，并填好继续追问。返回上一层即可继续。" = "Opened the chat for this card and filled in a follow-up. Go back one level to continue.";

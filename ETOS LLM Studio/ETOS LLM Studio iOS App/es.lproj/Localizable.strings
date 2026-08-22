@@ -2009,6 +2009,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "已处理会话 %d/%d" = "Processed sessions %d/%d";
 "已复制" = "Copied";
 "已完成" = "Completed";
+"执行失败" = "Error de ejecución";
 "已导入消息 %d" = "Imported messages %d";
 "已尝试生成最新的每日脉冲。" = "Tried to generate the latest Daily Pulse.";
 "已打开这张卡片对应的会话，并为你填好继续追问。" = "Opened the chat for this card and filled in a follow-up for you.";

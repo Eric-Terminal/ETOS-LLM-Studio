@@ -2486,6 +2486,7 @@
 "等待审批" = "Awaiting Approval";
 "执行中" = "Running";
 "已完成" = "Completed";
+"执行失败" = "Execution Failed";
 "已拒绝" = "Rejected";
 "等待你的审批后继续执行。" = "Waiting for your approval to continue.";
 "暂无返回结果。" = "No result yet.";
