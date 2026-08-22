@@ -1136,6 +1136,81 @@ struct RoleplayCompatibilityTests {
         #expect(extraction.documents[1].source.contains("状态栏"))
     }
 
+    @Test("MVU 后续回复自动补齐状态栏占位符")
+    func appendMVUStatusPlaceholderForFollowingReply() {
+        let hiddenUpdateRule = RoleplayRegexRule(
+            findRegex: #"/<UpdateVariable(?:variable)?>\s*(.*)\s*<\/UpdateVariable(?:variable)?>/gsi"#,
+            replaceString: "",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let statusRule = RoleplayRegexRule(
+            findRegex: "<StatusPlaceHolderImpl/>",
+            replaceString: "```html\n<div>状态栏</div>\n```",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let character = RoleplayCharacter(
+            name: "星野",
+            regexRules: [hiddenUpdateRule, statusRule]
+        )
+        let resolved = ResolvedRoleplaySession(
+            binding: SessionRoleplayBinding(sessionID: UUID(), characterIDs: [character.id]),
+            characters: [character],
+            persona: nil,
+            variables: .init(),
+            macroContext: .init(character: character)
+        )
+
+        let visualContent = RoleplayRuntime.visualContent(
+            "叙事正文\n\n<UpdateVariable><JSONPatch>[]</JSONPatch></UpdateVariable>",
+            resolved: resolved
+        )
+        let extraction = RoleplayHTMLExtractor.extract(from: visualContent)
+
+        #expect(extraction.remainingText == "叙事正文")
+        #expect(extraction.documents.count == 1)
+        #expect(extraction.documents[0].source.contains("状态栏"))
+    }
+
+    @Test("MVU 变量卡与状态栏在后续回复中分别显示")
+    func preserveBothMVUFollowingReplyDocuments() {
+        let updatePanelRule = RoleplayRegexRule(
+            findRegex: #"/<UpdateVariable(?:variable)?>\s*(.*)\s*<\/UpdateVariable(?:variable)?>/gsi"#,
+            replaceString: "<div><details>变量更新：$1</details></div>",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let statusRule = RoleplayRegexRule(
+            findRegex: "<StatusPlaceHolderImpl/>",
+            replaceString: "```html\n<div>状态栏</div>\n```",
+            placements: [.aiOutput],
+            markdownOnly: true
+        )
+        let character = RoleplayCharacter(
+            name: "星野",
+            regexRules: [updatePanelRule, statusRule]
+        )
+        let resolved = ResolvedRoleplaySession(
+            binding: SessionRoleplayBinding(sessionID: UUID(), characterIDs: [character.id]),
+            characters: [character],
+            persona: nil,
+            variables: .init(),
+            macroContext: .init(character: character)
+        )
+
+        let visualContent = RoleplayRuntime.visualContent(
+            "叙事正文\n\n<UpdateVariable><JSONPatch>[]</JSONPatch></UpdateVariable>",
+            resolved: resolved
+        )
+        let extraction = RoleplayHTMLExtractor.extract(from: visualContent)
+
+        #expect(extraction.remainingText == "叙事正文")
+        #expect(extraction.documents.count == 2)
+        #expect(extraction.documents[0].source.contains("变量更新"))
+        #expect(extraction.documents[1].source.contains("状态栏"))
+    }
+
     @Test("酒馆助手脚本使用 ES Module 并由原生 MVU 接管 MagVarUpdate")
     func makeHelperScriptModuleDocument() {
         let source = RoleplayHelperScriptDocument.source("""

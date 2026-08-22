@@ -34,6 +34,21 @@ public struct RoleplayRegexContext: Sendable {
 }
 
 public enum RoleplayRegexTransformer {
+    static func hasMatchingRule(
+        for input: String,
+        rules: [RoleplayRegexRule],
+        context: RoleplayRegexContext
+    ) -> Bool {
+        guard !input.isEmpty, !rules.isEmpty else { return false }
+        var context = context
+        let sourceRange = NSRange(location: 0, length: (input as NSString).length)
+        return rules.contains { rule in
+            guard shouldRun(rule, context: context),
+                  let regex = regularExpression(for: rule, context: &context) else { return false }
+            return regex.firstMatch(in: input, range: sourceRange) != nil
+        }
+    }
+
     public static func apply(
         _ input: String,
         rules: [RoleplayRegexRule],
@@ -75,13 +90,7 @@ public enum RoleplayRegexTransformer {
         to input: String,
         context: inout RoleplayRegexContext
     ) -> String {
-        var pattern = rule.findRegex
-        if rule.substituteRegex != 0 {
-            let resolved = RoleplayMacroResolver.resolve(pattern, context: &context.macroContext)
-            pattern = rule.substituteRegex == 2 ? NSRegularExpression.escapedPattern(for: resolved) : resolved
-        }
-        let parsed = parsedPattern(pattern)
-        guard let regex = try? NSRegularExpression(pattern: parsed.pattern, options: parsed.options) else { return input }
+        guard let regex = regularExpression(for: rule, context: &context) else { return input }
         let source = input as NSString
         let matches = regex.matches(in: input, range: NSRange(location: 0, length: source.length))
         guard !matches.isEmpty else { return input }
@@ -98,6 +107,19 @@ public enum RoleplayRegexTransformer {
             result.replaceCharacters(in: match.range, with: expanded)
         }
         return result as String
+    }
+
+    private static func regularExpression(
+        for rule: RoleplayRegexRule,
+        context: inout RoleplayRegexContext
+    ) -> NSRegularExpression? {
+        var pattern = rule.findRegex
+        if rule.substituteRegex != 0 {
+            let resolved = RoleplayMacroResolver.resolve(pattern, context: &context.macroContext)
+            pattern = rule.substituteRegex == 2 ? NSRegularExpression.escapedPattern(for: resolved) : resolved
+        }
+        let parsed = parsedPattern(pattern)
+        return try? NSRegularExpression(pattern: parsed.pattern, options: parsed.options)
     }
 
     private static func parsedPattern(_ raw: String) -> (pattern: String, options: NSRegularExpression.Options) {

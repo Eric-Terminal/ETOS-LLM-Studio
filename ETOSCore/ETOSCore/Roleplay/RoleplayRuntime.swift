@@ -27,6 +27,8 @@ struct ResolvedRoleplaySession {
 }
 
 enum RoleplayRuntime {
+    private static let mvuStatusPlaceholder = "<StatusPlaceHolderImpl/>"
+
     static func resolve(
         sessionID: UUID,
         messages: [ChatMessage],
@@ -171,8 +173,18 @@ enum RoleplayRuntime {
         placement: RoleplayRegexPlacement = .aiOutput,
         depth: Int? = nil
     ) -> String {
+        var source = content
+        if shouldAppendMVUStatusPlaceholder(
+            to: content,
+            resolved: resolved,
+            placement: placement,
+            depth: depth
+        ) {
+            // MagVarUpdate 会在变量解析完成后补入此占位符，状态栏正则依赖它生成后续 HTML 页面。
+            source += "\n\n\(mvuStatusPlaceholder)"
+        }
         var output = RoleplayRegexTransformer.apply(
-            content,
+            source,
             rules: resolved.regexRules,
             context: .init(
                 placement: placement,
@@ -191,6 +203,30 @@ enum RoleplayRuntime {
             )
         )
         return RoleplayMVUEngine.strippingUpdateBlock(from: output)
+    }
+
+    private static func shouldAppendMVUStatusPlaceholder(
+        to content: String,
+        resolved: ResolvedRoleplaySession,
+        placement: RoleplayRegexPlacement,
+        depth: Int?
+    ) -> Bool {
+        guard placement == .aiOutput,
+              !content.contains(mvuStatusPlaceholder),
+              content.range(
+                of: #"</UpdateVariable(?:variable)?>"#,
+                options: [.regularExpression, .caseInsensitive]
+              ) != nil else { return false }
+        return RoleplayRegexTransformer.hasMatchingRule(
+            for: mvuStatusPlaceholder,
+            rules: resolved.regexRules,
+            context: .init(
+                placement: placement,
+                isMarkdown: true,
+                depth: depth,
+                macroContext: resolved.macroContext
+            )
+        )
     }
 
     @discardableResult
