@@ -1106,6 +1106,56 @@ struct RoleplayCompatibilityTests {
         #expect(document.contains("getButtonEvent"))
     }
 
+    @Test("HTML 文档只注入源码实际使用的 CDN 依赖")
+    func injectsOnlyUsedHTMLDependencies() {
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: """
+            <html><head><script type="module">
+            $('.status').text(_.get(getAllVariables(), 'stat_data.value', ''));
+            </script></head><body><div class="status"></div></body></html>
+            """,
+            variables: [:],
+            userName: "用户",
+            characterName: "角色",
+            userAvatarPath: "",
+            characterAvatarPath: ""
+        )
+
+        #expect(document.contains("jquery@3.7.1"))
+        #expect(document.contains("lodash@4.17.21"))
+        #expect(!document.contains("font-awesome/6.7.2"))
+        #expect(!document.contains("vue@3.5.13"))
+        #expect(!document.contains("yaml@2.7.0"))
+        #expect(!document.contains("cdn.tailwindcss.com"))
+    }
+
+    @Test("HTML 文档识别样式和脚本依赖")
+    func detectsHTMLStyleAndScriptDependencies() {
+        let document = RoleplayHTMLDocumentFactory.makeDocument(
+            source: """
+            <html><head><script>
+            Vue.createApp({});
+            YAML.parse('value: 1');
+            </script></head><body>
+            <i class="fa-solid fa-heart"></i>
+            <div class="p-4 dark:bg-black"></div>
+            </body></html>
+            """,
+            variables: [:],
+            userName: "用户",
+            characterName: "角色",
+            userAvatarPath: "",
+            characterAvatarPath: ""
+        )
+
+        #expect(document.contains("font-awesome/6.7.2"))
+        #expect(document.contains("vue@3.5.13"))
+        #expect(document.contains("yaml@2.7.0"))
+        #expect(document.contains("cdn.tailwindcss.com"))
+        #expect(!document.contains("jquery@3.7.1"))
+        #expect(!document.contains("lodash@4.17.21"))
+    }
+
     @Test("HTML 提取识别角色正则生成的裸前端片段")
     func extractBareRoleplayHTML() {
         let extraction = RoleplayHTMLExtractor.extract(from: """

@@ -325,14 +325,10 @@ public enum RoleplayHTMLDocumentFactory {
             scriptButtons: scriptButtons,
             scriptInitialVariables: scriptInitialVariables
         ) + "\n" + RoleplayHTMLCompatibilityRuntime.source
+        let dependencyMarkup = RoleplayHTMLDependencyResolver.markup(for: resolvedSource)
         let headInjection = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=4.0, user-scalable=yes">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/yaml@2.7.0/browser/dist/index.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
+\(dependencyMarkup)
 <style>
   :root { color-scheme: light dark; }
   html, body { margin: 0; padding: 0; width: 100%; min-height: 1px; background: transparent; overflow-x: hidden; }
