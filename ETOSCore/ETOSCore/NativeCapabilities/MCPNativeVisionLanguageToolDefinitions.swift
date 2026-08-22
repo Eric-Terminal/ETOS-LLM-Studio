@@ -35,6 +35,28 @@ enum MCPNativeVisionLanguageToolDefinitions {
         }
     }
 
+    static var availableDescriptions: [MCPToolDescription] {
+        descriptions.filter { isToolAvailableOnCurrentPlatform($0.toolId) }
+    }
+
+    static func isToolAvailableOnCurrentPlatform(_ toolID: String) -> Bool {
+        if toolID.hasPrefix("vision.") {
+            #if canImport(Vision) && canImport(ImageIO)
+            return true
+            #else
+            return false
+            #endif
+        }
+        if toolID.hasPrefix("language.") {
+            #if canImport(NaturalLanguage)
+            return true
+            #else
+            return false
+            #endif
+        }
+        return false
+    }
+
     private static var definitions: [Definition] {
         [
             tool("vision.recognize_text", "使用 Vision 在设备端识别 app:// 图片中的文字，返回有界文本、置信度与归一化边界。", imageObject([

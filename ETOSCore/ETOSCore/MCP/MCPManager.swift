@@ -883,7 +883,11 @@ public final class MCPManager: ObservableObject {
     }
 
     public func status(for server: MCPServerConfiguration) -> MCPServerStatus {
-        serverStatuses[server.id] ?? MCPServerStatus()
+        var status = serverStatuses[server.id] ?? MCPServerStatus()
+        status.tools = status.tools.filter {
+            isToolAvailableOnCurrentPlatform($0.toolId, server: server)
+        }
+        return status
     }
 
     // MARK: - Debug Helpers

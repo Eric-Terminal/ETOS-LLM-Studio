@@ -61,6 +61,7 @@ extension MCPManager {
             }
 
             for tool in status.tools {
+                guard isToolAvailableOnCurrentPlatform(tool.toolId, server: server) else { continue }
                 guard server.isToolEnabled(tool.toolId) else { continue }
                 guard server.approvalPolicy(for: tool.toolId) != .alwaysDeny else { continue }
                 let fullName = internalToolName(for: server, tool: tool)
@@ -131,6 +132,21 @@ extension MCPManager {
             debugBusyCount = max(0, debugBusyCount - 1)
         }
         updateBusyFlag()
+    }
+
+    func isToolAvailableOnCurrentPlatform(
+        _ toolID: String,
+        server: MCPServerConfiguration
+    ) -> Bool {
+        switch server.transport {
+        case .builtInPersonalData:
+            return MCPBuiltInPersonalDataServer.isToolAvailableOnCurrentPlatform(toolID)
+        case .builtInAppTool(let category):
+            guard category == .visionLanguage else { return true }
+            return MCPNativeVisionLanguageToolDefinitions.isToolAvailableOnCurrentPlatform(toolID)
+        default:
+            return true
+        }
     }
 
     func updateBusyFlag() {

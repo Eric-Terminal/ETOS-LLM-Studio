@@ -16,6 +16,18 @@ public enum MCPBuiltInPersonalDataServer {
     public static let endpoint = "builtin://personal-data"
     private static let nativeToolsMigrationFlagKey = "mcp.personalDataNativeToolsDisabled.v1"
 
+    #if os(watchOS)
+    private static let unavailableToolIDs: Set<String> = [
+        "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+        "reminder.create_reminder", "reminder.update_reminder", "reminder.delete_reminder",
+        "contacts.create", "contacts.update", "contacts.delete",
+        "photos.search", "photos.export_asset", "photos.save_asset",
+        "photos.create_album", "photos.add_to_album"
+    ]
+    #else
+    private static let unavailableToolIDs: Set<String> = []
+    #endif
+
     private static let legacyToolIDs = [
         "health.list_types",
         "health.query_samples",
@@ -35,6 +47,10 @@ public enum MCPBuiltInPersonalDataServer {
 
     public static var toolIDs: [String] {
         legacyToolIDs + MCPNativePersonalDataToolDefinitions.toolIDs
+    }
+
+    static func isToolAvailableOnCurrentPlatform(_ toolID: String) -> Bool {
+        !unavailableToolIDs.contains(toolID)
     }
 
     public static func isBuiltInPersonalDataServer(_ server: MCPServerConfiguration) -> Bool {
@@ -93,7 +109,7 @@ public enum MCPBuiltInPersonalDataServer {
     }
 
     static func toolDescriptions() -> [MCPToolDescription] {
-        [
+        let descriptions = [
             MCPToolDescription(
                 toolId: "health.list_types",
                 description: NSLocalizedString("列出当前内建 HealthKit 工具支持的健康数据类型、读写能力与默认单位。不会请求 HealthKit 权限。", comment: ""),
@@ -238,6 +254,9 @@ public enum MCPBuiltInPersonalDataServer {
                 )
             )
         ] + MCPNativePersonalDataToolDefinitions.descriptions
+
+        // 配置仍保留完整工具 ID，运行时目录只公布当前平台真正能执行的能力。
+        return descriptions.filter { isToolAvailableOnCurrentPlatform($0.toolId) }
     }
 
     static func objectSchema(

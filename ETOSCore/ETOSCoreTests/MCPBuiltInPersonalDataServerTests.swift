@@ -28,7 +28,22 @@ struct MCPBuiltInPersonalDataServerTests {
         #expect(tools.contains(where: { $0.toolId == "health.query_samples" }))
         #expect(tools.contains(where: { $0.toolId == "health.write_blood_pressure" }))
         #expect(tools.contains(where: { $0.toolId == "calendar.query_events" }))
+        #expect(tools.contains(where: { $0.toolId == "reminder.query_reminders" }))
+
+        #if os(watchOS)
+        let unavailableToolIDs: Set<String> = [
+            "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+            "reminder.create_reminder", "reminder.update_reminder", "reminder.delete_reminder",
+            "contacts.create", "contacts.update", "contacts.delete",
+            "photos.search", "photos.export_asset", "photos.save_asset",
+            "photos.create_album", "photos.add_to_album"
+        ]
+        #expect(Set(tools.map(\.toolId)).isDisjoint(with: unavailableToolIDs))
+        #else
         #expect(tools.contains(where: { $0.toolId == "reminder.create_reminder" }))
+        #expect(tools.contains(where: { $0.toolId == "contacts.create" }))
+        #expect(tools.contains(where: { $0.toolId == "photos.search" }))
+        #endif
 
         let result = try await client.executeTool(toolId: "health.list_types", inputs: [:])
         guard case let .dictionary(resultObject) = result,

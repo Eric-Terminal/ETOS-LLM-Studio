@@ -23,6 +23,35 @@ import ETOSCore
 @MainActor
 struct ETOS_LLM_Studio_Watch_AppTests {
 
+    @Test("watchOS MCP 目录不暴露当前平台无法执行的工具")
+    func testMCPToolCatalogHidesUnavailableTools() async throws {
+        let personalClient = MCPClient(transport: MCPBuiltInPersonalDataTransport())
+        _ = try await personalClient.initialize(clientInfo: .init(name: "WatchTests", version: "0.1"))
+        let personalTools = try await personalClient.listTools()
+        let personalToolIDs = Set(personalTools.map(\.toolId))
+        #expect(personalToolIDs.isDisjoint(with: [
+            "calendar.create_event", "calendar.update_event", "calendar.delete_event",
+            "reminder.create_reminder", "reminder.update_reminder", "reminder.delete_reminder",
+            "contacts.create", "contacts.update", "contacts.delete",
+            "photos.search", "photos.export_asset", "photos.save_asset",
+            "photos.create_album", "photos.add_to_album"
+        ]))
+        await personalClient.disconnect()
+
+        let visionClient = MCPClient(
+            transport: MCPBuiltInAppToolTransport(category: .visionLanguage)
+        )
+        _ = try await visionClient.initialize(clientInfo: .init(name: "WatchTests", version: "0.1"))
+        let visionTools = try await visionClient.listTools()
+        let visionToolIDs = Set(visionTools.map(\.toolId))
+        #expect(visionToolIDs.isDisjoint(with: [
+            "vision.recognize_text", "vision.detect_barcodes",
+            "vision.classify_image", "vision.detect_document"
+        ]))
+        #expect(visionToolIDs.contains("language.detect"))
+        await visionClient.disconnect()
+    }
+
     @Test("系统字体会叠加全局字号倍率且不同基准字号不会共用缓存")
     func testSystemFontScaleKeepsDistinctPointSizes() {
         let previousEnabled = FontLibrary.isCustomFontEnabled

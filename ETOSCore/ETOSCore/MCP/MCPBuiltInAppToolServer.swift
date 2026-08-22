@@ -291,7 +291,9 @@ public enum MCPBuiltInAppToolServer {
         }
 
         if category == .visionLanguage {
-            return MCPNativeVisionLanguageToolDefinitions.descriptions
+            return includeUnavailablePlatformTools
+                ? MCPNativeVisionLanguageToolDefinitions.descriptions
+                : MCPNativeVisionLanguageToolDefinitions.availableDescriptions
         }
 
         let staticTools = AppToolKind.allCases

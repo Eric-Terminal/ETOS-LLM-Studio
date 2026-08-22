@@ -12,6 +12,29 @@ import Testing
 
 @Suite("内建 MCP 拓展工具服务器测试")
 struct MCPBuiltInAppToolServerTests {
+    @Test("视觉与语言目录仅暴露当前平台可执行的工具")
+    func testVisionLanguageTransportFiltersUnavailableTools() async throws {
+        let transport = MCPBuiltInAppToolTransport(category: .visionLanguage)
+        let client = MCPClient(transport: transport)
+
+        _ = try await client.initialize(clientInfo: .init(name: "Harness", version: "0.1"))
+        let tools = try await client.listTools()
+        let toolIDs = Set(tools.map(\.toolId))
+
+        #if os(watchOS)
+        #expect(toolIDs.isDisjoint(with: [
+            "vision.recognize_text", "vision.detect_barcodes",
+            "vision.classify_image", "vision.detect_document"
+        ]))
+        #expect(toolIDs.contains("language.detect"))
+        #else
+        #expect(toolIDs.contains("vision.recognize_text"))
+        #expect(toolIDs.contains("language.detect"))
+        #endif
+
+        await client.disconnect()
+    }
+
     @Test("会话协作分类通过 MCP 暴露完整工具目录")
     func testConversationTransportToolCatalog() async throws {
         let transport = MCPBuiltInAppToolTransport(category: .conversation)
