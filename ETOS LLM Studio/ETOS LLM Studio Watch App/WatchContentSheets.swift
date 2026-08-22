@@ -166,19 +166,28 @@ struct WatchQuickRequestControlsView: View {
     @State private var pendingSaveTask: Task<Void, Never>?
     @State private var sliderDescriptors: [String: ModelRequestBodyControlSliderDescriptor] = [:]
     @State private var localAgentMode = LocalAgentMode.chat
+    @State private var localAgentModeSelectionRevision: UInt = 0
     @State private var hasActiveRun = false
+    @State private var isLocalAgentModeReady = false
 
     var body: some View {
         let controls = runnableModel.model.requestBodyControls.filter(\.isEnabled)
         List {
             if appConfig.localLinuxEnabled, let sessionID {
                 Section(NSLocalizedString("会话模式", comment: "Watch local Agent mode section")) {
-                    Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: $localAgentMode) {
+                    Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: Binding(
+                        get: { localAgentMode },
+                        set: { mode in
+                            guard localAgentMode != mode else { return }
+                            localAgentModeSelectionRevision &+= 1
+                            localAgentMode = mode
+                        }
+                    )) {
                         ForEach(LocalAgentMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
                     }
-                    .disabled(isLocked || hasActiveRun)
+                    .disabled(isLocked || hasActiveRun || !isLocalAgentModeReady)
                     .onChange(of: localAgentMode) { _, mode in
                         _ = Persistence.saveLocalAgentMode(mode, sessionID: sessionID)
                     }
@@ -245,8 +254,10 @@ struct WatchQuickRequestControlsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(state == nil)
         .task(id: runnableModel.id) {
+            await ChatService.shared.waitForInitialPersistenceStateIfNeeded()
             await loadState()
             if let sessionID {
+                let selectionRevision = localAgentModeSelectionRevision
                 let sessionState = await Task.detached(priority: .userInitiated) {
                     let run = Persistence.loadLatestConversationRun(sessionID: sessionID)
                     return (
@@ -254,8 +265,12 @@ struct WatchQuickRequestControlsView: View {
                         hasActiveRun: run.map { !$0.status.isTerminal } ?? false
                     )
                 }.value
-                localAgentMode = sessionState.mode
+                if !Task.isCancelled,
+                   localAgentModeSelectionRevision == selectionRevision {
+                    localAgentMode = sessionState.mode
+                }
                 hasActiveRun = sessionState.hasActiveRun
+                isLocalAgentModeReady = !Task.isCancelled
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in

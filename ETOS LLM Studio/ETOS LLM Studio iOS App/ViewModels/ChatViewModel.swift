@@ -31,6 +31,7 @@ let logger = Logger(subsystem: "com.ETOS.LLM.Studio", category: "ChatViewModel")
 
 private struct PendingChatSendPayload: Sendable {
     let sessionID: UUID?
+    let localAgentMode: LocalAgentMode?
     let content: String
     let aiTemperature: Double
     let aiTopP: Double
@@ -449,8 +450,8 @@ final class ChatViewModel: ObservableObject {
     
     // MARK: - Messaging
     
-    func sendMessage() {
-        guard let payload = capturePendingSendPayload() else { return }
+    func sendMessage(localAgentMode: LocalAgentMode? = nil) {
+        guard let payload = capturePendingSendPayload(localAgentMode: localAgentMode) else { return }
         let delay = AppConfigStore.shared.chatSendDelaySeconds
         guard delay > 0 else {
             sendCapturedMessage(payload)
@@ -459,7 +460,9 @@ final class ChatViewModel: ObservableObject {
         scheduleDelayedSend(payload, delay: delay)
     }
 
-    private func capturePendingSendPayload() -> PendingChatSendPayload? {
+    private func capturePendingSendPayload(
+        localAgentMode: LocalAgentMode?
+    ) -> PendingChatSendPayload? {
         let userMessageContent = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasText = !userMessageContent.isEmpty
         let hasAudio = pendingAudioAttachment != nil
@@ -476,6 +479,7 @@ final class ChatViewModel: ObservableObject {
         let filesToSend = pendingFileAttachments
         let payload = PendingChatSendPayload(
             sessionID: currentSession?.id,
+            localAgentMode: localAgentMode,
             content: userMessageContent,
             aiTemperature: aiTemperature,
             aiTopP: aiTopP,
@@ -547,7 +551,8 @@ final class ChatViewModel: ObservableObject {
                 enableResponseSpeedMetrics: payload.enableResponseSpeedMetrics,
                 audioAttachment: payload.audioAttachment,
                 imageAttachments: payload.imageAttachments,
-                fileAttachments: payload.fileAttachments
+                fileAttachments: payload.fileAttachments,
+                requestedLocalAgentMode: payload.localAgentMode
             )
             if let sessionID = payload.sessionID {
                 pendingSendSubmissionSessionIDs.remove(sessionID)

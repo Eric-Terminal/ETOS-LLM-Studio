@@ -5921,6 +5921,7 @@
 "开启不会启动系统；终端、文件、recipe、MCP 或 Agent 首次使用时才准备。" = "Enabling does not start the system; the terminal, file, recipe, MCP, or Agent are only prepared for first use.";
 "开启这里只允许使用功能，不会下载、安装或启动系统。首次打开终端、Linux 文件、recipe 或运行 Agent 工具时才会准备内置环境。" = "Turning this on only allows the use of functions, not downloading, installing or starting the system. The built-in environment is prepared the first time you open a terminal, Linux file, recipe, or run an Agent tool.";
 "当前会话不是 Agent 模式。" = "The current session is not in Agent mode.";
+"错误: 无法保存会话模式。" = "Error: Unable to save the session mode.";
 "当前会话的标签页" = "Tabs for the current session";
 "当前会话还没有浏览器标签页。" = "There are no browser tabs for the current session.";
 "当前平台不支持本地 Linux。" = "The current platform does not support native Linux.";

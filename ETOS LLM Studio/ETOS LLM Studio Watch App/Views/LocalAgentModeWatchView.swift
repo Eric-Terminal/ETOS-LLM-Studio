@@ -13,16 +13,25 @@ struct LocalAgentModeWatchView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var mode = LocalAgentMode.chat
     @State private var activeRun: ConversationRun?
+    @State private var modeSelectionRevision: UInt = 0
+    @State private var isModeReady = false
 
     var body: some View {
         List {
             Section {
-                Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: $mode) {
+                Picker(NSLocalizedString("模式", comment: "Watch local Agent mode picker"), selection: Binding(
+                    get: { mode },
+                    set: { value in
+                        guard mode != value else { return }
+                        modeSelectionRevision &+= 1
+                        mode = value
+                    }
+                )) {
                     ForEach(LocalAgentMode.allCases) { value in
                         Text(value.displayName).tag(value)
                     }
                 }
-                .disabled(activeRun != nil)
+                .disabled(activeRun != nil || !isModeReady)
                 .onChange(of: mode) { _, value in
                     _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
                 }
@@ -52,12 +61,21 @@ struct LocalAgentModeWatchView: View {
         }
         .navigationTitle(NSLocalizedString("Chat / Agent", comment: "Watch local Agent mode title"))
         .task(id: sessionID) {
-            mode = await Task.detached(priority: .userInitiated) {
+            isModeReady = false
+            let selectionRevision = modeSelectionRevision
+            await ChatService.shared.waitForInitialPersistenceStateIfNeeded()
+            let storedMode = await Task.detached(priority: .userInitiated) {
                 Persistence.localAgentMode(sessionID: sessionID)
             }.value
+            if !Task.isCancelled, modeSelectionRevision == selectionRevision {
+                mode = storedMode
+            }
+            await reloadRunState()
+            isModeReady = !Task.isCancelled
             while !Task.isCancelled {
-                await reloadRunState()
                 try? await Task<Never, Never>.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                await reloadRunState()
             }
         }
     }

@@ -763,8 +763,10 @@ extension TelegramMessageComposer {
 private struct LocalAgentModePicker: View {
     let sessionID: UUID
     let isLocked: Bool
+    @EnvironmentObject private var viewModel: ChatViewModel
     @Binding var mode: LocalAgentMode
     @State private var hasActiveRun = false
+    @State private var modeSaveTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -776,7 +778,7 @@ private struct LocalAgentModePicker: View {
             .pickerStyle(.segmented)
             .disabled(isLocked || hasActiveRun)
             .onChange(of: mode) { _, value in
-                _ = Persistence.saveLocalAgentMode(value, sessionID: sessionID)
+                persistMode(value)
             }
             if hasActiveRun {
                 Text(NSLocalizedString("当前 Agent Run 尚未结束；请先在任务页停止它，再切换会话模式。", comment: "Active Agent run mode switch guidance"))
@@ -785,18 +787,22 @@ private struct LocalAgentModePicker: View {
             }
         }
         .task(id: sessionID) {
-            await reloadSessionState()
+            await reloadRunState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .cloudSyncLocalDataDidChange)) { _ in
-            Task { await reloadSessionState() }
+            Task { await reloadRunState() }
         }
     }
 
-    private func reloadSessionState() async {
-        mode = await Task.detached(priority: .userInitiated) {
-            Persistence.localAgentMode(sessionID: sessionID)
-        }.value
-        await reloadRunState()
+    private func persistMode(_ value: LocalAgentMode) {
+        modeSaveTask?.cancel()
+        modeSaveTask = Task {
+            await viewModel.chatService.waitForInitialPersistenceStateIfNeeded()
+            guard !Task.isCancelled, mode == value else { return }
+            _ = await Task.detached(priority: .userInitiated) {
+                Persistence.saveLocalAgentMode(value, sessionID: sessionID)
+            }.value
+        }
     }
 
     private func reloadRunState() async {

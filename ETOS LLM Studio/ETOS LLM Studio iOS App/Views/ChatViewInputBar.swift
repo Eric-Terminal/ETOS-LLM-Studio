@@ -17,10 +17,19 @@ extension ChatView {
             return
         }
 
+        let selectionRevision = localAgentModeSelectionRevision
+        await viewModel.chatService.waitForInitialPersistenceStateIfNeeded()
+        guard !Task.isCancelled,
+              viewModel.currentSession?.id == sessionID,
+              localAgentModeSelectionRevision == selectionRevision else { return }
+
         let storedMode = await Task.detached(priority: .userInitiated) {
             Persistence.localAgentMode(sessionID: sessionID)
         }.value
-        guard !Task.isCancelled, viewModel.currentSession?.id == sessionID else { return }
+        // 用户在异步读取期间做出的选择优先，旧快照不能把 Agent 悄悄改回 Chat。
+        guard !Task.isCancelled,
+              viewModel.currentSession?.id == sessionID,
+              localAgentModeSelectionRevision == selectionRevision else { return }
         currentLocalAgentMode = storedMode
     }
 
@@ -53,7 +62,14 @@ extension ChatView {
                     }
                 ),
                 isRequestControlsExpanded: $isComposerRequestControlsExpanded,
-                localAgentMode: $currentLocalAgentMode,
+                localAgentMode: Binding(
+                    get: { currentLocalAgentMode },
+                    set: { mode in
+                        guard currentLocalAgentMode != mode else { return }
+                        localAgentModeSelectionRevision &+= 1
+                        currentLocalAgentMode = mode
+                    }
+                ),
                 isSending: viewModel.isSendingMessage
                     || viewModel.isSendDelayPending
                     || viewModel.isSendSubmissionPending,
@@ -66,9 +82,12 @@ extension ChatView {
                     if AppConfigStore.shared.chatSendAnimationEnabled,
                        AppConfigStore.shared.chatSendDelaySeconds <= 0 {
                         // 启动「输入框 → 气泡」Overlay 飞行（内部已调用 viewModel.sendMessage()）
-                        beginSendFlight(text: outgoingText)
+                        beginSendFlight(
+                            text: outgoingText,
+                            localAgentMode: currentLocalAgentMode
+                        )
                     } else {
-                        viewModel.sendMessage()
+                        viewModel.sendMessage(localAgentMode: currentLocalAgentMode)
                     }
                     draftText = ""
                 },

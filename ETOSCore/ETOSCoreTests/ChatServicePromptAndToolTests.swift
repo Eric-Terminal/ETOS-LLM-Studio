@@ -12,6 +12,34 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("发送时固化界面选择的 Agent 模式")
+    func requestedAgentModeOverridesStalePersistedMode() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        var session = createPermanentTestSession(name: "Agent 模式快照测试")
+        session.worldbookContextIsolationEnabled = true
+        chatService.setCurrentSession(session)
+        #expect(Persistence.saveLocalAgentMode(.chat, sessionID: session.id))
+
+        await chatService.sendAndProcessMessage(
+            content: "使用发送时选择的模式",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false,
+            requestedLocalAgentMode: .agent
+        )
+
+        #expect(Persistence.localAgentMode(sessionID: session.id) == .agent)
+        await cleanup()
+    }
+
     @Test("会话隔离策略无需绑定世界书即可屏蔽记忆与工具")
     func testSessionIsolationPolicySuppressesMemoryAndToolsWithoutWorldbook() async throws {
         await cleanup()

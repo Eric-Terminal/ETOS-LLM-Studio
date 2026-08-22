@@ -37,7 +37,8 @@ extension ChatService {
         sourceMessageID: UUID? = nil,
         conversationEventID: UUID? = nil,
         conversationRun: ConversationRun? = nil,
-        existingInputMessageID: UUID? = nil
+        existingInputMessageID: UUID? = nil,
+        requestedLocalAgentMode: LocalAgentMode? = nil
     ) async {
         await waitForInitialPersistenceStateIfNeeded()
 
@@ -53,6 +54,26 @@ extension ChatService {
             )
             requestStatusSubject.send(.error)
             return
+        }
+
+        let effectiveLocalAgentMode: LocalAgentMode
+        if let requestedLocalAgentMode {
+            // 输入栏选择是本次发送的权威快照。启动期写入失败或旧异步读取都不能让
+            // 已明确选择的 Agent 在构造工具列表时退回 Chat。
+            guard Persistence.saveLocalAgentMode(
+                requestedLocalAgentMode,
+                sessionID: currentSession.id
+            ) else {
+                addErrorMessage(
+                    NSLocalizedString("错误: 无法保存会话模式。", comment: "Unable to persist requested session mode"),
+                    sessionID: currentSession.id
+                )
+                requestStatusSubject.send(.error)
+                return
+            }
+            effectiveLocalAgentMode = requestedLocalAgentMode
+        } else {
+            effectiveLocalAgentMode = Persistence.localAgentMode(sessionID: currentSession.id)
         }
 
         if !isRetry {
@@ -307,7 +328,7 @@ extension ChatService {
                 return
             }
             let steeringCapabilities = AgentToolCapabilityPolicy.resolve(
-                mode: Persistence.localAgentMode(sessionID: currentSession.id),
+                mode: effectiveLocalAgentMode,
                 isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
                 localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
             )
@@ -477,7 +498,7 @@ extension ChatService {
         emitSessionRequestStatus(.started, sessionID: currentSession.id)
 
         let agentCapabilities = AgentToolCapabilityPolicy.resolve(
-            mode: Persistence.localAgentMode(sessionID: currentSession.id),
+            mode: effectiveLocalAgentMode,
             isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
             localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
         )

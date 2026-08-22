@@ -5998,6 +5998,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "开启不会启动系统；终端、文件、recipe、MCP 或 Agent 首次使用时才准备。" = "L'activation ne démarre pas le système ; le terminal, le fichier, la recette, le MCP ou l'agent sont préparés uniquement pour la première utilisation.";
 "开启这里只允许使用功能，不会下载、安装或启动系统。首次打开终端、Linux 文件、recipe 或运行 Agent 工具时才会准备内置环境。" = "L'activer permet uniquement d'utiliser des fonctions, pas de télécharger, d'installer ou de démarrer le système. L'environnement intégré est préparé la première fois que vous ouvrez un terminal, un fichier Linux, une recette ou que vous exécutez un outil Agent.";
 "当前会话不是 Agent 模式。" = "La session en cours n'est pas en mode Agent.";
+"错误: 无法保存会话模式。" = "Erreur : impossible d’enregistrer le mode de session.";
 "当前会话的标签页" = "Onglets de la session en cours";
 "当前会话还没有浏览器标签页。" = "Il n'y a aucun onglet de navigateur pour la session en cours.";
 "当前平台不支持本地 Linux。" = "La plateforme actuelle ne prend pas en charge Linux natif.";

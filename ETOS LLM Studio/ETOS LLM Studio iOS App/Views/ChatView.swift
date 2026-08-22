@@ -136,6 +136,7 @@ struct ChatView: View {
     @State var localTerminalPreviewOffset: CGSize = .zero
     @State var localTerminalInitialJobID: UUID?
     @State var currentLocalAgentMode = LocalAgentMode.chat
+    @State var localAgentModeSelectionRevision: UInt = 0
     // 发送飞行动画：状态、输入文字区域与分轴呈现几何。
     @State var flightState: SendFlightState?
     @State var inputBarRect: CGRect = .zero
@@ -349,6 +350,7 @@ struct ChatView: View {
                 reloadChatQuickActions()
             }
             .onChange(of: viewModel.currentSession?.id) { _, _ in
+                localAgentModeSelectionRevision &+= 1
                 currentLocalAgentMode = .chat
                 refreshTemporaryChatState()
                 continuationExpansionState = .collapsed

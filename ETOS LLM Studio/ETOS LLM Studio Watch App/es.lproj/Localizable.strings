@@ -5998,6 +5998,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "开启不会启动系统；终端、文件、recipe、MCP 或 Agent 首次使用时才准备。" = "La habilitación no inicia el sistema; el terminal, el archivo, la receta, el MCP o el agente solo están preparados para su primer uso.";
 "开启这里只允许使用功能，不会下载、安装或启动系统。首次打开终端、Linux 文件、recipe 或运行 Agent 工具时才会准备内置环境。" = "Activar esto solo permite el uso de funciones, no descargar, instalar o iniciar el sistema. El entorno integrado se prepara la primera vez que abre una terminal, un archivo de Linux, una receta o ejecuta una herramienta del Agente.";
 "当前会话不是 Agent 模式。" = "La sesión actual no está en modo Agente.";
+"错误: 无法保存会话模式。" = "Error: No se pudo guardar el modo de sesión.";
 "当前会话的标签页" = "Pestañas para la sesión actual";
 "当前会话还没有浏览器标签页。" = "No hay pestañas del navegador para la sesión actual.";
 "当前平台不支持本地 Linux。" = "La plataforma actual no es compatible con Linux nativo.";

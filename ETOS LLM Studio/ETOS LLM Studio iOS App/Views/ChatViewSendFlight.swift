@@ -260,7 +260,7 @@ extension ChatView {
         min(0.75, max(0.28, sendFlightResponse * 0.9))
     }
 
-    func beginSendFlight(text: String) {
+    func beginSendFlight(text: String, localAgentMode: LocalAgentMode) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let sendSpring = Animation.spring(
             response: sendFlightResponse,
@@ -275,7 +275,7 @@ extension ChatView {
               !hasAttachments,
               !trimmed.isEmpty else {
             withAnimation(accessibilityReduceMotion ? .easeOut(duration: 0.12) : sendSpring) {
-                viewModel.sendMessage()
+                viewModel.sendMessage(localAgentMode: localAgentMode)
             }
             return
         }
@@ -319,7 +319,7 @@ extension ChatView {
 
         // 保留列表自身的平滑吸底，让已有消息与飞行气泡同时为新消息让出空间。
         withAnimation(sendSpring) {
-            viewModel.sendMessage()
+            viewModel.sendMessage(localAgentMode: localAgentMode)
         }
     }
 
