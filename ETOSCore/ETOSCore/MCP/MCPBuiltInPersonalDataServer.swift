@@ -21,6 +21,7 @@ public enum MCPBuiltInPersonalDataServer {
         "health.query_samples",
         "health.query_statistics",
         "health.write_quantity",
+        "health.write_blood_pressure",
         "health.write_category",
         "calendar.query_events",
         "calendar.create_event",
@@ -129,7 +130,7 @@ public enum MCPBuiltInPersonalDataServer {
             ),
             MCPToolDescription(
                 toolId: "health.write_quantity",
-                description: NSLocalizedString("写入允许记录的 HealthKit 数值样本，例如 dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。", comment: ""),
+                description: NSLocalizedString("写入允许记录的 HealthKit 数值样本，例如 heart_rate、dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。", comment: ""),
                 inputSchema: objectSchema(
                     properties: [
                         "type": stringSchema(NSLocalizedString("可写 HealthKit 数值类型名。", comment: "")),
@@ -139,6 +140,21 @@ public enum MCPBuiltInPersonalDataServer {
                         "note": stringSchema(NSLocalizedString("可选备注，会写入 HealthKit 元数据。", comment: ""))
                     ],
                     required: ["type", "value"]
+                )
+            ),
+            MCPToolDescription(
+                toolId: "health.write_blood_pressure",
+                description: NSLocalizedString("写入一条包含收缩压、舒张压及可选心率的 HealthKit 血压记录。调用时请求相关类型写入权限。", comment: ""),
+                inputSchema: objectSchema(
+                    properties: [
+                        "systolic": numberSchema(NSLocalizedString("收缩压，单位 mmHg。", comment: "")),
+                        "diastolic": numberSchema(NSLocalizedString("舒张压，单位 mmHg。", comment: "")),
+                        "heart_rate": numberSchema(NSLocalizedString("可选脉搏，单位 count/min。", comment: "")),
+                        "start_date": stringSchema(NSLocalizedString("ISO-8601 开始时间；省略时使用当前时间。", comment: "")),
+                        "end_date": stringSchema(NSLocalizedString("ISO-8601 结束时间；省略时等于开始时间。", comment: "")),
+                        "note": stringSchema(NSLocalizedString("可选备注，会写入 HealthKit 元数据。", comment: ""))
+                    ],
+                    required: ["systolic", "diastolic"]
                 )
             ),
             MCPToolDescription(

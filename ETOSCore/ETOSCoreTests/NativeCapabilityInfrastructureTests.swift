@@ -58,7 +58,8 @@ struct NativeCapabilityInfrastructureTests {
             "speech.speak", "speech.stop", "media.play_file", "media.pause", "media.resume", "media.stop",
             "home.write_characteristic", "home.execute_scene",
             "bluetooth.connect", "bluetooth.write_characteristic", "bluetooth.subscribe", "bluetooth.disconnect",
-            "nfc.scan", "nfc.read_ndef", "nfc.write_ndef"
+            "nfc.scan", "nfc.read_ndef", "nfc.write_ndef",
+            "health.write_blood_pressure"
         ]
 
         #expect(required.allSatisfy(MCPNativeCapabilityPolicy.requiresPerCallApproval))

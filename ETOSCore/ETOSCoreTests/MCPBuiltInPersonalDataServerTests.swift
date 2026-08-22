@@ -7,6 +7,9 @@
 // ============================================================================
 
 import Foundation
+#if canImport(HealthKit)
+import HealthKit
+#endif
 import Testing
 @testable import ETOSCore
 
@@ -23,6 +26,7 @@ struct MCPBuiltInPersonalDataServerTests {
         let tools = try await client.listTools()
         #expect(tools.contains(where: { $0.toolId == "health.list_types" }))
         #expect(tools.contains(where: { $0.toolId == "health.query_samples" }))
+        #expect(tools.contains(where: { $0.toolId == "health.write_blood_pressure" }))
         #expect(tools.contains(where: { $0.toolId == "calendar.query_events" }))
         #expect(tools.contains(where: { $0.toolId == "reminder.create_reminder" }))
 
@@ -40,12 +44,71 @@ struct MCPBuiltInPersonalDataServerTests {
             return id
         }
         #expect(typeIDs.contains("heart_rate"))
+        #expect(typeIDs.contains("blood_pressure_systolic"))
+        #expect(typeIDs.contains("blood_pressure_diastolic"))
         #expect(typeIDs.contains("heart_rate_variability"))
         #expect(typeIDs.contains("sleep_analysis"))
         #expect(typeIDs.contains("workouts"))
 
+        for typeID in ["heart_rate", "blood_pressure_systolic", "blood_pressure_diastolic"] {
+            let type = types.first { item in
+                guard case let .dictionary(object) = item,
+                      case let .string(id)? = object["id"] else { return false }
+                return id == typeID
+            }
+            guard case let .dictionary(typeObject)? = type else {
+                Issue.record("\(typeID) 应出现在 HealthKit 类型列表中。")
+                continue
+            }
+            #expect(typeObject["can_write"] == .bool(true))
+        }
+
+        guard case let .dictionary(systolicType)? = types.first(where: { item in
+            guard case let .dictionary(object) = item,
+                  case let .string(id)? = object["id"] else { return false }
+            return id == "blood_pressure_systolic"
+        }) else {
+            Issue.record("应返回收缩压类型详情。")
+            return
+        }
+        #expect(systolicType["write_tool"] == .string("health.write_blood_pressure"))
+
         await client.disconnect()
     }
+
+    #if canImport(HealthKit)
+    @Test("血压写入样本将收缩压和舒张压组成同一条记录")
+    func testBloodPressureSampleBuilder() throws {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let samples = MCPBuiltInBloodPressureSampleBuilder.make(
+            systolic: 128,
+            diastolic: 82,
+            heartRate: 70,
+            startDate: date,
+            endDate: date,
+            correlationMetadata: ["ETOSNote": "晨间测量"],
+            heartRateMetadata: nil
+        )
+        let systolicType = HKQuantityType(.bloodPressureSystolic)
+        let diastolicType = HKQuantityType(.bloodPressureDiastolic)
+        let systolicSample = try #require(
+            samples.correlation.objects(for: systolicType).first as? HKQuantitySample
+        )
+        let diastolicSample = try #require(
+            samples.correlation.objects(for: diastolicType).first as? HKQuantitySample
+        )
+
+        #expect(samples.correlation.correlationType == HKCorrelationType(.bloodPressure))
+        #expect(systolicSample.quantity.doubleValue(for: .millimeterOfMercury()) == 128)
+        #expect(diastolicSample.quantity.doubleValue(for: .millimeterOfMercury()) == 82)
+        #expect(samples.heartRate?.quantity.doubleValue(
+            for: HKUnit.count().unitDivided(by: .minute())
+        ) == 70)
+        #expect(samples.correlation.metadata?["ETOSNote"] as? String == "晨间测量")
+        #expect(samples.shareTypes.count == 4)
+        #expect(samples.objectsToSave.count == 2)
+    }
+    #endif
 
     @Test("内建个人数据服务器配置可编码解码")
     func testBuiltInPersonalDataConfigurationCodable() throws {

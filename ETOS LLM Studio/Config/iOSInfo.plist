@@ -107,7 +107,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>Read authorized health, sleep, and activity data only when you explicitly invoke a health tool.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Write authorized hydration, caffeine, nutrition, mindfulness, or symptom records only when you explicitly invoke a health tool.</string>
+	<string>Write authorized health records only when you explicitly invoke a health tool.</string>
 	<key>NSHomeKitUsageDescription</key>
 	<string>Read and control authorized homes and accessories only when you explicitly invoke a Home tool.</string>
 	<key>NSLocalNetworkUsageDescription</key>

@@ -30,6 +30,7 @@ enum MCPNativeCapabilityError: LocalizedError {
 enum MCPNativeCapabilityPolicy {
     private static let perCallApprovalToolIDs: Set<String> = [
         "health.write_quantity",
+        "health.write_blood_pressure",
         "health.write_category",
         "calendar.create_event",
         "calendar.update_event",

@@ -33,7 +33,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>AI 工具在你明确调用健康数据能力时，需要读取你授权的健康、睡眠与运动数据。</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>AI 工具在你明确调用健康记录能力时，需要写入你授权的饮水、咖啡因、营养、正念或症状记录。</string>
+	<string>AI 工具在你明确调用健康记录能力时，需要写入你授权的健康记录。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>AI 工具在你明确调用日历能力时，需要读取你授权的日程。</string>
 	<key>NSCalendarsUsageDescription</key>

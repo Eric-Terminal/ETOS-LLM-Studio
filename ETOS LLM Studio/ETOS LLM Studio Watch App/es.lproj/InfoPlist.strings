@@ -1,1 +1,3 @@
 "NSLocationWhenInUseUsageDescription" = "Solo se usa para mantener una actividad en segundo plano mientras la IA responde y la generación en segundo plano está activada. ETOS no lee, guarda ni sube tus coordenadas.";
+"NSHealthShareUsageDescription" = "Lee datos autorizados de salud, sueño y actividad cuando usas explícitamente una herramienta de Salud.";
+"NSHealthUpdateUsageDescription" = "Escribe registros de salud autorizados cuando usas explícitamente una herramienta de Salud.";

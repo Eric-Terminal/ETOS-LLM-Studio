@@ -1,1 +1,3 @@
 "NSLocationWhenInUseUsageDescription" = "仅在你开启“后台持续生成”且 AI 正在回复时维持定位后台活动；不会读取、保存或上传位置坐标。";
+"NSHealthShareUsageDescription" = "AI 工具在你明确调用健康数据能力时，需要读取你授权的健康、睡眠与运动数据。";
+"NSHealthUpdateUsageDescription" = "AI 工具在你明确调用健康记录能力时，需要写入你授权的健康记录。";

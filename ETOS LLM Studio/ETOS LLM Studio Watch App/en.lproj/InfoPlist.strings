@@ -1,1 +1,3 @@
 "NSLocationWhenInUseUsageDescription" = "Used only to maintain a background activity while AI is responding and Background Generation is enabled. ETOS does not read, save, or upload your coordinates.";
+"NSHealthShareUsageDescription" = "Reads authorized health, sleep, and activity data when you explicitly use a Health tool.";
+"NSHealthUpdateUsageDescription" = "Writes authorized health records when you explicitly use a Health tool.";

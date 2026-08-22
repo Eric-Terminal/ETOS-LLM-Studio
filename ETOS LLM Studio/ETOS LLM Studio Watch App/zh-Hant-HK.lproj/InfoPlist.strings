@@ -1,1 +1,3 @@
 "NSLocationWhenInUseUsageDescription" = "只會在你啟用「背景持續生成」且 AI 正在回覆時維持定位背景活動；不會讀取、儲存或上載位置座標。";
+"NSHealthShareUsageDescription" = "AI 工具在你明確呼叫健康功能時，需要讀取你授權的健康、睡眠與運動資料。";
+"NSHealthUpdateUsageDescription" = "AI 工具在你明確呼叫健康功能時，需要寫入你授權的健康記錄。";

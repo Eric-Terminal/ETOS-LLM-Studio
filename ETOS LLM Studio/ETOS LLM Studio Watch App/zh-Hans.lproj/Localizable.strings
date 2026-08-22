@@ -4146,7 +4146,8 @@
 "列出当前内建 HealthKit 工具支持的健康数据类型、读写能力与默认单位。不会请求 HealthKit 权限。" = "列出当前内建 HealthKit 工具支持的健康数据类型、读写能力与默认单位。不会请求 HealthKit 权限。";
 "按 HealthKit 类型读取原始样本，例如 heart_rate、heart_rate_variability、sleep_analysis、workouts、body_mass。调用时仅请求所需类型的读取权限。" = "按 HealthKit 类型读取原始样本，例如 heart_rate、heart_rate_variability、sleep_analysis、workouts、body_mass。调用时仅请求所需类型的读取权限。";
 "按 HealthKit 数值类型读取统计结果，适合步数、活动能量、心率均值、HRV 均值等汇总查询。调用时仅请求所需类型的读取权限。" = "按 HealthKit 数值类型读取统计结果，适合步数、活动能量、心率均值、HRV 均值等汇总查询。调用时仅请求所需类型的读取权限。";
-"写入允许记录的 HealthKit 数值样本，例如 dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。" = "写入允许记录的 HealthKit 数值样本，例如 dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。";
+"写入允许记录的 HealthKit 数值样本，例如 heart_rate、dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。" = "写入允许记录的 HealthKit 数值样本，例如 heart_rate、dietary_water、dietary_caffeine、dietary_energy、body_mass。调用时仅请求该类型写入权限。";
+"写入一条包含收缩压、舒张压及可选心率的 HealthKit 血压记录。调用时请求相关类型写入权限。" = "写入一条包含收缩压、舒张压及可选心率的 HealthKit 血压记录。调用时请求相关类型写入权限。";
 "写入允许记录的 HealthKit 分类样本，例如 mindful_session、headache、fever、coughing。调用时仅请求该类型写入权限。" = "写入允许记录的 HealthKit 分类样本，例如 mindful_session、headache、fever、coughing。调用时仅请求该类型写入权限。";
 "查询指定时间段内的系统日历事件，包含标题、地点、起止时间、备注和参与人摘要。调用时请求日历完整访问权限。" = "查询指定时间段内的系统日历事件，包含标题、地点、起止时间、备注和参与人摘要。调用时请求日历完整访问权限。";
 "创建系统日历事件，可设置地点、备注、提醒和简单循环规则。iOS 可写，watchOS 返回不支持。" = "创建系统日历事件，可设置地点、备注、提醒和简单循环规则。iOS 可写，watchOS 返回不支持。";
@@ -4171,6 +4172,10 @@
 "统计方式：sum、average、min、max。省略时按类型自动选择。" = "统计方式：sum、average、min、max。省略时按类型自动选择。";
 "要写入的数值，使用类型默认单位。" = "要写入的数值，使用类型默认单位。";
 "可选备注，会写入 HealthKit 元数据。" = "可选备注，会写入 HealthKit 元数据。";
+"收缩压，单位 mmHg。" = "收缩压，单位 mmHg。";
+"舒张压，单位 mmHg。" = "舒张压，单位 mmHg。";
+"可选脉搏，单位 count/min。" = "可选脉搏，单位 count/min。";
+"收缩压、舒张压及可选心率必须是大于 0 的有限数值。" = "收缩压、舒张压及可选心率必须是大于 0 的有限数值。";
 "分类值；症状支持 not_present、mild、moderate、severe，正念可省略。" = "分类值；症状支持 not_present、mild、moderate、severe，正念可省略。";
 "持续分钟数，适合正念或症状记录。" = "持续分钟数，适合正念或症状记录。";
 "事件 ID。" = "事件 ID。";
@@ -4233,6 +4238,8 @@
 "没有可用于新提醒事项的默认列表。" = "没有可用于新提醒事项的默认列表。";
 
 // HealthKit 类型标题
+"收缩压" = "收缩压";
+"舒张压" = "舒张压";
 "心率" = "心率";
 "心率变异性 SDNN" = "心率变异性 SDNN";
 "静息心率" = "静息心率";
