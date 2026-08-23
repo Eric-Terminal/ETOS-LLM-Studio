@@ -17,6 +17,12 @@ import UIKit
 import CoreText
 #endif
 
+enum GuideOverlayPresentationPolicy {
+    static func shouldPresent(isEnabled: Bool, activeMode: GuideMode?) -> Bool {
+        isEnabled && activeMode == .contextualHelp
+    }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var viewModel: ChatViewModel
@@ -271,9 +277,10 @@ struct ContentView: View {
                 }
         }
         .overlay {
-            if appConfig.guideOverlayEnabled,
-               isNativeSettingsPresented,
-               guideCoordinator.activePage != nil {
+            if GuideOverlayPresentationPolicy.shouldPresent(
+                isEnabled: appConfig.guideOverlayEnabled,
+                activeMode: guideCoordinator.activePage?.mode
+            ) {
                 GuideFloatingOverlay(controller: guideController)
                     .environmentObject(viewModel)
                     .zIndex(100)
