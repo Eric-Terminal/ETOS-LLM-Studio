@@ -62,7 +62,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @Binding private var requestedDestination: WatchSettingsNavigationDestination?
     @State private var settingsResearchTask: Task<Void, Never>?
-    @State private var isGuidePresented = false
     private let embedsInNavigationStack: Bool
 
     init(
@@ -272,24 +271,14 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(
-                        NSLocalizedString("页面向导", comment: "手表页面向导开关"),
-                        isOn: $appConfig.guideOverlayEnabled
-                    )
-                    if appConfig.guideOverlayEnabled {
-                        Button {
-                            GuideContextCoordinator.shared.pinActivePage()
-                            isGuidePresented = true
-                        } label: {
-                            settingsNavigationLabel("询问当前页面", icon: .guide)
-                        }
-                        .buttonStyle(.plain)
+                    NavigationLink {
+                        WatchGuideSettingsView()
+                    } label: {
+                        settingsNavigationLabel("页面向导", icon: .guide)
                     }
                     NavigationLink(destination: AboutView()) {
                         settingsNavigationLabel("关于", icon: .about)
                     }
-                } footer: {
-                    Text(NSLocalizedString("向导只读取页面主动提供的脱敏配置；已保存的密钥不可读。对话只保存在内存中。内置向导与我的模型使用不同出口。", comment: "手表向导入口与隐私说明"))
                 }
                 
                 // MARK: - 公告通知 Section
@@ -345,9 +334,7 @@ struct SettingsView: View {
             .onChange(of: viewModel.activatedModelListVersion) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
             }
-            .navigationDestination(isPresented: $isGuidePresented) {
-                WatchGuideConversationView(controller: guideController)
-            }
+            .watchGuideEntry()
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
                 case .model:

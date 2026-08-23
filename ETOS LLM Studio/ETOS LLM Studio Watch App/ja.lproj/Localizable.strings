@@ -6716,3 +6716,17 @@
 "页面向导" = "Page Guide";
 "页面已经变化，请重新生成这项修改。" = "The page has changed. Generate this change again.";
 "向导只读取页面主动提供的脱敏配置；已保存的密钥不可读。对话只保存在内存中。内置向导与我的模型使用不同出口。" = "The guide reads only redacted settings provided by the page; saved secrets are unreadable. Conversations stay in memory. Built-in Guide and My Models use different routes.";
+
+/* MARK: - 页面向导设置 */
+"向导会看到什么" = "What the Guide Can See";
+"当前页面会明确提供页面名称、相关文档和经过筛选的配置快照。密钥、密码与令牌只显示为已隐藏。" = "The current page explicitly provides its name, relevant documents, and a filtered configuration snapshot. Keys, passwords, and tokens appear only as hidden.";
+"页面向导与隐私" = "Page Guide and Privacy";
+"页面向导只读取每个页面主动声明的字段，不会截取屏幕、遍历辅助功能树或导出数据库。现有 API Key、密码和令牌不会发送给模型，但你可以在原生安全输入框中填写新值。向导提出的设置修改会先显示原生预览，只有你确认后才执行。对话、工具状态和撤销记录只保存在内存中，清空上下文或结束 App 进程后不会保留。默认先查内置文档；文档不足时才按当前构建的完整 Commit 读取公开源码。" = "The page guide reads only fields explicitly declared by each page. It does not capture the screen, traverse the accessibility tree, or export the database. Existing API keys, passwords, and tokens are never sent to the model, though you may enter new values in a native secure field. Suggested setting changes appear in a native preview and run only after you confirm. Conversations, tool state, and undo history stay in memory and disappear when you clear the context or quit the app. Built-in documents are searched first; public source code is read at this build’s full commit only when the documents are insufficient.";
+"在设置页面显示向导" = "Show Guide on Settings Pages";
+"开启后，已接入的设置页面会在顶部显示向导入口；点击后进入二级对话页面。" = "When enabled, a guide button appears at the top of supported Settings pages. Tap it to open the guide on a separate screen.";
+"回答使用的模型" = "Model Used for Answers";
+"始终可用，不依赖你的模型配置" = "Always available and independent of your model configuration";
+"没有已启用且支持工具调用的云端聊天模型。仍可继续使用内置免费向导。" = "No enabled cloud chat model supports tool calling. You can still use the built-in free guide.";
+"页面向导设置" = "Page Guide Settings";
+"显示向导" = "Show Guide";
+"模型线路" = "Model Route";
