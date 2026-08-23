@@ -231,6 +231,7 @@ public final class GuideConversationController: ObservableObject {
                 userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("向导连续调用工具次数过多，请清空上下文后换一种问法。", comment: "Guide tool loop limit")]
             )
         } catch is CancellationError {
+            removeEmptyAssistantMessages()
             isResponding = false
             currentTask = nil
         } catch {
@@ -305,12 +306,21 @@ public final class GuideConversationController: ObservableObject {
     }
 
     private func finishWithError(_ error: Error) {
+        removeEmptyAssistantMessages()
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastError = message
         canRetryWithBuiltIn = router.route == .userModel
         messages.append(GuideConversationMessage(role: .error, content: message))
         isResponding = false
         currentTask = nil
+    }
+
+    private func removeEmptyAssistantMessages() {
+        messages.removeAll {
+            $0.role == .assistant
+                && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && $0.toolCalls.isEmpty
+        }
     }
 
     private func encoded<T: Encodable>(_ value: T) throws -> String {

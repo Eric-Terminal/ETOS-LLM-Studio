@@ -76,9 +76,11 @@ public actor GuideEphemeralTokenProvider {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, response) = try await urlSession.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw GuideHTTPStatusError(statusCode: httpResponse.statusCode)
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -152,7 +154,11 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
                     continuation.yield(.completed(response))
                     continuation.finish()
                 } catch {
-                    continuation.finish(throwing: error)
+                    if let urlError = error as? URLError, urlError.code == .badServerResponse {
+                        continuation.finish(throwing: GuideHTTPStatusError(statusCode: 0))
+                    } else {
+                        continuation.finish(throwing: error)
+                    }
                 }
             }
             continuation.onTermination = { @Sendable _ in task.cancel() }

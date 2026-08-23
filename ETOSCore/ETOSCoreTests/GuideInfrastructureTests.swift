@@ -240,6 +240,66 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("生成失败会移除空回复占位并保留可重试错误")
+    func failedResponseRemovesEmptyPlaceholder() async {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let router = GuideModelRouter(
+            appConfig: appConfig,
+            builtInClient: GuideFailingCompletionClient()
+        )
+        router.useBuiltIn()
+        let controller = GuideConversationController(
+            router: router,
+            contextCoordinator: coordinator
+        )
+
+        controller.send("这个页面有什么？")
+        for _ in 0..<100 where controller.isResponding {
+            await Task.yield()
+        }
+
+        #expect(!controller.isResponding)
+        #expect(controller.messages.filter { $0.role == .assistant }.isEmpty)
+        #expect(controller.messages.last?.role == .error)
+        #expect(controller.lastError != nil)
+    }
+
+    @Test("内置向导令牌端点错误会显示产品级提示")
+    func tokenHTTPErrorUsesGuideMessage() async throws {
+        let baseURL = try #require(URL(string: "https://feedback.example"))
+        let tokenURL = baseURL
+            .appendingPathComponent("v1")
+            .appendingPathComponent("guide")
+            .appendingPathComponent("token")
+        GuideSourceURLProtocol.configure(url: tokenURL, data: Data(), statusCode: 404)
+        defer { GuideSourceURLProtocol.reset() }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GuideSourceURLProtocol.self]
+        let provider = GuideEphemeralTokenProvider(
+            baseURL: baseURL,
+            urlSession: URLSession(configuration: configuration)
+        )
+
+        do {
+            _ = try await provider.token()
+            Issue.record("令牌端点返回 404 时不应成功")
+        } catch {
+            #expect((error as? LocalizedError)?.errorDescription == "内置向导服务暂时不可用。")
+        }
+    }
+
+    @MainActor
     @Test("用户模型失效后内置向导仍可显式选择")
     func unavailableUserModelDoesNotBlockBuiltInRoute() throws {
         let appConfig = AppConfigStore.shared
@@ -547,20 +607,34 @@ private struct GuideHangingCompletionClient: GuideCompletionClient {
     }
 }
 
+private struct GuideFailingCompletionClient: GuideCompletionClient {
+    func events(
+        messages _: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(throwing: GuideError.invalidResponse)
+        }
+    }
+}
+
 private final class GuideSourceURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var responseURL: URL?
     private static var responseData = Data()
+    private static var responseStatusCode = 200
     private static var count = 0
 
     static var requestCount: Int {
         lock.withLock { count }
     }
 
-    static func configure(url: URL, data: Data) {
+    static func configure(url: URL, data: Data, statusCode: Int = 200) {
         lock.withLock {
             responseURL = url
             responseData = data
+            responseStatusCode = statusCode
             count = 0
         }
     }
@@ -569,6 +643,7 @@ private final class GuideSourceURLProtocol: URLProtocol {
         lock.withLock {
             responseURL = nil
             responseData = Data()
+            responseStatusCode = 200
             count = 0
         }
     }
@@ -578,23 +653,23 @@ private final class GuideSourceURLProtocol: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let response: (URL, Data)? = Self.lock.withLock {
+        let response: (url: URL, data: Data, statusCode: Int)? = Self.lock.withLock {
             guard let responseURL = Self.responseURL, request.url == responseURL else { return nil }
             Self.count += 1
-            return (responseURL, Self.responseData)
+            return (responseURL, Self.responseData, Self.responseStatusCode)
         }
         guard let response else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
         let httpResponse = HTTPURLResponse(
-            url: response.0,
-            statusCode: 200,
+            url: response.url,
+            statusCode: response.statusCode,
             httpVersion: nil,
             headerFields: ["Content-Type": "application/json"]
         )!
         client?.urlProtocol(self, didReceive: httpResponse, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: response.1)
+        client?.urlProtocol(self, didLoad: response.data)
         client?.urlProtocolDidFinishLoading(self)
     }
 

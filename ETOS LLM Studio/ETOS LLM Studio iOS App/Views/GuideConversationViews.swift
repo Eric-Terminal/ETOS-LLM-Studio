@@ -8,6 +8,7 @@
 
 import SwiftUI
 import ETOSCore
+import UIKit
 
 extension Notification.Name {
     static let requestGuideModelManagement = Notification.Name("requestGuideModelManagement")
@@ -31,13 +32,12 @@ struct GuideConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            modelBar
+            Divider()
             messageList
             Divider()
             if let proposal = controller.pendingProposal {
                 proposalPreview(proposal)
-            }
-            if controller.lastError != nil {
-                recoveryActions
             }
             composer
         }
@@ -100,9 +100,10 @@ struct GuideConversationView: View {
     @ViewBuilder
     private func messageBubble(_ message: GuideConversationMessage) -> some View {
         let isUser = message.role == .user
+        let shape = TelegramBubbleShape(isOutgoing: isUser)
         HStack {
             if isUser { Spacer(minLength: compact ? 28 : 64) }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 if message.role == .tool {
                     Label(NSLocalizedString("页面操作", comment: "向导工具消息标签"), systemImage: "checkmark.circle")
                         .font(.caption2)
@@ -112,12 +113,36 @@ struct GuideConversationView: View {
                     .font(.body)
                     .textSelection(.enabled)
                     .foregroundStyle(message.role == .error ? .red : .primary)
+                if isLatestError(message) {
+                    errorRecoveryActions
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(bubbleBackground(for: message.role))
+            .background(bubbleBackground(for: message.role), in: shape)
+            .contentShape(shape)
+            .contextMenu {
+                Button {
+                    UIPasteboard.general.string = message.content
+                } label: {
+                    Label(NSLocalizedString("复制", comment: "复制向导消息"), systemImage: "doc.on.doc")
+                }
+                if isLatestError(message) {
+                    Button {
+                        controller.retryLastResponse()
+                    } label: {
+                        Label(NSLocalizedString("重试", comment: "向导消息菜单重试按钮"), systemImage: "arrow.clockwise")
+                    }
+                }
+            }
             if !isUser { Spacer(minLength: compact ? 20 : 56) }
         }
+    }
+
+    private func isLatestError(_ message: GuideConversationMessage) -> Bool {
+        message.role == .error
+            && controller.lastError != nil
+            && controller.messages.last(where: { $0.role == .error })?.id == message.id
     }
 
     private func bubbleBackground(for role: GuideConversationMessage.Role) -> some ShapeStyle {
@@ -166,67 +191,118 @@ struct GuideConversationView: View {
         .background(Color.secondary.opacity(0.08))
     }
 
-    private var recoveryActions: some View {
-        HStack {
-            Button(NSLocalizedString("重试", comment: "向导重试按钮")) {
+    private var errorRecoveryActions: some View {
+        HStack(spacing: 8) {
+            Button {
                 controller.retryLastResponse()
+            } label: {
+                Label(NSLocalizedString("重试", comment: "向导重试按钮"), systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.bordered)
-            if controller.canRetryWithBuiltIn {
-                Button(NSLocalizedString("使用内置向导重试", comment: "切换内置向导重试按钮")) {
-                    controller.retryWithBuiltIn()
-                    routeRevision &+= 1
+            .buttonStyle(.borderless)
+            .font(.callout.weight(.semibold))
+
+            if controller.canRetryWithBuiltIn || router.route == .userModel {
+                Menu {
+                    if controller.canRetryWithBuiltIn {
+                        Button {
+                            controller.retryWithBuiltIn()
+                            routeRevision &+= 1
+                        } label: {
+                            Label(
+                                NSLocalizedString("使用内置向导重试", comment: "切换内置向导重试按钮"),
+                                systemImage: "sparkles"
+                            )
+                        }
+                    }
+                    if router.route == .userModel {
+                        Button {
+                            NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
+                        } label: {
+                            Label(
+                                NSLocalizedString("检查模型配置", comment: "向导错误后打开模型管理按钮"),
+                                systemImage: "slider.horizontal.3"
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            if router.route == .userModel {
-                Button(NSLocalizedString("检查模型配置", comment: "向导错误后打开模型管理按钮")) {
-                    NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
-                }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("更多", comment: "向导错误恢复更多操作"))
             }
             Spacer()
         }
+        .padding(.top, 2)
+    }
+
+    private var modelBar: some View {
+        HStack {
+            Text(NSLocalizedString("回答使用的模型", comment: "向导当前回答模型标签"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer()
+            routeMenu
+        }
         .padding(.horizontal)
-        .padding(.top, 8)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private var routeMenu: some View {
+        Menu {
+            Button {
+                router.useBuiltIn()
+                routeRevision &+= 1
+            } label: {
+                routeMenuLabel(
+                    NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
+                    selected: router.route == .builtIn
+                )
+            }
+            Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
+                if router.availableUserModels.isEmpty {
+                    Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型", comment: "无可用用户向导模型"))
+                } else {
+                    ForEach(router.availableUserModels, id: \.id) { model in
+                        Button {
+                            router.selectUserModel(model)
+                            routeRevision &+= 1
+                        } label: {
+                            routeMenuLabel(
+                                "\(model.model.displayName) · \(model.provider.name)",
+                                selected: router.route == .userModel && router.selectedUserModel?.id == model.id
+                            )
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: router.route == .builtIn ? "sparkles" : "person.crop.circle")
+                Text(selectedRouteTitle)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+            }
+        }
+        .id(routeRevision)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .accessibilityLabel(NSLocalizedString("选择向导模型", comment: "向导线路菜单辅助标签"))
+    }
+
+    private var selectedRouteTitle: String {
+        if router.route == .builtIn {
+            return NSLocalizedString("内置免费向导", comment: "内置向导线路名称")
+        }
+        guard let model = router.selectedUserModel else {
+            return NSLocalizedString("所选向导模型当前不可用。", comment: "向导所选模型失效提示")
+        }
+        return "\(model.model.displayName) · \(model.provider.name)"
     }
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            Menu {
-                Button {
-                    router.useBuiltIn()
-                    routeRevision &+= 1
-                } label: {
-                    routeMenuLabel(
-                        NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
-                        selected: router.route == .builtIn
-                    )
-                }
-                Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
-                    if router.availableUserModels.isEmpty {
-                        Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型", comment: "无可用用户向导模型"))
-                    } else {
-                        ForEach(router.availableUserModels, id: \.id) { model in
-                            Button {
-                                router.selectUserModel(model)
-                                routeRevision &+= 1
-                            } label: {
-                                routeMenuLabel(
-                                    "\(model.model.displayName) · \(model.provider.name)",
-                                    selected: router.route == .userModel && router.selectedUserModel?.id == model.id
-                                )
-                            }
-                        }
-                    }
-                }
-            } label: {
-                Image(systemName: router.route == .builtIn ? "sparkles" : "person.crop.circle")
-                    .frame(width: 30, height: 30)
-            }
-            .id(routeRevision)
-            .accessibilityLabel(NSLocalizedString("选择向导模型", comment: "向导线路菜单辅助标签"))
-
             TextField(
                 NSLocalizedString("询问这个页面…", comment: "向导输入框占位"),
                 text: $input,
