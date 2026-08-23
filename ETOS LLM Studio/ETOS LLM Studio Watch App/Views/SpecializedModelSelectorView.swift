@@ -12,6 +12,7 @@ import ETOSCore
 struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @StateObject private var guideRouter = GuideModelRouter()
 
     private var speechModelBinding: Binding<RunnableModel?> {
         Binding(
@@ -82,6 +83,8 @@ struct SpecializedModelSelectorView: View {
 
     var body: some View {
         List {
+            guideModelSection
+
             modelSelectionSection(
                 title: NSLocalizedString("语音模型", comment: "Speech model specialized selector title"),
                 options: viewModel.speechModels,
@@ -156,6 +159,40 @@ struct SpecializedModelSelectorView: View {
             syncVideoAnalysisSelection()
             syncImageGenerationSelection()
         }
+    }
+
+    private var guideModelSection: some View {
+        Section {
+            NavigationLink {
+                WatchGuideModelRouteSelectionView(router: guideRouter)
+            } label: {
+                HStack {
+                    Text(NSLocalizedString("页面向导模型", comment: "页面向导专用模型标题"))
+                    Spacer()
+                    MarqueeText(
+                        content: selectedGuideModelLabel,
+                        uiFont: .preferredFont(forTextStyle: .footnote)
+                    )
+                    .foregroundStyle(.secondary)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+        } footer: {
+            Text(NSLocalizedString("用于页面向导回答。内置免费向导始终可选；用户模型需要已启用并支持工具调用。", comment: "页面向导专用模型说明"))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var selectedGuideModelLabel: String {
+        guard guideRouter.route == .userModel else {
+            return NSLocalizedString("内置免费向导", comment: "内置向导线路名称")
+        }
+        guard let model = guideRouter.selectedUserModel else {
+            return NSLocalizedString("不可用", comment: "专用模型失效状态")
+        }
+        return "\(model.model.displayName) | \(model.provider.name)"
     }
 
     @ViewBuilder
@@ -235,6 +272,57 @@ struct SpecializedModelSelectorView: View {
     private func setImageGenerationModelIdentifier(_ identifier: String) {
         AppConfigStore.persistSynchronously(.text(identifier), for: .imageGenerationModelIdentifier)
         appConfig.imageGenerationModelIdentifier = identifier
+    }
+}
+
+private struct WatchGuideModelRouteSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var router: GuideModelRouter
+    @ObservedObject private var appConfig = AppConfigStore.shared
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    router.useBuiltIn()
+                    dismiss()
+                } label: {
+                    MarqueeTitleSubtitleSelectionRow(
+                        title: NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
+                        subtitle: NSLocalizedString("始终可用，不依赖你的模型配置", comment: "内置向导线路说明"),
+                        isSelected: router.route == .builtIn,
+                        subtitleUIFont: .preferredFont(forTextStyle: .caption2)
+                    )
+                }
+            }
+
+            Section(NSLocalizedString("使用我的模型", comment: "用户向导模型分组")) {
+                if router.availableUserModels.isEmpty {
+                    Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型。仍可继续使用内置免费向导。", comment: "向导无用户模型说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(router.availableUserModels, id: \.id) { model in
+                        Button {
+                            router.selectUserModel(model)
+                            dismiss()
+                        } label: {
+                            MarqueeTitleSubtitleSelectionRow(
+                                title: model.model.displayName,
+                                subtitle: "\(model.provider.name) · \(model.model.modelName)",
+                                isSelected: router.route == .userModel &&
+                                    appConfig.guidePreferredModelIdentifier == model.id,
+                                subtitleUIFont: .monospacedSystemFont(
+                                    ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+                                    weight: .regular
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("页面向导模型", comment: "页面向导模型选择标题"))
     }
 }
 

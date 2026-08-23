@@ -6730,3 +6730,7 @@
 "页面向导设置" = "Page Guide Settings";
 "显示向导" = "Show Guide";
 "模型线路" = "Model Route";
+
+/* MARK: - 页面向导专用模型 */
+"页面向导模型" = "Page Guide Model";
+"用于页面向导回答。内置免费向导始终可选；用户模型需要已启用并支持工具调用。" = "Used for Page Guide answers. The built-in free guide is always available; user models must be enabled and support tool calling.";

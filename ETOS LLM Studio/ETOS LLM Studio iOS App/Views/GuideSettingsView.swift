@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio iOS App
 //
-// 集中说明页面向导的数据边界，并配置浮动入口与模型线路。
+// 集中说明页面向导的数据边界，并配置浮动入口。
 // ============================================================================
 
 import SwiftUI
@@ -11,7 +11,6 @@ import ETOSCore
 
 struct GuideSettingsView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @StateObject private var router = GuideModelRouter()
     @State private var isShowingDetails = false
 
     var body: some View {
@@ -28,34 +27,6 @@ struct GuideSettingsView: View {
             } footer: {
                 Text(NSLocalizedString("开启后，进入设置及已接入的配置页面时会显示可拖动的向导入口。", comment: "向导浮动入口说明"))
             }
-
-            Section(NSLocalizedString("回答使用的模型", comment: "向导模型线路分组")) {
-                routeRow(
-                    title: NSLocalizedString("内置免费向导", comment: "内置向导线路名称"),
-                    detail: NSLocalizedString("始终可用，不依赖你的模型配置", comment: "内置向导线路说明"),
-                    selected: appConfig.guidePreferredRoute == GuideRoute.builtIn.rawValue
-                ) {
-                    appConfig.guidePreferredRoute = GuideRoute.builtIn.rawValue
-                }
-
-                ForEach(router.availableUserModels, id: \.id) { model in
-                    routeRow(
-                        title: model.model.displayName,
-                        detail: model.provider.name,
-                        selected: appConfig.guidePreferredRoute == GuideRoute.userModel.rawValue &&
-                            appConfig.guidePreferredModelIdentifier == model.id
-                    ) {
-                        appConfig.guidePreferredModelIdentifier = model.id
-                        appConfig.guidePreferredRoute = GuideRoute.userModel.rawValue
-                    }
-                }
-
-                if router.availableUserModels.isEmpty {
-                    Text(NSLocalizedString("没有已启用且支持工具调用的云端聊天模型。仍可继续使用内置免费向导。", comment: "向导无用户模型说明"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
         .navigationTitle(NSLocalizedString("页面向导", comment: "向导设置标题"))
         .guidePageContext(
@@ -69,10 +40,6 @@ struct GuideSettingsView: View {
                     "overlay_enabled": GuideSnapshotField(
                         label: NSLocalizedString("显示向导", comment: "向导快照字段"),
                         value: .bool(appConfig.guideOverlayEnabled)
-                    ),
-                    "route": GuideSnapshotField(
-                        label: NSLocalizedString("模型线路", comment: "向导快照字段"),
-                        value: .string(appConfig.guidePreferredRoute)
                     )
                 ])
             }
@@ -107,30 +74,5 @@ struct GuideSettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
         }
-    }
-
-    private func routeRow(
-        title: String,
-        detail: String,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(title)
-                        .foregroundStyle(.primary)
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.blue)
-                }
-            }
-        }
-        .buttonStyle(.plain)
     }
 }

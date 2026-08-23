@@ -6957,6 +6957,10 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "检查模型配置" = "Review Model Configuration";
 "模型 ID" = "Model ID";
 "模型线路" = "Model Route";
+
+/* MARK: - 页面向导专用模型 */
+"页面向导模型" = "Page Guide Model";
+"用于页面向导回答。内置免费向导始终可选；用户模型需要已启用并支持工具调用。" = "Used for Page Guide answers. The built-in free guide is always available; user models must be enabled and support tool calling.";
 "没有已启用且支持工具调用的云端聊天模型" = "No enabled cloud chat model supports tool calling";
 "没有已启用且支持工具调用的云端聊天模型。仍可继续使用内置免费向导。" = "No enabled cloud chat model supports tool calling. You can still use the built-in free guide.";
 "测试当前模型连接" = "Test Current Model Connection";
