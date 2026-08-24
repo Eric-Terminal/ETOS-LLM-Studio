@@ -72,7 +72,7 @@ struct ModelPricingSettingsView: View {
 
                 Section(
                     header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
-                    footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的每日时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
+                    footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的重复日和时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
                 ) {
                     Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
 
@@ -242,12 +242,13 @@ private struct ModelPricingTierSettingsView: View {
 
 private struct ModelPricingTimeOverridesView: View {
     @Binding var draft: ModelPricingDraft
+    @Environment(\.calendar) private var calendar
 
     var body: some View {
         List {
             Section(
                 header: Text(NSLocalizedString("峰谷时间段", comment: "Peak valley pricing ranges section")),
-                footer: Text(NSLocalizedString("时间段命中后只覆盖这里填写的价格；未填写的项目继续继承基础价格和已命中的阶梯价格。", comment: "Peak valley pricing ranges footer"))
+                footer: Text(NSLocalizedString("时间段命中后只覆盖这里填写的价格；每个时间段可单独选择重复日，未填写的价格继续继承基础价格和已命中的阶梯价格。", comment: "Peak valley pricing ranges footer"))
             ) {
                 ForEach(sortedTimeOverrideBindings, id: \.wrappedValue.id) { timeOverrideBinding in
                     NavigationLink {
@@ -314,8 +315,8 @@ private struct ModelPricingTimeOverridesView: View {
     }
 
     private func timeOverrideSubtitle(_ timeOverride: ModelPricingTimeOverrideDraft) -> String {
-        guard timeOverride.isValidTimeWindow else {
-            return NSLocalizedString("时间段不能相同", comment: "Invalid peak valley pricing range hint")
+        guard !timeOverride.weekdays.isEmpty else {
+            return NSLocalizedString("未选择重复日，将不会保存", comment: "Peak valley pricing range without weekdays hint")
         }
         guard timeOverride.hasAnyPrice else {
             return NSLocalizedString("未填写价格，将不会保存", comment: "Empty pricing tier hint")
@@ -326,9 +327,14 @@ private struct ModelPricingTimeOverridesView: View {
             priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: timeOverride.cacheWritePrice, inheritedText: draft.cacheWritePrice),
             priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: timeOverride.cacheReadPrice, inheritedText: draft.cacheReadPrice)
         ].compactMap { $0 }
-        return priceParts.isEmpty
+        let priceText = priceParts.isEmpty
             ? NSLocalizedString("未填写价格，将不会保存", comment: "Empty pricing tier hint")
             : priceParts.joined(separator: " • ")
+        let weekdayText = ModelPricingWeekdayText.summary(
+            for: timeOverride.weekdays,
+            calendar: calendar
+        )
+        return "\(weekdayText) • \(priceText)"
     }
 
     private func priceSummary(title: String, text: String, inheritedText: String) -> String? {
@@ -342,12 +348,13 @@ private struct ModelPricingTimeOverridesView: View {
 
 private struct ModelPricingTimeOverrideSettingsView: View {
     @Binding var timeOverride: ModelPricingTimeOverrideDraft
+    @Environment(\.calendar) private var calendar
 
     var body: some View {
         List {
             Section(
                 header: Text(NSLocalizedString("峰谷时间段", comment: "Peak valley pricing time range section")),
-                footer: Text(NSLocalizedString("时间段不能相同；跨午夜时间段会自动延续到次日。", comment: "Peak valley pricing time range footer"))
+                footer: Text(NSLocalizedString("开始和结束时间相同时表示全天；跨午夜时间段会从所选重复日自动延续到次日。", comment: "Peak valley pricing time range footer"))
             ) {
                 DatePicker(
                     NSLocalizedString("开始时间", comment: ""),
@@ -359,6 +366,21 @@ private struct ModelPricingTimeOverrideSettingsView: View {
                     selection: endTimeBinding,
                     displayedComponents: .hourAndMinute
                 )
+                NavigationLink {
+                    ModelPricingWeekdaySelectionView(weekdays: $timeOverride.weekdays)
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text(NSLocalizedString("重复", comment: "Pricing schedule repeat row"))
+                        Text(
+                            ModelPricingWeekdayText.summary(
+                                for: timeOverride.weekdays,
+                                calendar: calendar
+                            )
+                        )
+                        .etFont(.caption2)
+                        .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section(
@@ -386,6 +408,48 @@ private struct ModelPricingTimeOverrideSettingsView: View {
             get: { ModelPricingTimeOverrideDraft.date(fromMinuteOfDay: timeOverride.endMinuteOfDay) },
             set: { timeOverride.endMinuteOfDay = ModelPricingTimeOverrideDraft.minuteOfDay(from: $0) }
         )
+    }
+}
+
+private struct ModelPricingWeekdaySelectionView: View {
+    @Binding var weekdays: Set<ModelPricingWeekday>
+    @Environment(\.calendar) private var calendar
+
+    var body: some View {
+        List {
+            Section(
+                footer: Text(NSLocalizedString("至少保留一个重复日。", comment: "Pricing schedule weekday selection footer"))
+            ) {
+                ForEach(ModelPricingWeekday.ordered(for: calendar), id: \.self) { weekday in
+                    Button {
+                        toggle(weekday)
+                    } label: {
+                        HStack {
+                            Text(ModelPricingWeekdayText.title(for: weekday))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if weekdays.contains(weekday) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(weekdays.count == 1 && weekdays.contains(weekday))
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("重复", comment: "Pricing schedule repeat title"))
+    }
+
+    private func toggle(_ weekday: ModelPricingWeekday) {
+        if weekdays.contains(weekday) {
+            guard weekdays.count > 1 else { return }
+            weekdays.remove(weekday)
+        } else {
+            weekdays.insert(weekday)
+        }
     }
 }
 
@@ -501,6 +565,7 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
     var id: UUID = UUID()
     var startMinuteOfDay: Int = 0
     var endMinuteOfDay: Int = 60
+    var weekdays: Set<ModelPricingWeekday> = ModelPricingWeekday.everyDay
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
@@ -512,14 +577,11 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
         id = timeOverride.id
         startMinuteOfDay = timeOverride.startMinuteOfDay
         endMinuteOfDay = timeOverride.endMinuteOfDay
+        weekdays = timeOverride.weekdays
         inputPrice = ModelPricingDraft.string(from: timeOverride.inputPerMillionTokens)
         outputPrice = ModelPricingDraft.string(from: timeOverride.outputPerMillionTokens)
         cacheWritePrice = ModelPricingDraft.string(from: timeOverride.cacheWritePerMillionTokens)
         cacheReadPrice = ModelPricingDraft.string(from: timeOverride.cacheReadPerMillionTokens)
-    }
-
-    nonisolated var isValidTimeWindow: Bool {
-        startMinuteOfDay != endMinuteOfDay
     }
 
     nonisolated var hasAnyPrice: Bool {
@@ -530,11 +592,12 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
     }
 
     nonisolated var modelPricingTimeOverride: ModelPricingTimeOverride? {
-        guard isValidTimeWindow else { return nil }
+        guard !weekdays.isEmpty else { return nil }
         let timeOverride = ModelPricingTimeOverride(
             id: id,
             startMinuteOfDay: startMinuteOfDay,
             endMinuteOfDay: endMinuteOfDay,
+            weekdays: weekdays,
             inputPerMillionTokens: ModelPricingDraft.double(from: inputPrice),
             outputPerMillionTokens: ModelPricingDraft.double(from: outputPrice),
             cacheWritePerMillionTokens: ModelPricingDraft.double(from: cacheWritePrice),

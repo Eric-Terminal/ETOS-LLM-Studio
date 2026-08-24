@@ -296,6 +296,9 @@ extension SyncEngine {
             hasher.combine(timeOverride.id.uuidString)
             hasher.combine(timeOverride.startMinuteOfDay)
             hasher.combine(timeOverride.endMinuteOfDay)
+            for weekday in timeOverride.weekdays.sorted(by: { $0.rawValue < $1.rawValue }) {
+                hasher.combine(weekday.rawValue)
+            }
             hasher.combine(timeOverride.inputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.outputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.cacheWritePerMillionTokens ?? -1)

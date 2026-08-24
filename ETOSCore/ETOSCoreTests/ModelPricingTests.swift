@@ -237,6 +237,61 @@ struct ModelPricingTests {
         #expect(abs(estimate.totalCost - 0.0025) < 0.000001)
     }
 
+    @Test("峰谷定价支持周末全天重复")
+    func peakValleyPricingSupportsAllDayWeekends() throws {
+        let calendar = utcCalendar()
+        let timeOverrideID = UUID(uuidString: "00000000-0000-0000-0000-000000000096")!
+        let pricing = ModelPricing(
+            inputPerMillionTokens: 1,
+            timeOverridesEnabled: true,
+            timeOverrides: [
+                ModelPricingTimeOverride(
+                    id: timeOverrideID,
+                    startMinuteOfDay: 0,
+                    endMinuteOfDay: 0,
+                    weekdays: ModelPricingWeekday.weekend,
+                    inputPerMillionTokens: 0.25
+                )
+            ]
+        )
+
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 4, hour: 15, minute: 0, calendar: calendar),
+                calendar: calendar
+            )?.id == timeOverrideID
+        )
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 5, hour: 23, minute: 59, calendar: calendar),
+                calendar: calendar
+            )?.id == timeOverrideID
+        )
+        #expect(
+            pricing.matchingTimeOverride(
+                requestedAt: date(day: 6, hour: 15, minute: 0, calendar: calendar),
+                calendar: calendar
+            ) == nil
+        )
+        #expect(ModelPricingTimeRangeText.text(startMinuteOfDay: 0, endMinuteOfDay: 0) == NSLocalizedString("全天", comment: ""))
+    }
+
+    @Test("跨午夜时段按开始日重复")
+    func crossMidnightPricingUsesStartingWeekday() {
+        let calendar = utcCalendar()
+        let timeOverride = ModelPricingTimeOverride(
+            startMinuteOfDay: 23 * 60,
+            endMinuteOfDay: 2 * 60,
+            weekdays: [.monday],
+            inputPerMillionTokens: 0.25
+        )
+
+        #expect(timeOverride.contains(date(day: 6, hour: 23, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(timeOverride.contains(date(day: 7, hour: 1, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(!timeOverride.contains(date(day: 6, hour: 1, minute: 30, calendar: calendar), calendar: calendar))
+        #expect(!timeOverride.contains(date(day: 7, hour: 23, minute: 30, calendar: calendar), calendar: calendar))
+    }
+
     @Test("阶梯范围文本使用紧凑 token 边界")
     func tierRangeTextUsesCompactBoundaries() {
         #expect(ModelPricingTierRangeText.text(minimumTokens: 0, nextMinimumTokens: 200_001).contains("200K"))
@@ -271,6 +326,18 @@ struct ModelPricingTests {
         #expect(pricing.inputPerMillionTokens == 1)
         #expect(!pricing.timeOverridesEnabled)
         #expect(pricing.timeOverrides.isEmpty)
+    }
+
+    @Test("旧峰谷时段解码时默认每天重复")
+    func legacyTimeOverrideDecodesWithEveryDaySchedule() throws {
+        let data = try #require(
+            #"{"id":"00000000-0000-0000-0000-000000000097","startMinuteOfDay":600,"endMinuteOfDay":720,"inputPerMillionTokens":0.5}"#
+                .data(using: .utf8)
+        )
+
+        let timeOverride = try JSONDecoder().decode(ModelPricingTimeOverride.self, from: data)
+
+        #expect(timeOverride.weekdays == ModelPricingWeekday.everyDay)
     }
 
     @Test("只有每次请求价格的配置会按按次模式解码")
@@ -308,6 +375,7 @@ struct ModelPricingTests {
                         id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
                         startMinuteOfDay: 10 * 60,
                         endMinuteOfDay: 12 * 60,
+                        weekdays: ModelPricingWeekday.weekend,
                         outputPerMillionTokens: 1.5
                     )
                 ]
@@ -323,6 +391,7 @@ struct ModelPricingTests {
         #expect(decoded.pricing?.tiers.first?.inputPerMillionTokens == 0.4)
         #expect(decoded.pricing?.timeOverridesEnabled == true)
         #expect(decoded.pricing?.timeOverrides.first?.startMinuteOfDay == 10 * 60)
+        #expect(decoded.pricing?.timeOverrides.first?.weekdays == ModelPricingWeekday.weekend)
         #expect(decoded.pricing?.timeOverrides.first?.outputPerMillionTokens == 1.5)
     }
 
@@ -487,7 +556,7 @@ struct ModelPricingTests {
         return calendar
     }
 
-    private func date(hour: Int, minute: Int, calendar: Calendar) -> Date {
-        calendar.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: hour, minute: minute))!
+    private func date(day: Int = 1, hour: Int, minute: Int, calendar: Calendar) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 7, day: day, hour: hour, minute: minute))!
     }
 }

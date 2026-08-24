@@ -114,8 +114,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
         calendar: Calendar = .current
     ) -> ModelPricingTimeOverride? {
         guard timeOverridesEnabled, let requestedAt else { return nil }
-        let minute = Self.minuteOfDay(for: requestedAt, calendar: calendar)
-        return timeOverrides.first { $0.contains(minuteOfDay: minute) }
+        return timeOverrides.first { $0.contains(requestedAt, calendar: calendar) }
     }
 
     public static func normalizedPrice(_ value: Double?) -> Double? {
@@ -138,7 +137,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
     public static func normalizedTimeOverrides(_ timeOverrides: [ModelPricingTimeOverride]) -> [ModelPricingTimeOverride] {
         timeOverrides
             .map(\.normalized)
-            .filter { $0.isValidTimeWindow && !$0.isEffectivelyEmpty }
+            .filter { !$0.weekdays.isEmpty && !$0.isEffectivelyEmpty }
             .sorted {
                 if $0.startMinuteOfDay == $1.startMinuteOfDay {
                     if $0.endMinuteOfDay == $1.endMinuteOfDay {
@@ -302,10 +301,45 @@ public struct ModelPricingEffectivePrices: Hashable, Sendable {
     public var cacheReadPerMillionTokens: Double?
 }
 
+public enum ModelPricingWeekday: Int, Codable, CaseIterable, Hashable, Sendable {
+    case sunday = 1
+    case monday
+    case tuesday
+    case wednesday
+    case thursday
+    case friday
+    case saturday
+
+    public static let everyDay: Set<ModelPricingWeekday> = Set(allCases)
+    public static let weekdays: Set<ModelPricingWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
+    public static let weekend: Set<ModelPricingWeekday> = [.saturday, .sunday]
+
+    nonisolated public var previous: Self {
+        switch self {
+        case .sunday: return .saturday
+        case .monday: return .sunday
+        case .tuesday: return .monday
+        case .wednesday: return .tuesday
+        case .thursday: return .wednesday
+        case .friday: return .thursday
+        case .saturday: return .friday
+        }
+    }
+
+    nonisolated public static func ordered(for calendar: Calendar) -> [Self] {
+        let firstWeekday = Self(rawValue: calendar.firstWeekday) ?? .sunday
+        guard let firstIndex = allCases.firstIndex(of: firstWeekday) else {
+            return allCases
+        }
+        return Array(allCases[firstIndex...]) + Array(allCases[..<firstIndex])
+    }
+}
+
 public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var startMinuteOfDay: Int
     public var endMinuteOfDay: Int
+    public var weekdays: Set<ModelPricingWeekday>
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
@@ -315,6 +349,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         id: UUID = UUID(),
         startMinuteOfDay: Int,
         endMinuteOfDay: Int,
+        weekdays: Set<ModelPricingWeekday> = ModelPricingWeekday.everyDay,
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
@@ -323,6 +358,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         self.id = id
         self.startMinuteOfDay = Self.normalizedMinute(startMinuteOfDay)
         self.endMinuteOfDay = Self.normalizedMinute(endMinuteOfDay)
+        self.weekdays = weekdays
         self.inputPerMillionTokens = ModelPricing.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = ModelPricing.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = ModelPricing.normalizedPrice(cacheWritePerMillionTokens)
@@ -336,8 +372,8 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
             && cacheReadPerMillionTokens == nil
     }
 
-    public var isValidTimeWindow: Bool {
-        startMinuteOfDay != endMinuteOfDay
+    public var isAllDay: Bool {
+        startMinuteOfDay == endMinuteOfDay
     }
 
     public var isCrossMidnight: Bool {
@@ -349,6 +385,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
             id: id,
             startMinuteOfDay: startMinuteOfDay,
             endMinuteOfDay: endMinuteOfDay,
+            weekdays: weekdays,
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
@@ -364,7 +401,21 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         if startMinuteOfDay > endMinuteOfDay {
             return minute >= startMinuteOfDay || minute < endMinuteOfDay
         }
-        return false
+        return true
+    }
+
+    public func contains(_ date: Date, calendar: Calendar = .current) -> Bool {
+        let minute = ModelPricing.minuteOfDay(for: date, calendar: calendar)
+        guard contains(minuteOfDay: minute),
+              let currentWeekday = ModelPricingWeekday(rawValue: calendar.component(.weekday, from: date)) else {
+            return false
+        }
+
+        // 午夜后的片段仍属于开始日，避免“周五夜间”在周六零点被错误排除。
+        let scheduleWeekday = isCrossMidnight && minute < endMinuteOfDay
+            ? currentWeekday.previous
+            : currentWeekday
+        return weekdays.contains(scheduleWeekday)
     }
 
     public static func normalizedMinute(_ minute: Int) -> Int {
@@ -373,17 +424,102 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
     }
 }
 
+extension ModelPricingTimeOverride {
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case startMinuteOfDay
+        case endMinuteOfDay
+        case weekdays
+        case inputPerMillionTokens
+        case outputPerMillionTokens
+        case cacheWritePerMillionTokens
+        case cacheReadPerMillionTokens
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            startMinuteOfDay: try container.decode(Int.self, forKey: .startMinuteOfDay),
+            endMinuteOfDay: try container.decode(Int.self, forKey: .endMinuteOfDay),
+            weekdays: Set(
+                try container.decodeIfPresent([ModelPricingWeekday].self, forKey: .weekdays)
+                    ?? ModelPricingWeekday.allCases
+            ),
+            inputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens),
+            outputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens),
+            cacheWritePerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens),
+            cacheReadPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(startMinuteOfDay, forKey: .startMinuteOfDay)
+        try container.encode(endMinuteOfDay, forKey: .endMinuteOfDay)
+        if weekdays != ModelPricingWeekday.everyDay {
+            try container.encode(weekdays.sorted { $0.rawValue < $1.rawValue }, forKey: .weekdays)
+        }
+        try container.encodeIfPresent(inputPerMillionTokens, forKey: .inputPerMillionTokens)
+        try container.encodeIfPresent(outputPerMillionTokens, forKey: .outputPerMillionTokens)
+        try container.encodeIfPresent(cacheWritePerMillionTokens, forKey: .cacheWritePerMillionTokens)
+        try container.encodeIfPresent(cacheReadPerMillionTokens, forKey: .cacheReadPerMillionTokens)
+    }
+}
+
 public enum ModelPricingTimeRangeText {
     nonisolated public static func text(
         startMinuteOfDay: Int,
         endMinuteOfDay: Int
     ) -> String {
-        "\(displayTime(minuteOfDay: startMinuteOfDay)) - \(displayTime(minuteOfDay: endMinuteOfDay))"
+        if ModelPricingTimeOverride.normalizedMinute(startMinuteOfDay)
+            == ModelPricingTimeOverride.normalizedMinute(endMinuteOfDay) {
+            return NSLocalizedString("全天", comment: "All-day peak valley pricing range")
+        }
+        return "\(displayTime(minuteOfDay: startMinuteOfDay)) - \(displayTime(minuteOfDay: endMinuteOfDay))"
     }
 
     nonisolated public static func displayTime(minuteOfDay minute: Int) -> String {
         let minute = ModelPricingTimeOverride.normalizedMinute(minute)
         return String(format: "%02d:%02d", minute / 60, minute % 60)
+    }
+}
+
+public enum ModelPricingWeekdayText {
+    nonisolated public static func title(for weekday: ModelPricingWeekday) -> String {
+        switch weekday {
+        case .sunday: return NSLocalizedString("周日", comment: "Sunday pricing schedule option")
+        case .monday: return NSLocalizedString("周一", comment: "Monday pricing schedule option")
+        case .tuesday: return NSLocalizedString("周二", comment: "Tuesday pricing schedule option")
+        case .wednesday: return NSLocalizedString("周三", comment: "Wednesday pricing schedule option")
+        case .thursday: return NSLocalizedString("周四", comment: "Thursday pricing schedule option")
+        case .friday: return NSLocalizedString("周五", comment: "Friday pricing schedule option")
+        case .saturday: return NSLocalizedString("周六", comment: "Saturday pricing schedule option")
+        }
+    }
+
+    nonisolated public static func summary(
+        for weekdays: Set<ModelPricingWeekday>,
+        calendar: Calendar
+    ) -> String {
+        if weekdays == ModelPricingWeekday.everyDay {
+            return NSLocalizedString("每天", comment: "Every day pricing schedule summary")
+        }
+        if weekdays == ModelPricingWeekday.weekdays {
+            return NSLocalizedString("工作日", comment: "Weekdays pricing schedule summary")
+        }
+        if weekdays == ModelPricingWeekday.weekend {
+            return NSLocalizedString("周末", comment: "Weekend pricing schedule summary")
+        }
+        guard !weekdays.isEmpty else {
+            return NSLocalizedString("未选择", comment: "No pricing schedule weekdays selected")
+        }
+
+        return ModelPricingWeekday.ordered(for: calendar)
+            .filter(weekdays.contains)
+            .map { title(for: $0) }
+            .joined(separator: " • ")
     }
 }
 
