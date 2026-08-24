@@ -16,6 +16,7 @@ public final class GuideConversationController: ObservableObject {
     @Published public private(set) var pendingProposal: GuideActionProposal?
     @Published public private(set) var canUndo = false
     @Published public private(set) var lastError: String?
+    @Published public private(set) var lastErrorMessageID: UUID?
     @Published public private(set) var canRetryWithBuiltIn = false
 
     public let sessionID: UUID
@@ -28,6 +29,9 @@ public final class GuideConversationController: ObservableObject {
     private var currentTask: Task<Void, Never>?
     private var pendingToolCall: InternalToolCall?
     private var undoProposal: GuideActionProposal?
+    private var latestUserMessageID: UUID?
+    private var latestUserMessageAllowsEditing = false
+    private var latestTurnMessageIDs: Set<UUID> = []
 
     public init(
         sessionID: UUID = UUID(),
@@ -51,30 +55,63 @@ public final class GuideConversationController: ObservableObject {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isResponding, pendingProposal == nil else { return }
         lastError = nil
+        lastErrorMessageID = nil
         canRetryWithBuiltIn = false
-        messages.append(GuideConversationMessage(role: .user, content: trimmed))
+        let message = GuideConversationMessage(role: .user, content: trimmed)
+        messages.append(message)
         requestHistory.append(ChatMessage(role: .user, content: trimmed))
+        latestUserMessageID = message.id
+        latestUserMessageAllowsEditing = true
+        latestTurnMessageIDs = [message.id]
         startResponseLoop()
     }
 
     public func sendSetupChoice(_ choice: GuideModelSetupChoice, displayName: String) {
         guard !isResponding, pendingProposal == nil else { return }
         lastError = nil
+        lastErrorMessageID = nil
         canRetryWithBuiltIn = false
-        messages.append(GuideConversationMessage(role: .user, content: displayName))
+        let message = GuideConversationMessage(role: .user, content: displayName)
+        messages.append(message)
         requestHistory.append(ChatMessage(
             role: .user,
             content: "<guide_setup_choice version=\"1\">{\"choice\":\"(choice.rawValue)\"}</guide_setup_choice>"
         ))
+        latestUserMessageID = message.id
+        latestUserMessageAllowsEditing = false
+        latestTurnMessageIDs = [message.id]
         startResponseLoop()
     }
 
     public func retryLastResponse() {
-        guard !isResponding, pendingProposal == nil,
-              requestHistory.last(where: { $0.role == .user }) != nil else { return }
-        messages.removeAll { $0.role == .error }
-        lastError = nil
-        canRetryWithBuiltIn = false
+        guard let messageID = latestUserMessageID else { return }
+        retryResponse(for: messageID)
+    }
+
+    public func canEditMessage(_ messageID: UUID) -> Bool {
+        !isResponding
+            && pendingProposal == nil
+            && latestUserMessageID == messageID
+            && latestUserMessageAllowsEditing
+    }
+
+    public func canRetryMessage(_ messageID: UUID) -> Bool {
+        !isResponding
+            && pendingProposal == nil
+            && latestTurnMessageIDs.contains(messageID)
+    }
+
+    public func editUserMessage(_ messageID: UUID, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, canEditMessage(messageID),
+              prepareLatestUserTurn(messageID: messageID, replacementContent: trimmed) else { return }
+        startResponseLoop()
+    }
+
+    public func retryResponse(for messageID: UUID) {
+        guard canRetryMessage(messageID),
+              let latestUserID = latestUserMessageID,
+              prepareLatestUserTurn(messageID: latestUserID, replacementContent: nil) else { return }
         startResponseLoop()
     }
 
@@ -86,6 +123,7 @@ public final class GuideConversationController: ObservableObject {
     public func cancel() {
         currentTask?.cancel()
         currentTask = nil
+        removeEmptyAssistantMessages()
         isResponding = false
     }
 
@@ -98,7 +136,11 @@ public final class GuideConversationController: ObservableObject {
         undoProposal = nil
         canUndo = false
         lastError = nil
+        lastErrorMessageID = nil
         canRetryWithBuiltIn = false
+        latestUserMessageID = nil
+        latestUserMessageAllowsEditing = false
+        latestTurnMessageIDs.removeAll()
     }
 
     public func confirmPendingProposal() {
@@ -113,7 +155,9 @@ public final class GuideConversationController: ObservableObject {
                 undoProposal = execution.undoProposal
                 canUndo = execution.undoProposal != nil
                 appendToolResult(call: call, content: execution.message, disposition: .completed)
-                messages.append(GuideConversationMessage(role: .tool, content: execution.message))
+                let message = GuideConversationMessage(role: .tool, content: execution.message)
+                messages.append(message)
+                latestTurnMessageIDs.insert(message.id)
                 await runResponseLoop()
             } catch is CancellationError {
                 isResponding = false
@@ -129,7 +173,9 @@ public final class GuideConversationController: ObservableObject {
         pendingToolCall = nil
         let message = NSLocalizedString("用户没有应用这项修改。", comment: "Guide proposal rejected tool result")
         appendToolResult(call: call, content: message, disposition: .rejected)
-        messages.append(GuideConversationMessage(role: .tool, content: message))
+        let toolMessage = GuideConversationMessage(role: .tool, content: message)
+        messages.append(toolMessage)
+        latestTurnMessageIDs.insert(toolMessage.id)
         startResponseLoop()
     }
 
@@ -159,6 +205,27 @@ public final class GuideConversationController: ObservableObject {
         }
     }
 
+    private func prepareLatestUserTurn(messageID: UUID, replacementContent: String?) -> Bool {
+        guard let messageIndex = messages.firstIndex(where: { $0.id == messageID && $0.role == .user }),
+              messages.lastIndex(where: { $0.role == .user }) == messageIndex,
+              let historyIndex = requestHistory.lastIndex(where: { $0.role == .user }) else {
+            return false
+        }
+
+        if let replacementContent {
+            messages[messageIndex].content = replacementContent
+            requestHistory[historyIndex] = ChatMessage(role: .user, content: replacementContent)
+        }
+        messages.removeSubrange((messageIndex + 1)..<messages.endIndex)
+        requestHistory.removeSubrange((historyIndex + 1)..<requestHistory.endIndex)
+        pendingToolCall = nil
+        lastError = nil
+        lastErrorMessageID = nil
+        canRetryWithBuiltIn = false
+        latestTurnMessageIDs = [messageID]
+        return true
+    }
+
     private func runResponseLoop() async {
         do {
             let resolved = try router.resolvedClient()
@@ -173,6 +240,7 @@ public final class GuideConversationController: ObservableObject {
                 )
                 let placeholderID = UUID()
                 messages.append(GuideConversationMessage(id: placeholderID, role: .assistant, content: ""))
+                latestTurnMessageIDs.insert(placeholderID)
 
                 var completedMessage: ChatMessage?
                 for try await event in resolved.client.events(messages: outbound, tools: tools, sessionID: sessionID) {
@@ -303,6 +371,9 @@ public final class GuideConversationController: ObservableObject {
         messages.removeAll {
             $0.id == id && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.toolCalls.isEmpty
         }
+        if !messages.contains(where: { $0.id == id }) {
+            latestTurnMessageIDs.remove(id)
+        }
     }
 
     private func finishWithError(_ error: Error) {
@@ -310,17 +381,28 @@ public final class GuideConversationController: ObservableObject {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastError = message
         canRetryWithBuiltIn = router.route == .userModel
-        messages.append(GuideConversationMessage(role: .error, content: message))
+        let errorMessage = GuideConversationMessage(role: .error, content: message)
+        messages.append(errorMessage)
+        lastErrorMessageID = errorMessage.id
+        latestTurnMessageIDs.insert(errorMessage.id)
         isResponding = false
         currentTask = nil
     }
 
     private func removeEmptyAssistantMessages() {
+        let removedIDs = Set(messages.compactMap { message in
+            message.role == .assistant
+                && message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && message.toolCalls.isEmpty
+                ? message.id
+                : nil
+        })
         messages.removeAll {
             $0.role == .assistant
                 && $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && $0.toolCalls.isEmpty
         }
+        latestTurnMessageIDs.subtract(removedIDs)
     }
 
     private func encoded<T: Encodable>(_ value: T) throws -> String {

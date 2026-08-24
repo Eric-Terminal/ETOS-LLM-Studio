@@ -47,6 +47,7 @@ struct WatchGuideConversationView: View {
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
 
     @State private var input = ""
+    @State private var editingMessage: GuideConversationMessage?
 
     init(controller: GuideConversationController) {
         self.controller = controller
@@ -65,9 +66,7 @@ struct WatchGuideConversationView: View {
             } else {
                 Section(NSLocalizedString("对话", comment: "手表向导消息分组")) {
                     ForEach(controller.messages) { message in
-                        Text(message.content)
-                            .font(.footnote)
-                            .foregroundStyle(message.role == .error ? .red : .primary)
+                        messageRow(message)
                     }
                     if controller.isResponding {
                         ProgressView(NSLocalizedString("正在回答…", comment: "手表向导回答状态"))
@@ -155,6 +154,9 @@ struct WatchGuideConversationView: View {
         .onDisappear {
             coordinator.unpinActivePage()
         }
+        .sheet(item: $editingMessage) { message in
+            WatchGuideMessageEditorView(controller: controller, message: message)
+        }
     }
 
     private var emptyStateDetail: String {
@@ -165,6 +167,34 @@ struct WatchGuideConversationView: View {
             format: NSLocalizedString("向导会使用“%@”页面声明的配置与文档回答。", comment: "手表向导当前页面说明"),
             title
         )
+    }
+
+    @ViewBuilder
+    private func messageRow(_ message: GuideConversationMessage) -> some View {
+        let row = Text(message.content)
+            .font(.footnote)
+            .foregroundStyle(message.role == .error ? .red : .primary)
+
+        if controller.canEditMessage(message.id) || controller.canRetryMessage(message.id) {
+            row.contextMenu {
+                if controller.canEditMessage(message.id) {
+                    Button {
+                        editingMessage = message
+                    } label: {
+                        Label(NSLocalizedString("编辑", comment: "手表编辑向导消息"), systemImage: "pencil")
+                    }
+                }
+                if controller.canRetryMessage(message.id) {
+                    Button {
+                        controller.retryResponse(for: message.id)
+                    } label: {
+                        Label(NSLocalizedString("重试", comment: "手表重试向导回答"), systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+        } else {
+            row
+        }
     }
 
     private func routeButton(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -179,6 +209,38 @@ struct WatchGuideConversationView: View {
         guard !content.isEmpty else { return }
         input = ""
         controller.send(content)
+    }
+}
+
+private struct WatchGuideMessageEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var controller: GuideConversationController
+    let message: GuideConversationMessage
+
+    @State private var content: String
+
+    init(controller: GuideConversationController, message: GuideConversationMessage) {
+        self.controller = controller
+        self.message = message
+        _content = State(initialValue: message.content)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section(NSLocalizedString("消息内容", comment: "手表向导消息编辑内容")) {
+                    TextField(NSLocalizedString("消息内容", comment: "手表向导消息编辑输入框"), text: $content)
+                }
+                Section {
+                    Button(NSLocalizedString("保存", comment: "手表保存向导消息编辑")) {
+                        controller.editUserMessage(message.id, content: content)
+                        dismiss()
+                    }
+                    .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle(NSLocalizedString("编辑消息", comment: "手表编辑向导消息标题"))
+        }
     }
 }
 

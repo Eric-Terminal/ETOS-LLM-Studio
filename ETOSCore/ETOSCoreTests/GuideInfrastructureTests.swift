@@ -275,6 +275,55 @@ struct GuideInfrastructureTests {
         #expect(controller.lastError != nil)
     }
 
+    @MainActor
+    @Test("编辑或重试最近问题会替换旧回复而不是重复追加")
+    func editingAndRetryingLatestQuestionReplacesResponse() async throws {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let router = GuideModelRouter(
+            appConfig: appConfig,
+            builtInClient: GuideEchoCompletionClient()
+        )
+        router.useBuiltIn()
+        let controller = GuideConversationController(
+            router: router,
+            contextCoordinator: coordinator
+        )
+
+        controller.send("这个页面有什吗？")
+        for _ in 0..<100 where controller.isResponding {
+            await Task.yield()
+        }
+        let userMessage = try #require(controller.messages.first(where: { $0.role == .user }))
+        let firstResponse = try #require(controller.messages.last(where: { $0.role == .assistant }))
+        #expect(controller.canEditMessage(userMessage.id))
+        #expect(controller.canRetryMessage(firstResponse.id))
+
+        controller.editUserMessage(userMessage.id, content: "这个页面有什么？")
+        for _ in 0..<100 where controller.isResponding {
+            await Task.yield()
+        }
+        #expect(controller.messages.filter { $0.role == .user }.map(\.content) == ["这个页面有什么？"])
+        #expect(controller.messages.filter { $0.role == .assistant }.map(\.content) == ["回答：这个页面有什么？"])
+
+        let editedResponse = try #require(controller.messages.last(where: { $0.role == .assistant }))
+        controller.retryResponse(for: editedResponse.id)
+        for _ in 0..<100 where controller.isResponding {
+            await Task.yield()
+        }
+        #expect(controller.messages.filter { $0.role == .assistant }.map(\.content) == ["回答：这个页面有什么？"])
+    }
+
     @Test("内置向导令牌端点错误会显示产品级提示")
     func tokenHTTPErrorUsesGuideMessage() async throws {
         let baseURL = try #require(URL(string: "https://feedback.example"))
@@ -615,6 +664,20 @@ private struct GuideFailingCompletionClient: GuideCompletionClient {
     ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: GuideError.invalidResponse)
+        }
+    }
+}
+
+private struct GuideEchoCompletionClient: GuideCompletionClient {
+    func events(
+        messages: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        let question = messages.last(where: { $0.role == .user })?.content ?? ""
+        return AsyncThrowingStream { continuation in
+            continuation.yield(.completed(ChatMessage(role: .assistant, content: "回答：\(question)")))
+            continuation.finish()
         }
     }
 }

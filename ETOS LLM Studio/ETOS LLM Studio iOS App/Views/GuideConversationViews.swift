@@ -22,6 +22,8 @@ struct GuideConversationView: View {
 
     @State private var input = ""
     @State private var routeRevision = 0
+    @State private var messageActionMessage: GuideConversationMessage?
+    @State private var editingMessage: GuideConversationMessage?
     @FocusState private var inputFocused: Bool
 
     init(controller: GuideConversationController, compact: Bool) {
@@ -43,6 +45,34 @@ struct GuideConversationView: View {
         }
         .background(.regularMaterial)
         .accessibilityElement(children: .contain)
+        .sheet(item: $messageActionMessage) { message in
+            GuideMessageActionSheet(
+                message: message,
+                canEdit: controller.canEditMessage(message.id),
+                canRetry: controller.canRetryMessage(message.id),
+                onEdit: {
+                    messageActionMessage = nil
+                    DispatchQueue.main.async {
+                        editingMessage = message
+                    }
+                },
+                onRetry: {
+                    messageActionMessage = nil
+                    controller.retryResponse(for: message.id)
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $editingMessage) { message in
+            NavigationStack {
+                EditMessageView(
+                    message: ChatMessage(id: message.id, role: .user, content: message.content)
+                ) { updatedMessage in
+                    controller.editUserMessage(message.id, content: updatedMessage.content)
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 
     private var messageList: some View {
@@ -121,20 +151,13 @@ struct GuideConversationView: View {
             .padding(.vertical, 9)
             .background(bubbleBackground(for: message.role), in: shape)
             .contentShape(shape)
-            .contextMenu {
-                Button {
-                    UIPasteboard.general.string = message.content
-                } label: {
-                    Label(NSLocalizedString("复制", comment: "复制向导消息"), systemImage: "doc.on.doc")
-                }
-                if isLatestError(message) {
-                    Button {
-                        controller.retryLastResponse()
-                    } label: {
-                        Label(NSLocalizedString("重试", comment: "向导消息菜单重试按钮"), systemImage: "arrow.clockwise")
-                    }
-                }
-            }
+            .modifier(
+                ChatBubbleOpenMoreGestureModifier(
+                    isSelectionMode: false,
+                    onToggleSelection: {},
+                    onOpenMore: { messageActionMessage = message }
+                )
+            )
             if !isUser { Spacer(minLength: compact ? 20 : 56) }
         }
     }
@@ -142,7 +165,7 @@ struct GuideConversationView: View {
     private func isLatestError(_ message: GuideConversationMessage) -> Bool {
         message.role == .error
             && controller.lastError != nil
-            && controller.messages.last(where: { $0.role == .error })?.id == message.id
+            && controller.lastErrorMessageID == message.id
     }
 
     private func bubbleBackground(for role: GuideConversationMessage.Role) -> some ShapeStyle {
@@ -343,6 +366,52 @@ struct GuideConversationView: View {
         guard !content.isEmpty else { return }
         input = ""
         controller.send(content)
+    }
+}
+
+private struct GuideMessageActionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let message: GuideConversationMessage
+    let canEdit: Bool
+    let canRetry: Bool
+    let onEdit: () -> Void
+    let onRetry: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if canEdit {
+                        Button(action: onEdit) {
+                            Label(NSLocalizedString("编辑", comment: "编辑向导用户消息"), systemImage: "pencil")
+                        }
+                    }
+                    if canRetry {
+                        Button(action: onRetry) {
+                            Label(NSLocalizedString("重试", comment: "重试向导最近回答"), systemImage: "arrow.clockwise")
+                        }
+                    }
+                    Button {
+                        UIPasteboard.general.string = message.content
+                        dismiss()
+                    } label: {
+                        Label(NSLocalizedString("复制", comment: "复制向导消息"), systemImage: "doc.on.doc")
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .navigationTitle(NSLocalizedString("消息操作", comment: "向导消息操作标题"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("完成", comment: "关闭向导消息操作")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
