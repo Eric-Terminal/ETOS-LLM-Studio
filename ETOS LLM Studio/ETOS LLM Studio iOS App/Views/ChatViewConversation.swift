@@ -84,20 +84,20 @@ extension ChatView {
                 ScrollView {
                     VStack(spacing: 0) {
                         ChatScrollMetricsObserver(
-                            keepsBottomPinned: $shouldKeepBottomPinned,
+                            keepsBottomPinned: scrollCoordinator.keepsBottomPinnedBinding,
                             isStreaming: viewModel.isSendingMessage,
                             streamingDisplayMode: ChatStreamingDisplayMode.normalized(
                                 appConfig.chatStreamingDisplayMode
                             ),
                             reduceMotion: accessibilityReduceMotion,
-                            metricsRefreshGeneration: bottomScrollCommandGeneration,
+                            metricsRefreshGeneration: scrollCoordinator.bottomScrollCommandGeneration,
                             metricThresholds: ChatScrollMetricThresholds(
                                 arrival: bottomScrollCommandArrivalTolerance,
                                 bottomPinned: bottomPinnedDistanceThreshold,
                                 bottomButton: scrollToBottomButtonRevealDistance,
                                 historyLoading: automaticHistoryLoadTriggerDistance
                             ),
-                            isViewportTransitioning: isChatLayoutSettling,
+                            isViewportTransitioning: scrollCoordinator.isChatLayoutSettling,
                             hasProgrammaticScrollCommand: hasChatProgrammaticScrollOwnership,
                             anchorAdjustment: pendingChatAnchorAdjustment,
                             onAnchorAdjustmentApplied: { adjustmentID in
@@ -175,7 +175,7 @@ extension ChatView {
                                 let connectsTimelineToNext = shouldConnectTimeline(message, with: nextMessage)
                                 let showsStreamingIndicators = viewModel.isSendingMessage && viewModel.latestAssistantMessageID == message.id
                                 // 贴底流式气泡只跟随真实滚动偏移，避免相位弹簧与吸底校正互相拉扯。
-                                let isBottomPinnedStreamingBubble = showsStreamingIndicators && shouldKeepBottomPinned
+                                let isBottomPinnedStreamingBubble = showsStreamingIndicators && scrollCoordinator.shouldKeepBottomPinned
                                 let reportsSendFlightTarget = isSendFlightTarget(message.id)
                                 let sendFlightOpacity = sendFlightMessageOpacity(for: message)
                                 let preparedMarkdownPayload = viewModel.preparedMarkdownByMessageID[message.id]
@@ -195,7 +195,7 @@ extension ChatView {
                                         hasPreparedMarkdown: preparedMarkdownPayload != nil,
                                         hasPreparedReasoningMarkdown: preparedReasoningMarkdownPayload != nil,
                                         layoutRevision: state.layoutRevision,
-                                        recoveryRevision: chatLayoutIntegrityMonitor.recoveryRevision(for: message.id),
+                                        recoveryRevision: scrollCoordinator.chatLayoutIntegrityMonitor.recoveryRevision(for: message.id),
                                         rendererHandoffRevision: state.rendererHandoffRevision,
                                         rendererHandoffAt: state.lastRendererHandoffAt,
                                         usesNoBubbleStyle: viewModel.enableNoBubbleUI
@@ -243,7 +243,7 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.setReasoningExpanded(isExpanded, for: message.id)
                                             if isExpanded {
-                                                shouldKeepBottomPinned = false
+                                                scrollCoordinator.shouldKeepBottomPinned = false
                                             }
                                         }
                                     ),
@@ -253,7 +253,7 @@ extension ChatView {
                                         set: { isExpanded in
                                             viewModel.toolCallsExpandedState[message.id] = isExpanded
                                             if isExpanded {
-                                                shouldKeepBottomPinned = false
+                                                scrollCoordinator.shouldKeepBottomPinned = false
                                             }
                                         }
                                     ),
@@ -319,9 +319,9 @@ extension ChatView {
                                         _ = viewModel.setCurrentSessionIfExists(sessionID: sessionID)
                                     },
                                     reportsSendFlightTarget: reportsSendFlightTarget,
-                                    reportsLayoutIntegrityFrame: chatLayoutIntegrityMonitor
+                                    reportsLayoutIntegrityFrame: scrollCoordinator.chatLayoutIntegrityMonitor
                                         .isContentFrameProbeActive,
-                                    layoutRecoveryRevision: chatLayoutIntegrityMonitor.recoveryRevision(
+                                    layoutRecoveryRevision: scrollCoordinator.chatLayoutIntegrityMonitor.recoveryRevision(
                                         for: message.id
                                     ),
                                     providers: viewModel.providers
@@ -333,8 +333,8 @@ extension ChatView {
                                             ChatMessageLayoutFrameReporter(
                                                 messageID: message.id,
                                                 metadata: layoutIntegrityMetadata,
-                                                probeRevision: chatLayoutIntegrityMonitor.layoutProbeRevision,
-                                                stackRecoveryRevision: chatLayoutIntegrityMonitor.stackRecoveryRevision
+                                                probeRevision: scrollCoordinator.chatLayoutIntegrityMonitor.layoutProbeRevision,
+                                                stackRecoveryRevision: scrollCoordinator.chatLayoutIntegrityMonitor.stackRecoveryRevision
                                             )
                                         }
                                     }
@@ -365,9 +365,9 @@ extension ChatView {
                                     ))
                                 ) { [scrollAnimEnabled = appConfig.chatScrollAnimationEnabled,
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset,
-                                     layoutSettling = isChatLayoutSettling,
-                                     keepsBottomPinned = shouldKeepBottomPinned,
-                                     scrollUserInteracting = isChatScrollUserInteracting] content, phase in
+                                     layoutSettling = scrollCoordinator.isChatLayoutSettling,
+                                     keepsBottomPinned = scrollCoordinator.shouldKeepBottomPinned,
+                                     scrollUserInteracting = scrollCoordinator.isChatScrollUserInteracting] content, phase in
                                     content
                                         .offset(
                                             y: Self.chatScrollTransitionOffset(
@@ -401,33 +401,33 @@ extension ChatView {
                                 .frame(height: 8)
                                 .id(ChatScrollTargetID.bottom)
                         }
-                        .id(chatLayoutIntegrityMonitor.stackRecoveryRevision)
+                        .id(scrollCoordinator.chatLayoutIntegrityMonitor.stackRecoveryRevision)
                         .scrollTargetLayout()
                         .coordinateSpace(.named(ChatHistoryAnchorLayout.coordinateSpaceName))
                     }
                     .padding(.horizontal, 8)
                     // 短列表必须占满滚动视口，避免流式增长时底部锚点搬动整段内容。
-                    .frame(minHeight: chatScrollViewportHeight, alignment: .top)
+                    .frame(minHeight: scrollCoordinator.chatScrollViewportHeight, alignment: .top)
                     .frame(width: chatViewportWidth, alignment: .top)
                 }
                 .frame(width: chatViewportWidth)
                 .coordinateSpace(.named(ChatMessageLayoutAudit.coordinateSpaceName))
                 .onPreferenceChange(ChatHistoryAnchorFramePreferenceKey.self) { frames in
-                    chatHistoryViewportAnchorController.updateFrames(
+                    scrollCoordinator.chatHistoryViewportAnchorController.updateFrames(
                         frames,
                         displayedMessageIDs: viewModel.displayMessages.map(\.id)
                     )
                 }
                 .onPreferenceChange(ChatMessageLayoutFramePreferenceKey.self) { frames in
                     let displayedMessageIDs = viewModel.displayMessages.map(\.id)
-                    chatLayoutIntegrityMonitor.updateSnapshot(
+                    scrollCoordinator.chatLayoutIntegrityMonitor.updateSnapshot(
                         frames,
                         orderedMessageIDs: displayedMessageIDs
                     )
                     refreshMessageNavigationTargets()
                 }
                 .onChange(of: chatLayoutAuditContext) { _, context in
-                    chatLayoutIntegrityMonitor.updateContext(context)
+                    scrollCoordinator.chatLayoutIntegrityMonitor.updateContext(context)
                 }
                 .onChange(of: accessibilityVoiceOverEnabled) { _, isEnabled in
                     if isEnabled {
@@ -436,14 +436,14 @@ extension ChatView {
                         scheduleScrollNavigationPanelHide()
                     }
                 }
-                .onChange(of: chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
+                .onChange(of: scrollCoordinator.chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
                     if let newValue {
-                        chatScrollPositionController.issueCommand(
+                        scrollCoordinator.chatScrollPositionController.issueCommand(
                             to: .message(newValue),
                             anchor: .center
                         )
                     } else if let oldValue {
-                        chatScrollPositionController.releaseCommand(
+                        scrollCoordinator.chatScrollPositionController.releaseCommand(
                             expectedTarget: .message(oldValue)
                         )
                     }
@@ -452,20 +452,20 @@ extension ChatView {
                 // 两套机制不会同时接管，用户主动离底后也不会抢回阅读位置。
                 .chatDefaultSizeChangeScrollAnchor(
                     Self.chatSizeChangeScrollAnchor(
-                        keepsBottomPinned: shouldKeepBottomPinned,
+                        keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned,
                         isStreaming: viewModel.isSendingMessage
                     )
                 )
                 .onGeometryChange(for: CGSize.self) { proxy in
                     proxy.size
                 } action: { newSize in
-                    chatScrollViewportWidth = newSize.width
-                    chatScrollViewportHeight = newSize.height
+                    scrollCoordinator.chatScrollViewportWidth = newSize.width
+                    scrollCoordinator.chatScrollViewportHeight = newSize.height
                     refreshMessageNavigationTargets()
                 }
                 .scrollPosition(
-                    id: chatScrollPositionController.positionBinding,
-                    anchor: chatScrollPositionController.targetAnchor
+                    id: scrollCoordinator.chatScrollPositionController.positionBinding,
+                    anchor: scrollCoordinator.chatScrollPositionController.targetAnchor
                 )
                 .chatOnUserScrollPhaseChange { distanceToBottom, distanceToTop, isUserInteracting in
                     handleChatScrollMetrics(
@@ -487,12 +487,12 @@ extension ChatView {
                                 handleScrollToTopButtonTap()
                             }
                         }
-                        if previousMessageNavigationTargetID != nil {
+                        if scrollCoordinator.previousMessageNavigationTargetID != nil {
                             Button(NSLocalizedString("滚动到上一条消息", comment: "")) {
                                 handleAdjacentMessageNavigation(.previous)
                             }
                         }
-                        if nextMessageNavigationTargetID != nil {
+                        if scrollCoordinator.nextMessageNavigationTargetID != nil {
                             Button(NSLocalizedString("滚动到下一条消息", comment: "")) {
                                 handleAdjacentMessageNavigation(.next)
                             }
@@ -510,7 +510,7 @@ extension ChatView {
                     }
                 )
                 .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
-                    guard newValue != nil, shouldKeepBottomPinned || scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
+                    guard newValue != nil, scrollCoordinator.shouldKeepBottomPinned || scrollCoordinator.scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
                     scrollToBottom()
                 }
                 .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in
@@ -523,31 +523,12 @@ extension ChatView {
                     cancelAutomaticHistoryNavigation()
                 }
                 .onChange(of: viewModel.currentSession?.id) { _, _ in
-                    pendingHistoryResetWorkItem?.cancel()
-                    pendingHistoryResetWorkItem = nil
-                    pendingBottomSnapTask?.cancel()
-                    pendingBottomSnapTask = nil
-                    awaitsFreshBottomNavigationSnapshot = false
-                    bottomNavigationSnapshotBaselineRevision = 0
                     cancelPendingScrollTargetCommand()
-                    lastAutomaticHistoryLoadAnchorID = nil
-                    isHistoryLoadInFlight = false
-                    pendingAutomaticHistoryLoadRequest = nil
-                    chatHistoryViewportAnchorController.reset()
+                    scrollCoordinator.resetForSessionChange()
                     shouldRestorePendingJumpOnAppear = false
                     pendingJumpRequest = nil
                     isMessageJumpInFlight = false
-                    messageNavigationCursorID = nil
-                    chatNavigationMessageIDs = []
-                    chatNavigationIndexByMessageID = [:]
-                    previousMessageNavigationTargetID = nil
-                    nextMessageNavigationTargetID = nil
-                    hideScrollNavigationPanel()
-                    shouldKeepBottomPinned = true
-                    showScrollToBottom = false
-                    needsImmediateBottomSnap = true
-                    chatScrollPositionController.reset()
-                    chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
+                    scrollCoordinator.chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
                     resolvePendingSearchJumpIfNeeded()
                 }
                 .onChange(of: viewModel.displayMessageIdentityVersion) { _, _ in
@@ -568,7 +549,7 @@ extension ChatView {
                     }
                 }
                 .onAppear {
-                    chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
+                    scrollCoordinator.chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
                     refreshMessageNavigationIndex()
                     if accessibilityVoiceOverEnabled {
                         revealScrollNavigationPanel()
@@ -580,8 +561,8 @@ extension ChatView {
                         return
                     }
                     resolvePendingSearchJumpIfNeeded()
-                    if needsImmediateBottomSnap {
-                        shouldKeepBottomPinned = true
+                    if scrollCoordinator.needsImmediateBottomSnap {
+                        scrollCoordinator.shouldKeepBottomPinned = true
                         scheduleImmediateBottomSnap()
                     }
                 }
@@ -647,15 +628,15 @@ extension ChatView {
                         // 按钮锚定整个底部输入区顶部，角色脚本栏出现时与输入框同步上移。
                         .overlay(alignment: .topTrailing) {
                             if appConfig.chatTimelineNavigationEnabled
-                                && showScrollNavigationPanel
+                                && scrollCoordinator.showScrollNavigationPanel
                                 && canPresentExpandedScrollNavigationPanel {
                                 telegramScrollNavigationButtons
                                 .padding(.trailing, 16)
                                 .offset(y: -(scrollNavigationPanelHeight + scrollToBottomButtonInputSpacing))
                                 .transition(scrollNavigationPanelTransition)
-                            } else if showScrollToBottom || (
+                            } else if scrollCoordinator.showScrollToBottom || (
                                 appConfig.chatTimelineNavigationEnabled
-                                    && showScrollNavigationPanel
+                                    && scrollCoordinator.showScrollNavigationPanel
                                     && canNavigateToTimelineBottom
                             ) {
                                 telegramScrollToBottomButton(isEnabled: canNavigateToTimelineBottom) {
@@ -789,19 +770,9 @@ extension ChatView {
                 }
             }
             .onDisappear {
-                pendingHistoryResetWorkItem?.cancel()
-                pendingHistoryResetWorkItem = nil
-                pendingBottomSnapTask?.cancel()
-                pendingBottomSnapTask = nil
-                chatLayoutSettleTask?.cancel()
-                chatLayoutSettleTask = nil
-                isChatLayoutSettling = false
-                chatLayoutIntegrityMonitor.stop()
-                cancelAutomaticHistoryNavigation()
-                awaitsFreshBottomNavigationSnapshot = false
-                bottomNavigationSnapshotBaselineRevision = 0
+                scrollCoordinator.prepareForDisappearance()
                 if isMessageJumpInFlight,
-                   case .message(let messageID)? = chatScrollPositionController.activeCommandTarget {
+                   case .message(let messageID)? = scrollCoordinator.chatScrollPositionController.activeCommandTarget {
                     pendingJumpRequest = MessageJumpRequest(messageID: messageID)
                     shouldRestorePendingJumpOnAppear = true
                 } else if isMessageJumpInFlight {
@@ -810,10 +781,6 @@ extension ChatView {
                     isMessageJumpInFlight = false
                 }
                 cancelPendingScrollTargetCommand(preservingMessageJump: true)
-                messageNavigationCursorID = nil
-                scrollNavigationHideTask?.cancel()
-                scrollNavigationHideTask = nil
-                showScrollNavigationPanel = false
                 pendingFlightCleanupTask?.cancel()
                 pendingFlightCleanupTask = nil
                 chatTransientNoticeDismissTask?.cancel()

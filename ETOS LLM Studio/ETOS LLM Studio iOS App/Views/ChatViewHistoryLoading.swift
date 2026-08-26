@@ -29,22 +29,16 @@ extension ChatView {
 
 
     func performAutomaticHistoryLoad(_ request: ChatAutomaticHistoryLoadRequest) {
-        guard viewModel.usesAutomaticHistoryWindow,
-              !isHistoryLoadInFlight,
-              lastAutomaticHistoryLoadAnchorID != request.anchorMessageID else {
+        guard viewModel.usesAutomaticHistoryWindow else {
             return
         }
         let displayedMessageIDs = viewModel.displayMessages.map(\.id)
-        guard chatHistoryViewportAnchorController.beginMutation(
+        guard scrollCoordinator.beginAutomaticHistoryMutation(
             anchorMessageID: request.anchorMessageID,
             displayedMessageIDs: displayedMessageIDs
         ) else {
             return
         }
-        lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
-        suppressAutoScrollOnce = true
-        shouldKeepBottomPinned = false
-        isHistoryLoadInFlight = true
         let didLoad: Bool
         switch request.direction {
         case .earlier:
@@ -52,50 +46,30 @@ extension ChatView {
         case .later:
             didLoad = viewModel.loadMoreAutomaticLaterHistoryIfNeeded()
         }
-        guard didLoad else {
-            suppressAutoScrollOnce = false
-            isHistoryLoadInFlight = false
-            chatHistoryViewportAnchorController.cancel()
-            return
-        }
+        scrollCoordinator.finishHistoryMutation(didLoad: didLoad)
     }
 
     func performManualHistoryLoad() {
         guard viewModel.usesManualHistoryLoading,
-              !isHistoryLoadInFlight,
               let anchorMessageID = viewModel.displayMessages.first?.id else {
             return
         }
         let displayedMessageIDs = viewModel.displayMessages.map(\.id)
-        guard chatHistoryViewportAnchorController.beginMutation(
+        guard scrollCoordinator.beginManualHistoryMutation(
             anchorMessageID: anchorMessageID,
             displayedMessageIDs: displayedMessageIDs
         ) else {
             return
         }
-
-        suppressAutoScrollOnce = true
-        shouldKeepBottomPinned = false
-        isHistoryLoadInFlight = true
-        guard viewModel.loadMoreHistoryChunk() else {
-            suppressAutoScrollOnce = false
-            isHistoryLoadInFlight = false
-            chatHistoryViewportAnchorController.cancel()
-            return
-        }
+        scrollCoordinator.finishHistoryMutation(didLoad: viewModel.loadMoreHistoryChunk())
     }
 
     var pendingChatAnchorAdjustment: ChatScrollAnchorAdjustment? {
-        chatHistoryViewportAnchorController.pendingAdjustment
-            ?? chatLayoutIntegrityMonitor.pendingAnchorAdjustment
+        scrollCoordinator.pendingAnchorAdjustment
     }
 
     func completeChatAnchorAdjustment(id: UUID) {
-        if chatHistoryViewportAnchorController.completeAdjustment(id: id) {
-            isHistoryLoadInFlight = false
-            return
-        }
-        chatLayoutIntegrityMonitor.completeAnchorAdjustment(id: id)
+        scrollCoordinator.completeAnchorAdjustment(id: id)
     }
 
     func handleChatScrollMetrics(
@@ -103,7 +77,7 @@ extension ChatView {
         distanceToTop: CGFloat,
         isUserInteracting: Bool
     ) {
-        scrollDistanceToTop = max(distanceToTop, 0)
+        scrollCoordinator.scrollDistanceToTop = max(distanceToTop, 0)
         updateChatScrollInteractionState(isUserInteracting)
         updateScrollToBottomVisibility(
             distanceToBottom: distanceToBottom,
@@ -113,13 +87,13 @@ extension ChatView {
             distanceToBottom: distanceToBottom
         )
         guard !hasExplicitChatNavigationCommand else {
-            pendingAutomaticHistoryLoadRequest = nil
+            scrollCoordinator.pendingAutomaticHistoryLoadRequest = nil
             return
         }
 
         let firstMessageID = viewModel.displayMessages.first?.id
         let lastMessageID = viewModel.displayMessages.last?.id
-        if !isHistoryLoadInFlight,
+        if !scrollCoordinator.isHistoryLoadInFlight,
            !viewModel.isHistoryFullyLoaded,
            Self.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
@@ -127,13 +101,13 @@ extension ChatView {
             distanceToEdge: distanceToTop,
             triggerDistance: automaticHistoryLoadTriggerDistance,
             anchorMessageID: firstMessageID,
-            lastLoadAnchorID: lastAutomaticHistoryLoadAnchorID
+            lastLoadAnchorID: scrollCoordinator.lastAutomaticHistoryLoadAnchorID
            ), let firstMessageID {
-            pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
+            scrollCoordinator.pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
                 direction: .earlier,
                 anchorMessageID: firstMessageID
             )
-        } else if !isHistoryLoadInFlight,
+        } else if !scrollCoordinator.isHistoryLoadInFlight,
                   !viewModel.isLaterHistoryFullyLoaded,
                   Self.shouldQueueAutomaticHistoryLoad(
                     usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
@@ -141,37 +115,34 @@ extension ChatView {
                     distanceToEdge: distanceToBottom,
                     triggerDistance: automaticHistoryLoadTriggerDistance,
                     anchorMessageID: lastMessageID,
-                    lastLoadAnchorID: lastAutomaticHistoryLoadAnchorID
+                    lastLoadAnchorID: scrollCoordinator.lastAutomaticHistoryLoadAnchorID
                   ), let lastMessageID {
-            pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
+            scrollCoordinator.pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
                 direction: .later,
                 anchorMessageID: lastMessageID
             )
         }
 
         guard !isUserInteracting,
-              !isHistoryLoadInFlight,
-              let request = pendingAutomaticHistoryLoadRequest else {
+              !scrollCoordinator.isHistoryLoadInFlight,
+              let request = scrollCoordinator.pendingAutomaticHistoryLoadRequest else {
             return
         }
         let remainsNearRequestedEdge = request.direction == .earlier
             ? distanceToTop < automaticHistoryLoadTriggerDistance
             : distanceToBottom < automaticHistoryLoadTriggerDistance
-        pendingAutomaticHistoryLoadRequest = nil
+        scrollCoordinator.pendingAutomaticHistoryLoadRequest = nil
         guard remainsNearRequestedEdge else { return }
         performAutomaticHistoryLoad(request)
     }
 
 
     func cancelAutomaticHistoryNavigation() {
-        cancelHistoryAnchorRestoration()
-        pendingAutomaticHistoryLoadRequest = nil
-        lastAutomaticHistoryLoadAnchorID = nil
+        scrollCoordinator.cancelAutomaticHistoryNavigation()
     }
 
     func cancelHistoryAnchorRestoration() {
-        isHistoryLoadInFlight = false
-        chatHistoryViewportAnchorController.cancel()
+        scrollCoordinator.cancelHistoryAnchorRestoration()
     }
 
 }

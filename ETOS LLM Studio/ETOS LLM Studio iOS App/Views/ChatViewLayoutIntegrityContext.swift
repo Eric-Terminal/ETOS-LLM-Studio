@@ -17,15 +17,15 @@ extension ChatView {
         return ChatLayoutAuditContext(
             sessionID: viewModel.currentSession?.id,
             viewportSize: CGSize(
-                width: chatScrollViewportWidth,
-                height: chatScrollViewportHeight
+                width: scrollCoordinator.chatScrollViewportWidth,
+                height: scrollCoordinator.chatScrollViewportHeight
             ),
             isChatVisible: isChatVisible,
             isAppActive: scenePhase == .active,
-            isUserInteracting: isChatScrollUserInteracting,
+            isUserInteracting: scrollCoordinator.isChatScrollUserInteracting,
             isSendingMessage: viewModel.isSendingMessage,
-            isLayoutSettling: isChatLayoutSettling,
-            isHistoryLoadInFlight: isHistoryLoadInFlight,
+            isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
+            isHistoryLoadInFlight: scrollCoordinator.isHistoryLoadInFlight,
             hasProgrammaticScrollTarget: hasChatProgrammaticScrollOwnership,
             hasSendFlight: flightState != nil,
             scrollAnimationEnabled: appConfig.chatScrollAnimationEnabled,
@@ -40,22 +40,13 @@ extension ChatView {
     }
 
     func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
-        guard isChatScrollUserInteracting != isUserInteracting else { return }
-        isChatScrollUserInteracting = isUserInteracting
-        if isUserInteracting {
-            scrollNavigationHideTask?.cancel()
-            scrollNavigationHideTask = nil
-        } else {
+        guard scrollCoordinator.updateInteractionState(isUserInteracting) else { return }
+        if !isUserInteracting {
             scheduleScrollNavigationPanelHide()
         }
         if isUserInteracting,
-           (pendingScrollTargetTask != nil
-                || chatScrollPositionController.hasActiveCommand
-                || isMessageJumpInFlight) {
+           (scrollCoordinator.hasPendingOrActiveScrollCommand || isMessageJumpInFlight) {
             cancelPendingScrollTargetCommand()
-        }
-        if isUserInteracting, chatHistoryViewportAnchorController.isRestoringAnchor {
-            cancelHistoryAnchorRestoration()
         }
     }
 }

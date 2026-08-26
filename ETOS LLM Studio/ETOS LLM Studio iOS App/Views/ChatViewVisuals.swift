@@ -206,7 +206,7 @@ extension ChatView {
 
     var canPresentExpandedScrollNavigationPanel: Bool {
         Self.canPresentExpandedScrollNavigation(
-            viewportHeight: chatScrollViewportHeight,
+            viewportHeight: scrollCoordinator.chatScrollViewportHeight,
             panelHeight: scrollNavigationPanelHeight
         )
     }
@@ -230,14 +230,14 @@ extension ChatView {
             telegramScrollNavigationButton(
                 systemName: "chevron.up",
                 accessibilityLabel: NSLocalizedString("滚动到上一条消息", comment: ""),
-                isEnabled: previousMessageNavigationTargetID != nil
+                isEnabled: scrollCoordinator.previousMessageNavigationTargetID != nil
             ) {
                 handleAdjacentMessageNavigation(.previous)
             }
             telegramScrollNavigationButton(
                 systemName: "chevron.down",
                 accessibilityLabel: NSLocalizedString("滚动到下一条消息", comment: ""),
-                isEnabled: nextMessageNavigationTargetID != nil
+                isEnabled: scrollCoordinator.nextMessageNavigationTargetID != nil
             ) {
                 handleAdjacentMessageNavigation(.next)
             }
