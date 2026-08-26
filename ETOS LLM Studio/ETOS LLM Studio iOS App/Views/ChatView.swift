@@ -30,11 +30,7 @@ struct ChatView: View {
     @ObservedObject var ttsManager = TTSManager.shared
     @ObservedObject var localNotificationCenter = AppLocalNotificationCenter.shared
     @State var isChatVisible = false
-    @State var showScrollToBottom = false
-    @State var showScrollNavigationPanel = false
-    @State var scrollNavigationHideTask: Task<Void, Never>?
-    @State var shouldKeepBottomPinned = true
-    @State var suppressAutoScrollOnce = false
+    @StateObject var scrollCoordinator = ChatScrollCoordinator()
     @State var navigationDestination: ChatQuickAction?
     @State var selectedChatQuickActions: [ChatQuickAction] = ChatQuickActionSelection.fallback
     @State var isChatQuickActionFolderPresented = false
@@ -99,33 +95,6 @@ struct ChatView: View {
     @State var bottomSafeAreaInset: CGFloat = 0
     @State var isKeyboardVisible = false
     @State var chatInputBarHeight: CGFloat = 0
-    @State var chatScrollViewportWidth: CGFloat = 0
-    @State var chatScrollViewportHeight: CGFloat = 0
-    @State var scrollDistanceToBottom: CGFloat = 0
-    @State var scrollDistanceToTop: CGFloat = 0
-    @State var pendingHistoryResetWorkItem: DispatchWorkItem?
-    @State var pendingBottomSnapTask: Task<Void, Never>?
-    @State var chatLayoutSettleTask: Task<Void, Never>?
-    @State var pendingScrollTargetTask: Task<Void, Never>?
-    @State var scrollTargetGeneration: UInt = 0
-    @State var isHistoryLoadInFlight = false
-    @State var pendingAutomaticHistoryLoadRequest: ChatAutomaticHistoryLoadRequest?
-    @State var lastAutomaticHistoryLoadAnchorID: UUID?
-    @StateObject var chatScrollPositionController = ChatScrollPositionController()
-    @StateObject var chatHistoryViewportAnchorController = ChatHistoryViewportAnchorController()
-    @State var bottomScrollCommandReleaseTask: Task<Void, Never>?
-    @State var messageNavigationCursorID: UUID?
-    @State var chatNavigationMessageIDs: [UUID] = []
-    @State var chatNavigationIndexByMessageID: [UUID: Int] = [:]
-    @State var previousMessageNavigationTargetID: UUID?
-    @State var nextMessageNavigationTargetID: UUID?
-    @State var awaitsFreshBottomNavigationSnapshot = false
-    @State var bottomNavigationSnapshotBaselineRevision: UInt = 0
-    @State var bottomScrollCommandGeneration: UInt = 0
-    @State var needsImmediateBottomSnap: Bool = true
-    @State var isChatLayoutSettling: Bool = false
-    @State var isChatScrollUserInteracting: Bool = false
-    @StateObject var chatLayoutIntegrityMonitor = ChatLayoutIntegrityMonitor()
     @State var isComposerRequestControlsExpanded = false
     @State var shouldRestorePendingJumpOnAppear: Bool = false
     @State var pendingJumpRequest: MessageJumpRequest?

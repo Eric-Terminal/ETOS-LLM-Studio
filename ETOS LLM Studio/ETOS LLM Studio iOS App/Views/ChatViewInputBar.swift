@@ -76,8 +76,8 @@ extension ChatView {
                 isSendActionPending: viewModel.isSendSubmissionPending,
                 sendAction: {
                     guard viewModel.canSendMessage else { return }
-                    shouldKeepBottomPinned = true
-                    showScrollToBottom = false
+                    scrollCoordinator.shouldKeepBottomPinned = true
+                    scrollCoordinator.showScrollToBottom = false
                     let outgoingText = draftText
                     if AppConfigStore.shared.chatSendAnimationEnabled,
                        AppConfigStore.shared.chatSendDelaySeconds <= 0 {

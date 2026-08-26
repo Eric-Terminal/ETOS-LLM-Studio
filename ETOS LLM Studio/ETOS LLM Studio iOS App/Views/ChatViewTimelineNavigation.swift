@@ -62,10 +62,10 @@ extension ChatView {
     }
 
     var canNavigateToTimelineTop: Bool {
-        !chatNavigationMessageIDs.isEmpty
+        !scrollCoordinator.chatNavigationMessageIDs.isEmpty
             && Self.shouldEnableTimelineEdgeNavigation(
                 isHistoryBoundaryLoaded: viewModel.isHistoryFullyLoaded,
-                distanceToEdge: scrollDistanceToTop
+                distanceToEdge: scrollCoordinator.scrollDistanceToTop
             )
     }
 
@@ -73,8 +73,8 @@ extension ChatView {
         !viewModel.displayMessages.isEmpty
             && Self.shouldEnableTimelineBottomNavigation(
                 isLaterHistoryBoundaryLoaded: viewModel.isLaterHistoryFullyLoaded,
-                keepsBottomPinned: shouldKeepBottomPinned,
-                distanceToBottom: scrollDistanceToBottom
+                keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned,
+                distanceToBottom: scrollCoordinator.scrollDistanceToBottom
             )
     }
 
@@ -83,27 +83,27 @@ extension ChatView {
               let firstMessageID = viewModel.messageNavigationIDs().first else { return }
         revealScrollNavigationPanel()
         prepareForMessageJump()
-        messageNavigationCursorID = firstMessageID
+        scrollCoordinator.messageNavigationCursorID = firstMessageID
         refreshMessageNavigationTargets()
         scheduleTimelineTopNavigation()
     }
 
     func handleScrollToBottomButtonTap() {
         revealScrollNavigationPanel()
-        pendingHistoryResetWorkItem?.cancel()
-        pendingHistoryResetWorkItem = nil
+        scrollCoordinator.pendingHistoryResetWorkItem?.cancel()
+        scrollCoordinator.pendingHistoryResetWorkItem = nil
         shouldRestorePendingJumpOnAppear = false
-        lastAutomaticHistoryLoadAnchorID = nil
-        messageNavigationCursorID = nil
-        awaitsFreshBottomNavigationSnapshot = true
-        bottomNavigationSnapshotBaselineRevision = chatLayoutIntegrityMonitor.currentSnapshotRevision
-        previousMessageNavigationTargetID = nil
-        nextMessageNavigationTargetID = nil
+        scrollCoordinator.lastAutomaticHistoryLoadAnchorID = nil
+        scrollCoordinator.messageNavigationCursorID = nil
+        scrollCoordinator.awaitsFreshBottomNavigationSnapshot = true
+        scrollCoordinator.bottomNavigationSnapshotBaselineRevision = scrollCoordinator.chatLayoutIntegrityMonitor.currentSnapshotRevision
+        scrollCoordinator.previousMessageNavigationTargetID = nil
+        scrollCoordinator.nextMessageNavigationTargetID = nil
 
         let shouldResetHistoryWindow = viewModel.usesManualHistoryLoading
             || viewModel.usesAutomaticHistoryWindow
-        shouldKeepBottomPinned = true
-        showScrollToBottom = false
+        scrollCoordinator.shouldKeepBottomPinned = true
+        scrollCoordinator.showScrollToBottom = false
 
         guard shouldResetHistoryWindow else {
             scrollToBottom(
@@ -115,52 +115,52 @@ extension ChatView {
             return
         }
 
-        pendingBottomSnapTask?.cancel()
-        pendingBottomSnapTask = nil
+        scrollCoordinator.pendingBottomSnapTask?.cancel()
+        scrollCoordinator.pendingBottomSnapTask = nil
         cancelPendingScrollTargetCommand()
-        chatScrollPositionController.releaseCommand()
+        scrollCoordinator.chatScrollPositionController.releaseCommand()
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
             viewModel.resetLazyLoadState()
         }
         let workItem = DispatchWorkItem {
-            pendingHistoryResetWorkItem = nil
+            scrollCoordinator.pendingHistoryResetWorkItem = nil
             scheduleDeferredBottomSnap()
         }
-        pendingHistoryResetWorkItem = workItem
+        scrollCoordinator.pendingHistoryResetWorkItem = workItem
         DispatchQueue.main.async(execute: workItem)
     }
 
     func handleAdjacentMessageNavigation(_ direction: ChatMessageNavigationDirection) {
         guard appConfig.chatTimelineNavigationEnabled,
-              !awaitsFreshBottomNavigationSnapshot else { return }
+              !scrollCoordinator.awaitsFreshBottomNavigationSnapshot else { return }
         let navigationMessageIDs = viewModel.messageNavigationIDs()
-        guard let targetMessageID = chatLayoutIntegrityMonitor.adjacentMessageID(
+        guard let targetMessageID = scrollCoordinator.chatLayoutIntegrityMonitor.adjacentMessageID(
             in: navigationMessageIDs,
-            viewportHeight: chatScrollViewportHeight,
-            retainedAnchorID: messageNavigationCursorID,
+            viewportHeight: scrollCoordinator.chatScrollViewportHeight,
+            retainedAnchorID: scrollCoordinator.messageNavigationCursorID,
             direction: direction
         ) else { return }
 
         revealScrollNavigationPanel()
         prepareForMessageJump()
-        messageNavigationCursorID = targetMessageID
+        scrollCoordinator.messageNavigationCursorID = targetMessageID
         refreshMessageNavigationTargets()
         scheduleMessageJump(to: targetMessageID, usesAdjacentAnimation: true)
     }
 
     private func scheduleTimelineTopNavigation() {
-        let generation = scrollTargetGeneration
+        let generation = scrollCoordinator.scrollTargetGeneration
         let sessionID = viewModel.currentSession?.id
-        pendingScrollTargetTask = Task { @MainActor in
+        scrollCoordinator.pendingScrollTargetTask = Task { @MainActor in
             defer {
-                if generation == scrollTargetGeneration {
+                if generation == scrollCoordinator.scrollTargetGeneration {
                     releaseMessageJumpScrollTarget()
                     pendingJumpRequest = nil
                     isMessageJumpInFlight = false
                     shouldRestorePendingJumpOnAppear = false
-                    pendingScrollTargetTask = nil
+                    scrollCoordinator.pendingScrollTargetTask = nil
                 }
             }
 
@@ -174,9 +174,9 @@ extension ChatView {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 viewModel.moveHistoryWindowToStart()
-                chatScrollPositionController.issueCommand(to: .top, anchor: .top)
+                scrollCoordinator.chatScrollPositionController.issueCommand(to: .top, anchor: .top)
             }
-            bottomScrollCommandGeneration &+= 1
+            scrollCoordinator.bottomScrollCommandGeneration &+= 1
             try? await Task.sleep(nanoseconds: 80_000_000)
         }
     }
@@ -184,98 +184,98 @@ extension ChatView {
     func refreshMessageNavigationIndex() {
         guard appConfig.chatTimelineNavigationEnabled else { return }
         let messageIDs = viewModel.messageNavigationIDs()
-        guard chatNavigationMessageIDs != messageIDs else {
+        guard scrollCoordinator.chatNavigationMessageIDs != messageIDs else {
             refreshMessageNavigationTargets()
             return
         }
-        chatNavigationMessageIDs = messageIDs
-        chatNavigationIndexByMessageID = Dictionary(
+        scrollCoordinator.chatNavigationMessageIDs = messageIDs
+        scrollCoordinator.chatNavigationIndexByMessageID = Dictionary(
             uniqueKeysWithValues: messageIDs.enumerated().map { ($0.element, $0.offset) }
         )
-        if let cursor = messageNavigationCursorID,
-           chatNavigationIndexByMessageID[cursor] == nil {
-            messageNavigationCursorID = nil
+        if let cursor = scrollCoordinator.messageNavigationCursorID,
+           scrollCoordinator.chatNavigationIndexByMessageID[cursor] == nil {
+            scrollCoordinator.messageNavigationCursorID = nil
         }
         refreshMessageNavigationTargets()
     }
 
     func refreshMessageNavigationTargets() {
         guard appConfig.chatTimelineNavigationEnabled else { return }
-        if awaitsFreshBottomNavigationSnapshot {
+        if scrollCoordinator.awaitsFreshBottomNavigationSnapshot {
             let shouldSuspend = Self.shouldSuspendAdjacentNavigationForBottomArrival(
                 awaitsFreshSnapshot: true,
                 hasProgrammaticScrollOwnership: hasChatProgrammaticScrollOwnership,
-                currentSnapshotRevision: chatLayoutIntegrityMonitor.currentSnapshotRevision,
-                baselineSnapshotRevision: bottomNavigationSnapshotBaselineRevision
+                currentSnapshotRevision: scrollCoordinator.chatLayoutIntegrityMonitor.currentSnapshotRevision,
+                baselineSnapshotRevision: scrollCoordinator.bottomNavigationSnapshotBaselineRevision
             )
             if shouldSuspend {
-                previousMessageNavigationTargetID = nil
-                nextMessageNavigationTargetID = nil
+                scrollCoordinator.previousMessageNavigationTargetID = nil
+                scrollCoordinator.nextMessageNavigationTargetID = nil
                 return
             }
-            awaitsFreshBottomNavigationSnapshot = false
+            scrollCoordinator.awaitsFreshBottomNavigationSnapshot = false
         }
 
-        guard let anchorMessageID = chatLayoutIntegrityMonitor.navigationAnchorMessageID(
-            in: chatNavigationIndexByMessageID,
-            viewportHeight: chatScrollViewportHeight,
-            retainedAnchorID: messageNavigationCursorID
-        ), let anchorIndex = chatNavigationIndexByMessageID[anchorMessageID] else {
-            previousMessageNavigationTargetID = nil
-            nextMessageNavigationTargetID = nil
+        guard let anchorMessageID = scrollCoordinator.chatLayoutIntegrityMonitor.navigationAnchorMessageID(
+            in: scrollCoordinator.chatNavigationIndexByMessageID,
+            viewportHeight: scrollCoordinator.chatScrollViewportHeight,
+            retainedAnchorID: scrollCoordinator.messageNavigationCursorID
+        ), let anchorIndex = scrollCoordinator.chatNavigationIndexByMessageID[anchorMessageID] else {
+            scrollCoordinator.previousMessageNavigationTargetID = nil
+            scrollCoordinator.nextMessageNavigationTargetID = nil
             return
         }
 
         let previousTarget = anchorIndex > 0
-            ? chatNavigationMessageIDs[anchorIndex - 1]
+            ? scrollCoordinator.chatNavigationMessageIDs[anchorIndex - 1]
             : nil
         let nextIndex = anchorIndex + 1
-        let nextTarget = chatNavigationMessageIDs.indices.contains(nextIndex)
-            ? chatNavigationMessageIDs[nextIndex]
+        let nextTarget = scrollCoordinator.chatNavigationMessageIDs.indices.contains(nextIndex)
+            ? scrollCoordinator.chatNavigationMessageIDs[nextIndex]
             : nil
-        if previousMessageNavigationTargetID != previousTarget {
-            previousMessageNavigationTargetID = previousTarget
+        if scrollCoordinator.previousMessageNavigationTargetID != previousTarget {
+            scrollCoordinator.previousMessageNavigationTargetID = previousTarget
         }
-        if nextMessageNavigationTargetID != nextTarget {
-            nextMessageNavigationTargetID = nextTarget
+        if scrollCoordinator.nextMessageNavigationTargetID != nextTarget {
+            scrollCoordinator.nextMessageNavigationTargetID = nextTarget
         }
     }
 
     func revealScrollNavigationPanel() {
         guard appConfig.chatTimelineNavigationEnabled,
               !viewModel.displayMessages.isEmpty else { return }
-        scrollNavigationHideTask?.cancel()
-        scrollNavigationHideTask = nil
-        if !showScrollNavigationPanel {
+        scrollCoordinator.scrollNavigationHideTask?.cancel()
+        scrollCoordinator.scrollNavigationHideTask = nil
+        if !scrollCoordinator.showScrollNavigationPanel {
             withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
-                showScrollNavigationPanel = true
+                scrollCoordinator.showScrollNavigationPanel = true
             }
         }
-        if !isChatScrollUserInteracting {
+        if !scrollCoordinator.isChatScrollUserInteracting {
             scheduleScrollNavigationPanelHide()
         }
     }
 
     func scheduleScrollNavigationPanelHide() {
-        scrollNavigationHideTask?.cancel()
-        scrollNavigationHideTask = nil
-        guard showScrollNavigationPanel, !accessibilityVoiceOverEnabled else { return }
-        scrollNavigationHideTask = Task { @MainActor in
+        scrollCoordinator.scrollNavigationHideTask?.cancel()
+        scrollCoordinator.scrollNavigationHideTask = nil
+        guard scrollCoordinator.showScrollNavigationPanel, !accessibilityVoiceOverEnabled else { return }
+        scrollCoordinator.scrollNavigationHideTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard !Task.isCancelled, !isChatScrollUserInteracting else { return }
+            guard !Task.isCancelled, !scrollCoordinator.isChatScrollUserInteracting else { return }
             withAnimation(accessibilityReduceMotion ? nil : .easeIn(duration: 0.16)) {
-                showScrollNavigationPanel = false
+                scrollCoordinator.showScrollNavigationPanel = false
             }
-            scrollNavigationHideTask = nil
+            scrollCoordinator.scrollNavigationHideTask = nil
         }
     }
 
     func hideScrollNavigationPanel() {
-        scrollNavigationHideTask?.cancel()
-        scrollNavigationHideTask = nil
-        guard showScrollNavigationPanel else { return }
+        scrollCoordinator.scrollNavigationHideTask?.cancel()
+        scrollCoordinator.scrollNavigationHideTask = nil
+        guard scrollCoordinator.showScrollNavigationPanel else { return }
         withAnimation(accessibilityReduceMotion ? nil : .easeIn(duration: 0.16)) {
-            showScrollNavigationPanel = false
+            scrollCoordinator.showScrollNavigationPanel = false
         }
     }
 
@@ -283,40 +283,27 @@ extension ChatView {
         DragGesture(minimumDistance: 10, coordinateSpace: .local)
             .onChanged { value in
                 guard appConfig.chatTimelineNavigationEnabled,
-                      !showScrollNavigationPanel,
+                      !scrollCoordinator.showScrollNavigationPanel,
                       Self.shouldRevealScrollNavigationForEdgeSwipe(
                         startLocationX: value.startLocation.x,
-                        viewportWidth: chatScrollViewportWidth,
+                        viewportWidth: scrollCoordinator.chatScrollViewportWidth,
                         translation: value.translation
                       ) else { return }
                 revealScrollNavigationPanel()
             }
             .onEnded { _ in
-                guard showScrollNavigationPanel else { return }
+                guard scrollCoordinator.showScrollNavigationPanel else { return }
                 scheduleScrollNavigationPanelHide()
             }
     }
 
     func handleChatScrollPanBegan() {
-        awaitsFreshBottomNavigationSnapshot = false
-        messageNavigationCursorID = nil
-        refreshMessageNavigationTargets()
-        cancelHistoryAnchorRestoration()
-        pendingAutomaticHistoryLoadRequest = nil
-        let shouldCancelCommand = Self.shouldCancelProgrammaticScrollOnPanBegan(
-            hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
-            hasPendingBottomSnap: pendingBottomSnapTask != nil,
-            hasPendingTargetTask: pendingScrollTargetTask != nil,
-            hasScrollTarget: chatScrollPositionController.hasActiveCommand,
-            hasActiveBottomTarget: chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
-            isMessageJumpInFlight: isMessageJumpInFlight
+        let shouldCancelCommand = scrollCoordinator.prepareForUserPan(
+            isMessageJumpInFlight: isMessageJumpInFlight,
+            bottomScrollTarget: bottomScrollTarget
         )
-        pendingHistoryResetWorkItem?.cancel()
-        pendingHistoryResetWorkItem = nil
-        pendingBottomSnapTask?.cancel()
-        pendingBottomSnapTask = nil
+        refreshMessageNavigationTargets()
         guard shouldCancelCommand else { return }
-        needsImmediateBottomSnap = false
         cancelPendingScrollTargetCommand()
     }
 }
