@@ -301,6 +301,8 @@ extension ChatView {
         awaitsFreshBottomNavigationSnapshot = false
         messageNavigationCursorID = nil
         refreshMessageNavigationTargets()
+        cancelHistoryAnchorRestoration()
+        pendingAutomaticHistoryLoadRequest = nil
         let shouldCancelCommand = Self.shouldCancelProgrammaticScrollOnPanBegan(
             hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
             hasPendingBottomSnap: pendingBottomSnapTask != nil,

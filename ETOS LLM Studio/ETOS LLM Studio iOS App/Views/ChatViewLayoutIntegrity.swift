@@ -530,6 +530,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
     @Published private(set) var stackRecoveryRevision: UInt = 0
     @Published private(set) var pendingAnchorAdjustment: ChatScrollAnchorAdjustment?
     @Published private(set) var anchorScrollTargetMessageID: UUID?
+    @Published private(set) var isContentFrameProbeActive = false
 
     private struct MessagePair: Hashable {
         let upperMessageID: UUID
@@ -571,6 +572,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
     private var pendingStackRecovery: PendingStackRecovery?
     private var auditTask: Task<Void, Never>?
     private var auditGeneration: UInt = 0
+    private var suppressAuditForContentFrameRemoval = false
 
     func recoveryRevision(for messageID: UUID) -> UInt {
         recoveryRevisionByMessageID[messageID, default: 0]
@@ -614,6 +616,11 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         snapshot = newSnapshot
         self.orderedMessageIDs = orderedMessageIDs
         snapshotRevision &+= 1
+
+        if suppressAuditForContentFrameRemoval, newSnapshot.contentFrames.isEmpty {
+            suppressAuditForContentFrameRemoval = false
+            return
+        }
 
         if completeStackRecoveryIfPossible() {
             return
@@ -679,6 +686,8 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         stackRepairAttemptsByPair.removeAll(keepingCapacity: true)
         reportedExhaustedPairs.removeAll(keepingCapacity: true)
         anonymousAliasByMessageID.removeAll(keepingCapacity: true)
+        isContentFrameProbeActive = false
+        suppressAuditForContentFrameRemoval = false
     }
 
     private func reset() {
@@ -702,7 +711,9 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
             stackRecoveryRevision = 0
             pendingAnchorAdjustment = nil
             anchorScrollTargetMessageID = nil
+            isContentFrameProbeActive = false
         }
+        suppressAuditForContentFrameRemoval = false
     }
 
     private func scheduleAuditIfPossible() {
@@ -725,36 +736,45 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
                 if generation == auditGeneration {
                     requestedProbeRevision = nil
                     auditTask = nil
+                    deactivateContentFrameProbe()
                 }
             }
 
             try? await Task.sleep(nanoseconds: settleDelay)
             guard canContinueAudit(generation: generation) else { return }
 
-            let firstOverlap = await detectOverlap()
-            let hasUnconfirmedHandoff = snapshot.samples.contains { messageID, sample in
-                sample.metadata.rendererHandoffRevision
-                    > self.confirmedHandoffRevisionByMessageID[messageID, default: 0]
-            }
-            guard firstOverlap != nil || hasUnconfirmedHandoff else { return }
-
-            let baselineSnapshotRevision = snapshotRevision
-            let probeRevision = requestFreshLayoutProbe()
+            let firstBaselineSnapshotRevision = snapshotRevision
+            let firstProbeRevision = requestFreshLayoutProbe()
             try? await Task.sleep(nanoseconds: 120_000_000)
             guard canContinueAudit(generation: generation),
                   ChatMessageLayoutAudit.isFreshVerificationSample(
-                    baselineSnapshotRevision: baselineSnapshotRevision,
+                    baselineSnapshotRevision: firstBaselineSnapshotRevision,
                     currentSnapshotRevision: snapshotRevision,
-                    requestedProbeRevision: probeRevision,
+                    requestedProbeRevision: firstProbeRevision,
+                    reportedProbeRevision: snapshot.probeRevision
+                  ) else {
+                return
+            }
+
+            let firstOverlap = await detectOverlap()
+            confirmCurrentRendererHandoffs()
+            guard let firstOverlap else { return }
+
+            let secondBaselineSnapshotRevision = snapshotRevision
+            let secondProbeRevision = requestFreshLayoutProbe()
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard canContinueAudit(generation: generation),
+                  ChatMessageLayoutAudit.isFreshVerificationSample(
+                    baselineSnapshotRevision: secondBaselineSnapshotRevision,
+                    currentSnapshotRevision: snapshotRevision,
+                    requestedProbeRevision: secondProbeRevision,
                     reportedProbeRevision: snapshot.probeRevision
                   ) else {
                 return
             }
 
             let secondOverlap = await detectOverlap()
-            confirmCurrentRendererHandoffs()
-            guard let firstOverlap,
-                  let secondOverlap,
+            guard let secondOverlap,
                   firstOverlap.upperMessageID == secondOverlap.upperMessageID,
                   firstOverlap.lowerMessageID == secondOverlap.lowerMessageID else {
                 return
@@ -771,6 +791,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         transaction.animation = nil
         transaction.disablesAnimations = true
         withTransaction(transaction) {
+            isContentFrameProbeActive = true
             layoutProbeRevision = nextRevision
         }
         return nextRevision
@@ -781,6 +802,18 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         auditTask?.cancel()
         auditTask = nil
         requestedProbeRevision = nil
+        deactivateContentFrameProbe()
+    }
+
+    private func deactivateContentFrameProbe() {
+        guard isContentFrameProbeActive else { return }
+        suppressAuditForContentFrameRemoval = true
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isContentFrameProbeActive = false
+        }
     }
 
     private func canContinueAudit(generation: UInt) -> Bool {
@@ -949,53 +982,5 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         let alias = "m\(anonymousAliasByMessageID.count + 1)"
         anonymousAliasByMessageID[messageID] = alias
         return alias
-    }
-}
-
-extension ChatView {
-    var chatLayoutAuditContext: ChatLayoutAuditContext {
-        let transitionSettleDelay = appConfig.chatScrollAnimationEnabled
-            ? max(0.45, appConfig.chatScrollAnimationSpringResponse)
-            : 0.35
-        return ChatLayoutAuditContext(
-            sessionID: viewModel.currentSession?.id,
-            viewportSize: CGSize(
-                width: chatScrollViewportWidth,
-                height: chatScrollViewportHeight
-            ),
-            isChatVisible: isChatVisible,
-            isAppActive: scenePhase == .active,
-            isUserInteracting: isChatScrollUserInteracting,
-            isSendingMessage: viewModel.isSendingMessage,
-            isLayoutSettling: isChatLayoutSettling,
-            isHistoryLoadInFlight: isAutomaticHistoryLoadInFlight,
-            hasProgrammaticScrollTarget: hasChatProgrammaticScrollOwnership,
-            hasSendFlight: flightState != nil,
-            scrollAnimationEnabled: appConfig.chatScrollAnimationEnabled,
-            settleDelayNanoseconds: UInt64(transitionSettleDelay * 1_000_000_000),
-            usesNoBubbleUI: viewModel.enableNoBubbleUI,
-            fontScale: FontLibrary.effectiveFontScale(
-                appConfig.fontCustomScale,
-                isCustomFontEnabled: appConfig.fontUseCustomFonts
-            ),
-            systemVersion: UIDevice.current.systemVersion
-        )
-    }
-
-    func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
-        guard isChatScrollUserInteracting != isUserInteracting else { return }
-        isChatScrollUserInteracting = isUserInteracting
-        if isUserInteracting {
-            scrollNavigationHideTask?.cancel()
-            scrollNavigationHideTask = nil
-        } else {
-            scheduleScrollNavigationPanelHide()
-        }
-        if isUserInteracting,
-           (pendingScrollTargetTask != nil
-                || chatScrollPositionController.hasActiveCommand
-                || isMessageJumpInFlight) {
-            cancelPendingScrollTargetCommand()
-        }
     }
 }
