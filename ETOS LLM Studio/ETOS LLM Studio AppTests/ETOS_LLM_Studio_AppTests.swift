@@ -165,6 +165,36 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(ChatView.resolvedBottomScrollTarget == .bottom)
     }
 
+    @MainActor
+    @Test("系统位置回写不会被误判为程序化滚动")
+    func testObservedScrollPositionDoesNotClaimCommandOwnership() {
+        let controller = ChatScrollPositionController()
+
+        controller.acceptObservedPosition(.message(UUID()))
+
+        #expect(!controller.hasActiveCommand)
+    }
+
+    @MainActor
+    @Test("程序化滚动期间拒绝中间位置回写并在释放后恢复观测")
+    func testScrollCommandOwnsBindingOnlyForItsLifetime() {
+        let controller = ChatScrollPositionController()
+        let target = ChatScrollTargetID.message(UUID())
+        let intermediate = ChatScrollTargetID.message(UUID())
+
+        controller.issueCommand(to: target, anchor: .center)
+        controller.acceptObservedPosition(intermediate)
+
+        #expect(controller.hasActiveCommand)
+        #expect(controller.positionBinding.wrappedValue == target)
+
+        controller.releaseCommand(expectedTarget: target)
+        controller.acceptObservedPosition(intermediate)
+
+        #expect(!controller.hasActiveCommand)
+        #expect(controller.positionBinding.wrappedValue == intermediate)
+    }
+
     @Test("吸底命令抵达底部或超过最长占用时间后释放")
     func testChatBottomScrollCommandReleaseLifecycle() {
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(

@@ -15,8 +15,7 @@ extension ChatView {
             || pendingHistoryResetWorkItem != nil
             || pendingBottomSnapTask != nil
             || pendingScrollTargetTask != nil
-            || chatScrollTarget != nil
-            || activeBottomScrollCommandTarget != nil
+            || chatScrollPositionController.hasActiveCommand
     }
 
     var hasExplicitChatNavigationCommand: Bool {
@@ -24,8 +23,9 @@ extension ChatView {
             isMessageJumpInFlight: isMessageJumpInFlight,
             hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
             hasPendingBottomSnap: pendingBottomSnapTask != nil,
-            hasActiveBottomTarget: activeBottomScrollCommandTarget != nil,
-            hasPendingOrAppliedTarget: pendingScrollTargetTask != nil || chatScrollTarget != nil,
+            hasActiveBottomTarget: chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
+            hasPendingOrAppliedTarget: pendingScrollTargetTask != nil
+                || chatScrollPositionController.hasActiveCommand,
             isAutomaticHistoryLoadInFlight: isAutomaticHistoryLoadInFlight
         )
     }
@@ -272,12 +272,9 @@ extension ChatView {
 
     func handleDisplayedMessageIdentityChange() {
         let visibleMessageIDs = Set(viewModel.displayMessages.map(\.id))
-        let retainedTarget = Self.retainedChatScrollTarget(
-            chatScrollTarget,
-            visibleMessageIDs: visibleMessageIDs
-        )
-        if retainedTarget != chatScrollTarget {
-            chatScrollTarget = retainedTarget
+        if let activeTarget = chatScrollPositionController.activeCommandTarget,
+           !Self.isChatScrollTargetAvailable(activeTarget, visibleMessageIDs: visibleMessageIDs) {
+            cancelPendingScrollTargetCommand()
         }
 
         if isMessageJumpInFlight {
@@ -543,7 +540,7 @@ extension ChatView {
     /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
     func resolveActiveBottomScrollCommand(distanceToBottom: CGFloat) {
         guard Self.shouldReleaseActiveBottomScrollCommand(
-            hasActiveTarget: activeBottomScrollCommandTarget != nil,
+            hasActiveTarget: chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
             distanceToBottom: distanceToBottom,
             arrivalTolerance: bottomScrollCommandArrivalTolerance
         ) else { return }
@@ -553,16 +550,8 @@ extension ChatView {
     func releaseActiveBottomScrollCommand() {
         bottomScrollCommandReleaseTask?.cancel()
         bottomScrollCommandReleaseTask = nil
-        guard let target = activeBottomScrollCommandTarget else { return }
-        activeBottomScrollCommandTarget = nil
-        if chatScrollTarget == target {
-            var transaction = Transaction()
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                chatScrollTarget = nil
-            }
-        }
+        guard let target = chatScrollPositionController.activeCommandTarget else { return }
+        chatScrollPositionController.releaseCommand(expectedTarget: target)
         if awaitsFreshBottomNavigationSnapshot {
             bottomNavigationSnapshotBaselineRevision =
                 chatLayoutIntegrityMonitor.requestFreshNavigationSnapshot()
@@ -585,7 +574,7 @@ extension ChatView {
             guard !Task.isCancelled,
                   generation == scrollTargetGeneration,
                   sessionID == viewModel.currentSession?.id,
-                  activeBottomScrollCommandTarget == target,
+                  chatScrollPositionController.activeCommandTarget == target,
                   Self.shouldReleaseActiveBottomScrollCommand(
                     hasActiveTarget: true,
                     distanceToBottom: scrollDistanceToBottom,
@@ -644,14 +633,7 @@ extension ChatView {
         pendingScrollTargetTask?.cancel()
         pendingScrollTargetTask = nil
         releaseActiveBottomScrollCommand()
-        if chatScrollTarget != nil {
-            var transaction = Transaction()
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                chatScrollTarget = nil
-            }
-        }
+        chatScrollPositionController.releaseCommand()
         if !preservingMessageJump {
             pendingJumpRequest = nil
             isMessageJumpInFlight = false
@@ -709,14 +691,7 @@ extension ChatView {
                   sessionID == viewModel.currentSession?.id else {
                 return
             }
-            var transaction = Transaction()
-            transaction.animation = nil
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                if chatScrollTarget == target {
-                    chatScrollTarget = nil
-                }
-            }
+            chatScrollPositionController.releaseCommand(expectedTarget: target)
             isAutomaticHistoryLoadInFlight = false
             awaitsAutomaticHistoryAnchorMetrics = false
             automaticHistoryLoadDirection = nil
@@ -927,23 +902,11 @@ extension ChatView {
         _ target: ChatScrollTargetID,
         anchor: UnitPoint
     ) {
-        var transaction = Transaction()
-        transaction.animation = nil
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            chatScrollTargetAnchor = anchor
-            chatScrollTarget = target
-        }
+        chatScrollPositionController.issueCommand(to: target, anchor: anchor)
     }
 
     func releaseMessageJumpScrollTarget() {
-        guard chatScrollTarget != nil else { return }
-        var transaction = Transaction()
-        transaction.animation = nil
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            chatScrollTarget = nil
-        }
+        chatScrollPositionController.releaseCommand()
     }
 
     func canApplyScrollTarget(
@@ -968,8 +931,7 @@ extension ChatView {
         animation: Animation
     ) {
         let updateTarget = {
-            chatScrollTargetAnchor = anchor
-            chatScrollTarget = target
+            chatScrollPositionController.issueCommand(to: target, anchor: anchor)
         }
         if animated {
             withAnimation(animation, updateTarget)
@@ -986,7 +948,8 @@ extension ChatView {
         deferred: Bool = false,
         releasesAtBottom: Bool = false
     ) {
-        let shouldDefer = deferred || chatScrollTarget == target
+        let shouldDefer = deferred
+            || chatScrollPositionController.activeCommandTarget == target
         cancelPendingScrollTargetCommand()
         let generation = scrollTargetGeneration
         let sessionID = viewModel.currentSession?.id
@@ -994,7 +957,6 @@ extension ChatView {
         guard shouldDefer else {
             guard canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else { return }
             if releasesAtBottom {
-                activeBottomScrollCommandTarget = target
                 bottomScrollCommandGeneration &+= 1
             }
             applyScrollTarget(
@@ -1014,9 +976,7 @@ extension ChatView {
             return
         }
 
-        if chatScrollTarget == target {
-            chatScrollTarget = nil
-        }
+        chatScrollPositionController.releaseCommand(expectedTarget: target)
         pendingScrollTargetTask = Task { @MainActor in
             defer {
                 if generation == scrollTargetGeneration {
@@ -1029,7 +989,6 @@ extension ChatView {
                 return
             }
             if releasesAtBottom {
-                activeBottomScrollCommandTarget = target
                 bottomScrollCommandGeneration &+= 1
             }
             applyScrollTarget(

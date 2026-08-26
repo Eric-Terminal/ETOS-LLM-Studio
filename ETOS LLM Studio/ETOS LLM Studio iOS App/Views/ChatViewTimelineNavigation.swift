@@ -118,7 +118,7 @@ extension ChatView {
         pendingBottomSnapTask?.cancel()
         pendingBottomSnapTask = nil
         cancelPendingScrollTargetCommand()
-        chatScrollTarget = nil
+        chatScrollPositionController.releaseCommand()
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
@@ -174,8 +174,7 @@ extension ChatView {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 viewModel.moveHistoryWindowToStart()
-                chatScrollTargetAnchor = .top
-                chatScrollTarget = .top
+                chatScrollPositionController.issueCommand(to: .top, anchor: .top)
             }
             bottomScrollCommandGeneration &+= 1
             try? await Task.sleep(nanoseconds: 80_000_000)
@@ -306,8 +305,8 @@ extension ChatView {
             hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
             hasPendingBottomSnap: pendingBottomSnapTask != nil,
             hasPendingTargetTask: pendingScrollTargetTask != nil,
-            hasScrollTarget: chatScrollTarget != nil,
-            hasActiveBottomTarget: activeBottomScrollCommandTarget != nil,
+            hasScrollTarget: chatScrollPositionController.hasActiveCommand,
+            hasActiveBottomTarget: chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
             isMessageJumpInFlight: isMessageJumpInFlight
         )
         pendingHistoryResetWorkItem?.cancel()
