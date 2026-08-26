@@ -195,6 +195,55 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(controller.positionBinding.wrappedValue == intermediate)
     }
 
+    @MainActor
+    @Test("历史扩窗按同一消息行的几何差生成一次偏移校正")
+    func testHistoryWindowMutationPreservesViewportAnchor() {
+        let controller = ChatHistoryViewportAnchorController()
+        let earlierMessageID = UUID()
+        let anchorMessageID = UUID()
+        let trailingMessageID = UUID()
+        let initialMessageIDs = [anchorMessageID, trailingMessageID]
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 24, width: 300, height: 80)],
+            displayedMessageIDs: initialMessageIDs
+        )
+        #expect(controller.beginMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: initialMessageIDs
+        ))
+
+        // 与历史窗口无关的重排不能提前消费锚点。
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 30, width: 300, height: 80)],
+            displayedMessageIDs: initialMessageIDs
+        )
+        #expect(controller.pendingAdjustment == nil)
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 184, width: 300, height: 80)],
+            displayedMessageIDs: [earlierMessageID, anchorMessageID, trailingMessageID]
+        )
+
+        let adjustment = controller.pendingAdjustment
+        #expect(adjustment?.deltaY == 160)
+        #expect(adjustment.map { controller.completeAdjustment(id: $0.id) } == true)
+        #expect(!controller.isRestoringAnchor)
+    }
+
+    @MainActor
+    @Test("缺少真实行几何时不会开始历史窗口变更")
+    func testHistoryWindowMutationRequiresVisibleAnchorFrame() {
+        let controller = ChatHistoryViewportAnchorController()
+        let messageID = UUID()
+
+        #expect(!controller.beginMutation(
+            anchorMessageID: messageID,
+            displayedMessageIDs: [messageID]
+        ))
+        #expect(!controller.isRestoringAnchor)
+    }
+
     @Test("吸底命令抵达底部或超过最长占用时间后释放")
     func testChatBottomScrollCommandReleaseLifecycle() {
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
@@ -234,21 +283,49 @@ struct ETOS_LLM_Studio_AppTests {
         #expect(ChatScrollMetricsObserver.shouldNotifyMetrics(
             forcesRefresh: true,
             hasReportedDistance: true,
-            metricsChanged: false,
+            semanticRegionChanged: false,
             interactionChanged: false
         ))
         #expect(!ChatScrollMetricsObserver.shouldNotifyMetrics(
             forcesRefresh: false,
             hasReportedDistance: true,
-            metricsChanged: false,
+            semanticRegionChanged: false,
             interactionChanged: false
         ))
         #expect(ChatScrollMetricsObserver.shouldNotifyMetrics(
             forcesRefresh: false,
             hasReportedDistance: true,
-            metricsChanged: true,
+            semanticRegionChanged: true,
             interactionChanged: false
         ))
+    }
+
+    @Test("滚动度量只在跨过交互语义边界时进入 SwiftUI")
+    func testChatScrollMetricRegionsIgnorePixelMotion() {
+        let thresholds = ChatScrollMetricThresholds(
+            arrival: 1,
+            bottomPinned: 24,
+            bottomButton: 48,
+            historyLoading: 240
+        )
+        let first = ChatScrollMetricsObserver.metricRegion(
+            distanceToBottom: 90,
+            distanceToTop: 100,
+            thresholds: thresholds
+        )
+        let sameRegion = ChatScrollMetricsObserver.metricRegion(
+            distanceToBottom: 120,
+            distanceToTop: 140,
+            thresholds: thresholds
+        )
+        let crossedHistoryBoundary = ChatScrollMetricsObserver.metricRegion(
+            distanceToBottom: 260,
+            distanceToTop: 140,
+            thresholds: thresholds
+        )
+
+        #expect(first == sameRegion)
+        #expect(first != crossedHistoryBoundary)
     }
 
     @Test("只有贴底的布局变化暂停气泡滚动波浪")
@@ -422,23 +499,21 @@ struct ETOS_LLM_Studio_AppTests {
         ))
     }
 
-    @Test("显式导航期间暂停自动历史请求但保留自动锚点回执")
+    @Test("显式导航期间暂停自动历史请求")
     func testExplicitNavigationSuspendsAutomaticHistoryRequests() {
         #expect(ChatView.shouldSuspendAutomaticHistoryNavigation(
             isMessageJumpInFlight: true,
             hasPendingHistoryReset: false,
             hasPendingBottomSnap: false,
             hasActiveBottomTarget: false,
-            hasPendingOrAppliedTarget: true,
-            isAutomaticHistoryLoadInFlight: false
+            hasPendingOrAppliedTarget: true
         ))
         #expect(!ChatView.shouldSuspendAutomaticHistoryNavigation(
             isMessageJumpInFlight: false,
             hasPendingHistoryReset: false,
             hasPendingBottomSnap: false,
             hasActiveBottomTarget: false,
-            hasPendingOrAppliedTarget: true,
-            isAutomaticHistoryLoadInFlight: true
+            hasPendingOrAppliedTarget: false
         ))
     }
 
@@ -916,24 +991,6 @@ struct ETOS_LLM_Studio_AppTests {
             lastLoadAnchorID: nil
         ))
 
-        #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
-            isLoadInFlight: true,
-            awaitsAnchorMetrics: false,
-            distanceToEdge: 400,
-            triggerDistance: 240
-        ))
-        #expect(!ChatView.shouldReleaseAutomaticHistoryLoad(
-            isLoadInFlight: true,
-            awaitsAnchorMetrics: true,
-            distanceToEdge: 120,
-            triggerDistance: 240
-        ))
-        #expect(ChatView.shouldReleaseAutomaticHistoryLoad(
-            isLoadInFlight: true,
-            awaitsAnchorMetrics: true,
-            distanceToEdge: 400,
-            triggerDistance: 240
-        ))
     }
 
     @Test("跨会话消息跳转会等待目标历史和选择器就绪")

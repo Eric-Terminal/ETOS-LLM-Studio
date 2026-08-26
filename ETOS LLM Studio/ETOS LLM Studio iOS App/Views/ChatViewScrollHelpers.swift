@@ -10,6 +10,16 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
+    /// 可见坐标会随每个滚动像素变化；只在导航或静止审计真正需要时上报。
+    var shouldReportChatViewportLayoutFrames: Bool {
+        let needsNavigationFrames = showScrollNavigationPanel || accessibilityVoiceOverEnabled
+        let canAuditSettledLayout = !isChatScrollUserInteracting
+            && !viewModel.isSendingMessage
+            && !hasChatProgrammaticScrollOwnership
+            && !isHistoryLoadInFlight
+        return needsNavigationFrames || canAuditSettledLayout
+    }
+
     var hasChatProgrammaticScrollOwnership: Bool {
         isMessageJumpInFlight
             || pendingHistoryResetWorkItem != nil
@@ -25,8 +35,7 @@ extension ChatView {
             hasPendingBottomSnap: pendingBottomSnapTask != nil,
             hasActiveBottomTarget: chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
             hasPendingOrAppliedTarget: pendingScrollTargetTask != nil
-                || chatScrollPositionController.hasActiveCommand,
-            isAutomaticHistoryLoadInFlight: isAutomaticHistoryLoadInFlight
+                || chatScrollPositionController.hasActiveCommand
         )
     }
 
@@ -113,14 +122,13 @@ extension ChatView {
         hasPendingHistoryReset: Bool,
         hasPendingBottomSnap: Bool,
         hasActiveBottomTarget: Bool,
-        hasPendingOrAppliedTarget: Bool,
-        isAutomaticHistoryLoadInFlight: Bool
+        hasPendingOrAppliedTarget: Bool
     ) -> Bool {
         isMessageJumpInFlight
             || hasPendingHistoryReset
             || hasPendingBottomSnap
             || hasActiveBottomTarget
-            || (hasPendingOrAppliedTarget && !isAutomaticHistoryLoadInFlight)
+            || hasPendingOrAppliedTarget
     }
 
     /// 最后一条消息之后仍可能存在续聊链接与尾部留白，吸底必须定位消息栈的真实末端。
@@ -148,35 +156,6 @@ extension ChatView {
         case .message(let messageID):
             return visibleMessageIDs.contains(messageID)
         }
-    }
-
-    /// 手势阶段只记录加载意图，避免窗口变化打断 UIScrollView 的惯性减速。
-    nonisolated static func shouldQueueAutomaticHistoryLoad(
-        usesAutomaticHistoryWindow: Bool,
-        isUserInteracting: Bool,
-        distanceToEdge: CGFloat,
-        triggerDistance: CGFloat,
-        anchorMessageID: UUID?,
-        lastLoadAnchorID: UUID?
-    ) -> Bool {
-        guard usesAutomaticHistoryWindow,
-              isUserInteracting,
-              distanceToEdge < triggerDistance,
-              let anchorMessageID else {
-            return false
-        }
-        return anchorMessageID != lastLoadAnchorID
-    }
-
-    nonisolated static func shouldReleaseAutomaticHistoryLoad(
-        isLoadInFlight: Bool,
-        awaitsAnchorMetrics: Bool,
-        distanceToEdge: CGFloat,
-        triggerDistance: CGFloat
-    ) -> Bool {
-        isLoadInFlight
-            && awaitsAnchorMetrics
-            && distanceToEdge >= triggerDistance
     }
 
     nonisolated static func isPendingMessageJumpReady(
@@ -360,116 +339,6 @@ extension ChatView {
         )
     }
 
-    func performAutomaticHistoryLoad(_ request: ChatAutomaticHistoryLoadRequest) {
-        guard viewModel.usesAutomaticHistoryWindow,
-              !isAutomaticHistoryLoadInFlight,
-              lastAutomaticHistoryLoadAnchorID != request.anchorMessageID else {
-            return
-        }
-        lastAutomaticHistoryLoadAnchorID = request.anchorMessageID
-        suppressAutoScrollOnce = true
-        shouldKeepBottomPinned = false
-        isAutomaticHistoryLoadInFlight = true
-        awaitsAutomaticHistoryAnchorMetrics = false
-        automaticHistoryLoadDirection = request.direction
-        let didLoad: Bool
-        switch request.direction {
-        case .earlier:
-            didLoad = viewModel.loadMoreAutomaticHistoryIfNeeded()
-        case .later:
-            didLoad = viewModel.loadMoreAutomaticLaterHistoryIfNeeded()
-        }
-        guard didLoad else {
-            suppressAutoScrollOnce = false
-            isAutomaticHistoryLoadInFlight = false
-            automaticHistoryLoadDirection = nil
-            return
-        }
-        scheduleAutomaticHistoryAnchorRestore(
-            request.anchorMessageID,
-            anchor: request.direction == .earlier ? .top : .bottom
-        )
-    }
-
-    func handleChatScrollMetrics(
-        distanceToBottom: CGFloat,
-        distanceToTop: CGFloat,
-        isUserInteracting: Bool
-    ) {
-        scrollDistanceToTop = max(distanceToTop, 0)
-        updateChatScrollInteractionState(isUserInteracting)
-        updateScrollToBottomVisibility(
-            distanceToBottom: distanceToBottom,
-            isUserInteracting: isUserInteracting
-        )
-        resolveActiveBottomScrollCommand(
-            distanceToBottom: distanceToBottom
-        )
-        let activeEdgeDistance = automaticHistoryLoadDirection == .later
-            ? distanceToBottom
-            : distanceToTop
-        // 只有底层滚动视图确认旧边界消息已经进入新窗口内部，才释放窗口切换状态。
-        if Self.shouldReleaseAutomaticHistoryLoad(
-            isLoadInFlight: isAutomaticHistoryLoadInFlight,
-            awaitsAnchorMetrics: awaitsAutomaticHistoryAnchorMetrics,
-            distanceToEdge: activeEdgeDistance,
-            triggerDistance: automaticHistoryLoadTriggerDistance
-        ) {
-            isAutomaticHistoryLoadInFlight = false
-            awaitsAutomaticHistoryAnchorMetrics = false
-            automaticHistoryLoadDirection = nil
-        }
-
-        guard !hasExplicitChatNavigationCommand else {
-            pendingAutomaticHistoryLoadRequest = nil
-            return
-        }
-
-        let firstMessageID = viewModel.displayMessages.first?.id
-        let lastMessageID = viewModel.displayMessages.last?.id
-        if !isAutomaticHistoryLoadInFlight,
-           !viewModel.isHistoryFullyLoaded,
-           Self.shouldQueueAutomaticHistoryLoad(
-            usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
-            isUserInteracting: isUserInteracting,
-            distanceToEdge: distanceToTop,
-            triggerDistance: automaticHistoryLoadTriggerDistance,
-            anchorMessageID: firstMessageID,
-            lastLoadAnchorID: lastAutomaticHistoryLoadAnchorID
-           ), let firstMessageID {
-            pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
-                direction: .earlier,
-                anchorMessageID: firstMessageID
-            )
-        } else if !isAutomaticHistoryLoadInFlight,
-                  !viewModel.isLaterHistoryFullyLoaded,
-                  Self.shouldQueueAutomaticHistoryLoad(
-                    usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
-                    isUserInteracting: isUserInteracting,
-                    distanceToEdge: distanceToBottom,
-                    triggerDistance: automaticHistoryLoadTriggerDistance,
-                    anchorMessageID: lastMessageID,
-                    lastLoadAnchorID: lastAutomaticHistoryLoadAnchorID
-                  ), let lastMessageID {
-            pendingAutomaticHistoryLoadRequest = ChatAutomaticHistoryLoadRequest(
-                direction: .later,
-                anchorMessageID: lastMessageID
-            )
-        }
-
-        guard !isUserInteracting,
-              !isAutomaticHistoryLoadInFlight,
-              let request = pendingAutomaticHistoryLoadRequest else {
-            return
-        }
-        let remainsNearRequestedEdge = request.direction == .earlier
-            ? distanceToTop < automaticHistoryLoadTriggerDistance
-            : distanceToBottom < automaticHistoryLoadTriggerDistance
-        pendingAutomaticHistoryLoadRequest = nil
-        guard remainsNearRequestedEdge else { return }
-        performAutomaticHistoryLoad(request)
-    }
-
     func scheduleImmediateBottomSnap() {
         pendingBottomSnapTask?.cancel()
         shouldKeepBottomPinned = true
@@ -638,63 +507,6 @@ extension ChatView {
             pendingJumpRequest = nil
             isMessageJumpInFlight = false
             shouldRestorePendingJumpOnAppear = false
-        }
-        isAutomaticHistoryLoadInFlight = false
-        awaitsAutomaticHistoryAnchorMetrics = false
-        automaticHistoryLoadDirection = nil
-        pendingAutomaticHistoryLoadRequest = nil
-    }
-
-    func cancelAutomaticHistoryNavigation() {
-        if isAutomaticHistoryLoadInFlight || automaticHistoryLoadDirection != nil {
-            cancelPendingScrollTargetCommand()
-        } else {
-            awaitsAutomaticHistoryAnchorMetrics = false
-            pendingAutomaticHistoryLoadRequest = nil
-        }
-        lastAutomaticHistoryLoadAnchorID = nil
-    }
-
-    private func scheduleAutomaticHistoryAnchorRestore(_ messageID: UUID, anchor: UnitPoint) {
-        cancelPendingScrollTargetCommand()
-        isAutomaticHistoryLoadInFlight = true
-        let generation = scrollTargetGeneration
-        let sessionID = viewModel.currentSession?.id
-        let target = ChatScrollTargetID.message(messageID)
-        pendingScrollTargetTask = Task { @MainActor in
-            var didApplyTarget = false
-            defer {
-                if generation == scrollTargetGeneration {
-                    pendingScrollTargetTask = nil
-                    if !didApplyTarget {
-                        isAutomaticHistoryLoadInFlight = false
-                        awaitsAutomaticHistoryAnchorMetrics = false
-                    }
-                }
-            }
-            await Task.yield()
-            guard !Task.isCancelled,
-                  canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else {
-                return
-            }
-            applyScrollTarget(
-                target,
-                anchor: anchor,
-                animated: false,
-                animation: .linear(duration: 0)
-            )
-            didApplyTarget = true
-            awaitsAutomaticHistoryAnchorMetrics = true
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            guard !Task.isCancelled,
-                  generation == scrollTargetGeneration,
-                  sessionID == viewModel.currentSession?.id else {
-                return
-            }
-            chatScrollPositionController.releaseCommand(expectedTarget: target)
-            isAutomaticHistoryLoadInFlight = false
-            awaitsAutomaticHistoryAnchorMetrics = false
-            automaticHistoryLoadDirection = nil
         }
     }
 

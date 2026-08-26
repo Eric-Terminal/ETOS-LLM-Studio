@@ -328,10 +328,7 @@ extension ChatView {
         if viewModel.usesManualHistoryLoading && remainingCount > 0 && !viewModel.isHistoryFullyLoaded {
             let chunk = viewModel.historyLoadChunkCount
             Button {
-                suppressAutoScrollOnce = true
-                withAnimation {
-                    viewModel.loadMoreHistoryChunk()
-                }
+                performManualHistoryLoad()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.up.circle")

@@ -36,17 +36,21 @@ extension ChatViewModel {
         updateHistoryBoundaryState(for: historyWindow)
     }
 
-    func loadMoreHistoryChunk(count: Int? = nil) {
-        guard !isHistoryFullyLoaded else { return }
+    @discardableResult
+    func loadMoreHistoryChunk(count: Int? = nil) -> Bool {
+        guard !isHistoryFullyLoaded else { return false }
         ensureHistoryWindowPrepared()
-        guard let historyWindow else { return }
-        self.historyWindow = ChatHistoryWindowSupport.expandingEarlier(
+        guard let historyWindow else { return false }
+        let updated = ChatHistoryWindowSupport.expandingEarlier(
             historyWindow,
             in: visibleMessagesCache,
             weightedBatchSize: count ?? incrementalHistoryBatchSize,
             maximumWeightedCount: nil
         )
+        guard updated != historyWindow else { return false }
+        self.historyWindow = updated
         updateDisplayedMessages()
+        return true
     }
 
     @discardableResult
