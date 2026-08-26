@@ -113,9 +113,7 @@ struct ChatView: View {
     @State var automaticHistoryLoadDirection: ChatAutomaticHistoryDirection?
     @State var pendingAutomaticHistoryLoadRequest: ChatAutomaticHistoryLoadRequest?
     @State var lastAutomaticHistoryLoadAnchorID: UUID?
-    @State var chatScrollTarget: ChatScrollTargetID?
-    @State var chatScrollTargetAnchor: UnitPoint = .bottom
-    @State var activeBottomScrollCommandTarget: ChatScrollTargetID?
+    @StateObject var chatScrollPositionController = ChatScrollPositionController()
     @State var bottomScrollCommandReleaseTask: Task<Void, Never>?
     @State var messageNavigationCursorID: UUID?
     @State var chatNavigationMessageIDs: [UUID] = []
@@ -1125,17 +1123,15 @@ extension ChatView {
                     }
                 }
                 .onChange(of: chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
-                    var transaction = Transaction()
-                    transaction.animation = nil
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        if let newValue {
-                            chatScrollTargetAnchor = .center
-                            chatScrollTarget = .message(newValue)
-                        } else if let oldValue,
-                                  chatScrollTarget == .message(oldValue) {
-                            chatScrollTarget = nil
-                        }
+                    if let newValue {
+                        chatScrollPositionController.issueCommand(
+                            to: .message(newValue),
+                            anchor: .center
+                        )
+                    } else if let oldValue {
+                        chatScrollPositionController.releaseCommand(
+                            expectedTarget: .message(oldValue)
+                        )
                     }
                 }
                 // 静态尺寸变化由 SwiftUI 锚定；流式增长改由 UIKit 只动画 contentOffset。
@@ -1153,7 +1149,10 @@ extension ChatView {
                     chatScrollViewportHeight = newSize.height
                     refreshMessageNavigationTargets()
                 }
-                .scrollPosition(id: $chatScrollTarget, anchor: chatScrollTargetAnchor)
+                .scrollPosition(
+                    id: chatScrollPositionController.positionBinding,
+                    anchor: chatScrollPositionController.targetAnchor
+                )
                 .chatOnUserScrollPhaseChange { distanceToBottom, isUserInteracting in
                     updateChatScrollInteractionState(isUserInteracting)
                     updateScrollToBottomVisibility(
@@ -1230,7 +1229,7 @@ extension ChatView {
                     shouldKeepBottomPinned = true
                     showScrollToBottom = false
                     needsImmediateBottomSnap = true
-                    chatScrollTarget = nil
+                    chatScrollPositionController.reset()
                     chatLayoutIntegrityMonitor.updateContext(chatLayoutAuditContext)
                     resolvePendingSearchJumpIfNeeded()
                 }
@@ -1488,7 +1487,7 @@ extension ChatView {
                 awaitsFreshBottomNavigationSnapshot = false
                 bottomNavigationSnapshotBaselineRevision = 0
                 if isMessageJumpInFlight,
-                   case .message(let messageID)? = chatScrollTarget {
+                   case .message(let messageID)? = chatScrollPositionController.activeCommandTarget {
                     pendingJumpRequest = MessageJumpRequest(messageID: messageID)
                     shouldRestorePendingJumpOnAppear = true
                 } else if isMessageJumpInFlight {

@@ -992,7 +992,9 @@ extension ChatView {
             scheduleScrollNavigationPanelHide()
         }
         if isUserInteracting,
-           (pendingScrollTargetTask != nil || chatScrollTarget != nil || isMessageJumpInFlight) {
+           (pendingScrollTargetTask != nil
+                || chatScrollPositionController.hasActiveCommand
+                || isMessageJumpInFlight) {
             cancelPendingScrollTargetCommand()
         }
     }
