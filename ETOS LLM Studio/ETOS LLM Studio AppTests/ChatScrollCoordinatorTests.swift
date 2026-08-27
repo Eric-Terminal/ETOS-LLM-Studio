@@ -124,9 +124,7 @@ struct ChatScrollCoordinatorTests {
             displayedMessageIDs: [earlierMessageID, anchorMessageID, trailingMessageID]
         )
         #expect(controller.pendingAdjustment == nil)
-        try? await Task.sleep(for: .milliseconds(120))
-
-        let adjustment = controller.pendingAdjustment
+        let adjustment = await waitForPendingAdjustment(in: controller)
         #expect(adjustment?.deltaY == 160)
         #expect(adjustment.map { controller.completeAdjustment(id: $0.id) } == true)
         #expect(!controller.isRestoringAnchor)
@@ -173,7 +171,9 @@ struct ChatScrollCoordinatorTests {
             [anchorMessageID: CGRect(x: 0, y: 180, width: 300, height: 80)],
             displayedMessageIDs: [earlierMessageID, anchorMessageID]
         )
-        try? await Task.sleep(for: .milliseconds(120))
+        _ = await waitForPendingAdjustment(
+            in: coordinator.chatHistoryViewportAnchorController
+        )
         let adjustment = coordinator.pendingAnchorAdjustment
         #expect(adjustment?.deltaY == 140)
         #expect(adjustment.map { coordinator.completeAnchorAdjustment(id: $0.id) } == true)
@@ -210,9 +210,8 @@ struct ChatScrollCoordinatorTests {
             [anchorMessageID: CGRect(x: 0, y: 180, width: 300, height: 80)],
             displayedMessageIDs: expandedMessageIDs
         )
-        try? await Task.sleep(for: .milliseconds(120))
-
-        #expect(controller.pendingAdjustment?.deltaY == 160)
+        let adjustment = await waitForPendingAdjustment(in: controller)
+        #expect(adjustment?.deltaY == 160)
     }
 
     @MainActor
@@ -419,6 +418,20 @@ struct ChatScrollCoordinatorTests {
                 continuation.resume()
             }
         }
+    }
+
+    @MainActor
+    private func waitForPendingAdjustment(
+        in controller: ChatHistoryViewportAnchorController
+    ) async -> ChatScrollAnchorAdjustment? {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < deadline {
+            if let adjustment = controller.pendingAdjustment {
+                return adjustment
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return controller.pendingAdjustment
     }
 
     @Test("只有贴底的布局变化暂停气泡滚动波浪")
