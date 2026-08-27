@@ -100,12 +100,17 @@
 
 ### 文件职责拆分
 
-针对聊天主路径原有多个千行文件，按职责拆分为会话组合、历史加载、滚动桥、滚动纯度量、滚动协调和布局审计上下文。最终本次涉及的主要文件均低于 1000 行：`ChatView.swift` 685 行、`ChatViewConversation.swift` 817 行、`ChatScrollViewportBridge.swift` 831 行、`ChatViewScrollHelpers.swift` 806 行、`ChatViewLayoutIntegrity.swift` 986 行、`ChatScrollCoordinator.swift` 259 行。原本集中的应用测试也按聊天滚动协调和流式滚动拆开，三个相关测试文件分别为 516、754、315 行。拆分未改变气泡、壁纸、材质、输入栏、时间线导航和发送飞行动画的宏观结构。
+针对聊天主路径原有多个千行文件，按职责拆分为会话组合、历史加载、滚动桥、滚动纯度量、滚动协调和布局审计上下文。最终本次涉及的主要文件均低于 1000 行：`ChatView.swift` 695 行、`ChatViewConversation.swift` 817 行、`ChatScrollViewportBridge.swift` 838 行、`ChatViewScrollHelpers.swift` 806 行、`ChatViewLayoutIntegrity.swift` 986 行、`ChatScrollCoordinator.swift` 259 行。`ChatViewModelMessageSync.swift` 中的历史窗口操作另行拆至 185 行的 `ChatViewModelHistoryWindow.swift`，原文件降至 834 行。原本集中的应用测试也按聊天滚动协调、流式滚动和真实长会话运行态拆开，相关测试文件均低于 800 行。拆分未改变气泡、壁纸、材质、输入栏、时间线导航和发送飞行动画的宏观结构。
+
+### D-007：历史锚点等待 LazyVStack 几何稳定
+
+真实挂载 `ChatView` 后确认，历史扩窗会让 `LazyVStack` 在短时间内连续上报过渡 frame；同时 `UIScrollView.contentSize` 的上限可能仍是扩窗前的估算值。锚点控制器现在等待几何连续静止 80 毫秒后只生成一次修正，历史锚点允许暂时越过旧的最大偏移上限，等下一轮布局刷新真实内容尺寸。普通布局自愈仍使用上下界钳制，历史修正也始终保留下界保护。
 
 ## 最终验证
 
 - iOS App 完整构建成功，命令同时构建并验证了嵌入的 watch App 与各扩展。
-- iOS App 回归测试最终通过：96 个测试、15 个套件、0 失败。新增测试覆盖协调器完整历史变更生命周期、无数据加载时释放锚点，以及真实 UIKit 滚动桥的同语义区域回调抑制和历史锚点仅应用一次。
+- iOS App 回归测试最终通过：99 个测试、16 个套件、0 失败。新增测试覆盖协调器完整历史变更生命周期、无数据加载时释放锚点，以及真实 UIKit 滚动桥的同语义区域回调抑制和历史锚点仅应用一次。
+- 三组聊天滚动相关测试连续执行 3 轮，共 123 个测试、9 个套件全部通过。运行态测试真实挂载包含 60 条长消息的 `ChatView`：离底后连续模拟 20 个像素级偏移，视口没有自行回底或持续发布状态；自动与手动扩窗中，UIKit 实际偏移量与锚点消息的 frame 变化量一致。
 - ETOSCore 全量执行 1503 个测试时，`RoleplayStoreThreadingTests.changingPersonaRefreshesSeededGreetingAfterConversationStarted()` 在同一次运行中报告 2 个断言问题；该模块未被本次改动。随后单独重跑整个“角色扮演存储”串行套件，6 个测试全部通过，确认不是稳定回归。
 - 最终构建仍只有 `swift-cmark` 缺少 umbrella header 的既有第三方警告。
-- 两次尝试本机界面控制均因 `Sky Computer Use service startup request failed` 无法启动，因此未把截图式人工冒烟作为通过项；宏观 UI 通过差异复核与完整构建确认未发生结构性改动。
+- 两次尝试本机界面控制均因 `Sky Computer Use service startup request failed` / `Transport closed` 无法启动，因此未把截图式人工冒烟作为通过项；改用真实 `UIWindow`、`UIHostingController` 和 `UIScrollView` 的确定性运行态回归覆盖长会话交互，宏观 UI 另由差异复核与完整构建确认未发生结构性改动。

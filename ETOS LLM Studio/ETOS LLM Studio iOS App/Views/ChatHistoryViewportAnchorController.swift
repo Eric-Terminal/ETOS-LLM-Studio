@@ -49,6 +49,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
     @Published private(set) var pendingAdjustment: ChatScrollAnchorAdjustment?
 
     private struct PendingMutation {
+        let id: UUID
         let messageID: UUID
         let originalMinY: CGFloat
         let displayedMessageIDs: [UUID]
@@ -58,6 +59,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
     private var rowFrames: [UUID: CGRect] = [:]
     private var snapshotRevision: UInt = 0
     private var pendingMutation: PendingMutation?
+    private var pendingAdjustmentTask: Task<Void, Never>?
 
     var isRestoringAnchor: Bool {
         pendingMutation != nil || pendingAdjustment != nil
@@ -79,9 +81,9 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
             return
         }
 
-        self.pendingMutation = nil
-        pendingAdjustment = ChatScrollAnchorAdjustment(
-            deltaY: restoredFrame.minY - pendingMutation.originalMinY
+        scheduleAdjustment(
+            mutationID: pendingMutation.id,
+            restoredMinY: restoredFrame.minY
         )
     }
 
@@ -98,6 +100,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         }
 
         pendingMutation = PendingMutation(
+            id: UUID(),
             messageID: anchorMessageID,
             originalMinY: frame.minY,
             displayedMessageIDs: displayedMessageIDs,
@@ -114,6 +117,8 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
     }
 
     func cancel() {
+        pendingAdjustmentTask?.cancel()
+        pendingAdjustmentTask = nil
         pendingMutation = nil
         pendingAdjustment = nil
     }
@@ -129,5 +134,30 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
             && frame.height > 0
             && frame.minY.isFinite
             && frame.maxY.isFinite
+    }
+
+    /// LazyVStack 扩窗时可能在同一轮布局中先上报过渡 frame。
+    /// 只在几何短暂静止后生成一次偏移，避免用半成品快照拉偏阅读位置。
+    private func scheduleAdjustment(
+        mutationID: UUID,
+        restoredMinY: CGFloat
+    ) {
+        pendingAdjustmentTask?.cancel()
+        pendingAdjustmentTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled,
+                  let self,
+                  let pendingMutation = self.pendingMutation,
+                  pendingMutation.id == mutationID,
+                  self.pendingAdjustment == nil else {
+                return
+            }
+            self.pendingAdjustmentTask = nil
+            self.pendingMutation = nil
+            self.pendingAdjustment = ChatScrollAnchorAdjustment(
+                deltaY: restoredMinY - pendingMutation.originalMinY,
+                allowsTemporaryOverflow: true
+            )
+        }
     }
 }

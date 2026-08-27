@@ -96,7 +96,7 @@ struct ChatScrollCoordinatorTests {
 
     @MainActor
     @Test("历史扩窗按同一消息行的几何差生成一次偏移校正")
-    func testHistoryWindowMutationPreservesViewportAnchor() {
+    func testHistoryWindowMutationPreservesViewportAnchor() async {
         let controller = ChatHistoryViewportAnchorController()
         let earlierMessageID = UUID()
         let anchorMessageID = UUID()
@@ -123,6 +123,8 @@ struct ChatScrollCoordinatorTests {
             [anchorMessageID: CGRect(x: 0, y: 184, width: 300, height: 80)],
             displayedMessageIDs: [earlierMessageID, anchorMessageID, trailingMessageID]
         )
+        #expect(controller.pendingAdjustment == nil)
+        try? await Task.sleep(for: .milliseconds(120))
 
         let adjustment = controller.pendingAdjustment
         #expect(adjustment?.deltaY == 160)
@@ -145,7 +147,7 @@ struct ChatScrollCoordinatorTests {
 
     @MainActor
     @Test("滚动协调器统一持有历史扩窗的完整生命周期")
-    func testScrollCoordinatorOwnsHistoryMutationLifecycle() {
+    func testScrollCoordinatorOwnsHistoryMutationLifecycle() async {
         let coordinator = ChatScrollCoordinator()
         let earlierMessageID = UUID()
         let anchorMessageID = UUID()
@@ -171,6 +173,7 @@ struct ChatScrollCoordinatorTests {
             [anchorMessageID: CGRect(x: 0, y: 180, width: 300, height: 80)],
             displayedMessageIDs: [earlierMessageID, anchorMessageID]
         )
+        try? await Task.sleep(for: .milliseconds(120))
         let adjustment = coordinator.pendingAnchorAdjustment
         #expect(adjustment?.deltaY == 140)
         #expect(adjustment.map { coordinator.completeAnchorAdjustment(id: $0.id) } == true)
@@ -179,6 +182,37 @@ struct ChatScrollCoordinatorTests {
         coordinator.cancelAutomaticHistoryNavigation()
         #expect(coordinator.lastAutomaticHistoryLoadAnchorID == nil)
         #expect(!coordinator.chatHistoryViewportAnchorController.isRestoringAnchor)
+    }
+
+    @MainActor
+    @Test("历史扩窗忽略 LazyVStack 的过渡几何")
+    func testHistoryWindowWaitsForStableGeometry() async {
+        let controller = ChatHistoryViewportAnchorController()
+        let earlierMessageID = UUID()
+        let anchorMessageID = UUID()
+        let initialMessageIDs = [anchorMessageID]
+        let expandedMessageIDs = [earlierMessageID, anchorMessageID]
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 20, width: 300, height: 80)],
+            displayedMessageIDs: initialMessageIDs
+        )
+        #expect(controller.beginMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: initialMessageIDs
+        ))
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 100, width: 300, height: 80)],
+            displayedMessageIDs: expandedMessageIDs
+        )
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 180, width: 300, height: 80)],
+            displayedMessageIDs: expandedMessageIDs
+        )
+        try? await Task.sleep(for: .milliseconds(120))
+
+        #expect(controller.pendingAdjustment?.deltaY == 160)
     }
 
     @MainActor

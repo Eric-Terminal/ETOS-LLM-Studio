@@ -303,6 +303,13 @@ struct ChatLayoutIntegrityTests {
             minimumOffsetY: 0,
             maximumOffsetY: 700
         ) == 700)
+        #expect(ChatScrollMetricsObserver.anchorAdjustedContentOffsetY(
+            currentOffsetY: 680,
+            deltaY: 48,
+            minimumOffsetY: 0,
+            maximumOffsetY: 700,
+            allowsTemporaryOverflow: true
+        ) == 728)
     }
 
     @Test("布局诊断不包含原始消息 UUID 或聊天正文")

@@ -120,6 +120,16 @@ struct ChatView: View {
     @ScaledMetric(relativeTo: .body) var modelPickerProviderIconSize: CGFloat = 40
     @ScaledMetric(relativeTo: .caption2) var modelPickerProviderStripHeight: CGFloat = 68
 
+    @MainActor
+    init() {
+        _scrollCoordinator = StateObject(wrappedValue: ChatScrollCoordinator())
+    }
+
+    @MainActor
+    init(scrollCoordinator: ChatScrollCoordinator) {
+        _scrollCoordinator = StateObject(wrappedValue: scrollCoordinator)
+    }
+
     var draftText: String {
         get { appConfig.chatComposerDraft }
         nonmutating set { appConfig.chatComposerDraft = newValue }
