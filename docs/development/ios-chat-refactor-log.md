@@ -100,11 +100,13 @@
 
 ### 文件职责拆分
 
-针对聊天主路径原有多个千行文件，按职责拆分为会话组合、历史加载、滚动桥、滚动纯度量、滚动协调和布局审计上下文。最终本次涉及的主要文件均低于 1000 行：`ChatView.swift` 695 行、`ChatViewConversation.swift` 817 行、`ChatScrollViewportBridge.swift` 838 行、`ChatViewScrollHelpers.swift` 806 行、`ChatViewLayoutIntegrity.swift` 986 行、`ChatScrollCoordinator.swift` 259 行。`ChatViewModelMessageSync.swift` 中的历史窗口操作另行拆至 185 行的 `ChatViewModelHistoryWindow.swift`，原文件降至 834 行。原本集中的应用测试也按聊天滚动协调、流式滚动和真实长会话运行态拆开，相关测试文件均低于 800 行。拆分未改变气泡、壁纸、材质、输入栏、时间线导航和发送飞行动画的宏观结构。
+针对聊天主路径原有多个千行文件，按职责拆分为会话组合、历史加载、滚动桥、滚动纯度量、滚动协调和布局审计上下文。`ChatViewLayoutIntegrity.swift` 再按无状态审计定义与有状态恢复调度拆分为 515 行和 477 行，避免把 1000 行硬限制误当作日常目标。`ChatViewModelMessageSync.swift` 中的历史窗口操作另行拆至 185 行的 `ChatViewModelHistoryWindow.swift`，原文件降至 834 行。原本集中的应用测试也按聊天滚动协调、流式滚动和真实长会话运行态拆开。拆分未改变气泡、壁纸、材质、输入栏、时间线导航和发送飞行动画的宏观结构。
 
 ### D-007：历史锚点等待 LazyVStack 几何稳定
 
 真实挂载 `ChatView` 后确认，历史扩窗会让 `LazyVStack` 在短时间内连续上报过渡 frame；同时 `UIScrollView.contentSize` 的上限可能仍是扩窗前的估算值。锚点控制器现在等待几何连续静止 80 毫秒后只生成一次修正，历史锚点允许暂时越过旧的最大偏移上限，等下一轮布局刷新真实内容尺寸。普通布局自愈仍使用上下界钳制，历史修正也始终保留下界保护。
+
+历史锚点测试不再假设防抖任务必须在固定 120 毫秒内获得调度，而是等待结果或在 3 秒后明确超时，避免模拟器冷启动与数据库维护造成时序型假失败。
 
 ## 最终验证
 
