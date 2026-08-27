@@ -12,10 +12,16 @@ import ETOSCore
 struct ChatScrollAnchorAdjustment: Equatable, Identifiable, Sendable {
     let id: UUID
     let deltaY: CGFloat
+    let allowsTemporaryOverflow: Bool
 
-    nonisolated init(id: UUID = UUID(), deltaY: CGFloat) {
+    nonisolated init(
+        id: UUID = UUID(),
+        deltaY: CGFloat,
+        allowsTemporaryOverflow: Bool = false
+    ) {
         self.id = id
         self.deltaY = deltaY
+        self.allowsTemporaryOverflow = allowsTemporaryOverflow
     }
 }
 
@@ -293,7 +299,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 currentOffsetY: scrollView.contentOffset.y,
                 deltaY: anchorAdjustment.deltaY,
                 minimumOffsetY: minimumOffsetY,
-                maximumOffsetY: maximumOffsetY
+                maximumOffsetY: maximumOffsetY,
+                allowsTemporaryOverflow: anchorAdjustment.allowsTemporaryOverflow
             )
             lastAppliedAnchorAdjustmentID = anchorAdjustment.id
             UIView.performWithoutAnimation {

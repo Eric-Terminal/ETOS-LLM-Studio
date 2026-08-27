@@ -89,9 +89,13 @@ extension ChatScrollMetricsObserver {
         currentOffsetY: CGFloat,
         deltaY: CGFloat,
         minimumOffsetY: CGFloat,
-        maximumOffsetY: CGFloat
+        maximumOffsetY: CGFloat,
+        allowsTemporaryOverflow: Bool = false
     ) -> CGFloat {
-        min(max(currentOffsetY + deltaY, minimumOffsetY), maximumOffsetY)
+        let requestedOffsetY = max(currentOffsetY + deltaY, minimumOffsetY)
+        return allowsTemporaryOverflow
+            ? requestedOffsetY
+            : min(requestedOffsetY, maximumOffsetY)
     }
 
     /// SwiftUI 只需要知道交互语义跨过了哪个边界，连续像素距离留在 UIKit 内部。
