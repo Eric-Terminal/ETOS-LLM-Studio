@@ -44,6 +44,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         isLayoutSettling: false,
         isHistoryLoadInFlight: false,
         hasProgrammaticScrollTarget: false,
+        hasExclusiveViewportCommand: false,
         hasSendFlight: false,
         scrollAnimationEnabled: false,
         settleDelayNanoseconds: 450_000_000,
@@ -91,12 +92,25 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         }
         guard context != newContext else { return }
         context = newContext
-        if newContext.isUserInteracting {
-            pendingStackRecovery = nil
+        if newContext.isUserInteracting || newContext.hasExclusiveViewportCommand {
+            cancelViewportRecovery()
+        }
+        scheduleAuditIfPossible()
+    }
+
+    /// 用户手势与显式导航拥有更高优先级，旧布局恢复不得跨越这个边界继续改写视口。
+    func cancelViewportRecovery() {
+        cancelAudit()
+        pendingStackRecovery = nil
+        guard pendingAnchorAdjustment != nil || anchorScrollTargetMessageID != nil else { return }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
             pendingAnchorAdjustment = nil
             anchorScrollTargetMessageID = nil
         }
-        scheduleAuditIfPossible()
     }
 
     func updateSnapshot(
@@ -108,6 +122,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
         self.orderedMessageIDs = orderedMessageIDs
         snapshotRevision &+= 1
 
+        guard !context.hasExclusiveViewportCommand else { return }
         if suppressAuditForContentFrameRemoval, newSnapshot.contentFrames.isEmpty {
             suppressAuditForContentFrameRemoval = false
             return
@@ -248,6 +263,7 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
             }
 
             let firstOverlap = await detectOverlap()
+            guard canContinueAudit(generation: generation) else { return }
             confirmCurrentRendererHandoffs()
             guard let firstOverlap else { return }
 
@@ -265,7 +281,8 @@ final class ChatLayoutIntegrityMonitor: ObservableObject {
             }
 
             let secondOverlap = await detectOverlap()
-            guard let secondOverlap,
+            guard canContinueAudit(generation: generation),
+                  let secondOverlap,
                   firstOverlap.upperMessageID == secondOverlap.upperMessageID,
                   firstOverlap.lowerMessageID == secondOverlap.lowerMessageID else {
                 return

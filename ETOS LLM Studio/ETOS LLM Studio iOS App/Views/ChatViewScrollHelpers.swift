@@ -29,6 +29,15 @@ extension ChatView {
             || scrollCoordinator.chatScrollPositionController.hasActiveCommand
     }
 
+    /// 显式导航独占视口；布局自愈自己的定位命令不计入，避免它取消自身恢复闭环。
+    var hasExclusiveChatViewportCommand: Bool {
+        isMessageJumpInFlight
+            || scrollCoordinator.pendingHistoryResetWorkItem != nil
+            || scrollCoordinator.pendingBottomSnapTask != nil
+            || scrollCoordinator.pendingScrollTargetTask != nil
+            || scrollCoordinator.chatScrollPositionController.activeCommandOwner == .viewportNavigation
+    }
+
     var hasExplicitChatNavigationCommand: Bool {
         Self.shouldSuspendAutomaticHistoryNavigation(
             isMessageJumpInFlight: isMessageJumpInFlight,
@@ -241,6 +250,7 @@ extension ChatView {
         scrollCoordinator.pendingBottomSnapTask?.cancel()
         scrollCoordinator.pendingBottomSnapTask = nil
         cancelPendingScrollTargetCommand()
+        scrollCoordinator.prepareForExclusiveViewportNavigation()
         scrollCoordinator.messageNavigationCursorID = nil
         pendingJumpRequest = nil
         isMessageJumpInFlight = true
@@ -334,6 +344,7 @@ extension ChatView {
                 || !scrollCoordinator.isChatScrollUserInteracting else {
             return
         }
+        scrollCoordinator.prepareForExclusiveViewportNavigation()
         scrollCoordinator.shouldKeepBottomPinned = true
         setScrollTarget(
             bottomScrollTarget,
@@ -762,7 +773,9 @@ extension ChatView {
     }
 
     func releaseMessageJumpScrollTarget() {
-        scrollCoordinator.chatScrollPositionController.releaseCommand()
+        scrollCoordinator.chatScrollPositionController.releaseCommand(
+            expectedOwner: .viewportNavigation
+        )
     }
 
     func canApplyScrollTarget(

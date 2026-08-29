@@ -124,6 +124,58 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
+    @Test("显式导航不会被布局恢复覆盖或被旧回执释放")
+    func testViewportNavigationOwnsScrollPositionOverLayoutRecovery() {
+        let controller = ChatScrollPositionController()
+        let target = ChatScrollTargetID.message(UUID())
+
+        #expect(controller.issueCommand(
+            to: target,
+            anchor: .center,
+            owner: .layoutRecovery
+        ))
+        #expect(controller.issueCommand(to: target, anchor: .top))
+        #expect(!controller.issueCommand(
+            to: .message(UUID()),
+            anchor: .center,
+            owner: .layoutRecovery
+        ))
+
+        controller.releaseCommand(
+            expectedTarget: target,
+            expectedOwner: .layoutRecovery
+        )
+
+        #expect(controller.activeCommandTarget == target)
+        #expect(controller.activeCommandOwner == .viewportNavigation)
+        #expect(controller.targetAnchor == .top)
+    }
+
+    @MainActor
+    @Test("显式导航会撤销尚未消费的历史锚点补偿")
+    func testViewportNavigationCancelsPendingHistoryAnchorRestoration() {
+        let coordinator = ChatScrollCoordinator()
+        let anchorMessageID = UUID()
+        let displayedMessageIDs = [anchorMessageID, UUID()]
+
+        coordinator.chatHistoryViewportAnchorController.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 24, width: 300, height: 80)],
+            displayedMessageIDs: displayedMessageIDs
+        )
+        #expect(coordinator.beginAutomaticHistoryMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: displayedMessageIDs
+        ))
+        #expect(coordinator.isHistoryLoadInFlight)
+        #expect(coordinator.chatHistoryViewportAnchorController.isRestoringAnchor)
+
+        coordinator.prepareForExclusiveViewportNavigation()
+
+        #expect(!coordinator.isHistoryLoadInFlight)
+        #expect(!coordinator.chatHistoryViewportAnchorController.isRestoringAnchor)
+    }
+
+    @MainActor
     @Test("同一次拖动中延迟到达的自动命令不能重新夺回视口")
     func testUserInteractionRejectsLateAutomaticScrollCommand() {
         let controller = ChatScrollPositionController()

@@ -130,6 +130,12 @@ final class ChatScrollCoordinator: ObservableObject {
         chatHistoryViewportAnchorController.cancel()
     }
 
+    /// 按键与搜索跳转开始前撤销旧锚点补偿，防止恢复系统在落点后再次改写视口。
+    func prepareForExclusiveViewportNavigation() {
+        cancelAutomaticHistoryNavigation()
+        chatLayoutIntegrityMonitor.cancelViewportRecovery()
+    }
+
     @discardableResult
     func updateInteractionState(_ isUserInteracting: Bool) -> Bool {
         chatScrollPositionController.updateUserInteraction(isUserInteracting)
