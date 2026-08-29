@@ -14,6 +14,39 @@ import UIKit
 struct ChatLongConversationRuntimeTests {
 
     @MainActor
+    @Test("四键跨越历史边界时只换入相邻消息")
+    func testAdjacentNavigationPreservesConfiguredHistoryWindowSize() async throws {
+        let fixture = await makeFixture(
+            automaticHistoryLoading: false,
+            timelineNavigationEnabled: true,
+            markdownEnabled: true,
+            lazyLoadMessageCount: 4,
+            messageCount: 20,
+            paragraphCount: 20
+        )
+        defer { fixture.dispose() }
+
+        let initialIDs = fixture.viewModel.displayMessages.map(\.id)
+        let navigationIDs = fixture.viewModel.messageNavigationIDs()
+        let firstVisibleID = try #require(initialIDs.first)
+        let firstVisibleIndex = try #require(navigationIDs.firstIndex(of: firstVisibleID))
+        #expect(firstVisibleIndex > 0)
+        let targetID = navigationIDs[firstVisibleIndex - 1]
+
+        #expect(fixture.viewModel.shiftHistoryWindow(
+            toward: targetID,
+            weightedBatchSize: 1,
+            preservesCurrentWindowSize: true
+        ))
+
+        let shiftedIDs = fixture.viewModel.displayMessages.map(\.id)
+        #expect(initialIDs.count == 4)
+        #expect(shiftedIDs.count == 4)
+        #expect(shiftedIDs.first == targetID)
+        #expect(shiftedIDs.dropFirst() == initialIDs.dropLast())
+    }
+
+    @MainActor
     @Test("四条超长 Markdown 消息启用时间线导航后仍允许停留在顶部")
     func testFourLongMarkdownMessagesRemainAtTopDuringUserInteraction() async throws {
         let fixture = await makeFixture(
