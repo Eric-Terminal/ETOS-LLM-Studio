@@ -168,6 +168,18 @@ struct ChatStreamingScrollTests {
         ))
     }
 
+    @Test("向上程序导航期间即使仍在底部也不能重新吸底")
+    func testMessageNavigationSuppressesBottomPinIntent() {
+        #expect(!ChatView.resolvedBottomPinIntent(
+            currentIntent: true,
+            distanceToBottom: 0,
+            arrivalTolerance: 1,
+            isUserInteracting: false,
+            isLayoutSettling: false,
+            isNavigatingAwayFromBottom: true
+        ))
+    }
+
     @MainActor
     @Test("高速流式追加只淡入新增文字且不动画整层")
     func testStreamingMarkdownAppendFadesOnlyNewText() {

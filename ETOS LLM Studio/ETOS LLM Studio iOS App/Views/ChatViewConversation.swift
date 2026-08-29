@@ -471,7 +471,8 @@ extension ChatView {
                 // 两套机制不会同时接管，用户主动离底后也不会抢回阅读位置。
                 .chatDefaultSizeChangeScrollAnchor(
                     Self.chatSizeChangeScrollAnchor(
-                        keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned,
+                        keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned
+                            && !isMessageJumpInFlight,
                         isStreaming: viewModel.isSendingMessage
                     )
                 )
