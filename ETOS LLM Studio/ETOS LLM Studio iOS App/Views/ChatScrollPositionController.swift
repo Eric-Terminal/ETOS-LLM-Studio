@@ -8,12 +8,35 @@
 import Combine
 import SwiftUI
 
+enum ChatScrollCommandOwner: Equatable {
+    case viewportNavigation
+    case layoutRecovery
+}
+
 @MainActor
 final class ChatScrollPositionController: ObservableObject {
-    @Published private(set) var targetAnchor: UnitPoint = .bottom
-    @Published private(set) var activeCommandTarget: ChatScrollTargetID?
+    private struct Command {
+        let target: ChatScrollTargetID
+        let anchor: UnitPoint
+        let owner: ChatScrollCommandOwner
+    }
+
+    @Published private var activeCommand: Command?
 
     private var isUserInteracting = false
+    private var lastTargetAnchor: UnitPoint = .bottom
+
+    var targetAnchor: UnitPoint {
+        activeCommand?.anchor ?? lastTargetAnchor
+    }
+
+    var activeCommandTarget: ChatScrollTargetID? {
+        activeCommand?.target
+    }
+
+    var activeCommandOwner: ChatScrollCommandOwner? {
+        activeCommand?.owner
+    }
 
     var positionBinding: Binding<ChatScrollTargetID?> {
         Binding(
@@ -31,11 +54,17 @@ final class ChatScrollPositionController: ObservableObject {
     func issueCommand(
         to target: ChatScrollTargetID,
         anchor: UnitPoint,
+        owner: ChatScrollCommandOwner = .viewportNavigation,
         allowsDuringUserInteraction: Bool = false
     ) -> Bool {
         guard allowsDuringUserInteraction || !isUserInteracting else { return false }
-        targetAnchor = anchor
-        activeCommandTarget = target
+        // 布局自愈只能填补空闲视口，不能覆盖用户刚触发的时间线导航。
+        if owner == .layoutRecovery,
+           activeCommand?.owner == .viewportNavigation {
+            return false
+        }
+        lastTargetAnchor = anchor
+        activeCommand = Command(target: target, anchor: anchor, owner: owner)
         return true
     }
 
@@ -47,22 +76,24 @@ final class ChatScrollPositionController: ObservableObject {
     }
 
     /// 释放后绑定立即回到 nil，后续视图刷新不会重新执行已经完成的目标。
-    func releaseCommand(expectedTarget: ChatScrollTargetID? = nil) {
-        if let expectedTarget, activeCommandTarget != expectedTarget {
-            return
-        }
-        guard activeCommandTarget != nil else { return }
+    func releaseCommand(
+        expectedTarget: ChatScrollTargetID? = nil,
+        expectedOwner: ChatScrollCommandOwner? = nil
+    ) {
+        guard let activeCommand else { return }
+        if let expectedTarget, activeCommand.target != expectedTarget { return }
+        if let expectedOwner, activeCommand.owner != expectedOwner { return }
         var transaction = Transaction()
         transaction.animation = nil
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            activeCommandTarget = nil
+            self.activeCommand = nil
         }
     }
 
     func reset() {
-        activeCommandTarget = nil
-        targetAnchor = .bottom
+        activeCommand = nil
+        lastTargetAnchor = .bottom
         isUserInteracting = false
     }
 }

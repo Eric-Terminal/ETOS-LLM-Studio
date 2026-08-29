@@ -394,6 +394,7 @@ struct ChatLayoutAuditContext: Equatable {
     let isLayoutSettling: Bool
     let isHistoryLoadInFlight: Bool
     let hasProgrammaticScrollTarget: Bool
+    let hasExclusiveViewportCommand: Bool
     let hasSendFlight: Bool
     let scrollAnimationEnabled: Bool
     let settleDelayNanoseconds: UInt64
@@ -411,6 +412,7 @@ struct ChatLayoutAuditContext: Equatable {
         isLayoutSettling: Bool,
         isHistoryLoadInFlight: Bool,
         hasProgrammaticScrollTarget: Bool,
+        hasExclusiveViewportCommand: Bool,
         hasSendFlight: Bool,
         scrollAnimationEnabled: Bool,
         settleDelayNanoseconds: UInt64,
@@ -427,6 +429,7 @@ struct ChatLayoutAuditContext: Equatable {
         self.isLayoutSettling = isLayoutSettling
         self.isHistoryLoadInFlight = isHistoryLoadInFlight
         self.hasProgrammaticScrollTarget = hasProgrammaticScrollTarget
+        self.hasExclusiveViewportCommand = hasExclusiveViewportCommand
         self.hasSendFlight = hasSendFlight
         self.scrollAnimationEnabled = scrollAnimationEnabled
         self.settleDelayNanoseconds = settleDelayNanoseconds
@@ -443,6 +446,7 @@ struct ChatLayoutAuditContext: Equatable {
             || isLayoutSettling
             || isHistoryLoadInFlight
             || hasProgrammaticScrollTarget
+            || hasExclusiveViewportCommand
             || hasSendFlight
     }
 }
@@ -478,7 +482,8 @@ enum ChatLayoutDiagnosticFormatter {
             + "noBubble=\(context.usesNoBubbleUI) appActive=\(context.isAppActive) "
             + "userInteracting=\(context.isUserInteracting) streaming=\(context.isSendingMessage) "
             + "layoutSettling=\(context.isLayoutSettling) historyLoading=\(context.isHistoryLoadInFlight) "
-            + "programmaticScroll=\(context.hasProgrammaticScrollTarget) sendFlight=\(context.hasSendFlight) "
+            + "programmaticScroll=\(context.hasProgrammaticScrollTarget) "
+            + "exclusiveViewport=\(context.hasExclusiveViewportCommand) sendFlight=\(context.hasSendFlight) "
             + "scrollAnimation=\(context.scrollAnimationEnabled)"
     }
 

@@ -27,6 +27,7 @@ extension ChatView {
             isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
             isHistoryLoadInFlight: scrollCoordinator.isHistoryLoadInFlight,
             hasProgrammaticScrollTarget: hasChatProgrammaticScrollOwnership,
+            hasExclusiveViewportCommand: hasExclusiveChatViewportCommand,
             hasSendFlight: flightState != nil,
             scrollAnimationEnabled: appConfig.chatScrollAnimationEnabled,
             settleDelayNanoseconds: UInt64(transitionSettleDelay * 1_000_000_000),

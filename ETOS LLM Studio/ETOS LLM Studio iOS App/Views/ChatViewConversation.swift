@@ -442,14 +442,17 @@ extension ChatView {
                 }
                 .onChange(of: scrollCoordinator.chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
                     if let newValue {
-                        guard !scrollCoordinator.isChatScrollUserInteracting else { return }
+                        guard !scrollCoordinator.isChatScrollUserInteracting,
+                              !hasExclusiveChatViewportCommand else { return }
                         scrollCoordinator.chatScrollPositionController.issueCommand(
                             to: .message(newValue),
-                            anchor: .center
+                            anchor: .center,
+                            owner: .layoutRecovery
                         )
                     } else if let oldValue {
                         scrollCoordinator.chatScrollPositionController.releaseCommand(
-                            expectedTarget: .message(oldValue)
+                            expectedTarget: .message(oldValue),
+                            expectedOwner: .layoutRecovery
                         )
                     }
                 }

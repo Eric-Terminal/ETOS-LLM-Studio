@@ -90,6 +90,7 @@ extension ChatView {
 
     func handleScrollToBottomButtonTap() {
         revealScrollNavigationPanel()
+        scrollCoordinator.prepareForExclusiveViewportNavigation()
         scrollCoordinator.pendingHistoryResetWorkItem?.cancel()
         scrollCoordinator.pendingHistoryResetWorkItem = nil
         shouldRestorePendingJumpOnAppear = false

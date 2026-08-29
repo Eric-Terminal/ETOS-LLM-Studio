@@ -341,6 +341,7 @@ struct ChatLayoutIntegrityTests {
             isLayoutSettling: false,
             isHistoryLoadInFlight: false,
             hasProgrammaticScrollTarget: false,
+            hasExclusiveViewportCommand: false,
             hasSendFlight: false,
             scrollAnimationEnabled: true,
             settleDelayNanoseconds: 450_000_000,
