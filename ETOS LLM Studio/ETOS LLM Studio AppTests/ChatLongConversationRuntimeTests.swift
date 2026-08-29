@@ -26,7 +26,24 @@ struct ChatLongConversationRuntimeTests {
         )
         defer { fixture.dispose() }
         let scrollView = try #require(fixture.chatScrollView)
-        #expect(maximumContentOffsetY(of: scrollView) > 2_000)
+        let maximumOffset = maximumContentOffsetY(of: scrollView)
+        #expect(maximumOffset > 2_000)
+
+        _ = fixture.coordinator.prepareForUserPan(
+            isMessageJumpInFlight: false,
+            bottomScrollTarget: .bottom
+        )
+        fixture.coordinator.shouldKeepBottomPinned = false
+        let slightlyAwayFromBottomOffset = maximumOffset - 12
+        scrollView.setContentOffset(
+            CGPoint(x: scrollView.contentOffset.x, y: slightlyAwayFromBottomOffset),
+            animated: false
+        )
+        fixture.coordinator.updateInteractionState(false)
+        await settleLayout(fixture.host.view, duration: 0.35)
+
+        #expect(abs(scrollView.contentOffset.y - slightlyAwayFromBottomOffset) < 2)
+        #expect(!fixture.coordinator.shouldKeepBottomPinned)
 
         let readingOffset = minimumContentOffsetY(of: scrollView) + 24
         scrollView.setContentOffset(

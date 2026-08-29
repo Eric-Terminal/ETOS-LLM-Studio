@@ -127,35 +127,42 @@ struct ChatStreamingScrollTests {
         #expect(!ChatView.resolvedBottomPinIntent(
             currentIntent: true,
             distanceToBottom: 0,
-            threshold: 24,
+            arrivalTolerance: 1,
             isUserInteracting: true,
             isLayoutSettling: false
         ))
         #expect(ChatView.resolvedBottomPinIntent(
             currentIntent: true,
             distanceToBottom: 80,
-            threshold: 24,
+            arrivalTolerance: 1,
             isUserInteracting: false,
             isLayoutSettling: false
         ))
-        #expect(ChatView.resolvedBottomPinIntent(
+        #expect(!ChatView.resolvedBottomPinIntent(
             currentIntent: false,
             distanceToBottom: 12,
-            threshold: 24,
+            arrivalTolerance: 1,
             isUserInteracting: false,
             isLayoutSettling: false
         ))
         #expect(!ChatView.resolvedBottomPinIntent(
             currentIntent: false,
             distanceToBottom: 48,
-            threshold: 24,
+            arrivalTolerance: 1,
+            isUserInteracting: false,
+            isLayoutSettling: false
+        ))
+        #expect(ChatView.resolvedBottomPinIntent(
+            currentIntent: false,
+            distanceToBottom: 0.5,
+            arrivalTolerance: 1,
             isUserInteracting: false,
             isLayoutSettling: false
         ))
         #expect(!ChatView.resolvedBottomPinIntent(
             currentIntent: false,
             distanceToBottom: 0,
-            threshold: 24,
+            arrivalTolerance: 1,
             isUserInteracting: false,
             isLayoutSettling: true
         ))

@@ -508,7 +508,8 @@ extension ChatView {
                     }
                 )
                 .onChange(of: toolPermissionCenter.activeRequest?.id) { _, newValue in
-                    guard newValue != nil, scrollCoordinator.shouldKeepBottomPinned || scrollCoordinator.scrollDistanceToBottom < bottomPinnedDistanceThreshold else { return }
+                    guard newValue != nil,
+                          scrollCoordinator.shouldKeepBottomPinned else { return }
                     scrollToBottom()
                 }
                 .onChange(of: viewModel.pendingSearchJumpTarget) { _, _ in

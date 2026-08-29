@@ -52,7 +52,7 @@ extension ChatView {
     nonisolated static func resolvedBottomPinIntent(
         currentIntent: Bool,
         distanceToBottom: CGFloat,
-        threshold: CGFloat,
+        arrivalTolerance: CGFloat,
         isUserInteracting: Bool,
         isLayoutSettling: Bool
     ) -> Bool {
@@ -62,7 +62,7 @@ extension ChatView {
         if currentIntent {
             return true
         }
-        return !isLayoutSettling && distanceToBottom < threshold
+        return !isLayoutSettling && distanceToBottom <= arrivalTolerance
     }
 
     /// 相连气泡属于同一视觉组，不能被逐条滚动位移撕开连接处。
@@ -266,7 +266,7 @@ extension ChatView {
             resolvePendingSearchJumpIfNeeded()
             return
         }
-        if scrollCoordinator.shouldKeepBottomPinned || scrollCoordinator.scrollDistanceToBottom < bottomPinnedDistanceThreshold {
+        if scrollCoordinator.shouldKeepBottomPinned {
             scrollToBottom()
         }
         resolvePendingSearchJumpIfNeeded()
@@ -399,7 +399,7 @@ extension ChatView {
         scrollCoordinator.shouldKeepBottomPinned = Self.resolvedBottomPinIntent(
             currentIntent: scrollCoordinator.shouldKeepBottomPinned,
             distanceToBottom: normalizedDistance,
-            threshold: bottomPinnedDistanceThreshold,
+            arrivalTolerance: bottomScrollCommandArrivalTolerance,
             isUserInteracting: isUserInteracting,
             isLayoutSettling: scrollCoordinator.isChatLayoutSettling
         )
@@ -490,7 +490,7 @@ extension ChatView {
         Self.resolvedBottomPinIntent(
             currentIntent: scrollCoordinator.shouldKeepBottomPinned,
             distanceToBottom: scrollCoordinator.scrollDistanceToBottom,
-            threshold: bottomPinnedDistanceThreshold,
+            arrivalTolerance: bottomScrollCommandArrivalTolerance,
             isUserInteracting: scrollCoordinator.isChatScrollUserInteracting,
             isLayoutSettling: scrollCoordinator.isChatLayoutSettling
         )
