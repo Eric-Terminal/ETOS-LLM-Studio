@@ -375,6 +375,49 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
+    @Test("四键跨窗逐次抵消布局位移并等待几何稳定")
+    func testAdjacentWindowMutationPreservesAnchorUntilLayoutSettles() async throws {
+        let controller = ChatHistoryViewportAnchorController()
+        let earlierMessageID = UUID()
+        let anchorMessageID = UUID()
+        let trailingMessageID = UUID()
+        let initialMessageIDs = [anchorMessageID, trailingMessageID]
+        let shiftedMessageIDs = [earlierMessageID, anchorMessageID, trailingMessageID]
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 20, width: 300, height: 80)],
+            displayedMessageIDs: initialMessageIDs
+        )
+        let mutationID = try #require(controller.beginContinuousMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: initialMessageIDs
+        ))
+
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 100, width: 300, height: 80)],
+            displayedMessageIDs: shiftedMessageIDs
+        )
+        let firstAdjustment = try #require(controller.pendingAdjustment)
+        #expect(firstAdjustment.deltaY == 80)
+        #expect(firstAdjustment.allowsDuringProgrammaticScroll)
+        #expect(controller.completeAdjustment(id: firstAdjustment.id))
+
+        // 长 Markdown 的后续测量只补偿新增的高度，不能重新累计第一次位移。
+        controller.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 180, width: 300, height: 80)],
+            displayedMessageIDs: shiftedMessageIDs
+        )
+        let secondAdjustment = try #require(controller.pendingAdjustment)
+        #expect(secondAdjustment.deltaY == 80)
+        #expect(controller.completeAdjustment(id: secondAdjustment.id))
+
+        try await Task.sleep(for: .milliseconds(160))
+        #expect(controller.isContinuousMutationSettled(id: mutationID))
+        controller.finishContinuousMutation(id: mutationID)
+        #expect(!controller.isRestoringAnchor)
+    }
+
+    @MainActor
     @Test("历史数据未变化时协调器释放锚点与自动滚动抑制")
     func testScrollCoordinatorCancelsUnchangedHistoryMutation() {
         let coordinator = ChatScrollCoordinator()
@@ -539,11 +582,14 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
-    @Test("UIKit 滚动桥只应用一次历史锚点偏移")
-    func testChatScrollBridgeAppliesHistoryAnchorExactlyOnce() {
+    @Test("UIKit 滚动桥在四键命令期间只应用一次导航锚点偏移")
+    func testChatScrollBridgeAppliesNavigationAnchorExactlyOnce() {
         var keepsBottomPinned = false
         var appliedAdjustmentIDs: [UUID] = []
-        let adjustment = ChatScrollAnchorAdjustment(deltaY: 150)
+        let adjustment = ChatScrollAnchorAdjustment(
+            deltaY: 150,
+            allowsDuringProgrammaticScroll: true
+        )
         let coordinator = ChatScrollMetricsObserver.Coordinator(
             keepsBottomPinned: Binding(
                 get: { keepsBottomPinned },
@@ -560,7 +606,7 @@ struct ChatScrollCoordinatorTests {
                 historyLoading: 240
             ),
             isViewportTransitioning: false,
-            hasProgrammaticScrollCommand: false,
+            hasProgrammaticScrollCommand: true,
             anchorAdjustment: adjustment,
             onAnchorAdjustmentApplied: { appliedAdjustmentIDs.append($0) },
             onUserPanBegan: {},

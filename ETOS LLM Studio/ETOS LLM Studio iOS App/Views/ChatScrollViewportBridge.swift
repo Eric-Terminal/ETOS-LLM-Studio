@@ -1,7 +1,7 @@
 // ============================================================================
 // ChatScrollViewportBridge.swift
 // ============================================================================
-// UIScrollView 语义度量、流式跟随与一次性几何偏移桥。
+// UIScrollView 语义度量、流式跟随与几何偏移桥。
 // ============================================================================
 
 import Foundation
@@ -13,15 +13,18 @@ struct ChatScrollAnchorAdjustment: Equatable, Identifiable, Sendable {
     let id: UUID
     let deltaY: CGFloat
     let allowsTemporaryOverflow: Bool
+    let allowsDuringProgrammaticScroll: Bool
 
     nonisolated init(
         id: UUID = UUID(),
         deltaY: CGFloat,
-        allowsTemporaryOverflow: Bool = false
+        allowsTemporaryOverflow: Bool = false,
+        allowsDuringProgrammaticScroll: Bool = false
     ) {
         self.id = id
         self.deltaY = deltaY
         self.allowsTemporaryOverflow = allowsTemporaryOverflow
+        self.allowsDuringProgrammaticScroll = allowsDuringProgrammaticScroll
     }
 }
 
@@ -272,7 +275,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                   anchorAdjustment.id != lastAppliedAnchorAdjustmentID,
                   let scrollView,
                   !isViewportTransitioning,
-                  !hasProgrammaticScrollCommand else {
+                  (!hasProgrammaticScrollCommand
+                    || anchorAdjustment.allowsDuringProgrammaticScroll) else {
                 return
             }
             let isUserInteracting = scrollView.isDragging
