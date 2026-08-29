@@ -57,15 +57,16 @@ extension ChatView {
         keepsBottomPinned && !isStreaming ? .bottom : nil
     }
 
-    /// 用户手势永远优先于自动吸底；非交互状态下只有真正回到底部才重新接管。
+    /// 用户手势与离底导航永远优先于自动吸底；静止时只有真正回到底部才重新接管。
     nonisolated static func resolvedBottomPinIntent(
         currentIntent: Bool,
         distanceToBottom: CGFloat,
         arrivalTolerance: CGFloat,
         isUserInteracting: Bool,
-        isLayoutSettling: Bool
+        isLayoutSettling: Bool,
+        isNavigatingAwayFromBottom: Bool = false
     ) -> Bool {
-        if isUserInteracting {
+        if isUserInteracting || isNavigatingAwayFromBottom {
             return false
         }
         if currentIntent {
@@ -424,7 +425,8 @@ extension ChatView {
             distanceToBottom: normalizedDistance,
             arrivalTolerance: bottomScrollCommandArrivalTolerance,
             isUserInteracting: isUserInteracting,
-            isLayoutSettling: scrollCoordinator.isChatLayoutSettling
+            isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
+            isNavigatingAwayFromBottom: isMessageJumpInFlight
         )
 
         let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !scrollCoordinator.shouldKeepBottomPinned
@@ -515,7 +517,8 @@ extension ChatView {
             distanceToBottom: scrollCoordinator.scrollDistanceToBottom,
             arrivalTolerance: bottomScrollCommandArrivalTolerance,
             isUserInteracting: scrollCoordinator.isChatScrollUserInteracting,
-            isLayoutSettling: scrollCoordinator.isChatLayoutSettling
+            isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
+            isNavigatingAwayFromBottom: isMessageJumpInFlight
         )
     }
 
