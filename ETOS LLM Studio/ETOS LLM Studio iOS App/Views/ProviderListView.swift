@@ -147,7 +147,10 @@ private struct ProviderManagementContentView: View {
 
     var body: some View {
         List {
-            if viewModel.activatedConversationModels.isEmpty {
+            if GuideModelSetupEntryPolicy.shouldPresent(
+                hasLoadedPersistentModelConfiguration: viewModel.hasLoadedPersistentModelConfiguration,
+                hasRunnableConversationModel: !viewModel.activatedConversationModels.isEmpty
+            ) {
                 Section {
                     Text(NSLocalizedString("还没有可运行的聊天模型。向导可以帮你整理 API 地址、接口格式和模型信息。", comment: "模型管理首次配置说明"))
                         .font(.footnote)

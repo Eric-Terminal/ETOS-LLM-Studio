@@ -18,7 +18,10 @@ extension ContentView {
             isSending: viewModel.isSendingMessage
         )
         return List {
-            if viewModel.activatedConversationModels.isEmpty {
+            if GuideModelSetupEntryPolicy.shouldPresent(
+                hasLoadedPersistentModelConfiguration: viewModel.hasLoadedPersistentModelConfiguration,
+                hasRunnableConversationModel: !viewModel.activatedConversationModels.isEmpty
+            ) {
                 NavigationLink {
                     WatchGuideModelSetupView(
                         viewModel: viewModel,

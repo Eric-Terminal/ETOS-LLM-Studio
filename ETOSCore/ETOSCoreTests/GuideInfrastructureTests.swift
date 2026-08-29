@@ -551,6 +551,26 @@ struct GuideInfrastructureTests {
         #expect(GuideModelSetupStateResolver.resolve(providers: [providerWithKey], selectedModel: runnable) == .ready)
     }
 
+    @Test("首次模型向导只在持久化配置确认为空后显示")
+    func modelSetupEntryWaitsForPersistentConfiguration() {
+        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
+            hasLoadedPersistentModelConfiguration: false,
+            hasRunnableConversationModel: false
+        ))
+        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
+            hasLoadedPersistentModelConfiguration: false,
+            hasRunnableConversationModel: true
+        ))
+        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
+            hasLoadedPersistentModelConfiguration: true,
+            hasRunnableConversationModel: true
+        ))
+        #expect(GuideModelSetupEntryPolicy.shouldPresent(
+            hasLoadedPersistentModelConfiguration: true,
+            hasRunnableConversationModel: false
+        ))
+    }
+
     @Test("首次配置只接受完整的 HTTP 基础地址")
     func modelSetupValidatesRemoteBaseURL() {
         #expect(GuideModelSetupValidation.isValidRemoteBaseURL("https://api.example.com/v1"))

@@ -89,6 +89,15 @@ public enum GuideModelSetupStateResolver {
     }
 }
 
+public enum GuideModelSetupEntryPolicy {
+    public static func shouldPresent(
+        hasLoadedPersistentModelConfiguration: Bool,
+        hasRunnableConversationModel: Bool
+    ) -> Bool {
+        hasLoadedPersistentModelConfiguration && !hasRunnableConversationModel
+    }
+}
+
 public enum GuideModelSetupValidation {
     public static func isValidRemoteBaseURL(_ value: String) -> Bool {
         guard let components = URLComponents(

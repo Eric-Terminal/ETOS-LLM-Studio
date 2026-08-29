@@ -116,7 +116,10 @@ extension ChatView {
                         }
                         .frame(width: 0, height: 0)
 
-                        if viewModel.selectedModel == nil && sessionMessages.isEmpty {
+                        if GuideModelSetupEntryPolicy.shouldPresent(
+                            hasLoadedPersistentModelConfiguration: viewModel.hasLoadedPersistentModelConfiguration,
+                            hasRunnableConversationModel: !viewModel.activatedConversationModels.isEmpty
+                        ), sessionMessages.isEmpty {
                             GuideModelSetupEntryCard(
                                 action: { isGuideModelSetupPresented = true },
                                 manualAction: {
@@ -625,7 +628,9 @@ extension ChatView {
                             .padding(.bottom, 6)
                         }
 
-                        if viewModel.selectedModel == nil && !sessionMessages.isEmpty {
+                        if viewModel.hasLoadedPersistentModelConfiguration,
+                           viewModel.selectedModel == nil,
+                           !sessionMessages.isEmpty {
                             guideModelSetupCompactStatus
                         }
 

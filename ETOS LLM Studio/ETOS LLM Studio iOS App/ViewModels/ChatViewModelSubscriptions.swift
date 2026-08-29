@@ -76,6 +76,10 @@ extension ChatViewModel {
         BackgroundGenerationKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
         BackgroundGenerationAudioKeepAliveManager.shared.setGenerationActive(!runningSessionIDs.isEmpty)
         chatService.reloadLocalModelsAndAppConfigBackedModelState()
+        providers = chatService.providersSubject.value
+        applyActivatedConversationModels(chatService.activatedConversationModels)
+        selectedModel = chatService.selectedModelSubject.value
+        hasLoadedPersistentModelConfiguration = true
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()
