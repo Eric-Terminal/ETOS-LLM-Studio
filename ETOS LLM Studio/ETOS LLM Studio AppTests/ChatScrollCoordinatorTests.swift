@@ -69,46 +69,42 @@ struct ChatScrollCoordinatorTests {
     func testObservedScrollPositionDoesNotClaimCommandOwnership() {
         let controller = ChatScrollPositionController()
 
-        controller.acceptObservedPosition(.message(UUID()))
+        controller.positionBinding.wrappedValue = .message(UUID())
 
         #expect(!controller.hasActiveCommand)
+        #expect(controller.positionBinding.wrappedValue == nil)
     }
 
     @MainActor
-    @Test("程序化滚动期间拒绝中间位置回写并在释放后恢复观测")
+    @Test("程序化滚动期间拒绝中间位置回写且释放后不回放被动位置")
     func testScrollCommandOwnsBindingOnlyForItsLifetime() {
         let controller = ChatScrollPositionController()
         let target = ChatScrollTargetID.message(UUID())
         let intermediate = ChatScrollTargetID.message(UUID())
 
         controller.issueCommand(to: target, anchor: .center)
-        controller.acceptObservedPosition(intermediate)
+        controller.positionBinding.wrappedValue = intermediate
 
         #expect(controller.hasActiveCommand)
         #expect(controller.positionBinding.wrappedValue == target)
 
         controller.releaseCommand(expectedTarget: target)
-        controller.acceptObservedPosition(intermediate)
+        controller.positionBinding.wrappedValue = intermediate
 
         #expect(!controller.hasActiveCommand)
-        #expect(controller.positionBinding.wrappedValue == intermediate)
+        #expect(controller.positionBinding.wrappedValue == nil)
     }
 
     @MainActor
     @Test("同一次拖动中延迟到达的自动命令不能重新夺回视口")
     func testUserInteractionRejectsLateAutomaticScrollCommand() {
         let controller = ChatScrollPositionController()
-        let readingPosition = ChatScrollTargetID.message(UUID())
 
-        controller.acceptObservedPosition(readingPosition)
         controller.updateUserInteraction(true)
 
         #expect(!controller.issueCommand(to: .bottom, anchor: .bottom))
         #expect(!controller.hasActiveCommand)
         #expect(controller.positionBinding.wrappedValue == nil)
-
-        controller.acceptObservedPosition(readingPosition)
-        #expect(controller.positionBinding.wrappedValue == readingPosition)
 
         controller.updateUserInteraction(false)
         #expect(controller.issueCommand(to: .bottom, anchor: .bottom))
