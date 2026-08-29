@@ -19,6 +19,30 @@ struct GuideInfrastructureTests {
         #expect(GuideStreamTerminationPolicy.shouldFinish(after: .failed(reason: nil)))
     }
 
+    @Test("向导工具参数兼容增量与累计流并限制异常体积")
+    func streamedToolArgumentsRemainBounded() throws {
+        let incremental = try GuideStreamedToolArguments.merge(
+            existing: #"{"query":"#,
+            replacement: nil,
+            fragment: #"Guide"}"#
+        )
+        let cumulative = try GuideStreamedToolArguments.merge(
+            existing: #"{"query":"Gu"#,
+            replacement: nil,
+            fragment: #"{"query":"Guide"}"#
+        )
+
+        #expect(incremental == #"{"query":"Guide"}"#)
+        #expect(cumulative == #"{"query":"Guide"}"#)
+        #expect(throws: GuideError.self) {
+            _ = try GuideStreamedToolArguments.merge(
+                existing: "",
+                replacement: nil,
+                fragment: String(repeating: "x", count: GuideStreamedToolArguments.maximumByteCount + 1)
+            )
+        }
+    }
+
     @Test("写入型秘密不会进入可编码页面快照")
     func writeOnlySecretIsAlwaysHidden() throws {
         let secret = "secret-value-that-must-not-leak"

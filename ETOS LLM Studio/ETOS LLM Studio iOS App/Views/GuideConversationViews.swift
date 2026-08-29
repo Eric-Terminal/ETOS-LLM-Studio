@@ -117,17 +117,22 @@ struct GuideConversationView: View {
                         followsLatestMessage = false
                     }
             )
-            .onChange(of: controller.messages) { previous, messages in
-                if messages.isEmpty
-                    || (messages.count > previous.count && messages.last?.role == .user) {
+            .onChange(of: controller.messages.count) { _, count in
+                if count == 0 || controller.messages.last?.role == .user {
                     followsLatestMessage = true
                 }
                 guard followsLatestMessage else { return }
                 proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
             }
+            .onChange(of: controller.streamingContentRevision) { _, _ in
+                guard followsLatestMessage else { return }
+                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+            }
             .onChange(of: controller.isResponding) { _, isResponding in
-                guard isResponding else { return }
-                followsLatestMessage = true
+                if isResponding {
+                    followsLatestMessage = true
+                }
+                guard followsLatestMessage else { return }
                 proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
             }
         }
@@ -171,7 +176,6 @@ struct GuideConversationView: View {
                 }
                 messageContent(message)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if isLatestError(message) {
                     errorRecoveryActions
@@ -214,7 +218,6 @@ struct GuideConversationView: View {
     private func isStreaming(_ message: GuideConversationMessage) -> Bool {
         controller.isResponding
             && message.role == .assistant
-            && controller.messages.last?.id == message.id
     }
 
     private func isLatestError(_ message: GuideConversationMessage) -> Bool {

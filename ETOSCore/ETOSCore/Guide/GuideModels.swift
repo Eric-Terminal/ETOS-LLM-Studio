@@ -290,6 +290,36 @@ enum GuideStreamTerminationPolicy {
     }
 }
 
+enum GuideStreamedToolArguments {
+    static let maximumByteCount = 64 * 1_024
+
+    static func merge(
+        existing: String,
+        replacement: String?,
+        fragment: String?
+    ) throws -> String {
+        let merged: String
+        if let replacement {
+            merged = replacement
+        } else if let fragment {
+            // 少数 OpenAI 兼容服务会重复发送截至当前的完整参数，不能把累计值再次追加。
+            if fragment.utf8.count > existing.utf8.count, fragment.hasPrefix(existing) {
+                merged = fragment
+            } else {
+                var appended = existing
+                appended.append(contentsOf: fragment)
+                merged = appended
+            }
+        } else {
+            return existing
+        }
+        guard merged.utf8.count <= maximumByteCount else {
+            throw GuideError.invalidResponse
+        }
+        return merged
+    }
+}
+
 public protocol GuideCompletionClient: Sendable {
     func events(
         messages: [ChatMessage],

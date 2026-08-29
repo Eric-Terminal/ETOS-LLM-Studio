@@ -20,6 +20,9 @@ public final class GuideConversationController: ObservableObject {
     @Published public private(set) var canRetryWithBuiltIn = false
     @Published public private(set) var isAwaitingToolContinuation = false
 
+    /// 供界面观察流式正文推进，避免用整份消息数组做等值比较并长期保留上一版字符串。
+    public private(set) var streamingContentRevision = 0
+
     public let sessionID: UUID
     public let router: GuideModelRouter
 
@@ -276,11 +279,12 @@ public final class GuideConversationController: ObservableObject {
                         bufferedDelta.append(contentsOf: delta)
                         let now = updateClock.now
                         let shouldPublish = lastPublishedAt == nil
-                            || (lastPublishedAt?.duration(to: now) ?? .zero) >= .milliseconds(50)
+                            || (lastPublishedAt?.duration(to: now) ?? .zero) >= .milliseconds(120)
                         if shouldPublish,
                            let index = messages.firstIndex(where: { $0.id == placeholderID }) {
                             // 上游常把正文切成单字符 SSE；合并发布可避免 SwiftUI 为每个字符重绘整段会话。
                             messages[index].content.append(contentsOf: bufferedDelta)
+                            streamingContentRevision &+= 1
                             bufferedDelta.removeAll(keepingCapacity: true)
                             lastPublishedAt = now
                         }
@@ -292,6 +296,7 @@ public final class GuideConversationController: ObservableObject {
                    !bufferedDelta.isEmpty,
                    let index = messages.firstIndex(where: { $0.id == placeholderID }) {
                     messages[index].content.append(contentsOf: bufferedDelta)
+                    streamingContentRevision &+= 1
                 }
                 guard let response = completedMessage else { throw GuideError.invalidResponse }
                 if let index = messages.firstIndex(where: { $0.id == placeholderID }) {
@@ -302,6 +307,7 @@ public final class GuideConversationController: ObservableObject {
                         content: response.content,
                         toolCalls: response.toolCalls ?? []
                     )
+                    streamingContentRevision &+= 1
                 }
                 requestHistory.append(response)
 

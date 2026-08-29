@@ -237,7 +237,6 @@ struct WatchGuideConversationView: View {
     private func isStreaming(_ message: GuideConversationMessage) -> Bool {
         controller.isResponding
             && message.role == .assistant
-            && controller.messages.last?.id == message.id
     }
 
     private func routeButton(title: String, selected: Bool, action: @escaping () -> Void) -> some View {

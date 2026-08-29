@@ -283,11 +283,11 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
                 var builder = builders[index] ?? (nil, nil, "")
                 if let id = delta.id { builder.id = id }
                 if let name = delta.nameFragment, !name.isEmpty { builder.name = name }
-                if let replacement = delta.argumentsReplacement {
-                    builder.arguments = replacement
-                } else if let fragment = delta.argumentsFragment {
-                    builder.arguments += fragment
-                }
+                builder.arguments = try GuideStreamedToolArguments.merge(
+                    existing: builder.arguments,
+                    replacement: delta.argumentsReplacement,
+                    fragment: delta.argumentsFragment
+                )
                 builders[index] = builder
                 if !order.contains(index) { order.append(index) }
             }
