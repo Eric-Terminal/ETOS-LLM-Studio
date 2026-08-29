@@ -462,7 +462,8 @@ extension ChatView {
                 .chatDefaultSizeChangeScrollAnchor(
                     Self.chatSizeChangeScrollAnchor(
                         keepsBottomPinned: scrollCoordinator.shouldKeepBottomPinned
-                            && !isMessageJumpInFlight,
+                            && !isMessageJumpInFlight
+                            && !scrollCoordinator.hasRetainedTimelineNavigationTarget,
                         isStreaming: viewModel.isSendingMessage
                     )
                 )
@@ -476,12 +477,8 @@ extension ChatView {
                 .onChange(of: scrollCoordinator.chatScrollPositionController.activeCommandRevision) { _, _ in
                     consumeChatScrollCommand(using: chatScrollProxy)
                 }
-                .chatOnUserScrollPhaseChange { distanceToBottom, distanceToTop, isUserInteracting in
-                    handleChatScrollMetrics(
-                        distanceToBottom: distanceToBottom,
-                        distanceToTop: distanceToTop,
-                        isUserInteracting: isUserInteracting
-                    )
+                .chatOnScrollIdle {
+                    updateChatScrollInteractionState(false)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .scrollIndicators(.hidden)

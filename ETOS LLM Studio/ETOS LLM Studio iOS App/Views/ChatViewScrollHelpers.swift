@@ -22,7 +22,8 @@ extension ChatView {
     }
 
     var hasChatProgrammaticScrollOwnership: Bool {
-        isMessageJumpInFlight
+        scrollCoordinator.hasRetainedTimelineNavigationTarget
+            || isMessageJumpInFlight
             || scrollCoordinator.pendingHistoryResetWorkItem != nil
             || scrollCoordinator.pendingBottomSnapTask != nil
             || scrollCoordinator.pendingScrollTargetTask != nil
@@ -42,6 +43,7 @@ extension ChatView {
 
     var hasExplicitChatNavigationCommand: Bool {
         Self.shouldSuspendAutomaticHistoryNavigation(
+            hasRetainedTimelineNavigationTarget: scrollCoordinator.hasRetainedTimelineNavigationTarget,
             isMessageJumpInFlight: isMessageJumpInFlight,
             hasPendingHistoryReset: scrollCoordinator.pendingHistoryResetWorkItem != nil,
             hasPendingBottomSnap: scrollCoordinator.pendingBottomSnapTask != nil,
@@ -138,13 +140,15 @@ extension ChatView {
     }
 
     nonisolated static func shouldSuspendAutomaticHistoryNavigation(
+        hasRetainedTimelineNavigationTarget: Bool,
         isMessageJumpInFlight: Bool,
         hasPendingHistoryReset: Bool,
         hasPendingBottomSnap: Bool,
         hasActiveBottomTarget: Bool,
         hasPendingOrAppliedTarget: Bool
     ) -> Bool {
-        isMessageJumpInFlight
+        hasRetainedTimelineNavigationTarget
+            || isMessageJumpInFlight
             || hasPendingHistoryReset
             || hasPendingBottomSnap
             || hasActiveBottomTarget
@@ -458,6 +462,7 @@ extension ChatView {
             isUserInteracting: isUserInteracting,
             isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
             isNavigatingAwayFromBottom: isMessageJumpInFlight
+                || scrollCoordinator.hasRetainedTimelineNavigationTarget
         )
 
         let shouldShow = normalizedDistance > scrollToBottomButtonRevealDistance && !scrollCoordinator.shouldKeepBottomPinned
@@ -550,6 +555,7 @@ extension ChatView {
             isUserInteracting: scrollCoordinator.isChatScrollUserInteracting,
             isLayoutSettling: scrollCoordinator.isChatLayoutSettling,
             isNavigatingAwayFromBottom: isMessageJumpInFlight
+                || scrollCoordinator.hasRetainedTimelineNavigationTarget
         )
     }
 

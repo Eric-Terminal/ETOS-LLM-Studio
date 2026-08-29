@@ -222,6 +222,22 @@ struct ChatScrollCoordinatorTests {
         #expect(!coordinator.hasRetainedTimelineNavigationTarget)
     }
 
+    @Test("程序滚动阶段不能伪造成用户接管")
+    func testOnlyDirectPanCanConfirmUserInteraction() {
+        #expect(!ChatScrollCoordinator.confirmedUserInteraction(
+            reportedByScrollView: true,
+            hasDirectPanOwnership: false
+        ))
+        #expect(ChatScrollCoordinator.confirmedUserInteraction(
+            reportedByScrollView: true,
+            hasDirectPanOwnership: true
+        ))
+        #expect(!ChatScrollCoordinator.confirmedUserInteraction(
+            reportedByScrollView: false,
+            hasDirectPanOwnership: true
+        ))
+    }
+
     @MainActor
     @Test("同一次拖动中延迟到达的自动命令不能重新夺回视口")
     func testUserInteractionRejectsLateAutomaticScrollCommand() {
@@ -762,13 +778,23 @@ struct ChatScrollCoordinatorTests {
     @Test("显式导航期间暂停自动历史请求")
     func testExplicitNavigationSuspendsAutomaticHistoryRequests() {
         #expect(ChatView.shouldSuspendAutomaticHistoryNavigation(
+            hasRetainedTimelineNavigationTarget: false,
             isMessageJumpInFlight: true,
             hasPendingHistoryReset: false,
             hasPendingBottomSnap: false,
             hasActiveBottomTarget: false,
             hasPendingOrAppliedTarget: true
         ))
+        #expect(ChatView.shouldSuspendAutomaticHistoryNavigation(
+            hasRetainedTimelineNavigationTarget: true,
+            isMessageJumpInFlight: false,
+            hasPendingHistoryReset: false,
+            hasPendingBottomSnap: false,
+            hasActiveBottomTarget: false,
+            hasPendingOrAppliedTarget: false
+        ))
         #expect(!ChatView.shouldSuspendAutomaticHistoryNavigation(
+            hasRetainedTimelineNavigationTarget: false,
             isMessageJumpInFlight: false,
             hasPendingHistoryReset: false,
             hasPendingBottomSnap: false,

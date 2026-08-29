@@ -77,15 +77,19 @@ extension ChatView {
         distanceToTop: CGFloat,
         isUserInteracting: Bool
     ) {
+        let confirmedUserInteraction = ChatScrollCoordinator.confirmedUserInteraction(
+            reportedByScrollView: isUserInteracting,
+            hasDirectPanOwnership: scrollCoordinator.isChatScrollUserInteracting
+        )
         scrollCoordinator.scrollDistanceToTop = max(distanceToTop, 0)
-        updateChatScrollInteractionState(isUserInteracting)
+        updateChatScrollInteractionState(confirmedUserInteraction)
         updateScrollToBottomVisibility(
             distanceToBottom: distanceToBottom,
-            isUserInteracting: isUserInteracting
+            isUserInteracting: confirmedUserInteraction
         )
         resolveActiveBottomScrollCommand(
             distanceToBottom: distanceToBottom,
-            isUserInteracting: isUserInteracting
+            isUserInteracting: confirmedUserInteraction
         )
         guard !hasExplicitChatNavigationCommand else {
             scrollCoordinator.pendingAutomaticHistoryLoadRequest = nil
@@ -98,7 +102,7 @@ extension ChatView {
            !viewModel.isHistoryFullyLoaded,
            Self.shouldQueueAutomaticHistoryLoad(
             usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
-            isUserInteracting: isUserInteracting,
+            isUserInteracting: confirmedUserInteraction,
             distanceToEdge: distanceToTop,
             triggerDistance: automaticHistoryLoadTriggerDistance,
             anchorMessageID: firstMessageID,
@@ -112,7 +116,7 @@ extension ChatView {
                   !viewModel.isLaterHistoryFullyLoaded,
                   Self.shouldQueueAutomaticHistoryLoad(
                     usesAutomaticHistoryWindow: viewModel.usesAutomaticHistoryWindow,
-                    isUserInteracting: isUserInteracting,
+                    isUserInteracting: confirmedUserInteraction,
                     distanceToEdge: distanceToBottom,
                     triggerDistance: automaticHistoryLoadTriggerDistance,
                     anchorMessageID: lastMessageID,
@@ -124,7 +128,7 @@ extension ChatView {
             )
         }
 
-        guard !isUserInteracting,
+        guard !confirmedUserInteraction,
               !scrollCoordinator.isHistoryLoadInFlight,
               let request = scrollCoordinator.pendingAutomaticHistoryLoadRequest else {
             return
