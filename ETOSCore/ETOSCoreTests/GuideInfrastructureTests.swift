@@ -155,6 +155,46 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("页面可以声明并执行自定义只读工具")
+    func pageCanExecuteCustomReadTool() async throws {
+        let coordinator = GuideContextCoordinator()
+        let tool = InternalToolDefinition(
+            name: "read_custom_page_data",
+            description: "读取页面自定义数据",
+            parameters: GuideToolCatalog.objectSchema(properties: [:])
+        )
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(
+                id: "custom-page",
+                title: "自定义页面",
+                tools: [GuidePageTool(definition: tool, access: .read)]
+            ),
+            snapshot: { .empty },
+            executeReadTool: { call in
+                #expect(call.toolName == tool.name)
+                return #"{"value":"page-owned"}"#
+            },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+
+        let result = try await coordinator.executeReadTool(InternalToolCall(
+            id: "read-1",
+            toolName: tool.name,
+            arguments: "{}"
+        ))
+        #expect(result.contains("page-owned"))
+        await #expect(throws: GuideError.self) {
+            _ = try await coordinator.executeReadTool(InternalToolCall(
+                id: "read-2",
+                toolName: "undeclared_tool",
+                arguments: "{}"
+            ))
+        }
+    }
+
+    @MainActor
     @Test("来源页已变化时拒绝执行旧提案")
     func proposalRejectsChangedPage() async throws {
         let coordinator = GuideContextCoordinator()
@@ -276,6 +316,46 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("连续八轮工具调用会请示用户并可继续原会话")
+    func toolLoopLimitRequestsContinuation() async {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let router = GuideModelRouter(
+            appConfig: appConfig,
+            builtInClient: GuideLoopingCompletionClient()
+        )
+        router.useBuiltIn()
+        let controller = GuideConversationController(
+            router: router,
+            contextCoordinator: coordinator
+        )
+
+        controller.send("继续查清楚这个页面")
+        for _ in 0..<500 where controller.isResponding {
+            await Task.yield()
+        }
+        #expect(controller.isAwaitingToolContinuation)
+        #expect(controller.lastError == nil)
+
+        controller.continueToolCalls()
+        for _ in 0..<200 where controller.isResponding {
+            await Task.yield()
+        }
+        #expect(!controller.isAwaitingToolContinuation)
+        #expect(controller.messages.last(where: { $0.role == .assistant })?.content == "已查完")
+    }
+
+    @MainActor
     @Test("编辑或重试最近问题会替换旧回复而不是重复追加")
     func editingAndRetryingLatestQuestionReplacesResponse() async throws {
         let appConfig = AppConfigStore.shared
@@ -382,6 +462,7 @@ struct GuideInfrastructureTests {
             GuideToolCatalog.replaceModelRequestBody,
             GuideToolCatalog.updateGlobalProxy,
             GuideToolCatalog.updateMCPPreferences,
+            GuideToolCatalog.createMCPServer,
             GuideToolCatalog.requestModelSetupSecret,
             GuideToolCatalog.proposeModelSetupTest,
             GuideToolCatalog.proposeSetupModelSelection,
@@ -390,6 +471,34 @@ struct GuideInfrastructureTests {
         ]
         #expect(guideDefinitions.allSatisfy { AppToolKind.resolve(from: $0.name) == nil })
         #expect(Set(guideDefinitions.map(\.name)).count == guideDefinitions.count)
+    }
+
+    @Test("MCP 创建提案复用标准导入校验并隐藏认证值")
+    func mcpCreationProposalUsesValidatedConfiguration() throws {
+        let call = InternalToolCall(
+            id: "create-mcp",
+            toolName: GuideToolCatalog.createMCPServer.name,
+            arguments: #"{"name":"Docs","configuration":{"type":"http","url":"https://mcp.example.com","headers":{"Authorization":"Bearer private-token"}},"notes":"内部文档","select_for_chat":true}"#
+        )
+
+        let proposal = try GuideMCPServerProposalSupport.buildProposal(
+            call: call,
+            pageID: "mcp-toolbox"
+        )
+        let decoded = try GuideMCPServerProposalSupport.decode(proposal.arguments)
+
+        #expect(decoded.server.displayName == "Docs")
+        #expect(decoded.server.notes == "内部文档")
+        #expect(decoded.server.isSelectedForChat)
+        #expect(decoded.containsSensitiveValues)
+        #expect(proposal.summary.contains("仔细确认"))
+        #expect(!proposal.mutations[0].newValue.prettyPrintedCompact().contains("private-token"))
+        guard case .http(let endpoint, _, let headers) = decoded.server.transport else {
+            Issue.record("应解析为 HTTP MCP Server")
+            return
+        }
+        #expect(endpoint.absoluteString == "https://mcp.example.com")
+        #expect(headers["Authorization"] == "Bearer private-token")
     }
 
     @Test("提示词限定向导职责并仅按条件提供零成本建议")
@@ -404,7 +513,8 @@ struct GuideInfrastructureTests {
         #expect(english.contains("Gemini"))
         #expect(chinese.contains("用户自己选择的模型线路"))
         #expect(chinese.contains("不要声称基础模型固定为 Qwen"))
-        #expect(chinese.contains("guide_prompt_version: 1"))
+        #expect(chinese.contains("guide_prompt_version: 2"))
+        #expect(chinese.contains("创建、修改或删除配置"))
         #expect(GuidePromptBuilder.systemPrompt(mode: .modelSetup).contains("setup_state"))
     }
 
@@ -677,6 +787,38 @@ private struct GuideEchoCompletionClient: GuideCompletionClient {
         let question = messages.last(where: { $0.role == .user })?.content ?? ""
         return AsyncThrowingStream { continuation in
             continuation.yield(.completed(ChatMessage(role: .assistant, content: "回答：\(question)")))
+            continuation.finish()
+        }
+    }
+}
+
+private final class GuideLoopingCompletionClient: GuideCompletionClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requestCount = 0
+
+    func events(
+        messages _: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        let currentRequest = lock.withLock {
+            requestCount += 1
+            return requestCount
+        }
+        return AsyncThrowingStream { continuation in
+            if currentRequest <= 8 {
+                continuation.yield(.completed(ChatMessage(
+                    role: .assistant,
+                    content: "",
+                    toolCalls: [InternalToolCall(
+                        id: "page-context-\(currentRequest)",
+                        toolName: GuideToolCatalog.currentPageContext.name,
+                        arguments: "{}"
+                    )]
+                )))
+            } else {
+                continuation.yield(.completed(ChatMessage(role: .assistant, content: "已查完")))
+            }
             continuation.finish()
         }
     }

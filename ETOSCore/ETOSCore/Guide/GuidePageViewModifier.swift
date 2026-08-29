@@ -12,6 +12,7 @@ import SwiftUI
 private struct GuidePageContextModifier: ViewModifier {
     let descriptor: GuidePageDescriptor
     let snapshot: GuideContextCoordinator.SnapshotProvider
+    let executeReadTool: GuideContextCoordinator.ReadToolExecutor
     let buildProposal: GuideContextCoordinator.ProposalBuilder
     let execute: GuideContextCoordinator.ProposalExecutor
 
@@ -26,6 +27,7 @@ private struct GuidePageContextModifier: ViewModifier {
                     token = GuideContextCoordinator.shared.register(
                         descriptor: descriptor,
                         snapshot: snapshot,
+                        executeReadTool: executeReadTool,
                         buildProposal: buildProposal,
                         execute: execute
                     )
@@ -41,10 +43,13 @@ private struct GuidePageContextModifier: ViewModifier {
 
 @MainActor
 public extension View {
-    /// 注册当前页面允许向导读取的快照及提案式写入工具。
+    /// 注册当前页面公开的快照与自定义工具；读取由页面执行，任何写入都必须先生成提案。
     func guidePageContext(
         descriptor: GuidePageDescriptor,
         snapshot: @escaping @MainActor @Sendable () async -> GuidePageSnapshot,
+        executeReadTool: @escaping @MainActor @Sendable (InternalToolCall) async throws -> String = { call in
+            throw GuideError.unsupportedTool(call.toolName)
+        },
         buildProposal: @escaping @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal = { _, _ in
             throw GuideError.invalidToolArguments
         },
@@ -55,6 +60,7 @@ public extension View {
         modifier(GuidePageContextModifier(
             descriptor: descriptor,
             snapshot: snapshot,
+            executeReadTool: executeReadTool,
             buildProposal: buildProposal,
             execute: execute
         ))

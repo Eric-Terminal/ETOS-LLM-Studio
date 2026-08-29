@@ -207,7 +207,10 @@ struct MCPIntegrationView: View {
                 id: "watch-mcp-toolbox",
                 title: NSLocalizedString("MCP 工具箱", comment: "手表 MCP 向导上下文标题"),
                 documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
-                tools: [GuidePageTool(definition: GuideToolCatalog.updateMCPPreferences, access: .proposeChange)]
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPPreferences, access: .proposeChange),
+                    GuidePageTool(definition: GuideToolCatalog.createMCPServer, access: .proposeChange)
+                ]
             ),
             snapshot: mcpGuideSnapshot,
             buildProposal: buildMCPGuideProposal,
@@ -229,6 +232,9 @@ struct MCPIntegrationView: View {
         call: InternalToolCall,
         snapshot: GuidePageSnapshot
     ) throws -> GuideActionProposal {
+        if call.toolName == GuideToolCatalog.createMCPServer.name {
+            return try GuideMCPServerProposalSupport.buildProposal(call: call, pageID: "watch-mcp-toolbox")
+        }
         guard call.toolName == GuideToolCatalog.updateMCPPreferences.name else {
             throw GuideError.unsupportedTool(call.toolName)
         }
@@ -261,6 +267,24 @@ struct MCPIntegrationView: View {
     }
 
     private func executeMCPGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        if proposal.toolName == GuideToolCatalog.createMCPServer.name {
+            let decoded = try GuideMCPServerProposalSupport.decode(proposal.arguments)
+            manager.save(server: decoded.server)
+            guard manager.servers.contains(where: { $0.id == decoded.server.id }) else {
+                throw NSError(
+                    domain: "GuideMCPServerCreation",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: manager.lastOperationError ?? NSLocalizedString("无法保存 MCP 服务器配置。", comment: "手表 MCP 向导创建失败")]
+                )
+            }
+            manager.connectSelectedServersIfNeeded()
+            return GuideActionExecution(
+                message: String(
+                    format: NSLocalizedString("已创建 MCP 服务器“%@”。", comment: "手表 MCP 向导创建执行结果"),
+                    decoded.server.displayName
+                )
+            )
+        }
         guard proposal.toolName == GuideToolCatalog.updateMCPPreferences.name else {
             throw GuideError.unsupportedTool(proposal.toolName)
         }

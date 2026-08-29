@@ -18,6 +18,7 @@ public final class GuideConversationController: ObservableObject {
     @Published public private(set) var lastError: String?
     @Published public private(set) var lastErrorMessageID: UUID?
     @Published public private(set) var canRetryWithBuiltIn = false
+    @Published public private(set) var isAwaitingToolContinuation = false
 
     public let sessionID: UUID
     public let router: GuideModelRouter
@@ -53,7 +54,10 @@ public final class GuideConversationController: ObservableObject {
 
     public func send(_ content: String) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isResponding, pendingProposal == nil else { return }
+        guard !trimmed.isEmpty,
+              !isResponding,
+              pendingProposal == nil,
+              !isAwaitingToolContinuation else { return }
         lastError = nil
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
@@ -67,7 +71,7 @@ public final class GuideConversationController: ObservableObject {
     }
 
     public func sendSetupChoice(_ choice: GuideModelSetupChoice, displayName: String) {
-        guard !isResponding, pendingProposal == nil else { return }
+        guard !isResponding, pendingProposal == nil, !isAwaitingToolContinuation else { return }
         lastError = nil
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
@@ -91,6 +95,7 @@ public final class GuideConversationController: ObservableObject {
     public func canEditMessage(_ messageID: UUID) -> Bool {
         !isResponding
             && pendingProposal == nil
+            && !isAwaitingToolContinuation
             && latestUserMessageID == messageID
             && latestUserMessageAllowsEditing
     }
@@ -98,6 +103,7 @@ public final class GuideConversationController: ObservableObject {
     public func canRetryMessage(_ messageID: UUID) -> Bool {
         !isResponding
             && pendingProposal == nil
+            && !isAwaitingToolContinuation
             && latestTurnMessageIDs.contains(messageID)
     }
 
@@ -125,6 +131,7 @@ public final class GuideConversationController: ObservableObject {
         currentTask = nil
         removeEmptyAssistantMessages()
         isResponding = false
+        isAwaitingToolContinuation = false
     }
 
     public func clear() {
@@ -138,6 +145,7 @@ public final class GuideConversationController: ObservableObject {
         lastError = nil
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
+        isAwaitingToolContinuation = false
         latestUserMessageID = nil
         latestUserMessageAllowsEditing = false
         latestTurnMessageIDs.removeAll()
@@ -180,7 +188,10 @@ public final class GuideConversationController: ObservableObject {
     }
 
     public func undoLastChange() {
-        guard let undoProposal, !isResponding, pendingProposal == nil else { return }
+        guard let undoProposal,
+              !isResponding,
+              pendingProposal == nil,
+              !isAwaitingToolContinuation else { return }
         isResponding = true
         currentTask = Task { [weak self] in
             guard let self else { return }
@@ -198,7 +209,19 @@ public final class GuideConversationController: ObservableObject {
         }
     }
 
+    public func continueToolCalls() {
+        guard isAwaitingToolContinuation, !isResponding, pendingProposal == nil else { return }
+        isAwaitingToolContinuation = false
+        startResponseLoop()
+    }
+
+    public func finishToolCalls() {
+        guard isAwaitingToolContinuation, !isResponding else { return }
+        isAwaitingToolContinuation = false
+    }
+
     private func startResponseLoop() {
+        isAwaitingToolContinuation = false
         isResponding = true
         currentTask = Task { [weak self] in
             await self?.runResponseLoop()
@@ -219,6 +242,7 @@ public final class GuideConversationController: ObservableObject {
         messages.removeSubrange((messageIndex + 1)..<messages.endIndex)
         requestHistory.removeSubrange((historyIndex + 1)..<requestHistory.endIndex)
         pendingToolCall = nil
+        isAwaitingToolContinuation = false
         lastError = nil
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
@@ -293,11 +317,9 @@ public final class GuideConversationController: ObservableObject {
                 }
                 removeEmptyAssistantMessage(id: placeholderID)
             }
-            throw NSError(
-                domain: "GuideConversation",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("向导连续调用工具次数过多，请清空上下文后换一种问法。", comment: "Guide tool loop limit")]
-            )
+            isAwaitingToolContinuation = true
+            isResponding = false
+            currentTask = nil
         } catch is CancellationError {
             removeEmptyAssistantMessages()
             isResponding = false
@@ -348,7 +370,7 @@ public final class GuideConversationController: ObservableObject {
             guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
             return try await sourceService.readSource(path: path, startLine: start, endLine: end, commitSHA: sha)
         default:
-            throw GuideError.unsupportedTool(call.toolName)
+            return try await contextCoordinator.executeReadTool(call)
         }
     }
 
@@ -386,6 +408,7 @@ public final class GuideConversationController: ObservableObject {
         lastErrorMessageID = errorMessage.id
         latestTurnMessageIDs.insert(errorMessage.id)
         isResponding = false
+        isAwaitingToolContinuation = false
         currentTask = nil
     }
 

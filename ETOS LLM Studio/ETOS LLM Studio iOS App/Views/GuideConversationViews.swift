@@ -41,6 +41,9 @@ struct GuideConversationView: View {
             if let proposal = controller.pendingProposal {
                 proposalPreview(proposal)
             }
+            if controller.isAwaitingToolContinuation {
+                toolContinuationPrompt
+            }
             composer
         }
         .background(.regularMaterial)
@@ -214,6 +217,32 @@ struct GuideConversationView: View {
         .background(Color.secondary.opacity(0.08))
     }
 
+    private var toolContinuationPrompt: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                NSLocalizedString("继续查找？", comment: "向导连续工具调用确认标题"),
+                systemImage: "arrow.trianglehead.2.clockwise.rotate.90"
+            )
+            .font(.headline)
+            Text(NSLocalizedString("向导已连续完成 8 轮工具调用。是否允许它继续读取页面、文档或源码？", comment: "向导连续工具调用确认说明"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button(NSLocalizedString("到此为止", comment: "停止向导继续调用工具"), role: .cancel) {
+                    controller.finishToolCalls()
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+                Button(NSLocalizedString("继续调用", comment: "允许向导继续调用工具")) {
+                    controller.continueToolCalls()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .background(Color.secondary.opacity(0.08))
+    }
+
     private var errorRecoveryActions: some View {
         HStack(spacing: 8) {
             Button {
@@ -349,7 +378,11 @@ struct GuideConversationView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
                 }
-                .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.pendingProposal != nil)
+                .disabled(
+                    input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || controller.pendingProposal != nil
+                        || controller.isAwaitingToolContinuation
+                )
                 .accessibilityLabel(NSLocalizedString("发送", comment: "发送向导问题按钮"))
             }
         }

@@ -6946,3 +6946,13 @@
 "周四" = "Thursday";
 "周五" = "Friday";
 "周六" = "Saturday";
+"继续查找？" = "Continue searching?";
+"向导已连续完成 8 轮工具调用。是否允许它继续读取页面、文档或源码？" = "The guide has completed 8 consecutive rounds of tool calls. Allow it to keep reading the page, documentation, or source code?";
+"到此为止" = "Stop Here";
+"继续调用" = "Continue";
+"创建 MCP 服务器（包含认证或环境变量，请仔细确认）" = "Create MCP Server (contains authentication or environment variables; review carefully)";
+"创建 MCP 服务器" = "Create MCP Server";
+"MCP 服务器配置" = "MCP Server Configuration";
+"无法保存 MCP 服务器配置。" = "Unable to save the MCP Server configuration.";
+"已创建 MCP 服务器“%@”。" = "Created MCP Server “%@”.";
+"替换模型自定义请求体（包含疑似认证字段，请仔细确认）" = "Replace the custom model request body (contains possible authentication fields; review carefully)";

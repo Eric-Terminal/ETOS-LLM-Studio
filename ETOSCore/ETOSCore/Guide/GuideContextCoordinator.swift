@@ -20,6 +20,7 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     public typealias SnapshotProvider = @MainActor @Sendable () async -> GuidePageSnapshot
+    public typealias ReadToolExecutor = @MainActor @Sendable (InternalToolCall) async throws -> String
     public typealias ProposalBuilder = @MainActor @Sendable (InternalToolCall, GuidePageSnapshot) throws -> GuideActionProposal
     public typealias ProposalExecutor = @MainActor @Sendable (GuideActionProposal) async throws -> GuideActionExecution
 
@@ -27,6 +28,7 @@ public final class GuideContextCoordinator: ObservableObject {
         let token: RegistrationToken
         let descriptor: GuidePageDescriptor
         let snapshotProvider: SnapshotProvider
+        let readToolExecutor: ReadToolExecutor
         let proposalBuilder: ProposalBuilder
         let proposalExecutor: ProposalExecutor
     }
@@ -43,6 +45,9 @@ public final class GuideContextCoordinator: ObservableObject {
     public func register(
         descriptor: GuidePageDescriptor,
         snapshot: @escaping SnapshotProvider,
+        executeReadTool: @escaping ReadToolExecutor = { call in
+            throw GuideError.unsupportedTool(call.toolName)
+        },
         buildProposal: @escaping ProposalBuilder,
         execute: @escaping ProposalExecutor
     ) -> RegistrationToken {
@@ -51,6 +56,7 @@ public final class GuideContextCoordinator: ObservableObject {
             token: token,
             descriptor: descriptor,
             snapshotProvider: snapshot,
+            readToolExecutor: executeReadTool,
             proposalBuilder: buildProposal,
             proposalExecutor: execute
         ))
@@ -102,6 +108,18 @@ public final class GuideContextCoordinator: ObservableObject {
         }
         let snapshot = await registration.snapshotProvider()
         return try registration.proposalBuilder(call, snapshot)
+    }
+
+    public func executeReadTool(_ call: InternalToolCall) async throws -> String {
+        guard let registration = currentRegistration else {
+            throw GuideError.noActivePage
+        }
+        guard registration.descriptor.tools.contains(where: {
+            $0.access == .read && $0.definition.name == call.toolName
+        }) else {
+            throw GuideError.unsupportedTool(call.toolName)
+        }
+        return try await registration.readToolExecutor(call)
     }
 
     public func execute(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {

@@ -291,9 +291,7 @@ struct ModelSettingsView: View {
                 throw GuideError.invalidToolArguments
             }
             let newValue = JSONValue.dictionary(body)
-            guard !GuideSecretRedactor.containsSensitiveField(newValue) else {
-                throw GuideError.invalidToolArguments
-            }
+            let containsSensitiveFields = GuideSecretRedactor.containsSensitiveField(newValue)
             guard snapshot.fields["request_body_json"]?.value != newValue else {
                 throw GuideError.invalidToolArguments
             }
@@ -301,12 +299,14 @@ struct ModelSettingsView: View {
                 pageID: modelGuidePageID,
                 toolCallID: call.id,
                 toolName: call.toolName,
-                summary: NSLocalizedString("替换模型自定义请求体", comment: "手表模型请求体向导提案摘要"),
+                summary: containsSensitiveFields
+                    ? NSLocalizedString("替换模型自定义请求体（包含疑似认证字段，请仔细确认）", comment: "手表模型敏感请求体向导提案摘要")
+                    : NSLocalizedString("替换模型自定义请求体", comment: "手表模型请求体向导提案摘要"),
                 mutations: [GuideSettingMutation(
                     path: "request_body_json",
                     label: NSLocalizedString("自定义请求体", comment: "手表模型向导修改字段"),
                     oldValue: snapshot.fields["request_body_json"]?.value,
-                    newValue: newValue
+                    newValue: GuideSecretRedactor.redact(newValue)
                 )],
                 arguments: arguments
             )

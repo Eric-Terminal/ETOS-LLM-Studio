@@ -88,6 +88,20 @@ struct WatchGuideConversationView: View {
                 }
             }
 
+            if controller.isAwaitingToolContinuation {
+                Section(NSLocalizedString("继续查找？", comment: "手表向导连续工具调用确认标题")) {
+                    Text(NSLocalizedString("向导已连续完成 8 轮工具调用。是否允许它继续读取页面、文档或源码？", comment: "手表向导连续工具调用确认说明"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button(NSLocalizedString("继续调用", comment: "手表允许向导继续调用工具")) {
+                        controller.continueToolCalls()
+                    }
+                    Button(NSLocalizedString("到此为止", comment: "手表停止向导继续调用工具"), role: .cancel) {
+                        controller.finishToolCalls()
+                    }
+                }
+            }
+
             if controller.lastError != nil {
                 Section(NSLocalizedString("恢复", comment: "手表向导错误恢复分组")) {
                     Button(NSLocalizedString("重试", comment: "手表向导重试按钮")) {
@@ -128,7 +142,11 @@ struct WatchGuideConversationView: View {
                     Button(NSLocalizedString("发送", comment: "手表发送向导问题按钮")) {
                         send()
                     }
-                    .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.pendingProposal != nil)
+                    .disabled(
+                        input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || controller.pendingProposal != nil
+                            || controller.isAwaitingToolContinuation
+                    )
                 }
             }
         }
