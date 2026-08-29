@@ -110,7 +110,8 @@ extension ChatView {
                 animated: !accessibilityReduceMotion,
                 animation: accessibilityReduceMotion
                     ? .linear(duration: 0)
-                    : scrollToBottomButtonAnimation
+                    : scrollToBottomButtonAnimation,
+                allowsDuringUserInteraction: true
             )
             return
         }
@@ -126,7 +127,7 @@ extension ChatView {
         }
         let workItem = DispatchWorkItem {
             scrollCoordinator.pendingHistoryResetWorkItem = nil
-            scheduleDeferredBottomSnap()
+            scheduleDeferredBottomSnap(allowsDuringUserInteraction: true)
         }
         scrollCoordinator.pendingHistoryResetWorkItem = workItem
         DispatchQueue.main.async(execute: workItem)
@@ -174,7 +175,11 @@ extension ChatView {
             transaction.disablesAnimations = true
             withTransaction(transaction) {
                 viewModel.moveHistoryWindowToStart()
-                scrollCoordinator.chatScrollPositionController.issueCommand(to: .top, anchor: .top)
+                scrollCoordinator.chatScrollPositionController.issueCommand(
+                    to: .top,
+                    anchor: .top,
+                    allowsDuringUserInteraction: true
+                )
             }
             scrollCoordinator.bottomScrollCommandGeneration &+= 1
             try? await Task.sleep(nanoseconds: 80_000_000)
@@ -200,7 +205,8 @@ extension ChatView {
     }
 
     func refreshMessageNavigationTargets() {
-        guard appConfig.chatTimelineNavigationEnabled else { return }
+        guard appConfig.chatTimelineNavigationEnabled,
+              !scrollCoordinator.isChatScrollUserInteracting else { return }
         if scrollCoordinator.awaitsFreshBottomNavigationSnapshot {
             let shouldSuspend = Self.shouldSuspendAdjacentNavigationForBottomArrival(
                 awaitsFreshSnapshot: true,
@@ -302,7 +308,6 @@ extension ChatView {
             isMessageJumpInFlight: isMessageJumpInFlight,
             bottomScrollTarget: bottomScrollTarget
         )
-        refreshMessageNavigationTargets()
         guard shouldCancelCommand else { return }
         cancelPendingScrollTargetCommand()
     }

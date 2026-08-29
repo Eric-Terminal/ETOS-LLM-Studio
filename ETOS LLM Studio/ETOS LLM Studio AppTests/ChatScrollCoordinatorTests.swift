@@ -95,6 +95,27 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
+    @Test("同一次拖动中延迟到达的自动命令不能重新夺回视口")
+    func testUserInteractionRejectsLateAutomaticScrollCommand() {
+        let controller = ChatScrollPositionController()
+        let readingPosition = ChatScrollTargetID.message(UUID())
+
+        controller.acceptObservedPosition(readingPosition)
+        controller.updateUserInteraction(true)
+
+        #expect(!controller.issueCommand(to: .bottom, anchor: .bottom))
+        #expect(!controller.hasActiveCommand)
+        #expect(controller.positionBinding.wrappedValue == nil)
+
+        controller.acceptObservedPosition(readingPosition)
+        #expect(controller.positionBinding.wrappedValue == readingPosition)
+
+        controller.updateUserInteraction(false)
+        #expect(controller.issueCommand(to: .bottom, anchor: .bottom))
+        #expect(controller.hasActiveCommand)
+    }
+
+    @MainActor
     @Test("历史扩窗按同一消息行的几何差生成一次偏移校正")
     func testHistoryWindowMutationPreservesViewportAnchor() async {
         let controller = ChatHistoryViewportAnchorController()
@@ -236,27 +257,37 @@ struct ChatScrollCoordinatorTests {
         #expect(!coordinator.chatHistoryViewportAnchorController.isRestoringAnchor)
     }
 
-    @Test("吸底命令抵达底部或超过最长占用时间后释放")
+    @Test("吸底命令在用户接管、抵达底部或超时后释放")
     func testChatBottomScrollCommandReleaseLifecycle() {
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
             distanceToBottom: 0,
+            isUserInteracting: false,
             arrivalTolerance: 1
         ))
         #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
             distanceToBottom: 8,
+            isUserInteracting: false,
             arrivalTolerance: 1
         ))
         #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: true,
             distanceToBottom: 8,
+            isUserInteracting: true,
+            arrivalTolerance: 1
+        ))
+        #expect(ChatView.shouldReleaseActiveBottomScrollCommand(
+            hasActiveTarget: true,
+            distanceToBottom: 8,
+            isUserInteracting: false,
             arrivalTolerance: 1,
             hasExceededMaximumLifetime: true
         ))
         #expect(!ChatView.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: false,
             distanceToBottom: 0,
+            isUserInteracting: true,
             arrivalTolerance: 1,
             hasExceededMaximumLifetime: true
         ))

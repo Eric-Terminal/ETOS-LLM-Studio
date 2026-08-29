@@ -14,6 +14,7 @@ final class ChatScrollPositionController: ObservableObject {
     @Published private(set) var activeCommandTarget: ChatScrollTargetID?
 
     private var observedPositionID: ChatScrollTargetID?
+    private var isUserInteracting = false
 
     var positionBinding: Binding<ChatScrollTargetID?> {
         Binding(
@@ -34,10 +35,27 @@ final class ChatScrollPositionController: ObservableObject {
         observedPositionID = positionID
     }
 
-    func issueCommand(to target: ChatScrollTargetID, anchor: UnitPoint) {
+    /// 拖动与惯性减速属于同一次直接操控；期间到达的自动命令不能重新夺回视口。
+    @discardableResult
+    func issueCommand(
+        to target: ChatScrollTargetID,
+        anchor: UnitPoint,
+        allowsDuringUserInteraction: Bool = false
+    ) -> Bool {
+        guard allowsDuringUserInteraction || !isUserInteracting else { return false }
         targetAnchor = anchor
         activeCommandTarget = target
         observedPositionID = target
+        return true
+    }
+
+    func updateUserInteraction(_ isUserInteracting: Bool) {
+        self.isUserInteracting = isUserInteracting
+        if isUserInteracting {
+            // nil 表示当前没有应用指定的锚点，避免旧目标随视图刷新重新生效。
+            observedPositionID = nil
+            releaseCommand()
+        }
     }
 
     /// 释放所有权不清空 scrollPosition。绑定继续承载系统观测值，不再制造 nil/ID 往返。
@@ -53,5 +71,6 @@ final class ChatScrollPositionController: ObservableObject {
         activeCommandTarget = nil
         observedPositionID = nil
         targetAnchor = .bottom
+        isUserInteracting = false
     }
 }
