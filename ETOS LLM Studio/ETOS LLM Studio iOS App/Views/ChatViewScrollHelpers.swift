@@ -105,6 +105,14 @@ extension ChatView {
         usesAdjacentAnimation && isFinalSegment ? adjacentDuration : defaultDuration
     }
 
+    /// 相邻目标扩窗后已经可用时直接提交最终落点，不能先排队旧边界定位。
+    nonisolated static func shouldUseSingleFinalAdjacentJump(
+        usesAdjacentAnimation: Bool,
+        targetIsVisibleAfterWindowShift: Bool
+    ) -> Bool {
+        usesAdjacentAnimation && targetIsVisibleAfterWindowShift
+    }
+
     /// 只有贴底内容随视口变化时才暂停气泡波浪，历史阅读与用户手势始终保留直接反馈。
     nonisolated static func shouldSuppressScrollTransitionForViewportChange(
         isLayoutSettling: Bool,
@@ -407,6 +415,27 @@ extension ChatView {
         Self.resolvedBottomScrollTarget
     }
 
+    /// ScrollViewReader 只消费一次命令，不把目标长期绑定为视口状态。
+    func consumeChatScrollCommand(using proxy: ScrollViewProxy) {
+        let controller = scrollCoordinator.chatScrollPositionController
+        guard let target = controller.activeCommandTarget else { return }
+        let scroll = {
+            proxy.scrollTo(target, anchor: controller.targetAnchor)
+        }
+        if let animation = controller.activeCommandAnimation {
+            withAnimation(animation) {
+                scroll()
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scroll()
+            }
+        }
+    }
+
     func updateScrollToBottomVisibility(distanceToBottom: CGFloat, isUserInteracting: Bool) {
         let normalizedDistance = max(distanceToBottom, 0)
         scrollCoordinator.scrollDistanceToBottom = normalizedDistance
@@ -437,8 +466,8 @@ extension ChatView {
         }
     }
 
-    /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
-    /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
+    /// 抵达底部或用户接管后释放一次性命令的所有权，
+    /// 后续流式增长统一交给尺寸变化锚点。
     func resolveActiveBottomScrollCommand(
         distanceToBottom: CGFloat,
         isUserInteracting: Bool
@@ -625,12 +654,35 @@ extension ChatView {
                     return
                 }
 
-                // 数据窗口移动后先把原边界钉回原位；这一帧不动画，避免窗口裁切形成瞬移。
+                // 先让新窗口进入视图树；相邻导航随后只提交最终落点。
                 await Task.yield()
                 guard !Task.isCancelled,
                       generation == scrollCoordinator.scrollTargetGeneration,
-                      sessionID == viewModel.currentSession?.id,
-                      viewModel.displayMessages.contains(where: { $0.id == preservedAnchorID }) else {
+                      sessionID == viewModel.currentSession?.id else {
+                    return
+                }
+                let positionAfterWindowShift = viewModel.historyWindowPosition(of: messageID)
+                if Self.shouldUseSingleFinalAdjacentJump(
+                    usesAdjacentAnimation: usesAdjacentAnimation,
+                    targetIsVisibleAfterWindowShift: positionAfterWindowShift == .visible
+                ) {
+                    await animateMessageJump(
+                        to: messageID,
+                        anchor: .top,
+                        duration: Self.resolvedMessageJumpDuration(
+                            defaultDuration: historyJumpSegmentDuration(
+                                estimatedSegmentCount: estimatedSegmentCount
+                            ),
+                            usesAdjacentAnimation: true,
+                            isFinalSegment: true
+                        ),
+                        phase: .adjacent,
+                        generation: generation,
+                        sessionID: sessionID
+                    )
+                    return
+                }
+                guard viewModel.displayMessages.contains(where: { $0.id == preservedAnchorID }) else {
                     return
                 }
                 applyScrollTargetWithoutAnimation(
@@ -804,20 +856,12 @@ extension ChatView {
         animation: Animation,
         allowsDuringUserInteraction: Bool = false
     ) -> Bool {
-        var didIssueCommand = false
-        let updateTarget = {
-            didIssueCommand = scrollCoordinator.chatScrollPositionController.issueCommand(
-                to: target,
-                anchor: anchor,
-                allowsDuringUserInteraction: allowsDuringUserInteraction
-            )
-        }
-        if animated {
-            withAnimation(animation, updateTarget)
-        } else {
-            updateTarget()
-        }
-        return didIssueCommand
+        scrollCoordinator.chatScrollPositionController.issueCommand(
+            to: target,
+            anchor: anchor,
+            animation: animated ? animation : nil,
+            allowsDuringUserInteraction: allowsDuringUserInteraction
+        )
     }
 
     private func setScrollTarget(

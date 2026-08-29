@@ -81,6 +81,7 @@ extension ChatView {
                 }
 
                 // Z-Index 1: 消息列表
+                ScrollViewReader { chatScrollProxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         ChatScrollMetricsObserver(
@@ -472,10 +473,9 @@ extension ChatView {
                     scrollCoordinator.chatScrollViewportHeight = newSize.height
                     refreshMessageNavigationTargets()
                 }
-                .scrollPosition(
-                    id: scrollCoordinator.chatScrollPositionController.positionBinding,
-                    anchor: scrollCoordinator.chatScrollPositionController.targetAnchor
-                )
+                .onChange(of: scrollCoordinator.chatScrollPositionController.activeCommandRevision) { _, _ in
+                    consumeChatScrollCommand(using: chatScrollProxy)
+                }
                 .chatOnUserScrollPhaseChange { distanceToBottom, distanceToTop, isUserInteracting in
                     handleChatScrollMetrics(
                         distanceToBottom: distanceToBottom,
@@ -657,6 +657,7 @@ extension ChatView {
                 }
                 .onPreferenceChange(ChatInputBarHeightPreferenceKey.self) { newHeight in
                     handleChatInputBarHeightChange(newHeight)
+                }
                 }
 
                 if selectedChatQuickActions.count > 1 {
