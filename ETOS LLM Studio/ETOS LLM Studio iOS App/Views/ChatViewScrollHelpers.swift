@@ -605,7 +605,13 @@ extension ChatView {
         )
 
         scrollCoordinator.pendingScrollTargetTask = Task { @MainActor in
+            var continuousAnchorMutationID: UUID?
             defer {
+                if let continuousAnchorMutationID {
+                    scrollCoordinator.chatHistoryViewportAnchorController.cancelMutation(
+                        id: continuousAnchorMutationID
+                    )
+                }
                 if generation == scrollCoordinator.scrollTargetGeneration {
                     releaseMessageJumpScrollTarget()
                     pendingJumpRequest = nil
@@ -656,21 +662,65 @@ extension ChatView {
                     return
                 }
 
-                guard let preservedAnchorID,
-                      viewModel.shiftHistoryWindow(
-                        toward: messageID,
-                        weightedBatchSize: windowShiftBatchSize,
-                        preservesCurrentWindowSize: usesAdjacentAnimation
-                      ) else {
+                guard let preservedAnchorID else { return }
+                if usesAdjacentAnimation {
+                    continuousAnchorMutationID = scrollCoordinator
+                        .chatHistoryViewportAnchorController
+                        .beginContinuousMutation(
+                            anchorMessageID: preservedAnchorID,
+                            displayedMessageIDs: viewModel.displayMessages.map(\.id)
+                        )
+                }
+                guard viewModel.shiftHistoryWindow(
+                    toward: messageID,
+                    weightedBatchSize: windowShiftBatchSize,
+                    preservesCurrentWindowSize: usesAdjacentAnimation
+                ) else {
+                    if let mutationID = continuousAnchorMutationID {
+                        scrollCoordinator.chatHistoryViewportAnchorController.cancelMutation(
+                            id: mutationID
+                        )
+                        continuousAnchorMutationID = nil
+                    }
                     return
                 }
 
-                // 先让新窗口进入视图树；相邻导航随后只提交最终落点。
+                // 新消息在 LazyVStack 中完成测量前，先守住用户当前看见的气泡。
                 await Task.yield()
                 guard !Task.isCancelled,
                       generation == scrollCoordinator.scrollTargetGeneration,
                       sessionID == viewModel.currentSession?.id else {
                     return
+                }
+                if usesAdjacentAnimation {
+                    let anchorController = scrollCoordinator
+                        .chatHistoryViewportAnchorController
+                    if let mutationID = continuousAnchorMutationID {
+                        let deadline = ContinuousClock.now + .milliseconds(800)
+                        while !Task.isCancelled,
+                              generation == scrollCoordinator.scrollTargetGeneration,
+                              sessionID == viewModel.currentSession?.id,
+                              !anchorController.isContinuousMutationSettled(id: mutationID),
+                              ContinuousClock.now < deadline {
+                            try? await Task.sleep(for: .milliseconds(16))
+                        }
+                        guard !Task.isCancelled,
+                              generation == scrollCoordinator.scrollTargetGeneration,
+                              sessionID == viewModel.currentSession?.id else {
+                            return
+                        }
+                        if anchorController.isContinuousMutationSettled(id: mutationID) {
+                            anchorController.finishContinuousMutation(id: mutationID)
+                        } else {
+                            anchorController.cancelMutation(id: mutationID)
+                        }
+                        continuousAnchorMutationID = nil
+                    }
+                    guard !Task.isCancelled,
+                          generation == scrollCoordinator.scrollTargetGeneration,
+                          sessionID == viewModel.currentSession?.id else {
+                        return
+                    }
                 }
                 let positionAfterWindowShift = viewModel.historyWindowPosition(of: messageID)
                 if Self.shouldUseSingleFinalAdjacentJump(
