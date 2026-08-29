@@ -52,7 +52,12 @@ final class ChatScrollPositionController: ObservableObject {
             return
         }
         guard activeCommandTarget != nil else { return }
-        activeCommandTarget = nil
+        var transaction = Transaction()
+        transaction.animation = nil
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            activeCommandTarget = nil
+        }
     }
 
     func reset() {

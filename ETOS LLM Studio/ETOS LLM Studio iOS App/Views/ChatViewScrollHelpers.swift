@@ -72,15 +72,27 @@ extension ChatView {
         isEnabled: Bool,
         isConnectedToAdjacentBubble: Bool,
         isBottomPinnedStreamingBubble: Bool = false,
-        isViewportTransitioning: Bool = false
+        isViewportTransitioning: Bool = false,
+        isTimelineNavigationActive: Bool = false
     ) -> CGFloat {
         guard isEnabled,
               !isConnectedToAdjacentBubble,
               !isBottomPinnedStreamingBubble,
-              !isViewportTransitioning else {
+              !isViewportTransitioning,
+              !isTimelineNavigationActive else {
             return 0
         }
         return phaseValue * CGFloat(configuredOffset)
+    }
+
+    /// 相邻导航即使需要先扩展懒加载窗口，也必须沿用同一个短动画节奏。
+    nonisolated static func resolvedMessageJumpDuration(
+        defaultDuration: TimeInterval,
+        usesAdjacentAnimation: Bool,
+        isFinalSegment: Bool,
+        adjacentDuration: TimeInterval = 0.28
+    ) -> TimeInterval {
+        usesAdjacentAnimation && isFinalSegment ? adjacentDuration : defaultDuration
     }
 
     /// 只有贴底内容随视口变化时才暂停气泡波浪，历史阅读与用户手势始终保留直接反馈。
@@ -560,14 +572,18 @@ extension ChatView {
                   pendingJumpRequest == request,
                   let position = viewModel.historyWindowPosition(of: messageID) {
                 if position == .visible {
-                    let duration = usesAdjacentAnimation
-                        ? 0.36
-                        : (estimatedSegmentCount == 1 ? 0.9 : 0.52)
+                    let duration = Self.resolvedMessageJumpDuration(
+                        defaultDuration: estimatedSegmentCount == 1 ? 0.9 : 0.52,
+                        usesAdjacentAnimation: usesAdjacentAnimation,
+                        isFinalSegment: true
+                    )
                     await animateMessageJump(
                         to: messageID,
                         anchor: .top,
                         duration: duration,
-                        phase: estimatedSegmentCount == 1 ? .complete : .decelerating,
+                        phase: usesAdjacentAnimation
+                            ? .adjacent
+                            : (estimatedSegmentCount == 1 ? .complete : .decelerating),
                         generation: generation,
                         sessionID: sessionID
                     )
@@ -612,7 +628,9 @@ extension ChatView {
                 completedSegmentCount += 1
                 let updatedPosition = viewModel.historyWindowPosition(of: messageID)
                 let isFinalSegment = updatedPosition == .visible
-                if isFinalSegment, viewModel.centerHistoryWindow(on: messageID) {
+                if isFinalSegment,
+                   !usesAdjacentAnimation,
+                   viewModel.centerHistoryWindow(on: messageID) {
                     await Task.yield()
                     guard !Task.isCancelled,
                           generation == scrollCoordinator.scrollTargetGeneration,
@@ -636,7 +654,9 @@ extension ChatView {
                 guard let destinationID else { return }
 
                 let phase: ChatMessageJumpAnimationPhase
-                if estimatedSegmentCount == 1 {
+                if usesAdjacentAnimation, isFinalSegment {
+                    phase = .adjacent
+                } else if estimatedSegmentCount == 1 {
                     phase = .complete
                 } else if completedSegmentCount == 1 {
                     phase = .accelerating
@@ -645,8 +665,12 @@ extension ChatView {
                 } else {
                     phase = .cruising
                 }
-                let duration = historyJumpSegmentDuration(
-                    estimatedSegmentCount: estimatedSegmentCount
+                let duration = Self.resolvedMessageJumpDuration(
+                    defaultDuration: historyJumpSegmentDuration(
+                        estimatedSegmentCount: estimatedSegmentCount
+                    ),
+                    usesAdjacentAnimation: usesAdjacentAnimation,
+                    isFinalSegment: isFinalSegment
                 )
                 await animateMessageJump(
                     to: destinationID,
@@ -689,6 +713,8 @@ extension ChatView {
             animation = .linear(duration: 0)
         } else {
             switch phase {
+            case .adjacent:
+                animation = .smooth(duration: duration)
             case .accelerating:
                 animation = .timingCurve(0.55, 0, 0.82, 0.32, duration: duration)
             case .cruising:
@@ -711,7 +737,8 @@ extension ChatView {
             try? await Task.sleep(nanoseconds: 80_000_000)
             return
         }
-        try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+        let settleDuration = phase == .adjacent ? duration + 0.05 : duration
+        try? await Task.sleep(nanoseconds: UInt64(settleDuration * 1_000_000_000))
     }
 
     private func historyJumpSegmentDuration(estimatedSegmentCount: Int) -> TimeInterval {

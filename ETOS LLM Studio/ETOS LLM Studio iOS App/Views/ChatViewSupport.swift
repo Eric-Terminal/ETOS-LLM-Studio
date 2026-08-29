@@ -101,7 +101,8 @@ struct ChatAutomaticHistoryLoadRequest: Equatable {
     let anchorMessageID: UUID
 }
 
-enum ChatMessageJumpAnimationPhase {
+enum ChatMessageJumpAnimationPhase: Equatable {
+    case adjacent
     case accelerating
     case cruising
     case decelerating

@@ -56,6 +56,34 @@ struct ChatScrollCoordinatorTests {
             isViewportTransitioning: true
         )
         #expect(viewportTransitionOffset == 0)
+
+        let timelineNavigationOffset = ChatView.chatScrollTransitionOffset(
+            phaseValue: 0.5,
+            configuredOffset: 32,
+            isEnabled: true,
+            isConnectedToAdjacentBubble: false,
+            isTimelineNavigationActive: true
+        )
+        #expect(timelineNavigationOffset == 0)
+    }
+
+    @Test("相邻导航跨越懒加载窗口后仍使用同一个短动画")
+    func testAdjacentMessageJumpKeepsShortFinalAnimation() {
+        #expect(ChatView.resolvedMessageJumpDuration(
+            defaultDuration: 0.9,
+            usesAdjacentAnimation: true,
+            isFinalSegment: true
+        ) == 0.28)
+        #expect(ChatView.resolvedMessageJumpDuration(
+            defaultDuration: 0.5,
+            usesAdjacentAnimation: true,
+            isFinalSegment: false
+        ) == 0.5)
+        #expect(ChatView.resolvedMessageJumpDuration(
+            defaultDuration: 0.9,
+            usesAdjacentAnimation: false,
+            isFinalSegment: true
+        ) == 0.9)
     }
 
     @MainActor
