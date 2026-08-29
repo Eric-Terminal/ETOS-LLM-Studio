@@ -86,6 +86,22 @@ struct ChatScrollCoordinatorTests {
         ) == 0.9)
     }
 
+    @Test("相邻目标扩窗可见后只提交最终定位")
+    func testAdjacentWindowShiftSkipsIntermediateAnchorCommand() {
+        #expect(ChatView.shouldUseSingleFinalAdjacentJump(
+            usesAdjacentAnimation: true,
+            targetIsVisibleAfterWindowShift: true
+        ))
+        #expect(!ChatView.shouldUseSingleFinalAdjacentJump(
+            usesAdjacentAnimation: false,
+            targetIsVisibleAfterWindowShift: true
+        ))
+        #expect(!ChatView.shouldUseSingleFinalAdjacentJump(
+            usesAdjacentAnimation: true,
+            targetIsVisibleAfterWindowShift: false
+        ))
+    }
+
     @MainActor
     @Test("吸底命令使用消息栈的真实尾部锚点")
     func testChatBottomScrollTargetsTrueStackEnd() {
@@ -93,34 +109,49 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
-    @Test("系统位置回写不会被误判为程序化滚动")
-    func testObservedScrollPositionDoesNotClaimCommandOwnership() {
+    @Test("重复目标仍会生成新的单次滚动命令")
+    func testRepeatedTargetCreatesNewOneShotCommand() throws {
         let controller = ChatScrollPositionController()
+        let target = ChatScrollTargetID.message(UUID())
 
-        controller.positionBinding.wrappedValue = .message(UUID())
+        #expect(controller.issueCommand(to: target, anchor: .center))
+        let firstRevision = try #require(controller.activeCommandRevision)
+        #expect(controller.issueCommand(to: target, anchor: .top))
+        let secondRevision = try #require(controller.activeCommandRevision)
 
-        #expect(!controller.hasActiveCommand)
-        #expect(controller.positionBinding.wrappedValue == nil)
+        #expect(secondRevision > firstRevision)
+        #expect(controller.activeCommandTarget == target)
+        #expect(controller.targetAnchor == .top)
     }
 
     @MainActor
-    @Test("程序化滚动期间拒绝中间位置回写且释放后不回放被动位置")
-    func testScrollCommandOwnsBindingOnlyForItsLifetime() {
+    @Test("单次滚动命令释放后不保留可重放目标")
+    func testOneShotScrollCommandReleasesWithoutReplayTarget() {
         let controller = ChatScrollPositionController()
         let target = ChatScrollTargetID.message(UUID())
-        let intermediate = ChatScrollTargetID.message(UUID())
 
         controller.issueCommand(to: target, anchor: .center)
-        controller.positionBinding.wrappedValue = intermediate
-
         #expect(controller.hasActiveCommand)
-        #expect(controller.positionBinding.wrappedValue == target)
+        #expect(controller.activeCommandTarget == target)
 
         controller.releaseCommand(expectedTarget: target)
-        controller.positionBinding.wrappedValue = intermediate
-
         #expect(!controller.hasActiveCommand)
-        #expect(controller.positionBinding.wrappedValue == nil)
+        #expect(controller.activeCommandTarget == nil)
+        #expect(controller.activeCommandRevision == nil)
+    }
+
+    @MainActor
+    @Test("会话重置后命令序号仍保持单调")
+    func testCommandRevisionRemainsMonotonicAcrossReset() throws {
+        let controller = ChatScrollPositionController()
+
+        #expect(controller.issueCommand(to: .top, anchor: .top))
+        let revisionBeforeReset = try #require(controller.activeCommandRevision)
+        controller.reset()
+        #expect(controller.issueCommand(to: .bottom, anchor: .bottom))
+        let revisionAfterReset = try #require(controller.activeCommandRevision)
+
+        #expect(revisionAfterReset > revisionBeforeReset)
     }
 
     @MainActor
@@ -184,7 +215,7 @@ struct ChatScrollCoordinatorTests {
 
         #expect(!controller.issueCommand(to: .bottom, anchor: .bottom))
         #expect(!controller.hasActiveCommand)
-        #expect(controller.positionBinding.wrappedValue == nil)
+        #expect(controller.activeCommandTarget == nil)
 
         controller.updateUserInteraction(false)
         #expect(controller.issueCommand(to: .bottom, anchor: .bottom))

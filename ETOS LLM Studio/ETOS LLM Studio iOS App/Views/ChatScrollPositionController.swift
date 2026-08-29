@@ -1,8 +1,7 @@
 // ============================================================================
 // ChatScrollPositionController.swift
 // ============================================================================
-// SwiftUI 会把当前可见位置持续写回 scrollPosition 绑定。本控制器只向绑定暴露
-// 应用主动发出的命令，避免被动位置在其他状态刷新时被回放成新的滚动目标。
+// 只保存应用主动发出的一次性滚动命令；视图消费后不会把目标长期绑定到视口。
 // ============================================================================
 
 import Combine
@@ -16,15 +15,22 @@ enum ChatScrollCommandOwner: Equatable {
 @MainActor
 final class ChatScrollPositionController: ObservableObject {
     private struct Command {
+        let revision: UInt
         let target: ChatScrollTargetID
         let anchor: UnitPoint
         let owner: ChatScrollCommandOwner
+        let animation: Animation?
     }
 
     @Published private var activeCommand: Command?
 
     private var isUserInteracting = false
+    private var nextCommandRevision: UInt = 0
     private var lastTargetAnchor: UnitPoint = .bottom
+
+    var activeCommandRevision: UInt? {
+        activeCommand?.revision
+    }
 
     var targetAnchor: UnitPoint {
         activeCommand?.anchor ?? lastTargetAnchor
@@ -38,11 +44,8 @@ final class ChatScrollPositionController: ObservableObject {
         activeCommand?.owner
     }
 
-    var positionBinding: Binding<ChatScrollTargetID?> {
-        Binding(
-            get: { [weak self] in self?.activeCommandTarget },
-            set: { _ in }
-        )
+    var activeCommandAnimation: Animation? {
+        activeCommand?.animation
     }
 
     var hasActiveCommand: Bool {
@@ -55,6 +58,7 @@ final class ChatScrollPositionController: ObservableObject {
         to target: ChatScrollTargetID,
         anchor: UnitPoint,
         owner: ChatScrollCommandOwner = .viewportNavigation,
+        animation: Animation? = nil,
         allowsDuringUserInteraction: Bool = false
     ) -> Bool {
         guard allowsDuringUserInteraction || !isUserInteracting else { return false }
@@ -63,8 +67,15 @@ final class ChatScrollPositionController: ObservableObject {
            activeCommand?.owner == .viewportNavigation {
             return false
         }
+        nextCommandRevision &+= 1
         lastTargetAnchor = anchor
-        activeCommand = Command(target: target, anchor: anchor, owner: owner)
+        activeCommand = Command(
+            revision: nextCommandRevision,
+            target: target,
+            anchor: anchor,
+            owner: owner,
+            animation: animation
+        )
         return true
     }
 
@@ -75,7 +86,7 @@ final class ChatScrollPositionController: ObservableObject {
         }
     }
 
-    /// 释放后绑定立即回到 nil，后续视图刷新不会重新执行已经完成的目标。
+    /// 释放只结束命令所有权；一次性滚动已经由视图消费，不需要保留目标位置。
     func releaseCommand(
         expectedTarget: ChatScrollTargetID? = nil,
         expectedOwner: ChatScrollCommandOwner? = nil
