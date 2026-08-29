@@ -757,10 +757,10 @@ private struct LocalLinuxSafetyRuleEditorView: View {
 }
 
 private struct LocalLinuxMountsView: View {
+    @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var mounts: [LocalLinuxMountRecord] = []
     @State private var isImporterPresented = false
     @State private var isPreparingMount = false
-    @State private var access = LocalLinuxMountAccess.readOnly
     @State private var errorMessage: String?
 
     var body: some View {
@@ -772,7 +772,10 @@ private struct LocalLinuxMountsView: View {
             }
 
             Section {
-                Picker(NSLocalizedString("新挂载权限", comment: "New Linux mount access"), selection: $access) {
+                Picker(
+                    NSLocalizedString("新挂载权限", comment: "New Linux mount access"),
+                    selection: $appConfig.localLinuxDefaultMountAccess
+                ) {
                     Text(NSLocalizedString("只读", comment: "Read only" )).tag(LocalLinuxMountAccess.readOnly)
                     Text(NSLocalizedString("读写", comment: "Read write")).tag(LocalLinuxMountAccess.readWrite)
                 }
@@ -838,7 +841,7 @@ private struct LocalLinuxMountsView: View {
                         _ = try await LocalLinuxMountManager.shared.addExternalDirectory(
                             url,
                             displayName: url.lastPathComponent,
-                            access: access
+                            access: appConfig.localLinuxDefaultMountAccess
                         )
                         await reload()
                     } catch {

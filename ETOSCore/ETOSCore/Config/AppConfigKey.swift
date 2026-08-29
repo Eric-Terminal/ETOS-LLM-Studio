@@ -265,6 +265,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case localLinuxEnabled = "localLinux.enabled"
     case localLinuxEnvironmentPrivacyEnabled = "localLinux.environmentPrivacy.enabled"
     case localLinuxCommandSafetyEnabled = "localLinux.commandSafety.enabled"
+    case localLinuxDefaultMountAccess = "localLinux.mount.defaultAccess"
     case localLinuxDefaultShellPath = "localLinux.terminal.defaultShellPath"
     case localLinuxDefaultSessionMode = "localLinux.defaultSessionMode"
     case localLinuxDefaultTimeoutSeconds = "localLinux.defaultTimeoutSeconds"
@@ -492,6 +493,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .localLinuxCommandSafetyEnabled,
              .localLinuxLocalMCPOnDemand:
             return .bool(true)
+        case .localLinuxDefaultMountAccess:
+            return .text(LocalLinuxMountAccess.readOnly.rawValue)
         case .localLinuxDefaultShellPath:
             return .text(LocalLinuxTerminalShellConfiguration.defaultPath)
         case .localLinuxDefaultSessionMode:
@@ -857,6 +860,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .localModelPerformanceMonitorEnabled,
              .localModelCacheEnabled,
              .localModelKVCacheEnabled,
+             .localLinuxDefaultMountAccess,
              .localLinuxDefaultShellPath:
             return false
         default:

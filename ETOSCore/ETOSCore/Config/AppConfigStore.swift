@@ -179,6 +179,9 @@ public final class AppConfigStore: ObservableObject {
     @Published public var localLinuxEnabled: Bool { didSet { write(.localLinuxEnabled, localLinuxEnabled) } }
     @Published public var localLinuxEnvironmentPrivacyEnabled: Bool { didSet { write(.localLinuxEnvironmentPrivacyEnabled, localLinuxEnvironmentPrivacyEnabled) } }
     @Published public var localLinuxCommandSafetyEnabled: Bool { didSet { write(.localLinuxCommandSafetyEnabled, localLinuxCommandSafetyEnabled) } }
+    @Published public var localLinuxDefaultMountAccess: LocalLinuxMountAccess {
+        didSet { write(.localLinuxDefaultMountAccess, localLinuxDefaultMountAccess.rawValue) }
+    }
     @Published public var localLinuxDefaultShellPath: String { didSet { write(.localLinuxDefaultShellPath, localLinuxDefaultShellPath) } }
     @Published public var localLinuxDefaultSessionMode: String { didSet { write(.localLinuxDefaultSessionMode, localLinuxDefaultSessionMode) } }
     @Published public var localLinuxDefaultTimeoutSeconds: Int { didSet { write(.localLinuxDefaultTimeoutSeconds, localLinuxDefaultTimeoutSeconds) } }
@@ -589,6 +592,9 @@ public final class AppConfigStore: ObservableObject {
         localLinuxEnabled = Self.boolValue(.localLinuxEnabled, userDefaults: userDefaults)
         localLinuxEnvironmentPrivacyEnabled = Self.boolValue(.localLinuxEnvironmentPrivacyEnabled, userDefaults: userDefaults)
         localLinuxCommandSafetyEnabled = Self.boolValue(.localLinuxCommandSafetyEnabled, userDefaults: userDefaults)
+        localLinuxDefaultMountAccess = LocalLinuxMountAccess(
+            rawValue: Self.textValue(.localLinuxDefaultMountAccess, userDefaults: userDefaults)
+        ) ?? .readOnly
         localLinuxDefaultShellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(
             Self.textValue(.localLinuxDefaultShellPath, userDefaults: userDefaults)
         )
@@ -1163,6 +1169,7 @@ public final class AppConfigStore: ObservableObject {
         case .localLinuxEnabled: return .bool(localLinuxEnabled)
         case .localLinuxEnvironmentPrivacyEnabled: return .bool(localLinuxEnvironmentPrivacyEnabled)
         case .localLinuxCommandSafetyEnabled: return .bool(localLinuxCommandSafetyEnabled)
+        case .localLinuxDefaultMountAccess: return .text(localLinuxDefaultMountAccess.rawValue)
         case .localLinuxDefaultShellPath: return .text(localLinuxDefaultShellPath)
         case .localLinuxDefaultSessionMode: return .text(localLinuxDefaultSessionMode)
         case .localLinuxDefaultTimeoutSeconds: return .integer(localLinuxDefaultTimeoutSeconds)
@@ -1529,6 +1536,8 @@ public final class AppConfigStore: ObservableObject {
         case .systemPrompt: systemPrompt = value
         case .localLinuxDefaultSessionMode:
             localLinuxDefaultSessionMode = LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxDefaultMountAccess:
+            localLinuxDefaultMountAccess = LocalLinuxMountAccess(rawValue: value) ?? .readOnly
         case .localLinuxDefaultShellPath:
             localLinuxDefaultShellPath = LocalLinuxTerminalShellConfiguration.normalizedPath(value)
         case .localLinuxActivePromptProfileID:
@@ -1916,6 +1925,8 @@ public final class AppConfigStore: ObservableObject {
             return ChatComposerStyle.normalized(value).rawValue
         case .localLinuxDefaultSessionMode:
             return LocalAgentMode(rawValue: value)?.rawValue ?? LocalAgentMode.chat.rawValue
+        case .localLinuxDefaultMountAccess:
+            return LocalLinuxMountAccess(rawValue: value)?.rawValue ?? LocalLinuxMountAccess.readOnly.rawValue
         case .localLinuxDefaultShellPath:
             return LocalLinuxTerminalShellConfiguration.normalizedPath(value)
         case .localLinuxWorkspaceCleanupPolicy:

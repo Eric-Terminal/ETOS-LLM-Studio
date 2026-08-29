@@ -89,6 +89,28 @@ extension PersistenceTests {
         #expect(AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? String == "/bin/bash")
     }
 
+    @Test("新挂载权限默认只读并使用本机数据库配置")
+    @MainActor
+    func localLinuxDefaultMountAccessPersistsLocally() {
+        let key = AppConfigKey.localLinuxDefaultMountAccess
+        let previousValue = AppConfigStore.shared.localLinuxDefaultMountAccess
+
+        defer {
+            AppConfigStore.shared.localLinuxDefaultMountAccess = previousValue
+        }
+
+        #expect(key.defaultValue == .text(LocalLinuxMountAccess.readOnly.rawValue))
+        #expect(key.participatesInSync == false)
+
+        AppConfigStore.shared.localLinuxDefaultMountAccess = .readWrite
+
+        #expect(AppConfigStore.shared.localLinuxDefaultMountAccess == .readWrite)
+        #expect(
+            AppConfigStore.shared.snapshot(includeLocalOnly: true)[key.rawValue] as? String
+                == LocalLinuxMountAccess.readWrite.rawValue
+        )
+    }
+
     @Test("iOS 与 watchOS 默认使用按提供商选择模型")
     func modelPickerDefaultsToProviderGrouping() {
         #expect(AppConfigKey.iOSModelPickerGroupsByProvider.defaultValue == .bool(true))
