@@ -14,14 +14,20 @@ extension Notification.Name {
     static let requestGuideModelManagement = Notification.Name("requestGuideModelManagement")
 }
 
+private enum GuideMessageListAnchor: Hashable {
+    case bottom
+}
+
 struct GuideConversationView: View {
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
     let compact: Bool
 
     @State private var input = ""
     @State private var routeRevision = 0
+    @State private var followsLatestMessage = true
     @State private var messageActionMessage: GuideConversationMessage?
     @State private var editingMessage: GuideConversationMessage?
     @FocusState private var inputFocused: Bool
@@ -37,6 +43,7 @@ struct GuideConversationView: View {
             modelBar
             Divider()
             messageList
+                .frame(maxHeight: .infinity)
             Divider()
             if let proposal = controller.pendingProposal {
                 proposalPreview(proposal)
@@ -94,14 +101,34 @@ struct GuideConversationView: View {
                             .controlSize(.small)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    Color.clear
+                        .frame(height: 1)
+                        .id(GuideMessageListAnchor.bottom)
+                        .onAppear {
+                            followsLatestMessage = true
+                        }
                 }
                 .padding()
             }
-            .onChange(of: controller.messages) { _, messages in
-                guard let id = messages.last?.id else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(id, anchor: .bottom)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { _ in
+                        // 用户开始查看上文后，流式更新不能继续把视口抢回底部。
+                        followsLatestMessage = false
+                    }
+            )
+            .onChange(of: controller.messages) { previous, messages in
+                if messages.isEmpty
+                    || (messages.count > previous.count && messages.last?.role == .user) {
+                    followsLatestMessage = true
                 }
+                guard followsLatestMessage else { return }
+                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+            }
+            .onChange(of: controller.isResponding) { _, isResponding in
+                guard isResponding else { return }
+                followsLatestMessage = true
+                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
             }
         }
     }
@@ -142,10 +169,10 @@ struct GuideConversationView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Text(message.content)
-                    .font(.body)
+                messageContent(message)
                     .textSelection(.enabled)
-                    .foregroundStyle(message.role == .error ? .red : .primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if isLatestError(message) {
                     errorRecoveryActions
                 }
@@ -154,15 +181,40 @@ struct GuideConversationView: View {
             .padding(.vertical, 9)
             .background(bubbleBackground(for: message.role), in: shape)
             .contentShape(shape)
-            .modifier(
-                ChatBubbleOpenMoreGestureModifier(
-                    isSelectionMode: false,
-                    onToggleSelection: {},
-                    onOpenMore: { messageActionMessage = message }
-                )
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.45)
+                    .onEnded { _ in
+                        messageActionMessage = message
+                    }
             )
             if !isUser { Spacer(minLength: compact ? 20 : 56) }
         }
+    }
+
+    @ViewBuilder
+    private func messageContent(_ message: GuideConversationMessage) -> some View {
+        if message.role == .assistant {
+            ETAdvancedMarkdownRenderer(
+                content: message.content,
+                preparedContent: nil,
+                enableMarkdown: appConfig.enableMarkdown,
+                isOutgoing: false,
+                enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+                enableMathRendering: appConfig.enableAdvancedRenderer,
+                customTextColor: nil,
+                isStreaming: isStreaming(message)
+            )
+        } else {
+            Text(message.content)
+                .font(.body)
+                .foregroundStyle(message.role == .error ? .red : .primary)
+        }
+    }
+
+    private func isStreaming(_ message: GuideConversationMessage) -> Bool {
+        controller.isResponding
+            && message.role == .assistant
+            && controller.messages.last?.id == message.id
     }
 
     private func isLatestError(_ message: GuideConversationMessage) -> Bool {
@@ -398,6 +450,7 @@ struct GuideConversationView: View {
         let content = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
         input = ""
+        followsLatestMessage = true
         controller.send(content)
     }
 }

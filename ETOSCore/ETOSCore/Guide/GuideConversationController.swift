@@ -267,15 +267,31 @@ public final class GuideConversationController: ObservableObject {
                 latestTurnMessageIDs.insert(placeholderID)
 
                 var completedMessage: ChatMessage?
+                var bufferedDelta = ""
+                let updateClock = ContinuousClock()
+                var lastPublishedAt: ContinuousClock.Instant?
                 for try await event in resolved.client.events(messages: outbound, tools: tools, sessionID: sessionID) {
                     switch event {
                     case .contentDelta(let delta):
-                        if let index = messages.firstIndex(where: { $0.id == placeholderID }) {
-                            messages[index].content += delta
+                        bufferedDelta.append(contentsOf: delta)
+                        let now = updateClock.now
+                        let shouldPublish = lastPublishedAt == nil
+                            || (lastPublishedAt?.duration(to: now) ?? .zero) >= .milliseconds(50)
+                        if shouldPublish,
+                           let index = messages.firstIndex(where: { $0.id == placeholderID }) {
+                            // 上游常把正文切成单字符 SSE；合并发布可避免 SwiftUI 为每个字符重绘整段会话。
+                            messages[index].content.append(contentsOf: bufferedDelta)
+                            bufferedDelta.removeAll(keepingCapacity: true)
+                            lastPublishedAt = now
                         }
                     case .completed(let message):
                         completedMessage = message
                     }
+                }
+                if completedMessage == nil,
+                   !bufferedDelta.isEmpty,
+                   let index = messages.firstIndex(where: { $0.id == placeholderID }) {
+                    messages[index].content.append(contentsOf: bufferedDelta)
                 }
                 guard let response = completedMessage else { throw GuideError.invalidResponse }
                 if let index = messages.firstIndex(where: { $0.id == placeholderID }) {

@@ -12,6 +12,13 @@ import Testing
 
 @Suite("页面向导基础设施", .serialized)
 struct GuideInfrastructureTests {
+    @Test("向导在协议终止事件后停止读取长连接")
+    func streamTerminationFinishesGuideResponse() {
+        #expect(!GuideStreamTerminationPolicy.shouldFinish(after: nil))
+        #expect(GuideStreamTerminationPolicy.shouldFinish(after: .completed))
+        #expect(GuideStreamTerminationPolicy.shouldFinish(after: .failed(reason: nil)))
+    }
+
     @Test("写入型秘密不会进入可编码页面快照")
     func writeOnlySecretIsAlwaysHidden() throws {
         let secret = "secret-value-that-must-not-leak"

@@ -280,6 +280,16 @@ public enum GuideCompletionEvent: Sendable {
     case completed(ChatMessage)
 }
 
+enum GuideStreamTerminationPolicy {
+    static func shouldFinish(after termination: ChatMessagePart.StreamTermination?) -> Bool {
+        guard let termination else { return false }
+        switch termination {
+        case .completed, .failed:
+            return true
+        }
+    }
+}
+
 public protocol GuideCompletionClient: Sendable {
     func events(
         messages: [ChatMessage],

@@ -68,6 +68,7 @@ extension ChatService {
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard let part = adapter.parseStreamingResponse(line: line) else { continue }
+            let shouldFinishStream = GuideStreamTerminationPolicy.shouldFinish(after: part.streamTermination)
             if part.content != nil || part.reasoningContent != nil || part.toolCallDeltas != nil || part.tokenUsage != nil {
                 parsedEvents += 1
             }
@@ -114,6 +115,8 @@ extension ChatService {
                 builders[index] = builder
                 if !order.contains(index) { order.append(index) }
             }
+            // SSE 的协议结束事件已经足以判定响应完成，不能继续等待上游主动关闭长连接。
+            if shouldFinishStream { break }
         }
 
         if case .failed(let reason) = termination {

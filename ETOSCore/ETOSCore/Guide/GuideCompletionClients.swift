@@ -253,6 +253,7 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard let part = adapter.parseStreamingResponse(line: line) else { continue }
+            let shouldFinishStream = GuideStreamTerminationPolicy.shouldFinish(after: part.streamTermination)
             if part.streamTermination == .completed { didComplete = true }
             if case .failed(let reason) = part.streamTermination {
                 throw NSError(
@@ -290,6 +291,8 @@ public final class GuideBuiltInCompletionClient: GuideCompletionClient, @uncheck
                 builders[index] = builder
                 if !order.contains(index) { order.append(index) }
             }
+            // 内置线路同样以协议结束事件为准，避免保活连接让界面永久停留在生成状态。
+            if shouldFinishStream { break }
         }
         guard didComplete else { throw URLError(.networkConnectionLost) }
         let toolNames = Set(tools.map(\.name))

@@ -45,6 +45,7 @@ struct WatchGuideConversationView: View {
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
     @ObservedObject private var coordinator = GuideContextCoordinator.shared
+    @ObservedObject private var appConfig = AppConfigStore.shared
 
     @State private var input = ""
     @State private var editingMessage: GuideConversationMessage?
@@ -189,9 +190,7 @@ struct WatchGuideConversationView: View {
 
     @ViewBuilder
     private func messageRow(_ message: GuideConversationMessage) -> some View {
-        let row = Text(message.content)
-            .font(.footnote)
-            .foregroundStyle(message.role == .error ? .red : .primary)
+        let row = messageContent(message)
 
         if controller.canEditMessage(message.id) || controller.canRetryMessage(message.id) {
             row.contextMenu {
@@ -213,6 +212,32 @@ struct WatchGuideConversationView: View {
         } else {
             row
         }
+    }
+
+    @ViewBuilder
+    private func messageContent(_ message: GuideConversationMessage) -> some View {
+        if message.role == .assistant {
+            ETAdvancedMarkdownRenderer(
+                content: message.content,
+                preparedContent: nil,
+                enableMarkdown: appConfig.enableMarkdown,
+                isOutgoing: false,
+                enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+                enableMathRendering: appConfig.enableAdvancedRenderer,
+                customTextColor: nil,
+                isStreaming: isStreaming(message)
+            )
+        } else {
+            Text(message.content)
+                .font(.footnote)
+                .foregroundStyle(message.role == .error ? .red : .primary)
+        }
+    }
+
+    private func isStreaming(_ message: GuideConversationMessage) -> Bool {
+        controller.isResponding
+            && message.role == .assistant
+            && controller.messages.last?.id == message.id
     }
 
     private func routeButton(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
