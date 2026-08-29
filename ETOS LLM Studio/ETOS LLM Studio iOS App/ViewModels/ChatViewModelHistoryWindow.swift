@@ -107,7 +107,11 @@ extension ChatViewModel {
     }
 
     @discardableResult
-    func shiftHistoryWindow(toward messageID: UUID, weightedBatchSize: Int) -> Bool {
+    func shiftHistoryWindow(
+        toward messageID: UUID,
+        weightedBatchSize: Int,
+        preservesCurrentWindowSize: Bool = false
+    ) -> Bool {
         ensureVisibleMessagesCachePrepared()
         ensureHistoryWindowPrepared()
         guard let historyWindow,
@@ -119,6 +123,16 @@ extension ChatViewModel {
             return false
         }
 
+        let maximumWeightedCount = preservesCurrentWindowSize
+            ? max(
+                1,
+                ChatHistoryWindowSupport.weightedCount(
+                    in: visibleMessagesCache,
+                    window: historyWindow
+                )
+            )
+            : automaticHistoryMaximumWindowSize
+
         let updated: ChatHistoryWindow
         switch position {
         case .earlier:
@@ -126,14 +140,14 @@ extension ChatViewModel {
                 historyWindow,
                 in: visibleMessagesCache,
                 weightedBatchSize: weightedBatchSize,
-                maximumWeightedCount: automaticHistoryMaximumWindowSize
+                maximumWeightedCount: maximumWeightedCount
             )
         case .later:
             updated = ChatHistoryWindowSupport.expandingLater(
                 historyWindow,
                 in: visibleMessagesCache,
                 weightedBatchSize: weightedBatchSize,
-                maximumWeightedCount: automaticHistoryMaximumWindowSize
+                maximumWeightedCount: maximumWeightedCount
             )
         case .visible:
             return false

@@ -78,6 +78,11 @@ final class ChatScrollCoordinator: ObservableObject {
         pendingScrollTargetTask != nil || chatScrollPositionController.hasActiveCommand
     }
 
+    /// 四键连续导航沿用同一游标；用户亲自拖动前，布局恢复不能改写该落点。
+    var hasRetainedTimelineNavigationTarget: Bool {
+        messageNavigationCursorID != nil
+    }
+
     func beginAutomaticHistoryMutation(
         anchorMessageID: UUID,
         displayedMessageIDs: [UUID]

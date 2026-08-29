@@ -207,6 +207,22 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
+    @Test("四键游标在用户接管前持续保留视口所有权")
+    func testTimelineCursorRetainsViewportUntilUserPan() {
+        let coordinator = ChatScrollCoordinator()
+        coordinator.messageNavigationCursorID = UUID()
+
+        #expect(coordinator.hasRetainedTimelineNavigationTarget)
+
+        _ = coordinator.prepareForUserPan(
+            isMessageJumpInFlight: false,
+            bottomScrollTarget: .bottom
+        )
+
+        #expect(!coordinator.hasRetainedTimelineNavigationTarget)
+    }
+
+    @MainActor
     @Test("同一次拖动中延迟到达的自动命令不能重新夺回视口")
     func testUserInteractionRejectsLateAutomaticScrollCommand() {
         let controller = ChatScrollPositionController()

@@ -29,9 +29,11 @@ extension ChatView {
             || scrollCoordinator.chatScrollPositionController.hasActiveCommand
     }
 
-    /// 显式导航独占视口；布局自愈自己的定位命令不计入，避免它取消自身恢复闭环。
+    /// 四键游标在用户亲自拖动前持续独占视口；布局自愈不能追越该边界。
+    /// 布局自愈自己的定位命令不计入，避免它取消自身恢复闭环。
     var hasExclusiveChatViewportCommand: Bool {
-        isMessageJumpInFlight
+        scrollCoordinator.hasRetainedTimelineNavigationTarget
+            || isMessageJumpInFlight
             || scrollCoordinator.pendingHistoryResetWorkItem != nil
             || scrollCoordinator.pendingBottomSnapTask != nil
             || scrollCoordinator.pendingScrollTargetTask != nil
@@ -589,9 +591,11 @@ extension ChatView {
         let generation = scrollCoordinator.scrollTargetGeneration
         let sessionID = viewModel.currentSession?.id
         let initialDistance = viewModel.historyWindowDistance(to: messageID) ?? 0
+        // 四键是相邻浏览，不能复用编号搜索的十二条分段窗口。
+        let windowShiftBatchSize = usesAdjacentAnimation ? 1 : historyJumpBatchSize
         let estimatedSegmentCount = max(
             1,
-            (initialDistance + historyJumpBatchSize - 1) / historyJumpBatchSize
+            (initialDistance + windowShiftBatchSize - 1) / windowShiftBatchSize
         )
 
         scrollCoordinator.pendingScrollTargetTask = Task { @MainActor in
@@ -649,7 +653,8 @@ extension ChatView {
                 guard let preservedAnchorID,
                       viewModel.shiftHistoryWindow(
                         toward: messageID,
-                        weightedBatchSize: historyJumpBatchSize
+                        weightedBatchSize: windowShiftBatchSize,
+                        preservesCurrentWindowSize: usesAdjacentAnimation
                       ) else {
                     return
                 }

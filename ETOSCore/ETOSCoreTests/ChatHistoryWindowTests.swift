@@ -35,6 +35,29 @@ struct ChatHistoryWindowTests {
         #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: secondExpansion) == 37)
     }
 
+    @Test("相邻导航每次只换入一条并保持原窗口容量")
+    func testAdjacentNavigationSlidesBoundedWindowByOneMessage() {
+        let messages = makeMessages(count: 20)
+        let initial = ChatHistoryWindowSupport.trailing(in: messages, weightedLimit: 4)
+        let previous = ChatHistoryWindowSupport.expandingEarlier(
+            initial,
+            in: messages,
+            weightedBatchSize: 1,
+            maximumWeightedCount: 4
+        )
+        let next = ChatHistoryWindowSupport.expandingLater(
+            previous,
+            in: messages,
+            weightedBatchSize: 1,
+            maximumWeightedCount: 4
+        )
+
+        #expect(initial == ChatHistoryWindow(lowerBound: 16, upperBound: 20))
+        #expect(previous == ChatHistoryWindow(lowerBound: 15, upperBound: 19))
+        #expect(next == initial)
+        #expect(ChatHistoryWindowSupport.weightedCount(in: messages, window: previous) == 4)
+    }
+
     @Test("顶部窗口从完整会话起点建立并保持权重上限")
     func testLeadingWindowStartsAtConversationOrigin() {
         let messages = makeMessages(count: 80)
