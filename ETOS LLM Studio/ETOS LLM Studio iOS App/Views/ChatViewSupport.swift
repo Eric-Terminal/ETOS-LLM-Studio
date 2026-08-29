@@ -213,30 +213,13 @@ extension View {
         }
     }
 
-    /// 现代系统直接使用滚动阶段中断吸底，避免等到偏移量变化后才发现用户已经接管。
+    /// 手势开始只由 UIKit 的真实拖动边沿认领；SwiftUI 阶段仅补充可靠的静止回报。
     @ViewBuilder
-    func chatOnUserScrollPhaseChange(
-        _ action: @escaping (
-            _ distanceToBottom: CGFloat,
-            _ distanceToTop: CGFloat,
-            _ isUserInteracting: Bool
-        ) -> Void
-    ) -> some View {
+    func chatOnScrollIdle(_ action: @escaping () -> Void) -> some View {
         if #available(iOS 18.0, *) {
-            onScrollPhaseChange { _, newPhase, context in
-                let distanceToBottom = max(
-                    context.geometry.contentSize.height - context.geometry.visibleRect.maxY,
-                    0
-                )
-                let distanceToTop = max(context.geometry.visibleRect.minY, 0)
-                switch newPhase {
-                case .tracking, .interacting, .decelerating:
-                    action(distanceToBottom, distanceToTop, true)
-                case .idle:
-                    action(distanceToBottom, distanceToTop, false)
-                case .animating:
-                    break
-                }
+            onScrollPhaseChange { _, newPhase, _ in
+                guard newPhase == .idle else { return }
+                action()
             }
         } else {
             self

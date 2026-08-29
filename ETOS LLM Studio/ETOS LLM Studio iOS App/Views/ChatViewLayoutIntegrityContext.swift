@@ -41,16 +41,8 @@ extension ChatView {
     }
 
     func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
-        if isUserInteracting {
-            let shouldCancelCommand = scrollCoordinator.prepareForUserPan(
-                isMessageJumpInFlight: isMessageJumpInFlight,
-                bottomScrollTarget: bottomScrollTarget
-            )
-            if shouldCancelCommand {
-                cancelPendingScrollTargetCommand()
-            }
-            return
-        }
+        // 只有 UIPanGestureRecognizer.began 可以开始接管；度量回报只负责确认手势结束。
+        guard !isUserInteracting else { return }
         guard scrollCoordinator.updateInteractionState(false) else { return }
         refreshMessageNavigationTargets()
         scheduleScrollNavigationPanelHide()

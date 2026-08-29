@@ -78,9 +78,17 @@ final class ChatScrollCoordinator: ObservableObject {
         pendingScrollTargetTask != nil || chatScrollPositionController.hasActiveCommand
     }
 
-    /// 四键连续导航沿用同一游标；用户亲自拖动前，布局恢复不能改写该落点。
+    /// 四键连续导航沿用同一游标；用户亲自拖动前，任何自动滚动都不能改写该落点。
     var hasRetainedTimelineNavigationTarget: Bool {
         messageNavigationCursorID != nil
+    }
+
+    /// UIScrollView 的阶段状态只能确认已经开始的手势，不能把程序动画升级成用户接管。
+    nonisolated static func confirmedUserInteraction(
+        reportedByScrollView: Bool,
+        hasDirectPanOwnership: Bool
+    ) -> Bool {
+        reportedByScrollView && hasDirectPanOwnership
     }
 
     func beginAutomaticHistoryMutation(
