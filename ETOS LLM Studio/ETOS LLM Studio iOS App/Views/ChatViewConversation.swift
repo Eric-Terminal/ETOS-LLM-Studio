@@ -378,7 +378,10 @@ extension ChatView {
                                      scrollAnimOffset = appConfig.chatScrollAnimationOffset,
                                      layoutSettling = scrollCoordinator.isChatLayoutSettling,
                                      keepsBottomPinned = scrollCoordinator.shouldKeepBottomPinned,
-                                     scrollUserInteracting = scrollCoordinator.isChatScrollUserInteracting] content, phase in
+                                     scrollUserInteracting = scrollCoordinator.isChatScrollUserInteracting,
+                                     timelineNavigationActive = appConfig.chatTimelineNavigationEnabled
+                                        && (hasChatProgrammaticScrollOwnership
+                                            || scrollCoordinator.messageNavigationCursorID != nil)] content, phase in
                                     content
                                         .offset(
                                             y: Self.chatScrollTransitionOffset(
@@ -392,7 +395,8 @@ extension ChatView {
                                                         isLayoutSettling: layoutSettling,
                                                         keepsBottomPinned: keepsBottomPinned,
                                                         isUserInteracting: scrollUserInteracting
-                                                    )
+                                                    ),
+                                                isTimelineNavigationActive: timelineNavigationActive
                                             )
                                         )
                                 }
