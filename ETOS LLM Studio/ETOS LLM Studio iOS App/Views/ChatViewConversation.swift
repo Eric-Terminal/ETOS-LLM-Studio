@@ -438,6 +438,7 @@ extension ChatView {
                 }
                 .onChange(of: scrollCoordinator.chatLayoutIntegrityMonitor.anchorScrollTargetMessageID) { oldValue, newValue in
                     if let newValue {
+                        guard !scrollCoordinator.isChatScrollUserInteracting else { return }
                         scrollCoordinator.chatScrollPositionController.issueCommand(
                             to: .message(newValue),
                             anchor: .center
@@ -472,9 +473,6 @@ extension ChatView {
                         distanceToBottom: distanceToBottom,
                         distanceToTop: distanceToTop,
                         isUserInteracting: isUserInteracting
-                    )
-                    resolveActiveBottomScrollCommand(
-                        distanceToBottom: distanceToBottom
                     )
                 }
                 .scrollDismissesKeyboard(.interactively)

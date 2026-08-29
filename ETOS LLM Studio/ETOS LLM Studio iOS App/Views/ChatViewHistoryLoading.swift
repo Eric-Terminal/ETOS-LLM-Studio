@@ -84,7 +84,8 @@ extension ChatView {
             isUserInteracting: isUserInteracting
         )
         resolveActiveBottomScrollCommand(
-            distanceToBottom: distanceToBottom
+            distanceToBottom: distanceToBottom,
+            isUserInteracting: isUserInteracting
         )
         guard !hasExplicitChatNavigationCommand else {
             scrollCoordinator.pendingAutomaticHistoryLoadRequest = nil

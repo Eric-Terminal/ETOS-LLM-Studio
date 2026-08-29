@@ -14,6 +14,46 @@ import UIKit
 struct ChatLongConversationRuntimeTests {
 
     @MainActor
+    @Test("四条超长 Markdown 消息启用时间线导航后仍允许停留在顶部")
+    func testFourLongMarkdownMessagesRemainAtTopDuringUserInteraction() async throws {
+        let fixture = await makeFixture(
+            automaticHistoryLoading: false,
+            timelineNavigationEnabled: true,
+            markdownEnabled: true,
+            lazyLoadMessageCount: 4,
+            messageCount: 4,
+            paragraphCount: 60
+        )
+        defer { fixture.dispose() }
+        let scrollView = try #require(fixture.chatScrollView)
+        #expect(maximumContentOffsetY(of: scrollView) > 2_000)
+
+        let readingOffset = minimumContentOffsetY(of: scrollView) + 24
+        scrollView.setContentOffset(
+            CGPoint(x: scrollView.contentOffset.x, y: readingOffset),
+            animated: false
+        )
+        await settleLayout(fixture.host.view, duration: 0.25)
+        let settledReadingOffset = scrollView.contentOffset.y
+
+        _ = fixture.coordinator.prepareForUserPan(
+            isMessageJumpInFlight: false,
+            bottomScrollTarget: .bottom
+        )
+        fixture.coordinator.shouldKeepBottomPinned = false
+        let acceptedLateBottomCommand = fixture.coordinator.chatScrollPositionController
+            .issueCommand(to: .bottom, anchor: .bottom)
+
+        #expect(!acceptedLateBottomCommand)
+        #expect(!fixture.coordinator.chatScrollPositionController.hasActiveCommand)
+        fixture.coordinator.updateInteractionState(false)
+        await settleLayout(fixture.host.view, duration: 0.6)
+
+        #expect(abs(scrollView.contentOffset.y - settledReadingOffset) < 2)
+        #expect(!fixture.coordinator.shouldKeepBottomPinned)
+    }
+
+    @MainActor
     @Test("长会话离开底部后细小滚动不会形成状态反馈或自行回底")
     func testLongConversationRemainsStableAwayFromBottom() async throws {
         let fixture = await makeFixture(automaticHistoryLoading: true)
@@ -147,17 +187,22 @@ struct ChatLongConversationRuntimeTests {
 
     @MainActor
     private func makeFixture(
-        automaticHistoryLoading: Bool
+        automaticHistoryLoading: Bool,
+        timelineNavigationEnabled: Bool = false,
+        markdownEnabled: Bool = false,
+        lazyLoadMessageCount: Int = 5,
+        messageCount: Int = 60,
+        paragraphCount: Int = 8
     ) async -> HostedChatFixture {
         let appConfig = AppConfigStore.shared
         let savedConfiguration = SavedChatConfiguration(appConfig: appConfig)
-        appConfig.chatTimelineNavigationEnabled = false
+        appConfig.chatTimelineNavigationEnabled = timelineNavigationEnabled
         appConfig.chatScrollAnimationEnabled = false
-        appConfig.enableMarkdown = false
+        appConfig.enableMarkdown = markdownEnabled
         appConfig.enableAdvancedRenderer = false
         appConfig.enableBackground = false
         appConfig.automaticHistoryLoadingEnabled = automaticHistoryLoading
-        appConfig.lazyLoadMessageCount = 5
+        appConfig.lazyLoadMessageCount = lazyLoadMessageCount
 
         let chatService = ChatService()
         let viewModel = ChatViewModel(chatService: chatService)
@@ -166,7 +211,10 @@ struct ChatLongConversationRuntimeTests {
             name: "长会话滚动运行态测试",
             isTemporary: true
         )
-        let messages = makeMessages(count: 60)
+        let messages = makeMessages(
+            count: messageCount,
+            paragraphCount: paragraphCount
+        )
         chatService.chatSessionsSubject.send([session])
         chatService.currentSessionSubject.send(session)
         chatService.messagesForSessionSubject.send(messages)
@@ -244,19 +292,21 @@ struct ChatLongConversationRuntimeTests {
         }
     }
 
-    private func makeMessages(count: Int) -> [ChatMessage] {
+    private func makeMessages(count: Int, paragraphCount: Int) -> [ChatMessage] {
         (0..<count).map { index in
+            let paragraphs = (0..<paragraphCount).map { paragraphIndex in
+                """
+                ### 第 \(paragraphIndex + 1) 段
+
+                这是用于超长 Markdown 会话滚动验收的正文，包含 **强调内容**、`inline code` 与自然换行。
+                """
+            }.joined(separator: "\n\n")
             ChatMessage(
                 role: index.isMultiple(of: 2) ? .user : .assistant,
                 content: """
                 第 \(index + 1) 条测试消息
-                这是用于长会话滚动验收的稳定正文。
-                每条消息保留足够高度，以覆盖真实的离底阅读和历史扩窗。
-                第四行用于模拟较长的自然语言回复。
-                第五行用于确保手动模式的五条消息也能超过一屏。
-                第六行保持每次历史扩窗前后的气泡高度稳定。
-                第七行继续提供滚动所需的内容高度。
-                第八行结束本条测试消息。
+
+                \(paragraphs)
                 """
             )
         }

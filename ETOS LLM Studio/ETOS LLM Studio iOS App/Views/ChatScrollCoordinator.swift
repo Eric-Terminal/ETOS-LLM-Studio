@@ -132,6 +132,7 @@ final class ChatScrollCoordinator: ObservableObject {
 
     @discardableResult
     func updateInteractionState(_ isUserInteracting: Bool) -> Bool {
+        chatScrollPositionController.updateUserInteraction(isUserInteracting)
         guard isChatScrollUserInteracting != isUserInteracting else { return false }
         isChatScrollUserInteracting = isUserInteracting
         if isUserInteracting {
@@ -153,15 +154,18 @@ final class ChatScrollCoordinator: ObservableObject {
         cancelHistoryAnchorRestoration()
         pendingAutomaticHistoryLoadRequest = nil
 
+        let hadScrollTarget = chatScrollPositionController.hasActiveCommand
+        let hadActiveBottomTarget =
+            chatScrollPositionController.activeCommandTarget == bottomScrollTarget
         let shouldCancelCommand = Self.shouldCancelProgrammaticScrollOnPanBegan(
             hasPendingHistoryReset: pendingHistoryResetWorkItem != nil,
             hasPendingBottomSnap: pendingBottomSnapTask != nil,
             hasPendingTargetTask: pendingScrollTargetTask != nil,
-            hasScrollTarget: chatScrollPositionController.hasActiveCommand,
-            hasActiveBottomTarget:
-                chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
+            hasScrollTarget: hadScrollTarget,
+            hasActiveBottomTarget: hadActiveBottomTarget,
             isMessageJumpInFlight: isMessageJumpInFlight
         )
+        _ = updateInteractionState(true)
         pendingHistoryResetWorkItem?.cancel()
         pendingHistoryResetWorkItem = nil
         pendingBottomSnapTask?.cancel()

@@ -40,13 +40,18 @@ extension ChatView {
     }
 
     func updateChatScrollInteractionState(_ isUserInteracting: Bool) {
-        guard scrollCoordinator.updateInteractionState(isUserInteracting) else { return }
-        if !isUserInteracting {
-            scheduleScrollNavigationPanelHide()
+        if isUserInteracting {
+            let shouldCancelCommand = scrollCoordinator.prepareForUserPan(
+                isMessageJumpInFlight: isMessageJumpInFlight,
+                bottomScrollTarget: bottomScrollTarget
+            )
+            if shouldCancelCommand {
+                cancelPendingScrollTargetCommand()
+            }
+            return
         }
-        if isUserInteracting,
-           (scrollCoordinator.hasPendingOrActiveScrollCommand || isMessageJumpInFlight) {
-            cancelPendingScrollTargetCommand()
-        }
+        guard scrollCoordinator.updateInteractionState(false) else { return }
+        refreshMessageNavigationTargets()
+        scheduleScrollNavigationPanelHide()
     }
 }

@@ -12,6 +12,7 @@ import ETOSCore
 extension ChatView {
     /// 可见坐标会随每个滚动像素变化；只在导航或静止审计真正需要时上报。
     var shouldReportChatViewportLayoutFrames: Bool {
+        guard !scrollCoordinator.isChatScrollUserInteracting else { return false }
         let needsNavigationFrames = scrollCoordinator.showScrollNavigationPanel || accessibilityVoiceOverEnabled
         let canAuditSettledLayout = !scrollCoordinator.isChatScrollUserInteracting
             && !viewModel.isSendingMessage
@@ -94,11 +95,14 @@ extension ChatView {
     nonisolated static func shouldReleaseActiveBottomScrollCommand(
         hasActiveTarget: Bool,
         distanceToBottom: CGFloat,
+        isUserInteracting: Bool,
         arrivalTolerance: CGFloat,
         hasExceededMaximumLifetime: Bool = false
     ) -> Bool {
         hasActiveTarget
-            && (distanceToBottom <= arrivalTolerance || hasExceededMaximumLifetime)
+            && (isUserInteracting
+                || distanceToBottom <= arrivalTolerance
+                || hasExceededMaximumLifetime)
     }
 
     nonisolated static func shouldSuspendAutomaticHistoryNavigation(
@@ -311,20 +315,31 @@ extension ChatView {
 
     func scrollToBottom(
         animated: Bool = true,
-        animation: Animation = .easeOut(duration: 0.25)
+        animation: Animation = .easeOut(duration: 0.25),
+        allowsDuringUserInteraction: Bool = false
     ) {
+        guard allowsDuringUserInteraction
+                || !scrollCoordinator.isChatScrollUserInteracting else {
+            return
+        }
         scrollCoordinator.shouldKeepBottomPinned = true
         setScrollTarget(
             bottomScrollTarget,
             anchor: .bottom,
             animated: animated,
             animation: animation,
+            allowsDuringUserInteraction: allowsDuringUserInteraction,
             releasesAtBottom: true
         )
     }
 
     func scheduleImmediateBottomSnap() {
         scrollCoordinator.pendingBottomSnapTask?.cancel()
+        guard !scrollCoordinator.isChatScrollUserInteracting else {
+            scrollCoordinator.needsImmediateBottomSnap = false
+            scrollCoordinator.pendingBottomSnapTask = nil
+            return
+        }
         scrollCoordinator.shouldKeepBottomPinned = true
         guard !viewModel.displayMessages.isEmpty else {
             scrollCoordinator.needsImmediateBottomSnap = true
@@ -340,13 +355,21 @@ extension ChatView {
         }
     }
 
-    func scheduleDeferredBottomSnap() {
+    func scheduleDeferredBottomSnap(allowsDuringUserInteraction: Bool = false) {
         scrollCoordinator.pendingBottomSnapTask?.cancel()
+        guard allowsDuringUserInteraction
+                || !scrollCoordinator.isChatScrollUserInteracting else {
+            scrollCoordinator.pendingBottomSnapTask = nil
+            return
+        }
         scrollCoordinator.shouldKeepBottomPinned = true
         scrollCoordinator.pendingBottomSnapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 50_000_000)
             guard !Task.isCancelled else { return }
-            scrollToBottom(animated: false)
+            scrollToBottom(
+                animated: false,
+                allowsDuringUserInteraction: allowsDuringUserInteraction
+            )
             scrollCoordinator.pendingBottomSnapTask = nil
         }
     }
@@ -391,10 +414,14 @@ extension ChatView {
 
     /// scrollPosition 只承担一次性跳转；抵达底部或用户接管后立即释放绑定，
     /// 后续流式增长统一交给尺寸变化锚点，避免两个目标长期互相校正。
-    func resolveActiveBottomScrollCommand(distanceToBottom: CGFloat) {
+    func resolveActiveBottomScrollCommand(
+        distanceToBottom: CGFloat,
+        isUserInteracting: Bool
+    ) {
         guard Self.shouldReleaseActiveBottomScrollCommand(
             hasActiveTarget: scrollCoordinator.chatScrollPositionController.activeCommandTarget == bottomScrollTarget,
             distanceToBottom: distanceToBottom,
+            isUserInteracting: isUserInteracting,
             arrivalTolerance: bottomScrollCommandArrivalTolerance
         ) else { return }
         releaseActiveBottomScrollCommand()
@@ -431,6 +458,7 @@ extension ChatView {
                   Self.shouldReleaseActiveBottomScrollCommand(
                     hasActiveTarget: true,
                     distanceToBottom: scrollCoordinator.scrollDistanceToBottom,
+                    isUserInteracting: scrollCoordinator.isChatScrollUserInteracting,
                     arrivalTolerance: bottomScrollCommandArrivalTolerance,
                     hasExceededMaximumLifetime: true
                   ) else {
@@ -675,7 +703,8 @@ extension ChatView {
             .message(messageID),
             anchor: anchor,
             animated: !accessibilityReduceMotion,
-            animation: animation
+            animation: animation,
+            allowsDuringUserInteraction: true
         )
         guard !accessibilityReduceMotion else {
             // 无动画仍需跨过 SwiftUI 的布局消费边沿，不能在同一更新周期清空目标。
@@ -698,7 +727,11 @@ extension ChatView {
         _ target: ChatScrollTargetID,
         anchor: UnitPoint
     ) {
-        scrollCoordinator.chatScrollPositionController.issueCommand(to: target, anchor: anchor)
+        scrollCoordinator.chatScrollPositionController.issueCommand(
+            to: target,
+            anchor: anchor,
+            allowsDuringUserInteraction: true
+        )
     }
 
     func releaseMessageJumpScrollTarget() {
@@ -720,20 +753,28 @@ extension ChatView {
         )
     }
 
+    @discardableResult
     private func applyScrollTarget(
         _ target: ChatScrollTargetID,
         anchor: UnitPoint,
         animated: Bool,
-        animation: Animation
-    ) {
+        animation: Animation,
+        allowsDuringUserInteraction: Bool = false
+    ) -> Bool {
+        var didIssueCommand = false
         let updateTarget = {
-            scrollCoordinator.chatScrollPositionController.issueCommand(to: target, anchor: anchor)
+            didIssueCommand = scrollCoordinator.chatScrollPositionController.issueCommand(
+                to: target,
+                anchor: anchor,
+                allowsDuringUserInteraction: allowsDuringUserInteraction
+            )
         }
         if animated {
             withAnimation(animation, updateTarget)
         } else {
             updateTarget()
         }
+        return didIssueCommand
     }
 
     private func setScrollTarget(
@@ -742,6 +783,7 @@ extension ChatView {
         animated: Bool,
         animation: Animation,
         deferred: Bool = false,
+        allowsDuringUserInteraction: Bool = false,
         releasesAtBottom: Bool = false
     ) {
         let shouldDefer = deferred
@@ -752,16 +794,15 @@ extension ChatView {
 
         guard shouldDefer else {
             guard canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else { return }
-            if releasesAtBottom {
-                scrollCoordinator.bottomScrollCommandGeneration &+= 1
-            }
-            applyScrollTarget(
+            let didIssueCommand = applyScrollTarget(
                 target,
                 anchor: anchor,
                 animated: animated,
-                animation: animation
+                animation: animation,
+                allowsDuringUserInteraction: allowsDuringUserInteraction
             )
-            if releasesAtBottom {
+            if releasesAtBottom, didIssueCommand {
+                scrollCoordinator.bottomScrollCommandGeneration &+= 1
                 scheduleBottomScrollCommandRelease(
                     target: target,
                     generation: generation,
@@ -784,16 +825,15 @@ extension ChatView {
                   canApplyScrollTarget(target, generation: generation, sessionID: sessionID) else {
                 return
             }
-            if releasesAtBottom {
-                scrollCoordinator.bottomScrollCommandGeneration &+= 1
-            }
-            applyScrollTarget(
+            let didIssueCommand = applyScrollTarget(
                 target,
                 anchor: anchor,
                 animated: animated,
-                animation: animation
+                animation: animation,
+                allowsDuringUserInteraction: allowsDuringUserInteraction
             )
-            if releasesAtBottom {
+            if releasesAtBottom, didIssueCommand {
+                scrollCoordinator.bottomScrollCommandGeneration &+= 1
                 scheduleBottomScrollCommandRelease(
                     target: target,
                     generation: generation,
