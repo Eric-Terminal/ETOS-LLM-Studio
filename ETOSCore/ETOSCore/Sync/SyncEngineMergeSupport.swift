@@ -33,7 +33,9 @@ extension SyncEngine {
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
             tagIDs: session.tagIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
         )
@@ -55,7 +57,9 @@ extension SyncEngine {
             enhancedPrompt: session.enhancedPrompt,
             lorebookIDs: session.lorebookIDs,
             tagIDs: session.tagIDs,
-            worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
             folderID: session.folderID,
             isTemporary: false
         )
@@ -191,7 +195,9 @@ extension SyncEngine {
         hasher.combine(session.topicPrompt ?? "")
         hasher.combine(session.enhancedPrompt ?? "")
         hasher.combine(session.folderID?.uuidString ?? "")
-        hasher.combine(session.worldbookContextIsolationEnabled)
+        hasher.combine(session.memoryContextIsolationEnabled)
+        hasher.combine(session.toolContextIsolationEnabled)
+        hasher.combine(session.globalSystemPromptIsolationEnabled)
         for worldbookID in session.lorebookIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
             hasher.combine(worldbookID.uuidString)
         }

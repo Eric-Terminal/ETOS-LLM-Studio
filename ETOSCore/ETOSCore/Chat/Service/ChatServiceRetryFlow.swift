@@ -149,7 +149,7 @@ extension ChatService {
 
         let agentCapabilities = AgentToolCapabilityPolicy.resolve(
             mode: Persistence.localAgentMode(sessionID: currentSession.id),
-            isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+            isToolContextIsolated: currentSession.isToolContextIsolationActive,
             localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
         )
         let shouldPrepareAgentRun = agentCapabilities.preparesAgentRun

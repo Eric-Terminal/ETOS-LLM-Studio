@@ -25,7 +25,7 @@ public enum ToolCatalogBuiltInToolStatusReason: String, Equatable, Sendable {
     case memoryWriteDisabled
     case activeRetrievalDisabled
     case zeroTopK
-    case isolatedByWorldbook
+    case isolatedBySession
     case widgetDisabled
     case askUserInputDisabled
     case getSystemTimeDisabled
@@ -79,13 +79,14 @@ public enum ToolCatalogSupport {
         enableWidgetTool: Bool,
         enableAskUserInputTool: Bool,
         enableGetSystemTimeTool: Bool,
-        isIsolatedSession: Bool
+        isMemoryIsolated: Bool,
+        isToolIsolated: Bool
     ) -> [ToolCatalogBuiltInToolState] {
         let memoryWriteConfiguredEnabled = enableMemory && enableMemoryWrite
-        let memoryWriteAvailable = memoryWriteConfiguredEnabled && !isIsolatedSession
+        let memoryWriteAvailable = memoryWriteConfiguredEnabled && !isMemoryIsolated && !isToolIsolated
         let memoryWriteReason: ToolCatalogBuiltInToolStatusReason
-        if memoryWriteConfiguredEnabled && isIsolatedSession {
-            memoryWriteReason = .isolatedByWorldbook
+        if memoryWriteConfiguredEnabled && (isMemoryIsolated || isToolIsolated) {
+            memoryWriteReason = .isolatedBySession
         } else if !enableMemory {
             memoryWriteReason = .memoryDisabled
         } else if !enableMemoryWrite {
@@ -96,10 +97,10 @@ public enum ToolCatalogSupport {
 
         let resolvedTopK = max(0, memoryTopK)
         let memorySearchConfiguredEnabled = enableMemory && enableMemoryActiveRetrieval && resolvedTopK > 0
-        let memorySearchAvailable = memorySearchConfiguredEnabled && !isIsolatedSession
+        let memorySearchAvailable = memorySearchConfiguredEnabled && !isMemoryIsolated && !isToolIsolated
         let memorySearchReason: ToolCatalogBuiltInToolStatusReason
-        if memorySearchConfiguredEnabled && isIsolatedSession {
-            memorySearchReason = .isolatedByWorldbook
+        if memorySearchConfiguredEnabled && (isMemoryIsolated || isToolIsolated) {
+            memorySearchReason = .isolatedBySession
         } else if !enableMemory {
             memorySearchReason = .memoryDisabled
         } else if !enableMemoryActiveRetrieval {
@@ -110,9 +111,15 @@ public enum ToolCatalogSupport {
             memorySearchReason = .enabled
         }
 
-        let widgetReason: ToolCatalogBuiltInToolStatusReason = enableWidgetTool ? .enabled : .widgetDisabled
-        let askUserInputReason: ToolCatalogBuiltInToolStatusReason = enableAskUserInputTool ? .enabled : .askUserInputDisabled
-        let getSystemTimeReason: ToolCatalogBuiltInToolStatusReason = enableGetSystemTimeTool ? .enabled : .getSystemTimeDisabled
+        let widgetReason: ToolCatalogBuiltInToolStatusReason = isToolIsolated && enableWidgetTool
+            ? .isolatedBySession
+            : (enableWidgetTool ? .enabled : .widgetDisabled)
+        let askUserInputReason: ToolCatalogBuiltInToolStatusReason = isToolIsolated && enableAskUserInputTool
+            ? .isolatedBySession
+            : (enableAskUserInputTool ? .enabled : .askUserInputDisabled)
+        let getSystemTimeReason: ToolCatalogBuiltInToolStatusReason = isToolIsolated && enableGetSystemTimeTool
+            ? .isolatedBySession
+            : (enableGetSystemTimeTool ? .enabled : .getSystemTimeDisabled)
 
         return [
             ToolCatalogBuiltInToolState(
@@ -131,19 +138,19 @@ public enum ToolCatalogSupport {
             ToolCatalogBuiltInToolState(
                 kind: .widgetCard,
                 isConfiguredEnabled: enableWidgetTool,
-                isAvailableInCurrentSession: enableWidgetTool,
+                isAvailableInCurrentSession: enableWidgetTool && !isToolIsolated,
                 statusReason: widgetReason
             ),
             ToolCatalogBuiltInToolState(
                 kind: .askUserInput,
                 isConfiguredEnabled: enableAskUserInputTool,
-                isAvailableInCurrentSession: enableAskUserInputTool,
+                isAvailableInCurrentSession: enableAskUserInputTool && !isToolIsolated,
                 statusReason: askUserInputReason
             ),
             ToolCatalogBuiltInToolState(
                 kind: .getSystemTime,
                 isConfiguredEnabled: enableGetSystemTimeTool,
-                isAvailableInCurrentSession: enableGetSystemTimeTool,
+                isAvailableInCurrentSession: enableGetSystemTimeTool && !isToolIsolated,
                 statusReason: getSystemTimeReason
             )
         ]

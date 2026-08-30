@@ -63,6 +63,9 @@ extension Persistence {
                 lorebookIDs: baseRecord.session.lorebookIDs,
                 tagIDs: baseRecord.session.tagIDs,
                 worldbookContextIsolationEnabled: baseRecord.session.worldbookContextIsolationEnabled,
+                memoryContextIsolationEnabled: baseRecord.session.memoryContextIsolationEnabled,
+                toolContextIsolationEnabled: baseRecord.session.toolContextIsolationEnabled,
+                globalSystemPromptIsolationEnabled: baseRecord.session.globalSystemPromptIsolationEnabled,
                 conversationSummary: finalSummary,
                 conversationSummaryUpdatedAt: finalUpdatedAt
             )
@@ -281,7 +284,10 @@ extension Persistence {
                 folderID: session.folderID,
                 lorebookIDs: session.lorebookIDs,
                 tagIDs: session.tagIDs,
-                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
+                worldbookContextIsolationEnabled: session.memoryContextIsolationEnabled || session.toolContextIsolationEnabled ? true : nil,
+                memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+                toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+                globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
                 conversationSummary: preservedSummary?.conversationSummary,
                 conversationSummaryUpdatedAt: preservedSummary?.conversationSummaryUpdatedAt
             ),
@@ -303,6 +309,9 @@ extension Persistence {
             lorebookIDs: summary.session.lorebookIDs,
             tagIDs: summary.session.tagIDs ?? [],
             worldbookContextIsolationEnabled: summary.session.worldbookContextIsolationEnabled ?? false,
+            memoryContextIsolationEnabled: summary.session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: summary.session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: summary.session.globalSystemPromptIsolationEnabled ?? false,
             folderID: summary.session.folderID,
             isTemporary: false
         )
@@ -332,7 +341,13 @@ extension Persistence {
         summary.session.folderID == session.folderID &&
         summary.session.lorebookIDs == session.lorebookIDs &&
         (summary.session.tagIDs ?? []) == session.tagIDs &&
-        (summary.session.worldbookContextIsolationEnabled ?? false) == session.worldbookContextIsolationEnabled &&
+        (summary.session.memoryContextIsolationEnabled
+            ?? summary.session.worldbookContextIsolationEnabled
+            ?? false) == session.memoryContextIsolationEnabled &&
+        (summary.session.toolContextIsolationEnabled
+            ?? summary.session.worldbookContextIsolationEnabled
+            ?? false) == session.toolContextIsolationEnabled &&
+        (summary.session.globalSystemPromptIsolationEnabled ?? false) == session.globalSystemPromptIsolationEnabled &&
         summary.prompts.topicPrompt == session.topicPrompt &&
         summary.prompts.enhancedPrompt == session.enhancedPrompt
     }

@@ -69,7 +69,9 @@ extension ChatService {
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
-            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: sourceSession.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: sourceSession.globalSystemPromptIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
         )

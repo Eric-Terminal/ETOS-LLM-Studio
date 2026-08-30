@@ -243,7 +243,9 @@ extension ChatService {
         enhancedPrompt: String? = nil,
         preferredModelIdentifier: String? = nil,
         lorebookIDs: [UUID] = [],
-        worldbookContextIsolationEnabled: Bool = false,
+        memoryContextIsolationEnabled: Bool = false,
+        toolContextIsolationEnabled: Bool = false,
+        globalSystemPromptIsolationEnabled: Bool = false,
         folderID: UUID? = nil,
         activate: Bool = true
     ) -> ChatSession {
@@ -259,7 +261,9 @@ extension ChatService {
             enhancedPrompt: enhancedPrompt,
             preferredModelIdentifier: preferredModelIdentifier,
             lorebookIDs: lorebookIDs,
-            worldbookContextIsolationEnabled: worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: globalSystemPromptIsolationEnabled,
             folderID: folderID,
             isTemporary: false
         )
@@ -371,7 +375,9 @@ extension ChatService {
             enhancedPrompt: sourceSession.enhancedPrompt,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
-            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: sourceSession.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: sourceSession.globalSystemPromptIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
         )
@@ -426,7 +432,9 @@ extension ChatService {
             enhancedPrompt: copyPrompts ? sourceSession.enhancedPrompt : nil,
             lorebookIDs: sourceSession.lorebookIDs,
             tagIDs: sourceSession.tagIDs,
-            worldbookContextIsolationEnabled: sourceSession.worldbookContextIsolationEnabled,
+            memoryContextIsolationEnabled: sourceSession.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: sourceSession.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: sourceSession.globalSystemPromptIsolationEnabled,
             folderID: sourceSession.folderID,
             isTemporary: false
         )

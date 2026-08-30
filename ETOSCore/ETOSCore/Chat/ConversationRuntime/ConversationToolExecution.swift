@@ -173,8 +173,14 @@ extension ChatService {
             enhancedPrompt: enhancedPrompt,
             preferredModelIdentifier: preferredModelIdentifier,
             lorebookIDs: inheritsSessionConfiguration ? sourceSession.lorebookIDs : [],
-            worldbookContextIsolationEnabled: inheritsSessionConfiguration
-                ? sourceSession.worldbookContextIsolationEnabled
+            memoryContextIsolationEnabled: inheritsSessionConfiguration
+                ? sourceSession.memoryContextIsolationEnabled
+                : false,
+            toolContextIsolationEnabled: inheritsSessionConfiguration
+                ? sourceSession.toolContextIsolationEnabled
+                : false,
+            globalSystemPromptIsolationEnabled: inheritsSessionConfiguration
+                ? sourceSession.globalSystemPromptIsolationEnabled
                 : false,
             folderID: targetFolderID,
             containerSessionID: containerSessionID,

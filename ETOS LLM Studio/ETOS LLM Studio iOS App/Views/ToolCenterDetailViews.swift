@@ -68,7 +68,7 @@ struct MCPToolCenterDetailView: View {
 
     private var currentStatusText: String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -111,6 +111,7 @@ struct MCPToolCenterDetailView: View {
 
 struct MCPToolCategoryDetailView: View {
     let currentSessionIsolationActive: Bool
+    let currentSessionMemoryIsolationActive: Bool
     let searchText: String
     let showEnabledOnly: Bool
 
@@ -169,7 +170,7 @@ struct MCPToolCategoryDetailView: View {
                             MCPToolCenterDetailView(
                                 serverID: available.server.id,
                                 tool: available.tool,
-                                currentSessionIsolationActive: currentSessionIsolationActive
+                                currentSessionIsolationActive: isBlockedBySessionPolicy(available)
                             )
                         } label: {
                             ToolCenterStatusRow(
@@ -210,8 +211,8 @@ struct MCPToolCategoryDetailView: View {
         let isEnabled = manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
         let policy = manager.approvalPolicy(serverID: available.server.id, toolId: available.tool.toolId)
 
-        if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        if isBlockedBySessionPolicy(available) {
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -228,10 +229,16 @@ struct MCPToolCategoryDetailView: View {
     private func mcpStatusColor(for available: MCPAvailableTool) -> Color {
         let isEnabled = manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
         let policy = manager.approvalPolicy(serverID: available.server.id, toolId: available.tool.toolId)
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || !isEnabled || policy == .alwaysDeny {
+        if isBlockedBySessionPolicy(available) || !manager.chatToolsEnabled || !isEnabled || policy == .alwaysDeny {
             return .secondary
         }
         return .green
+    }
+
+    private func isBlockedBySessionPolicy(_ available: MCPAvailableTool) -> Bool {
+        currentSessionIsolationActive
+            || (currentSessionMemoryIsolationActive
+                && MCPBuiltInAppToolServer.category(for: available.server.id) == .memory)
     }
 }
 
@@ -344,7 +351,7 @@ struct SkillToolCategoryDetailView: View {
 
     private func skillStatusText(for skill: SkillMetadata) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "工具因会话隔离不可用原因")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
@@ -465,7 +472,7 @@ struct ShortcutToolCategoryDetailView: View {
 
     private func shortcutStatusText(for tool: ShortcutToolDefinition) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -606,7 +613,7 @@ struct ShortcutToolCenterDetailView: View {
 
     private func currentStatusText(for tool: ShortcutToolDefinition) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")

@@ -168,27 +168,17 @@ The two have **different goals**:
 - **Landmark / depth injection** is for **structural completion**, not length filling
 :::
 
-## Worldbook Isolation Rewrites the Whole Pipeline
+## Session Switches Can Trim Context Independently
 
-When the current session has a worldbook bound and **isolation mode** enabled, ETOS switches to a **stricter** context model.
+Roleplay sessions can enable **Block Memory**, **Block Tools**, and **Block Global System Prompt** independently, with no worldbook binding required.
 
-**Sent**:
+| Switch | Effect on the outgoing request |
+| --- | --- |
+| Block Memory | Skip long-term memory, cross-session summaries, user profile, and memory tools |
+| Block Tools | Skip all tool definitions and remove historical tool calls and results |
+| Block Global System Prompt | Omit the global system prompt while retaining session prompts, character cards, and lorebooks |
 
-- Global prompt
-- Topic prompt
-- Enhancement prompt
-- Worldbook
-
-**Not sent**:
-
-- Long-term memory
-- Cross-session summary
-- User profile
-- MCP tools
-- Shortcut tools
-- Other external tool context
-
-That's why Tool Center sometimes shows "**configured-on but not available in this session**" — because this session has worldbook isolation enabled.
+That's why Tool Center can show "**configured-on but not available in this session**": the session may block tools, while memory tools can also be unavailable because memory is blocked.
 
 See [Worldbook & Tool Governance](/en/design/worldbook-and-tools).
 

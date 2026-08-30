@@ -20,6 +20,8 @@ extension ChatService {
         let enableMemory: Bool
         let enableMemoryWrite: Bool
         let enableMemoryActiveRetrieval: Bool
+        let includeMemoryTools: Bool
+        let includeMemoryManagementTools: Bool
         let includeBuiltInAppTools: Bool
         let includeMCPTools: Bool
         let includeShortcutTools: Bool
@@ -32,42 +34,29 @@ extension ChatService {
         enableMemoryWrite: Bool,
         enableMemoryActiveRetrieval: Bool
     ) -> AuxiliaryContextPolicy {
-        let fullIsolationActive = session?.isWorldbookContextIsolationActive ?? false
-        guard !fullIsolationActive else {
-            logger.info("当前会话已启用记忆与工具隔离，将屏蔽长期记忆与工具上下文。")
-            return AuxiliaryContextPolicy(
-                enableMemory: false,
-                enableMemoryWrite: false,
-                enableMemoryActiveRetrieval: false,
-                includeBuiltInAppTools: false,
-                includeMCPTools: false,
-                includeShortcutTools: false,
-                includeSkills: false
-            )
-        }
-
+        let memoryIsolationActive = session?.isMemoryContextIsolationActive ?? false
+        let toolIsolationActive = session?.isToolContextIsolationActive ?? false
         let temporaryMemoryIsolationActive = isTemporaryChatMemoryIsolated(for: session?.id)
-        guard temporaryMemoryIsolationActive else {
-            return AuxiliaryContextPolicy(
-                enableMemory: enableMemory,
-                enableMemoryWrite: enableMemoryWrite,
-                enableMemoryActiveRetrieval: enableMemoryActiveRetrieval,
-                includeBuiltInAppTools: true,
-                includeMCPTools: true,
-                includeShortcutTools: true,
-                includeSkills: true
-            )
-        }
+        let shouldIsolateMemory = memoryIsolationActive || temporaryMemoryIsolationActive
 
-        logger.info("当前临时对话已启用记忆隔离，将屏蔽长期记忆上下文与记忆工具。")
+        if memoryIsolationActive {
+            logger.info("当前会话已屏蔽记忆，将跳过长期记忆上下文与记忆工具。")
+        } else if temporaryMemoryIsolationActive {
+            logger.info("当前临时对话已启用记忆隔离，将屏蔽长期记忆上下文与记忆工具。")
+        }
+        if toolIsolationActive {
+            logger.info("当前会话已屏蔽工具，将跳过工具定义与历史工具调用。")
+        }
         return AuxiliaryContextPolicy(
-            enableMemory: false,
-            enableMemoryWrite: false,
-            enableMemoryActiveRetrieval: false,
-            includeBuiltInAppTools: true,
-            includeMCPTools: true,
-            includeShortcutTools: true,
-            includeSkills: true
+            enableMemory: enableMemory && !shouldIsolateMemory,
+            enableMemoryWrite: enableMemoryWrite && !shouldIsolateMemory,
+            enableMemoryActiveRetrieval: enableMemoryActiveRetrieval && !shouldIsolateMemory,
+            includeMemoryTools: !toolIsolationActive,
+            includeMemoryManagementTools: !shouldIsolateMemory,
+            includeBuiltInAppTools: !toolIsolationActive,
+            includeMCPTools: !toolIsolationActive,
+            includeShortcutTools: !toolIsolationActive,
+            includeSkills: !toolIsolationActive
         )
     }
 
@@ -89,7 +78,7 @@ extension ChatService {
 
         var resolvedTools: [InternalToolDefinition] = []
         let includeAgentTools = agentCapabilities?.preparesAgentRun
-            ?? (localAgentContext?.mode == .agent && session?.isWorldbookContextIsolationActive != true)
+            ?? (localAgentContext?.mode == .agent && session?.isToolContextIsolationActive != true)
         let includeConversationTools = agentCapabilities?.includesConversationTools ?? includeAgentTools
         let includeBrowserTools = agentCapabilities?.includesBrowserTools ?? includeAgentTools
         let includeLocalLinuxTools = agentCapabilities?.includesLocalLinuxTools
@@ -99,10 +88,10 @@ extension ChatService {
         let selectedServerIDs = includeLocalLinuxTools
             ? (selectedAgentMCPServerIDs ?? localAgentContext.map { Set($0.selectedMCPServerIDs) })
             : nil
-        if policy.enableMemory && policy.enableMemoryWrite {
+        if policy.includeMemoryTools && policy.enableMemory && policy.enableMemoryWrite {
             resolvedTools.append(saveMemoryTool)
         }
-        if policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
+        if policy.includeMemoryTools && policy.enableMemory && policy.enableMemoryActiveRetrieval && resolvedMemoryTopK() > 0 {
             resolvedTools.append(searchMemoryTool)
         }
         if policy.includeBuiltInAppTools {
@@ -118,7 +107,10 @@ extension ChatService {
                     selectedServerIDs: selectedServerIDs
                 )
             }
-            resolvedTools.append(contentsOf: mcpTools)
+            resolvedTools.append(contentsOf: mcpTools.filter { tool in
+                policy.includeMemoryManagementTools
+                    || MCPBuiltInAppToolServer.category(for: tool.name) != .memory
+            })
         }
         if policy.includeShortcutTools {
             let shortcutTools = await MainActor.run { ShortcutToolManager.shared.chatToolsForLLM() }
@@ -225,9 +217,11 @@ extension ChatService {
         let baseMessages = visibleMessages.filter { $0.role != .error && $0.id != loadingMessageID }
         let normalizedMessages = normalizedMessagesForToolCallChain(baseMessages)
         let messageRegexRules = MessageRegexRuleStore.currentRules()
-        let isWorldbookIsolationActive = session?.isWorldbookContextIsolationActive == true
+        let isToolIsolationActive = session?.isToolContextIsolationActive == true
+        let isMemoryIsolationActive = session?.isMemoryContextIsolationActive == true
+            || isTemporaryChatMemoryIsolated(for: session?.id)
 
-        if !isWorldbookIsolationActive {
+        if !isToolIsolationActive && !isMemoryIsolationActive {
             guard !messageRegexRules.isEmpty else {
                 return normalizedMessages
             }
@@ -235,13 +229,30 @@ extension ChatService {
         }
 
         return normalizedMessages.compactMap { message in
-            guard message.role != .tool else { return nil }
+            if message.role == .tool {
+                if isToolIsolationActive {
+                    return nil
+                }
+                if message.toolCalls?.contains(where: { isMemoryToolName($0.toolName) }) == true {
+                    return nil
+                }
+            }
+
             var sanitized = message
-            sanitized.toolCalls = nil
-            sanitized.toolCallsPlacement = nil
+            if isToolIsolationActive {
+                sanitized.toolCalls = nil
+                sanitized.toolCallsPlacement = nil
+            } else if let toolCalls = sanitized.toolCalls {
+                let retainedToolCalls = toolCalls.filter { !isMemoryToolName($0.toolName) }
+                sanitized.toolCalls = retainedToolCalls.isEmpty ? nil : retainedToolCalls
+                if retainedToolCalls.isEmpty {
+                    sanitized.toolCallsPlacement = nil
+                }
+            }
 
             if sanitized.role == .assistant,
-               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+               sanitized.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               sanitized.toolCalls?.isEmpty != false {
                 return nil
             }
             if messageRegexRules.isEmpty {
@@ -249,6 +260,12 @@ extension ChatService {
             }
             return applyMessageRegexRules(to: sanitized, rules: messageRegexRules, mode: .sendOnly)
         }
+    }
+
+    private func isMemoryToolName(_ name: String) -> Bool {
+        name == "save_memory"
+            || name == "search_memory"
+            || MCPBuiltInAppToolServer.category(for: name) == .memory
     }
 
     func limitedChatHistory(_ messages: [ChatMessage], maxMessages: Int) -> [ChatMessage] {

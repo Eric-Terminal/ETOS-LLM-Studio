@@ -13,7 +13,7 @@ import Foundation
 @Suite("工具中心辅助测试")
 struct ToolCatalogSupportTests {
 
-    @Test("世界书隔离会影响内置工具的当前会话可用性")
+    @Test("同时屏蔽记忆与工具会影响全部内置工具")
     func testBuiltInToolStatesReflectIsolation() {
         let states = ToolCatalogSupport.builtInToolStates(
             enableMemory: true,
@@ -23,7 +23,8 @@ struct ToolCatalogSupportTests {
             enableWidgetTool: true,
             enableAskUserInputTool: true,
             enableGetSystemTimeTool: true,
-            isIsolatedSession: true
+            isMemoryIsolated: true,
+            isToolIsolated: true
         )
 
         let memoryWrite = states.first(where: { $0.kind == .memoryWrite })
@@ -31,10 +32,34 @@ struct ToolCatalogSupportTests {
 
         #expect(memoryWrite?.isConfiguredEnabled == true)
         #expect(memoryWrite?.isAvailableInCurrentSession == false)
-        #expect(memoryWrite?.statusReason == .isolatedByWorldbook)
+        #expect(memoryWrite?.statusReason == .isolatedBySession)
         #expect(memorySearch?.isConfiguredEnabled == true)
         #expect(memorySearch?.isAvailableInCurrentSession == false)
-        #expect(memorySearch?.statusReason == .isolatedByWorldbook)
+        #expect(memorySearch?.statusReason == .isolatedBySession)
+        #expect(states.first(where: { $0.kind == .widgetCard })?.isAvailableInCurrentSession == false)
+        #expect(states.first(where: { $0.kind == .askUserInput })?.isAvailableInCurrentSession == false)
+        #expect(states.first(where: { $0.kind == .getSystemTime })?.isAvailableInCurrentSession == false)
+    }
+
+    @Test("记忆隔离不会屏蔽非记忆工具")
+    func testMemoryIsolationKeepsOtherToolsAvailable() {
+        let states = ToolCatalogSupport.builtInToolStates(
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true,
+            memoryTopK: 5,
+            enableWidgetTool: true,
+            enableAskUserInputTool: true,
+            enableGetSystemTimeTool: true,
+            isMemoryIsolated: true,
+            isToolIsolated: false
+        )
+
+        #expect(states.first(where: { $0.kind == .memoryWrite })?.isAvailableInCurrentSession == false)
+        #expect(states.first(where: { $0.kind == .memorySearch })?.isAvailableInCurrentSession == false)
+        #expect(states.first(where: { $0.kind == .widgetCard })?.isAvailableInCurrentSession == true)
+        #expect(states.first(where: { $0.kind == .askUserInput })?.isAvailableInCurrentSession == true)
+        #expect(states.first(where: { $0.kind == .getSystemTime })?.isAvailableInCurrentSession == true)
     }
 
     @Test("Top K 为零时主动检索不会视为启用")
@@ -47,7 +72,8 @@ struct ToolCatalogSupportTests {
             enableWidgetTool: true,
             enableAskUserInputTool: true,
             enableGetSystemTimeTool: true,
-            isIsolatedSession: false
+            isMemoryIsolated: false,
+            isToolIsolated: false
         )
 
         let memorySearch = states.first(where: { $0.kind == .memorySearch })
@@ -67,7 +93,8 @@ struct ToolCatalogSupportTests {
             enableWidgetTool: false,
             enableAskUserInputTool: true,
             enableGetSystemTimeTool: true,
-            isIsolatedSession: false
+            isMemoryIsolated: false,
+            isToolIsolated: false
         )
 
         let widgetTool = states.first(where: { $0.kind == .widgetCard })
@@ -86,7 +113,8 @@ struct ToolCatalogSupportTests {
             enableWidgetTool: true,
             enableAskUserInputTool: false,
             enableGetSystemTimeTool: true,
-            isIsolatedSession: false
+            isMemoryIsolated: false,
+            isToolIsolated: false
         )
 
         let askTool = states.first(where: { $0.kind == .askUserInput })
@@ -105,7 +133,8 @@ struct ToolCatalogSupportTests {
             enableWidgetTool: true,
             enableAskUserInputTool: true,
             enableGetSystemTimeTool: false,
-            isIsolatedSession: false
+            isMemoryIsolated: false,
+            isToolIsolated: false
         )
 
         let timeTool = states.first(where: { $0.kind == .getSystemTime })

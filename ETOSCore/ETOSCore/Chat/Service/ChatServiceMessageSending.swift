@@ -329,7 +329,7 @@ extension ChatService {
             }
             let steeringCapabilities = AgentToolCapabilityPolicy.resolve(
                 mode: effectiveLocalAgentMode,
-                isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+                isToolContextIsolated: currentSession.isToolContextIsolationActive,
                 localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
             )
             let steeringMCPServerIDs = steeringCapabilities.preparesAgentRun
@@ -499,7 +499,7 @@ extension ChatService {
 
         let agentCapabilities = AgentToolCapabilityPolicy.resolve(
             mode: effectiveLocalAgentMode,
-            isWorldbookContextIsolated: currentSession.isWorldbookContextIsolationActive,
+            isToolContextIsolated: currentSession.isToolContextIsolationActive,
             localLinuxEnabled: AppConfigStore.boolValue(for: .localLinuxEnabled)
         )
         let shouldPrepareAgentRun = agentCapabilities.preparesAgentRun

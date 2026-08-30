@@ -228,9 +228,11 @@ extension PersistenceGRDBStore {
             INSERT INTO sessions (
                 id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
                 folder_id, container_session_id, lorebook_ids_json,
-                worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
+                worldbook_context_isolation_enabled, memory_context_isolation_enabled,
+                tool_context_isolation_enabled, global_system_prompt_isolation_enabled,
+                is_temporary, sort_index, updated_at,
                 conversation_summary, conversation_summary_updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 sessionID.uuidString,
@@ -242,6 +244,9 @@ extension PersistenceGRDBStore {
                 nil,
                 nil,
                 encodeJSON([UUID]()) ?? Data("[]".utf8),
+                0,
+                0,
+                0,
                 0,
                 1,
                 Int.max / 2,
@@ -272,9 +277,11 @@ extension PersistenceGRDBStore {
                 INSERT INTO sessions (
                     id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
                     folder_id, container_session_id, lorebook_ids_json,
-                    worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
+                    worldbook_context_isolation_enabled, memory_context_isolation_enabled,
+                    tool_context_isolation_enabled, global_system_prompt_isolation_enabled,
+                    is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     system_prompt = excluded.system_prompt,
@@ -285,6 +292,9 @@ extension PersistenceGRDBStore {
                     container_session_id = excluded.container_session_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
+                    memory_context_isolation_enabled = excluded.memory_context_isolation_enabled,
+                    tool_context_isolation_enabled = excluded.tool_context_isolation_enabled,
+                    global_system_prompt_isolation_enabled = excluded.global_system_prompt_isolation_enabled,
                     is_temporary = excluded.is_temporary,
                     sort_index = excluded.sort_index,
                     updated_at = excluded.updated_at,
@@ -301,7 +311,10 @@ extension PersistenceGRDBStore {
                     session.folderID?.uuidString,
                     session.containerSessionID?.uuidString,
                     lorebookData,
-                    session.worldbookContextIsolationEnabled ? 1 : 0,
+                    session.memoryContextIsolationEnabled || session.toolContextIsolationEnabled ? 1 : 0,
+                    session.memoryContextIsolationEnabled ? 1 : 0,
+                    session.toolContextIsolationEnabled ? 1 : 0,
+                    session.globalSystemPromptIsolationEnabled ? 1 : 0,
                     session.isTemporary ? 1 : 0,
                     sortIndex,
                     updatedAt.timeIntervalSince1970,
@@ -315,9 +328,11 @@ extension PersistenceGRDBStore {
                 INSERT INTO sessions (
                     id, name, system_prompt, topic_prompt, enhanced_prompt, preferred_model_identifier,
                     folder_id, container_session_id, lorebook_ids_json,
-                    worldbook_context_isolation_enabled, is_temporary, sort_index, updated_at,
+                    worldbook_context_isolation_enabled, memory_context_isolation_enabled,
+                    tool_context_isolation_enabled, global_system_prompt_isolation_enabled,
+                    is_temporary, sort_index, updated_at,
                     conversation_summary, conversation_summary_updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     system_prompt = excluded.system_prompt,
@@ -328,6 +343,9 @@ extension PersistenceGRDBStore {
                     container_session_id = excluded.container_session_id,
                     lorebook_ids_json = excluded.lorebook_ids_json,
                     worldbook_context_isolation_enabled = excluded.worldbook_context_isolation_enabled,
+                    memory_context_isolation_enabled = excluded.memory_context_isolation_enabled,
+                    tool_context_isolation_enabled = excluded.tool_context_isolation_enabled,
+                    global_system_prompt_isolation_enabled = excluded.global_system_prompt_isolation_enabled,
                     is_temporary = excluded.is_temporary,
                     sort_index = excluded.sort_index,
                     updated_at = excluded.updated_at,
@@ -344,7 +362,10 @@ extension PersistenceGRDBStore {
                     session.folderID?.uuidString,
                     session.containerSessionID?.uuidString,
                     lorebookData,
-                    session.worldbookContextIsolationEnabled ? 1 : 0,
+                    session.memoryContextIsolationEnabled || session.toolContextIsolationEnabled ? 1 : 0,
+                    session.memoryContextIsolationEnabled ? 1 : 0,
+                    session.toolContextIsolationEnabled ? 1 : 0,
+                    session.globalSystemPromptIsolationEnabled ? 1 : 0,
                     session.isTemporary ? 1 : 0,
                     sortIndex,
                     updatedAt.timeIntervalSince1970,

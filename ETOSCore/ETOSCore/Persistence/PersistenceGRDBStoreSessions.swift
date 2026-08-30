@@ -154,7 +154,8 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
                            preferred_model_identifier, folder_id, container_session_id,
-                           lorebook_ids_json, worldbook_context_isolation_enabled
+                           lorebook_ids_json, memory_context_isolation_enabled,
+                           tool_context_isolation_enabled, global_system_prompt_isolation_enabled
                     FROM sessions
                     WHERE is_temporary = 0 AND container_session_id IS NULL
                     ORDER BY sort_index ASC, updated_at DESC, id ASC
@@ -173,7 +174,9 @@ extension PersistenceGRDBStore {
                         preferredModelIdentifier: row["preferred_model_identifier"],
                         lorebookIDs: lorebookIDs,
                         tagIDs: tagAssignments[row["id"]] ?? [],
-                        worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
+                        memoryContextIsolationEnabled: (row["memory_context_isolation_enabled"] as Int) != 0,
+                        toolContextIsolationEnabled: (row["tool_context_isolation_enabled"] as Int) != 0,
+                        globalSystemPromptIsolationEnabled: (row["global_system_prompt_isolation_enabled"] as Int) != 0,
                         folderID: uuid(from: row["folder_id"]),
                         containerSessionID: uuid(from: row["container_session_id"]),
                         isTemporary: false
@@ -194,7 +197,9 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT id, name, system_prompt, topic_prompt, enhanced_prompt,
                            preferred_model_identifier, folder_id, container_session_id,
-                           lorebook_ids_json, worldbook_context_isolation_enabled, is_temporary
+                           lorebook_ids_json, memory_context_isolation_enabled,
+                           tool_context_isolation_enabled, global_system_prompt_isolation_enabled,
+                           is_temporary
                     FROM sessions
                     WHERE id = ?
                     """,
@@ -214,7 +219,9 @@ extension PersistenceGRDBStore {
                     preferredModelIdentifier: row["preferred_model_identifier"],
                     lorebookIDs: decodeJSON([UUID].self, from: lorebookData) ?? [],
                     tagIDs: tagAssignments[rawSessionID] ?? [],
-                    worldbookContextIsolationEnabled: (row["worldbook_context_isolation_enabled"] as Int) != 0,
+                    memoryContextIsolationEnabled: (row["memory_context_isolation_enabled"] as Int) != 0,
+                    toolContextIsolationEnabled: (row["tool_context_isolation_enabled"] as Int) != 0,
+                    globalSystemPromptIsolationEnabled: (row["global_system_prompt_isolation_enabled"] as Int) != 0,
                     folderID: uuid(from: row["folder_id"]),
                     containerSessionID: uuid(from: row["container_session_id"]),
                     isTemporary: (row["is_temporary"] as Int) != 0

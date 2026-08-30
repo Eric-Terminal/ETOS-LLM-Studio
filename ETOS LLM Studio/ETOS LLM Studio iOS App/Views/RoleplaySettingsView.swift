@@ -673,14 +673,30 @@ private struct RoleplaySessionBindingView: View {
 
                 Section {
                     Toggle(
-                        NSLocalizedString("屏蔽记忆与工具", comment: "Session memory and tool isolation toggle"),
+                        NSLocalizedString("屏蔽记忆", comment: "Block memory for current session"),
                         isOn: Binding(
-                            get: { currentSession?.worldbookContextIsolationEnabled ?? false },
-                            set: { updateContextIsolation($0) }
+                            get: { currentSession?.memoryContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.memoryContextIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Toggle(
+                        NSLocalizedString("屏蔽工具", comment: "Block tools for current session"),
+                        isOn: Binding(
+                            get: { currentSession?.toolContextIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.toolContextIsolationEnabled, isEnabled: $0) }
+                        )
+                    )
+
+                    Toggle(
+                        NSLocalizedString("屏蔽全局系统提示词", comment: "Block global system prompt for current session"),
+                        isOn: Binding(
+                            get: { currentSession?.globalSystemPromptIsolationEnabled ?? false },
+                            set: { updateContextIsolation(\.globalSystemPromptIsolationEnabled, isEnabled: $0) }
                         )
                     )
                 } footer: {
-                    Text(NSLocalizedString("开启后，当前会话不会向模型发送记忆上下文、工具定义或历史工具调用。", comment: "Session memory and tool isolation description"))
+                    Text(NSLocalizedString("分别控制当前会话是否发送记忆、工具和全局系统提示词。角色卡、会话提示词与世界书不受影响。", comment: "Independent session context isolation description"))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -859,14 +875,19 @@ private struct RoleplaySessionBindingView: View {
         )
     }
 
-    private func updateContextIsolation(_ isEnabled: Bool) {
+    private func updateContextIsolation(
+        _ keyPath: WritableKeyPath<ChatSession, Bool>,
+        isEnabled: Bool
+    ) {
         guard var session = currentSession else { return }
-        session.worldbookContextIsolationEnabled = isEnabled
+        session[keyPath: keyPath] = isEnabled
         currentSession = session
         ChatService.shared.updateWorldbookSessionSettings(
             sessionID: session.id,
             worldbookIDs: session.lorebookIDs,
-            worldbookContextIsolationEnabled: isEnabled
+            memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+            toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+            globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
         )
     }
 }

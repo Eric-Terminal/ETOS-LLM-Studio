@@ -166,13 +166,13 @@ For when "I have MCPs configured but I don't want the AI using any tools today."
 
 ## Advanced
 
-### Per-Session Isolation
+### Per-Session Tool Blocking
 
 Some sessions you might want **with no tools at all** — e.g., a roleplay session with a specific Worldbook.
 
-The mechanism: when a session has Worldbook's **isolation mode** on, the Tool Center shows "This session has worldbook isolation enabled; this tool will not actually be active." The AI cannot call any tool in that session.
+When a session enables **Block Tools**, Tool Center explains that the relevant context is blocked and the tool is not actually available. The AI cannot call any tool in that session. This switch is independent of memory and the global system prompt.
 
-See [Memory & Worldbook](/en/modules/memory-worldbook) → Worldbook Isolation.
+See [Memory & Worldbook](/en/modules/memory-worldbook) → Per-Session Context Blocking.
 
 ### MCP Server Debugging
 

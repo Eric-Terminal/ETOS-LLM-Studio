@@ -381,7 +381,10 @@ extension Persistence {
                 folderID: session.folderID,
                 lorebookIDs: session.lorebookIDs,
                 tagIDs: session.tagIDs,
-                worldbookContextIsolationEnabled: session.worldbookContextIsolationEnabled ? true : nil,
+                worldbookContextIsolationEnabled: session.memoryContextIsolationEnabled || session.toolContextIsolationEnabled ? true : nil,
+                memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+                toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+                globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled,
                 conversationSummary: nil,
                 conversationSummaryUpdatedAt: nil
             ),

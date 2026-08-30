@@ -586,8 +586,21 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
     public var lorebookIDs: [UUID]
     /// 绑定到当前会话的标签 ID，标签实体由 SessionTag 单独维护。
     public var tagIDs: [UUID]
-    /// 开启后，当前会话发送请求时会屏蔽记忆与工具上下文。
-    public var worldbookContextIsolationEnabled: Bool
+    /// 开启后，当前会话发送请求时不会读取、写入或主动检索长期记忆。
+    public var memoryContextIsolationEnabled: Bool
+    /// 开启后，当前会话不会向模型暴露工具，并会清理历史工具调用消息。
+    public var toolContextIsolationEnabled: Bool
+    /// 开启后，当前会话不会注入全局系统提示词；会话与角色扮演提示词不受影响。
+    public var globalSystemPromptIsolationEnabled: Bool
+    /// 兼容旧版把记忆和工具合并保存的隔离开关。
+    @available(*, deprecated, message: "请改用 memoryContextIsolationEnabled 与 toolContextIsolationEnabled。")
+    public var worldbookContextIsolationEnabled: Bool {
+        get { memoryContextIsolationEnabled || toolContextIsolationEnabled }
+        set {
+            memoryContextIsolationEnabled = newValue
+            toolContextIsolationEnabled = newValue
+        }
+    }
     @available(*, deprecated, message: "请改用 lorebookIDs；worldbookIDs 为兼容旧代码保留。")
     public var worldbookIDs: [UUID] {
         get { lorebookIDs }
@@ -600,10 +613,11 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         containerSessionID != nil
     }
 
-    /// 当前会话是否启用了记忆与工具隔离。
-    public var isWorldbookContextIsolationActive: Bool {
-        worldbookContextIsolationEnabled
-    }
+    public var isMemoryContextIsolationActive: Bool { memoryContextIsolationEnabled }
+
+    public var isToolContextIsolationActive: Bool { toolContextIsolationEnabled }
+
+    public var isGlobalSystemPromptIsolationActive: Bool { globalSystemPromptIsolationEnabled }
 
     public init(
         id: UUID,
@@ -616,6 +630,9 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         lorebookIDs: [UUID]? = nil,
         tagIDs: [UUID] = [],
         worldbookContextIsolationEnabled: Bool = false,
+        memoryContextIsolationEnabled: Bool? = nil,
+        toolContextIsolationEnabled: Bool? = nil,
+        globalSystemPromptIsolationEnabled: Bool = false,
         folderID: UUID? = nil,
         containerSessionID: UUID? = nil,
         isTemporary: Bool = false
@@ -630,7 +647,9 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         self.containerSessionID = containerSessionID
         self.lorebookIDs = lorebookIDs ?? worldbookIDs
         self.tagIDs = tagIDs
-        self.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
+        self.memoryContextIsolationEnabled = memoryContextIsolationEnabled ?? worldbookContextIsolationEnabled
+        self.toolContextIsolationEnabled = toolContextIsolationEnabled ?? worldbookContextIsolationEnabled
+        self.globalSystemPromptIsolationEnabled = globalSystemPromptIsolationEnabled
         self.isTemporary = isTemporary
     }
 
@@ -649,6 +668,9 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         case tagIDs
         case tagIds
         case worldbookContextIsolationEnabled
+        case memoryContextIsolationEnabled
+        case toolContextIsolationEnabled
+        case globalSystemPromptIsolationEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -677,7 +699,15 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         } else {
             self.tagIDs = []
         }
-        self.worldbookContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .worldbookContextIsolationEnabled) ?? false
+        let legacyIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .worldbookContextIsolationEnabled) ?? false
+        self.memoryContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .memoryContextIsolationEnabled)
+            ?? legacyIsolationEnabled
+        self.toolContextIsolationEnabled = try container.decodeIfPresent(Bool.self, forKey: .toolContextIsolationEnabled)
+            ?? legacyIsolationEnabled
+        self.globalSystemPromptIsolationEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .globalSystemPromptIsolationEnabled
+        ) ?? false
         self.isTemporary = false
     }
 
@@ -699,8 +729,15 @@ public struct ChatSession: Identifiable, Codable, Hashable, Sendable {
         if !tagIDs.isEmpty {
             try container.encode(tagIDs, forKey: .tagIDs)
         }
-        if worldbookContextIsolationEnabled {
-            try container.encode(worldbookContextIsolationEnabled, forKey: .worldbookContextIsolationEnabled)
+        // 两个新字段需要显式编码 false，避免旧兼容字段为 true 时合并回错误状态。
+        try container.encode(memoryContextIsolationEnabled, forKey: .memoryContextIsolationEnabled)
+        try container.encode(toolContextIsolationEnabled, forKey: .toolContextIsolationEnabled)
+        if globalSystemPromptIsolationEnabled {
+            try container.encode(globalSystemPromptIsolationEnabled, forKey: .globalSystemPromptIsolationEnabled)
+        }
+        if memoryContextIsolationEnabled || toolContextIsolationEnabled {
+            // 旧版本无法识别独立字段；宁可多屏蔽一类上下文，也不能静默泄露用户已屏蔽的内容。
+            try container.encode(true, forKey: .worldbookContextIsolationEnabled)
         }
     }
 }

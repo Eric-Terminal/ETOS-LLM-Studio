@@ -12,6 +12,7 @@ import ETOSCore
 
 struct WatchBuiltInToolDetailView: View {
     let kind: ToolCatalogBuiltInToolKind
+    let currentSessionMemoryIsolationActive: Bool
     let currentSessionIsolationActive: Bool
     @Binding var enableMemory: Bool
     @Binding var enableMemoryWrite: Bool
@@ -36,7 +37,8 @@ struct WatchBuiltInToolDetailView: View {
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
-            isIsolatedSession: currentSessionIsolationActive
+            isMemoryIsolated: currentSessionMemoryIsolationActive,
+            isToolIsolated: currentSessionIsolationActive
         ).first(where: { $0.kind == kind }) ?? ToolCatalogBuiltInToolState(
             kind: kind,
             isConfiguredEnabled: false,
@@ -187,6 +189,9 @@ struct WatchBuiltInToolDetailView: View {
     }
 
     private func statusText(for state: ToolCatalogBuiltInToolState) -> String {
+        if state.statusReason == .isolatedBySession {
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
+        }
         switch state.kind {
         case .memoryWrite:
             switch state.statusReason {
@@ -196,8 +201,8 @@ struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("记忆系统总开关已关闭。", comment: "Memory system disabled")
             case .memoryWriteDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write disabled")
-            case .isolatedByWorldbook:
-                return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            case .isolatedBySession:
+                return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
             case .activeRetrievalDisabled, .zeroTopK, .widgetDisabled, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未允许写入新的记忆。", comment: "Memory write fallback")
             @unknown default:
@@ -216,8 +221,8 @@ struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search disabled")
             case .zeroTopK:
                 return NSLocalizedString("当前 Top K 为 0，聊天时不会暴露检索工具。", comment: "Memory search top k zero")
-            case .isolatedByWorldbook:
-                return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            case .isolatedBySession:
+                return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
             case .memoryWriteDisabled, .widgetDisabled, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未允许主动检索。", comment: "Memory search fallback")
             @unknown default:
@@ -229,7 +234,7 @@ struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("已启用网页卡片渲染能力。", comment: "Built-in widget enabled status")
             case .widgetDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .askUserInputDisabled, .getSystemTimeDisabled:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedBySession, .askUserInputDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用网页卡片渲染能力。", comment: "Built-in widget unknown status fallback")
@@ -240,7 +245,7 @@ struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("已启用结构化问答能力。", comment: "Built-in ask user input enabled status")
             case .askUserInputDisabled:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled, .getSystemTimeDisabled:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedBySession, .widgetDisabled, .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用结构化问答能力。", comment: "Built-in ask user input unknown status fallback")
@@ -251,7 +256,7 @@ struct WatchBuiltInToolDetailView: View {
                 return NSLocalizedString("已启用系统时间获取能力。", comment: "Get system time enabled status")
             case .getSystemTimeDisabled:
                 return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time disabled status")
-            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedByWorldbook, .widgetDisabled, .askUserInputDisabled:
+            case .memoryDisabled, .memoryWriteDisabled, .activeRetrievalDisabled, .zeroTopK, .isolatedBySession, .widgetDisabled, .askUserInputDisabled:
                 return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time disabled status fallback")
             @unknown default:
                 return NSLocalizedString("当前未启用获取系统时间工具。", comment: "Get system time unknown status fallback")
@@ -313,7 +318,7 @@ struct WatchMCPToolCenterDetailView: View {
 
     private var currentStatusText: String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -440,7 +445,7 @@ struct WatchSkillToolCategoryDetailView: View {
 
     private func skillStatusText(for skill: SkillMetadata) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "工具因世界书隔离不可用原因")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "工具因会话隔离不可用原因")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。", comment: "Agent Skills 总开关关闭提示")
@@ -542,7 +547,7 @@ struct WatchShortcutToolCategoryDetailView: View {
 
     private func shortcutStatusText(for tool: ShortcutToolDefinition) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -644,7 +649,7 @@ struct WatchShortcutToolCenterDetailView: View {
 
     private func currentStatusText(for tool: ShortcutToolDefinition) -> String {
         if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")

@@ -17,10 +17,10 @@ struct AgentToolCapabilityPolicy: Equatable, Sendable {
 
     static func resolve(
         mode: LocalAgentMode,
-        isWorldbookContextIsolated: Bool,
+        isToolContextIsolated: Bool,
         localLinuxEnabled: Bool
     ) -> AgentToolCapabilityPolicy {
-        let allowsChatTools = !isWorldbookContextIsolated
+        let allowsChatTools = !isToolContextIsolated
         let includesLocalLinux = allowsChatTools && localLinuxEnabled && mode == .agent
         return AgentToolCapabilityPolicy(
             preparesAgentRun: includesLocalLinux,

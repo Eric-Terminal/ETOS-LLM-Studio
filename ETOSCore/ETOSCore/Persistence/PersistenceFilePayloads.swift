@@ -32,6 +32,9 @@ struct SessionMetaPayload: Codable {
     let lorebookIDs: [UUID]
     let tagIDs: [UUID]?
     let worldbookContextIsolationEnabled: Bool?
+    let memoryContextIsolationEnabled: Bool?
+    let toolContextIsolationEnabled: Bool?
+    let globalSystemPromptIsolationEnabled: Bool?
     let conversationSummary: String?
     let conversationSummaryUpdatedAt: String?
 }

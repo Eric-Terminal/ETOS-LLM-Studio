@@ -51,34 +51,41 @@ extension ChatService {
     }
 
     public func assignWorldbooks(to sessionID: UUID, worldbookIDs: [UUID]) {
-        let currentIsolationEnabled = chatSessionsSubject.value.first(where: { $0.id == sessionID })?.worldbookContextIsolationEnabled
-            ?? currentSessionSubject.value?.worldbookContextIsolationEnabled
-            ?? false
+        let session = chatSessionsSubject.value.first(where: { $0.id == sessionID })
+            ?? currentSessionSubject.value
         updateWorldbookSessionSettings(
             sessionID: sessionID,
             worldbookIDs: worldbookIDs,
-            worldbookContextIsolationEnabled: currentIsolationEnabled
+            memoryContextIsolationEnabled: session?.memoryContextIsolationEnabled ?? false,
+            toolContextIsolationEnabled: session?.toolContextIsolationEnabled ?? false,
+            globalSystemPromptIsolationEnabled: session?.globalSystemPromptIsolationEnabled ?? false
         )
     }
 
     public func updateWorldbookSessionSettings(
         sessionID: UUID,
         worldbookIDs: [UUID],
-        worldbookContextIsolationEnabled: Bool
+        memoryContextIsolationEnabled: Bool,
+        toolContextIsolationEnabled: Bool,
+        globalSystemPromptIsolationEnabled: Bool
     ) {
         var sessions = chatSessionsSubject.value
         let uniqueIDs = deduplicatedWorldbookIDs(worldbookIDs)
 
         if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
             sessions[index].lorebookIDs = uniqueIDs
-            sessions[index].worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
+            sessions[index].memoryContextIsolationEnabled = memoryContextIsolationEnabled
+            sessions[index].toolContextIsolationEnabled = toolContextIsolationEnabled
+            sessions[index].globalSystemPromptIsolationEnabled = globalSystemPromptIsolationEnabled
             chatSessionsSubject.send(sessions)
         }
 
         if let current = currentSessionSubject.value, current.id == sessionID {
             var updated = current
             updated.lorebookIDs = uniqueIDs
-            updated.worldbookContextIsolationEnabled = worldbookContextIsolationEnabled
+            updated.memoryContextIsolationEnabled = memoryContextIsolationEnabled
+            updated.toolContextIsolationEnabled = toolContextIsolationEnabled
+            updated.globalSystemPromptIsolationEnabled = globalSystemPromptIsolationEnabled
             currentSessionSubject.send(updated)
         }
 

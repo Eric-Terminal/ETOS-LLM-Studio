@@ -153,8 +153,8 @@ extension ChatService {
             }
         }
 
-        let isWorldbookIsolationActive = sessionForRequest?.isWorldbookContextIsolationActive ?? false
-        let conversationMemoryEnabled = enableMemory && isConversationMemoryEnabled() && !isWorldbookIsolationActive
+        let isMemoryIsolationActive = sessionForRequest?.isMemoryContextIsolationActive ?? false
+        let conversationMemoryEnabled = enableMemory && isConversationMemoryEnabled() && !isMemoryIsolationActive
         let recentConversationSummaries: [ConversationSessionSummary]
         let conversationUserProfile: ConversationUserProfile?
         if conversationMemoryEnabled {
@@ -281,7 +281,7 @@ extension ChatService {
             localLinuxToolsEnabled: activeRequestIncludesLocalLinuxTools(sessionID: currentSessionID)
         )
         var finalSystemPrompt = buildFinalSystemPrompt(
-            global: systemPrompt,
+            global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
             conversationSystem: sessionForRequest?.systemPrompt,
             topic: sessionForRequest?.topicPrompt,
             includeConversationRuntime: includesConversationTools,

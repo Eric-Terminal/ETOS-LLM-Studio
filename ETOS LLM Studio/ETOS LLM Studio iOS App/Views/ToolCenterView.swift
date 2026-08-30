@@ -25,7 +25,11 @@ struct ToolCenterView: View {
     @State var isShowingBuiltInIntroDetails = false
 
     var currentSessionIsolationActive: Bool {
-        viewModel.currentSession?.isWorldbookContextIsolationActive ?? false
+        viewModel.currentSession?.isToolContextIsolationActive ?? false
+    }
+
+    var currentSessionMemoryIsolationActive: Bool {
+        viewModel.currentSession?.isMemoryContextIsolationActive ?? false
     }
 
     var enableMemory: Bool {
@@ -53,7 +57,8 @@ struct ToolCenterView: View {
             enableWidgetTool: appToolManager.isToolEnabled(.showWidget),
             enableAskUserInputTool: appToolManager.isToolEnabled(.askUserInput),
             enableGetSystemTimeTool: appToolManager.isToolEnabled(.getSystemTime),
-            isIsolatedSession: currentSessionIsolationActive
+            isMemoryIsolated: currentSessionMemoryIsolationActive,
+            isToolIsolated: currentSessionIsolationActive
         )
     }
 
@@ -221,7 +226,13 @@ struct ToolCenterView: View {
         return mcpCatalogTools.filter {
             mcpManager.isToolEnabled(serverID: $0.server.id, toolId: $0.tool.toolId)
             && mcpManager.approvalPolicy(serverID: $0.server.id, toolId: $0.tool.toolId) != .alwaysDeny
+            && !isBlockedMemoryManagementTool($0)
         }.count
+    }
+
+    func isBlockedMemoryManagementTool(_ available: MCPAvailableTool) -> Bool {
+        currentSessionMemoryIsolationActive
+            && MCPBuiltInAppToolServer.category(for: available.server.id) == .memory
     }
 
     var configuredShortcutCount: Int {

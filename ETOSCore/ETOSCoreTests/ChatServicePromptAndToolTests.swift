@@ -18,7 +18,7 @@ extension ChatServiceTests {
         setupMockResponsesForChatAndTitle()
 
         var session = createPermanentTestSession(name: "Agent 模式快照测试")
-        session.worldbookContextIsolationEnabled = true
+        session.toolContextIsolationEnabled = true
         chatService.setCurrentSession(session)
         #expect(Persistence.saveLocalAgentMode(.chat, sessionID: session.id))
 
@@ -40,12 +40,14 @@ extension ChatServiceTests {
         await cleanup()
     }
 
-    @Test("会话隔离策略无需绑定世界书即可屏蔽记忆与工具")
-    func testSessionIsolationPolicySuppressesMemoryAndToolsWithoutWorldbook() async throws {
+    @Test("会话可以分别屏蔽记忆与工具")
+    func testSessionIsolationPolicySeparatesMemoryAndTools() async throws {
         await cleanup()
 
-        var isolatedSession = ChatSession(id: UUID(), name: "隔离策略会话")
-        isolatedSession.worldbookContextIsolationEnabled = true
+        var memoryIsolatedSession = ChatSession(id: UUID(), name: "记忆隔离会话")
+        memoryIsolatedSession.memoryContextIsolationEnabled = true
+        var toolIsolatedSession = ChatSession(id: UUID(), name: "工具隔离会话")
+        toolIsolatedSession.toolContextIsolationEnabled = true
 
         let normalPolicy = chatService.auxiliaryContextPolicy(
             for: nil,
@@ -53,8 +55,14 @@ extension ChatServiceTests {
             enableMemoryWrite: true,
             enableMemoryActiveRetrieval: true
         )
-        let isolatedPolicy = chatService.auxiliaryContextPolicy(
-            for: isolatedSession,
+        let memoryIsolatedPolicy = chatService.auxiliaryContextPolicy(
+            for: memoryIsolatedSession,
+            enableMemory: true,
+            enableMemoryWrite: true,
+            enableMemoryActiveRetrieval: true
+        )
+        let toolIsolatedPolicy = chatService.auxiliaryContextPolicy(
+            for: toolIsolatedSession,
             enableMemory: true,
             enableMemoryWrite: true,
             enableMemoryActiveRetrieval: true
@@ -64,13 +72,57 @@ extension ChatServiceTests {
         #expect(normalPolicy.includeMCPTools)
         #expect(normalPolicy.enableMemory)
         #expect(normalPolicy.enableMemoryWrite)
-        #expect(!isolatedPolicy.includeBuiltInAppTools)
-        #expect(!isolatedPolicy.includeMCPTools)
-        #expect(!isolatedPolicy.includeShortcutTools)
-        #expect(!isolatedPolicy.includeSkills)
-        #expect(!isolatedPolicy.enableMemory)
-        #expect(!isolatedPolicy.enableMemoryWrite)
-        #expect(!isolatedPolicy.enableMemoryActiveRetrieval)
+        #expect(memoryIsolatedPolicy.includeBuiltInAppTools)
+        #expect(memoryIsolatedPolicy.includeMCPTools)
+        #expect(memoryIsolatedPolicy.includeShortcutTools)
+        #expect(memoryIsolatedPolicy.includeSkills)
+        #expect(!memoryIsolatedPolicy.includeMemoryManagementTools)
+        #expect(!memoryIsolatedPolicy.enableMemory)
+        #expect(!memoryIsolatedPolicy.enableMemoryWrite)
+        #expect(!memoryIsolatedPolicy.enableMemoryActiveRetrieval)
+        #expect(!toolIsolatedPolicy.includeMemoryTools)
+        #expect(toolIsolatedPolicy.includeMemoryManagementTools)
+        #expect(!toolIsolatedPolicy.includeBuiltInAppTools)
+        #expect(!toolIsolatedPolicy.includeMCPTools)
+        #expect(!toolIsolatedPolicy.includeShortcutTools)
+        #expect(!toolIsolatedPolicy.includeSkills)
+        #expect(toolIsolatedPolicy.enableMemory)
+        #expect(toolIsolatedPolicy.enableMemoryWrite)
+        #expect(toolIsolatedPolicy.enableMemoryActiveRetrieval)
+
+        await cleanup()
+    }
+
+    @Test("会话可以只屏蔽全局系统提示词")
+    func testSessionIsolationSuppressesOnlyGlobalSystemPrompt() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+
+        var session = createPermanentTestSession(name: "系统提示词隔离会话")
+        session.systemPrompt = "conversation-system-should-remain"
+        session.topicPrompt = "topic-should-remain"
+        session.globalSystemPromptIsolationEnabled = true
+        chatService.setCurrentSession(session)
+
+        await chatService.sendAndProcessMessage(
+            content: "hello",
+            aiTemperature: 0,
+            aiTopP: 1,
+            systemPrompt: "global-system-should-hide",
+            maxChatHistory: 5,
+            enableStreaming: false,
+            enhancedPrompt: nil,
+            enableMemory: false,
+            enableMemoryWrite: false,
+            includeSystemTime: false
+        )
+
+        let sentSystemPrompt = mockAdapter.receivedMessages?
+            .first(where: { $0.role == .system })?
+            .content ?? ""
+        #expect(!sentSystemPrompt.contains("global-system-should-hide"))
+        #expect(sentSystemPrompt.contains("conversation-system-should-remain"))
+        #expect(sentSystemPrompt.contains("topic-should-remain"))
 
         await cleanup()
     }
@@ -80,7 +132,7 @@ extension ChatServiceTests {
         await cleanup()
 
         var isolatedSession = ChatSession(id: UUID(), name: "历史工具隔离会话")
-        isolatedSession.worldbookContextIsolationEnabled = true
+        isolatedSession.toolContextIsolationEnabled = true
         let historicalToolCall = InternalToolCall(
             id: "historical-tool-call",
             toolName: "test_tool",
@@ -103,6 +155,43 @@ extension ChatServiceTests {
         #expect(preparedMessages.first?.content == "保留这条消息")
         #expect(!preparedMessages.contains(where: { $0.role == .tool }))
         #expect(!preparedMessages.contains(where: { !($0.toolCalls?.isEmpty ?? true) }))
+
+        await cleanup()
+    }
+
+    @Test("记忆屏蔽只移除历史记忆工具调用")
+    func testMemoryIsolationRemovesOnlyHistoricalMemoryToolCalls() async throws {
+        await cleanup()
+
+        var isolatedSession = ChatSession(id: UUID(), name: "历史记忆隔离会话")
+        isolatedSession.memoryContextIsolationEnabled = true
+        let memoryToolCall = InternalToolCall(
+            id: "historical-memory-tool-call",
+            toolName: "search_memory",
+            arguments: "{}"
+        )
+        let retainedToolCall = InternalToolCall(
+            id: "historical-retained-tool-call",
+            toolName: "test_tool",
+            arguments: "{}"
+        )
+        let messages = [
+            ChatMessage(role: .assistant, content: "", toolCalls: [memoryToolCall]),
+            ChatMessage(role: .tool, content: "不应发送", toolCalls: [memoryToolCall]),
+            ChatMessage(role: .assistant, content: "", toolCalls: [retainedToolCall]),
+            ChatMessage(role: .tool, content: "应保留", toolCalls: [retainedToolCall])
+        ]
+
+        let preparedMessages = chatService.preparedMessagesForRequest(
+            from: messages,
+            loadingMessageID: UUID(),
+            session: isolatedSession
+        )
+
+        #expect(preparedMessages.count == 2)
+        #expect(preparedMessages.contains(where: { $0.content == "应保留" }))
+        #expect(!preparedMessages.contains(where: { $0.content == "不应发送" }))
+        #expect(preparedMessages.flatMap { $0.toolCalls ?? [] }.map(\.toolName) == ["test_tool", "test_tool"])
 
         await cleanup()
     }
@@ -1156,7 +1245,8 @@ extension ChatServiceTests {
 
         var session = chatService.currentSessionSubject.value ?? ChatSession(id: UUID(), name: "隔离会话")
         session.lorebookIDs = [book.id]
-        session.worldbookContextIsolationEnabled = true
+        session.memoryContextIsolationEnabled = true
+        session.toolContextIsolationEnabled = true
         chatService.setCurrentSession(session)
 
         let historicalAssistantToolCall = InternalToolCall(

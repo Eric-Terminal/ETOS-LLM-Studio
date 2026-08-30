@@ -12,6 +12,7 @@ import ETOSCore
 
 struct WatchMCPToolCategoryDetailView: View {
     let currentSessionIsolationActive: Bool
+    let currentSessionMemoryIsolationActive: Bool
     let showEnabledOnly: Bool
 
     @ObservedObject private var manager = MCPManager.shared
@@ -59,7 +60,7 @@ struct WatchMCPToolCategoryDetailView: View {
                             WatchMCPToolCenterDetailView(
                                 serverID: available.server.id,
                                 tool: available.tool,
-                                currentSessionIsolationActive: currentSessionIsolationActive
+                                currentSessionIsolationActive: isBlockedBySessionPolicy(available)
                             )
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
@@ -97,8 +98,8 @@ struct WatchMCPToolCategoryDetailView: View {
         let isEnabled = manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
         let policy = manager.approvalPolicy(serverID: available.server.id, toolId: available.tool.toolId)
 
-        if currentSessionIsolationActive {
-            return NSLocalizedString("当前会话因世界书隔离发送而不会实际启用该工具。", comment: "Tool unavailable due to worldbook isolation")
+        if isBlockedBySessionPolicy(available) {
+            return NSLocalizedString("当前会话已屏蔽相关上下文，因此不会实际启用该工具。", comment: "Tool unavailable due to session isolation")
         }
         if !manager.chatToolsEnabled {
             return NSLocalizedString("总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。", comment: "Global switch off explanation")
@@ -115,10 +116,16 @@ struct WatchMCPToolCategoryDetailView: View {
     private func mcpStatusColor(for available: MCPAvailableTool) -> Color {
         let isEnabled = manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)
         let policy = manager.approvalPolicy(serverID: available.server.id, toolId: available.tool.toolId)
-        if currentSessionIsolationActive || !manager.chatToolsEnabled || !isEnabled || policy == .alwaysDeny {
+        if isBlockedBySessionPolicy(available) || !manager.chatToolsEnabled || !isEnabled || policy == .alwaysDeny {
             return .secondary
         }
         return .green
+    }
+
+    private func isBlockedBySessionPolicy(_ available: MCPAvailableTool) -> Bool {
+        currentSessionIsolationActive
+            || (currentSessionMemoryIsolationActive
+                && MCPBuiltInAppToolServer.category(for: available.server.id) == .memory)
     }
 }
 

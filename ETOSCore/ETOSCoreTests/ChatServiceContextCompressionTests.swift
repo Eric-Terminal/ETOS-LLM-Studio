@@ -60,7 +60,9 @@ extension ChatServiceTests {
             topicPrompt: "保留话题",
             enhancedPrompt: "保留增强提示词",
             lorebookIDs: [UUID()],
-            worldbookContextIsolationEnabled: true
+            memoryContextIsolationEnabled: true,
+            toolContextIsolationEnabled: true,
+            globalSystemPromptIsolationEnabled: true
         )
         #expect(Persistence.saveLocalAgentMode(.agent, sessionID: source.id))
 
@@ -81,7 +83,9 @@ extension ChatServiceTests {
         #expect(child.topicPrompt == source.topicPrompt)
         #expect(child.enhancedPrompt == source.enhancedPrompt)
         #expect(child.lorebookIDs == source.lorebookIDs)
-        #expect(child.worldbookContextIsolationEnabled)
+        #expect(child.memoryContextIsolationEnabled)
+        #expect(child.toolContextIsolationEnabled)
+        #expect(child.globalSystemPromptIsolationEnabled)
         #expect(Persistence.localAgentMode(sessionID: child.id) == .agent)
 
         chatService.deleteSessions([child, source])

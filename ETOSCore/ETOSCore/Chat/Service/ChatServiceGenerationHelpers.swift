@@ -43,7 +43,7 @@ extension ChatService {
               !session.isEmbeddedSubagent else {
             return
         }
-        guard !session.isWorldbookContextIsolationActive else { return }
+        guard !session.isMemoryContextIsolationActive else { return }
         let messagesSnapshot = ChatResponseAttemptSupport.visibleMessages(from: messagesSnapshot(for: sessionID))
         Task { [weak self] in
             await self?.performConversationMemoryUpdateIfNeeded(

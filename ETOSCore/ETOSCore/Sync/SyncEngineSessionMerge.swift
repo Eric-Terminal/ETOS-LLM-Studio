@@ -122,17 +122,12 @@ extension SyncEngine {
         merged.lorebookIDs = mergeOrderedUUIDs(local.lorebookIDs, incoming.lorebookIDs)
         merged.tagIDs = mergeOrderedUUIDs(local.tagIDs, incoming.tagIDs)
 
-        if local.worldbookContextIsolationEnabled != incoming.worldbookContextIsolationEnabled {
-            let localHasBindings = !local.lorebookIDs.isEmpty
-            let incomingHasBindings = !incoming.lorebookIDs.isEmpty
-            if local.worldbookContextIsolationEnabled && !localHasBindings {
-                merged.worldbookContextIsolationEnabled = incoming.worldbookContextIsolationEnabled
-            } else if incoming.worldbookContextIsolationEnabled && !incomingHasBindings {
-                merged.worldbookContextIsolationEnabled = local.worldbookContextIsolationEnabled
-            } else if local.worldbookContextIsolationEnabled || incoming.worldbookContextIsolationEnabled {
-                merged.worldbookContextIsolationEnabled = true
-            }
-        }
+        merged.memoryContextIsolationEnabled = local.memoryContextIsolationEnabled
+            || incoming.memoryContextIsolationEnabled
+        merged.toolContextIsolationEnabled = local.toolContextIsolationEnabled
+            || incoming.toolContextIsolationEnabled
+        merged.globalSystemPromptIsolationEnabled = local.globalSystemPromptIsolationEnabled
+            || incoming.globalSystemPromptIsolationEnabled
 
         if local.name != incoming.name {
             if local.baseNameWithoutSyncSuffix == incoming.baseNameWithoutSyncSuffix {

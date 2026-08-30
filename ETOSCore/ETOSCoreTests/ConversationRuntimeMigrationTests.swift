@@ -15,6 +15,69 @@ import Testing
 struct ConversationRuntimeMigrationTests {
     private let historicalMessageCount = 29_000
 
+    @Test("会话上下文屏蔽开关可独立持久化")
+    func sessionContextIsolationSwitchesPersistIndependently() throws {
+        let chatsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionContextIsolationPersistence-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: chatsDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: chatsDirectory) }
+
+        let store = try PersistenceGRDBStore(chatsDirectory: chatsDirectory)
+        let session = ChatSession(
+            id: UUID(),
+            name: "独立上下文屏蔽",
+            memoryContextIsolationEnabled: false,
+            toolContextIsolationEnabled: true,
+            globalSystemPromptIsolationEnabled: true
+        )
+        store.saveChatSessions([session])
+
+        let loaded = try #require(store.loadChatSessions().first)
+        #expect(!loaded.memoryContextIsolationEnabled)
+        #expect(loaded.toolContextIsolationEnabled)
+        #expect(loaded.globalSystemPromptIsolationEnabled)
+    }
+
+    @Test("旧版组合隔离开关迁移为记忆与工具屏蔽")
+    func legacyContextIsolationBackfillsIndependentSwitches() throws {
+        let chatsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionContextIsolationMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: chatsDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: chatsDirectory) }
+
+        let databaseURL = chatsDirectory.appendingPathComponent("chat-store.sqlite")
+        var store: PersistenceGRDBStore? = try PersistenceGRDBStore(chatsDirectory: chatsDirectory)
+        let session = ChatSession(id: UUID(), name: "旧版组合隔离")
+        store?.saveChatSessions([session])
+        store = nil
+
+        do {
+            let queue = try makeDatabaseQueue(at: databaseURL)
+            try queue.write { db in
+                try db.execute(
+                    sql: """
+                        UPDATE sessions
+                        SET worldbook_context_isolation_enabled = 1,
+                            memory_context_isolation_enabled = 0,
+                            tool_context_isolation_enabled = 0
+                        WHERE id = ?
+                    """,
+                    arguments: [session.id.uuidString]
+                )
+                try db.execute(
+                    sql: "DELETE FROM grdb_migrations WHERE identifier = ?",
+                    arguments: ["v17_split_session_context_isolation"]
+                )
+            }
+        }
+
+        let migratedStore = try PersistenceGRDBStore(chatsDirectory: chatsDirectory)
+        let migrated = try #require(migratedStore.loadChatSessions().first)
+        #expect(migrated.memoryContextIsolationEnabled)
+        #expect(migrated.toolContextIsolationEnabled)
+        #expect(!migrated.globalSystemPromptIsolationEnabled)
+    }
+
     @Test("v10 可在线性时间回填 2.9 万条历史消息且不重建 FTS")
     func conversationRuntimeMigrationBackfillsLargeHistoryWithoutReindexing() throws {
         let chatsDirectory = FileManager.default.temporaryDirectory

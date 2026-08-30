@@ -208,7 +208,7 @@ extension ChatService {
                 ?? (localAgentContext?.mode == .agent)
             let localLinuxToolsEnabled = configuration.localLinuxToolsEnabled
                 ?? (localAgentContext != nil)
-            let allowsChatTools = !session.isWorldbookContextIsolationActive
+            let allowsChatTools = !session.isToolContextIsolationActive
             let agentCapabilities = AgentToolCapabilityPolicy(
                 preparesAgentRun: agentToolsEnabled && localLinuxToolsEnabled,
                 includesConversationTools: allowsChatTools,
