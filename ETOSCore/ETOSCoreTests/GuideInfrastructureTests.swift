@@ -22,7 +22,7 @@ struct GuideInfrastructureTests {
     @Test("向导工具参数兼容增量与累计流并限制异常体积")
     func streamedToolArgumentsRemainBounded() throws {
         let incremental = try GuideStreamedToolArguments.merge(
-            existing: #"{"query":"#,
+            existing: "{\"query\":\"",
             replacement: nil,
             fragment: #"Guide"}"#
         )
