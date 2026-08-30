@@ -83,24 +83,29 @@ public actor GuideSourceService {
     public static let shared = GuideSourceService()
 
     private let baseURL: URL
-    private let rawBaseURL: URL
     private let urlSession: URLSession
     private let fileManager: FileManager
     private let cacheDirectoryOverride: URL?
+    private let sourcePackStore: GuideSourcePackStore
     private var memoryTree: GuideSourceTree?
 
     public init(
         baseURL: URL = FeedbackServiceConfig.default.baseURL,
-        rawBaseURL: URL = URL(string: "https://raw.githubusercontent.com")!,
         urlSession: URLSession = NetworkSessionConfiguration.shared,
         fileManager: FileManager = .default,
-        cacheDirectoryURL: URL? = nil
+        cacheDirectoryURL: URL? = nil,
+        sourcePackDirectoryURL: URL? = nil
     ) {
         self.baseURL = baseURL
-        self.rawBaseURL = rawBaseURL
         self.urlSession = urlSession
         self.fileManager = fileManager
         self.cacheDirectoryOverride = cacheDirectoryURL
+        self.sourcePackStore = GuideSourcePackStore(
+            baseURL: baseURL,
+            urlSession: urlSession,
+            fileManager: fileManager,
+            cacheDirectoryURL: sourcePackDirectoryURL
+        )
     }
 
     public func searchTree(query: String, commitSHA: String, limit: Int = 40) async throws -> [GuideSourceTreeEntry] {
@@ -163,53 +168,32 @@ public actor GuideSourceService {
         }.prefix(max(1, min(limit, 200))))
     }
 
+    public func searchSourceCode(
+        query: String,
+        pathPrefix: String? = nil,
+        commitSHA: String,
+        limit: Int = 40
+    ) async throws -> [GuideSourceCodeMatch] {
+        try await sourcePackStore.search(
+            query: query,
+            pathPrefix: pathPrefix,
+            commitSHA: commitSHA,
+            limit: limit
+        )
+    }
+
     public func readSource(
         path: String,
         startLine: Int,
         endLine: Int,
         commitSHA: String
-    ) async throws -> String {
-        let normalizedPath = try validatedPath(path)
-        guard GuideBuildVersion.isFullSHA(commitSHA) else { throw GuideError.sourceUnavailable }
-        let start = max(1, startLine)
-        let end = min(max(start, endLine), start + 239)
-
-        let tree = try await sourceTree(commitSHA: commitSHA)
-        guard let entry = tree.entries.first(where: { $0.path == normalizedPath && $0.type == "blob" }),
-              (entry.size ?? 0) <= 262_144 else {
-            throw GuideError.sourceUnavailable
-        }
-
-        let url = rawBaseURL
-            .appendingPathComponent("Eric-Terminal")
-            .appendingPathComponent("ETOS-LLM-Studio")
-            .appendingPathComponent(commitSHA.lowercased())
-            .appendingPathComponent(normalizedPath)
-        let (data, response) = try await urlSession.data(from: url)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode),
-              data.count <= 262_144,
-              let text = String(data: data, encoding: .utf8) else {
-            throw GuideError.sourceUnavailable
-        }
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        guard start <= lines.count else { return "" }
-        let upperBound = min(end, lines.count)
-        return (start...upperBound).map { line in
-            "\(line): \(lines[line - 1])"
-        }.joined(separator: "\n")
-    }
-
-    private func validatedPath(_ path: String) throws -> String {
-        let normalized = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        let allowedExtensions = ["swift", "md", "json", "plist", "yml", "yaml", "go", "ts", "js", "vue", "html", "css", "sh"]
-        guard !normalized.isEmpty,
-              !normalized.hasPrefix("/"),
-              !normalized.split(separator: "/").contains(".."),
-              allowedExtensions.contains((normalized as NSString).pathExtension.lowercased()) else {
-            throw GuideError.sourceUnavailable
-        }
-        return normalized
+    ) async throws -> GuideSourceExcerpt {
+        try await sourcePackStore.read(
+            path: path,
+            startLine: startLine,
+            endLine: endLine,
+            commitSHA: commitSHA
+        )
     }
 
     private func validatedDirectoryPath(_ path: String) throws -> String {

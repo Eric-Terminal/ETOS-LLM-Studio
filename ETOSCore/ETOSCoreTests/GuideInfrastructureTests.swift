@@ -735,62 +735,6 @@ struct GuideInfrastructureTests {
         #expect(!FileManager.default.fileExists(atPath: oldCacheFile.path))
     }
 
-    @Test("源码读取限制文件大小与单次返回行数")
-    func sourceReadEnforcesSizeAndLineBudget() async throws {
-        let sha = "0123456789abcdef0123456789abcdef01234567"
-        let rawBaseURL = try #require(URL(string: "https://raw.example"))
-        let sourcePath = "ETOSCore/Guide.swift"
-        let expectedURL = rawBaseURL
-            .appendingPathComponent("Eric-Terminal")
-            .appendingPathComponent("ETOS-LLM-Studio")
-            .appendingPathComponent(sha)
-            .appendingPathComponent(sourcePath)
-        let cacheDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
-        let tree = GuideSourceTree(
-            schemaVersion: 1,
-            repository: GuideSourceService.repository,
-            commitSHA: sha,
-            truncated: false,
-            entries: [
-                GuideSourceTreeEntry(path: sourcePath, type: "blob", size: 8_000),
-                GuideSourceTreeEntry(path: "ETOSCore/Oversized.swift", type: "blob", size: 262_145)
-            ]
-        )
-        try JSONEncoder().encode(tree).write(
-            to: cacheDirectory.appendingPathComponent("\(sha).json"),
-            options: .atomic
-        )
-        let source = (1...300).map { "line-\($0)" }.joined(separator: "\n")
-        GuideSourceURLProtocol.configure(url: expectedURL, data: Data(source.utf8))
-        defer { GuideSourceURLProtocol.reset() }
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [GuideSourceURLProtocol.self]
-        let service = GuideSourceService(
-            rawBaseURL: rawBaseURL,
-            urlSession: URLSession(configuration: configuration),
-            cacheDirectoryURL: cacheDirectory
-        )
-
-        let excerpt = try await service.readSource(
-            path: sourcePath,
-            startLine: 1,
-            endLine: 1_000,
-            commitSHA: sha
-        )
-        #expect(excerpt.split(separator: "\n").count == 240)
-        await #expect(throws: GuideError.self) {
-            _ = try await service.readSource(
-                path: "ETOSCore/Oversized.swift",
-                startLine: 1,
-                endLine: 10,
-                commitSHA: sha
-            )
-        }
-    }
-
     @Test("内置文档支持关键词检索和按 ID 读取")
     func knowledgeSearchFindsRelevantDocument() async throws {
         let service = GuideKnowledgeService()

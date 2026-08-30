@@ -57,6 +57,24 @@ public enum GuideToolCatalog {
         )
     )
 
+    public static let searchSourceCode = InternalToolDefinition(
+        name: "search_source_code",
+        description: "在当前 App 精确版本的源码内容中全文搜索，返回文件路径、行号与单行预览。仅在文档不足时使用，找到位置后再分段读取源码。",
+        parameters: objectSchema(
+            properties: [
+                "query": .dictionary([
+                    "type": .string("string"),
+                    "description": .string("要定位的类型名、函数名、配置键或代码片段")
+                ]),
+                "path_prefix": .dictionary([
+                    "type": .string("string"),
+                    "description": .string("可选的仓库相对目录前缀，用于缩小搜索范围")
+                ])
+            ],
+            required: ["query"]
+        )
+    )
+
     public static let listSourceDirectory = InternalToolDefinition(
         name: "list_source_directory",
         description: "列出当前 App 精确版本源码中某个目录的直接子项。仅在文档不足时使用。",
@@ -73,7 +91,7 @@ public enum GuideToolCatalog {
 
     public static let readSourceFile = InternalToolDefinition(
         name: "read_source_file",
-        description: "读取当前 App 精确版本中的一个源码文件片段。必须先从源码树取得路径。",
+        description: "按行读取当前 App 精确版本中的源码片段，单次最多 240 行；返回总行数和是否还有后续内容。必须先通过源码搜索或目录树取得路径。",
         parameters: objectSchema(
             properties: [
                 "path": .dictionary([
@@ -227,6 +245,7 @@ public enum GuideToolCatalog {
         searchDocuments,
         readDocument,
         searchSourceTree,
+        searchSourceCode,
         listSourceDirectory,
         readSourceFile
     ]

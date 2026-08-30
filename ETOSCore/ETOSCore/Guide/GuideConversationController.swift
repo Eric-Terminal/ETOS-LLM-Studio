@@ -381,6 +381,15 @@ public final class GuideConversationController: ObservableObject {
             let query = try GuideToolArguments.string("query", in: arguments)
             guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
             return try encoded(try await sourceService.searchTree(query: query, commitSHA: sha))
+        case GuideToolCatalog.searchSourceCode.name:
+            let query = try GuideToolArguments.string("query", in: arguments)
+            let pathPrefix = try GuideToolArguments.optionalString("path_prefix", in: arguments)
+            guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
+            return try encoded(try await sourceService.searchSourceCode(
+                query: query,
+                pathPrefix: pathPrefix,
+                commitSHA: sha
+            ))
         case GuideToolCatalog.listSourceDirectory.name:
             let path = try GuideToolArguments.string("path", in: arguments)
             guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
@@ -390,7 +399,12 @@ public final class GuideConversationController: ObservableObject {
             let start = try GuideToolArguments.integer("start_line", in: arguments)
             let end = try GuideToolArguments.integer("end_line", in: arguments)
             guard let sha = GuideBuildVersion.fullCommitSHA() else { throw GuideError.sourceUnavailable }
-            return try await sourceService.readSource(path: path, startLine: start, endLine: end, commitSHA: sha)
+            return try encoded(try await sourceService.readSource(
+                path: path,
+                startLine: start,
+                endLine: end,
+                commitSHA: sha
+            ))
         default:
             return try await contextCoordinator.executeReadTool(call)
         }
