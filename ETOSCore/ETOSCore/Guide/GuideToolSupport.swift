@@ -250,6 +250,13 @@ public enum GuideToolCatalog {
         readSourceFile
     ]
 
+    public static func availableKnowledgeDefinitions(commitSHA: String?) -> [InternalToolDefinition] {
+        guard let commitSHA, GuideBuildVersion.isFullSHA(commitSHA) else {
+            return [currentPageContext, searchDocuments, readDocument]
+        }
+        return knowledgeDefinitions
+    }
+
     public static func objectSchema(
         properties: [String: JSONValue],
         required: [String] = []

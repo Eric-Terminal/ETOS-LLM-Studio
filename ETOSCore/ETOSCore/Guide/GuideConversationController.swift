@@ -9,6 +9,36 @@
 import Foundation
 import Combine
 
+/// 流式正文使用独立观察对象，避免每个文本批次都让模型选择器和输入框重新参与 SwiftUI 更新。
+@MainActor
+public final class GuideStreamingState: ObservableObject {
+    public private(set) var messageID: UUID?
+    public private(set) var content = ""
+    public private(set) var revision = 0
+
+    func begin(messageID: UUID) {
+        objectWillChange.send()
+        self.messageID = messageID
+        content.removeAll(keepingCapacity: true)
+        revision &+= 1
+    }
+
+    func append(_ delta: String, messageID: UUID) {
+        guard self.messageID == messageID, !delta.isEmpty else { return }
+        objectWillChange.send()
+        content.append(contentsOf: delta)
+        revision &+= 1
+    }
+
+    func reset(messageID: UUID? = nil) {
+        guard messageID == nil || self.messageID == messageID else { return }
+        objectWillChange.send()
+        self.messageID = nil
+        content.removeAll(keepingCapacity: false)
+        revision &+= 1
+    }
+}
+
 @MainActor
 public final class GuideConversationController: ObservableObject {
     @Published public private(set) var messages: [GuideConversationMessage] = []
@@ -19,20 +49,20 @@ public final class GuideConversationController: ObservableObject {
     @Published public private(set) var lastErrorMessageID: UUID?
     @Published public private(set) var canRetryWithBuiltIn = false
     @Published public private(set) var isAwaitingToolContinuation = false
-    @Published public private(set) var streamingContentRevision = 0
-
-    /// 流式正文与已完成消息分开保存，避免每批 SSE 都复制、比较整份消息数组。
-    public private(set) var streamingMessageID: UUID?
-    public private(set) var streamingContent = ""
-
     public let sessionID: UUID
     public let router: GuideModelRouter
+    public let streamingState = GuideStreamingState()
+
+    /// 兼容调用方读取当前流式快照；变化通知只由 `streamingState` 发出。
+    public var streamingMessageID: UUID? { streamingState.messageID }
+    public var streamingContent: String { streamingState.content }
 
     private let contextCoordinator: GuideContextCoordinator
     private let knowledgeService: GuideKnowledgeService
     private let sourceService: GuideSourceService
     private var requestHistory: [ChatMessage] = []
     private var currentTask: Task<Void, Never>?
+    private var activeTaskID: UUID?
     private var pendingToolCall: InternalToolCall?
     private var undoProposal: GuideActionProposal?
     private var latestUserMessageID: UUID?
@@ -132,10 +162,13 @@ public final class GuideConversationController: ObservableObject {
     }
 
     public func cancel() {
-        currentTask?.cancel()
+        activeTaskID = nil
+        let task = currentTask
         currentTask = nil
+        task?.cancel()
         commitStreamingContent()
         removeEmptyAssistantMessages()
+        compactRequestHistoryAfterCompletedTurn()
         isResponding = false
         isAwaitingToolContinuation = false
     }
@@ -162,21 +195,28 @@ public final class GuideConversationController: ObservableObject {
         pendingProposal = nil
         pendingToolCall = nil
         isResponding = true
+        let taskID = UUID()
+        activeTaskID = taskID
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let execution = try await contextCoordinator.execute(proposal)
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
                 undoProposal = execution.undoProposal
                 canUndo = execution.undoProposal != nil
                 appendToolResult(call: call, content: execution.message, disposition: .completed)
                 let message = GuideConversationMessage(role: .tool, content: execution.message)
                 messages.append(message)
                 latestTurnMessageIDs.insert(message.id)
-                await runResponseLoop()
+                await runResponseLoop(taskID: taskID)
             } catch is CancellationError {
+                guard activeTaskID == taskID else { return }
                 isResponding = false
+                activeTaskID = nil
+                currentTask = nil
             } catch {
-                finishWithError(error)
+                finishWithError(error, taskID: taskID)
             }
         }
     }
@@ -199,18 +239,27 @@ public final class GuideConversationController: ObservableObject {
               pendingProposal == nil,
               !isAwaitingToolContinuation else { return }
         isResponding = true
+        let taskID = UUID()
+        activeTaskID = taskID
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let execution = try await contextCoordinator.execute(undoProposal)
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
                 self.undoProposal = nil
                 canUndo = false
                 messages.append(GuideConversationMessage(role: .tool, content: execution.message))
                 isResponding = false
+                activeTaskID = nil
+                currentTask = nil
             } catch is CancellationError {
+                guard activeTaskID == taskID else { return }
                 isResponding = false
+                activeTaskID = nil
+                currentTask = nil
             } catch {
-                finishWithError(error)
+                finishWithError(error, taskID: taskID)
             }
         }
     }
@@ -224,14 +273,17 @@ public final class GuideConversationController: ObservableObject {
     public func finishToolCalls() {
         guard isAwaitingToolContinuation, !isResponding else { return }
         isAwaitingToolContinuation = false
+        compactRequestHistoryAfterCompletedTurn()
     }
 
     private func startResponseLoop() {
         isAwaitingToolContinuation = false
         isResponding = true
         resetStreamingContent()
+        let taskID = UUID()
+        activeTaskID = taskID
         currentTask = Task { [weak self] in
-            await self?.runResponseLoop()
+            await self?.runResponseLoop(taskID: taskID)
         }
     }
 
@@ -257,13 +309,22 @@ public final class GuideConversationController: ObservableObject {
         return true
     }
 
-    private func runResponseLoop() async {
+    private func runResponseLoop(taskID: UUID) async {
         do {
+            guard activeTaskID == taskID else { return }
             let resolved = try router.resolvedClient()
+            var unavailableReadTools = Set<String>()
             for _ in 0..<8 {
                 try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
                 let context = try await contextCoordinator.currentContext()
-                let tools = GuideToolCatalog.knowledgeDefinitions + context.descriptor.tools.map(\.definition)
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
+                let tools = (
+                    GuideToolCatalog.availableKnowledgeDefinitions(
+                        commitSHA: GuideBuildVersion.fullCommitSHA()
+                    ) + context.descriptor.tools.map(\.definition)
+                ).filter { !unavailableReadTools.contains($0.name) }
                 let outbound = GuidePromptBuilder.requestMessages(
                     history: requestHistory,
                     context: context,
@@ -279,6 +340,8 @@ public final class GuideConversationController: ObservableObject {
                 let updateClock = ContinuousClock()
                 var lastPublishedAt: ContinuousClock.Instant?
                 for try await event in resolved.client.events(messages: outbound, tools: tools, sessionID: sessionID) {
+                    try Task.checkCancellation()
+                    guard activeTaskID == taskID else { return }
                     switch event {
                     case .contentDelta(let delta):
                         bufferedDelta.append(contentsOf: delta)
@@ -294,6 +357,8 @@ public final class GuideConversationController: ObservableObject {
                         completedMessage = message
                     }
                 }
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return }
                 if completedMessage == nil, !bufferedDelta.isEmpty {
                     publishStreamingContent(bufferedDelta, messageID: placeholderID)
                 }
@@ -312,41 +377,55 @@ public final class GuideConversationController: ObservableObject {
                 let calls = response.toolCalls ?? []
                 if calls.isEmpty {
                     removeEmptyAssistantMessage(id: placeholderID)
+                    compactRequestHistoryAfterCompletedTurn()
                     isResponding = false
+                    activeTaskID = nil
                     currentTask = nil
                     return
                 }
 
                 for call in calls {
                     if isProposalTool(call.toolName, context: context) {
-                        pendingProposal = try await contextCoordinator.makeProposal(for: call)
+                        let proposal = try await contextCoordinator.makeProposal(for: call)
+                        try Task.checkCancellation()
+                        guard activeTaskID == taskID else { return }
+                        pendingProposal = proposal
                         pendingToolCall = call
                         removeEmptyAssistantMessage(id: placeholderID)
                         isResponding = false
+                        activeTaskID = nil
                         currentTask = nil
                         return
                     }
                     do {
                         let result = try await executeReadTool(call)
+                        try Task.checkCancellation()
+                        guard activeTaskID == taskID else { return }
                         appendToolResult(call: call, content: result, disposition: .completed)
                     } catch {
+                        if error is CancellationError { throw error }
+                        guard activeTaskID == taskID else { return }
                         // 知识检索失败属于一次工具结果，交还模型改用文档或换关键词，不能终止整段向导会话。
                         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                         appendToolResult(call: call, content: message, disposition: .failed)
+                        unavailableReadTools.insert(call.toolName)
                     }
                 }
                 removeEmptyAssistantMessage(id: placeholderID)
             }
             isAwaitingToolContinuation = true
             isResponding = false
+            activeTaskID = nil
             currentTask = nil
         } catch is CancellationError {
+            guard activeTaskID == taskID else { return }
             commitStreamingContent()
             removeEmptyAssistantMessages()
             isResponding = false
+            activeTaskID = nil
             currentTask = nil
         } catch {
-            finishWithError(error)
+            finishWithError(error, taskID: taskID)
         }
     }
 
@@ -435,7 +514,7 @@ public final class GuideConversationController: ObservableObject {
 
         var visibleCalls = messages[messageIndex].toolCalls
         var visibleCall = resolvedCall
-        // 工具结果可能包含大段文档或源码；可见消息只保留终态，正文仍仅存在于请求历史中。
+        // 工具结果可能包含大段文档或源码；可见消息只保留终态，原文仅保留到本轮回答完成。
         visibleCall.result = nil
         visibleCalls[callIndex] = visibleCall
         let message = messages[messageIndex]
@@ -456,9 +535,11 @@ public final class GuideConversationController: ObservableObject {
         }
     }
 
-    private func finishWithError(_ error: Error) {
+    private func finishWithError(_ error: Error, taskID: UUID) {
+        guard activeTaskID == taskID else { return }
         commitStreamingContent()
         removeEmptyAssistantMessages()
+        compactRequestHistoryAfterCompletedTurn()
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastError = message
         canRetryWithBuiltIn = router.route == .userModel
@@ -468,19 +549,16 @@ public final class GuideConversationController: ObservableObject {
         latestTurnMessageIDs.insert(errorMessage.id)
         isResponding = false
         isAwaitingToolContinuation = false
+        activeTaskID = nil
         currentTask = nil
     }
 
     private func beginStreaming(messageID: UUID) {
-        streamingMessageID = messageID
-        streamingContent.removeAll(keepingCapacity: true)
-        streamingContentRevision &+= 1
+        streamingState.begin(messageID: messageID)
     }
 
     private func publishStreamingContent(_ content: String, messageID: UUID) {
-        guard streamingMessageID == messageID, !content.isEmpty else { return }
-        streamingContent.append(contentsOf: content)
-        streamingContentRevision &+= 1
+        streamingState.append(content, messageID: messageID)
     }
 
     /// 停止或失败时保留用户已经看到的部分回答；正常完成则由协议终态一次性写入最终消息。
@@ -500,10 +578,19 @@ public final class GuideConversationController: ObservableObject {
     }
 
     private func resetStreamingContent(messageID: UUID? = nil) {
-        guard messageID == nil || streamingMessageID == messageID else { return }
-        streamingMessageID = nil
-        streamingContent.removeAll(keepingCapacity: false)
-        streamingContentRevision &+= 1
+        streamingState.reset(messageID: messageID)
+    }
+
+    /// 工具原文只服务于本轮推理；最终回答形成后保留它只会让下一问重复携带源码和隐藏思考。
+    private func compactRequestHistoryAfterCompletedTurn() {
+        requestHistory.removeAll { message in
+            message.role == .tool || (message.role == .assistant && !(message.toolCalls ?? []).isEmpty)
+        }
+        for index in requestHistory.indices where requestHistory[index].role == .assistant {
+            requestHistory[index].reasoningContent = nil
+            requestHistory[index].reasoningProviderSpecificFields = nil
+            requestHistory[index].providerResponseMetadata = nil
+        }
     }
 
     private func removeEmptyAssistantMessages() {

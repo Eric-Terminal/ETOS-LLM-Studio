@@ -18,6 +18,21 @@ private enum GuideMessageListAnchor: Hashable {
     case bottom
 }
 
+/// 把高频流式通知限制在消息列表，避免输入框跟随每批正文重新进入 TextInputUI 更新链路。
+private struct GuideStreamingObservedContent<Content: View>: View {
+    @ObservedObject var state: GuideStreamingState
+    private let content: () -> Content
+
+    init(state: GuideStreamingState, @ViewBuilder content: @escaping () -> Content) {
+        self.state = state
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+    }
+}
+
 private struct GuideToolCallRow: View {
     let call: InternalToolCall
     let isActive: Bool
@@ -115,8 +130,7 @@ private struct GuideMessageBubble: View, Equatable {
                             .foregroundStyle(.secondary)
                     }
                     if !displayedContent.isEmpty {
-                        messageContent
-                            .textSelection(.enabled)
+                        selectableMessageContent
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if !message.toolCalls.isEmpty {
@@ -169,6 +183,16 @@ private struct GuideMessageBubble: View, Equatable {
             Text(displayedContent)
                 .font(.body)
                 .foregroundStyle(message.role == .error ? .red : .primary)
+        }
+    }
+
+    @ViewBuilder
+    private var selectableMessageContent: some View {
+        if isStreaming {
+            // 流式 Text 每批都会替换；此时启用选区会让 TextInputUI 持续重建候选与交互状态。
+            messageContent
+        } else {
+            messageContent.textSelection(.enabled)
         }
     }
 
@@ -291,85 +315,87 @@ struct GuideConversationView: View {
     }
 
     private var messageList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    if controller.messages.isEmpty {
-                        emptyState
+        GuideStreamingObservedContent(state: controller.streamingState) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        if controller.messages.isEmpty {
+                            emptyState
+                        }
+                        ForEach(controller.messages) { message in
+                            let isStreaming = controller.streamingMessageID == message.id
+                            GuideMessageBubble(
+                                message: message,
+                                displayedContent: isStreaming ? controller.streamingContent : message.content,
+                                compact: compact,
+                                isStreaming: isStreaming,
+                                isToolActive: controller.isResponding && controller.messages.last?.id == message.id,
+                                awaitingToolCallID: controller.pendingProposal?.toolCallID,
+                                isLatestError: isLatestError(message),
+                                canRetryWithBuiltIn: controller.canRetryWithBuiltIn,
+                                canManageModel: router.route == .userModel,
+                                enableMarkdown: appConfig.enableMarkdown,
+                                enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+                                onOpenActions: { messageActionMessage = $0 },
+                                onRetry: { controller.retryLastResponse() },
+                                onRetryWithBuiltIn: {
+                                    controller.retryWithBuiltIn()
+                                    routeRevision &+= 1
+                                },
+                                onManageModel: {
+                                    NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
+                                }
+                            )
+                            .equatable()
+                            .id(message.id)
+                        }
+                        if controller.isResponding {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Color.clear
+                            .frame(height: 1)
+                            .id(GuideMessageListAnchor.bottom)
                     }
-                    ForEach(controller.messages) { message in
-                        let isStreaming = controller.streamingMessageID == message.id
-                        GuideMessageBubble(
-                            message: message,
-                            displayedContent: isStreaming ? controller.streamingContent : message.content,
-                            compact: compact,
-                            isStreaming: isStreaming,
-                            isToolActive: controller.isResponding && controller.messages.last?.id == message.id,
-                            awaitingToolCallID: controller.pendingProposal?.toolCallID,
-                            isLatestError: isLatestError(message),
-                            canRetryWithBuiltIn: controller.canRetryWithBuiltIn,
-                            canManageModel: router.route == .userModel,
-                            enableMarkdown: appConfig.enableMarkdown,
-                            enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
-                            onOpenActions: { messageActionMessage = $0 },
-                            onRetry: { controller.retryLastResponse() },
-                            onRetryWithBuiltIn: {
-                                controller.retryWithBuiltIn()
-                                routeRevision &+= 1
-                            },
-                            onManageModel: {
-                                NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
-                            }
-                        )
-                        .equatable()
-                        .id(message.id)
-                    }
-                    if controller.isResponding {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    Color.clear
-                        .frame(height: 1)
-                        .id(GuideMessageListAnchor.bottom)
-                }
-                .padding()
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 8)
-                    .onChanged { _ in
-                        // 用户开始查看上文后，流式更新不能继续把视口抢回底部。
-                        followsLatestMessage = false
-                    }
-            )
-            .onChange(of: controller.messages.count) { _, count in
-                if count == 0 || controller.messages.last?.role == .user {
-                    followsLatestMessage = true
-                }
-                guard followsLatestMessage else { return }
-                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
-            }
-            .onChange(of: controller.streamingContentRevision) { _, _ in
-                guard followsLatestMessage else { return }
-                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
-            }
-            .onAppear {
-                proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if !followsLatestMessage && !controller.messages.isEmpty {
-                    Button {
-                        followsLatestMessage = true
-                        proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
-                    } label: {
-                        Image(systemName: "arrow.down")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.small)
                     .padding()
-                    .accessibilityLabel(NSLocalizedString("回到最新消息", comment: "向导回到底部按钮"))
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in
+                            // 用户开始查看上文后，流式更新不能继续把视口抢回底部。
+                            followsLatestMessage = false
+                        }
+                )
+                .onChange(of: controller.messages.count) { _, count in
+                    if count == 0 || controller.messages.last?.role == .user {
+                        followsLatestMessage = true
+                    }
+                    guard followsLatestMessage else { return }
+                    proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+                }
+                .onChange(of: controller.streamingState.revision) { _, _ in
+                    guard followsLatestMessage else { return }
+                    proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+                }
+                .onAppear {
+                    proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if !followsLatestMessage && !controller.messages.isEmpty {
+                        Button {
+                            followsLatestMessage = true
+                            proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+                        } label: {
+                            Image(systemName: "arrow.down")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.small)
+                        .padding()
+                        .accessibilityLabel(NSLocalizedString("回到最新消息", comment: "向导回到底部按钮"))
+                    }
                 }
             }
         }

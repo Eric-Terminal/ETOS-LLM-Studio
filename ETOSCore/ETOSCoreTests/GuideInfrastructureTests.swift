@@ -7,6 +7,7 @@
 // ============================================================================
 
 import Foundation
+import Combine
 import Testing
 @testable import ETOSCore
 
@@ -395,6 +396,125 @@ struct GuideInfrastructureTests {
         #expect(controller.streamingMessageID == nil)
         #expect(controller.streamingContent.isEmpty)
         #expect(controller.messages.last?.content == "第二轮正在回答")
+    }
+
+    @MainActor
+    @Test("取消旧请求后立即发送不会让旧任务终态覆盖新请求")
+    func cancelledTaskCannotFinishNewRequest() async throws {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let client = GuideOverlappingCancellationCompletionClient()
+        let router = GuideModelRouter(appConfig: appConfig, builtInClient: client)
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+
+        controller.send("第一问")
+        for _ in 0..<100 where controller.streamingContent != "第1个请求" {
+            await Task.yield()
+        }
+        #expect(controller.streamingContent == "第1个请求")
+
+        controller.cancel()
+        controller.send("第二问")
+        for _ in 0..<200 where controller.streamingContent != "第2个请求" {
+            await Task.yield()
+        }
+        for _ in 0..<20 {
+            await Task.yield()
+        }
+
+        #expect(controller.isResponding)
+        #expect(controller.streamingContent == "第2个请求")
+        #expect(controller.messages.last?.role == .assistant)
+        #expect(controller.messages.last?.content.isEmpty == true)
+        controller.cancel()
+    }
+
+    @MainActor
+    @Test("流式正文变化不会发布整个会话控制器")
+    func streamingUpdatesStayInDedicatedObservationState() async {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let client = GuideControlledStreamingCompletionClient()
+        let router = GuideModelRouter(appConfig: appConfig, builtInClient: client)
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+
+        controller.send("开始流式回答")
+        for _ in 0..<100 where !client.isReady {
+            await Task.yield()
+        }
+
+        var controllerChanges = 0
+        var streamingChanges = 0
+        let controllerObservation = controller.objectWillChange.sink { controllerChanges += 1 }
+        let streamingObservation = controller.streamingState.objectWillChange.sink { streamingChanges += 1 }
+        client.yield(.contentDelta("只刷新消息区"))
+        for _ in 0..<100 where controller.streamingContent.isEmpty {
+            await Task.yield()
+        }
+
+        #expect(controller.streamingContent == "只刷新消息区")
+        #expect(streamingChanges == 1)
+        #expect(controllerChanges == 0)
+        withExtendedLifetime((controllerObservation, streamingObservation)) {}
+        controller.cancel()
+    }
+
+    @MainActor
+    @Test("完成一轮后下一问不会重复携带工具原文与隐藏思考")
+    func completedTurnCompactsTransientToolHistory() async throws {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let client = GuideHistoryRecordingCompletionClient()
+        let router = GuideModelRouter(appConfig: appConfig, builtInClient: client)
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+
+        controller.send("第一问")
+        for _ in 0..<300 where controller.isResponding {
+            await Task.yield()
+        }
+        controller.send("第二问")
+        for _ in 0..<300 where controller.isResponding {
+            await Task.yield()
+        }
+
+        let secondTurnRequest = try #require(client.messages(forRequest: 3))
+        #expect(!secondTurnRequest.contains { $0.role == .tool })
+        #expect(!secondTurnRequest.contains { !($0.toolCalls ?? []).isEmpty })
+        #expect(!secondTurnRequest.contains { $0.reasoningContent != nil })
+        #expect(secondTurnRequest.contains { $0.role == .assistant && $0.content == "第一问已回答" })
     }
 
     @MainActor
@@ -794,6 +914,19 @@ struct GuideInfrastructureTests {
         let document = await service.document(id: "model-request-body")
         #expect(document?.content.contains("原始 JSON") == true)
     }
+
+    @Test("源码工具只在完整提交号可用时暴露")
+    func sourceToolsRequireFullCommitSHA() {
+        let localBuildTools = GuideToolCatalog.availableKnowledgeDefinitions(commitSHA: nil)
+        let releaseTools = GuideToolCatalog.availableKnowledgeDefinitions(
+            commitSHA: String(repeating: "a", count: 40)
+        )
+
+        #expect(!localBuildTools.contains { $0.name == GuideToolCatalog.searchSourceCode.name })
+        #expect(localBuildTools.contains { $0.name == GuideToolCatalog.searchDocuments.name })
+        #expect(releaseTools.contains { $0.name == GuideToolCatalog.searchSourceCode.name })
+        #expect(releaseTools.contains { $0.name == GuideToolCatalog.readSourceFile.name })
+    }
 }
 
 private struct GuideHangingCompletionClient: GuideCompletionClient {
@@ -871,6 +1004,101 @@ private final class GuideSecondTurnHangingCompletionClient: GuideCompletionClien
                 }
             }
             continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
+    }
+}
+
+private final class GuideOverlappingCancellationCompletionClient: GuideCompletionClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requestCount = 0
+    private var continuations: [AsyncThrowingStream<GuideCompletionEvent, Error>.Continuation] = []
+
+    func events(
+        messages _: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        let request = lock.withLock {
+            requestCount += 1
+            return requestCount
+        }
+        return AsyncThrowingStream { continuation in
+            lock.withLock {
+                continuations.append(continuation)
+            }
+            continuation.yield(.contentDelta("第\(request)个请求"))
+        }
+    }
+}
+
+private final class GuideControlledStreamingCompletionClient: GuideCompletionClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: AsyncThrowingStream<GuideCompletionEvent, Error>.Continuation?
+
+    var isReady: Bool {
+        lock.withLock { continuation != nil }
+    }
+
+    func events(
+        messages _: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            lock.withLock {
+                self.continuation = continuation
+            }
+        }
+    }
+
+    func yield(_ event: GuideCompletionEvent) {
+        lock.withLock { continuation }?.yield(event)
+    }
+}
+
+private final class GuideHistoryRecordingCompletionClient: GuideCompletionClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [[ChatMessage]] = []
+
+    func events(
+        messages: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        let request = lock.withLock {
+            requests.append(messages)
+            return requests.count
+        }
+        return AsyncThrowingStream { continuation in
+            switch request {
+            case 1:
+                continuation.yield(.completed(ChatMessage(
+                    role: .assistant,
+                    content: "",
+                    reasoningContent: String(repeating: "隐藏思考", count: 1_000),
+                    toolCalls: [InternalToolCall(
+                        id: "context-1",
+                        toolName: GuideToolCatalog.currentPageContext.name,
+                        arguments: "{}"
+                    )]
+                )))
+            case 2:
+                continuation.yield(.completed(ChatMessage(
+                    role: .assistant,
+                    content: "第一问已回答",
+                    reasoningContent: String(repeating: "最终隐藏思考", count: 1_000)
+                )))
+            default:
+                continuation.yield(.completed(ChatMessage(role: .assistant, content: "第二问已回答")))
+            }
+            continuation.finish()
+        }
+    }
+
+    func messages(forRequest number: Int) -> [ChatMessage]? {
+        lock.withLock {
+            guard requests.indices.contains(number - 1) else { return nil }
+            return requests[number - 1]
         }
     }
 }

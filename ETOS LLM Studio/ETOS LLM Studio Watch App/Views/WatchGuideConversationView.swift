@@ -9,6 +9,21 @@
 import SwiftUI
 import ETOSCore
 
+/// watchOS 同样只让消息片段订阅流式状态，输入框和模型列表不参与逐批重绘。
+private struct WatchGuideStreamingObservedContent<Content: View>: View {
+    @ObservedObject var state: GuideStreamingState
+    private let content: () -> Content
+
+    init(state: GuideStreamingState, @ViewBuilder content: @escaping () -> Content) {
+        self.state = state
+        self.content = content
+    }
+
+    var body: some View {
+        content()
+    }
+}
+
 private struct WatchGuideToolCallRow: View {
     let call: InternalToolCall
     let isActive: Bool
@@ -162,11 +177,13 @@ struct WatchGuideConversationView: View {
                 }
             } else {
                 Section(NSLocalizedString("对话", comment: "手表向导消息分组")) {
-                    ForEach(controller.messages) { message in
-                        messageRow(message)
-                    }
-                    if controller.isResponding {
-                        ProgressView(NSLocalizedString("正在回答…", comment: "手表向导回答状态"))
+                    WatchGuideStreamingObservedContent(state: controller.streamingState) {
+                        ForEach(controller.messages) { message in
+                            messageRow(message)
+                        }
+                        if controller.isResponding {
+                            ProgressView(NSLocalizedString("正在回答…", comment: "手表向导回答状态"))
+                        }
                     }
                 }
             }
