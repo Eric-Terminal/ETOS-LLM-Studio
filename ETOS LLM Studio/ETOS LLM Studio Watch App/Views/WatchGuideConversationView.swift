@@ -9,6 +9,50 @@
 import SwiftUI
 import ETOSCore
 
+private struct WatchGuideToolCallRow: View {
+    let call: InternalToolCall
+    let isActive: Bool
+    let isAwaitingConfirmation: Bool
+
+    private var status: (title: String, systemImage: String, color: Color) {
+        switch call.resultDisposition {
+        case .completed:
+            return (NSLocalizedString("已完成", comment: "手表向导工具调用完成状态"), "checkmark.circle.fill", .green)
+        case .failed:
+            return (NSLocalizedString("失败", comment: "手表向导工具调用失败状态"), "xmark.circle.fill", .red)
+        case .rejected:
+            return (NSLocalizedString("已拒绝", comment: "手表向导工具调用拒绝状态"), "hand.raised.circle.fill", .secondary)
+        case nil where isAwaitingConfirmation:
+            return (NSLocalizedString("等待确认", comment: "手表向导工具调用等待确认状态"), "clock.badge.exclamationmark", .orange)
+        case nil where isActive:
+            return (NSLocalizedString("处理中", comment: "手表向导工具调用处理状态"), "gearshape.2", .blue)
+        case nil:
+            return (NSLocalizedString("已停止", comment: "手表向导工具调用停止状态"), "pause.circle.fill", .secondary)
+        }
+    }
+
+    var body: some View {
+        let status = status
+        HStack(spacing: 6) {
+            if isActive && call.resultDisposition == nil && !isAwaitingConfirmation {
+                ProgressView()
+            } else {
+                Image(systemName: status.systemImage)
+                    .foregroundStyle(status.color)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(call.toolName)
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .lineLimit(2)
+                Text(status.title)
+                    .font(.caption2)
+                    .foregroundStyle(status.color)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct WatchGuideEntryModifier: ViewModifier {
     @EnvironmentObject private var controller: GuideConversationController
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -217,16 +261,27 @@ struct WatchGuideConversationView: View {
     @ViewBuilder
     private func messageContent(_ message: GuideConversationMessage) -> some View {
         if message.role == .assistant {
-            ETAdvancedMarkdownRenderer(
-                content: message.content,
-                preparedContent: nil,
-                enableMarkdown: appConfig.enableMarkdown,
-                isOutgoing: false,
-                enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
-                enableMathRendering: appConfig.enableAdvancedRenderer,
-                customTextColor: nil,
-                isStreaming: isStreaming(message)
-            )
+            VStack(alignment: .leading) {
+                if !message.content.isEmpty {
+                    ETAdvancedMarkdownRenderer(
+                        content: message.content,
+                        preparedContent: nil,
+                        enableMarkdown: appConfig.enableMarkdown,
+                        isOutgoing: false,
+                        enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+                        enableMathRendering: appConfig.enableAdvancedRenderer,
+                        customTextColor: nil,
+                        isStreaming: isStreaming(message)
+                    )
+                }
+                ForEach(message.toolCalls, id: \.id) { call in
+                    WatchGuideToolCallRow(
+                        call: call,
+                        isActive: controller.isResponding && controller.messages.last?.id == message.id,
+                        isAwaitingConfirmation: controller.pendingProposal?.toolCallID == call.id
+                    )
+                }
+            }
         } else {
             Text(message.content)
                 .font(.footnote)

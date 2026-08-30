@@ -50,6 +50,7 @@ struct ContentView: View {
     @State private var newAPIProviderImportNoticeMessage: String?
     @State private var newAPIProviderImportErrorMessage: String?
     @State private var didEnterBackgroundSinceLastActivation = false
+    @State private var settingsGuideContextToken: GuideContextCoordinator.RegistrationToken?
     
     var body: some View {
         contentWithMigrationOverlays
@@ -59,12 +60,17 @@ struct ContentView: View {
             }
             .onAppear {
                 refreshRootToolPermissionAutoPresentationBlocker()
+                updateSettingsGuideContext(isPresented: isNativeSettingsPresented)
             }
             .onDisappear {
                 setRootToolPermissionAutoPresentationBlocked(false)
+                updateSettingsGuideContext(isPresented: false)
             }
             .onChange(of: rootToolPermissionAutoPresentationBlocked) { _, _ in
                 refreshRootToolPermissionAutoPresentationBlocker()
+            }
+            .onChange(of: isNativeSettingsPresented) { _, isPresented in
+                updateSettingsGuideContext(isPresented: isPresented)
             }
             .onChange(of: announcementManager.shouldShowAlert) { _, isPresented in
                 guard !isPresented else { return }
@@ -630,6 +636,42 @@ struct ContentView: View {
 
     private func pushNativeChatIfNeeded() {
         isNativeSettingsPresented = false
+    }
+
+    private func updateSettingsGuideContext(isPresented: Bool) {
+        guard isPresented else {
+            if let settingsGuideContextToken {
+                guideCoordinator.unregister(settingsGuideContextToken)
+                self.settingsGuideContextToken = nil
+            }
+            return
+        }
+        guard settingsGuideContextToken == nil else { return }
+
+        let settingsViewModel = viewModel
+        settingsGuideContextToken = guideCoordinator.register(
+            descriptor: GuidePageDescriptor(
+                id: "settings-navigation",
+                title: NSLocalizedString("设置", comment: "设置导航向导后备上下文标题"),
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+            ),
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "provider_count": GuideSnapshotField(
+                        label: NSLocalizedString("提供商数量", comment: "设置导航向导后备快照字段"),
+                        value: .int(settingsViewModel.providers.count),
+                        access: .readOnly
+                    ),
+                    "selected_model": GuideSnapshotField(
+                        label: NSLocalizedString("当前模型", comment: "设置导航向导后备快照字段"),
+                        value: .string(settingsViewModel.selectedModel?.model.displayName ?? ""),
+                        access: .readOnly
+                    )
+                ])
+            },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
     }
 
     private func scheduleDailyPulsePreparation(after delayNanoseconds: UInt64) {

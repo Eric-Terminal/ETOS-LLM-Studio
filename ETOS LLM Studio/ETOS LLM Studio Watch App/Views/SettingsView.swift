@@ -77,13 +77,38 @@ struct SettingsView: View {
     // MARK: - 视图主体
     
     var body: some View {
-        if embedsInNavigationStack {
-            NavigationStack {
+        Group {
+            if embedsInNavigationStack {
+                NavigationStack {
+                    settingsContent
+                }
+            } else {
                 settingsContent
             }
-        } else {
-            settingsContent
         }
+        // 上下文与入口挂在整个设置导航容器上，进入未单独声明的子页时仍可继续使用向导。
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "watch-settings-root",
+                title: NSLocalizedString("设置", comment: "手表设置向导上下文标题"),
+                documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
+            ),
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "provider_count": GuideSnapshotField(
+                        label: NSLocalizedString("提供商数量", comment: "手表设置向导快照字段"),
+                        value: .int(viewModel.providers.count),
+                        access: .readOnly
+                    ),
+                    "selected_model": GuideSnapshotField(
+                        label: NSLocalizedString("当前模型", comment: "手表设置向导快照字段"),
+                        value: .string(viewModel.selectedModel?.model.displayName ?? ""),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
+        .watchGuideEntry()
     }
 
     private var settingsContent: some View {
@@ -303,27 +328,6 @@ struct SettingsView: View {
 
             }
             .navigationTitle(NSLocalizedString("设置", comment: "设置页标题"))
-            .guidePageContext(
-                descriptor: GuidePageDescriptor(
-                    id: "watch-settings-root",
-                    title: NSLocalizedString("设置", comment: "手表设置向导上下文标题"),
-                    documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
-                ),
-                snapshot: {
-                    GuidePageSnapshot(fields: [
-                        "provider_count": GuideSnapshotField(
-                            label: NSLocalizedString("提供商数量", comment: "手表设置向导快照字段"),
-                            value: .int(viewModel.providers.count),
-                            access: .readOnly
-                        ),
-                        "selected_model": GuideSnapshotField(
-                            label: NSLocalizedString("当前模型", comment: "手表设置向导快照字段"),
-                            value: .string(viewModel.selectedModel?.model.displayName ?? ""),
-                            access: .readOnly
-                        )
-                    ])
-                }
-            )
             .onAppear {
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
                 scheduleSettingsResearchAchievementIfNeeded()
@@ -334,7 +338,6 @@ struct SettingsView: View {
             .onChange(of: viewModel.activatedModelListVersion) { _, _ in
                 ensureSelectedModel(in: viewModel.activatedConversationModels)
             }
-            .watchGuideEntry()
             .navigationDestination(item: $requestedDestination) { destination in
                 switch destination {
                 case .model:

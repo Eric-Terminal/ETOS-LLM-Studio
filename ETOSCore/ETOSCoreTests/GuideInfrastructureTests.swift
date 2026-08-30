@@ -377,6 +377,10 @@ struct GuideInfrastructureTests {
         }
         #expect(controller.isAwaitingToolContinuation)
         #expect(controller.lastError == nil)
+        let visibleCalls = controller.messages.flatMap(\.toolCalls)
+        #expect(visibleCalls.count == 8)
+        #expect(visibleCalls.allSatisfy { $0.resultDisposition == .completed })
+        #expect(visibleCalls.allSatisfy { $0.result == nil })
 
         controller.continueToolCalls()
         for _ in 0..<200 where controller.isResponding {

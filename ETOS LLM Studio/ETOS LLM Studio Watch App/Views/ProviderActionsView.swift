@@ -59,6 +59,32 @@ struct ProviderActionsView: View {
             }
         }
         .navigationTitle(provider.name)
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: GuidePageID(rawValue: "watch-provider-actions-\(provider.id)"),
+                title: provider.name,
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")]
+            ),
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "name": GuideSnapshotField(
+                        label: NSLocalizedString("提供商名称", comment: "手表提供商入口向导快照字段"),
+                        value: .string(provider.name),
+                        access: .readOnly
+                    ),
+                    "base_url": GuideSnapshotField(
+                        label: NSLocalizedString("API 地址", comment: "手表提供商入口向导快照字段"),
+                        value: .string(provider.baseURL),
+                        access: .readOnly
+                    ),
+                    "api_format": GuideSnapshotField(
+                        label: NSLocalizedString("API 格式", comment: "手表提供商入口向导快照字段"),
+                        value: .string(provider.apiFormat),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
     }
 
     private func updateProvider(_ updatedProvider: Provider) {

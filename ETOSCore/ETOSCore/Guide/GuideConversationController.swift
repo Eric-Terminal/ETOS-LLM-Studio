@@ -409,6 +409,29 @@ public final class GuideConversationController: ObservableObject {
             content: content,
             toolCalls: [resolvedCall]
         ))
+        updateVisibleToolCall(resolvedCall)
+    }
+
+    private func updateVisibleToolCall(_ resolvedCall: InternalToolCall) {
+        guard let messageIndex = messages.lastIndex(where: { message in
+            message.toolCalls.contains { $0.id == resolvedCall.id }
+        }),
+        let callIndex = messages[messageIndex].toolCalls.firstIndex(where: { $0.id == resolvedCall.id }) else {
+            return
+        }
+
+        var visibleCalls = messages[messageIndex].toolCalls
+        var visibleCall = resolvedCall
+        // 工具结果可能包含大段文档或源码；可见消息只保留终态，正文仍仅存在于请求历史中。
+        visibleCall.result = nil
+        visibleCalls[callIndex] = visibleCall
+        let message = messages[messageIndex]
+        messages[messageIndex] = GuideConversationMessage(
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            toolCalls: visibleCalls
+        )
     }
 
     private func removeEmptyAssistantMessage(id: UUID) {

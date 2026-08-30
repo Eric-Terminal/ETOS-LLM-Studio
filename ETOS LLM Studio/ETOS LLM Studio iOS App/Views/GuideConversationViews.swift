@@ -18,6 +18,58 @@ private enum GuideMessageListAnchor: Hashable {
     case bottom
 }
 
+private struct GuideToolCallRow: View {
+    let call: InternalToolCall
+    let isActive: Bool
+    let isAwaitingConfirmation: Bool
+
+    private var status: (title: String, systemImage: String, color: Color) {
+        switch call.resultDisposition {
+        case .completed:
+            return (NSLocalizedString("已完成", comment: "向导工具调用完成状态"), "checkmark.circle.fill", .green)
+        case .failed:
+            return (NSLocalizedString("失败", comment: "向导工具调用失败状态"), "xmark.circle.fill", .red)
+        case .rejected:
+            return (NSLocalizedString("已拒绝", comment: "向导工具调用拒绝状态"), "hand.raised.circle.fill", .secondary)
+        case nil where isAwaitingConfirmation:
+            return (NSLocalizedString("等待确认", comment: "向导工具调用等待确认状态"), "clock.badge.exclamationmark", .orange)
+        case nil where isActive:
+            return (NSLocalizedString("处理中", comment: "向导工具调用处理状态"), "gearshape.2", .blue)
+        case nil:
+            return (NSLocalizedString("已停止", comment: "向导工具调用停止状态"), "pause.circle.fill", .secondary)
+        }
+    }
+
+    var body: some View {
+        let status = status
+        HStack(spacing: 8) {
+            if isActive && call.resultDisposition == nil && !isAwaitingConfirmation {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(status.color)
+            } else {
+                Image(systemName: status.systemImage)
+                    .foregroundStyle(status.color)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(call.toolName)
+                    .font(.caption.monospaced().weight(.semibold))
+                    .lineLimit(2)
+                Text(NSLocalizedString("工具调用", comment: "向导工具调用类型标签"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Text(status.title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(status.color)
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct GuideConversationView: View {
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
@@ -174,9 +226,23 @@ struct GuideConversationView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                messageContent(message)
-                    .textSelection(.enabled)
+                if !message.content.isEmpty {
+                    messageContent(message)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if !message.toolCalls.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(message.toolCalls, id: \.id) { call in
+                            GuideToolCallRow(
+                                call: call,
+                                isActive: controller.isResponding && controller.messages.last?.id == message.id,
+                                isAwaitingConfirmation: controller.pendingProposal?.toolCallID == call.id
+                            )
+                        }
+                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if isLatestError(message) {
                     errorRecoveryActions
                 }

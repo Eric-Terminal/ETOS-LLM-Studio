@@ -206,6 +206,32 @@ struct ProviderDetailView: View {
         } message: {
             Text(fetchError ?? NSLocalizedString("发生未知错误。", comment: ""))
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: GuidePageID(rawValue: "watch-provider-models-\(provider.id)"),
+                title: provider.name,
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")]
+            ),
+            snapshot: {
+                GuidePageSnapshot(fields: [
+                    "name": GuideSnapshotField(
+                        label: NSLocalizedString("提供商名称", comment: "手表提供商模型页向导快照字段"),
+                        value: .string(provider.name),
+                        access: .readOnly
+                    ),
+                    "base_url": GuideSnapshotField(
+                        label: NSLocalizedString("API 地址", comment: "手表提供商模型页向导快照字段"),
+                        value: .string(provider.baseURL),
+                        access: .readOnly
+                    ),
+                    "api_format": GuideSnapshotField(
+                        label: NSLocalizedString("API 格式", comment: "手表提供商模型页向导快照字段"),
+                        value: .string(provider.apiFormat),
+                        access: .readOnly
+                    )
+                ])
+            }
+        )
     }
     
     private func fetchAndMergeModels(showsProgress: Bool) async {
