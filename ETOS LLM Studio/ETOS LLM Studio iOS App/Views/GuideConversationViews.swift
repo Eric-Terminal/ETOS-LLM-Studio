@@ -70,6 +70,159 @@ private struct GuideToolCallRow: View {
     }
 }
 
+/// 每条消息独立比较渲染输入，流式增量只允许刷新当前回答，历史 Markdown 不参与重绘。
+private struct GuideMessageBubble: View, Equatable {
+    let message: GuideConversationMessage
+    let displayedContent: String
+    let compact: Bool
+    let isStreaming: Bool
+    let isToolActive: Bool
+    let awaitingToolCallID: String?
+    let isLatestError: Bool
+    let canRetryWithBuiltIn: Bool
+    let canManageModel: Bool
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+    let onOpenActions: (GuideConversationMessage) -> Void
+    let onRetry: () -> Void
+    let onRetryWithBuiltIn: () -> Void
+    let onManageModel: () -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.message == rhs.message
+            && lhs.displayedContent == rhs.displayedContent
+            && lhs.compact == rhs.compact
+            && lhs.isStreaming == rhs.isStreaming
+            && lhs.isToolActive == rhs.isToolActive
+            && lhs.awaitingToolCallID == rhs.awaitingToolCallID
+            && lhs.isLatestError == rhs.isLatestError
+            && lhs.canRetryWithBuiltIn == rhs.canRetryWithBuiltIn
+            && lhs.canManageModel == rhs.canManageModel
+            && lhs.enableMarkdown == rhs.enableMarkdown
+            && lhs.enableAdvancedRenderer == rhs.enableAdvancedRenderer
+    }
+
+    var body: some View {
+        if !displayedContent.isEmpty || !message.toolCalls.isEmpty {
+            let isUser = message.role == .user
+            let shape = TelegramBubbleShape(isOutgoing: isUser)
+            HStack {
+                if isUser { Spacer(minLength: compact ? 28 : 64) }
+                VStack(alignment: .leading, spacing: 6) {
+                    if message.role == .tool {
+                        Label(NSLocalizedString("页面操作", comment: "向导工具消息标签"), systemImage: "checkmark.circle")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if !displayedContent.isEmpty {
+                        messageContent
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if !message.toolCalls.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(message.toolCalls, id: \.id) { call in
+                                GuideToolCallRow(
+                                    call: call,
+                                    isActive: isToolActive,
+                                    isAwaitingConfirmation: awaitingToolCallID == call.id
+                                )
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if isLatestError {
+                        errorRecoveryActions
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(bubbleBackground, in: shape)
+                .contentShape(shape)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .onEnded { _ in
+                            var actionMessage = message
+                            actionMessage.content = displayedContent
+                            onOpenActions(actionMessage)
+                        }
+                )
+                if !isUser { Spacer(minLength: compact ? 20 : 56) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var messageContent: some View {
+        if message.role == .assistant {
+            ETAdvancedMarkdownRenderer(
+                content: displayedContent,
+                preparedContent: nil,
+                enableMarkdown: enableMarkdown,
+                isOutgoing: false,
+                enableAdvancedRenderer: enableAdvancedRenderer,
+                enableMathRendering: enableAdvancedRenderer,
+                customTextColor: nil,
+                isStreaming: isStreaming
+            )
+        } else {
+            Text(displayedContent)
+                .font(.body)
+                .foregroundStyle(message.role == .error ? .red : .primary)
+        }
+    }
+
+    private var bubbleBackground: some ShapeStyle {
+        switch message.role {
+        case .user:
+            return AnyShapeStyle(Color.accentColor.opacity(0.16))
+        case .error:
+            return AnyShapeStyle(Color.red.opacity(0.12))
+        case .tool:
+            return AnyShapeStyle(Color.green.opacity(0.12))
+        case .assistant:
+            return AnyShapeStyle(.thinMaterial)
+        }
+    }
+
+    private var errorRecoveryActions: some View {
+        HStack(spacing: 8) {
+            Button(action: onRetry) {
+                Label(NSLocalizedString("重试", comment: "向导重试按钮"), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .font(.callout.weight(.semibold))
+
+            if canRetryWithBuiltIn || canManageModel {
+                Menu {
+                    if canRetryWithBuiltIn {
+                        Button(action: onRetryWithBuiltIn) {
+                            Label(
+                                NSLocalizedString("使用内置向导重试", comment: "切换内置向导重试按钮"),
+                                systemImage: "sparkles"
+                            )
+                        }
+                    }
+                    if canManageModel {
+                        Button(action: onManageModel) {
+                            Label(
+                                NSLocalizedString("检查模型配置", comment: "向导错误后打开模型管理按钮"),
+                                systemImage: "slider.horizontal.3"
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(NSLocalizedString("更多", comment: "向导错误恢复更多操作"))
+            }
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+}
+
 struct GuideConversationView: View {
     @ObservedObject var controller: GuideConversationController
     @ObservedObject private var router: GuideModelRouter
@@ -145,8 +298,31 @@ struct GuideConversationView: View {
                         emptyState
                     }
                     ForEach(controller.messages) { message in
-                        messageBubble(message)
-                            .id(message.id)
+                        let isStreaming = controller.streamingMessageID == message.id
+                        GuideMessageBubble(
+                            message: message,
+                            displayedContent: isStreaming ? controller.streamingContent : message.content,
+                            compact: compact,
+                            isStreaming: isStreaming,
+                            isToolActive: controller.isResponding && controller.messages.last?.id == message.id,
+                            awaitingToolCallID: controller.pendingProposal?.toolCallID,
+                            isLatestError: isLatestError(message),
+                            canRetryWithBuiltIn: controller.canRetryWithBuiltIn,
+                            canManageModel: router.route == .userModel,
+                            enableMarkdown: appConfig.enableMarkdown,
+                            enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
+                            onOpenActions: { messageActionMessage = $0 },
+                            onRetry: { controller.retryLastResponse() },
+                            onRetryWithBuiltIn: {
+                                controller.retryWithBuiltIn()
+                                routeRevision &+= 1
+                            },
+                            onManageModel: {
+                                NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
+                            }
+                        )
+                        .equatable()
+                        .id(message.id)
                     }
                     if controller.isResponding {
                         ProgressView()
@@ -156,12 +332,10 @@ struct GuideConversationView: View {
                     Color.clear
                         .frame(height: 1)
                         .id(GuideMessageListAnchor.bottom)
-                        .onAppear {
-                            followsLatestMessage = true
-                        }
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 8)
                     .onChanged { _ in
@@ -180,12 +354,23 @@ struct GuideConversationView: View {
                 guard followsLatestMessage else { return }
                 proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
             }
-            .onChange(of: controller.isResponding) { _, isResponding in
-                if isResponding {
-                    followsLatestMessage = true
-                }
-                guard followsLatestMessage else { return }
+            .onAppear {
                 proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !followsLatestMessage && !controller.messages.isEmpty {
+                    Button {
+                        followsLatestMessage = true
+                        proxy.scrollTo(GuideMessageListAnchor.bottom, anchor: .bottom)
+                    } label: {
+                        Image(systemName: "arrow.down")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
+                    .padding()
+                    .accessibilityLabel(NSLocalizedString("回到最新消息", comment: "向导回到底部按钮"))
+                }
             }
         }
     }
@@ -214,95 +399,10 @@ struct GuideConversationView: View {
         return NSLocalizedString("这个页面还没有声明可供向导读取的上下文。", comment: "向导无页面上下文说明")
     }
 
-    @ViewBuilder
-    private func messageBubble(_ message: GuideConversationMessage) -> some View {
-        let isUser = message.role == .user
-        let shape = TelegramBubbleShape(isOutgoing: isUser)
-        HStack {
-            if isUser { Spacer(minLength: compact ? 28 : 64) }
-            VStack(alignment: .leading, spacing: 6) {
-                if message.role == .tool {
-                    Label(NSLocalizedString("页面操作", comment: "向导工具消息标签"), systemImage: "checkmark.circle")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                if !message.content.isEmpty {
-                    messageContent(message)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if !message.toolCalls.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(message.toolCalls, id: \.id) { call in
-                            GuideToolCallRow(
-                                call: call,
-                                isActive: controller.isResponding && controller.messages.last?.id == message.id,
-                                isAwaitingConfirmation: controller.pendingProposal?.toolCallID == call.id
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if isLatestError(message) {
-                    errorRecoveryActions
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(bubbleBackground(for: message.role), in: shape)
-            .contentShape(shape)
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.45)
-                    .onEnded { _ in
-                        messageActionMessage = message
-                    }
-            )
-            if !isUser { Spacer(minLength: compact ? 20 : 56) }
-        }
-    }
-
-    @ViewBuilder
-    private func messageContent(_ message: GuideConversationMessage) -> some View {
-        if message.role == .assistant {
-            ETAdvancedMarkdownRenderer(
-                content: message.content,
-                preparedContent: nil,
-                enableMarkdown: appConfig.enableMarkdown,
-                isOutgoing: false,
-                enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
-                enableMathRendering: appConfig.enableAdvancedRenderer,
-                customTextColor: nil,
-                isStreaming: isStreaming(message)
-            )
-        } else {
-            Text(message.content)
-                .font(.body)
-                .foregroundStyle(message.role == .error ? .red : .primary)
-        }
-    }
-
-    private func isStreaming(_ message: GuideConversationMessage) -> Bool {
-        controller.isResponding
-            && message.role == .assistant
-    }
-
     private func isLatestError(_ message: GuideConversationMessage) -> Bool {
         message.role == .error
             && controller.lastError != nil
             && controller.lastErrorMessageID == message.id
-    }
-
-    private func bubbleBackground(for role: GuideConversationMessage.Role) -> some ShapeStyle {
-        switch role {
-        case .user:
-            return AnyShapeStyle(Color.accentColor.opacity(0.16))
-        case .error:
-            return AnyShapeStyle(Color.red.opacity(0.12))
-        case .tool:
-            return AnyShapeStyle(Color.green.opacity(0.12))
-        case .assistant:
-            return AnyShapeStyle(.thinMaterial)
-        }
     }
 
     private func proposalPreview(_ proposal: GuideActionProposal) -> some View {
@@ -362,50 +462,6 @@ struct GuideConversationView: View {
         }
         .padding()
         .background(Color.secondary.opacity(0.08))
-    }
-
-    private var errorRecoveryActions: some View {
-        HStack(spacing: 8) {
-            Button {
-                controller.retryLastResponse()
-            } label: {
-                Label(NSLocalizedString("重试", comment: "向导重试按钮"), systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .font(.callout.weight(.semibold))
-
-            if controller.canRetryWithBuiltIn || router.route == .userModel {
-                Menu {
-                    if controller.canRetryWithBuiltIn {
-                        Button {
-                            controller.retryWithBuiltIn()
-                            routeRevision &+= 1
-                        } label: {
-                            Label(
-                                NSLocalizedString("使用内置向导重试", comment: "切换内置向导重试按钮"),
-                                systemImage: "sparkles"
-                            )
-                        }
-                    }
-                    if router.route == .userModel {
-                        Button {
-                            NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
-                        } label: {
-                            Label(
-                                NSLocalizedString("检查模型配置", comment: "向导错误后打开模型管理按钮"),
-                                systemImage: "slider.horizontal.3"
-                            )
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(NSLocalizedString("更多", comment: "向导错误恢复更多操作"))
-            }
-            Spacer()
-        }
-        .padding(.top, 2)
     }
 
     private var modelBar: some View {

@@ -53,6 +53,58 @@ private struct WatchGuideToolCallRow: View {
     }
 }
 
+/// watchOS 只刷新正在增长的回答，避免 List 在每批流式文本到达时重建历史 Markdown。
+private struct WatchGuideMessageContent: View, Equatable {
+    let message: GuideConversationMessage
+    let displayedContent: String
+    let isStreaming: Bool
+    let isToolActive: Bool
+    let awaitingToolCallID: String?
+    let enableMarkdown: Bool
+    let enableAdvancedRenderer: Bool
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.message == rhs.message
+            && lhs.displayedContent == rhs.displayedContent
+            && lhs.isStreaming == rhs.isStreaming
+            && lhs.isToolActive == rhs.isToolActive
+            && lhs.awaitingToolCallID == rhs.awaitingToolCallID
+            && lhs.enableMarkdown == rhs.enableMarkdown
+            && lhs.enableAdvancedRenderer == rhs.enableAdvancedRenderer
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if message.role == .assistant {
+            VStack(alignment: .leading) {
+                if !displayedContent.isEmpty {
+                    ETAdvancedMarkdownRenderer(
+                        content: displayedContent,
+                        preparedContent: nil,
+                        enableMarkdown: enableMarkdown,
+                        isOutgoing: false,
+                        enableAdvancedRenderer: enableAdvancedRenderer,
+                        enableMathRendering: enableAdvancedRenderer,
+                        customTextColor: nil,
+                        isStreaming: isStreaming
+                    )
+                }
+                ForEach(message.toolCalls, id: \.id) { call in
+                    WatchGuideToolCallRow(
+                        call: call,
+                        isActive: isToolActive,
+                        isAwaitingConfirmation: awaitingToolCallID == call.id
+                    )
+                }
+            }
+        } else {
+            Text(displayedContent)
+                .font(.footnote)
+                .foregroundStyle(message.role == .error ? .red : .primary)
+        }
+    }
+}
+
 private struct WatchGuideEntryModifier: ViewModifier {
     @EnvironmentObject private var controller: GuideConversationController
     @ObservedObject private var appConfig = AppConfigStore.shared
@@ -234,7 +286,17 @@ struct WatchGuideConversationView: View {
 
     @ViewBuilder
     private func messageRow(_ message: GuideConversationMessage) -> some View {
-        let row = messageContent(message)
+        let isStreaming = controller.streamingMessageID == message.id
+        let row = WatchGuideMessageContent(
+            message: message,
+            displayedContent: isStreaming ? controller.streamingContent : message.content,
+            isStreaming: isStreaming,
+            isToolActive: controller.isResponding && controller.messages.last?.id == message.id,
+            awaitingToolCallID: controller.pendingProposal?.toolCallID,
+            enableMarkdown: appConfig.enableMarkdown,
+            enableAdvancedRenderer: appConfig.enableAdvancedRenderer
+        )
+        .equatable()
 
         row.swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if controller.canRetryMessage(message.id) {
@@ -252,42 +314,6 @@ struct WatchGuideConversationView: View {
                 }
             }
         }
-    }
-
-    @ViewBuilder
-    private func messageContent(_ message: GuideConversationMessage) -> some View {
-        if message.role == .assistant {
-            VStack(alignment: .leading) {
-                if !message.content.isEmpty {
-                    ETAdvancedMarkdownRenderer(
-                        content: message.content,
-                        preparedContent: nil,
-                        enableMarkdown: appConfig.enableMarkdown,
-                        isOutgoing: false,
-                        enableAdvancedRenderer: appConfig.enableAdvancedRenderer,
-                        enableMathRendering: appConfig.enableAdvancedRenderer,
-                        customTextColor: nil,
-                        isStreaming: isStreaming(message)
-                    )
-                }
-                ForEach(message.toolCalls, id: \.id) { call in
-                    WatchGuideToolCallRow(
-                        call: call,
-                        isActive: controller.isResponding && controller.messages.last?.id == message.id,
-                        isAwaitingConfirmation: controller.pendingProposal?.toolCallID == call.id
-                    )
-                }
-            }
-        } else {
-            Text(message.content)
-                .font(.footnote)
-                .foregroundStyle(message.role == .error ? .red : .primary)
-        }
-    }
-
-    private func isStreaming(_ message: GuideConversationMessage) -> Bool {
-        controller.isResponding
-            && message.role == .assistant
     }
 
     private func routeButton(title: String, selected: Bool, action: @escaping () -> Void) -> some View {

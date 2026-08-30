@@ -347,6 +347,57 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("第二轮流式回答不会改写或重新标记历史回答")
+    func secondTurnStreamingIsolatedFromHistory() async throws {
+        let appConfig = AppConfigStore.shared
+        let previousRoute = appConfig.guidePreferredRoute
+        defer { appConfig.guidePreferredRoute = previousRoute }
+
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings", title: "设置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+        let router = GuideModelRouter(
+            appConfig: appConfig,
+            builtInClient: GuideSecondTurnHangingCompletionClient()
+        )
+        router.useBuiltIn()
+        let controller = GuideConversationController(
+            router: router,
+            contextCoordinator: coordinator
+        )
+
+        controller.send("第一轮")
+        for _ in 0..<100 where controller.isResponding {
+            await Task.yield()
+        }
+        let firstAssistant = try #require(controller.messages.last(where: { $0.role == .assistant }))
+
+        controller.send("第二轮")
+        for _ in 0..<100 where controller.streamingContent.isEmpty {
+            await Task.yield()
+        }
+
+        let streamingID = try #require(controller.streamingMessageID)
+        let assistants = controller.messages.filter { $0.role == .assistant }
+        #expect(assistants.count == 2)
+        #expect(firstAssistant.id != streamingID)
+        #expect(firstAssistant.content == "第一轮回答")
+        #expect(assistants.last?.id == streamingID)
+        #expect(assistants.last?.content.isEmpty == true)
+        #expect(controller.streamingContent == "第二轮正在回答")
+
+        controller.cancel()
+        #expect(controller.streamingMessageID == nil)
+        #expect(controller.streamingContent.isEmpty)
+        #expect(controller.messages.last?.content == "第二轮正在回答")
+    }
+
+    @MainActor
     @Test("连续八轮工具调用会请示用户并可继续原会话")
     func toolLoopLimitRequestsContinuation() async {
         let appConfig = AppConfigStore.shared
@@ -787,6 +838,39 @@ private struct GuideEchoCompletionClient: GuideCompletionClient {
         return AsyncThrowingStream { continuation in
             continuation.yield(.completed(ChatMessage(role: .assistant, content: "回答：\(question)")))
             continuation.finish()
+        }
+    }
+}
+
+private final class GuideSecondTurnHangingCompletionClient: GuideCompletionClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requestCount = 0
+
+    func events(
+        messages _: [ChatMessage],
+        tools _: [InternalToolDefinition],
+        sessionID _: UUID
+    ) -> AsyncThrowingStream<GuideCompletionEvent, Error> {
+        let currentRequest = lock.withLock {
+            requestCount += 1
+            return requestCount
+        }
+        return AsyncThrowingStream { continuation in
+            if currentRequest == 1 {
+                continuation.yield(.completed(ChatMessage(role: .assistant, content: "第一轮回答")))
+                continuation.finish()
+                return
+            }
+            let task = Task {
+                continuation.yield(.contentDelta("第二轮正在回答"))
+                do {
+                    try await Task.sleep(nanoseconds: 3_600_000_000_000)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
 }

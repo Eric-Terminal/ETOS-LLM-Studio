@@ -19,9 +19,11 @@ public final class GuideConversationController: ObservableObject {
     @Published public private(set) var lastErrorMessageID: UUID?
     @Published public private(set) var canRetryWithBuiltIn = false
     @Published public private(set) var isAwaitingToolContinuation = false
+    @Published public private(set) var streamingContentRevision = 0
 
-    /// 供界面观察流式正文推进，避免用整份消息数组做等值比较并长期保留上一版字符串。
-    public private(set) var streamingContentRevision = 0
+    /// 流式正文与已完成消息分开保存，避免每批 SSE 都复制、比较整份消息数组。
+    public private(set) var streamingMessageID: UUID?
+    public private(set) var streamingContent = ""
 
     public let sessionID: UUID
     public let router: GuideModelRouter
@@ -132,6 +134,7 @@ public final class GuideConversationController: ObservableObject {
     public func cancel() {
         currentTask?.cancel()
         currentTask = nil
+        commitStreamingContent()
         removeEmptyAssistantMessages()
         isResponding = false
         isAwaitingToolContinuation = false
@@ -226,6 +229,7 @@ public final class GuideConversationController: ObservableObject {
     private func startResponseLoop() {
         isAwaitingToolContinuation = false
         isResponding = true
+        resetStreamingContent()
         currentTask = Task { [weak self] in
             await self?.runResponseLoop()
         }
@@ -268,6 +272,7 @@ public final class GuideConversationController: ObservableObject {
                 let placeholderID = UUID()
                 messages.append(GuideConversationMessage(id: placeholderID, role: .assistant, content: ""))
                 latestTurnMessageIDs.insert(placeholderID)
+                beginStreaming(messageID: placeholderID)
 
                 var completedMessage: ChatMessage?
                 var bufferedDelta = ""
@@ -280,11 +285,8 @@ public final class GuideConversationController: ObservableObject {
                         let now = updateClock.now
                         let shouldPublish = lastPublishedAt == nil
                             || (lastPublishedAt?.duration(to: now) ?? .zero) >= .milliseconds(120)
-                        if shouldPublish,
-                           let index = messages.firstIndex(where: { $0.id == placeholderID }) {
-                            // 上游常把正文切成单字符 SSE；合并发布可避免 SwiftUI 为每个字符重绘整段会话。
-                            messages[index].content.append(contentsOf: bufferedDelta)
-                            streamingContentRevision &+= 1
+                        if shouldPublish {
+                            publishStreamingContent(bufferedDelta, messageID: placeholderID)
                             bufferedDelta.removeAll(keepingCapacity: true)
                             lastPublishedAt = now
                         }
@@ -292,23 +294,19 @@ public final class GuideConversationController: ObservableObject {
                         completedMessage = message
                     }
                 }
-                if completedMessage == nil,
-                   !bufferedDelta.isEmpty,
-                   let index = messages.firstIndex(where: { $0.id == placeholderID }) {
-                    messages[index].content.append(contentsOf: bufferedDelta)
-                    streamingContentRevision &+= 1
+                if completedMessage == nil, !bufferedDelta.isEmpty {
+                    publishStreamingContent(bufferedDelta, messageID: placeholderID)
                 }
                 guard let response = completedMessage else { throw GuideError.invalidResponse }
                 if let index = messages.firstIndex(where: { $0.id == placeholderID }) {
-                    messages[index].content = response.content
                     messages[index] = GuideConversationMessage(
                         id: placeholderID,
                         role: .assistant,
                         content: response.content,
                         toolCalls: response.toolCalls ?? []
                     )
-                    streamingContentRevision &+= 1
                 }
+                resetStreamingContent(messageID: placeholderID)
                 requestHistory.append(response)
 
                 let calls = response.toolCalls ?? []
@@ -343,6 +341,7 @@ public final class GuideConversationController: ObservableObject {
             isResponding = false
             currentTask = nil
         } catch is CancellationError {
+            commitStreamingContent()
             removeEmptyAssistantMessages()
             isResponding = false
             currentTask = nil
@@ -458,6 +457,7 @@ public final class GuideConversationController: ObservableObject {
     }
 
     private func finishWithError(_ error: Error) {
+        commitStreamingContent()
         removeEmptyAssistantMessages()
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         lastError = message
@@ -469,6 +469,41 @@ public final class GuideConversationController: ObservableObject {
         isResponding = false
         isAwaitingToolContinuation = false
         currentTask = nil
+    }
+
+    private func beginStreaming(messageID: UUID) {
+        streamingMessageID = messageID
+        streamingContent.removeAll(keepingCapacity: true)
+        streamingContentRevision &+= 1
+    }
+
+    private func publishStreamingContent(_ content: String, messageID: UUID) {
+        guard streamingMessageID == messageID, !content.isEmpty else { return }
+        streamingContent.append(contentsOf: content)
+        streamingContentRevision &+= 1
+    }
+
+    /// 停止或失败时保留用户已经看到的部分回答；正常完成则由协议终态一次性写入最终消息。
+    private func commitStreamingContent() {
+        guard let messageID = streamingMessageID else { return }
+        if !streamingContent.isEmpty,
+           let index = messages.firstIndex(where: { $0.id == messageID }) {
+            let message = messages[index]
+            messages[index] = GuideConversationMessage(
+                id: message.id,
+                role: message.role,
+                content: streamingContent,
+                toolCalls: message.toolCalls
+            )
+        }
+        resetStreamingContent(messageID: messageID)
+    }
+
+    private func resetStreamingContent(messageID: UUID? = nil) {
+        guard messageID == nil || streamingMessageID == messageID else { return }
+        streamingMessageID = nil
+        streamingContent.removeAll(keepingCapacity: false)
+        streamingContentRevision &+= 1
     }
 
     private func removeEmptyAssistantMessages() {
