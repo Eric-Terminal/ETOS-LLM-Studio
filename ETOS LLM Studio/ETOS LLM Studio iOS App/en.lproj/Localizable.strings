@@ -6956,3 +6956,8 @@
 "无法保存 MCP 服务器配置。" = "Unable to save the MCP Server configuration.";
 "已创建 MCP 服务器“%@”。" = "Created MCP Server “%@”.";
 "替换模型自定义请求体（包含疑似认证字段，请仔细确认）" = "Replace the custom model request body (contains possible authentication fields; review carefully)";
+"试听当前设置" = "Preview Current Settings";
+"这是 TTS 试听。" = "This is a TTS preview.";
+"系统模式使用设备内置语音；云端模式使用下方模型；自动模式优先系统，失败后回退云端。" = "System uses the device voice; Cloud uses the model below; Auto tries System first and falls back to Cloud.";
+"开启“文字转语音”后，该模型会出现在 TTS 模型列表中。" = "Enable Text-to-Speech to show this model in the TTS model list.";
+"TTS 接口类型" = "TTS Interface Type";

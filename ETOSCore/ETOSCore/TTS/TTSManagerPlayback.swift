@@ -46,12 +46,7 @@ extension TTSManager {
                         try await speakBySystem(item.text, settings: settings)
                     } catch {
                         if item.playbackModeOverride == nil, settings.playbackMode == .auto {
-#if os(watchOS)
-                            // watchOS 上系统 TTS 异常时不自动切云端，避免网络不稳定导致长时间卡在加载态。
-                            throw error
-#else
                             try await speakByCloud(item, settings: settings)
-#endif
                         } else {
                             throw error
                         }

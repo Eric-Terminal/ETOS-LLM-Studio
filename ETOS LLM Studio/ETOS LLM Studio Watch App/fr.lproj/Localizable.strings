@@ -6845,3 +6845,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "无法保存 MCP 服务器配置。" = "Impossible d’enregistrer la configuration du serveur MCP.";
 "已创建 MCP 服务器“%@”。" = "Le serveur MCP « %@ » a été créé.";
 "替换模型自定义请求体（包含疑似认证字段，请仔细确认）" = "Remplacer le corps de requête personnalisé du modèle (contient de possibles champs d’authentification ; vérifiez attentivement)";
+"试听当前设置" = "Écouter les réglages actuels";
+"这是 TTS 试听。" = "Ceci est un aperçu TTS.";
+"系统模式使用设备内置语音；云端模式使用下方模型；自动模式优先系统，失败后回退云端。" = "Le mode Système utilise la voix intégrée de l’appareil ; le mode Cloud utilise le modèle ci-dessous ; le mode Automatique essaie d’abord le système, puis bascule vers le cloud en cas d’échec.";
+"开启“文字转语音”后，该模型会出现在 TTS 模型列表中。" = "Activez « Synthèse vocale » pour afficher ce modèle dans la liste des modèles TTS.";
+"TTS 接口类型" = "Type d’interface TTS";

@@ -47,12 +47,8 @@ extension ChatService {
     }
 
     public var activatedTTSModels: [RunnableModel] {
-        // TTS 不再要求模型承担独立类型，保留旧能力标记的优先级以兼容已有配置。
-        let configuredModels = configuredRunnableModels
-        let ttsCapable = configuredModels.filter { $0.model.supportsTextToSpeech }
-        return ttsCapable.isEmpty
-            ? configuredModels.filter { $0.model.isChatModel }
-            : ttsCapable
+        // 只展示用户明确标记的 TTS 模型，避免把普通聊天模型静默当作语音模型调用。
+        activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
     }
 
     public var activatedOCRModels: [RunnableModel] {

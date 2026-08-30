@@ -123,7 +123,7 @@ public extension ModelConnectivityTestResult.Status {
 extension ChatService {
     public func connectivityTestCandidates(for provider: Provider) -> [RunnableModel] {
         provider.models
-            .filter { $0.isActivated && ModelKind.allCases.contains($0.kind) }
+            .filter { $0.isActivated && $0.kind.supportsConnectivityTest }
             .map { RunnableModel(provider: provider, model: $0) }
     }
 

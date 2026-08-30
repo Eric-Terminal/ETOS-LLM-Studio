@@ -56,7 +56,7 @@ struct ModelSettingsView: View {
                 )
             }
 
-            if ModelKind.allCases.contains(model.kind) && !LocalModelProviderBridge.isLocalProvider(provider) {
+            if model.kind.supportsConnectivityTest && !LocalModelProviderBridge.isLocalProvider(provider) {
                 Section {
                     NavigationLink {
                         SingleModelConnectivityTestView(provider: provider, model: model)
@@ -606,18 +606,22 @@ extension ModelSettingsView {
         case .openAICompatible, .openAIResponses:
             break
         }
+        capabilities.append(.textToSpeech)
         return capabilities
     }
 
     private var chatCapabilityFooterText: String {
+        let protocolDescription: String
         switch ProviderAPIFormatFamily(apiFormat: effectiveAPIFormat) {
         case .anthropic:
-            return NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
+            protocolDescription = NSLocalizedString("开启推理或提示缓存能力后会自动添加对应的结构化控制；关闭能力不会删除已经配置的控制。", comment: "模型能力与结构化控制联动说明")
         case .gemini:
-            return NSLocalizedString("Gemini 的提示缓存由服务端自动管理；此选项只记录模型能力，不会添加请求参数或结构化控制。", comment: "Gemini 隐式提示缓存说明")
+            protocolDescription = NSLocalizedString("Gemini 的提示缓存由服务端自动管理；此选项只记录模型能力，不会添加请求参数或结构化控制。", comment: "Gemini 隐式提示缓存说明")
         case .openAICompatible, .openAIResponses:
-            return NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
+            protocolDescription = NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
         }
+        let ttsDescription = NSLocalizedString("开启“文字转语音”后，该模型会出现在 TTS 模型列表中。", comment: "聊天模型 TTS 能力说明")
+        return "\(protocolDescription)\n\(ttsDescription)"
     }
 
     private var availableInputModalities: [ModelModality] {

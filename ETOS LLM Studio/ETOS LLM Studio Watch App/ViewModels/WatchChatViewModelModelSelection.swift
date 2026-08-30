@@ -150,16 +150,21 @@ extension ChatViewModel {
             ttsManager.updateSelectedModel(match)
             return
         }
-        guard !ttsModelIdentifier.isEmpty else {
+
+        guard let fallback = ttsModels.first else {
             selectedTTSModel = nil
+            if !ttsModelIdentifier.isEmpty {
+                persistSpecializedModelIdentifier("", for: .ttsModelIdentifier)
+                ttsModelIdentifier = ""
+            }
             ttsManager.updateSelectedModel(nil)
             return
         }
-        guard !ttsModels.isEmpty else { return }
-        selectedTTSModel = nil
-        persistSpecializedModelIdentifier("", for: .ttsModelIdentifier)
-        ttsModelIdentifier = ""
-        ttsManager.updateSelectedModel(nil)
+
+        selectedTTSModel = fallback
+        persistSpecializedModelIdentifier(fallback.id, for: .ttsModelIdentifier)
+        ttsModelIdentifier = fallback.id
+        ttsManager.updateSelectedModel(fallback)
     }
 
     func syncEmbeddingModelSelection() {

@@ -13,9 +13,11 @@ import SwiftUI
 
 @Suite("模型用途配置")
 struct ModelKindConfigurationTests {
-    @Test("普通模型只提供聊天、图片生成和嵌入三种用途")
-    func exposesOnlyPrimaryModelKinds() {
-        #expect(ModelKind.allCases == [.chat, .image, .embedding])
+    @Test("模型配置提供聊天、图片生成、嵌入和文字转语音用途")
+    func exposesConfigurableModelKinds() {
+        #expect(ModelKind.allCases == [.chat, .image, .embedding, .textToSpeech])
+        #expect(ModelKind.chat.supportsConnectivityTest)
+        #expect(!ModelKind.textToSpeech.supportsConnectivityTest)
     }
 }
 

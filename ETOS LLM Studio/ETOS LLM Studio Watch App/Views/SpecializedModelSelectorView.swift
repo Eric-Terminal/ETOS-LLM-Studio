@@ -96,6 +96,7 @@ struct SpecializedModelSelectorView: View {
                 title: NSLocalizedString("TTS 模型", comment: "TTS model specialized selector title"),
                 options: viewModel.ttsModels,
                 selection: ttsModelBinding,
+                allowEmptySelection: false,
                 footer: NSLocalizedString("用于文字转语音，也可在 TTS 设置中修改。", comment: "Watch TTS model specialized selector footer")
             )
 

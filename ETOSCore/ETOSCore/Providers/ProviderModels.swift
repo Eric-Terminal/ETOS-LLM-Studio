@@ -209,16 +209,26 @@ public enum ModelKind: String, Codable, Hashable, CaseIterable, Sendable {
     case chat
     case image
     case embedding
-    // 旧版本曾把专用服务路由暴露为模型类型；保留原始值只为兼容已有配置。
+    // 重排仍只保留原始值用于兼容；TTS 专用模型需要从普通聊天模型中明确分离。
     case rerank
     case textToSpeech
 
-    /// 普通模型配置只呈现用户能够直接使用的三种用途。
+    /// 模型配置呈现用户能够直接分配的用途；重排暂未接入可执行链路。
     public static let allCases: [ModelKind] = [
         .chat,
         .image,
-        .embedding
+        .embedding,
+        .textToSpeech
     ]
+
+    public var supportsConnectivityTest: Bool {
+        switch self {
+        case .chat, .image, .embedding:
+            return true
+        case .rerank, .textToSpeech:
+            return false
+        }
+    }
 
     public var localizedName: String {
         switch self {
@@ -273,7 +283,8 @@ public enum ModelCapability: String, Codable, Hashable, CaseIterable, Sendable {
     public static let editableCases: [ModelCapability] = [
         .toolCalling,
         .reasoning,
-        .promptCaching
+        .promptCaching,
+        .textToSpeech
     ]
 
     public var localizedName: String {

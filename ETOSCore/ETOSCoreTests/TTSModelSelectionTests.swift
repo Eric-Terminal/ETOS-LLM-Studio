@@ -53,8 +53,8 @@ struct TTSModelSelectionTests {
         }
     }
 
-    @Test("没有旧版 TTS 标记时可从已配置聊天模型中选择")
-    func testActivatedTTSModelsFallsBackToConfiguredChatModels() {
+    @Test("未标记 TTS 能力的聊天模型不会进入 TTS 列表")
+    func testActivatedTTSModelsExcludesUnmarkedChatModels() {
         let backupProviders = ConfigLoader.loadProviders()
         defer { restoreProviders(backupProviders) }
 
@@ -73,9 +73,60 @@ struct TTSModelSelectionTests {
         let service = ChatService()
         let activated = service.activatedTTSModels
 
-        #expect(activated.count == 1)
-        #expect(activated.first?.model.modelName == "gpt-4o")
-        #expect(service.resolveSelectedTTSModel()?.model.modelName == "gpt-4o")
+        #expect(activated.isEmpty)
+        #expect(service.resolveSelectedTTSModel() == nil)
+    }
+
+    @Test("聊天模型可通过 TTS 能力进入专用列表")
+    func testActivatedTTSModelsIncludesChatModelWithCapability() {
+        let backupProviders = ConfigLoader.loadProviders()
+        defer { restoreProviders(backupProviders) }
+
+        clearAllProviders()
+
+        let hybridModel = Model(
+            modelName: "hybrid-audio-model",
+            displayName: "Hybrid Audio",
+            isActivated: true,
+            capabilities: [.toolCalling, .textToSpeech]
+        )
+        let provider = Provider(
+            name: "Hybrid Provider",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [hybridModel]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        let activated = ChatService().activatedTTSModels
+
+        #expect(activated.map(\.model.modelName) == ["hybrid-audio-model"])
+    }
+
+    @Test("未启用的 TTS 模型不会进入专用列表")
+    func testActivatedTTSModelsExcludesInactiveModels() {
+        let backupProviders = ConfigLoader.loadProviders()
+        defer { restoreProviders(backupProviders) }
+
+        clearAllProviders()
+
+        let inactiveModel = Model(
+            modelName: "inactive-tts",
+            displayName: "Inactive TTS",
+            isActivated: false,
+            kind: .textToSpeech
+        )
+        let provider = Provider(
+            name: "Inactive Provider",
+            baseURL: "https://example.com/v1",
+            apiKeys: ["key"],
+            apiFormat: "openai-compatible",
+            models: [inactiveModel]
+        )
+        ConfigLoader.saveProvider(provider)
+
+        #expect(ChatService().activatedTTSModels.isEmpty)
     }
 
     @Test("对话模型列表会排除嵌入等专用用途模型")
