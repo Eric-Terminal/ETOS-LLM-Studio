@@ -236,25 +236,21 @@ struct WatchGuideConversationView: View {
     private func messageRow(_ message: GuideConversationMessage) -> some View {
         let row = messageContent(message)
 
-        if controller.canEditMessage(message.id) || controller.canRetryMessage(message.id) {
-            row.contextMenu {
-                if controller.canEditMessage(message.id) {
-                    Button {
-                        editingMessage = message
-                    } label: {
-                        Label(NSLocalizedString("编辑", comment: "手表编辑向导消息"), systemImage: "pencil")
-                    }
-                }
-                if controller.canRetryMessage(message.id) {
-                    Button {
-                        controller.retryResponse(for: message.id)
-                    } label: {
-                        Label(NSLocalizedString("重试", comment: "手表重试向导回答"), systemImage: "arrow.clockwise")
-                    }
+        row.swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if controller.canRetryMessage(message.id) {
+                Button {
+                    controller.retryResponse(for: message.id)
+                } label: {
+                    Label(NSLocalizedString("重试", comment: "手表重试向导回答"), systemImage: "arrow.clockwise")
                 }
             }
-        } else {
-            row
+            if controller.canEditMessage(message.id) {
+                Button {
+                    editingMessage = message
+                } label: {
+                    Label(NSLocalizedString("编辑", comment: "手表编辑向导消息"), systemImage: "pencil")
+                }
+            }
         }
     }
 
