@@ -72,7 +72,7 @@ struct ModelSettingsView: View {
                 footer: Text(kindFooterText)
             ) {
                 Picker(NSLocalizedString("模型类型", comment: "模型类型选择器标题"), selection: kindBinding) {
-                    ForEach(ModelKind.allCases, id: \.self) { kind in
+                    ForEach(selectableModelKinds, id: \.self) { kind in
                         Text(modelKindSelectionTitle(kind)).tag(kind)
                     }
                 }
@@ -469,6 +469,11 @@ extension ModelSettingsView {
                 model.resetCapabilityShape(for: newKind)
             }
         )
+    }
+
+    private var selectableModelKinds: [ModelKind] {
+        // 旧配置仍可编辑和迁移，但新模型不再把 TTS 当作通用模型用途。
+        ModelKind.allCases.filter { $0 != .textToSpeech || model.kind == .textToSpeech }
     }
 
     private var kindFooterText: String {

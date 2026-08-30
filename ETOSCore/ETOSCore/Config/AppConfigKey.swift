@@ -344,6 +344,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case speechModelIdentifier = "speechModelIdentifier"
     case ttsModelIdentifier = "ttsModelIdentifier"
     case ttsServiceConfiguration = "tts.serviceConfiguration"
+    case ttsCacheNetworkAudioForReplay = "tts.cacheNetworkAudioForReplay"
+    case ttsTextSelectionMode = "tts.textSelectionMode"
     case memoryEmbeddingModelIdentifier = "memoryEmbeddingModelIdentifier"
     case titleGenerationModelIdentifier = "titleGenerationModelIdentifier"
     case dailyPulseModelIdentifier = "dailyPulseModelIdentifier"
@@ -651,6 +653,10 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("")
         case .ttsServiceConfiguration:
             return .text("{\"services\":[],\"selectedServiceID\":null,\"didMigrateLegacyModel\":false}")
+        case .ttsCacheNetworkAudioForReplay:
+            return .bool(false)
+        case .ttsTextSelectionMode:
+            return .text("")
         case .ocrModelIdentifier:
             #if os(watchOS)
             return .text("")

@@ -22,6 +22,61 @@ struct TTSServiceConfigurationTests {
         #expect(!service.isReady)
     }
 
+    @Test("所有网络语音协议都有独立的推荐配置")
+    func testAllProviderKindsHaveRecommendedConfiguration() {
+        let services = TTSProviderKind.allCases.map {
+            TTSServiceConfiguration.defaultConfiguration(for: $0)
+        }
+
+        #expect(services.count == 12)
+        #expect(Set(services.map(\.providerKind)) == Set(TTSProviderKind.allCases))
+        #expect(services.allSatisfy { !$0.name.isEmpty })
+        #expect(services.allSatisfy { !$0.voice.isEmpty || $0.providerKind == .elevenLabs || $0.providerKind == .fishAudio })
+        #expect(services.allSatisfy { $0.advanced != nil })
+        #expect(services.first(where: { $0.providerKind == .gemini })?.modelID == "gemini-3.1-flash-tts-preview")
+        #expect(services.first(where: { $0.providerKind == .miniMax })?.modelID == "speech-2.8-turbo")
+        #expect(services.first(where: { $0.providerKind == .qwenAudio })?.baseURL.hasPrefix("wss://") == true)
+    }
+
+    @Test("供应商字段描述只暴露对应协议支持的参数")
+    func testProviderConfigurationFields() {
+        let azureFields = TTSProviderPresetCatalog.configurationFields(for: .azure)
+        let miniMaxFields = TTSProviderPresetCatalog.configurationFields(for: .miniMax)
+        let fishAudioFields = TTSProviderPresetCatalog.configurationFields(for: .fishAudio)
+
+        #expect(azureFields == [.language])
+        #expect(miniMaxFields.contains(.pronunciationDictionary))
+        #expect(miniMaxFields.contains(.subtitles))
+        #expect(fishAudioFields.contains(.temperature))
+        #expect(fishAudioFields.contains(.topP))
+        #expect(!TTSProviderPresetCatalog.requiresModelID(for: .xAI))
+        #expect(TTSProviderPresetCatalog.requiresModelID(for: .elevenLabs))
+    }
+
+    @Test("旧服务配置缺少高级参数时仍可解码并补上推荐值")
+    func testDecodingLegacyServiceWithoutAdvancedConfiguration() throws {
+        let data = Data("""
+        {
+          "id": "11111111-2222-3333-4444-555555555555",
+          "name": "旧服务",
+          "providerKind": "openai-compatible",
+          "baseURL": "https://example.com/v1",
+          "apiKey": "secret",
+          "modelID": "tts-model",
+          "voice": "voice",
+          "responseFormat": "mp3",
+          "languageType": "Auto",
+          "miniMaxEmotion": "calm"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder().decode(TTSServiceConfiguration.self, from: data)
+
+        #expect(decoded.advanced == nil)
+        #expect(decoded.normalized.advanced == TTSProviderPresetCatalog.recommendedPreset(for: .openAICompatible).advanced)
+        #expect(decoded.normalized.isReady)
+    }
+
     @Test("独立服务完整配置后可以播放")
     func testConfiguredServiceIsReady() {
         var service = TTSServiceConfiguration.defaultConfiguration(for: .qwen)
@@ -35,6 +90,25 @@ struct TTSServiceConfigurationTests {
         #expect(normalized.languageType == "Auto")
     }
 
+    @Test("服务地址必须符合当前协议")
+    func testServiceEndpointSchemeValidation() {
+        var httpService = TTSServiceConfiguration.defaultConfiguration(for: .openAICompatible)
+        httpService.apiKey = "secret"
+        httpService.baseURL = "wss://example.com/v1"
+
+        var webSocketService = TTSServiceConfiguration.defaultConfiguration(for: .qwenAudio)
+        webSocketService.apiKey = "secret"
+        webSocketService.baseURL = "https://example.com/api-ws/v1/inference"
+
+        #expect(!httpService.isReady)
+        #expect(!webSocketService.isReady)
+
+        httpService.baseURL = "https://example.com/v1"
+        webSocketService.baseURL = "wss://example.com/api-ws/v1/inference"
+        #expect(httpService.isReady)
+        #expect(webSocketService.isReady)
+    }
+
     @Test("切换接口类型会保留服务身份并换用对应默认值")
     func testChangingProviderKindPreservesIdentity() {
         let service = TTSServiceConfiguration.defaultConfiguration(for: .openAICompatible)
@@ -43,7 +117,7 @@ struct TTSServiceConfigurationTests {
         #expect(changed.id == service.id)
         #expect(changed.providerKind == .gemini)
         #expect(changed.baseURL == "https://generativelanguage.googleapis.com/v1beta")
-        #expect(changed.modelID == "gemini-2.5-flash-preview-tts")
+        #expect(changed.modelID == "gemini-3.1-flash-tts-preview")
     }
 
     @Test("旧通用模型配置可迁移为独立 TTS 服务")
@@ -240,6 +314,68 @@ struct TTSServiceConfigurationTests {
         let quoted = TTSManager.extractQuotedContentForPlayback(text)
 
         #expect(quoted == "第一句\n第二句")
+    }
+
+    @Test("朗读内容模式会排除中英文括号内容")
+    func testTextSelectionExcludesParentheses() {
+        let selected = TTSManager.selectTextForPlayback(
+            "开头（舞台动作）中间 (aside) 结尾",
+            mode: .outsideParentheses
+        )
+
+        #expect(selected == "开头 中间 结尾")
+    }
+
+    @Test("朗读内容模式可以只保留 Markdown 斜体")
+    func testTextSelectionKeepsItalicContent() {
+        let selected = TTSManager.selectTextForPlayback(
+            "普通 *第一段* 文字与 _第二段_。",
+            mode: .italicOnly
+        )
+
+        #expect(selected == "第一段\n第二段")
+    }
+
+    @Test("朗读内容模式可以移除 Markdown 斜体")
+    func testTextSelectionRemovesItalicContent() {
+        let selected = TTSManager.selectTextForPlayback(
+            "保留 *移除* 结尾",
+            mode: .nonItalic
+        )
+
+        #expect(selected == "保留 结尾")
+    }
+
+    @Test("下划线标识符不会被误判为斜体")
+    func testTextSelectionIgnoresIdentifierUnderscores() {
+        let selected = TTSManager.selectTextForPlayback(
+            "保留 foo_bar_baz",
+            mode: .italicOnly
+        )
+
+        #expect(selected == "保留 foo_bar_baz")
+    }
+
+    @Test("朗读内容模式会识别 HTML 斜体标签")
+    func testTextSelectionKeepsHTMLItalicContent() {
+        let selected = TTSManager.selectTextForPlayback(
+            "普通 <em>第一段</em> 与 <i class=\"voice\">第二段</i>",
+            mode: .italicOnly
+        )
+
+        #expect(selected == "第一段\n第二段")
+    }
+
+    @Test("PCM 网络分片会合并为可导出的 WAV")
+    func testPCMClipsBuildWAVExport() throws {
+        let export = try #require(TTSAudioExportBuilder.make(from: [
+            TTSManager.AudioClip(data: Data([0x01, 0x02]), format: "pcm", sampleRate: 24_000),
+            TTSManager.AudioClip(data: Data([0x03, 0x04]), format: "pcm", sampleRate: 24_000)
+        ]))
+
+        #expect(export.fileExtension == "wav")
+        #expect(String(data: Data(export.data.prefix(4)), encoding: .ascii) == "RIFF")
+        #expect(Data(export.data.suffix(4)) == Data([0x01, 0x02, 0x03, 0x04]))
     }
 
     private func clearAllProviders() {

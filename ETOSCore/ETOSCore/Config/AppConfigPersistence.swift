@@ -448,6 +448,8 @@ extension AppConfigStore {
         case .speechModelIdentifier: return .text(speechModelIdentifier)
         case .ttsModelIdentifier: return .text(ttsModelIdentifier)
         case .ttsServiceConfiguration: return .text(ttsServiceConfiguration)
+        case .ttsCacheNetworkAudioForReplay: return .bool(ttsCacheNetworkAudioForReplay)
+        case .ttsTextSelectionMode: return .text(ttsTextSelectionMode)
         case .memoryEmbeddingModelIdentifier: return .text(memoryEmbeddingModelIdentifier)
         case .titleGenerationModelIdentifier: return .text(titleGenerationModelIdentifier)
         case .dailyPulseModelIdentifier: return .text(dailyPulseModelIdentifier)

@@ -49,18 +49,20 @@ extension TTSManager {
 
     func preprocessText(_ text: String, settings: TTSSettingsSnapshot) -> String {
         let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ")
+        let configuredMode = TTSTextSelectionMode(rawValue: AppConfigStore.shared.ttsTextSelectionMode)
+        let mode = configuredMode ?? (settings.onlyReadQuotedContent ? .quotedOnly : .fullText)
+        let selected = Self.selectTextForPlayback(normalized, mode: mode)
         let stripped: String
 #if os(watchOS)
         if settings.watchUseLightweightPreprocess {
-            stripped = normalized
+            stripped = selected
         } else {
-            stripped = stripMarkdown(normalized)
+            stripped = stripMarkdown(selected)
         }
 #else
-        stripped = stripMarkdown(normalized)
+        stripped = stripMarkdown(selected)
 #endif
-        let quoted = settings.onlyReadQuotedContent ? Self.extractQuotedContentForPlayback(stripped) : stripped
-        return quoted.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func boundedSpeechInput(_ text: String, settings: TTSSettingsSnapshot) -> String {
@@ -137,13 +139,10 @@ extension TTSManager {
 
     func normalizedBaseURL(_ string: String) -> URL {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: trimmed), !trimmed.isEmpty {
-            return url
-        }
-        return URL(string: "https://api.openai.com/v1")!
+        return URL(string: trimmed)!
     }
 
-    func parseSSEPayloads(from data: Data) -> [String] {
+    nonisolated static func parseSSEPayloads(from data: Data) -> [String] {
         guard let text = String(data: data, encoding: .utf8) else { return [] }
         var payloads: [String] = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -186,6 +185,209 @@ extension TTSManager {
 
         if parts.isEmpty { return text }
         return parts.joined(separator: "\n")
+    }
+
+    nonisolated public static func selectTextForPlayback(
+        _ text: String,
+        mode: TTSTextSelectionMode
+    ) -> String {
+        let selected: String
+        switch mode {
+        case .fullText:
+            selected = text
+        case .quotedOnly:
+            selected = extractQuotedContentForPlayback(text)
+        case .outsideParentheses:
+            selected = textOutsideParentheses(text)
+        case .italicOnly:
+            selected = italicRanges(in: text)
+                .map { String(text[$0.content]) }
+                .joined(separator: "\n")
+        case .nonItalic:
+            var result = text
+            for range in italicRanges(in: text).map({ $0.whole }).reversed() {
+                result.removeSubrange(range)
+            }
+            selected = result
+        }
+        let normalized = normalizedSelectedText(selected)
+        if !normalized.isEmpty {
+            return normalized
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private nonisolated static func normalizedSelectedText(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { normalizedInlineWhitespace(String($0)) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private nonisolated static func normalizedInlineWhitespace(_ text: String) -> String {
+        var result = ""
+        var hasPendingSpace = false
+        for character in text {
+            if character.isWhitespace {
+                hasPendingSpace = !result.isEmpty
+            } else {
+                if hasPendingSpace {
+                    result.append(" ")
+                    hasPendingSpace = false
+                }
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    private nonisolated static func textOutsideParentheses(_ text: String) -> String {
+        var result = ""
+        var depth = 0
+        for character in text {
+            if character == "(" || character == "（" {
+                if !result.isEmpty { result.append(" ") }
+                depth += 1
+            } else if (character == ")" || character == "）") && depth > 0 {
+                depth -= 1
+            } else if depth == 0 {
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    private nonisolated static func italicRanges(
+        in text: String
+    ) -> [(whole: Range<String.Index>, content: Range<String.Index>)] {
+        var candidates = markdownItalicRanges(in: text)
+        candidates.append(contentsOf: htmlItalicRanges(in: text))
+        candidates.sort { $0.whole.lowerBound < $1.whole.lowerBound }
+
+        var ranges: [(whole: Range<String.Index>, content: Range<String.Index>)] = []
+        var previousEnd: String.Index?
+        for candidate in candidates {
+            if let previousEnd, candidate.whole.lowerBound < previousEnd {
+                continue
+            }
+            ranges.append(candidate)
+            previousEnd = candidate.whole.upperBound
+        }
+        return ranges
+    }
+
+    private nonisolated static func htmlItalicRanges(
+        in text: String
+    ) -> [(whole: Range<String.Index>, content: Range<String.Index>)] {
+        var ranges: [(whole: Range<String.Index>, content: Range<String.Index>)] = []
+        var cursor = text.startIndex
+
+        while cursor < text.endIndex,
+              let openingStart = text[cursor...].firstIndex(of: "<"),
+              let openingEnd = text[openingStart...].firstIndex(of: ">") {
+            let tagStart = text.index(after: openingStart)
+            let tagBody = text[tagStart..<openingEnd]
+            let tagName = tagBody
+                .split(whereSeparator: { $0.isWhitespace })
+                .first?
+                .lowercased()
+            guard let tagName, tagName == "em" || tagName == "i" else {
+                cursor = text.index(after: openingEnd)
+                continue
+            }
+
+            let contentStart = text.index(after: openingEnd)
+            let closingTag = "</\(tagName)>"
+            guard let closingRange = text.range(
+                of: closingTag,
+                options: .caseInsensitive,
+                range: contentStart..<text.endIndex
+            ) else {
+                cursor = contentStart
+                continue
+            }
+            ranges.append((openingStart..<closingRange.upperBound, contentStart..<closingRange.lowerBound))
+            cursor = closingRange.upperBound
+        }
+
+        return ranges
+    }
+
+    private nonisolated static func markdownItalicRanges(
+        in text: String
+    ) -> [(whole: Range<String.Index>, content: Range<String.Index>)] {
+        var ranges: [(whole: Range<String.Index>, content: Range<String.Index>)] = []
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            let marker = text[index]
+            guard marker == "*" || marker == "_",
+                  isSingleMarkdownMarker(marker, in: text, at: index),
+                  isMarkdownItalicOpening(marker, in: text, at: index) else {
+                index = text.index(after: index)
+                continue
+            }
+            let contentStart = text.index(after: index)
+            guard contentStart < text.endIndex, !text[contentStart].isWhitespace else {
+                index = contentStart
+                continue
+            }
+
+            var closing = contentStart
+            var foundClosing: String.Index?
+            while closing < text.endIndex {
+                if text[closing] == marker,
+                   isSingleMarkdownMarker(marker, in: text, at: closing),
+                   closing > contentStart,
+                   !text[text.index(before: closing)].isWhitespace {
+                    if marker == "_" {
+                        let next = text.index(after: closing)
+                        if next < text.endIndex, isLetterOrNumber(text[next]) {
+                            closing = next
+                            continue
+                        }
+                    }
+                    foundClosing = closing
+                    break
+                }
+                closing = text.index(after: closing)
+            }
+
+            guard let foundClosing else {
+                index = contentStart
+                continue
+            }
+            let wholeEnd = text.index(after: foundClosing)
+            ranges.append((index..<wholeEnd, contentStart..<foundClosing))
+            index = wholeEnd
+        }
+
+        return ranges
+    }
+
+    private nonisolated static func isMarkdownItalicOpening(
+        _ marker: Character,
+        in text: String,
+        at index: String.Index
+    ) -> Bool {
+        let next = text.index(after: index)
+        guard next < text.endIndex, !text[next].isWhitespace else { return false }
+        if marker == "_", index > text.startIndex,
+           isLetterOrNumber(text[text.index(before: index)]) {
+            return false
+        }
+        return true
+    }
+
+    private nonisolated static func isSingleMarkdownMarker(
+        _ marker: Character,
+        in text: String,
+        at index: String.Index
+    ) -> Bool {
+        let previousMatches = index > text.startIndex && text[text.index(before: index)] == marker
+        let next = text.index(after: index)
+        let nextMatches = next < text.endIndex && text[next] == marker
+        return !previousMatches && !nextMatches
     }
 
     nonisolated static func closingQuote(for character: Character, in text: String, at index: String.Index) -> Character? {
@@ -247,42 +449,5 @@ extension TTSManager {
         let length = max(1, text.count)
         let normalizedRate = max(0.2, speechRate)
         return TimeInterval(Double(length) * 0.065 / Double(normalizedRate))
-    }
-}
-
-private extension Float {
-    func ttsClamped(to range: ClosedRange<Float>) -> Float {
-        min(max(self, range.lowerBound), range.upperBound)
-    }
-}
-
-private extension Data {
-    init?(hexString: String) {
-        let cleaned = hexString.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
-        guard cleaned.count % 2 == 0 else { return nil }
-        var bytes = Data(capacity: cleaned.count / 2)
-        var index = cleaned.startIndex
-        while index < cleaned.endIndex {
-            let next = cleaned.index(index, offsetBy: 2)
-            let byteString = cleaned[index..<next]
-            guard let value = UInt8(byteString, radix: 16) else { return nil }
-            bytes.append(value)
-            index = next
-        }
-        self = bytes
-    }
-}
-
-private extension UInt16 {
-    var littleEndianData: Data {
-        var value = self.littleEndian
-        return Data(bytes: &value, count: MemoryLayout<UInt16>.size)
-    }
-}
-
-private extension UInt32 {
-    var littleEndianData: Data {
-        var value = self.littleEndian
-        return Data(bytes: &value, count: MemoryLayout<UInt32>.size)
     }
 }

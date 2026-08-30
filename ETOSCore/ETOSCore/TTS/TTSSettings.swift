@@ -7,12 +7,42 @@ public enum TTSPlaybackMode: String, CaseIterable, Codable, Sendable {
     case auto
 }
 
+public enum TTSTextSelectionMode: String, CaseIterable, Codable, Sendable {
+    case fullText
+    case quotedOnly
+    case outsideParentheses
+    case italicOnly
+    case nonItalic
+
+    public var localizedName: String {
+        switch self {
+        case .fullText:
+            return NSLocalizedString("全部内容", comment: "TTS text selection mode")
+        case .quotedOnly:
+            return NSLocalizedString("仅引号内容", comment: "TTS text selection mode")
+        case .outsideParentheses:
+            return NSLocalizedString("排除括号内容", comment: "TTS text selection mode")
+        case .italicOnly:
+            return NSLocalizedString("仅斜体内容", comment: "TTS text selection mode")
+        case .nonItalic:
+            return NSLocalizedString("排除斜体内容", comment: "TTS text selection mode")
+        }
+    }
+}
+
 public enum TTSProviderKind: String, CaseIterable, Codable, Sendable {
     case openAICompatible = "openai-compatible"
     case gemini
+    case azure
     case qwen
+    case qwenAudio = "qwen-audio"
     case miniMax = "minimax"
     case groq
+    case xAI = "xai"
+    case elevenLabs = "elevenlabs"
+    case miMo = "mimo"
+    case stepFun = "stepfun"
+    case fishAudio = "fish-audio"
 
     public var localizedName: String {
         switch self {
@@ -20,12 +50,26 @@ public enum TTSProviderKind: String, CaseIterable, Codable, Sendable {
             return NSLocalizedString("OpenAI 兼容", comment: "TTS 接口类型")
         case .gemini:
             return NSLocalizedString("Gemini", comment: "TTS 接口类型")
+        case .azure:
+            return NSLocalizedString("Azure", comment: "TTS 接口类型")
         case .qwen:
             return NSLocalizedString("Qwen", comment: "TTS 接口类型")
+        case .qwenAudio:
+            return NSLocalizedString("Qwen Audio", comment: "TTS 接口类型")
         case .miniMax:
             return NSLocalizedString("MiniMax", comment: "TTS 接口类型")
         case .groq:
             return NSLocalizedString("Groq", comment: "TTS 接口类型")
+        case .xAI:
+            return NSLocalizedString("xAI", comment: "TTS 接口类型")
+        case .elevenLabs:
+            return NSLocalizedString("ElevenLabs", comment: "TTS 接口类型")
+        case .miMo:
+            return NSLocalizedString("MiMo", comment: "TTS 接口类型")
+        case .stepFun:
+            return NSLocalizedString("StepFun", comment: "TTS 接口类型")
+        case .fishAudio:
+            return NSLocalizedString("Fish Audio", comment: "TTS 接口类型")
         }
     }
 }

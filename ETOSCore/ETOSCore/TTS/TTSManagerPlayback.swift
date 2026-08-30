@@ -104,16 +104,20 @@ extension TTSManager {
         let candidates = [item] + Array(queue.prefix(prefetchWindowSize))
         scheduleCloudPrefetch(for: candidates, settings: settings)
         let clip = try await resolveCloudClip(for: item, settings: settings)
+        recordNetworkAudioClip(clip, for: item.id)
         try await playAudio(clip: clip, speed: settings.playbackSpeed)
     }
 
     private func resolveCloudClip(for item: QueueItem, settings: TTSSettingsSnapshot) async throws -> AudioClip {
+        if let cachedClip = item.cachedClip {
+            return cachedClip
+        }
         if let task = prefetchTasks[item.id] {
             prefetchTasks.removeValue(forKey: item.id)
             return try await task.value
         }
 
-        let service = try resolveCloudService()
+        let service = try resolveCloudService(item.serviceOverride)
         return try await synthesizeCloudAudio(text: item.text, settings: settings, service: service)
     }
 
@@ -121,14 +125,18 @@ extension TTSManager {
         guard !candidates.isEmpty else { return }
 
         for item in candidates {
+            if item.cachedClip != nil {
+                continue
+            }
             if prefetchTasks[item.id] != nil {
                 continue
             }
 
             let text = item.text
+            let serviceOverride = item.serviceOverride
             prefetchTasks[item.id] = Task { [weak self] in
                 guard let self else { throw CancellationError() }
-                let service = try self.resolveCloudService()
+                let service = try self.resolveCloudService(serviceOverride)
                 return try await self.synthesizeCloudAudio(text: text, settings: settings, service: service)
             }
         }
@@ -141,22 +149,14 @@ extension TTSManager {
         prefetchTasks.removeAll()
     }
 
-    private func resolveCloudService() throws -> TTSServiceConfiguration {
-        guard let service = TTSServiceStore.shared.selectedService else {
+    private func resolveCloudService(_ serviceOverride: TTSServiceConfiguration? = nil) throws -> TTSServiceConfiguration {
+        guard let service = serviceOverride ?? TTSServiceStore.shared.selectedService else {
             throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 服务。", comment: "")])
         }
         guard service.isReady else {
             throw NSError(domain: "TTS", code: -7, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前 TTS 服务配置不完整。", comment: "")])
         }
         return service
-    }
-
-    private var cloudRequestTimeoutSeconds: TimeInterval {
-#if os(watchOS)
-        25
-#else
-        120
-#endif
     }
 
     private func speakBySystem(_ text: String, settings: TTSSettingsSnapshot) async throws {
@@ -277,182 +277,6 @@ extension TTSManager {
     }
 #endif
 
-    private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, service: TTSServiceConfiguration) async throws -> AudioClip {
-        switch service.providerKind {
-        case .openAICompatible:
-            return try await synthesizeOpenAICompatible(text: text, service: service)
-        case .gemini:
-            return try await synthesizeGemini(text: text, service: service)
-        case .qwen:
-            return try await synthesizeQwen(text: text, service: service)
-        case .miniMax:
-            return try await synthesizeMiniMax(text: text, playbackSpeed: settings.playbackSpeed, service: service)
-        case .groq:
-            return try await synthesizeGroq(text: text, service: service)
-        }
-    }
-
-    private func synthesizeOpenAICompatible(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
-        let url = normalizedBaseURL(service.trimmedBaseURL).appendingPathComponent("audio/speech")
-        let payload: [String: Any] = [
-            "model": service.trimmedModelID,
-            "input": text,
-            "voice": service.trimmedVoice,
-            "response_format": service.responseFormat
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = cloudRequestTimeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let data = try await fetchData(for: request)
-        return AudioClip(data: data, format: service.responseFormat.lowercased(), sampleRate: nil)
-    }
-
-    private func synthesizeGroq(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
-        var groqService = service
-        if groqService.responseFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            groqService.responseFormat = "wav"
-        }
-        return try await synthesizeOpenAICompatible(text: text, service: groqService)
-    }
-
-    private func synthesizeGemini(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
-        let baseURL = normalizedBaseURL(service.trimmedBaseURL).absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let url = URL(string: "\(baseURL)/models/\(service.trimmedModelID):generateContent")!
-
-        let payload: [String: Any] = [
-            "contents": [[
-                "parts": [["text": text]]
-            ]],
-            "generationConfig": [
-                "responseModalities": ["AUDIO"],
-                "speechConfig": [
-                    "voiceConfig": [
-                        "prebuiltVoiceConfig": [
-                            "voiceName": service.trimmedVoice
-                        ]
-                    ]
-                ]
-            ],
-            "model": service.trimmedModelID
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = cloudRequestTimeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(service.trimmedAPIKey, forHTTPHeaderField: "x-goog-api-key")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let data = try await fetchData(for: request)
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let firstCandidate = candidates.first,
-              let content = firstCandidate["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let firstPart = parts.first,
-              let inlineData = firstPart["inlineData"] as? [String: Any],
-              let base64 = inlineData["data"] as? String,
-              let pcmData = Data(base64Encoded: base64) else {
-            throw NSError(domain: "TTS", code: -4, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("Gemini TTS 响应解析失败。", comment: "")])
-        }
-
-        return AudioClip(data: pcmData, format: "pcm", sampleRate: 24_000)
-    }
-
-    private func synthesizeQwen(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
-        let url = normalizedBaseURL(service.trimmedBaseURL)
-            .appendingPathComponent("services")
-            .appendingPathComponent("aigc")
-            .appendingPathComponent("multimodal-generation")
-            .appendingPathComponent("generation")
-
-        let payload: [String: Any] = [
-            "model": service.trimmedModelID,
-            "input": [
-                "text": text,
-                "voice": service.trimmedVoice,
-                "language_type": service.languageType
-            ]
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = cloudRequestTimeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("enable", forHTTPHeaderField: "X-DashScope-SSE")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let data = try await fetchData(for: request)
-        let ssePayloads = parseSSEPayloads(from: data)
-        var output = Data()
-        for payload in ssePayloads {
-            guard let payloadData = payload.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-                  let outputObj = json["output"] as? [String: Any],
-                  let audioObj = outputObj["audio"] as? [String: Any],
-                  let audioBase64 = audioObj["data"] as? String,
-                  let chunkData = Data(base64Encoded: audioBase64) else {
-                continue
-            }
-            output.append(chunkData)
-        }
-
-        if output.isEmpty {
-            throw NSError(domain: "TTS", code: -5, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("Qwen TTS 未返回可播放音频。", comment: "")])
-        }
-        return AudioClip(data: output, format: "pcm", sampleRate: 24_000)
-    }
-
-    private func synthesizeMiniMax(text: String, playbackSpeed: Float, service: TTSServiceConfiguration) async throws -> AudioClip {
-        let url = normalizedBaseURL(service.trimmedBaseURL).appendingPathComponent("t2a_v2")
-        let payload: [String: Any] = [
-            "model": service.trimmedModelID,
-            "text": text,
-            "stream": true,
-            "output_format": "hex",
-            "stream_options": ["exclude_aggregated_audio": true],
-            "voice_setting": [
-                "voice_id": service.trimmedVoice,
-                "emotion": service.miniMaxEmotion,
-                "speed": playbackSpeed
-            ]
-        ]
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = cloudRequestTimeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let data = try await fetchData(for: request)
-        let ssePayloads = parseSSEPayloads(from: data)
-        var output = Data()
-
-        for payload in ssePayloads {
-            guard let payloadData = payload.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-                  let dataObj = json["data"] as? [String: Any],
-                  let hexAudio = dataObj["audio"] as? String,
-                  let chunk = Data(hexString: hexAudio) else {
-                continue
-            }
-            output.append(chunk)
-        }
-
-        if output.isEmpty {
-            throw NSError(domain: "TTS", code: -6, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("MiniMax TTS 未返回可播放音频。", comment: "")])
-        }
-
-        return AudioClip(data: output, format: "mp3", sampleRate: 32_000)
-    }
-
 #if canImport(AVFoundation)
     private func playAudio(clip: AudioClip, speed: Float) async throws {
         activeBackend = .cloud
@@ -460,7 +284,11 @@ extension TTSManager {
 
         var audioData = clip.data
         if clip.format.lowercased() == "pcm" {
-            audioData = pcmToWav(pcm: clip.data, sampleRate: clip.sampleRate ?? 24_000)
+            audioData = pcmToWav(
+                pcm: clip.data,
+                sampleRate: clip.sampleRate ?? 24_000,
+                channels: clip.channels
+            )
         }
 
         let player = try AVAudioPlayer(data: audioData)
@@ -606,23 +434,6 @@ extension TTSManager: AVSpeechSynthesizerDelegate {
 private extension Float {
     func ttsClamped(to range: ClosedRange<Float>) -> Float {
         min(max(self, range.lowerBound), range.upperBound)
-    }
-}
-
-private extension Data {
-    init?(hexString: String) {
-        let cleaned = hexString.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
-        guard cleaned.count % 2 == 0 else { return nil }
-        var bytes = Data(capacity: cleaned.count / 2)
-        var index = cleaned.startIndex
-        while index < cleaned.endIndex {
-            let next = cleaned.index(index, offsetBy: 2)
-            let byteString = cleaned[index..<next]
-            guard let value = UInt8(byteString, radix: 16) else { return nil }
-            bytes.append(value)
-            index = next
-        }
-        self = bytes
     }
 }
 

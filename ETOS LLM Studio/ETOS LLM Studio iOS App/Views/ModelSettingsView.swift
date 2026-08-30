@@ -542,13 +542,18 @@ extension ModelSettingsView {
 
     private var modelKindSelector: some View {
         ModelSegmentedSelectionRow(
-            options: ModelKind.allCases,
+            options: selectableModelKinds,
             isSelected: { model.kind == $0 },
             title: modelKindSelectionTitle,
             onSelect: { kind in
                 kindBinding.wrappedValue = kind
             }
         )
+    }
+
+    private var selectableModelKinds: [ModelKind] {
+        // 旧配置仍可编辑和迁移，但新模型不再把 TTS 当作通用模型用途。
+        ModelKind.allCases.filter { $0 != .textToSpeech || model.kind == .textToSpeech }
     }
 
     private func modelKindSelectionTitle(_ kind: ModelKind) -> String {

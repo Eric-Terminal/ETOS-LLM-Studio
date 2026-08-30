@@ -11,10 +11,7 @@ struct TTSSettingsView: View {
     var body: some View {
         Form {
             playbackSection
-
-            if usesCloudPlayback {
-                cloudServicesSection
-            }
+            cloudServicesSection
 
             behaviorSection
             watchCompatibilitySection
@@ -27,6 +24,11 @@ struct TTSSettingsView: View {
                     service: .defaultConfiguration(for: .openAICompatible),
                     selectsAfterSaving: true
                 )
+            }
+        }
+        .toolbar {
+            if serviceStore.services.count > 1 {
+                EditButton()
             }
         }
     }
@@ -88,6 +90,7 @@ struct TTSSettingsView: View {
                     }
                 }
                 .onDelete(perform: deleteServices)
+                .onMove(perform: serviceStore.move)
             }
 
             Button {
@@ -98,7 +101,7 @@ struct TTSSettingsView: View {
         } header: {
             Text(NSLocalizedString("云端语音服务", comment: ""))
         } footer: {
-            Text(NSLocalizedString("每个服务分别保存接口类型、地址、密钥、模型和音色。向左轻扫服务可删除。", comment: "TTS 服务列表说明"))
+            Text(NSLocalizedString("每个服务分别保存协议和语音参数；可进入编辑页试听，使用编辑按钮调整顺序。", comment: "TTS 服务列表说明"))
         }
     }
 
@@ -108,12 +111,23 @@ struct TTSSettingsView: View {
                 NSLocalizedString("后台继续朗读", comment: "TTS 后台继续播放开关"),
                 isOn: $appConfig.continueTTSPlaybackInBackground
             )
+            Toggle(
+                NSLocalizedString("缓存网络音频用于重播", comment: "TTS network audio replay cache"),
+                isOn: $appConfig.ttsCacheNetworkAudioForReplay
+            )
             Toggle(NSLocalizedString("回复完成后自动朗读", comment: ""), isOn: $settingsStore.autoPlayAfterAssistantResponse)
-            Toggle(NSLocalizedString("仅朗读引号内容", comment: ""), isOn: $settingsStore.onlyReadQuotedContent)
+            Picker(NSLocalizedString("朗读内容", comment: "TTS text selection picker"), selection: textSelectionModeBinding) {
+                ForEach(TTSTextSelectionMode.allCases, id: \.self) { mode in
+                    Text(mode.localizedName).tag(mode)
+                }
+            }
         } header: {
             Text(NSLocalizedString("朗读行为", comment: ""))
         } footer: {
-            Text(NSLocalizedString("开启后，正在播放的朗读会在切换到其他 App 后继续，全部内容读完后自动停止；此选项不会自动开始朗读。", comment: "TTS 后台继续播放说明"))
+            VStack(alignment: .leading) {
+                Text(NSLocalizedString("所选内容为空时会朗读全文。", comment: "TTS text selection fallback explanation"))
+                Text(NSLocalizedString("网络音频缓存只保留在内存中，用于重播时避免再次请求；应用退出后会自动清除。", comment: "TTS behavior explanation"))
+            }
         }
     }
 
@@ -196,6 +210,19 @@ struct TTSSettingsView: View {
         )
     }
 
+    private var textSelectionModeBinding: Binding<TTSTextSelectionMode> {
+        Binding(
+            get: {
+                TTSTextSelectionMode(rawValue: appConfig.ttsTextSelectionMode)
+                    ?? (settingsStore.onlyReadQuotedContent ? .quotedOnly : .fullText)
+            },
+            set: { mode in
+                appConfig.ttsTextSelectionMode = mode.rawValue
+                settingsStore.onlyReadQuotedContent = false
+            }
+        )
+    }
+
     private var usesSystemPlayback: Bool {
         settingsStore.playbackMode != .cloud
     }
@@ -229,7 +256,7 @@ private struct TTSServiceRow: View {
         HStack {
             VStack(alignment: .leading) {
                 Text(service.name)
-                Text("\(service.providerKind.localizedName) · \(service.modelID)")
+                Text(serviceSummary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -241,11 +268,17 @@ private struct TTSServiceRow: View {
             }
         }
     }
+
+    private var serviceSummary: String {
+        let detail = service.trimmedModelID.isEmpty ? service.trimmedVoice : service.trimmedModelID
+        return "\(service.providerKind.localizedName) · \(detail)"
+    }
 }
 
 private struct TTSServiceEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var serviceStore = TTSServiceStore.shared
+    @ObservedObject private var ttsManager = TTSManager.shared
     @State private var draft: TTSServiceConfiguration
 
     let selectsAfterSaving: Bool
@@ -268,7 +301,7 @@ private struct TTSServiceEditorView: View {
             }
 
             Section {
-                TextField(NSLocalizedString("Base URL", comment: ""), text: $draft.baseURL)
+                TextField(baseURLFieldLabel, text: $draft.baseURL)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -277,24 +310,28 @@ private struct TTSServiceEditorView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                TextField(NSLocalizedString("模型 ID", comment: ""), text: $draft.modelID)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
+                if fields.contains(.modelID) {
+                    TextField(NSLocalizedString("模型 ID", comment: ""), text: $draft.modelID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
             } header: {
                 Text(NSLocalizedString("接口", comment: "TTS 接口配置分组"))
             } footer: {
-                Text(NSLocalizedString("Base URL 填写版本根路径，应用会按接口类型补全语音合成端点。", comment: "TTS Base URL 说明"))
+                Text(interfaceFooterText)
             }
 
             Section {
-                Picker(NSLocalizedString("推荐 Voice", comment: ""), selection: voicePresetBinding) {
-                    ForEach(voiceOptions, id: \.self) { voice in
-                        Text(voice).tag(voice)
+                if !voiceOptions.isEmpty {
+                    Picker(NSLocalizedString("推荐 Voice", comment: ""), selection: voicePresetBinding) {
+                        ForEach(voiceOptions, id: \.self) { voice in
+                            Text(voice).tag(voice)
+                        }
+                        Text(NSLocalizedString("自定义", comment: "")).tag(Self.customPresetTag)
                     }
-                    Text(NSLocalizedString("自定义", comment: "")).tag(Self.customPresetTag)
                 }
 
-                TextField(NSLocalizedString("Voice", comment: "TTS voice text field"), text: $draft.voice)
+                TextField(voiceFieldLabel, text: $draft.voice)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
@@ -307,11 +344,16 @@ private struct TTSServiceEditorView: View {
                 }
 
                 if !languageTypeOptions.isEmpty {
-                    Picker(NSLocalizedString("语言", comment: ""), selection: $draft.languageType) {
+                    Picker(NSLocalizedString("推荐语言", comment: "TTS recommended language"), selection: languagePresetBinding) {
                         ForEach(languageTypeOptions, id: \.self) { language in
                             Text(language).tag(language)
                         }
+                        Text(NSLocalizedString("自定义", comment: "")).tag(Self.customPresetTag)
                     }
+
+                    TextField(NSLocalizedString("语言", comment: ""), text: $draft.languageType)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
 
                 if !miniMaxEmotionOptions.isEmpty {
@@ -331,6 +373,24 @@ private struct TTSServiceEditorView: View {
                 Text(NSLocalizedString("语音", comment: "TTS 语音参数分组"))
             } footer: {
                 Text(NSLocalizedString("推荐项用于快速填写；Voice 仍可直接输入服务支持的自定义值。", comment: "TTS Voice 说明"))
+            }
+
+            if hasAdvancedFields {
+                advancedParametersSection
+            }
+
+            Section {
+                Button(action: togglePreview) {
+                    Label(
+                        ttsManager.isSpeaking
+                            ? NSLocalizedString("停止试听", comment: "")
+                            : NSLocalizedString("试听此服务", comment: "TTS per-service preview button"),
+                        systemImage: ttsManager.isSpeaking ? "stop.circle" : "speaker.wave.2"
+                    )
+                }
+                .disabled(!draft.isReady)
+            } footer: {
+                Text(NSLocalizedString("试听会直接使用当前页面中的参数，无需先保存。", comment: "TTS draft preview explanation"))
             }
         }
         .navigationTitle(selectsAfterSaving
@@ -353,7 +413,171 @@ private struct TTSServiceEditorView: View {
         }
     }
 
+    @ViewBuilder
+    private var advancedParametersSection: some View {
+        Section {
+            if fields.contains(.workspace) {
+                TextField(NSLocalizedString("Workspace ID", comment: "TTS workspace identifier"), text: advancedBinding(\.workspaceID))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+
+            if fields.contains(.region) {
+                TextField(NSLocalizedString("区域", comment: "TTS service region"), text: advancedBinding(\.region))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+
+            if fields.contains(.instruction) {
+                TextField(
+                    NSLocalizedString("语音指令", comment: "TTS provider instruction"),
+                    text: advancedBinding(\.instruction),
+                    axis: .vertical
+                )
+                .lineLimit(2...5)
+            }
+
+            if fields.contains(.speed) {
+                advancedSlider(
+                    title: NSLocalizedString("合成语速", comment: "TTS synthesis speed"),
+                    value: advancedBinding(\.speed),
+                    range: 0.5...2
+                )
+            }
+
+            if fields.contains(.volume) {
+                advancedSlider(
+                    title: NSLocalizedString("合成音量", comment: "TTS synthesis volume"),
+                    value: advancedBinding(\.volume),
+                    range: 0...10
+                )
+            }
+
+            if fields.contains(.pitch) {
+                Stepper(value: advancedBinding(\.pitch), in: -12...12) {
+                    LabeledContent(NSLocalizedString("合成音调", comment: "TTS synthesis pitch")) {
+                        Text("\(draft.advancedSettings.pitch)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+            }
+
+            if fields.contains(.sampleRate) {
+                Picker(NSLocalizedString("采样率", comment: "TTS audio sample rate"), selection: advancedBinding(\.sampleRate)) {
+                    ForEach([8_000, 16_000, 22_050, 24_000, 32_000, 44_100, 48_000], id: \.self) { value in
+                        Text("\(value) Hz").tag(value)
+                    }
+                }
+            }
+
+            if fields.contains(.bitrate) {
+                Picker(NSLocalizedString("比特率", comment: "TTS audio bitrate"), selection: advancedBinding(\.bitrate)) {
+                    ForEach([32_000, 64_000, 128_000, 256_000], id: \.self) { value in
+                        Text("\(value / 1_000) kbps").tag(value)
+                    }
+                }
+            }
+
+            if fields.contains(.channels) {
+                Picker(NSLocalizedString("声道", comment: "TTS audio channels"), selection: advancedBinding(\.channels)) {
+                    Text(NSLocalizedString("单声道", comment: "Mono audio")).tag(1)
+                    Text(NSLocalizedString("立体声", comment: "Stereo audio")).tag(2)
+                }
+            }
+
+            if fields.contains(.languageBoost) {
+                TextField(NSLocalizedString("语言增强", comment: "MiniMax language boost"), text: advancedBinding(\.languageBoost))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+
+            if fields.contains(.pronunciationDictionary) {
+                TextField(
+                    NSLocalizedString("发音词典（每行一项）", comment: "MiniMax pronunciation dictionary"),
+                    text: pronunciationDictionaryBinding,
+                    axis: .vertical
+                )
+                .lineLimit(2...6)
+            }
+
+            if fields.contains(.temperature) {
+                advancedSlider(
+                    title: NSLocalizedString("随机性", comment: "Fish Audio temperature"),
+                    value: advancedBinding(\.temperature),
+                    range: 0...1
+                )
+            }
+
+            if fields.contains(.topP) {
+                advancedSlider(
+                    title: NSLocalizedString("Top P", comment: "Fish Audio top-p"),
+                    value: advancedBinding(\.topP),
+                    range: 0...1
+                )
+            }
+
+            if fields.contains(.latency) {
+                Picker(NSLocalizedString("延迟模式", comment: "Fish Audio latency mode"), selection: advancedBinding(\.latency)) {
+                    Text(NSLocalizedString("标准", comment: "Normal latency")).tag("normal")
+                    Text(NSLocalizedString("均衡", comment: "Balanced latency")).tag("balanced")
+                    Text(NSLocalizedString("低延迟", comment: "Low latency")).tag("low")
+                }
+            }
+
+            if fields.contains(.subtitles) {
+                Toggle(NSLocalizedString("返回字幕", comment: "TTS subtitle option"), isOn: advancedBinding(\.subtitleEnabled))
+            }
+
+            if fields.contains(.optimizeTextPreview) {
+                Toggle(NSLocalizedString("优化文本预览", comment: "MiMo voice design option"), isOn: advancedBinding(\.optimizeTextPreview))
+            }
+        } header: {
+            Text(NSLocalizedString("高级参数", comment: "TTS advanced parameters section"))
+        } footer: {
+            Text(NSLocalizedString("这些参数由当前语音服务定义；不确定时保持推荐值即可。", comment: "TTS advanced parameters explanation"))
+        }
+    }
+
     private static let customPresetTag = "__custom__"
+
+    private var fields: Set<TTSProviderConfigurationField> {
+        TTSProviderPresetCatalog.configurationFields(for: draft.providerKind)
+    }
+
+    private var hasAdvancedFields: Bool {
+        !fields.subtracting([.modelID, .responseFormat, .language, .emotion]).isEmpty
+    }
+
+    private var baseURLFieldLabel: String {
+        draft.providerKind == .qwenAudio
+            ? NSLocalizedString("WebSocket URL", comment: "TTS WebSocket endpoint")
+            : NSLocalizedString("Base URL", comment: "")
+    }
+
+    private var interfaceFooterText: String {
+        if draft.providerKind == .qwenAudio {
+            return NSLocalizedString(
+                "可直接使用默认 WebSocket 地址；填写 Workspace ID 后会按区域生成专属地址。",
+                comment: "Qwen Audio WebSocket explanation"
+            )
+        }
+        return NSLocalizedString(
+            "Base URL 填写版本根路径，应用会按接口类型补全语音合成端点。",
+            comment: "TTS Base URL 说明"
+        )
+    }
+
+    private var voiceFieldLabel: String {
+        switch draft.providerKind {
+        case .fishAudio:
+            return NSLocalizedString("Reference ID", comment: "Fish Audio reference identifier")
+        case .xAI, .elevenLabs:
+            return NSLocalizedString("Voice ID", comment: "TTS voice identifier")
+        default:
+            return NSLocalizedString("Voice", comment: "TTS voice text field")
+        }
+    }
 
     private var providerKindBinding: Binding<TTSProviderKind> {
         Binding(
@@ -388,11 +612,74 @@ private struct TTSServiceEditorView: View {
         )
     }
 
+    private var languagePresetBinding: Binding<String> {
+        Binding(
+            get: { languageTypeOptions.contains(draft.languageType) ? draft.languageType : Self.customPresetTag },
+            set: { newValue in
+                guard newValue != Self.customPresetTag else { return }
+                draft.languageType = newValue
+            }
+        )
+    }
+
+    private var pronunciationDictionaryBinding: Binding<String> {
+        Binding(
+            get: { draft.advancedSettings.pronunciationDictionary.joined(separator: "\n") },
+            set: { value in
+                var advanced = draft.advancedSettings
+                advanced.pronunciationDictionary = value.components(separatedBy: .newlines)
+                draft.advanced = advanced
+            }
+        )
+    }
+
+    private func advancedBinding<Value>(
+        _ keyPath: WritableKeyPath<TTSServiceAdvancedConfiguration, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { draft.advancedSettings[keyPath: keyPath] },
+            set: { value in
+                var advanced = draft.advancedSettings
+                advanced[keyPath: keyPath] = value
+                draft.advanced = advanced
+            }
+        )
+    }
+
+    private func advancedSlider(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>
+    ) -> some View {
+        VStack(alignment: .leading) {
+            LabeledContent(title) {
+                Text(String(format: "%.2f", value.wrappedValue))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Slider(value: value, in: range)
+        }
+    }
+
     private func applyRecommendedParameters() {
+        let defaults = TTSServiceConfiguration.defaultConfiguration(for: draft.providerKind)
         let preset = TTSProviderPresetCatalog.recommendedPreset(for: draft.providerKind)
+        draft.modelID = defaults.modelID
         draft.voice = preset.voice
         draft.responseFormat = preset.responseFormat
         draft.languageType = preset.languageType
         draft.miniMaxEmotion = preset.miniMaxEmotion
+        draft.advanced = preset.advanced
+    }
+
+    private func togglePreview() {
+        if ttsManager.isSpeaking {
+            ttsManager.stop()
+        } else {
+            ttsManager.preview(
+                NSLocalizedString("这是 TTS 试听。", comment: "TTS preview sample"),
+                using: draft
+            )
+        }
     }
 }

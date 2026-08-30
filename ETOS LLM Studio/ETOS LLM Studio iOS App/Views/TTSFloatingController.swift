@@ -1,10 +1,33 @@
 import SwiftUI
 import ETOSCore
+import UniformTypeIdentifiers
+
+private struct TTSAudioExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.audio] }
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
 
 struct TTSFloatingController: View {
     @ObservedObject private var ttsManager = TTSManager.shared
     @ObservedObject private var settingsStore = TTSSettingsStore.shared
     @State private var keepVisibleAfterFinished: Bool = false
+    @State private var exportDocument: TTSAudioExportDocument?
+    @State private var exportFilename = "tts-audio.mp3"
+    @State private var exportContentType: UTType = .audio
+    @State private var exportError: String?
 
     private let speedSteps: [Float] = [0.8, 1.0, 1.2, 1.5]
     private let panelCornerRadius: CGFloat = 18
@@ -52,6 +75,31 @@ struct TTSFloatingController: View {
             }
             .onChange(of: ttsManager.playbackState.status) { _, _ in
                 updateVisibilityState()
+            }
+            .fileExporter(
+                isPresented: Binding(
+                    get: { exportDocument != nil },
+                    set: { if !$0 { exportDocument = nil } }
+                ),
+                document: exportDocument,
+                contentType: exportContentType,
+                defaultFilename: exportFilename
+            ) { result in
+                if case .failure(let error) = result {
+                    exportError = error.localizedDescription
+                }
+                exportDocument = nil
+            }
+            .alert(
+                NSLocalizedString("无法导出音频", comment: "TTS export error title"),
+                isPresented: Binding(
+                    get: { exportError != nil },
+                    set: { if !$0 { exportError = nil } }
+                )
+            ) {
+                Button(NSLocalizedString("好", comment: "Dismiss alert"), role: .cancel) {}
+            } message: {
+                Text(exportError ?? "")
             }
         }
     }
@@ -122,6 +170,13 @@ struct TTSFloatingController: View {
                     Capsule()
                         .fill(Color.accentColor.opacity(0.2))
                 }
+            }
+
+            if ttsManager.canExportLastNetworkAudio {
+                circularControlButton(systemName: "square.and.arrow.down") {
+                    prepareAudioExport()
+                }
+                .accessibilityLabel(NSLocalizedString("导出朗读音频", comment: "TTS export audio button"))
             }
 
             circularControlButton(systemName: "xmark") {
@@ -246,6 +301,13 @@ struct TTSFloatingController: View {
 
     private func dismissController() {
         keepVisibleAfterFinished = false
+    }
+
+    private func prepareAudioExport() {
+        guard let export = ttsManager.lastNetworkAudioExport() else { return }
+        exportFilename = "tts-audio.\(export.fileExtension)"
+        exportContentType = UTType(filenameExtension: export.fileExtension) ?? .audio
+        exportDocument = TTSAudioExportDocument(data: export.data)
     }
 
     private func updateVisibilityState() {

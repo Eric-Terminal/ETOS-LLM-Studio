@@ -20,6 +20,7 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
     public var responseFormat: String
     public var languageType: String
     public var miniMaxEmotion: String
+    public var advanced: TTSServiceAdvancedConfiguration?
 
     public init(
         id: UUID = UUID(),
@@ -31,7 +32,8 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
         voice: String,
         responseFormat: String,
         languageType: String,
-        miniMaxEmotion: String
+        miniMaxEmotion: String,
+        advanced: TTSServiceAdvancedConfiguration? = nil
     ) {
         self.id = id
         self.name = name
@@ -43,14 +45,27 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
         self.responseFormat = responseFormat
         self.languageType = languageType
         self.miniMaxEmotion = miniMaxEmotion
+        self.advanced = advanced
     }
 
     public var isReady: Bool {
-        !trimmedName.isEmpty &&
-            !trimmedBaseURL.isEmpty &&
-            !trimmedAPIKey.isEmpty &&
-            !trimmedModelID.isEmpty &&
-            !trimmedVoice.isEmpty
+        guard !trimmedName.isEmpty,
+              !trimmedBaseURL.isEmpty,
+              !trimmedAPIKey.isEmpty,
+              hasValidBaseURL else { return false }
+        if TTSProviderPresetCatalog.requiresModelID(for: providerKind), trimmedModelID.isEmpty {
+            return false
+        }
+        if providerKind != .miMo || trimmedModelID != "mimo-v2.5-tts-voicedesign" {
+            guard !trimmedVoice.isEmpty else { return false }
+        }
+        return true
+    }
+
+    private var hasValidBaseURL: Bool {
+        guard let url = URL(string: trimmedBaseURL), url.host != nil else { return false }
+        let allowedSchemes = providerKind == .qwenAudio ? ["ws", "wss"] : ["http", "https"]
+        return url.scheme.map { allowedSchemes.contains($0.lowercased()) } == true
     }
 
     public var trimmedName: String {
@@ -83,7 +98,12 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
         result.responseFormat = responseFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         result.languageType = languageType.trimmingCharacters(in: .whitespacesAndNewlines)
         result.miniMaxEmotion = miniMaxEmotion.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.advanced = advancedSettings.normalized
         return result
+    }
+
+    public var advancedSettings: TTSServiceAdvancedConfiguration {
+        advanced ?? TTSProviderPresetCatalog.recommendedPreset(for: providerKind).advanced
     }
 
     public static func defaultConfiguration(
@@ -102,7 +122,8 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
             voice: preset.voice,
             responseFormat: preset.responseFormat,
             languageType: preset.languageType,
-            miniMaxEmotion: preset.miniMaxEmotion
+            miniMaxEmotion: preset.miniMaxEmotion,
+            advanced: preset.advanced
         )
     }
 
@@ -140,7 +161,13 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
             return (
                 NSLocalizedString("Gemini TTS", comment: "默认 TTS 服务名称"),
                 "https://generativelanguage.googleapis.com/v1beta",
-                "gemini-2.5-flash-preview-tts"
+                "gemini-3.1-flash-tts-preview"
+            )
+        case .azure:
+            return (
+                NSLocalizedString("Azure TTS", comment: "默认 TTS 服务名称"),
+                "",
+                ""
             )
         case .qwen:
             return (
@@ -148,17 +175,53 @@ public struct TTSServiceConfiguration: Codable, Identifiable, Hashable, Sendable
                 "https://dashscope.aliyuncs.com/api/v1",
                 "qwen3-tts-flash"
             )
+        case .qwenAudio:
+            return (
+                NSLocalizedString("Qwen Audio TTS", comment: "默认 TTS 服务名称"),
+                "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+                "qwen-audio-3.0-tts-flash"
+            )
         case .miniMax:
             return (
                 NSLocalizedString("MiniMax TTS", comment: "默认 TTS 服务名称"),
                 "https://api.minimaxi.com/v1",
-                "speech-2.6-turbo"
+                "speech-2.8-turbo"
             )
         case .groq:
             return (
                 NSLocalizedString("Groq TTS", comment: "默认 TTS 服务名称"),
                 "https://api.groq.com/openai/v1",
                 "canopylabs/orpheus-v1-english"
+            )
+        case .xAI:
+            return (
+                NSLocalizedString("xAI TTS", comment: "默认 TTS 服务名称"),
+                "https://api.x.ai/v1",
+                ""
+            )
+        case .elevenLabs:
+            return (
+                NSLocalizedString("ElevenLabs TTS", comment: "默认 TTS 服务名称"),
+                "https://api.elevenlabs.io",
+                "eleven_multilingual_v2"
+            )
+        case .miMo:
+            return (
+                NSLocalizedString("MiMo TTS", comment: "默认 TTS 服务名称"),
+                "https://api.xiaomimimo.com/v1",
+                "mimo-v2.5-tts"
+            )
+        case .stepFun:
+            return (
+                NSLocalizedString("StepFun TTS", comment: "默认 TTS 服务名称"),
+                "https://api.stepfun.com/v1",
+                "stepaudio-2.5-tts"
+            )
+        case .fishAudio:
+            return (
+                NSLocalizedString("Fish Audio TTS", comment: "默认 TTS 服务名称"),
+                "https://api.fish.audio",
+                "s2.1-pro"
             )
         }
     }
@@ -236,6 +299,20 @@ public final class TTSServiceStore: ObservableObject {
         if selectedServiceID == serviceID {
             selectedServiceID = services.first?.id
         }
+        persistCurrentState(didMigrateLegacyModel: true)
+    }
+
+    public func move(from source: IndexSet, to destination: Int) {
+        let movingServices = source.compactMap { index in
+            services.indices.contains(index) ? services[index] : nil
+        }
+        guard !movingServices.isEmpty else { return }
+        for index in source.sorted(by: >) where services.indices.contains(index) {
+            services.remove(at: index)
+        }
+        let removedBeforeDestination = source.filter { $0 < destination }.count
+        let insertionIndex = min(max(0, destination - removedBeforeDestination), services.count)
+        services.insert(contentsOf: movingServices, at: insertionIndex)
         persistCurrentState(didMigrateLegacyModel: true)
     }
 

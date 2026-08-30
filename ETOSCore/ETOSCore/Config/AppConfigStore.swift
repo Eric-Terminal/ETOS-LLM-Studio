@@ -246,6 +246,12 @@ public final class AppConfigStore: ObservableObject {
     @Published public var speechModelIdentifier: String { didSet { write(.speechModelIdentifier, speechModelIdentifier) } }
     @Published public var ttsModelIdentifier: String { didSet { write(.ttsModelIdentifier, ttsModelIdentifier) } }
     @Published public var ttsServiceConfiguration: String { didSet { write(.ttsServiceConfiguration, ttsServiceConfiguration) } }
+    @Published public var ttsCacheNetworkAudioForReplay: Bool {
+        didSet { write(.ttsCacheNetworkAudioForReplay, ttsCacheNetworkAudioForReplay) }
+    }
+    @Published public var ttsTextSelectionMode: String {
+        didSet { write(.ttsTextSelectionMode, ttsTextSelectionMode) }
+    }
     @Published public var memoryEmbeddingModelIdentifier: String { didSet { write(.memoryEmbeddingModelIdentifier, memoryEmbeddingModelIdentifier) } }
     @Published public var titleGenerationModelIdentifier: String { didSet { write(.titleGenerationModelIdentifier, titleGenerationModelIdentifier) } }
     @Published public var dailyPulseModelIdentifier: String { didSet { write(.dailyPulseModelIdentifier, dailyPulseModelIdentifier) } }
@@ -662,6 +668,8 @@ public final class AppConfigStore: ObservableObject {
         speechModelIdentifier = Self.textValue(.speechModelIdentifier, userDefaults: userDefaults)
         ttsModelIdentifier = Self.textValue(.ttsModelIdentifier, userDefaults: userDefaults)
         ttsServiceConfiguration = Self.textValue(.ttsServiceConfiguration, userDefaults: userDefaults)
+        ttsCacheNetworkAudioForReplay = Self.boolValue(.ttsCacheNetworkAudioForReplay, userDefaults: userDefaults)
+        ttsTextSelectionMode = Self.textValue(.ttsTextSelectionMode, userDefaults: userDefaults)
         memoryEmbeddingModelIdentifier = Self.textValue(.memoryEmbeddingModelIdentifier, userDefaults: userDefaults)
         titleGenerationModelIdentifier = Self.textValue(.titleGenerationModelIdentifier, userDefaults: userDefaults)
         dailyPulseModelIdentifier = Self.textValue(.dailyPulseModelIdentifier, userDefaults: userDefaults)

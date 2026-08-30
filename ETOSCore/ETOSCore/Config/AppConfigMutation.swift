@@ -123,6 +123,7 @@ extension AppConfigStore {
         case .backgroundGenerationKeepAliveEnabled: backgroundGenerationKeepAliveEnabled = value
         case .backgroundGenerationAudioKeepAliveEnabled: backgroundGenerationAudioKeepAliveEnabled = value
         case .continueTTSPlaybackInBackground: continueTTSPlaybackInBackground = value
+        case .ttsCacheNetworkAudioForReplay: ttsCacheNetworkAudioForReplay = value
         case .enableBackgroundReplyNotification: enableBackgroundReplyNotification = value
         case .hasRequestedBackgroundReplyNotificationPermission: hasRequestedBackgroundReplyNotificationPermission = value
         case .hasRequestedBackgroundReplyNotificationPermissionWatch: hasRequestedBackgroundReplyNotificationPermissionWatch = value
@@ -246,6 +247,7 @@ extension AppConfigStore {
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
         case .ttsServiceConfiguration: ttsServiceConfiguration = value
+        case .ttsTextSelectionMode: ttsTextSelectionMode = value
         case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value
         case .titleGenerationModelIdentifier: titleGenerationModelIdentifier = value
         case .dailyPulseModelIdentifier: dailyPulseModelIdentifier = value
