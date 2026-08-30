@@ -113,8 +113,8 @@ extension TTSManager {
             return try await task.value
         }
 
-        let model = try resolveCloudModel()
-        return try await synthesizeCloudAudio(text: item.text, settings: settings, model: model)
+        let service = try resolveCloudService()
+        return try await synthesizeCloudAudio(text: item.text, settings: settings, service: service)
     }
 
     private func scheduleCloudPrefetch(for candidates: [QueueItem], settings: TTSSettingsSnapshot) {
@@ -128,8 +128,8 @@ extension TTSManager {
             let text = item.text
             prefetchTasks[item.id] = Task { [weak self] in
                 guard let self else { throw CancellationError() }
-                let model = try self.resolveCloudModel()
-                return try await self.synthesizeCloudAudio(text: text, settings: settings, model: model)
+                let service = try self.resolveCloudService()
+                return try await self.synthesizeCloudAudio(text: text, settings: settings, service: service)
             }
         }
     }
@@ -141,11 +141,14 @@ extension TTSManager {
         prefetchTasks.removeAll()
     }
 
-    private func resolveCloudModel() throws -> RunnableModel {
-        guard let model = selectedModel ?? ChatService.shared.resolveSelectedTTSModel() else {
-            throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 模型。", comment: "")])
+    private func resolveCloudService() throws -> TTSServiceConfiguration {
+        guard let service = TTSServiceStore.shared.selectedService else {
+            throw NSError(domain: "TTS", code: -1, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("未选择可用的 TTS 服务。", comment: "")])
         }
-        return model
+        guard service.isReady else {
+            throw NSError(domain: "TTS", code: -7, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前 TTS 服务配置不完整。", comment: "")])
+        }
+        return service
     }
 
     private var cloudRequestTimeoutSeconds: TimeInterval {
@@ -274,60 +277,52 @@ extension TTSManager {
     }
 #endif
 
-    private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        switch settings.providerKind {
+    private func synthesizeCloudAudio(text: String, settings: TTSSettingsSnapshot, service: TTSServiceConfiguration) async throws -> AudioClip {
+        switch service.providerKind {
         case .openAICompatible:
-            return try await synthesizeOpenAICompatible(text: text, settings: settings, model: model)
+            return try await synthesizeOpenAICompatible(text: text, service: service)
         case .gemini:
-            return try await synthesizeGemini(text: text, settings: settings, model: model)
+            return try await synthesizeGemini(text: text, service: service)
         case .qwen:
-            return try await synthesizeQwen(text: text, settings: settings, model: model)
+            return try await synthesizeQwen(text: text, service: service)
         case .miniMax:
-            return try await synthesizeMiniMax(text: text, settings: settings, model: model)
+            return try await synthesizeMiniMax(text: text, playbackSpeed: settings.playbackSpeed, service: service)
         case .groq:
-            return try await synthesizeGroq(text: text, settings: settings, model: model)
+            return try await synthesizeGroq(text: text, service: service)
         }
     }
 
-    private func synthesizeOpenAICompatible(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        guard let key = firstAPIKey(from: model.provider) else {
-            throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
-        }
-
-        let url = normalizedBaseURL(model.provider.baseURL).appendingPathComponent("audio/speech")
+    private func synthesizeOpenAICompatible(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
+        let url = normalizedBaseURL(service.trimmedBaseURL).appendingPathComponent("audio/speech")
         let payload: [String: Any] = [
-            "model": model.model.modelName,
+            "model": service.trimmedModelID,
             "input": text,
-            "voice": settings.voice,
-            "response_format": settings.responseFormat
+            "voice": service.trimmedVoice,
+            "response_format": service.responseFormat
         ]
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let data = try await fetchData(for: request)
-        return AudioClip(data: data, format: settings.responseFormat.lowercased(), sampleRate: nil)
+        return AudioClip(data: data, format: service.responseFormat.lowercased(), sampleRate: nil)
     }
 
-    private func synthesizeGroq(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        var groqSettings = settings
-        if groqSettings.responseFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            groqSettings.responseFormat = "wav"
+    private func synthesizeGroq(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
+        var groqService = service
+        if groqService.responseFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            groqService.responseFormat = "wav"
         }
-        return try await synthesizeOpenAICompatible(text: text, settings: groqSettings, model: model)
+        return try await synthesizeOpenAICompatible(text: text, service: groqService)
     }
 
-    private func synthesizeGemini(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        guard let key = firstAPIKey(from: model.provider) else {
-            throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
-        }
-
-        let baseURL = normalizedBaseURL(model.provider.baseURL).absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let url = URL(string: "\(baseURL)/models/\(model.model.modelName):generateContent")!
+    private func synthesizeGemini(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
+        let baseURL = normalizedBaseURL(service.trimmedBaseURL).absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let url = URL(string: "\(baseURL)/models/\(service.trimmedModelID):generateContent")!
 
         let payload: [String: Any] = [
             "contents": [[
@@ -338,19 +333,19 @@ extension TTSManager {
                 "speechConfig": [
                     "voiceConfig": [
                         "prebuiltVoiceConfig": [
-                            "voiceName": settings.voice
+                            "voiceName": service.trimmedVoice
                         ]
                     ]
                 ]
             ],
-            "model": model.model.modelName
+            "model": service.trimmedModelID
         ]
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        request.setValue(service.trimmedAPIKey, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let data = try await fetchData(for: request)
@@ -369,23 +364,19 @@ extension TTSManager {
         return AudioClip(data: pcmData, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeQwen(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        guard let key = firstAPIKey(from: model.provider) else {
-            throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
-        }
-
-        let url = normalizedBaseURL(model.provider.baseURL)
+    private func synthesizeQwen(text: String, service: TTSServiceConfiguration) async throws -> AudioClip {
+        let url = normalizedBaseURL(service.trimmedBaseURL)
             .appendingPathComponent("services")
             .appendingPathComponent("aigc")
             .appendingPathComponent("multimodal-generation")
             .appendingPathComponent("generation")
 
         let payload: [String: Any] = [
-            "model": model.model.modelName,
+            "model": service.trimmedModelID,
             "input": [
                 "text": text,
-                "voice": settings.voice,
-                "language_type": settings.languageType
+                "voice": service.trimmedVoice,
+                "language_type": service.languageType
             ]
         ]
 
@@ -393,7 +384,7 @@ extension TTSManager {
         request.httpMethod = "POST"
         request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         request.setValue("enable", forHTTPHeaderField: "X-DashScope-SSE")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
@@ -418,22 +409,18 @@ extension TTSManager {
         return AudioClip(data: output, format: "pcm", sampleRate: 24_000)
     }
 
-    private func synthesizeMiniMax(text: String, settings: TTSSettingsSnapshot, model: RunnableModel) async throws -> AudioClip {
-        guard let key = firstAPIKey(from: model.provider) else {
-            throw NSError(domain: "TTS", code: -3, userInfo: [NSLocalizedDescriptionKey: NSLocalizedString("当前提供商未配置 API Key。", comment: "")])
-        }
-
-        let url = normalizedBaseURL(model.provider.baseURL).appendingPathComponent("t2a_v2")
+    private func synthesizeMiniMax(text: String, playbackSpeed: Float, service: TTSServiceConfiguration) async throws -> AudioClip {
+        let url = normalizedBaseURL(service.trimmedBaseURL).appendingPathComponent("t2a_v2")
         let payload: [String: Any] = [
-            "model": model.model.modelName,
+            "model": service.trimmedModelID,
             "text": text,
             "stream": true,
             "output_format": "hex",
             "stream_options": ["exclude_aggregated_audio": true],
             "voice_setting": [
-                "voice_id": settings.voice,
-                "emotion": settings.miniMaxEmotion,
-                "speed": settings.playbackSpeed
+                "voice_id": service.trimmedVoice,
+                "emotion": service.miniMaxEmotion,
+                "speed": playbackSpeed
             ]
         ]
 
@@ -441,7 +428,7 @@ extension TTSManager {
         request.httpMethod = "POST"
         request.timeoutInterval = cloudRequestTimeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(service.trimmedAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let data = try await fetchData(for: request)

@@ -3,130 +3,86 @@ import Foundation
 import Combine
 @testable import ETOSCore
 
-@Suite("TTS 模型选择测试")
-struct TTSModelSelectionTests {
+@Suite("TTS 服务测试")
+struct TTSServiceConfigurationTests {
 
-    @Test("模型能力支持 textToSpeech")
-    func testModelSupportsTextToSpeechCapability() {
+    @Test("旧模型配置中的 TTS 能力仍可读取")
+    func testLegacyModelSupportsTextToSpeechCapability() {
         let model = Model(modelName: "gpt-4o-mini-tts", kind: .textToSpeech)
         #expect(model.supportsTextToSpeech)
     }
 
-    @Test("存在 TTS 能力模型时优先返回可 TTS 模型")
-    func testActivatedTTSModelsPrefersCapableModels() {
-        let backupProviders = ConfigLoader.loadProviders()
-        let backupTTSIdentifier = Persistence.readAppConfigText(key: AppConfigKey.ttsModelIdentifier.rawValue)
-        defer {
-            restoreProviders(backupProviders)
-            if let backupTTSIdentifier {
-                Persistence.writeAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue, text: backupTTSIdentifier)
-            } else {
-                Persistence.deleteAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue)
-            }
-        }
+    @Test("独立服务提供可直接使用的协议默认值")
+    func testDefaultServiceConfiguration() {
+        let service = TTSServiceConfiguration.defaultConfiguration(for: .openAICompatible)
 
-        clearAllProviders()
-
-        let ttsModel = Model(modelName: "gpt-4o-mini-tts", displayName: "TTS", isActivated: true, kind: .textToSpeech)
-        let normalModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: true)
-        let provider = Provider(
-            name: "TTS Provider",
-            baseURL: "https://example.com/v1",
-            apiKeys: ["key"],
-            apiFormat: "openai-compatible",
-            models: [ttsModel, normalModel]
-        )
-        ConfigLoader.saveProvider(provider)
-
-        let service = ChatService()
-        let activated = service.activatedTTSModels
-
-        #expect(activated.count == 1)
-        #expect(activated.first?.model.modelName == "gpt-4o-mini-tts")
-
-        if let chosen = activated.first {
-            Persistence.writeAppConfig(key: AppConfigKey.ttsModelIdentifier.rawValue, text: chosen.id)
-            let resolved = service.resolveSelectedTTSModel()
-            #expect(resolved?.id == chosen.id)
-        } else {
-            Issue.record("未解析到 TTS 模型")
-        }
+        #expect(service.baseURL == "https://api.openai.com/v1")
+        #expect(service.modelID == "gpt-4o-mini-tts")
+        #expect(service.voice == "alloy")
+        #expect(!service.isReady)
     }
 
-    @Test("未标记 TTS 能力的聊天模型不会进入 TTS 列表")
-    func testActivatedTTSModelsExcludesUnmarkedChatModels() {
-        let backupProviders = ConfigLoader.loadProviders()
-        defer { restoreProviders(backupProviders) }
+    @Test("独立服务完整配置后可以播放")
+    func testConfiguredServiceIsReady() {
+        var service = TTSServiceConfiguration.defaultConfiguration(for: .qwen)
+        service.apiKey = "  secret  "
 
-        clearAllProviders()
+        let normalized = service.normalized
 
-        let chatModel = Model(modelName: "gpt-4o", displayName: "Chat", isActivated: false)
-        let provider = Provider(
-            name: "Chat Provider",
-            baseURL: "https://example.com/v1",
-            apiKeys: ["key"],
-            apiFormat: "openai-compatible",
-            models: [chatModel]
-        )
-        ConfigLoader.saveProvider(provider)
-
-        let service = ChatService()
-        let activated = service.activatedTTSModels
-
-        #expect(activated.isEmpty)
-        #expect(service.resolveSelectedTTSModel() == nil)
+        #expect(normalized.apiKey == "secret")
+        #expect(normalized.isReady)
+        #expect(normalized.modelID == "qwen3-tts-flash")
+        #expect(normalized.languageType == "Auto")
     }
 
-    @Test("聊天模型可通过 TTS 能力进入专用列表")
-    func testActivatedTTSModelsIncludesChatModelWithCapability() {
-        let backupProviders = ConfigLoader.loadProviders()
-        defer { restoreProviders(backupProviders) }
+    @Test("切换接口类型会保留服务身份并换用对应默认值")
+    func testChangingProviderKindPreservesIdentity() {
+        let service = TTSServiceConfiguration.defaultConfiguration(for: .openAICompatible)
+        let changed = service.changingProviderKind(to: .gemini)
 
-        clearAllProviders()
-
-        let hybridModel = Model(
-            modelName: "hybrid-audio-model",
-            displayName: "Hybrid Audio",
-            isActivated: true,
-            capabilities: [.toolCalling, .textToSpeech]
-        )
-        let provider = Provider(
-            name: "Hybrid Provider",
-            baseURL: "https://example.com/v1",
-            apiKeys: ["key"],
-            apiFormat: "openai-compatible",
-            models: [hybridModel]
-        )
-        ConfigLoader.saveProvider(provider)
-
-        let activated = ChatService().activatedTTSModels
-
-        #expect(activated.map(\.model.modelName) == ["hybrid-audio-model"])
+        #expect(changed.id == service.id)
+        #expect(changed.providerKind == .gemini)
+        #expect(changed.baseURL == "https://generativelanguage.googleapis.com/v1beta")
+        #expect(changed.modelID == "gemini-2.5-flash-preview-tts")
     }
 
-    @Test("未启用的 TTS 模型不会进入专用列表")
-    func testActivatedTTSModelsExcludesInactiveModels() {
-        let backupProviders = ConfigLoader.loadProviders()
-        defer { restoreProviders(backupProviders) }
-
-        clearAllProviders()
-
-        let inactiveModel = Model(
-            modelName: "inactive-tts",
-            displayName: "Inactive TTS",
-            isActivated: false,
-            kind: .textToSpeech
-        )
+    @Test("旧通用模型配置可迁移为独立 TTS 服务")
+    func testMigratingLegacyModelToService() {
+        let model = Model(modelName: "legacy-tts", displayName: "旧语音", isActivated: true, kind: .textToSpeech)
         let provider = Provider(
-            name: "Inactive Provider",
-            baseURL: "https://example.com/v1",
-            apiKeys: ["key"],
+            name: "旧提供商",
+            baseURL: "https://legacy.example/v1",
+            apiKeys: ["legacy-key"],
             apiFormat: "openai-compatible",
-            models: [inactiveModel]
+            models: [model]
         )
-        ConfigLoader.saveProvider(provider)
+        let settings = TTSSettingsSnapshot(
+            playbackMode: .cloud,
+            providerKind: .openAICompatible,
+            autoPlayAfterAssistantResponse: false,
+            onlyReadQuotedContent: false,
+            watchUseLightweightPreprocess: true,
+            watchSpeechMaxCharacters: 2_000,
+            speechRate: 1,
+            pitch: 1,
+            playbackSpeed: 1,
+            voice: "nova",
+            responseFormat: "mp3",
+            languageType: "Auto",
+            miniMaxEmotion: "calm"
+        )
 
-        #expect(ChatService().activatedTTSModels.isEmpty)
+        let migrated = TTSServiceConfiguration.migrated(
+            from: RunnableModel(provider: provider, model: model),
+            settings: settings
+        )
+
+        #expect(migrated.name == "旧语音")
+        #expect(migrated.baseURL == provider.baseURL)
+        #expect(migrated.apiKey == "legacy-key")
+        #expect(migrated.modelID == "legacy-tts")
+        #expect(migrated.voice == "nova")
+        #expect(migrated.isReady)
     }
 
     @Test("对话模型列表会排除嵌入等专用用途模型")

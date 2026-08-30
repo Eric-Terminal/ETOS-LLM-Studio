@@ -12,6 +12,7 @@ import ETOSCore
 struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var ttsServiceStore = TTSServiceStore.shared
     @StateObject private var guideRouter = GuideModelRouter()
 
     private var speechModelBinding: Binding<RunnableModel?> {
@@ -25,13 +26,6 @@ struct SpecializedModelSelectorView: View {
         Binding(
             get: { viewModel.selectedEmbeddingModel },
             set: { viewModel.setSelectedEmbeddingModel($0) }
-        )
-    }
-
-    private var ttsModelBinding: Binding<RunnableModel?> {
-        Binding(
-            get: { viewModel.selectedTTSModel },
-            set: { viewModel.setSelectedTTSModel($0) }
         )
     }
 
@@ -92,13 +86,7 @@ struct SpecializedModelSelectorView: View {
                 footer: NSLocalizedString("用于语音转文字，也可在偏好设置中修改。", comment: "Watch speech model specialized selector footer")
             )
 
-            modelSelectionSection(
-                title: NSLocalizedString("TTS 模型", comment: "TTS model specialized selector title"),
-                options: viewModel.ttsModels,
-                selection: ttsModelBinding,
-                allowEmptySelection: false,
-                footer: NSLocalizedString("用于文字转语音，也可在 TTS 设置中修改。", comment: "Watch TTS model specialized selector footer")
-            )
+            ttsServiceSection
 
             modelSelectionSection(
                 title: NSLocalizedString("嵌入模型", comment: "Embedding model specialized selector title"),
@@ -181,6 +169,26 @@ struct SpecializedModelSelectorView: View {
             }
         } footer: {
             Text(NSLocalizedString("用于页面向导回答。内置免费向导始终可选；用户模型需要已启用并支持工具调用。", comment: "页面向导专用模型说明"))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var ttsServiceSection: some View {
+        Section {
+            NavigationLink {
+                TTSSettingsView()
+            } label: {
+                VStack(alignment: .leading) {
+                    Text(NSLocalizedString("TTS 服务", comment: "TTS 专用服务入口"))
+                    Text(ttsServiceStore.selectedService?.name ?? NSLocalizedString("未配置", comment: ""))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        } footer: {
+            Text(NSLocalizedString("用于文字转语音；添加、选择与编辑均在 TTS 设置中完成。", comment: "watchOS TTS 专用服务说明"))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }

@@ -117,7 +117,6 @@ extension ChatViewModel {
             isCurrentlySpeaking: ttsManager.isSpeaking
         ), let latest else { return }
         lastAutoPlayedAssistantMessageID = latest.id
-        ttsManager.updateSelectedModel(selectedTTSModel)
         ttsManager.speak(latest.content, messageID: latest.id, flush: true)
     }
 

@@ -562,7 +562,6 @@ extension ModelSettingsView {
             case .openAICompatible, .openAIResponses:
                 EmptyView()
             }
-            Toggle(ModelCapability.textToSpeech.localizedName, isOn: capabilityBinding(.textToSpeech))
         } header: {
             Text(NSLocalizedString("能力", comment: "聊天模型能力区块标题"))
         } footer: {
@@ -580,8 +579,7 @@ extension ModelSettingsView {
         case .openAICompatible, .openAIResponses:
             protocolDescription = NSLocalizedString("推理能力开启后会自动添加思考预算控制；关闭能力不会删除已经配置的控制。", comment: "推理能力与结构化控制联动说明")
         }
-        let ttsDescription = NSLocalizedString("开启“文字转语音”后，该模型会出现在 TTS 模型列表中。", comment: "聊天模型 TTS 能力说明")
-        return "\(protocolDescription)\n\(ttsDescription)"
+        return protocolDescription
     }
 
     private var availableInputModalities: [ModelModality] {
@@ -603,8 +601,7 @@ extension ModelSettingsView {
             Text(NSLocalizedString("此模型用于重新排序候选内容。", comment: "重排模型能力说明"))
                 .foregroundStyle(.secondary)
         case .textToSpeech:
-            Text(NSLocalizedString("此模型接收文字并输出语音。", comment: "文字转语音模型能力说明"))
-                .foregroundStyle(.secondary)
+            EmptyView()
         case .chat:
             EmptyView()
         }

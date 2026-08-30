@@ -245,6 +245,7 @@ extension AppConfigStore {
         case .videoAnalysisModelIdentifier: videoAnalysisModelIdentifier = value
         case .speechModelIdentifier: speechModelIdentifier = value
         case .ttsModelIdentifier: ttsModelIdentifier = value
+        case .ttsServiceConfiguration: ttsServiceConfiguration = value
         case .memoryEmbeddingModelIdentifier: memoryEmbeddingModelIdentifier = value
         case .titleGenerationModelIdentifier: titleGenerationModelIdentifier = value
         case .dailyPulseModelIdentifier: dailyPulseModelIdentifier = value

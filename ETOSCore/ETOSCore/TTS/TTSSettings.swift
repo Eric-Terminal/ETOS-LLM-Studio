@@ -13,6 +13,21 @@ public enum TTSProviderKind: String, CaseIterable, Codable, Sendable {
     case qwen
     case miniMax = "minimax"
     case groq
+
+    public var localizedName: String {
+        switch self {
+        case .openAICompatible:
+            return NSLocalizedString("OpenAI 兼容", comment: "TTS 接口类型")
+        case .gemini:
+            return NSLocalizedString("Gemini", comment: "TTS 接口类型")
+        case .qwen:
+            return NSLocalizedString("Qwen", comment: "TTS 接口类型")
+        case .miniMax:
+            return NSLocalizedString("MiniMax", comment: "TTS 接口类型")
+        case .groq:
+            return NSLocalizedString("Groq", comment: "TTS 接口类型")
+        }
+    }
 }
 
 public enum TTSPlaybackStatus: String, Codable, Sendable {

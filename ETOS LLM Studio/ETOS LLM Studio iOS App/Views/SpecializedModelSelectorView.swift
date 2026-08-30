@@ -12,6 +12,7 @@ import ETOSCore
 struct SpecializedModelSelectorView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    @ObservedObject private var ttsServiceStore = TTSServiceStore.shared
     @StateObject private var guideRouter = GuideModelRouter()
 
     var body: some View {
@@ -25,13 +26,7 @@ struct SpecializedModelSelectorView: View {
                 footer: NSLocalizedString("用于语音转文字；也可在“偏好设置”中修改。", comment: "Speech model specialized selector footer")
             )
 
-            modelPickerSection(
-                title: NSLocalizedString("TTS 模型", comment: "TTS model specialized selector title"),
-                options: viewModel.ttsModels,
-                selectionID: ttsModelIdentifierBinding,
-                allowEmptySelection: false,
-                footer: NSLocalizedString("用于文字转语音；也可在“TTS 设置”中修改。", comment: "TTS model specialized selector footer")
-            )
+            ttsServiceSection
 
             modelPickerSection(
                 title: NSLocalizedString("嵌入模型", comment: "Embedding model specialized selector title"),
@@ -155,20 +150,6 @@ struct SpecializedModelSelectorView: View {
         )
     }
 
-    private var ttsModelIdentifierBinding: Binding<String> {
-        Binding(
-            get: { viewModel.selectedTTSModel?.id ?? "" },
-            set: { newIdentifier in
-                guard !newIdentifier.isEmpty else {
-                    viewModel.setSelectedTTSModel(nil)
-                    return
-                }
-                let selected = viewModel.ttsModels.first(where: { $0.id == newIdentifier })
-                viewModel.setSelectedTTSModel(selected)
-            }
-        )
-    }
-
     private var titleModelIdentifierBinding: Binding<String> {
         Binding(
             get: { viewModel.selectedTitleGenerationModel?.id ?? "" },
@@ -233,6 +214,24 @@ struct SpecializedModelSelectorView: View {
             get: { appConfig.videoAnalysisModelIdentifier },
             set: { setVideoAnalysisModelIdentifier($0) }
         )
+    }
+
+    private var ttsServiceSection: some View {
+        Section {
+            NavigationLink {
+                TTSSettingsView()
+            } label: {
+                HStack {
+                    Text(NSLocalizedString("TTS 服务", comment: "TTS 专用服务入口"))
+                    Spacer()
+                    Text(ttsServiceStore.selectedService?.name ?? NSLocalizedString("未配置", comment: ""))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        } footer: {
+            Text(NSLocalizedString("用于文字转语音；服务的添加、选择与编辑均在 TTS 设置中完成。", comment: "TTS 专用服务说明"))
+        }
     }
 
     @ViewBuilder

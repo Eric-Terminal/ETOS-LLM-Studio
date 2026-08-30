@@ -6,6 +6,7 @@
 // 负责应用配置的数据库读写、快照加载与同步应用。
 // ============================================================================
 
+import Combine
 import Foundation
 
 extension AppConfigStore {
@@ -446,6 +447,7 @@ extension AppConfigStore {
 
         case .speechModelIdentifier: return .text(speechModelIdentifier)
         case .ttsModelIdentifier: return .text(ttsModelIdentifier)
+        case .ttsServiceConfiguration: return .text(ttsServiceConfiguration)
         case .memoryEmbeddingModelIdentifier: return .text(memoryEmbeddingModelIdentifier)
         case .titleGenerationModelIdentifier: return .text(titleGenerationModelIdentifier)
         case .dailyPulseModelIdentifier: return .text(dailyPulseModelIdentifier)

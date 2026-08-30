@@ -46,11 +46,6 @@ extension ChatService {
         return candidates
     }
 
-    public var activatedTTSModels: [RunnableModel] {
-        // 只展示用户明确标记的 TTS 模型，避免把普通聊天模型静默当作语音模型调用。
-        activatedRunnableModels.filter { $0.model.supportsTextToSpeech }
-    }
-
     public var activatedOCRModels: [RunnableModel] {
         activatedChatModels.filter { $0.model.supportsVisionInput }
     }
@@ -74,15 +69,6 @@ extension ChatService {
             return match
         }
         return activatedSpeechModels.first
-    }
-
-    public func resolveSelectedTTSModel() -> RunnableModel? {
-        let storedIdentifier = Persistence.readAppConfigText(key: AppConfigKey.ttsModelIdentifier.rawValue) ?? ""
-        if !storedIdentifier.isEmpty,
-           let match = activatedTTSModels.first(where: { $0.id == storedIdentifier }) {
-            return match
-        }
-        return activatedTTSModels.first
     }
 
     func orderedRunnableModels(from models: [RunnableModel]) -> [RunnableModel] {

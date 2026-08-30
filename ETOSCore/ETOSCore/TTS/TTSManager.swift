@@ -17,7 +17,6 @@ public final class TTSManager: NSObject, ObservableObject {
     let settingsStore = TTSSettingsStore.shared
     let urlSession: URLSession
 
-    var selectedModel: RunnableModel?
     var queue: [QueueItem] = []
     var workerTask: Task<Void, Never>?
     var workerGeneration = 0
@@ -76,10 +75,6 @@ public final class TTSManager: NSObject, ObservableObject {
     public init(urlSession: URLSession = NetworkSessionConfiguration.shared) {
         self.urlSession = urlSession
         super.init()
-    }
-
-    public func updateSelectedModel(_ model: RunnableModel?) {
-        selectedModel = model
     }
 
     public func speak(

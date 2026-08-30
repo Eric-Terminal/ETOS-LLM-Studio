@@ -135,12 +135,6 @@ extension TTSManager {
         }
     }
 
-    func firstAPIKey(from provider: Provider) -> String? {
-        provider.apiKeys
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first(where: { !$0.isEmpty })
-    }
-
     func normalizedBaseURL(_ string: String) -> URL {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         if let url = URL(string: trimmed), !trimmed.isEmpty {

@@ -127,9 +127,7 @@ class ChatViewModel: ObservableObject {
     @Published var isSendDelayPending: Bool = false
     @Published var pendingSendSubmissionSessionIDs: Set<UUID> = []
     @Published var speechModels: [RunnableModel] = []
-    @Published var ttsModels: [RunnableModel] = []
     @Published var selectedSpeechModel: RunnableModel?
-    @Published var selectedTTSModel: RunnableModel?
     @Published var selectedEmbeddingModel: RunnableModel?
     @Published var selectedTitleGenerationModel: RunnableModel?
     @Published var selectedDailyPulseModel: RunnableModel?
@@ -310,9 +308,6 @@ class ChatViewModel: ObservableObject {
     }
     @Published var speechModelIdentifier: String = AppConfigStore.shared.speechModelIdentifier {
         didSet { AppConfigStore.shared.speechModelIdentifier = speechModelIdentifier }
-    }
-    @Published var ttsModelIdentifier: String = AppConfigStore.shared.ttsModelIdentifier {
-        didSet { AppConfigStore.shared.ttsModelIdentifier = ttsModelIdentifier }
     }
     @Published var memoryEmbeddingModelIdentifier: String = AppConfigStore.shared.memoryEmbeddingModelIdentifier {
         didSet { AppConfigStore.shared.memoryEmbeddingModelIdentifier = memoryEmbeddingModelIdentifier }
@@ -698,7 +693,6 @@ class ChatViewModel: ObservableObject {
         guard message.role == .assistant || message.role == .tool || message.role == .system else { return }
         let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
-        ttsManager.updateSelectedModel(selectedTTSModel)
         ttsManager.speak(content, messageID: message.id, flush: true)
     }
 

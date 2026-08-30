@@ -111,7 +111,7 @@ public final class AppConfigStore: ObservableObject {
     var pendingWriteTasks: [UUID: Task<Void, Never>] = [:]
     var pendingChatComposerDraftWriteID: UUID?
     var persistedChatComposerDraftValue: AppConfigValue = .text("")
-    @Published public private(set) var didLoadPersistentStore = false
+    @Published public internal(set) var didLoadPersistentStore = false
     var locallyChangedKeysBeforePersistentLoad: Set<AppConfigKey> = []
     nonisolated static var shouldSkipQuickSyncForCurrentProcess: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -245,6 +245,7 @@ public final class AppConfigStore: ObservableObject {
 
     @Published public var speechModelIdentifier: String { didSet { write(.speechModelIdentifier, speechModelIdentifier) } }
     @Published public var ttsModelIdentifier: String { didSet { write(.ttsModelIdentifier, ttsModelIdentifier) } }
+    @Published public var ttsServiceConfiguration: String { didSet { write(.ttsServiceConfiguration, ttsServiceConfiguration) } }
     @Published public var memoryEmbeddingModelIdentifier: String { didSet { write(.memoryEmbeddingModelIdentifier, memoryEmbeddingModelIdentifier) } }
     @Published public var titleGenerationModelIdentifier: String { didSet { write(.titleGenerationModelIdentifier, titleGenerationModelIdentifier) } }
     @Published public var dailyPulseModelIdentifier: String { didSet { write(.dailyPulseModelIdentifier, dailyPulseModelIdentifier) } }
@@ -660,6 +661,7 @@ public final class AppConfigStore: ObservableObject {
 
         speechModelIdentifier = Self.textValue(.speechModelIdentifier, userDefaults: userDefaults)
         ttsModelIdentifier = Self.textValue(.ttsModelIdentifier, userDefaults: userDefaults)
+        ttsServiceConfiguration = Self.textValue(.ttsServiceConfiguration, userDefaults: userDefaults)
         memoryEmbeddingModelIdentifier = Self.textValue(.memoryEmbeddingModelIdentifier, userDefaults: userDefaults)
         titleGenerationModelIdentifier = Self.textValue(.titleGenerationModelIdentifier, userDefaults: userDefaults)
         dailyPulseModelIdentifier = Self.textValue(.dailyPulseModelIdentifier, userDefaults: userDefaults)

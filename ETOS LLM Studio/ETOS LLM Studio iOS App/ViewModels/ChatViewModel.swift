@@ -103,9 +103,7 @@ final class ChatViewModel: ObservableObject {
     @Published var selectedDailyPulseModel: RunnableModel?
     @Published var selectedConversationSummaryModel: RunnableModel?
     @Published var selectedReasoningSummaryModel: RunnableModel?
-    @Published var selectedTTSModel: RunnableModel?
     @Published var selectedOCRModel: RunnableModel?
-    @Published var ttsModels: [RunnableModel] = []
     @Published var reasoningExpandedState: [UUID: Bool] = [:]
     @Published var toolCallsExpandedState: [UUID: Bool] = [:]
     @Published var autoOpenedPendingToolCallIDs: Set<String> = []
@@ -286,9 +284,6 @@ final class ChatViewModel: ObservableObject {
     }
     @Published var speechModelIdentifier: String = AppConfigStore.shared.speechModelIdentifier {
         didSet { AppConfigStore.shared.speechModelIdentifier = speechModelIdentifier }
-    }
-    @Published var ttsModelIdentifier: String = AppConfigStore.shared.ttsModelIdentifier {
-        didSet { AppConfigStore.shared.ttsModelIdentifier = ttsModelIdentifier }
     }
     @Published var memoryEmbeddingModelIdentifier: String = AppConfigStore.shared.memoryEmbeddingModelIdentifier {
         didSet { AppConfigStore.shared.memoryEmbeddingModelIdentifier = memoryEmbeddingModelIdentifier }
@@ -819,7 +814,6 @@ final class ChatViewModel: ObservableObject {
         guard message.role == .assistant || message.role == .tool || message.role == .system else { return }
         let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return }
-        ttsManager.updateSelectedModel(selectedTTSModel)
         ttsManager.speak(content, messageID: message.id, flush: true)
     }
 

@@ -55,7 +55,6 @@ extension ChatViewModel {
         sendSpeechAsAudio = appConfig.sendSpeechAsAudio
         enableSpeechInput = appConfig.enableSpeechInput
         speechModelIdentifier = appConfig.speechModelIdentifier
-        ttsModelIdentifier = appConfig.ttsModelIdentifier
         memoryEmbeddingModelIdentifier = appConfig.memoryEmbeddingModelIdentifier
         titleGenerationModelIdentifier = appConfig.titleGenerationModelIdentifier
         dailyPulseModelIdentifier = appConfig.dailyPulseModelIdentifier
@@ -83,7 +82,6 @@ extension ChatViewModel {
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()
-        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
         syncDailyPulseModelSelection()
@@ -348,9 +346,7 @@ extension ChatViewModel {
                 self.applyActivatedConversationModels(chatService.activatedConversationModels)
                 self.applyActivatedChatModels(chatService.activatedChatModels)
                 self.speechModels = chatService.activatedSpeechModels
-                self.ttsModels = chatService.activatedTTSModels
                 self.syncSpeechModelSelection()
-                self.syncTTSModelSelection()
                 self.syncEmbeddingModelSelection()
                 self.syncTitleGenerationModelSelection()
                 self.syncDailyPulseModelSelection()
@@ -480,16 +476,6 @@ extension ChatViewModel {
             }
             .store(in: &cancellables)
 
-        ttsManager.$isSpeaking
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] speaking in
-                guard let self else { return }
-                if !speaking {
-                    self.ttsManager.updateSelectedModel(self.selectedTTSModel)
-                }
-            }
-            .store(in: &cancellables)
-
         NotificationCenter.default.publisher(for: .globalSystemPromptStoreDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -523,7 +509,6 @@ extension ChatViewModel {
             .store(in: &cancellables)
 
         syncSpeechModelSelection()
-        syncTTSModelSelection()
         syncEmbeddingModelSelection()
         syncTitleGenerationModelSelection()
         syncDailyPulseModelSelection()
