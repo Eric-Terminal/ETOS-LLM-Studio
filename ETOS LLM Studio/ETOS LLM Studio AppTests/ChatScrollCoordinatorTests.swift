@@ -375,6 +375,35 @@ struct ChatScrollCoordinatorTests {
     }
 
     @MainActor
+    @Test("边界翻页换窗时锚点补偿可与程序滚动所有权共存")
+    func testViewportPageHistoryMutationAllowsProgrammaticAnchorAdjustment() async {
+        let coordinator = ChatScrollCoordinator()
+        let earlierMessageID = UUID()
+        let anchorMessageID = UUID()
+        let initialMessageIDs = [anchorMessageID]
+
+        coordinator.chatHistoryViewportAnchorController.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 20, width: 300, height: 80)],
+            displayedMessageIDs: initialMessageIDs
+        )
+        #expect(coordinator.beginViewportPageHistoryMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: initialMessageIDs
+        ))
+        coordinator.chatHistoryViewportAnchorController.updateFrames(
+            [anchorMessageID: CGRect(x: 0, y: 140, width: 300, height: 80)],
+            displayedMessageIDs: [earlierMessageID, anchorMessageID]
+        )
+
+        let adjustment = await waitForPendingAdjustment(
+            in: coordinator.chatHistoryViewportAnchorController
+        )
+        #expect(adjustment?.deltaY == 120)
+        #expect(adjustment?.allowsDuringProgrammaticScroll == true)
+        #expect(adjustment.map { coordinator.completeAnchorAdjustment(id: $0.id) } == true)
+    }
+
+    @MainActor
     @Test("四键跨窗逐次抵消布局位移并等待几何稳定")
     func testAdjacentWindowMutationPreservesAnchorUntilLayoutSettles() async throws {
         let controller = ChatHistoryViewportAnchorController()
@@ -533,6 +562,51 @@ struct ChatScrollCoordinatorTests {
         #expect(first != crossedHistoryBoundary)
     }
 
+    @Test("中间两键按八成视口翻页并钳制到内容边界")
+    func testViewportPageTargetUsesVisibleHeightAndClampsToEdges() {
+        let upwardTarget = ChatScrollMetricsObserver.viewportPageTargetOffsetY(
+            currentOffsetY: 700,
+            direction: .upward,
+            viewportHeight: 600,
+            viewportFraction: 0.8,
+            minimumOffsetY: 0,
+            maximumOffsetY: 1_400
+        )
+        #expect(abs(upwardTarget - 220) < 0.001)
+        #expect(ChatScrollMetricsObserver.viewportPageTargetOffsetY(
+            currentOffsetY: 700,
+            direction: .downward,
+            viewportHeight: 600,
+            viewportFraction: 0.8,
+            minimumOffsetY: 0,
+            maximumOffsetY: 1_000
+        ) == 1_000)
+        #expect(ChatScrollMetricsObserver.viewportPageTargetOffsetY(
+            currentOffsetY: 100,
+            direction: .upward,
+            viewportHeight: 600,
+            viewportFraction: 0.8,
+            minimumOffsetY: -20,
+            maximumOffsetY: 1_400
+        ) == -20)
+    }
+
+    @Test("只有抵达当前窗口边界时翻页才换入一条历史")
+    func testViewportPageLoadsHistoryOnlyAtWindowEdge() {
+        #expect(ChatView.shouldLoadHistoryBeforeViewportPage(
+            isHistoryBoundaryLoaded: false,
+            distanceToEdge: 0.5
+        ))
+        #expect(!ChatView.shouldLoadHistoryBeforeViewportPage(
+            isHistoryBoundaryLoaded: false,
+            distanceToEdge: 20
+        ))
+        #expect(!ChatView.shouldLoadHistoryBeforeViewportPage(
+            isHistoryBoundaryLoaded: true,
+            distanceToEdge: 0
+        ))
+    }
+
     @MainActor
     @Test("UIKit 滚动桥不会把同一区域内的逐像素移动回写给 SwiftUI")
     func testChatScrollBridgeSuppressesPixelLevelCallbacks() async {
@@ -557,6 +631,8 @@ struct ChatScrollCoordinatorTests {
             hasProgrammaticScrollCommand: false,
             anchorAdjustment: nil,
             onAnchorAdjustmentApplied: { _ in },
+            viewportPageRequest: nil,
+            onViewportPageRequestCompleted: { _ in },
             onUserPanBegan: {},
             usesNativeSizeChangeAnchor: false,
             onMetricsChange: { _, _, _ in callbackCount += 1 }
@@ -609,6 +685,8 @@ struct ChatScrollCoordinatorTests {
             hasProgrammaticScrollCommand: true,
             anchorAdjustment: adjustment,
             onAnchorAdjustmentApplied: { appliedAdjustmentIDs.append($0) },
+            viewportPageRequest: nil,
+            onViewportPageRequestCompleted: { _ in },
             onUserPanBegan: {},
             usesNativeSizeChangeAnchor: false,
             onMetricsChange: { _, _, _ in }
@@ -624,6 +702,51 @@ struct ChatScrollCoordinatorTests {
         coordinator.applyAnchorAdjustmentIfNeeded()
         #expect(scrollView.contentOffset.y == 350)
         #expect(appliedAdjustmentIDs == [adjustment.id])
+        coordinator.detach()
+    }
+
+    @MainActor
+    @Test("UIKit 滚动桥直接执行一次视口翻页请求")
+    func testChatScrollBridgeAppliesViewportPageExactlyOnce() {
+        var keepsBottomPinned = false
+        var completedRequestIDs: [UUID] = []
+        let request = ChatViewportPageRequest(direction: .upward)
+        let coordinator = ChatScrollMetricsObserver.Coordinator(
+            keepsBottomPinned: Binding(
+                get: { keepsBottomPinned },
+                set: { keepsBottomPinned = $0 }
+            ),
+            isStreaming: false,
+            streamingDisplayMode: .immediate,
+            reduceMotion: true,
+            metricsRefreshGeneration: 0,
+            metricThresholds: ChatScrollMetricThresholds(
+                arrival: 1,
+                bottomPinned: 24,
+                bottomButton: 48,
+                historyLoading: 240
+            ),
+            isViewportTransitioning: false,
+            hasProgrammaticScrollCommand: true,
+            anchorAdjustment: nil,
+            onAnchorAdjustmentApplied: { _ in },
+            viewportPageRequest: request,
+            onViewportPageRequestCompleted: { completedRequestIDs.append($0) },
+            onUserPanBegan: {},
+            usesNativeSizeChangeAnchor: false,
+            onMetricsChange: { _, _, _ in }
+        )
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 320, height: 600))
+        scrollView.contentSize = CGSize(width: 320, height: 2_000)
+        scrollView.contentOffset = CGPoint(x: 0, y: 700)
+
+        coordinator.attach(to: scrollView)
+        #expect(abs(scrollView.contentOffset.y - 220) < 0.001)
+        #expect(completedRequestIDs == [request.id])
+
+        coordinator.applyViewportPageRequestIfNeeded()
+        #expect(abs(scrollView.contentOffset.y - 220) < 0.001)
+        #expect(completedRequestIDs == [request.id])
         coordinator.detach()
     }
 

@@ -229,17 +229,17 @@ extension ChatView {
             }
             telegramScrollNavigationButton(
                 systemName: "chevron.up",
-                accessibilityLabel: NSLocalizedString("滚动到上一条消息", comment: ""),
-                isEnabled: scrollCoordinator.previousMessageNavigationTargetID != nil
+                accessibilityLabel: NSLocalizedString("上一页", comment: ""),
+                isEnabled: canNavigateOnePageUp
             ) {
-                handleAdjacentMessageNavigation(.previous)
+                handleViewportPageNavigation(.upward)
             }
             telegramScrollNavigationButton(
                 systemName: "chevron.down",
-                accessibilityLabel: NSLocalizedString("滚动到下一条消息", comment: ""),
-                isEnabled: scrollCoordinator.nextMessageNavigationTargetID != nil
+                accessibilityLabel: NSLocalizedString("下一页", comment: ""),
+                isEnabled: canNavigateOnePageDown
             ) {
-                handleAdjacentMessageNavigation(.next)
+                handleViewportPageNavigation(.downward)
             }
             telegramScrollToBottomButton(isEnabled: canNavigateToTimelineBottom) {
                 handleScrollToBottomButtonTap()

@@ -98,6 +98,20 @@ extension ChatScrollMetricsObserver {
             : min(requestedOffsetY, maximumOffsetY)
     }
 
+    /// 翻页保留一小段上下文，让眼睛能从上一屏自然接续，而不是重新寻找阅读位置。
+    nonisolated static func viewportPageTargetOffsetY(
+        currentOffsetY: CGFloat,
+        direction: ChatViewportPageDirection,
+        viewportHeight: CGFloat,
+        viewportFraction: CGFloat,
+        minimumOffsetY: CGFloat,
+        maximumOffsetY: CGFloat
+    ) -> CGFloat {
+        let requestedOffsetY = currentOffsetY
+            + direction.offsetMultiplier * viewportHeight * viewportFraction
+        return min(max(requestedOffsetY, minimumOffsetY), maximumOffsetY)
+    }
+
     /// SwiftUI 只需要知道交互语义跨过了哪个边界，连续像素距离留在 UIKit 内部。
     nonisolated static func metricRegion(
         distanceToBottom: CGFloat,

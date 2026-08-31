@@ -104,6 +104,10 @@ extension ChatView {
                             onAnchorAdjustmentApplied: { adjustmentID in
                                 completeChatAnchorAdjustment(id: adjustmentID)
                             },
+                            viewportPageRequest: scrollCoordinator.pendingViewportPageRequest,
+                            onViewportPageRequestCompleted: { requestID in
+                                scrollCoordinator.completeViewportPageRequest(id: requestID)
+                            },
                             onUserPanBegan: {
                                 handleChatScrollPanBegan()
                             }
@@ -504,14 +508,14 @@ extension ChatView {
                                 handleScrollToTopButtonTap()
                             }
                         }
-                        if scrollCoordinator.previousMessageNavigationTargetID != nil {
-                            Button(NSLocalizedString("滚动到上一条消息", comment: "")) {
-                                handleAdjacentMessageNavigation(.previous)
+                        if canNavigateOnePageUp {
+                            Button(NSLocalizedString("上一页", comment: "")) {
+                                handleViewportPageNavigation(.upward)
                             }
                         }
-                        if scrollCoordinator.nextMessageNavigationTargetID != nil {
-                            Button(NSLocalizedString("滚动到下一条消息", comment: "")) {
-                                handleAdjacentMessageNavigation(.next)
+                        if canNavigateOnePageDown {
+                            Button(NSLocalizedString("下一页", comment: "")) {
+                                handleViewportPageNavigation(.downward)
                             }
                         }
                         if canNavigateToTimelineBottom {

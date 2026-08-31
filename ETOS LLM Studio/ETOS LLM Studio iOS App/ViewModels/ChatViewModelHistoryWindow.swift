@@ -7,6 +7,11 @@
 import ETOSCore
 import Foundation
 
+enum ChatHistoryWindowShiftDirection: Sendable {
+    case earlier
+    case later
+}
+
 extension ChatViewModel {
     var usesAutomaticHistoryWindow: Bool {
         automaticHistoryLoadingEnabled
@@ -123,6 +128,34 @@ extension ChatViewModel {
             return false
         }
 
+        switch position {
+        case .earlier:
+            return shiftHistoryWindow(
+                .earlier,
+                weightedBatchSize: weightedBatchSize,
+                preservesCurrentWindowSize: preservesCurrentWindowSize
+            )
+        case .later:
+            return shiftHistoryWindow(
+                .later,
+                weightedBatchSize: weightedBatchSize,
+                preservesCurrentWindowSize: preservesCurrentWindowSize
+            )
+        case .visible:
+            return false
+        }
+    }
+
+    @discardableResult
+    func shiftHistoryWindow(
+        _ direction: ChatHistoryWindowShiftDirection,
+        weightedBatchSize: Int,
+        preservesCurrentWindowSize: Bool = false
+    ) -> Bool {
+        ensureVisibleMessagesCachePrepared()
+        ensureHistoryWindowPrepared()
+        guard let historyWindow else { return false }
+
         let maximumWeightedCount = preservesCurrentWindowSize
             ? max(
                 1,
@@ -134,7 +167,7 @@ extension ChatViewModel {
             : automaticHistoryMaximumWindowSize
 
         let updated: ChatHistoryWindow
-        switch position {
+        switch direction {
         case .earlier:
             updated = ChatHistoryWindowSupport.expandingEarlier(
                 historyWindow,
@@ -149,8 +182,6 @@ extension ChatViewModel {
                 weightedBatchSize: weightedBatchSize,
                 maximumWeightedCount: maximumWeightedCount
             )
-        case .visible:
-            return false
         }
 
         guard updated != historyWindow else { return false }

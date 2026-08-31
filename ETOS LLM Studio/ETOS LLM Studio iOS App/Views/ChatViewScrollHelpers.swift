@@ -10,15 +10,12 @@ import UIKit
 import ETOSCore
 
 extension ChatView {
-    /// 可见坐标会随每个滚动像素变化；只在导航或静止审计真正需要时上报。
+    /// 视口翻页只由 UIScrollView 接管；消息 frame 仅在静止审计时上报，避免逐像素回写。
     var shouldReportChatViewportLayoutFrames: Bool {
         guard !scrollCoordinator.isChatScrollUserInteracting else { return false }
-        let needsNavigationFrames = scrollCoordinator.showScrollNavigationPanel || accessibilityVoiceOverEnabled
-        let canAuditSettledLayout = !scrollCoordinator.isChatScrollUserInteracting
-            && !viewModel.isSendingMessage
+        return !viewModel.isSendingMessage
             && !hasChatProgrammaticScrollOwnership
             && !scrollCoordinator.isHistoryLoadInFlight
-        return needsNavigationFrames || canAuditSettledLayout
     }
 
     var hasChatProgrammaticScrollOwnership: Bool {
@@ -576,6 +573,7 @@ extension ChatView {
         scrollCoordinator.scrollTargetGeneration &+= 1
         scrollCoordinator.pendingScrollTargetTask?.cancel()
         scrollCoordinator.pendingScrollTargetTask = nil
+        scrollCoordinator.cancelViewportPageRequest()
         releaseActiveBottomScrollCommand()
         scrollCoordinator.chatScrollPositionController.releaseCommand()
         if !preservingMessageJump {

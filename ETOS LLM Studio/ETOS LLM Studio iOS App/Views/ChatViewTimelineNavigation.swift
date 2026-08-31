@@ -1,7 +1,7 @@
 // ============================================================================
 // ChatViewTimelineNavigation.swift
 // ============================================================================
-// 四键时间线导航的目标解析、活动显隐与一次性顶部命令。
+// 四键时间线导航的视口翻页、活动显隐与首尾命令。
 // ============================================================================
 
 import Foundation
@@ -25,6 +25,14 @@ extension ChatView {
     ) -> Bool {
         if !isLaterHistoryBoundaryLoaded { return true }
         return !keepsBottomPinned && distanceToBottom > arrivalTolerance
+    }
+
+    nonisolated static func shouldLoadHistoryBeforeViewportPage(
+        isHistoryBoundaryLoaded: Bool,
+        distanceToEdge: CGFloat,
+        arrivalTolerance: CGFloat = 1
+    ) -> Bool {
+        !isHistoryBoundaryLoaded && distanceToEdge <= arrivalTolerance
     }
 
     nonisolated static func canPresentExpandedScrollNavigation(
@@ -62,7 +70,7 @@ extension ChatView {
     }
 
     var canNavigateToTimelineTop: Bool {
-        !scrollCoordinator.chatNavigationMessageIDs.isEmpty
+        !viewModel.displayMessages.isEmpty
             && Self.shouldEnableTimelineEdgeNavigation(
                 isHistoryBoundaryLoaded: viewModel.isHistoryFullyLoaded,
                 distanceToEdge: scrollCoordinator.scrollDistanceToTop
@@ -78,13 +86,27 @@ extension ChatView {
             )
     }
 
+    var canNavigateOnePageUp: Bool {
+        !viewModel.displayMessages.isEmpty
+            && Self.shouldEnableTimelineEdgeNavigation(
+                isHistoryBoundaryLoaded: viewModel.isHistoryFullyLoaded,
+                distanceToEdge: scrollCoordinator.scrollDistanceToTop
+            )
+    }
+
+    var canNavigateOnePageDown: Bool {
+        !viewModel.displayMessages.isEmpty
+            && Self.shouldEnableTimelineEdgeNavigation(
+                isHistoryBoundaryLoaded: viewModel.isLaterHistoryFullyLoaded,
+                distanceToEdge: scrollCoordinator.scrollDistanceToBottom
+            )
+    }
+
     func handleScrollToTopButtonTap() {
         guard appConfig.chatTimelineNavigationEnabled,
-              let firstMessageID = viewModel.messageNavigationIDs().first else { return }
+              !viewModel.displayMessages.isEmpty else { return }
         revealScrollNavigationPanel()
         prepareForMessageJump()
-        scrollCoordinator.messageNavigationCursorID = firstMessageID
-        refreshMessageNavigationTargets()
         scheduleTimelineTopNavigation()
     }
 
@@ -134,22 +156,131 @@ extension ChatView {
         DispatchQueue.main.async(execute: workItem)
     }
 
-    func handleAdjacentMessageNavigation(_ direction: ChatMessageNavigationDirection) {
+    func handleViewportPageNavigation(_ direction: ChatViewportPageDirection) {
         guard appConfig.chatTimelineNavigationEnabled,
-              !scrollCoordinator.awaitsFreshBottomNavigationSnapshot else { return }
-        let navigationMessageIDs = viewModel.messageNavigationIDs()
-        guard let targetMessageID = scrollCoordinator.chatLayoutIntegrityMonitor.adjacentMessageID(
-            in: navigationMessageIDs,
-            viewportHeight: scrollCoordinator.chatScrollViewportHeight,
-            retainedAnchorID: scrollCoordinator.messageNavigationCursorID,
-            direction: direction
-        ) else { return }
+              !scrollCoordinator.awaitsFreshBottomNavigationSnapshot,
+              (direction == .upward ? canNavigateOnePageUp : canNavigateOnePageDown) else {
+            return
+        }
 
         revealScrollNavigationPanel()
-        prepareForMessageJump()
-        scrollCoordinator.messageNavigationCursorID = targetMessageID
-        refreshMessageNavigationTargets()
-        scheduleMessageJump(to: targetMessageID, usesAdjacentAnimation: true)
+        cancelPendingScrollTargetCommand()
+        scrollCoordinator.prepareForExclusiveViewportNavigation()
+        scrollCoordinator.pendingHistoryResetWorkItem?.cancel()
+        scrollCoordinator.pendingHistoryResetWorkItem = nil
+        scrollCoordinator.pendingBottomSnapTask?.cancel()
+        scrollCoordinator.pendingBottomSnapTask = nil
+        scrollCoordinator.awaitsFreshBottomNavigationSnapshot = false
+        scrollCoordinator.lastAutomaticHistoryLoadAnchorID = nil
+        scrollCoordinator.messageNavigationCursorID = nil
+        scrollCoordinator.previousMessageNavigationTargetID = nil
+        scrollCoordinator.nextMessageNavigationTargetID = nil
+        scrollCoordinator.needsImmediateBottomSnap = false
+        scrollCoordinator.shouldKeepBottomPinned = false
+        pendingJumpRequest = nil
+        isMessageJumpInFlight = false
+        shouldRestorePendingJumpOnAppear = false
+
+        let generation = scrollCoordinator.scrollTargetGeneration
+        let sessionID = viewModel.currentSession?.id
+        scrollCoordinator.pendingScrollTargetTask = Task { @MainActor in
+            var pageRequestID: UUID?
+            defer {
+                if let pageRequestID {
+                    scrollCoordinator.cancelViewportPageRequest(id: pageRequestID)
+                }
+                if generation == scrollCoordinator.scrollTargetGeneration {
+                    if scrollCoordinator.isHistoryLoadInFlight {
+                        scrollCoordinator.cancelHistoryAnchorRestoration()
+                    }
+                    scrollCoordinator.pendingScrollTargetTask = nil
+                }
+            }
+
+            await Task.yield()
+            guard !Task.isCancelled,
+                  generation == scrollCoordinator.scrollTargetGeneration,
+                  sessionID == viewModel.currentSession?.id else {
+                return
+            }
+
+            let distanceToEdge = direction == .upward
+                ? scrollCoordinator.scrollDistanceToTop
+                : scrollCoordinator.scrollDistanceToBottom
+            let isHistoryBoundaryLoaded = direction == .upward
+                ? viewModel.isHistoryFullyLoaded
+                : viewModel.isLaterHistoryFullyLoaded
+            if Self.shouldLoadHistoryBeforeViewportPage(
+                isHistoryBoundaryLoaded: isHistoryBoundaryLoaded,
+                distanceToEdge: distanceToEdge
+            ) {
+                // 边界行的 frame 可能和按键显现处于同一布局轮；短暂等待真实锚点再换窗。
+                var beganHistoryMutation = false
+                for _ in 0..<12 {
+                    guard !Task.isCancelled,
+                          generation == scrollCoordinator.scrollTargetGeneration,
+                          sessionID == viewModel.currentSession?.id else {
+                        return
+                    }
+                    let displayedMessageIDs = viewModel.displayMessages.map(\.id)
+                    let anchorMessageID = direction == .upward
+                        ? displayedMessageIDs.first
+                        : displayedMessageIDs.last
+                    if let anchorMessageID,
+                       scrollCoordinator.beginViewportPageHistoryMutation(
+                           anchorMessageID: anchorMessageID,
+                           displayedMessageIDs: displayedMessageIDs
+                       ) {
+                        beganHistoryMutation = true
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
+                guard beganHistoryMutation else { return }
+
+                let shiftDirection: ChatHistoryWindowShiftDirection = direction == .upward
+                    ? .earlier
+                    : .later
+                let didLoad = viewModel.shiftHistoryWindow(
+                    shiftDirection,
+                    weightedBatchSize: 1,
+                    preservesCurrentWindowSize: true
+                )
+                scrollCoordinator.finishHistoryMutation(didLoad: didLoad)
+                guard didLoad else { return }
+
+                for _ in 0..<75 {
+                    guard !Task.isCancelled,
+                          generation == scrollCoordinator.scrollTargetGeneration,
+                          sessionID == viewModel.currentSession?.id else {
+                        return
+                    }
+                    if !scrollCoordinator.isHistoryLoadInFlight { break }
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
+                guard !scrollCoordinator.isHistoryLoadInFlight else {
+                    scrollCoordinator.cancelHistoryAnchorRestoration()
+                    return
+                }
+            }
+
+            guard !Task.isCancelled,
+                  generation == scrollCoordinator.scrollTargetGeneration,
+                  sessionID == viewModel.currentSession?.id else {
+                return
+            }
+            let requestID = scrollCoordinator.issueViewportPageRequest(direction: direction)
+            pageRequestID = requestID
+            for _ in 0..<75 {
+                guard !Task.isCancelled,
+                      generation == scrollCoordinator.scrollTargetGeneration,
+                      sessionID == viewModel.currentSession?.id else {
+                    return
+                }
+                if scrollCoordinator.pendingViewportPageRequest?.id != requestID { break }
+                try? await Task.sleep(nanoseconds: 16_000_000)
+            }
+        }
     }
 
     private func scheduleTimelineTopNavigation() {

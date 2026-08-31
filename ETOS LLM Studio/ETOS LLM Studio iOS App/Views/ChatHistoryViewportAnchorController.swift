@@ -60,6 +60,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         let displayedMessageIDs: [UUID]
         let baselineSnapshotRevision: UInt
         let mode: MutationMode
+        let allowsDuringProgrammaticScroll: Bool
         var compensatedMinY: CGFloat
         var isSettled: Bool
     }
@@ -107,12 +108,14 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
     /// 只有拿到当前屏幕中的真实行 frame 后才允许改变历史窗口。
     func beginMutation(
         anchorMessageID: UUID,
-        displayedMessageIDs: [UUID]
+        displayedMessageIDs: [UUID],
+        allowsDuringProgrammaticScroll: Bool = false
     ) -> Bool {
         startMutation(
             anchorMessageID: anchorMessageID,
             displayedMessageIDs: displayedMessageIDs,
-            mode: .settledOnce
+            mode: .settledOnce,
+            allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll
         ) != nil
     }
 
@@ -124,7 +127,8 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
         startMutation(
             anchorMessageID: anchorMessageID,
             displayedMessageIDs: displayedMessageIDs,
-            mode: .continuousUntilSettled
+            mode: .continuousUntilSettled,
+            allowsDuringProgrammaticScroll: true
         )
     }
 
@@ -153,7 +157,8 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
     private func startMutation(
         anchorMessageID: UUID,
         displayedMessageIDs: [UUID],
-        mode: MutationMode
+        mode: MutationMode,
+        allowsDuringProgrammaticScroll: Bool
     ) -> UUID? {
         guard pendingMutation == nil,
               pendingAdjustment == nil,
@@ -170,6 +175,7 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
             displayedMessageIDs: displayedMessageIDs,
             baselineSnapshotRevision: snapshotRevision,
             mode: mode,
+            allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll,
             compensatedMinY: frame.minY,
             isSettled: false
         )
@@ -301,7 +307,9 @@ final class ChatHistoryViewportAnchorController: ObservableObject {
             self.pendingMutation = nil
             self.pendingAdjustment = ChatScrollAnchorAdjustment(
                 deltaY: restoredMinY - pendingMutation.originalMinY,
-                allowsTemporaryOverflow: true
+                allowsTemporaryOverflow: true,
+                allowsDuringProgrammaticScroll:
+                    pendingMutation.allowsDuringProgrammaticScroll
             )
         }
     }

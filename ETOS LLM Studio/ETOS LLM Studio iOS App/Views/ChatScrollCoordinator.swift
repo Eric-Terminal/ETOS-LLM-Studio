@@ -24,6 +24,7 @@ final class ChatScrollCoordinator: ObservableObject {
     @Published var pendingHistoryResetWorkItem: DispatchWorkItem?
     @Published var pendingBottomSnapTask: Task<Void, Never>?
     @Published var pendingScrollTargetTask: Task<Void, Never>?
+    @Published var pendingViewportPageRequest: ChatViewportPageRequest?
     @Published var isHistoryLoadInFlight = false
     @Published var previousMessageNavigationTargetID: UUID?
     @Published var nextMessageNavigationTargetID: UUID?
@@ -116,6 +117,17 @@ final class ChatScrollCoordinator: ObservableObject {
         )
     }
 
+    func beginViewportPageHistoryMutation(
+        anchorMessageID: UUID,
+        displayedMessageIDs: [UUID]
+    ) -> Bool {
+        beginHistoryMutation(
+            anchorMessageID: anchorMessageID,
+            displayedMessageIDs: displayedMessageIDs,
+            allowsDuringProgrammaticScroll: true
+        )
+    }
+
     func finishHistoryMutation(didLoad: Bool) {
         guard !didLoad else { return }
         suppressAutoScrollOnce = false
@@ -141,6 +153,23 @@ final class ChatScrollCoordinator: ObservableObject {
     func cancelHistoryAnchorRestoration() {
         isHistoryLoadInFlight = false
         chatHistoryViewportAnchorController.cancel()
+    }
+
+    @discardableResult
+    func issueViewportPageRequest(direction: ChatViewportPageDirection) -> UUID {
+        let request = ChatViewportPageRequest(direction: direction)
+        pendingViewportPageRequest = request
+        return request.id
+    }
+
+    func completeViewportPageRequest(id: UUID) {
+        guard pendingViewportPageRequest?.id == id else { return }
+        pendingViewportPageRequest = nil
+    }
+
+    func cancelViewportPageRequest(id: UUID? = nil) {
+        guard id == nil || pendingViewportPageRequest?.id == id else { return }
+        pendingViewportPageRequest = nil
     }
 
     /// 按键与搜索跳转开始前撤销旧锚点补偿，防止恢复系统在落点后再次改写视口。
@@ -211,6 +240,7 @@ final class ChatScrollCoordinator: ObservableObject {
         scrollNavigationHideTask?.cancel()
         scrollNavigationHideTask = nil
         showScrollNavigationPanel = false
+        pendingViewportPageRequest = nil
     }
 
     nonisolated static func shouldCancelProgrammaticScrollOnPanBegan(
@@ -245,6 +275,7 @@ final class ChatScrollCoordinator: ObservableObject {
         lastAutomaticHistoryLoadAnchorID = nil
         isHistoryLoadInFlight = false
         pendingAutomaticHistoryLoadRequest = nil
+        pendingViewportPageRequest = nil
         suppressAutoScrollOnce = false
         chatHistoryViewportAnchorController.reset()
         chatScrollPositionController.reset()
@@ -265,12 +296,14 @@ final class ChatScrollCoordinator: ObservableObject {
 
     private func beginHistoryMutation(
         anchorMessageID: UUID,
-        displayedMessageIDs: [UUID]
+        displayedMessageIDs: [UUID],
+        allowsDuringProgrammaticScroll: Bool = false
     ) -> Bool {
         guard !isHistoryLoadInFlight,
               chatHistoryViewportAnchorController.beginMutation(
                 anchorMessageID: anchorMessageID,
-                displayedMessageIDs: displayedMessageIDs
+                displayedMessageIDs: displayedMessageIDs,
+                allowsDuringProgrammaticScroll: allowsDuringProgrammaticScroll
               ) else {
             return false
         }

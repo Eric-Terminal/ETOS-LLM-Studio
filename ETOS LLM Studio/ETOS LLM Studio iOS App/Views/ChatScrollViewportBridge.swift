@@ -28,6 +28,36 @@ struct ChatScrollAnchorAdjustment: Equatable, Identifiable, Sendable {
     }
 }
 
+enum ChatViewportPageDirection: Equatable, Sendable {
+    case upward
+    case downward
+
+    nonisolated var offsetMultiplier: CGFloat {
+        switch self {
+        case .upward:
+            return -1
+        case .downward:
+            return 1
+        }
+    }
+}
+
+struct ChatViewportPageRequest: Equatable, Identifiable, Sendable {
+    let id: UUID
+    let direction: ChatViewportPageDirection
+    let viewportFraction: CGFloat
+
+    nonisolated init(
+        id: UUID = UUID(),
+        direction: ChatViewportPageDirection,
+        viewportFraction: CGFloat = 0.8
+    ) {
+        self.id = id
+        self.direction = direction
+        self.viewportFraction = viewportFraction
+    }
+}
+
 struct ChatScrollMetricThresholds: Equatable, Sendable {
     let arrival: CGFloat
     let bottomPinned: CGFloat
@@ -55,6 +85,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
     let hasProgrammaticScrollCommand: Bool
     let anchorAdjustment: ChatScrollAnchorAdjustment?
     let onAnchorAdjustmentApplied: (UUID) -> Void
+    let viewportPageRequest: ChatViewportPageRequest?
+    let onViewportPageRequestCompleted: (UUID) -> Void
     let onUserPanBegan: () -> Void
     let onMetricsChange: (CGFloat, CGFloat, Bool) -> Void
 
@@ -70,6 +102,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             hasProgrammaticScrollCommand: hasProgrammaticScrollCommand,
             anchorAdjustment: anchorAdjustment,
             onAnchorAdjustmentApplied: onAnchorAdjustmentApplied,
+            viewportPageRequest: viewportPageRequest,
+            onViewportPageRequestCompleted: onViewportPageRequestCompleted,
             onUserPanBegan: onUserPanBegan,
             usesNativeSizeChangeAnchor: Self.usesNativeSizeChangeAnchor,
             onMetricsChange: onMetricsChange
@@ -94,6 +128,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         coordinator.metricThresholds = metricThresholds
         coordinator.anchorAdjustment = anchorAdjustment
         coordinator.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
+        coordinator.updateViewportPageRequest(viewportPageRequest)
+        coordinator.onViewportPageRequestCompleted = onViewportPageRequestCompleted
         coordinator.onUserPanBegan = onUserPanBegan
         coordinator.updateScrollOwnership(
             isStreaming: isStreaming,
@@ -104,6 +140,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         DispatchQueue.main.async {
             uiView.attachToScrollViewIfNeeded()
             coordinator.applyAnchorAdjustmentIfNeeded()
+            coordinator.applyViewportPageRequestIfNeeded()
         }
     }
 
@@ -129,6 +166,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         var hasProgrammaticScrollCommand: Bool
         var anchorAdjustment: ChatScrollAnchorAdjustment?
         var onAnchorAdjustmentApplied: (UUID) -> Void
+        var viewportPageRequest: ChatViewportPageRequest?
+        var onViewportPageRequestCompleted: (UUID) -> Void
         var onUserPanBegan: () -> Void
         let usesNativeSizeChangeAnchor: Bool
         weak var scrollView: UIScrollView?
@@ -145,6 +184,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var pendingStreamingLayoutStableContentOverflowsViewport: Bool?
         private var pendingDistanceNotification: DispatchWorkItem?
         private var streamingFollowAnimator: UIViewPropertyAnimator?
+        private var viewportPageAnimator: UIViewPropertyAnimator?
         private var awaitsStreamingEndHandoff = false
         private var lastBoundsSize: CGSize?
         private var lastDistanceToBottom: CGFloat = 0
@@ -153,6 +193,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
         private var lastReportedInteractionState = false
         private var lastReportedMetricRegion: ChatScrollMetricRegion?
         private var lastAppliedAnchorAdjustmentID: UUID?
+        private var lastAppliedViewportPageRequestID: UUID?
         private var lastServicedMetricsRefreshGeneration: UInt
 
         init(
@@ -166,6 +207,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             hasProgrammaticScrollCommand: Bool,
             anchorAdjustment: ChatScrollAnchorAdjustment?,
             onAnchorAdjustmentApplied: @escaping (UUID) -> Void,
+            viewportPageRequest: ChatViewportPageRequest?,
+            onViewportPageRequestCompleted: @escaping (UUID) -> Void,
             onUserPanBegan: @escaping () -> Void,
             usesNativeSizeChangeAnchor: Bool,
             onMetricsChange: @escaping (CGFloat, CGFloat, Bool) -> Void
@@ -180,6 +223,8 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             self.hasProgrammaticScrollCommand = hasProgrammaticScrollCommand
             self.anchorAdjustment = anchorAdjustment
             self.onAnchorAdjustmentApplied = onAnchorAdjustmentApplied
+            self.viewportPageRequest = viewportPageRequest
+            self.onViewportPageRequestCompleted = onViewportPageRequestCompleted
             self.onUserPanBegan = onUserPanBegan
             self.usesNativeSizeChangeAnchor = usesNativeSizeChangeAnchor
             self.onMetricsChange = onMetricsChange
@@ -195,6 +240,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             guard self.scrollView !== scrollView else {
                 scheduleDistanceChangeNotification()
                 applyAnchorAdjustmentIfNeeded()
+                applyViewportPageRequestIfNeeded()
                 return
             }
 
@@ -213,6 +259,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingStreamingLayoutStableContentOverflowsViewport = nil
             awaitsStreamingEndHandoff = false
             stopStreamingFollowAnimator(preservingVisiblePosition: false)
+            stopViewportPageAnimator(preservingVisiblePosition: false)
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
             lastBoundsSize = scrollView.bounds.size
@@ -222,6 +269,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             lastReportedInteractionState = false
             lastReportedMetricRegion = nil
             lastAppliedAnchorAdjustmentID = nil
+            lastAppliedViewportPageRequestID = nil
             self.scrollView = scrollView
             scrollView.panGestureRecognizer.addTarget(
                 self,
@@ -243,6 +291,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
                 self?.handleBoundsChange(scrollView.bounds.size)
             }
             applyAnchorAdjustmentIfNeeded()
+            applyViewportPageRequestIfNeeded()
         }
 
         func detach() {
@@ -266,7 +315,9 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingDistanceNotification?.cancel()
             pendingDistanceNotification = nil
             stopStreamingFollowAnimator(preservingVisiblePosition: false)
+            stopViewportPageAnimator(preservingVisiblePosition: false)
             lastAppliedAnchorAdjustmentID = nil
+            lastAppliedViewportPageRequestID = nil
             scrollView = nil
         }
 
@@ -291,6 +342,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingStreamingLayoutStableContentHeight = nil
             pendingStreamingLayoutStableContentOverflowsViewport = nil
             stopStreamingFollowAnimator(preservingVisiblePosition: true)
+            stopViewportPageAnimator(preservingVisiblePosition: true)
 
             let minimumOffsetY = -scrollView.adjustedContentInset.top
             let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
@@ -315,6 +367,95 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             }
             scheduleDistanceChangeNotification()
             onAnchorAdjustmentApplied(anchorAdjustment.id)
+        }
+
+        /// 中间两键直接驱动原生视口，不再把消息行 frame 当成动画终点。
+        func applyViewportPageRequestIfNeeded() {
+            guard let viewportPageRequest,
+                  viewportPageRequest.id != lastAppliedViewportPageRequestID,
+                  let scrollView,
+                  !isViewportTransitioning else {
+                return
+            }
+            let isUserInteracting = scrollView.isDragging
+                || scrollView.isTracking
+                || scrollView.isDecelerating
+            guard !isUserInteracting else { return }
+
+            cancelPendingViewportFollow()
+            pendingStreamingLayoutSettle?.cancel()
+            pendingStreamingLayoutSettle = nil
+            pendingStreamingLayoutSafeContentHeight = nil
+            pendingStreamingLayoutStableContentHeight = nil
+            pendingStreamingLayoutStableContentOverflowsViewport = nil
+            stopStreamingFollowAnimator(preservingVisiblePosition: true)
+            stopViewportPageAnimator(preservingVisiblePosition: true)
+
+            let minimumOffsetY = -scrollView.adjustedContentInset.top
+            let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
+                contentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height,
+                topInset: scrollView.adjustedContentInset.top,
+                bottomInset: scrollView.adjustedContentInset.bottom
+            )
+            let visibleOffsetY = scrollView.layer.presentation()?.bounds.origin.y
+                ?? scrollView.bounds.origin.y
+            let startOffsetY = min(max(visibleOffsetY, minimumOffsetY), maximumOffsetY)
+            let viewportHeight = max(
+                scrollView.bounds.height
+                    - scrollView.adjustedContentInset.top
+                    - scrollView.adjustedContentInset.bottom,
+                1
+            )
+            let targetOffsetY = ChatScrollMetricsObserver.viewportPageTargetOffsetY(
+                currentOffsetY: startOffsetY,
+                direction: viewportPageRequest.direction,
+                viewportHeight: viewportHeight,
+                viewportFraction: viewportPageRequest.viewportFraction,
+                minimumOffsetY: minimumOffsetY,
+                maximumOffsetY: maximumOffsetY
+            )
+            lastAppliedViewportPageRequestID = viewportPageRequest.id
+            UIView.performWithoutAnimation {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: startOffsetY),
+                    animated: false
+                )
+            }
+
+            let completesImmediately = reduceMotion || abs(targetOffsetY - startOffsetY) <= 0.5
+            guard !completesImmediately else {
+                UIView.performWithoutAnimation {
+                    scrollView.setContentOffset(
+                        CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY),
+                        animated: false
+                    )
+                }
+                notifyDistanceChange(forcesRefresh: true)
+                onViewportPageRequestCompleted(viewportPageRequest.id)
+                return
+            }
+
+            let animator = UIViewPropertyAnimator(duration: 0.34, dampingRatio: 1) {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY),
+                    animated: false
+                )
+            }
+            viewportPageAnimator = animator
+            animator.addCompletion { [weak self, weak animator] _ in
+                guard let self, self.viewportPageAnimator === animator else { return }
+                self.viewportPageAnimator = nil
+                self.notifyDistanceChange(forcesRefresh: true)
+                self.onViewportPageRequestCompleted(viewportPageRequest.id)
+            }
+            animator.startAnimation()
+        }
+
+        func updateViewportPageRequest(_ request: ChatViewportPageRequest?) {
+            viewportPageRequest = request
+            guard request == nil else { return }
+            stopViewportPageAnimator(preservingVisiblePosition: true)
         }
 
         func updateScrollOwnership(
@@ -745,6 +886,34 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             }
         }
 
+        private func stopViewportPageAnimator(preservingVisiblePosition: Bool) {
+            guard let viewportPageAnimator else { return }
+            let visibleOffsetY = scrollView?.layer.presentation()?.bounds.origin.y
+                ?? scrollView?.bounds.origin.y
+            viewportPageAnimator.stopAnimation(true)
+            self.viewportPageAnimator = nil
+            guard preservingVisiblePosition,
+                  let scrollView,
+                  let visibleOffsetY,
+                  visibleOffsetY.isFinite else {
+                return
+            }
+            let minimumOffsetY = -scrollView.adjustedContentInset.top
+            let maximumOffsetY = ChatScrollMetricsObserver.maximumContentOffsetY(
+                contentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height,
+                topInset: scrollView.adjustedContentInset.top,
+                bottomInset: scrollView.adjustedContentInset.bottom
+            )
+            let interruptedOffsetY = min(max(visibleOffsetY, minimumOffsetY), maximumOffsetY)
+            UIView.performWithoutAnimation {
+                scrollView.setContentOffset(
+                    CGPoint(x: scrollView.contentOffset.x, y: interruptedOffsetY),
+                    animated: false
+                )
+            }
+        }
+
         @objc private func handlePanGesture(_ gestureRecognizer: UIPanGestureRecognizer) {
             guard gestureRecognizer.state == .began else { return }
             // 新的触摸边沿必须无条件抢占；减速阶段 interaction Bool 可能仍为 true。
@@ -757,6 +926,7 @@ struct ChatScrollMetricsObserver: UIViewRepresentable {
             pendingStreamingLayoutStableContentHeight = nil
             pendingStreamingLayoutStableContentOverflowsViewport = nil
             stopStreamingFollowAnimator(preservingVisiblePosition: true)
+            stopViewportPageAnimator(preservingVisiblePosition: true)
             keepsBottomPinned.wrappedValue = false
             notifyDistanceChange(forcesRefresh: true)
         }
