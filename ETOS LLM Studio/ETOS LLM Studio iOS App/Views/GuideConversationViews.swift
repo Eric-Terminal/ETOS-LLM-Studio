@@ -130,7 +130,7 @@ private struct GuideMessageBubble: View, Equatable {
                             .foregroundStyle(.secondary)
                     }
                     if !displayedContent.isEmpty {
-                        selectableMessageContent
+                        messageContent
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if !message.toolCalls.isEmpty {
@@ -183,16 +183,6 @@ private struct GuideMessageBubble: View, Equatable {
             Text(displayedContent)
                 .font(.body)
                 .foregroundStyle(message.role == .error ? .red : .primary)
-        }
-    }
-
-    @ViewBuilder
-    private var selectableMessageContent: some View {
-        if isStreaming {
-            // 流式 Text 每批都会替换；此时启用选区会让 TextInputUI 持续重建候选与交互状态。
-            messageContent
-        } else {
-            messageContent.textSelection(.enabled)
         }
     }
 
@@ -318,7 +308,9 @@ struct GuideConversationView: View {
         GuideStreamingObservedContent(state: controller.streamingState) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    // 向导会话不持久化且规模很小。普通栈可避免可选文本固有高度与
+                    // LazyVStack 可见区放置互相触发，在浮窗宽高约束下形成 TextKit 2 布局反馈环。
+                    VStack(spacing: 10) {
                         if controller.messages.isEmpty {
                             emptyState
                         }
