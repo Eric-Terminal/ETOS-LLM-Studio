@@ -420,6 +420,8 @@
 "懒加载消息数" = "Lazy-load Message Nombre";
 "成功响应" = "Réussi Réponse";
 "多个 API Key 用英文逗号分隔。" = "Utiliser commas (,) à separate multiple API Clés.";
+"添加 API Key" = "Ajouter une clé API";
+"每个 API Key 独立一行；向左轻扫可删除。" = "Chaque clé API occupe une ligne. Balayez vers la gauche pour la supprimer.";
 "使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。
 {api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "Use Clé=value à Ajouter ou Remplacer Requête headers, e.g. User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64).
 {api_key} est replaced avec le Actuel API Clé, e.g. Authorization=Bearer {api_key}";

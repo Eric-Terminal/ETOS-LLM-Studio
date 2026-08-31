@@ -421,6 +421,8 @@
 "懒加载消息数" = "懒加载消息数";
 "成功响应" = "成功响应";
 "多个 API Key 用英文逗号分隔。" = "多个 API Key 用英文逗号分隔。";
+"添加 API Key" = "添加 API Key";
+"每个 API Key 独立一行；向左轻扫可删除。" = "每个 API Key 独立一行；向左轻扫可删除。";
 "显示明文" = "显示明文";
 "privacy_storage_details_markdown" = "应用在您的设备上存储以下数据：\n• **聊天记录** - 您与 AI 的对话历史\n• **API 配置与密钥（SQLite）** - 提供商配置与 API Key 保存在本地 SQLite 配置库\n• **记忆数据** - RAG 系统的向量化记忆\n• **应用设置** - 您的偏好设置";
 "privacy_storage_details_plain" = "应用在您的设备上存储以下数据：\n• 聊天记录 - 您与 AI 的对话历史\n• API 配置与密钥（SQLite） - 提供商配置与 API Key 保存在本地 SQLite 配置库\n• 记忆数据 - RAG 系统的向量化记忆\n• 应用设置 - 您的偏好设置";

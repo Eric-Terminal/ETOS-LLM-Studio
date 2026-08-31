@@ -418,6 +418,8 @@
 "懒加载消息数" = "Lazy-load رسالة العدد";
 "成功响应" = "ناجح استجابة";
 "多个 API Key 用英文逗号分隔。" = "استخدم commas (,) إلى separate multiple API مفاتيح.";
+"添加 API Key" = "إضافة مفتاح API";
+"每个 API Key 独立一行；向左轻扫可删除。" = "يُعرض كل مفتاح API في صف مستقل. اسحب لليسار لحذفه.";
 "使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。
 {api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}" = "Use مفتاح=value إلى إضافة أو تجاوز طلب headers, e.g. User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64).
 {api_key} هو replaced مع الـ الحالي API مفتاح, e.g. Authorization=Bearer {api_key}";

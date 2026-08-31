@@ -14,7 +14,7 @@ struct ProviderEditView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var provider: Provider
-    @State private var apiKeysText: String
+    @State private var apiKeyEntries: [APIKeyEntry]
     @State private var headerOverrideEntries: [HeaderOverrideEntry]
     @State private var useProviderProxyOverride: Bool
     @State private var providerProxyConfiguration: NetworkProxyConfiguration
@@ -31,7 +31,7 @@ struct ProviderEditView: View {
     let onUnsavedChangesChange: (Bool) -> Void
     let onSave: (Provider) -> Void
     private let savedProvider: Provider
-    private let savedApiKeysText: String
+    private let savedAPIKeyValues: [String]
     private let savedHeaderOverrideTexts: [String]
     private let savedUseProviderProxyOverride: Bool
     private let savedProviderProxyConfiguration: NetworkProxyConfiguration
@@ -52,8 +52,8 @@ struct ProviderEditView: View {
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         _provider = State(initialValue: provider)
-        let apiKeysText = provider.apiKeys.joined(separator: ",")
-        _apiKeysText = State(initialValue: apiKeysText)
+        let apiKeyValues = provider.apiKeys.isEmpty ? [""] : provider.apiKeys
+        _apiKeyEntries = State(initialValue: apiKeyValues.map { APIKeyEntry(value: $0) })
         let serializedHeaders = HeaderExpressionParser.serialize(headers: provider.headerOverrides)
         let headerOverrideTexts = serializedHeaders.isEmpty ? [""] : serializedHeaders
         _headerOverrideEntries = State(initialValue: serializedHeaders.isEmpty
@@ -73,7 +73,7 @@ struct ProviderEditView: View {
         self.onUnsavedChangesChange = onUnsavedChangesChange
         self.onSave = onSave
         self.savedProvider = provider
-        self.savedApiKeysText = apiKeysText
+        self.savedAPIKeyValues = apiKeyValues
         self.savedHeaderOverrideTexts = headerOverrideTexts
         self.savedUseProviderProxyOverride = useProviderProxyOverride
         self.savedProviderProxyConfiguration = providerProxyConfiguration
@@ -105,16 +105,17 @@ struct ProviderEditView: View {
             }
             
             Section(header: Text(NSLocalizedString("认证", comment: "")), footer: Text(apiKeysHint)) {
-                Group {
-                    if showApiKeys {
-                        TextField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $apiKeysText)
-                    } else {
-                        SecureField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $apiKeysText)
-                    }
+                ForEach($apiKeyEntries) { $entry in
+                    APIKeyRow(entry: $entry, showsPlaintext: showApiKeys)
                 }
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                
+                .onDelete(perform: deleteAPIKeyEntries)
+
+                Button {
+                    addAPIKeyEntry()
+                } label: {
+                    Label(NSLocalizedString("添加 API Key", comment: "Add provider API key button"), systemImage: "plus")
+                }
+
                 Toggle(NSLocalizedString("显示明文", comment: ""), isOn: $showApiKeys)
             }
 
@@ -375,7 +376,7 @@ struct ProviderEditView: View {
             throw GuideError.unsupportedTool(proposal.toolName)
         }
         let originalProvider = provider
-        let originalAPIKeysText = apiKeysText
+        let originalAPIKeyEntries = apiKeyEntries
         let oldArguments = currentProviderGuideArguments(for: proposal.arguments.keys)
 
         do {
@@ -385,11 +386,13 @@ struct ProviderEditView: View {
                 provider.chatEndpointPath = value
             }
             if let value = try GuideToolArguments.optionalString("api_format", in: proposal.arguments) { provider.apiFormat = value }
-            if let value = try GuideToolArguments.optionalString("api_key", in: proposal.arguments) { apiKeysText = value }
+            if let value = try GuideToolArguments.optionalString("api_key", in: proposal.arguments) {
+                setAPIKeyEntries(from: value)
+            }
             guard !isSaveDisabled else { throw GuideError.invalidToolArguments }
         } catch {
             provider = originalProvider
-            apiKeysText = originalAPIKeysText
+            apiKeyEntries = originalAPIKeyEntries
             throw error
         }
 
@@ -402,7 +405,7 @@ struct ProviderEditView: View {
         let undoProposal = try buildProviderGuideProposal(call: undoCall, snapshot: undoSnapshot)
         guard persistProviderEdits() else {
             provider = originalProvider
-            apiKeysText = originalAPIKeysText
+            apiKeyEntries = originalAPIKeyEntries
             throw GuideError.invalidToolArguments
         }
         return GuideActionExecution(
@@ -428,7 +431,7 @@ struct ProviderEditView: View {
 
     private var hasUnsavedChanges: Bool {
         provider != savedProvider ||
-        apiKeysText != savedApiKeysText ||
+        apiKeyEntries.map(\.value) != savedAPIKeyValues ||
         headerOverrideEntries.map(\.text) != savedHeaderOverrideTexts ||
         useProviderProxyOverride != savedUseProviderProxyOverride ||
         providerProxyConfiguration != savedProviderProxyConfiguration
@@ -472,7 +475,7 @@ struct ProviderEditView: View {
         if isLocalProvider {
             return NSLocalizedString("本地推理不会读取 API Key。这里保留字段只是为了沿用提供商配置界面。", comment: "Local provider API key hint")
         }
-        return NSLocalizedString("多个 API Key 用英文逗号分隔。", comment: "")
+        return NSLocalizedString("每个 API Key 独立一行；向左轻扫可删除。", comment: "Provider API key list hint")
     }
 
     private var numberFormatter: NumberFormatter {
@@ -508,10 +511,13 @@ struct ProviderEditView: View {
         NSLocalizedString("使用 key=value 添加或覆盖请求头，例如: User-Agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)。\n{api_key} 会替换为当前 API Key，例如: Authorization=Bearer {api_key}", comment: "")
     }
 
+    private var apiKeysText: String {
+        apiKeyEntries.map(\.value).joined(separator: ",")
+    }
+
     private var parsedApiKeys: [String] {
-        apiKeysText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        apiKeyEntries
+            .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
 
@@ -540,6 +546,21 @@ struct ProviderEditView: View {
             username: configuration.username.trimmingCharacters(in: .whitespacesAndNewlines),
             password: configuration.password
         )
+    }
+
+    private func addAPIKeyEntry() {
+        apiKeyEntries.append(APIKeyEntry(value: ""))
+    }
+
+    private func deleteAPIKeyEntries(at offsets: IndexSet) {
+        apiKeyEntries.remove(atOffsets: offsets)
+    }
+
+    private func setAPIKeyEntries(from text: String) {
+        let values = text
+            .split(separator: ",", omittingEmptySubsequences: false)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        apiKeyEntries = (values.isEmpty ? [""] : values).map { APIKeyEntry(value: $0) }
     }
 
     private func addHeaderOverrideEntry() {
@@ -652,6 +673,33 @@ struct ProviderEditView: View {
 private struct HeaderOverridesPreview {
     let text: String
     let isPlaceholder: Bool
+}
+
+private struct APIKeyEntry: Identifiable, Equatable {
+    let id: UUID
+    var value: String
+
+    init(id: UUID = UUID(), value: String) {
+        self.id = id
+        self.value = value
+    }
+}
+
+private struct APIKeyRow: View {
+    @Binding var entry: APIKeyEntry
+    let showsPlaintext: Bool
+
+    var body: some View {
+        Group {
+            if showsPlaintext {
+                TextField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $entry.value)
+            } else {
+                SecureField(NSLocalizedString("API Key", comment: "Provider API key field"), text: $entry.value)
+            }
+        }
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+    }
 }
 
 private struct HeaderOverrideEntry: Identifiable, Equatable {
