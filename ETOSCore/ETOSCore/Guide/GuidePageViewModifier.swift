@@ -11,6 +11,7 @@ import SwiftUI
 @MainActor
 private struct GuidePageContextModifier: ViewModifier {
     let descriptor: GuidePageDescriptor
+    let isFallback: Bool
     let snapshot: GuideContextCoordinator.SnapshotProvider
     let executeReadTool: GuideContextCoordinator.ReadToolExecutor
     let buildProposal: GuideContextCoordinator.ProposalBuilder
@@ -26,6 +27,7 @@ private struct GuidePageContextModifier: ViewModifier {
                 } else {
                     token = GuideContextCoordinator.shared.register(
                         descriptor: descriptor,
+                        isFallback: isFallback,
                         snapshot: snapshot,
                         executeReadTool: executeReadTool,
                         buildProposal: buildProposal,
@@ -46,6 +48,7 @@ public extension View {
     /// 注册当前页面公开的快照与自定义工具；读取由页面执行，任何写入都必须先生成提案。
     func guidePageContext(
         descriptor: GuidePageDescriptor,
+        isFallback: Bool = false,
         snapshot: @escaping @MainActor @Sendable () async -> GuidePageSnapshot,
         executeReadTool: @escaping @MainActor @Sendable (InternalToolCall) async throws -> String = { call in
             throw GuideError.unsupportedTool(call.toolName)
@@ -59,6 +62,7 @@ public extension View {
     ) -> some View {
         modifier(GuidePageContextModifier(
             descriptor: descriptor,
+            isFallback: isFallback,
             snapshot: snapshot,
             executeReadTool: executeReadTool,
             buildProposal: buildProposal,

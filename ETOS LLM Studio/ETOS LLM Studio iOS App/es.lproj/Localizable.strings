@@ -7141,3 +7141,12 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "高级参数" = "Ajustes avanzados";
 "可直接使用默认 WebSocket 地址；填写 Workspace ID 后会按区域生成专属地址。" = "Puedes usar directamente la URL WebSocket predeterminada. Introduce un ID de espacio de trabajo para generar una URL regional.";
 "所选内容为空时会朗读全文。" = "Si la selección no contiene texto, se leerá el texto completo.";
+
+/* Propuestas de modelos de proveedor de la guía de página */
+"当前分页" = "Pestaña actual";
+"已配置提供商" = "Proveedores configurados";
+"已添加模型" = "Modelos añadidos";
+"已保存提供商模型配置。" = "Se guardó la configuración de modelos del proveedor.";
+"新增或更新 %d 个模型，移除 %d 个模型" = "Modelos para añadir o actualizar: %d; modelos para eliminar: %d";
+"新增或更新 %d 个模型，移除 %d 个模型（包含疑似认证字段，请仔细确认）" = "Modelos para añadir o actualizar: %d; modelos para eliminar: %d (contiene posibles campos de autenticación; revísalos con atención)";
+"撤销向导的模型列表修改" = "Deshacer los cambios del asistente en la lista de modelos";

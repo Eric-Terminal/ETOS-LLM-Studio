@@ -93,6 +93,7 @@ struct SettingsView: View {
                 title: NSLocalizedString("设置", comment: "手表设置向导上下文标题"),
                 documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
             ),
+            isFallback: true,
             snapshot: {
                 GuidePageSnapshot(fields: [
                     "provider_count": GuideSnapshotField(

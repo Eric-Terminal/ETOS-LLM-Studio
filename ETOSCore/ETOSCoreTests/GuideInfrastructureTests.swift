@@ -122,6 +122,36 @@ struct GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("页面专属上下文优先于设置导航后备上下文")
+    func pageRegistrationOutranksFallbackContext() async throws {
+        let coordinator = GuideContextCoordinator()
+        let fallback = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "settings-fallback", title: "设置"),
+            isFallback: true,
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        let page = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "provider-models", title: "模型配置"),
+            snapshot: { .empty },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(fallback) }
+
+        coordinator.activate(fallback)
+        #expect(try await coordinator.currentContext().descriptor.id == "provider-models")
+
+        coordinator.pinActivePage()
+        coordinator.unregister(page)
+        #expect(try await coordinator.currentContext().descriptor.id == "provider-models")
+
+        coordinator.unpinActivePage()
+        #expect(try await coordinator.currentContext().descriptor.id == "settings-fallback")
+    }
+
+    @MainActor
     @Test("手表二级向导可暂时保留来源页面")
     func pinnedRegistrationSurvivesSourceDisappearance() async throws {
         let coordinator = GuideContextCoordinator()
@@ -665,6 +695,7 @@ struct GuideInfrastructureTests {
             GuideToolCatalog.readProviderTemplate,
             GuideToolCatalog.updateProviderConfiguration,
             GuideToolCatalog.updateModelConfiguration,
+            GuideToolCatalog.updateProviderModels,
             GuideToolCatalog.replaceModelRequestBody,
             GuideToolCatalog.updateGlobalProxy,
             GuideToolCatalog.updateMCPPreferences,
@@ -705,6 +736,53 @@ struct GuideInfrastructureTests {
         }
         #expect(endpoint.absoluteString == "https://mcp.example.com")
         #expect(headers["Authorization"] == "Bearer private-token")
+    }
+
+    @Test("模型列表 JSON 提案可新增模型、隐藏秘密并完整撤销")
+    func providerModelsProposalAddsRedactsAndRestores() throws {
+        let originalModel = Model(
+            modelName: "existing-chat",
+            displayName: "Existing Chat",
+            isActivated: true
+        )
+        let provider = Provider(
+            name: "Example",
+            baseURL: "https://api.example.com/v1",
+            apiKeys: ["provider-secret"],
+            apiFormat: "openai-compatible",
+            models: [originalModel]
+        )
+        let call = InternalToolCall(
+            id: "add-model",
+            toolName: GuideToolCatalog.updateProviderModels.name,
+            arguments: #"{"models":[{"model_id":"deepseek-v4-flash-Eric","display_name":"DeepSeek V4 Flash","kind":"chat","supports_tool_calling":true,"request_body_json":{"temperature":0.6,"headers":{"Authorization":"Bearer private-token"}}}]}"#
+        )
+
+        let proposal = try GuideProviderModelsProposalSupport.buildProposal(
+            call: call,
+            pageID: "provider-models",
+            provider: provider
+        )
+        #expect(proposal.mutations.count == 1)
+        #expect(proposal.summary.contains("仔细确认"))
+        #expect(!proposal.mutations[0].newValue.prettyPrintedCompact().contains("private-token"))
+
+        let application = try GuideProviderModelsProposalSupport.apply(proposal, to: provider)
+        let added = try #require(application.provider.models.first {
+            $0.modelName == "deepseek-v4-flash-Eric"
+        })
+        #expect(added.isActivated)
+        #expect(added.supportsToolCalling)
+        #expect(added.requestBodyOverrideMode == .rawJSON)
+        #expect(JSONValue.dictionary(added.overrideParameters).prettyPrintedCompact().contains("private-token"))
+
+        let undoProposal = try #require(application.undoProposal)
+        let restored = try GuideProviderModelsProposalSupport.apply(
+            undoProposal,
+            to: application.provider
+        )
+        #expect(restored.provider.models == provider.models)
+        #expect(restored.undoProposal == nil)
     }
 
     @Test("提示词限定向导职责并仅按条件提供零成本建议")

@@ -27,6 +27,7 @@ public final class GuideContextCoordinator: ObservableObject {
     private struct Registration {
         let token: RegistrationToken
         let descriptor: GuidePageDescriptor
+        let isFallback: Bool
         let snapshotProvider: SnapshotProvider
         let readToolExecutor: ReadToolExecutor
         let proposalBuilder: ProposalBuilder
@@ -44,6 +45,7 @@ public final class GuideContextCoordinator: ObservableObject {
     @discardableResult
     public func register(
         descriptor: GuidePageDescriptor,
+        isFallback: Bool = false,
         snapshot: @escaping SnapshotProvider,
         executeReadTool: @escaping ReadToolExecutor = { call in
             throw GuideError.unsupportedTool(call.toolName)
@@ -55,6 +57,7 @@ public final class GuideContextCoordinator: ObservableObject {
         registrations.append(Registration(
             token: token,
             descriptor: descriptor,
+            isFallback: isFallback,
             snapshotProvider: snapshot,
             readToolExecutor: executeReadTool,
             proposalBuilder: buildProposal,
@@ -78,7 +81,7 @@ public final class GuideContextCoordinator: ObservableObject {
 
     /// watchOS 进入二级向导页时，暂时保留来源页声明；退出向导后必须解除。
     public func pinActivePage() {
-        pinnedRegistration = registrations.last
+        pinnedRegistration = currentRegistration
         refreshActivePage()
     }
 
@@ -137,6 +140,10 @@ public final class GuideContextCoordinator: ObservableObject {
     }
 
     private var currentRegistration: Registration? {
-        registrations.last ?? pinnedRegistration
+        // 导航容器的后备上下文只在当前页没有更精确声明时接管。
+        // watchOS 进入向导二级页后，固定的来源页也应优先于设置根容器。
+        registrations.last(where: { !$0.isFallback })
+            ?? pinnedRegistration
+            ?? registrations.last
     }
 }

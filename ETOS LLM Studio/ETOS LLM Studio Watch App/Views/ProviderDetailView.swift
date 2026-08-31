@@ -208,29 +208,80 @@ struct ProviderDetailView: View {
         }
         .guidePageContext(
             descriptor: GuidePageDescriptor(
-                id: GuidePageID(rawValue: "watch-provider-models-\(provider.id)"),
+                id: providerModelsGuidePageID,
                 title: provider.name,
-                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")]
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+                tools: allowsManualModelAdd
+                    ? [GuidePageTool(definition: GuideToolCatalog.updateProviderModels, access: .proposeChange)]
+                    : []
             ),
-            snapshot: {
-                GuidePageSnapshot(fields: [
-                    "name": GuideSnapshotField(
-                        label: NSLocalizedString("提供商名称", comment: "手表提供商模型页向导快照字段"),
-                        value: .string(provider.name),
-                        access: .readOnly
-                    ),
-                    "base_url": GuideSnapshotField(
-                        label: NSLocalizedString("API 地址", comment: "手表提供商模型页向导快照字段"),
-                        value: .string(provider.baseURL),
-                        access: .readOnly
-                    ),
-                    "api_format": GuideSnapshotField(
-                        label: NSLocalizedString("API 格式", comment: "手表提供商模型页向导快照字段"),
-                        value: .string(provider.apiFormat),
-                        access: .readOnly
-                    )
-                ])
-            }
+            snapshot: providerModelsGuideSnapshot,
+            buildProposal: buildProviderModelsGuideProposal,
+            execute: executeProviderModelsGuideProposal
+        )
+    }
+
+    private var providerModelsGuidePageID: GuidePageID {
+        GuidePageID(rawValue: "watch-provider-models-\(provider.id)")
+    }
+
+    private func providerModelsGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "name": GuideSnapshotField(
+                label: NSLocalizedString("提供商名称", comment: "手表提供商模型页向导快照字段"),
+                value: .string(provider.name),
+                access: .readOnly
+            ),
+            "base_url": GuideSnapshotField(
+                label: NSLocalizedString("API 地址", comment: "手表提供商模型页向导快照字段"),
+                value: .string(provider.baseURL),
+                access: .readOnly
+            ),
+            "api_format": GuideSnapshotField(
+                label: NSLocalizedString("API 格式", comment: "手表提供商模型页向导快照字段"),
+                value: .string(provider.apiFormat),
+                access: .readOnly
+            ),
+            "models": GuideSnapshotField(
+                label: NSLocalizedString("已添加模型", comment: "手表提供商模型页向导快照字段"),
+                value: GuideProviderModelsProposalSupport.snapshotValue(for: provider.models)
+            )
+        ])
+    }
+
+    private func buildProviderModelsGuideProposal(
+        call: InternalToolCall,
+        snapshot: GuidePageSnapshot
+    ) throws -> GuideActionProposal {
+        _ = snapshot
+        guard allowsManualModelAdd else { throw GuideError.unsupportedTool(call.toolName) }
+        return try GuideProviderModelsProposalSupport.buildProposal(
+            call: call,
+            pageID: providerModelsGuidePageID,
+            provider: provider
+        )
+    }
+
+    private func executeProviderModelsGuideProposal(
+        _ proposal: GuideActionProposal
+    ) async throws -> GuideActionExecution {
+        guard allowsManualModelAdd else { throw GuideError.unsupportedTool(proposal.toolName) }
+        let application = try GuideProviderModelsProposalSupport.apply(proposal, to: provider)
+
+        // 显式持久化确认后的完整结果，并暂时抑制 @State 变化触发的重复保存。
+        isApplyingProviderUpdateFromParent = true
+        provider = application.provider
+        var providerToSave = application.provider
+        providerToSave.models = application.provider.models.filter(\.isActivated)
+        ChatService.shared.saveProviderFromManagement(providerToSave)
+        onSave(providerToSave)
+        DispatchQueue.main.async {
+            isApplyingProviderUpdateFromParent = false
+        }
+
+        return GuideActionExecution(
+            message: NSLocalizedString("已保存提供商模型配置。", comment: "提供商模型向导执行结果"),
+            undoProposal: application.undoProposal
         )
     }
     

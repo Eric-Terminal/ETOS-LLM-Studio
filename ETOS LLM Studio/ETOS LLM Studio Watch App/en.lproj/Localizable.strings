@@ -6876,3 +6876,12 @@
 "高级参数" = "Advanced Settings";
 "可直接使用默认 WebSocket 地址；填写 Workspace ID 后会按区域生成专属地址。" = "You can use the default WebSocket URL directly. Enter a Workspace ID to generate a regional URL.";
 "所选内容为空时会朗读全文。" = "If the selection contains no text, the full text will be read.";
+
+/* Page guide provider-model proposals */
+"当前分页" = "Current Tab";
+"已配置提供商" = "Configured Providers";
+"已添加模型" = "Added Models";
+"已保存提供商模型配置。" = "Provider model configuration saved.";
+"新增或更新 %d 个模型，移除 %d 个模型" = "Models to add or update: %d; models to remove: %d";
+"新增或更新 %d 个模型，移除 %d 个模型（包含疑似认证字段，请仔细确认）" = "Models to add or update: %d; models to remove: %d (contains possible authentication fields; review carefully)";
+"撤销向导的模型列表修改" = "Undo the guide's model list changes";

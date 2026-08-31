@@ -135,6 +135,38 @@ struct ProviderListView: View {
                     .environmentObject(viewModel)
             }
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "provider-management",
+                title: NSLocalizedString("模型管理", comment: "模型管理向导后备上下文标题"),
+                documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")]
+            ),
+            isFallback: true,
+            snapshot: providerManagementGuideSnapshot
+        )
+    }
+
+    private func providerManagementGuideSnapshot() async -> GuidePageSnapshot {
+        GuidePageSnapshot(fields: [
+            "selected_tab": GuideSnapshotField(
+                label: NSLocalizedString("当前分页", comment: "模型管理向导快照字段"),
+                value: .string(selectedTab.title),
+                access: .readOnly
+            ),
+            "providers": GuideSnapshotField(
+                label: NSLocalizedString("已配置提供商", comment: "模型管理向导快照字段"),
+                value: .array(viewModel.providers.map { provider in
+                    .dictionary([
+                        "id": .string(provider.id.uuidString.lowercased()),
+                        "name": .string(provider.name),
+                        "base_url": .string(provider.baseURL),
+                        "api_format": .string(provider.apiFormat),
+                        "active_model_count": .int(provider.models.count(where: \.isActivated))
+                    ])
+                }),
+                access: .readOnly
+            )
+        ])
     }
 }
 

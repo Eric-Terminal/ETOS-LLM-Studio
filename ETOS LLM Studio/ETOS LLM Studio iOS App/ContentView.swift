@@ -655,6 +655,7 @@ struct ContentView: View {
                 title: NSLocalizedString("设置", comment: "设置导航向导后备上下文标题"),
                 documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")]
             ),
+            isFallback: true,
             snapshot: {
                 GuidePageSnapshot(fields: [
                     "provider_count": GuideSnapshotField(
