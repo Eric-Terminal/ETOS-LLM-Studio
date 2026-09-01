@@ -7151,3 +7151,8 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "新增或更新 %d 个模型，移除 %d 个模型" = "Modèles à ajouter ou mettre à jour : %d ; modèles à supprimer : %d";
 "新增或更新 %d 个模型，移除 %d 个模型（包含疑似认证字段，请仔细确认）" = "Modèles à ajouter ou mettre à jour : %d ; modèles à supprimer : %d (contient de possibles champs d’authentification ; vérifiez attentivement)";
 "撤销向导的模型列表修改" = "Annuler les modifications de la liste des modèles effectuées par le guide";
+
+/* Clavier physique */
+"实体键盘" = "Clavier physique";
+"按 Return 发送消息" = "Envoyer avec Retour";
+"开启后，按 Return 发送消息，按 Shift–Return 换行。关闭后，按 ⌘Return 发送。屏幕键盘不受影响。" = "Lorsque cette option est activée, appuyez sur Retour pour envoyer et sur Maj–Retour pour insérer un saut de ligne. Lorsqu’elle est désactivée, appuyez sur ⌘Retour pour envoyer. Le clavier à l’écran n’est pas affecté.";

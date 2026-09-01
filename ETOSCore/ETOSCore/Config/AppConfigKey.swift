@@ -410,6 +410,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case enableSlashCommands = "chat.slashCommands.enabled"
     case customChatSlashCommands = "chat.slashCommands.custom"
     case chatComposerStyle = "chat.composer.style"
+    case iOSHardwareKeyboardReturnSendsMessage = "chat.composer.hardwareKeyboard.returnSendsMessage.iOS"
     case chatComposerDraft = "chat.composer.draft"
     case restoreLastSessionOnLaunch = "launch.restoreLastSessionOnLaunchEnabled"
     case restoreLastSessionOnlyIfRecent = "launch.restoreLastSessionOnlyIfRecent"
@@ -736,6 +737,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             return .text("")
         case .chatComposerStyle:
             return .text(ChatComposerStyle.capsule.rawValue)
+        case .iOSHardwareKeyboardReturnSendsMessage:
+            return .bool(true)
         case .watchAttachmentSourceHistory,
              .watchBackgroundSourceHistory:
             return .text("[]")
@@ -856,6 +859,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
              .requestLogPlainMessageEnabled,
              .performanceTelemetryEnabled,
              .watchUseThirdPartyKeyboard,
+             .iOSHardwareKeyboardReturnSendsMessage,
              .localDebugLastServerAddress,
              .iOSModelPickerExpandedGroupIDs,
              .watchModelPickerExpandedGroupIDs,

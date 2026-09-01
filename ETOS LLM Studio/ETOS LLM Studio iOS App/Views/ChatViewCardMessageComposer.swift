@@ -62,6 +62,11 @@ extension TelegramMessageComposer {
         )
         .etFont(.system(size: 16))
         .focused(focus)
+        .onKeyPress(
+            .return,
+            phases: .down,
+            action: adaptiveHandleHardwareKeyboardReturn
+        )
         .textFieldStyle(.plain)
         // 交给系统文本控件逐行扩展；达到六行后内部滚动，避免在输入链路中重复测量全文。
         .lineLimit(1...6)

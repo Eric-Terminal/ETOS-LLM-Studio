@@ -481,6 +481,9 @@ public final class AppConfigStore: ObservableObject {
     }
     @Published public var enableSlashCommands: Bool { didSet { write(.enableSlashCommands, enableSlashCommands) } }
     @Published public var chatComposerStyle: String { didSet { write(.chatComposerStyle, chatComposerStyle) } }
+    @Published public var iOSHardwareKeyboardReturnSendsMessage: Bool {
+        didSet { write(.iOSHardwareKeyboardReturnSendsMessage, iOSHardwareKeyboardReturnSendsMessage) }
+    }
     @Published public var chatComposerDraft: String { didSet { write(.chatComposerDraft, chatComposerDraft) } }
     @Published public var restoreLastSessionOnLaunch: Bool { didSet { write(.restoreLastSessionOnLaunch, restoreLastSessionOnLaunch) } }
     @Published public var restoreLastSessionOnlyIfRecent: Bool { didSet { write(.restoreLastSessionOnlyIfRecent, restoreLastSessionOnlyIfRecent) } }
@@ -759,6 +762,10 @@ public final class AppConfigStore: ObservableObject {
         chatComposerStyle = ChatComposerStyle.normalized(
             Self.textValue(.chatComposerStyle, userDefaults: userDefaults)
         ).rawValue
+        iOSHardwareKeyboardReturnSendsMessage = Self.boolValue(
+            .iOSHardwareKeyboardReturnSendsMessage,
+            userDefaults: userDefaults
+        )
         let initialChatComposerDraft = Self.textValue(.chatComposerDraft, userDefaults: userDefaults)
         chatComposerDraft = initialChatComposerDraft
         persistedChatComposerDraftValue = Self.normalizedAppConfigValue(.text(initialChatComposerDraft), for: .chatComposerDraft)

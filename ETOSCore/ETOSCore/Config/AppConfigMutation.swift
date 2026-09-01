@@ -112,6 +112,7 @@ extension AppConfigStore {
         case .modelPickerPromptShortcutEnabled: modelPickerPromptShortcutEnabled = value
         case .modelPickerWorldbookShortcutEnabled: modelPickerWorldbookShortcutEnabled = value
         case .enableSlashCommands: enableSlashCommands = value
+        case .iOSHardwareKeyboardReturnSendsMessage: iOSHardwareKeyboardReturnSendsMessage = value
         case .restoreLastSessionOnLaunch: restoreLastSessionOnLaunch = value
         case .restoreLastSessionOnlyIfRecent: restoreLastSessionOnlyIfRecent = value
         case .providerDetailGroupByMainstream: providerDetailGroupByMainstream = value

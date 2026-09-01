@@ -330,6 +330,11 @@ extension TelegramMessageComposer {
             TextEditor(text: $text)
                 .etFont(.system(size: 16))
                 .focused(focus)
+                .onKeyPress(
+                    .return,
+                    phases: .down,
+                    action: adaptiveHandleHardwareKeyboardReturn
+                )
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(adaptivePresentation != .expandedText)
                 // 让飞行文字从按钮之间的真实编辑视口出发，而不是整个玻璃胶囊。
@@ -727,17 +732,39 @@ extension TelegramMessageComposer {
         if isSending && !adaptiveHasContent {
             stopAction()
         } else if adaptiveHasContent {
-            adaptiveCloseRequestControls()
-            if let command = adaptiveRecognizedSlashCommand {
-                performSelectedSlashCommand(command)
-            } else {
-                sendAction()
-            }
+            adaptiveSubmitContent()
         } else if viewModel.canQuickRetryLatestMessage {
             adaptiveCloseRequestControls()
             viewModel.quickRetryLatestMessage()
         } else {
             adaptiveBeginEditing()
+        }
+    }
+
+    func adaptiveHandleHardwareKeyboardReturn(_ keyPress: KeyPress) -> KeyPress.Result {
+        let action = ChatComposerHardwareKeyboardReturnAction.resolve(
+            returnSendsMessage: appConfig.iOSHardwareKeyboardReturnSendsMessage,
+            modifiers: keyPress.modifiers
+        )
+        guard action == .send else {
+            return .ignored
+        }
+
+        // 消费发送组合键，即使当前内容不可发送，也不能把它意外降级成换行。
+        guard !isSendActionPending, adaptiveHasContent else {
+            return .handled
+        }
+        adaptiveSubmitContent()
+        return .handled
+    }
+
+    private func adaptiveSubmitContent() {
+        guard adaptiveRecognizedSlashCommand != nil || viewModel.canSendMessage else { return }
+        adaptiveCloseRequestControls()
+        if let command = adaptiveRecognizedSlashCommand {
+            performSelectedSlashCommand(command)
+        } else {
+            sendAction()
         }
     }
 

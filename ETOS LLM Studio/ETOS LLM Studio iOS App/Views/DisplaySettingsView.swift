@@ -281,6 +281,19 @@ struct DisplaySettingsView: View {
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                Section {
+                    Toggle(
+                        NSLocalizedString("按 Return 发送消息", comment: "实体键盘 Return 发送设置"),
+                        isOn: $appConfig.iOSHardwareKeyboardReturnSendsMessage
+                    )
+                } header: {
+                    Text(NSLocalizedString("实体键盘", comment: "实体键盘设置分组"))
+                } footer: {
+                    Text(NSLocalizedString("开启后，按 Return 发送消息，按 Shift–Return 换行。关闭后，按 ⌘Return 发送。屏幕键盘不受影响。", comment: "实体键盘 Return 行为说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .tabItem {
                 Label(NSLocalizedString("界面与交互", comment: ""), systemImage: "slider.horizontal.3")

@@ -7151,3 +7151,8 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "新增或更新 %d 个模型，移除 %d 个模型" = "Modelos para añadir o actualizar: %d; modelos para eliminar: %d";
 "新增或更新 %d 个模型，移除 %d 个模型（包含疑似认证字段，请仔细确认）" = "Modelos para añadir o actualizar: %d; modelos para eliminar: %d (contiene posibles campos de autenticación; revísalos con atención)";
 "撤销向导的模型列表修改" = "Deshacer los cambios del asistente en la lista de modelos";
+
+/* Teclado físico */
+"实体键盘" = "Teclado físico";
+"按 Return 发送消息" = "Enviar con Retorno";
+"开启后，按 Return 发送消息，按 Shift–Return 换行。关闭后，按 ⌘Return 发送。屏幕键盘不受影响。" = "Cuando está activado, pulsa Retorno para enviar y Mayús–Retorno para insertar un salto de línea. Cuando está desactivado, pulsa ⌘Retorno para enviar. El teclado en pantalla no se ve afectado.";

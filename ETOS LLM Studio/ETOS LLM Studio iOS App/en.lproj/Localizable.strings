@@ -7074,3 +7074,8 @@
 "新增或更新 %d 个模型，移除 %d 个模型" = "Models to add or update: %d; models to remove: %d";
 "新增或更新 %d 个模型，移除 %d 个模型（包含疑似认证字段，请仔细确认）" = "Models to add or update: %d; models to remove: %d (contains possible authentication fields; review carefully)";
 "撤销向导的模型列表修改" = "Undo the guide's model list changes";
+
+/* Hardware keyboard */
+"实体键盘" = "Hardware Keyboard";
+"按 Return 发送消息" = "Send Messages with Return";
+"开启后，按 Return 发送消息，按 Shift–Return 换行。关闭后，按 ⌘Return 发送。屏幕键盘不受影响。" = "When enabled, press Return to send and Shift–Return to insert a line break. When disabled, press ⌘Return to send. The onscreen keyboard is unaffected.";

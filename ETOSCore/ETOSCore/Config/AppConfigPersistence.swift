@@ -519,6 +519,7 @@ extension AppConfigStore {
         case .temporaryChatMemoryEnabled: return .bool(temporaryChatMemoryEnabled)
         case .enableSlashCommands: return .bool(enableSlashCommands)
         case .chatComposerStyle: return .text(chatComposerStyle)
+        case .iOSHardwareKeyboardReturnSendsMessage: return .bool(iOSHardwareKeyboardReturnSendsMessage)
         case .chatComposerDraft: return .text(chatComposerDraft)
         case .restoreLastSessionOnLaunch: return .bool(restoreLastSessionOnLaunch)
         case .restoreLastSessionOnlyIfRecent: return .bool(restoreLastSessionOnlyIfRecent)
