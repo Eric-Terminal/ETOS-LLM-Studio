@@ -2475,6 +2475,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+"max" = "max";
 "填写 JSON 对象" = "إدخال كائن JSON";
 
 "none" = "none";

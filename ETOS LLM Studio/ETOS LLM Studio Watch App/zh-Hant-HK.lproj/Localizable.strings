@@ -2268,6 +2268,7 @@
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+"max" = "max";
 
 "none" = "none";
 "温度" = "溫度";

@@ -584,7 +584,8 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: ["reasoning_effort": .string("low")]),
                     ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: ["reasoning_effort": .string("medium")]),
                     ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: ["reasoning_effort": .string("high")]),
-                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")])
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: ["reasoning_effort": .string("xhigh")]),
+                    ModelRequestBodyControlOption(id: "max", title: NSLocalizedString("max", comment: ""), payload: ["reasoning_effort": .string("max")])
                 ]
             )
         case .openAIResponses:
@@ -599,7 +600,8 @@ public enum ModelRequestBodyControlDefaults {
                     ModelRequestBodyControlOption(id: "low", title: NSLocalizedString("low", comment: ""), payload: openAIResponsesThinkingPayload(effort: "low")),
                     ModelRequestBodyControlOption(id: "medium", title: NSLocalizedString("medium", comment: ""), payload: openAIResponsesThinkingPayload(effort: "medium")),
                     ModelRequestBodyControlOption(id: "high", title: NSLocalizedString("high", comment: ""), payload: openAIResponsesThinkingPayload(effort: "high")),
-                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: openAIResponsesThinkingPayload(effort: "xhigh"))
+                    ModelRequestBodyControlOption(id: "xhigh", title: NSLocalizedString("xhigh", comment: ""), payload: openAIResponsesThinkingPayload(effort: "xhigh")),
+                    ModelRequestBodyControlOption(id: "max", title: NSLocalizedString("max", comment: ""), payload: openAIResponsesThinkingPayload(effort: "max"))
                 ]
             )
         }

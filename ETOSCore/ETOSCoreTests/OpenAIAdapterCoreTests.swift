@@ -45,7 +45,7 @@ struct OpenAIAdapterCoreTests {
     @Test("OpenAI Chat 思考控制使用顶层 reasoning_effort")
     func testOpenAIChatThinkingControlUsesTopLevelReasoningEffort() throws {
         var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-compatible")
-        thinkingControl.defaultOptionID = "high"
+        thinkingControl.defaultOptionID = "max"
         let model = RunnableModel(
             provider: dummyModel.provider,
             model: Model(
@@ -66,7 +66,7 @@ struct OpenAIAdapterCoreTests {
         let httpBody = try #require(request.httpBody)
         let payload = try #require(JSONSerialization.jsonObject(with: httpBody) as? [String: Any])
 
-        #expect(payload["reasoning_effort"] as? String == "high")
+        #expect(payload["reasoning_effort"] as? String == "max")
         #expect(payload["reasoning"] == nil)
     }
 

@@ -2333,6 +2333,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+"max" = "max";
 
 "none" = "none";
 "温度" = "Température";

@@ -413,7 +413,7 @@ struct OpenAIAdapterAdvancedTests {
     @Test("OpenAI Responses 独立适配器默认使用 Responses 请求体")
     func testOpenAIResponsesAdapterBuildsResponsesPayloadByDefault() throws {
         var thinkingControl = ModelRequestBodyControlDefaults.thinkingOptionGroup(for: "openai-responses")
-        thinkingControl.defaultOptionID = "high"
+        thinkingControl.defaultOptionID = "max"
         let model = RunnableModel(
             provider: responsesDummyModel.provider,
             model: Model(
@@ -449,7 +449,7 @@ struct OpenAIAdapterAdvancedTests {
         #expect(jsonPayload["messages"] == nil)
         #expect(jsonPayload["max_tokens"] == nil)
         #expect(jsonPayload["max_output_tokens"] as? Int == 512)
-        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "high")
+        #expect((jsonPayload["reasoning"] as? [String: Any])?["effort"] as? String == "max")
         #expect(jsonPayload["reasoning_effort"] == nil)
         #expect(inputItems.first?["role"] as? String == "user")
         #expect(firstTool["type"] as? String == "function")

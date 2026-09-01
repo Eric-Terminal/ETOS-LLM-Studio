@@ -2475,6 +2475,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+"max" = "max";
 "填写 JSON 对象" = "Saisir un objet JSON";
 
 "none" = "none";

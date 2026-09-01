@@ -2333,6 +2333,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "medium" = "medium";
 "high" = "high";
 "xhigh" = "xhigh";
+"max" = "max";
 
 "none" = "none";
 "温度" = "درجة الحرارة";

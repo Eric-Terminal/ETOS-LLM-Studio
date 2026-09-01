@@ -906,6 +906,8 @@ struct RequestBodyControlTests {
         #expect(!openAI.options.contains(where: { $0.id == "auto" }))
         #expect(openAI.options.allSatisfy { !$0.payload.isEmpty })
         #expect(openAI.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == .string("high"))
+        #expect(openAI.options.last?.id == "max")
+        #expect(openAI.options.last?.payload["reasoning_effort"] == .string("max"))
         #expect(openAIResponses.isSliderEnabled)
         #expect(openAIResponses.defaultOptionID == "medium")
         #expect(!openAIResponses.options.contains(where: { $0.id == "auto" }))
@@ -914,6 +916,10 @@ struct RequestBodyControlTests {
             "effort": .string("high")
         ]))
         #expect(openAIResponses.options.first(where: { $0.id == "high" })?.payload["reasoning_effort"] == nil)
+        #expect(openAIResponses.options.last?.id == "max")
+        #expect(openAIResponses.options.last?.payload["reasoning"] == .dictionary([
+            "effort": .string("max")
+        ]))
 
         #expect(gemini.isSliderEnabled)
         #expect(gemini.defaultOptionID == "medium")
