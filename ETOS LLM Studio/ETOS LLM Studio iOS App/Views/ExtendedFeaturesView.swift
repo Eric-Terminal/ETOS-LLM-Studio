@@ -147,6 +147,19 @@ struct ExtendedFeaturesView: View {
         }
         .navigationTitle(NSLocalizedString("拓展功能", comment: "拓展功能页标题"))
         .listStyle(.insetGrouped)
+        .guideSettingsPageContext(
+            id: "settings-extended-features",
+            title: NSLocalizedString("拓展功能", comment: "拓展功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-extended", title: "Extended Features")],
+            settings: [
+                .readOnly("available_sections", label: NSLocalizedString("可用功能入口", comment: "向导设置字段"), value: {
+                    .array([
+                        "slash_commands", "background_generation", "app_lock", "feedback", "local_models",
+                        "image_gallery", "remote_files", "storage", "data_import"
+                    ].map(JSONValue.string))
+                })
+            ]
+        )
     }
 
     private func settingsIntroCard(
@@ -248,6 +261,16 @@ struct LongTermMemoryFeatureView: View {
             }
         }
         .navigationTitle(NSLocalizedString("记忆系统", comment: "记忆系统页标题"))
+        .guideSettingsPageContext(
+            id: "settings-memory-system",
+            title: NSLocalizedString("记忆系统", comment: "记忆系统向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .bool("memory_enabled", label: NSLocalizedString("启用记忆功能", comment: "向导设置字段"), get: { viewModel.enableMemory }, set: { viewModel.enableMemory = $0 }),
+                .bool("memory_write_enabled", label: NSLocalizedString("允许写入新的记忆", comment: "向导设置字段"), get: { viewModel.enableMemoryWrite }, set: { viewModel.enableMemoryWrite = $0 }),
+                .bool("cross_conversation_memory_enabled", label: NSLocalizedString("启用异步跨对话记忆", comment: "向导设置字段"), get: { viewModel.enableConversationMemoryAsync }, set: { viewModel.enableConversationMemoryAsync = $0 })
+            ]
+        )
     }
 
     private func settingsIntroCard(

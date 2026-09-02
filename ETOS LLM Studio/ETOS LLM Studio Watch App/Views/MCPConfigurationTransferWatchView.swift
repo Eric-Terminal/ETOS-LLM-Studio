@@ -69,6 +69,30 @@ struct MCPConfigurationTransferWatchView: View {
         } message: {
             Text(message ?? "")
         }
+        .guideSettingsPageContext(
+            id: "watch-mcp-configuration-transfer",
+            title: NSLocalizedString("MCP 迁移", comment: "手表 MCP 配置迁移向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .writeOnlyString(
+                    "mcp_servers_json_draft",
+                    label: NSLocalizedString("mcpServers JSON 草稿", comment: "手表 MCP 配置迁移向导字段"),
+                    isConfigured: { document != "{\n  \"mcpServers\": {}\n}" },
+                    set: { document = $0 }
+                ),
+                .readOnly(
+                    "configured_server_count",
+                    label: NSLocalizedString("已配置服务器数量", comment: "手表 MCP 配置迁移向导字段"),
+                    value: { .int(manager.servers.count) }
+                ),
+                .readOnly(
+                    "import_requires_user_action",
+                    label: NSLocalizedString("需要手动确认导入", comment: "手表 MCP 配置迁移向导字段"),
+                    value: { .bool(true) }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private func importDocument() {

@@ -91,6 +91,12 @@ struct ChatAppearanceProfileSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("颜色配置", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-chat-appearance",
+            title: NSLocalizedString("颜色配置", comment: "聊天外观向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: appearanceGuideSettings
+        )
         .alert(NSLocalizedString("颜色配置", comment: ""), isPresented: errorPresented) {
             Button(NSLocalizedString("好的", comment: ""), role: .cancel) {}
         } message: {
@@ -112,6 +118,66 @@ struct ChatAppearanceProfileSettingsView: View {
             get: { selectedProfileID },
             set: { selectedProfileID = $0 }
         )
+    }
+
+    private var appearanceGuideSettings: [GuidePageSetting] {
+        let profileIDs = manager.configuration.profiles.map(\.id)
+        return [
+            .readOnly(
+                "active_profile_id",
+                label: NSLocalizedString("当前生效配置", comment: "聊天外观向导字段"),
+                value: { .string(manager.activeProfile.id) }
+            ),
+            .readOnly(
+                "available_profiles",
+                label: NSLocalizedString("可用颜色配置", comment: "聊天外观向导字段"),
+                value: {
+                    .array(manager.configuration.profiles.map { profile in
+                        .dictionary([
+                            "id": .string(profile.id),
+                            "name": .string(displaySettingsProfileDisplayName(profile))
+                        ])
+                    })
+                }
+            ),
+            .string(
+                "selected_profile_id",
+                label: NSLocalizedString("当前编辑配置", comment: "聊天外观向导字段"),
+                allowedValues: profileIDs,
+                allowsEmpty: false,
+                get: { selectedProfileID },
+                set: { selectedProfileID = $0 }
+            ),
+            .json(
+                "selected_profile",
+                label: NSLocalizedString("当前颜色配置", comment: "聊天外观向导字段"),
+                schema: GuideAppearanceSettingsSupport.profileSchema,
+                get: { GuideAppearanceSettingsSupport.profileValue(selectedProfile) },
+                normalize: GuideAppearanceSettingsSupport.normalizeProfile,
+                set: { value in
+                    let updated = try GuideAppearanceSettingsSupport.profile(from: value, updating: selectedProfile)
+                    try manager.updateProfile(updated)
+                    selectedProfileID = updated.id
+                }
+            ),
+            .json(
+                "schedule_rules",
+                label: NSLocalizedString("自动切换时间段", comment: "聊天外观向导字段"),
+                schema: GuideAppearanceSettingsSupport.schedulesSchema,
+                get: { GuideAppearanceSettingsSupport.schedulesValue(manager.configuration.scheduleRules) },
+                normalize: GuideAppearanceSettingsSupport.normalizeSchedules,
+                set: { value in
+                    let rules = try GuideAppearanceSettingsSupport.schedules(from: value)
+                    let validProfileIDs = Set(manager.configuration.profiles.map(\.id))
+                    guard rules.allSatisfy({ validProfileIDs.contains($0.profileID) }) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    var configuration = manager.configuration
+                    configuration.scheduleRules = rules
+                    try manager.saveConfiguration(configuration)
+                }
+            )
+        ]
     }
 
     private var errorPresented: Binding<Bool> {

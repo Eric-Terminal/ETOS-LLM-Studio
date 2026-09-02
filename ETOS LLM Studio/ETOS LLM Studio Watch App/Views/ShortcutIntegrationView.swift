@@ -235,6 +235,38 @@ struct ShortcutIntegrationView: View {
             }
         }
         .navigationTitle(NSLocalizedString("快捷指令", comment: ""))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: "shortcut-toolbox",
+                title: NSLocalizedString("快捷指令工具箱", comment: "快捷指令向导上下文标题"),
+                documents: [GuideDocumentReference(id: "shortcut-tools", title: "Shortcut Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateShortcutPreferences, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                GuideShortcutPreferencesSupport.snapshot(
+                    manager: manager,
+                    appConfig: appConfig,
+                    permissionCenter: toolPermissionCenter
+                )
+            },
+            buildProposal: { call, snapshot in
+                try GuideShortcutPreferencesSupport.buildProposal(
+                    call: call,
+                    pageID: "shortcut-toolbox",
+                    snapshot: snapshot
+                )
+            },
+            execute: { proposal in
+                try GuideShortcutPreferencesSupport.execute(
+                    proposal,
+                    manager: manager,
+                    appConfig: appConfig
+                )
+            }
+        )
+        .watchGuideEntry()
     }
 
     private func settingsIntroCard(
@@ -372,6 +404,46 @@ private struct ShortcutToolDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: ""))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: tool.map {
+                    String(
+                        format: NSLocalizedString("快捷指令工具：%@", comment: "快捷指令工具向导上下文标题"),
+                        $0.displayName
+                    )
+                } ?? NSLocalizedString("快捷指令工具", comment: "快捷指令工具向导上下文标题"),
+                documents: [GuideDocumentReference(id: "shortcut-tools", title: "Shortcut Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateShortcutTool, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                guard let tool else { return .empty }
+                return GuideShortcutToolSettingsSupport.snapshot(tool)
+            },
+            buildProposal: { call, _ in
+                guard let tool else { throw GuideError.invalidToolArguments }
+                return try GuideShortcutToolSettingsSupport.buildProposal(
+                    call: call,
+                    pageID: guidePageID,
+                    tool: tool
+                )
+            },
+            execute: { proposal in
+                guard let tool else { throw GuideError.invalidToolArguments }
+                let application = try GuideShortcutToolSettingsSupport.apply(proposal, tool: tool)
+                manager.setToolEnabled(id: toolID, isEnabled: application.enabled)
+                manager.setRunModeHint(id: toolID, runModeHint: application.runMode)
+                manager.updateUserDescription(id: toolID, description: application.userDescription)
+                return application.execution
+            }
+        )
+        .watchGuideEntry()
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "shortcut-tool-\(toolID.uuidString.lowercased())")
     }
 
     private func importStatusText(for tool: ShortcutToolDefinition) -> String? {

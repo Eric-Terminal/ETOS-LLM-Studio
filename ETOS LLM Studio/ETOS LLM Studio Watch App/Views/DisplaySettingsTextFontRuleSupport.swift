@@ -87,6 +87,13 @@ struct WatchChatTextFontRuleEditorView: View {
             fontPrioritySection
         }
         .navigationTitle(NSLocalizedString("字体规则", comment: ""))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-text-font-rule-\(rule.id)"),
+            title: NSLocalizedString("字体规则", comment: "指定内容字体规则向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: fontRuleGuideSettings
+        )
+        .watchGuideEntry()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(NSLocalizedString("保存", comment: "")) {
@@ -117,6 +124,56 @@ struct WatchChatTextFontRuleEditorView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
+    }
+
+    private var fontRuleGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly("rule_id", label: NSLocalizedString("规则 ID", comment: "指定内容字体规则向导字段"), value: { .string(rule.id) }),
+            .bool("enabled", label: NSLocalizedString("启用规则", comment: "指定内容字体规则向导字段"), get: { rule.isEnabled }, set: { rule.isEnabled = $0 }),
+            .string("match_kind", label: NSLocalizedString("匹配方式", comment: "指定内容字体规则向导字段"), allowedValues: ChatAppearanceTextRuleKind.allCases.map(\.rawValue), get: { rule.kind.rawValue }, set: { rule.kind = ChatAppearanceTextRuleKind(rawValue: $0) ?? rule.kind }),
+            .string("exact_text_or_pattern", label: NSLocalizedString("指定文字或正则表达式", comment: "指定内容字体规则向导字段"), get: { rule.exactText }, set: { rule.exactText = $0 }),
+            .string("start_delimiter", label: NSLocalizedString("起始标记", comment: "指定内容字体规则向导字段"), get: { rule.startDelimiter }, set: { rule.startDelimiter = $0 }),
+            .string("end_delimiter", label: NSLocalizedString("结束标记", comment: "指定内容字体规则向导字段"), get: { rule.endDelimiter }, set: { rule.endDelimiter = $0 }),
+            .bool("includes_delimiters", label: NSLocalizedString("包含起止标记", comment: "指定内容字体规则向导字段"), get: { rule.includesDelimiters }, set: { rule.includesDelimiters = $0 }),
+            fontChainGuideSetting,
+            .readOnly("regular_expression_valid", label: NSLocalizedString("正则表达式有效", comment: "指定内容字体规则向导字段"), value: { .bool(isRegularExpressionValid) }),
+            .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+        ]
+    }
+
+    private var fontChainGuideSetting: GuidePageSetting {
+        let allowedIDs = assets.map { $0.id.uuidString.lowercased() }
+        return .json(
+            "font_priority",
+            label: NSLocalizedString("字体优先级", comment: "指定内容字体规则向导字段"),
+            schema: .dictionary([
+                "type": .string("array"),
+                "items": .dictionary(["type": .string("string"), "enum": .array(allowedIDs.map(JSONValue.string))]),
+                "uniqueItems": .bool(true)
+            ]),
+            get: { .array(rule.fontAssetIDs.map { .string($0.uuidString.lowercased()) }) },
+            normalize: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                var seen = Set<UUID>()
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item,
+                          let id = UUID(uuidString: rawValue),
+                          assets.contains(where: { $0.id == id }),
+                          seen.insert(id).inserted else { throw GuideError.invalidToolArguments }
+                    return id
+                }
+                return .array(ids.map { .string($0.uuidString.lowercased()) })
+            },
+            set: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                rule.fontAssetIDs = try items.map { item in
+                    guard case .string(let rawValue) = item, let id = UUID(uuidString: rawValue) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return id
+                }
+            }
+        )
     }
 
     private var matchSection: some View {

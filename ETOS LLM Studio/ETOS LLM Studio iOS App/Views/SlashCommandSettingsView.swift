@@ -96,11 +96,39 @@ struct SlashCommandSettingsView: View {
                 }
             }
         }
-        .sheet(isPresented: $isEditorPresented) {
-            NavigationStack {
-                CustomSlashCommandEditorView(command: editingCommand)
-            }
+        .navigationDestination(isPresented: $isEditorPresented) {
+            CustomSlashCommandEditorView(command: editingCommand)
         }
+        .guideSettingsPageContext(
+            id: "settings-slash-commands",
+            title: NSLocalizedString("快速指令", comment: "快速指令向导标题"),
+            documents: [GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
+            settings: guideSettings
+        )
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "enabled",
+                label: NSLocalizedString("启用快速指令", comment: "快速指令向导字段"),
+                get: { appConfig.enableSlashCommands },
+                set: { appConfig.enableSlashCommands = $0 }
+            ),
+            .json(
+                "custom_commands",
+                label: NSLocalizedString("自定义快速指令列表", comment: "快速指令向导字段"),
+                schema: GuideSlashCommandSettingsSupport.schema,
+                get: { GuideSlashCommandSettingsSupport.value(customCommandStore.commands) },
+                normalize: GuideSlashCommandSettingsSupport.normalize,
+                set: { try GuideSlashCommandSettingsSupport.apply($0, to: customCommandStore) }
+            ),
+            .readOnly(
+                "built_in_commands",
+                label: NSLocalizedString("内建快速指令", comment: "快速指令向导字段"),
+                value: { .array(ChatSlashCommand.allCases.map { .string($0.invocation) }) }
+            )
+        ]
     }
 
     private func presentEditor(for command: CustomChatSlashCommand?) {
@@ -182,6 +210,51 @@ private struct CustomSlashCommandEditorView: View {
                     .disabled(!canSave)
             }
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "slash-command-editor-\(command?.id.uuidString.lowercased() ?? "new")"),
+            title: command == nil
+                ? NSLocalizedString("新增快速指令", comment: "快速指令编辑器向导标题")
+                : NSLocalizedString("编辑快速指令", comment: "快速指令编辑器向导标题"),
+            documents: [GuideDocumentReference(id: "slash-commands", title: "Quick Commands")],
+            settings: editorGuideSettings
+        )
+    }
+
+    private var editorGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "editor_mode",
+                label: NSLocalizedString("编辑模式", comment: "快速指令编辑器向导字段"),
+                value: { .string(command == nil ? "create" : "edit") }
+            ),
+            .json(
+                "trigger",
+                label: NSLocalizedString("激活指令", comment: "快速指令编辑器向导字段"),
+                schema: .dictionary(["type": .string("string")]),
+                get: { .string(trigger) },
+                normalize: { value in
+                    guard case .string(let rawValue) = value else { throw GuideError.invalidToolArguments }
+                    let canonical = CustomChatSlashCommandStore.canonicalTrigger(rawValue)
+                    guard CustomChatSlashCommandStore.isValidTrigger(canonical),
+                          !ChatSlashCommandParser.isReservedTrigger(canonical),
+                          store.isTriggerAvailable(canonical, excluding: command?.id) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return .string(canonical)
+                },
+                set: { value in
+                    guard case .string(let resolved) = value else { throw GuideError.invalidToolArguments }
+                    trigger = resolved
+                }
+            ),
+            .string(
+                "prompt",
+                label: NSLocalizedString("提示词", comment: "快速指令编辑器向导字段"),
+                allowsEmpty: false,
+                get: { prompt },
+                set: { prompt = $0 }
+            )
+        ]
     }
 
     private var canonicalTrigger: String {

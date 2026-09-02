@@ -158,6 +158,69 @@ struct AgentSkillsView: View {
         } message: {
             Text(String(format: NSLocalizedString("确认删除“%@”？此操作不可撤销。", comment: ""), deleteTarget?.name ?? ""))
         }
+        .guideSettingsPageContext(
+            id: "settings-agent-skills",
+            title: NSLocalizedString("Agent Skills", comment: "Agent Skills 向导标题"),
+            documents: [GuideDocumentReference(id: "agent-skills", title: "Agent Skills")],
+            settings: guideSettings
+        )
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "chat_tools_enabled",
+                label: NSLocalizedString("向模型暴露 Agent Skills", comment: "Agent Skills 向导字段"),
+                get: { manager.chatToolsEnabled },
+                set: { manager.setChatToolsEnabled($0) }
+            ),
+            .json(
+                "enabled_skill_names",
+                label: NSLocalizedString("聊天中启用的技能", comment: "Agent Skills 向导字段"),
+                schema: .dictionary([
+                    "type": .string("array"),
+                    "items": .dictionary([
+                        "type": .string("string"),
+                        "enum": .array(manager.skills.map { .string($0.name) })
+                    ]),
+                    "uniqueItems": .bool(true)
+                ]),
+                get: { .array(manager.enabledSkillNames.sorted().map(JSONValue.string)) },
+                normalize: { value in
+                    guard case .array(let values) = value else { throw GuideError.invalidToolArguments }
+                    let names = try values.map { item -> String in
+                        guard case .string(let name) = item,
+                              manager.skills.contains(where: { $0.name == name }) else {
+                            throw GuideError.invalidToolArguments
+                        }
+                        return name
+                    }
+                    guard Set(names).count == names.count else { throw GuideError.invalidToolArguments }
+                    return .array(names.sorted().map(JSONValue.string))
+                },
+                set: { value in
+                    guard case .array(let values) = value else { throw GuideError.invalidToolArguments }
+                    let enabledNames = Set(values.compactMap { item -> String? in
+                        guard case .string(let name) = item else { return nil }
+                        return name
+                    })
+                    manager.skills.forEach {
+                        manager.setSkillEnabled(name: $0.name, isEnabled: enabledNames.contains($0.name))
+                    }
+                }
+            ),
+            .readOnly("installed_skills", label: NSLocalizedString("已安装技能", comment: "Agent Skills 向导字段"), value: {
+                .array(manager.skills.map { skill in
+                    .dictionary([
+                        "name": .string(skill.name),
+                        "description": .string(skill.description),
+                        "compatibility": .string(skill.compatibility ?? ""),
+                        "enabled": .bool(manager.isSkillEnabled(skill.name)),
+                        "allowed_tools": .array(skill.allowedTools.map(JSONValue.string))
+                    ])
+                })
+            })
+        ]
     }
 }
 
@@ -676,6 +739,45 @@ private struct SkillDetailView: View {
         } message: {
             Text(String(format: NSLocalizedString("确认删除“%@”？", comment: ""), deleteTarget?.relativePath ?? ""))
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "agent-skill-\(skillName)"),
+            title: String(format: NSLocalizedString("Agent Skill：%@", comment: "Agent Skill 详情向导标题"), skillName),
+            documents: [GuideDocumentReference(id: "agent-skills", title: "Agent Skills")],
+            settings: detailGuideSettings
+        )
+    }
+
+    private var detailGuideSettings: [GuidePageSetting] {
+        guard let skill else {
+            return [.readOnly("skill_missing", label: NSLocalizedString("技能不存在", comment: "Agent Skill 向导字段"), value: { .bool(true) })]
+        }
+        return [
+            .readOnly("name", label: NSLocalizedString("名称", comment: "Agent Skill 向导字段"), value: { .string(skill.name) }),
+            .readOnly("description", label: NSLocalizedString("描述", comment: "Agent Skill 向导字段"), value: { .string(skill.description) }),
+            .readOnly("compatibility", label: NSLocalizedString("兼容性", comment: "Agent Skill 向导字段"), value: { .string(skill.compatibility ?? "") }),
+            .readOnly("allowed_tools", label: NSLocalizedString("允许工具", comment: "Agent Skill 向导字段"), value: { .array(skill.allowedTools.map(JSONValue.string)) }),
+            .readOnly("files", label: NSLocalizedString("技能文件", comment: "Agent Skill 向导字段"), value: {
+                .array(files.map { file in
+                    .dictionary([
+                        "path": .string(file.relativePath),
+                        "size": .int(Int(clamping: file.size)),
+                        "readable_text": .bool(file.isReadableText)
+                    ])
+                })
+            }),
+            .readOnly("skill_body_character_count", label: NSLocalizedString("SKILL.md 正文字符数", comment: "Agent Skill 向导字段"), value: { .int(skillBody.count) }),
+            .bool("enabled", label: NSLocalizedString("在聊天中启用该技能", comment: "Agent Skill 向导字段"), get: { manager.isSkillEnabled(skill.name) }, set: { manager.setSkillEnabled(name: skill.name, isEnabled: $0) }),
+            .string(
+                "execution_policy",
+                label: NSLocalizedString("脚本执行策略", comment: "Agent Skill 向导字段"),
+                allowedValues: SkillExecutionPolicy.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { executionPolicy.rawValue },
+                set: { rawValue in
+                    if let policy = SkillExecutionPolicy(rawValue: rawValue) { updateExecutionPolicy(policy) }
+                }
+            )
+        ]
     }
 
     private func reload() {

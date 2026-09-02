@@ -223,6 +223,49 @@ struct MCPIntegrationView: View {
         GuidePageSnapshot(fields: [
             "chat_tools_enabled": GuideSnapshotField(label: NSLocalizedString("向模型暴露 MCP 工具", comment: "手表 MCP 向导快照字段"), value: .bool(manager.chatToolsEnabled)),
             "tool_call_title_enabled": GuideSnapshotField(label: NSLocalizedString("让 AI 描述 MCP 任务", comment: "手表 MCP 向导快照字段"), value: .bool(manager.toolCallTitleEnabled)),
+            "server_order": GuideSnapshotField(
+                label: NSLocalizedString("服务器顺序", comment: "手表 MCP 向导快照字段"),
+                value: GuideOrderedSettingsSupport.identifierOrderValue(
+                    manager.servers.map { $0.id.uuidString.lowercased() }
+                )
+            ),
+            "servers": GuideSnapshotField(
+                label: NSLocalizedString("已配置服务器", comment: "手表 MCP 向导快照字段"),
+                value: .array(manager.servers.map { server in
+                    let status = manager.status(for: server)
+                    return .dictionary([
+                        "id": .string(server.id.uuidString.lowercased()),
+                        "name": .string(server.displayName),
+                        "transport": .string(mcpGuideTransportName(server.transport)),
+                        "endpoint": .string(server.humanReadableEndpoint),
+                        "selected_for_chat": .bool(server.isSelectedForChat),
+                        "connection_state": .string(mcpGuideConnectionState(status.connectionState)),
+                        "tool_count": .int(status.tools.count),
+                        "resource_count": .int(status.resources.count)
+                    ])
+                }),
+                access: .readOnly
+            ),
+            "published_tools": GuideSnapshotField(
+                label: NSLocalizedString("已公布工具", comment: "手表 MCP 向导快照字段"),
+                value: .array(manager.tools.map { available in
+                    .dictionary([
+                        "server_id": .string(available.server.id.uuidString.lowercased()),
+                        "server_name": .string(available.server.displayName),
+                        "tool_id": .string(available.tool.toolId),
+                        "description": .string(available.tool.description ?? ""),
+                        "enabled": .bool(manager.isToolEnabled(
+                            serverID: available.server.id,
+                            toolId: available.tool.toolId
+                        )),
+                        "approval_policy": .string(manager.approvalPolicy(
+                            serverID: available.server.id,
+                            toolId: available.tool.toolId
+                        ).rawValue)
+                    ])
+                }),
+                access: .readOnly
+            ),
             "server_count": GuideSnapshotField(label: NSLocalizedString("服务器数量", comment: "手表 MCP 向导快照字段"), value: .int(manager.servers.count), access: .readOnly),
             "published_tool_count": GuideSnapshotField(label: NSLocalizedString("可用工具数量", comment: "手表 MCP 向导快照字段"), value: .int(manager.tools.count), access: .readOnly)
         ])
@@ -239,12 +282,13 @@ struct MCPIntegrationView: View {
             throw GuideError.unsupportedTool(call.toolName)
         }
         let arguments = try GuideToolArguments.decode(call.arguments)
+        var normalizedArguments = arguments
         let labels: [String: String] = [
             "chat_tools_enabled": NSLocalizedString("向模型暴露 MCP 工具", comment: "手表 MCP 向导修改字段"),
             "tool_call_title_enabled": NSLocalizedString("让 AI 描述 MCP 任务", comment: "手表 MCP 向导修改字段")
         ]
-        try GuideToolArguments.requireOnlyKeys(Set(labels.keys), in: arguments)
-        let mutations = try labels.compactMap { key, label -> GuideSettingMutation? in
+        try GuideToolArguments.requireOnlyKeys(Set(labels.keys).union(["server_order"]), in: arguments)
+        var mutations = try labels.compactMap { key, label -> GuideSettingMutation? in
             guard let value = try GuideToolArguments.optionalBool(key, in: arguments) else { return nil }
             let newValue = JSONValue.bool(value)
             guard snapshot.fields[key]?.value != newValue else { return nil }
@@ -255,6 +299,21 @@ struct MCPIntegrationView: View {
                 newValue: newValue
             )
         }
+        if let orderValue = arguments["server_order"] {
+            let normalized = try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                orderValue,
+                currentIdentifiers: manager.servers.map { $0.id.uuidString.lowercased() }
+            )
+            normalizedArguments["server_order"] = normalized
+            if snapshot.fields["server_order"]?.value != normalized {
+                mutations.append(GuideSettingMutation(
+                    path: "server_order",
+                    label: NSLocalizedString("服务器顺序", comment: "手表 MCP 向导修改字段"),
+                    oldValue: snapshot.fields["server_order"]?.value,
+                    newValue: normalized
+                ))
+            }
+        }
         guard !mutations.isEmpty else { throw GuideError.invalidToolArguments }
         return GuideActionProposal(
             pageID: "watch-mcp-toolbox",
@@ -262,7 +321,7 @@ struct MCPIntegrationView: View {
             toolName: call.toolName,
             summary: NSLocalizedString("修改 MCP 工具箱偏好", comment: "手表 MCP 向导提案摘要"),
             mutations: mutations,
-            arguments: arguments
+            arguments: normalizedArguments
         )
     }
 
@@ -297,6 +356,18 @@ struct MCPIntegrationView: View {
             oldArguments["tool_call_title_enabled"] = .bool(manager.toolCallTitleEnabled)
             manager.setToolCallTitleEnabled(value)
         }
+        if let orderValue = proposal.arguments["server_order"] {
+            let oldIdentifiers = manager.servers.map { $0.id.uuidString.lowercased() }
+            oldArguments["server_order"] = GuideOrderedSettingsSupport.identifierOrderValue(oldIdentifiers)
+            let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                from: orderValue,
+                currentIdentifiers: oldIdentifiers
+            )
+            manager.setServerOrder(try identifiers.map { identifier in
+                guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                return id
+            })
+        }
         let undoSnapshot = await mcpGuideSnapshot()
         let undoCall = InternalToolCall(
             id: UUID().uuidString,
@@ -307,6 +378,29 @@ struct MCPIntegrationView: View {
             message: NSLocalizedString("已保存 MCP 工具箱偏好。", comment: "手表 MCP 向导执行结果"),
             undoProposal: try buildMCPGuideProposal(call: undoCall, snapshot: undoSnapshot)
         )
+    }
+
+    private func mcpGuideTransportName(_ transport: MCPServerConfiguration.Transport) -> String {
+        switch transport {
+        case .http: return "http"
+        case .httpSSE: return "sse"
+        case .localStdio: return "stdio"
+        case .oauth: return "oauth"
+        case .builtInSearch: return "built_in_search"
+        case .builtInAppTool: return "built_in_app_tool"
+        case .builtInPersonalData: return "built_in_personal_data"
+        }
+    }
+
+    private func mcpGuideConnectionState(_ state: MCPManager.ConnectionState) -> String {
+        switch state {
+        case .idle: return "idle"
+        case .connecting: return "connecting"
+        case .reconnecting: return "reconnecting"
+        case .ready: return "ready"
+        case .failed: return "failed"
+        @unknown default: return "unknown"
+        }
     }
 
     private func serverSelectionRow(for server: MCPServerConfiguration) -> some View {

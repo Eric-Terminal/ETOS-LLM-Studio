@@ -84,6 +84,30 @@ struct LocalModelManagementView: View {
             }
         }
         .navigationTitle(NSLocalizedString("本地模型", comment: "Local models title"))
+        .guideSettingsPageContext(
+            id: "settings-local-models",
+            title: NSLocalizedString("本地模型", comment: "本地模型向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: [
+                .bool("provider_enabled", label: NSLocalizedString("启用本地模型提供商", comment: "向导设置字段"), get: { appConfig.localModelsEnabled }, set: { localModelsEnabledBinding.wrappedValue = $0 }),
+                .bool("performance_monitor_enabled", label: NSLocalizedString("性能监视面板", comment: "向导设置字段"), get: { appConfig.localModelPerformanceMonitorEnabled }, set: { localPerformanceMonitorEnabledBinding.wrappedValue = $0 }),
+                .bool("model_cache_enabled", label: NSLocalizedString("模型缓存", comment: "向导设置字段"), get: { appConfig.localModelCacheEnabled }, set: { localModelCacheEnabledBinding.wrappedValue = $0 }),
+                .bool("conversation_kv_cache_enabled", label: NSLocalizedString("对话 KV 缓存", comment: "向导设置字段"), get: { appConfig.localModelKVCacheEnabled }, set: { localModelKVCacheEnabledBinding.wrappedValue = $0 }),
+                .readOnly("models", label: NSLocalizedString("权重", comment: "向导设置字段"), value: {
+                    .array(store.models.map { record in
+                        .dictionary([
+                            "id": .string(record.id.uuidString),
+                            "name": .string(record.sanitizedDisplayName),
+                            "file_name": .string(record.fileName),
+                            "file_size": .int(Int(clamping: record.fileSize)),
+                            "file_available": .bool(store.fileExists(for: record)),
+                            "activated": .bool(record.isActivated),
+                            "architecture": .string(record.ggufArchitecture ?? "")
+                        ])
+                    })
+                })
+            ]
+        )
         .fileImporter(
             isPresented: $isImportingModel,
             allowedContentTypes: [ggufType, .data],
@@ -335,13 +359,17 @@ private struct LocalModelDetailView: View {
         .navigationTitle(draft.sanitizedDisplayName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hasUnsavedChanges)
-        .sheet(isPresented: $showCLIImport) {
-            NavigationStack {
-                LocalModelCLIStyleImportView(record: draft) { result in
-                    draft = result.updatedRecord
-                    cliImportResult = result
-                    refreshTextFieldsFromDraft()
-                }
+        .guideSettingsPageContext(
+            id: "settings-local-model-detail",
+            title: String(format: NSLocalizedString("本地模型：%@", comment: "本地模型详情向导标题"), draft.sanitizedDisplayName),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: guideSettings
+        )
+        .navigationDestination(isPresented: $showCLIImport) {
+            LocalModelCLIStyleImportView(record: draft) { result in
+                draft = result.updatedRecord
+                cliImportResult = result
+                refreshTextFieldsFromDraft()
             }
         }
         .fileImporter(
@@ -407,6 +435,49 @@ private struct LocalModelDetailView: View {
         } message: {
             Text(detailErrorMessage ?? "")
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var result: [GuidePageSetting] = [
+            .string("display_name", label: NSLocalizedString("名称", comment: "向导设置字段"), allowsEmpty: false, get: { draft.displayName }, set: { draft.displayName = $0 }),
+            .bool("activated", label: NSLocalizedString("加入候选模型", comment: "向导设置字段"), get: { draft.isActivated }, set: { draft.isActivated = $0 }),
+            .integer("context_size", label: NSLocalizedString("上下文长度", comment: "向导设置字段"), range: 1...1_048_576, get: { draft.effectiveContextSize }, set: { draft.contextSize = $0; contextSizeText = "\($0)" }),
+            .integer("max_output_tokens", label: NSLocalizedString("最大输出长度", comment: "向导设置字段"), range: 1...131_072, get: { draft.effectiveMaxOutputTokens }, set: { draft.maxOutputTokens = $0; maxOutputTokensText = "\($0)" }),
+            .integer("gpu_layers", label: NSLocalizedString("GPU 层数", comment: "向导设置字段"), range: -1...999, get: { draft.effectiveGPULayers }, set: { draft.gpuLayers = $0; gpuLayersText = "\($0)" }),
+            .integer("batch_size", label: NSLocalizedString("Batch Size", comment: "向导设置字段"), range: 0...1_048_576, get: { draft.effectiveBatchSize }, set: { draft.batchSize = $0; batchSizeText = "\($0)" }),
+            .integer("ubatch_size", label: NSLocalizedString("Ubatch Size", comment: "向导设置字段"), range: 0...1_048_576, get: { draft.effectiveUbatchSize }, set: { draft.ubatchSize = $0; ubatchSizeText = "\($0)" }),
+            .integer("seed", label: NSLocalizedString("随机种子", comment: "向导设置字段"), range: 0...Int(UInt32.max), get: { Int(draft.effectiveSeed) }, set: { draft.seed = UInt32($0); seedText = "\($0)" }),
+            .bool("kv_offload", label: NSLocalizedString("KV 缓存 GPU 卸载", comment: "向导设置字段"), get: { draft.effectiveKVOffload }, set: { draft.kvOffload = $0 }),
+            .integer("flash_attention", label: NSLocalizedString("Flash Attention", comment: "向导设置字段"), range: -1...1, get: { Int(draft.effectiveFlashAttention.rawValue) }, set: { draft.flashAttention = LocalLLMFlashAttentionMode(rawValue: Int32($0)) }),
+            .double("temperature", label: NSLocalizedString("温度", comment: "向导设置字段"), range: 0...5, get: { draft.effectiveTemperature }, set: { draft.temperature = $0; temperatureText = LocalModelFormat.decimal($0) }),
+            .integer("top_k", label: NSLocalizedString("Top K", comment: "向导设置字段"), range: 0...1_000, get: { draft.effectiveTopK }, set: { draft.topK = $0; topKText = "\($0)" }),
+            .double("top_p", label: NSLocalizedString("Top P", comment: "向导设置字段"), range: 0...1, get: { draft.effectiveTopP }, set: { draft.topP = $0; topPText = LocalModelFormat.decimal($0) }),
+            .double("min_p", label: NSLocalizedString("Min P", comment: "向导设置字段"), range: 0...1, get: { draft.effectiveMinP }, set: { draft.minP = $0; minPText = LocalModelFormat.decimal($0) }),
+            .integer("repeat_last_n", label: NSLocalizedString("重复惩罚窗口", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveRepeatLastN }, set: { draft.repeatLastN = $0; repeatLastNText = "\($0)" }),
+            .double("repeat_penalty", label: NSLocalizedString("重复惩罚", comment: "向导设置字段"), range: 0...4, get: { draft.effectiveRepeatPenalty }, set: { draft.repeatPenalty = $0; repeatPenaltyText = LocalModelFormat.decimal($0) }),
+            .double("frequency_penalty", label: NSLocalizedString("频率惩罚", comment: "向导设置字段"), range: -2...2, get: { draft.effectiveFrequencyPenalty }, set: { draft.frequencyPenalty = $0; frequencyPenaltyText = LocalModelFormat.decimal($0) }),
+            .double("presence_penalty", label: NSLocalizedString("存在惩罚", comment: "向导设置字段"), range: -2...2, get: { draft.effectivePresencePenalty }, set: { draft.presencePenalty = $0; presencePenaltyText = LocalModelFormat.decimal($0) }),
+            .string("grammar", label: NSLocalizedString("Grammar", comment: "向导设置字段"), get: { draft.grammar ?? "" }, set: { draft.grammar = $0 }),
+            .bool("ignore_eos", label: NSLocalizedString("忽略 EOS", comment: "向导设置字段"), get: { draft.effectiveIgnoreEOS }, set: { draft.ignoreEOS = $0 }),
+            .integer("image_min_tokens", label: NSLocalizedString("最少图片 Token", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveImageMinTokens }, set: { draft.imageMinTokens = $0; imageMinTokensText = "\($0)" }),
+            .integer("image_max_tokens", label: NSLocalizedString("最多图片 Token", comment: "向导设置字段"), range: -1...1_048_576, get: { draft.effectiveImageMaxTokens }, set: { draft.imageMaxTokens = $0; imageMaxTokensText = "\($0)" }),
+            .string("sampler_chain", label: NSLocalizedString("采样链", comment: "向导设置字段"), allowsEmpty: false, get: { LocalLLMSamplerKind.chainString(draft.effectiveSamplerKinds) }, set: { draft.samplerKinds = LocalLLMSamplerKind.parse($0) }),
+            .readOnly("file_name", label: NSLocalizedString("文件", comment: "向导设置字段"), value: { .string(draft.fileName) }),
+            .readOnly("file_size", label: NSLocalizedString("大小", comment: "向导设置字段"), value: { .int(Int(clamping: draft.fileSize)) }),
+            .readOnly("file_available", label: NSLocalizedString("状态", comment: "向导设置字段"), value: { .bool(store.fileExists(for: draft)) }),
+            .readOnly("architecture", label: NSLocalizedString("GGUF 架构", comment: "向导设置字段"), value: { .string(draft.ggufArchitecture ?? "") }),
+            .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+        ]
+        if draft.hasLoRAAdapter {
+            result.append(.double("lora_scale", label: NSLocalizedString("LoRA 强度", comment: "向导设置字段"), range: -100...100, get: { draft.effectiveLoRAScale }, set: { draft.loraScale = $0; loraScaleText = LocalModelFormat.decimal($0) }))
+        }
+        if draft.speechArchitecture?.requiresDecoderModel == true {
+            result.append(.string("speech_decoder_model_id", label: NSLocalizedString("解码模型", comment: "向导设置字段"), allowedValues: [""] + speechDecoderCandidates.map { $0.id.uuidString }, get: { draft.speechDecoderModelID?.uuidString ?? "" }, set: { draft.speechDecoderModelID = UUID(uuidString: $0) }))
+        }
+        if draft.speechArchitecture?.isTranscriptionModel == true {
+            result.append(.string("speech_vad_model_id", label: NSLocalizedString("VAD 模型", comment: "向导设置字段"), allowedValues: [""] + speechVADCandidates.map { $0.id.uuidString }, get: { draft.speechVADModelID?.uuidString ?? "" }, set: { draft.speechVADModelID = UUID(uuidString: $0) }))
+        }
+        return result
     }
 
     @ViewBuilder
@@ -1410,6 +1481,29 @@ private struct LocalModelCLIStyleImportView: View {
         }
         .navigationTitle(NSLocalizedString("参数导入", comment: "Local llama style import navigation title"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-local-model-cli-import-\(record.id.uuidString.lowercased())"),
+            title: NSLocalizedString("参数导入", comment: "本地模型参数导入向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: [
+                .string(
+                    "arguments",
+                    label: NSLocalizedString("llama.cpp-style 参数", comment: "本地模型参数导入向导字段"),
+                    get: { inputText },
+                    set: { inputText = $0 }
+                ),
+                .readOnly(
+                    "last_result",
+                    label: NSLocalizedString("最近一次导入结果", comment: "本地模型参数导入向导字段"),
+                    value: { guideResultValue }
+                ),
+                .readOnly(
+                    "apply_method",
+                    label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                    value: { .string(NSLocalizedString("填写后需要点击解析并应用到表单", comment: "本地模型参数导入应用方式")) }
+                )
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("完成", comment: "Done")) {
@@ -1417,6 +1511,25 @@ private struct LocalModelCLIStyleImportView: View {
                 }
             }
         }
+    }
+
+    private var guideResultValue: JSONValue {
+        guard let result else { return .null }
+        return .dictionary([
+            "applied": .array(result.appliedParameters.map { item in
+                .dictionary([
+                    "option": .string(item.option),
+                    "field": .string(item.title),
+                    "value": .string(item.value)
+                ])
+            }),
+            "unsupported": .array(result.unsupportedParameters.map { item in
+                .dictionary(["option": .string(item.option), "message": .string(item.message)])
+            }),
+            "errors": .array(result.errorParameters.map { item in
+                .dictionary(["option": .string(item.option), "message": .string(item.message)])
+            })
+        ])
     }
 }
 
@@ -1595,9 +1708,48 @@ private struct LocalModelSamplerChainLabView: View {
         }
         .navigationTitle(NSLocalizedString("采样器链实验室", comment: "Sampler chain lab title"))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-local-model-sampler-chain",
+            title: NSLocalizedString("采样器链实验室", comment: "采样器链向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-models", title: "Local Models")],
+            settings: samplerGuideSettings
+        )
         .toolbar {
             EditButton()
         }
+    }
+
+    private var samplerGuideSettings: [GuidePageSetting] {
+        [
+            .json(
+                "sampler_chain",
+                label: NSLocalizedString("采样器链", comment: "采样器链向导字段"),
+                schema: .dictionary([
+                    "type": .string("string"),
+                    "description": .string("按执行顺序排列的 sampler 代码；可用代码为 edskypmxta，空字符串表示空链")
+                ]),
+                get: { .string(LocalLLMSamplerKind.chainString(currentKinds)) },
+                normalize: { value in
+                    guard case .string(let rawValue) = value else { throw GuideError.invalidToolArguments }
+                    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    let parsed = LocalLLMSamplerKind.parse(trimmed)
+                    guard trimmed.isEmpty || (!parsed.isEmpty && LocalLLMSamplerKind.chainString(parsed) == trimmed) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return .string(trimmed)
+                },
+                set: { value in
+                    guard case .string(let rawValue) = value else { throw GuideError.invalidToolArguments }
+                    let parsed = LocalLLMSamplerKind.parse(rawValue)
+                    samplerKinds = parsed == LocalLLMSamplerKind.defaultChain ? nil : parsed
+                }
+            ),
+            .readOnly(
+                "requires_save",
+                label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                value: { .string(NSLocalizedString("修改后需要保存本地模型", comment: "本地模型草稿应用方式")) }
+            )
+        ]
     }
 }
 

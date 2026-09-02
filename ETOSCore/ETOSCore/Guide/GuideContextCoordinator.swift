@@ -79,6 +79,30 @@ public final class GuideContextCoordinator: ObservableObject {
         refreshActivePage()
     }
 
+    /// SwiftUI 视图仍停留在同一层级时，页面声明可能随传输类型等本地状态变化。
+    /// 替换原注册项而不改变其导航顺序，避免向导继续使用旧字段白名单。
+    public func update(
+        _ token: RegistrationToken,
+        descriptor: GuidePageDescriptor,
+        isFallback: Bool = false,
+        snapshot: @escaping SnapshotProvider,
+        executeReadTool: @escaping ReadToolExecutor,
+        buildProposal: @escaping ProposalBuilder,
+        execute: @escaping ProposalExecutor
+    ) {
+        guard let index = registrations.firstIndex(where: { $0.token == token }) else { return }
+        registrations[index] = Registration(
+            token: token,
+            descriptor: descriptor,
+            isFallback: isFallback,
+            snapshotProvider: snapshot,
+            readToolExecutor: executeReadTool,
+            proposalBuilder: buildProposal,
+            proposalExecutor: execute
+        )
+        refreshActivePage()
+    }
+
     /// watchOS 进入二级向导页时，暂时保留来源页声明；退出向导后必须解除。
     public func pinActivePage() {
         pinnedRegistration = currentRegistration

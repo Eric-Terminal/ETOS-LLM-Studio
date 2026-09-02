@@ -117,6 +117,12 @@ struct DeviceSyncSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("同步与备份", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-sync",
+            title: NSLocalizedString("同步与备份", comment: "同步设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-sync", title: "Sync and Backup")],
+            settings: guideSettings
+        )
         .confirmationDialog(
             NSLocalizedString("发现两套不同的数据", comment: ""),
             isPresented: Binding(
@@ -206,6 +212,14 @@ struct DeviceSyncSettingsView: View {
                 )
             }
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool("backup_on_launch", label: NSLocalizedString("启动时创建数据库备份点", comment: "向导设置字段"), get: { appConfig.syncBackupCreateOnLaunch }, set: { appConfig.syncBackupCreateOnLaunch = $0 }),
+            .bool("watch_sync_enabled", label: NSLocalizedString("启用 Apple Watch 同步", comment: "向导设置字段"), get: { appConfig.syncAutoSyncEnabled }, set: { appConfig.syncAutoSyncEnabled = $0 }),
+            .bool("icloud_sync_enabled", label: NSLocalizedString("启用 iCloud 漫游同步", comment: "向导设置字段"), get: { appConfig.cloudSyncEnabled }, set: { appConfig.cloudSyncEnabled = $0 })
+        ]
     }
 
     private var syncIntroDetails: String {

@@ -62,6 +62,21 @@ struct MessageRegexRulesView: View {
             }
         }
         .navigationTitle(NSLocalizedString("消息规则", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-message-regex-rules",
+            title: NSLocalizedString("消息规则", comment: "消息正则规则向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .json(
+                    "rules",
+                    label: NSLocalizedString("正则替换规则", comment: "消息正则规则向导字段"),
+                    schema: GuideMessageRegexSettingsSupport.rulesSchema,
+                    get: { GuideMessageRegexSettingsSupport.rulesValue(store.rules) },
+                    normalize: GuideMessageRegexSettingsSupport.normalizeRules,
+                    set: { store.save(try GuideMessageRegexSettingsSupport.rules(from: $0)) }
+                )
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -189,6 +204,26 @@ private struct MessageRegexRuleEditorView: View {
             }
         }
         .navigationTitle(NSLocalizedString("正则替换", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-message-regex-rule-editor",
+            title: NSLocalizedString("正则替换", comment: "消息正则编辑向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .json(
+                    "rule",
+                    label: NSLocalizedString("正则替换规则", comment: "消息正则规则向导字段"),
+                    schema: GuideMessageRegexSettingsSupport.ruleSchema,
+                    get: { GuideMessageRegexSettingsSupport.ruleValue(rule) },
+                    normalize: GuideMessageRegexSettingsSupport.normalizeRule,
+                    set: { rule = try GuideMessageRegexSettingsSupport.rule(from: $0) }
+                ),
+                .readOnly(
+                    "save_required",
+                    label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"),
+                    value: { .bool(true) }
+                )
+            ]
+        )
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) {

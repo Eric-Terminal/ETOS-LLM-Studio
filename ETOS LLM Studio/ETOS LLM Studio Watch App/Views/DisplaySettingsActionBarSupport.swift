@@ -107,6 +107,37 @@ struct WatchMessageActionBarSettingsView: View {
             }
         }
         .navigationTitle(role.title)
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-message-action-bar-\(role.rawValue)"),
+            title: role.title,
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: actionBarGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var actionBarGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly("message_role", label: NSLocalizedString("消息类型", comment: "消息功能栏向导字段"), value: { .string(role.rawValue) }),
+            .string("alignment", label: NSLocalizedString("延伸方向", comment: "消息功能栏向导字段"), allowedValues: MessageActionBarAlignment.allCases.map(\.rawValue), get: { alignmentBinding.wrappedValue.rawValue }, set: { alignmentBinding.wrappedValue = MessageActionBarAlignment(rawValue: $0) ?? alignmentBinding.wrappedValue }),
+            .bool("outer_border", label: NSLocalizedString("显示外围边框", comment: "消息功能栏向导字段"), get: { outerBorderBinding.wrappedValue }, set: { outerBorderBinding.wrappedValue = $0 }),
+            .double("font_scale", label: NSLocalizedString("字号比例", comment: "消息功能栏向导字段"), range: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale, get: { fontScaleBinding.wrappedValue }, set: { fontScaleBinding.wrappedValue = $0 }),
+            .json(
+                "items",
+                label: NSLocalizedString("已启用项目", comment: "消息功能栏向导字段"),
+                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema,
+                get: { GuideDisplayActionSettingsSupport.messageActionItemsValue(selectedItems) },
+                normalize: GuideDisplayActionSettingsSupport.normalizeMessageActionItems,
+                set: { value in
+                    let items = try GuideDisplayActionSettingsSupport.messageActionItems(from: value)
+                    let supported = Set(MessageActionBarItem.supportedItems(for: role).filter(\.isSupportedOnCurrentPlatform))
+                    guard items.allSatisfy(supported.contains) else { throw GuideError.invalidToolArguments }
+                    var updated = configuration
+                    updated.setItems(items, for: role)
+                    configuration = updated
+                }
+            )
+        ]
     }
 
     private var alignmentBinding: Binding<MessageActionBarAlignment> {

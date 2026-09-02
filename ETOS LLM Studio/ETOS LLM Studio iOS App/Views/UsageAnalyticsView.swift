@@ -36,6 +36,63 @@ struct UsageAnalyticsView: View {
         .background(Color(.secondarySystemGroupedBackground))
         .navigationTitle(NSLocalizedString("用量统计", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "usage-analytics",
+            title: NSLocalizedString("用量统计", comment: "用量统计向导上下文标题"),
+            documents: [GuideDocumentReference(id: "usage-analytics", title: "Usage Analytics")],
+            settings: usageGuideSettings
+        )
+    }
+
+    private var usageGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "summary",
+                label: NSLocalizedString("用量总览", comment: "用量统计向导字段"),
+                value: {
+                    let stats = viewModel.state.summaryStats
+                    return .dictionary([
+                        "total_tokens": .int(stats.totalTokens),
+                        "session_count": .int(stats.sessionCount),
+                        "message_count": .int(stats.messageCount),
+                        "active_days": .int(stats.activeDays),
+                        "current_streak": .int(stats.currentStreak),
+                        "most_used_model": .string(stats.mostUsedModel),
+                        "most_used_model_share": .double(stats.mostUsedModelShare)
+                    ])
+                }
+            ),
+            .readOnly(
+                "active_range",
+                label: NSLocalizedString("当前统计范围", comment: "用量统计向导字段"),
+                value: {
+                    guard let card = viewModel.state.activeOverviewCard else { return .null }
+                    return .dictionary([
+                        "title": .string(card.title),
+                        "request_count": .int(card.requestCount),
+                        "total_tokens": .int(card.totalTokens),
+                        "error_count": .int(card.errorCount),
+                        "top_model": .string(card.topModelName)
+                    ])
+                }
+            ),
+            .readOnly(
+                "detail",
+                label: NSLocalizedString("当前详情", comment: "用量统计向导字段"),
+                value: {
+                    let detail = viewModel.state.detail
+                    return .dictionary([
+                        "title": .string(detail.title),
+                        "subtitle": .string(detail.subtitle),
+                        "request_count": .int(detail.requestCount),
+                        "success_count": .int(detail.successCount),
+                        "failed_count": .int(detail.failedCount),
+                        "cancelled_count": .int(detail.cancelledCount),
+                        "total_tokens": .int(detail.tokenTotals.totalTokens)
+                    ])
+                }
+            )
+        ]
     }
 
     private let summaryCardColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)

@@ -88,21 +88,27 @@ struct ProviderListView: View {
                 }
                 .tag(ProviderManagementTab.provider)
 
-            ProviderModelOrderContentView()
+            ProviderModelOrderContentView(
+                isGuideContextActive: selectedTab == .modelOrder
+            )
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.modelOrder.title, systemImage: ProviderManagementTab.modelOrder.iconName)
                 }
                 .tag(ProviderManagementTab.modelOrder)
 
-            SpecializedModelSelectorView()
+            SpecializedModelSelectorView(
+                isGuideContextActive: selectedTab == .specializedModel
+            )
                 .environmentObject(viewModel)
                 .tabItem {
                     Label(ProviderManagementTab.specializedModel.title, systemImage: ProviderManagementTab.specializedModel.iconName)
                 }
                 .tag(ProviderManagementTab.specializedModel)
 
-            GlobalProxySettingsView()
+            GlobalProxySettingsView(
+                isGuideContextActive: selectedTab == .globalProxy
+            )
                 .tabItem {
                     Label(ProviderManagementTab.globalProxy.title, systemImage: ProviderManagementTab.globalProxy.iconName)
                 }
@@ -277,7 +283,8 @@ private struct ProviderConfigurationTabsView: View {
                     fetchModelsRequest: fetchModelsRequest,
                     allowsRemoteModelFetch: allowsRemoteModelFetch,
                     allowsModelTesting: allowsModelTesting,
-                    allowsManualModelAdd: allowsManualModelAdd
+                    allowsManualModelAdd: allowsManualModelAdd,
+                    isGuideContextActive: selectedTab == .models
                 ) { updatedProvider in
                     updateProvider(updatedProvider)
                 }
@@ -295,6 +302,7 @@ private struct ProviderConfigurationTabsView: View {
                 navigationTitleOverride: NSLocalizedString("提供商配置", comment: ""),
                 saveRequest: saveProviderRequest,
                 showsToolbarSaveButton: false,
+                isGuideContextActive: selectedTab == .provider,
                 onSaveAvailabilityChange: { canSave in
                     canSaveProviderConfiguration = canSave
                     if !canSave {
@@ -417,6 +425,7 @@ private struct ProviderConfigurationTabsView: View {
 private struct ProviderModelOrderContentView: View {
     @EnvironmentObject private var viewModel: ChatViewModel
     @ObservedObject private var appConfig = AppConfigStore.shared
+    let isGuideContextActive: Bool
 
     var body: some View {
         List {
@@ -462,6 +471,63 @@ private struct ProviderModelOrderContentView: View {
                 }
             }
         }
+        .guideSettingsPageContext(
+            id: "settings-provider-model-order",
+            title: NSLocalizedString("模型顺序", comment: "模型顺序向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            isActive: isGuideContextActive,
+            settings: modelOrderGuideSettings
+        )
+    }
+
+    private var modelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "groups_by_provider",
+                label: NSLocalizedString("按提供商选择模型", comment: "模型顺序向导字段"),
+                get: { appConfig.iOSModelPickerGroupsByProvider },
+                set: { appConfig.iOSModelPickerGroupsByProvider = $0 }
+            ),
+            .json(
+                "provider_order",
+                label: NSLocalizedString("提供商顺序", comment: "模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.identifierOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.identifierOrderValue(
+                        viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                        value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                set: { value in
+                    let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                        from: value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                    ChatService.shared.setProviderOrder(try identifiers.map { identifier in
+                        guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                        return id
+                    })
+                }
+            ),
+            .readOnly(
+                "providers",
+                label: NSLocalizedString("已配置提供商", comment: "模型顺序向导字段"),
+                value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL)
+                        ])
+                    })
+                }
+            )
+        ]
     }
 
     private var modelPickerGroupingBinding: Binding<Bool> {
@@ -543,6 +609,56 @@ private struct ProviderModelOrderDetailView: View {
         .onChange(of: organization) { _, updated in
             synchronize(with: updated)
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-provider-model-order-\(provider.id.uuidString.lowercased())"),
+            title: provider.name,
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: providerModelOrderGuideSettings
+        )
+    }
+
+    private var providerModelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "provider",
+                label: NSLocalizedString("提供商信息", comment: "单提供商模型顺序向导字段"),
+                value: {
+                    .dictionary([
+                        "id": .string(provider.id.uuidString.lowercased()),
+                        "name": .string(provider.name),
+                        "base_url": .string(provider.baseURL)
+                    ])
+                }
+            ),
+            .json(
+                "boundary_order",
+                label: NSLocalizedString("模型与文件夹边界顺序", comment: "单提供商模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.modelBoundaryOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.modelBoundaryOrderValue(
+                        (editingOrganization ?? organization).boundaryItems
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeModelBoundaryOrder(
+                        value,
+                        organization: editingOrganization ?? organization
+                    )
+                },
+                set: { value in
+                    let current = editingOrganization ?? organization
+                    let items = try GuideOrderedSettingsSupport.modelBoundaryOrder(
+                        from: value,
+                        organization: current
+                    )
+                    guard let updated = current.applyingBoundaryItems(items) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    synchronize(with: updated)
+                    persist(updated)
+                }
+            )
+        ]
     }
 
     private var organization: RunnableModelPickerOrganization {

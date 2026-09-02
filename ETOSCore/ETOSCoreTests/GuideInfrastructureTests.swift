@@ -95,6 +95,56 @@ struct GuideInfrastructureTests {
         }
     }
 
+    @Test("向导顺序设置只接受当前集合的完整排列")
+    func orderedSettingsRequireAnExactPermutation() throws {
+        let current = ["first", "second", "third"]
+        let normalized = try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+            .array([.string("third"), .string("first"), .string("second")]),
+            currentIdentifiers: current
+        )
+
+        #expect(normalized == .array([.string("third"), .string("first"), .string("second")]))
+        #expect(throws: GuideError.self) {
+            _ = try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                .array([.string("first"), .string("first"), .string("third")]),
+                currentIdentifiers: current
+            )
+        }
+        #expect(throws: GuideError.self) {
+            _ = try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                .array([.string("first"), .string("second")]),
+                currentIdentifiers: current
+            )
+        }
+    }
+
+    @Test("模型目录顺序拒绝交叉的文件夹边界")
+    func modelBoundaryOrderRejectsCrossedGroups() throws {
+        var organization = RunnableModelPickerOrganization(models: [])
+        organization.createGroup("A/B")
+        let validValue = GuideOrderedSettingsSupport.modelBoundaryOrderValue(
+            organization.boundaryItems
+        )
+
+        #expect(
+            try GuideOrderedSettingsSupport.normalizeModelBoundaryOrder(
+                validValue,
+                organization: organization
+            ) == validValue
+        )
+        #expect(throws: GuideError.self) {
+            _ = try GuideOrderedSettingsSupport.normalizeModelBoundaryOrder(
+                .array([
+                    .dictionary(["kind": .string("group_start"), "value": .string("A")]),
+                    .dictionary(["kind": .string("group_start"), "value": .string("A/B")]),
+                    .dictionary(["kind": .string("group_end"), "value": .string("A")]),
+                    .dictionary(["kind": .string("group_end"), "value": .string("A/B")])
+                ]),
+                organization: organization
+            )
+        }
+    }
+
     @MainActor
     @Test("导航栈最上层页面提供上下文，退出后恢复上一页")
     func registrationStackTracksVisiblePage() async throws {
@@ -119,6 +169,32 @@ struct GuideInfrastructureTests {
         await #expect(throws: GuideError.self) {
             _ = try await coordinator.currentContext()
         }
+    }
+
+    @MainActor
+    @Test("同一页面可原地刷新向导声明与快照提供者")
+    func registrationUpdateRefreshesActiveContext() async throws {
+        let coordinator = GuideContextCoordinator()
+        let token = coordinator.register(
+            descriptor: GuidePageDescriptor(id: "editor", title: "旧声明"),
+            snapshot: { GuidePageSnapshot(fields: ["revision": .init(label: "版本", value: .int(1))]) },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+        defer { coordinator.unregister(token) }
+
+        coordinator.update(
+            token,
+            descriptor: GuidePageDescriptor(id: "editor", title: "新声明"),
+            snapshot: { GuidePageSnapshot(fields: ["revision": .init(label: "版本", value: .int(2))]) },
+            executeReadTool: { _ in throw GuideError.invalidToolArguments },
+            buildProposal: { _, _ in throw GuideError.invalidToolArguments },
+            execute: { _ in throw GuideError.invalidToolArguments }
+        )
+
+        let context = try await coordinator.currentContext()
+        #expect(context.descriptor.title == "新声明")
+        #expect(context.snapshot.fields["revision"]?.value == .int(2))
     }
 
     @MainActor
@@ -700,6 +776,11 @@ struct GuideInfrastructureTests {
             GuideToolCatalog.updateGlobalProxy,
             GuideToolCatalog.updateMCPPreferences,
             GuideToolCatalog.createMCPServer,
+            GuideToolCatalog.updateMCPServer,
+            GuideToolCatalog.updateMCPTool,
+            GuideToolCatalog.updateShortcutPreferences,
+            GuideToolCatalog.updateShortcutTool,
+            GuideDeclarativeSettingsSupport.toolDefinition(pageTitle: "测试设置", settings: []),
             GuideToolCatalog.requestModelSetupSecret,
             GuideToolCatalog.proposeModelSetupTest,
             GuideToolCatalog.proposeSetupModelSelection,
@@ -736,6 +817,304 @@ struct GuideInfrastructureTests {
         }
         #expect(endpoint.absoluteString == "https://mcp.example.com")
         #expect(headers["Authorization"] == "Bearer private-token")
+    }
+
+    @Test("MCP 修改提案保留隐藏认证值并支持完整撤销")
+    func mcpUpdatePreservesSecretsAndSupportsUndo() throws {
+        let original = MCPServerConfiguration(
+            displayName: "Docs",
+            notes: "旧备注",
+            transport: .http(
+                endpoint: try #require(URL(string: "https://old.example.com/mcp")),
+                apiKey: "private-api-key",
+                additionalHeaders: [
+                    "Authorization": "Bearer private-header",
+                    "X-Trace-ID": "trace-old"
+                ]
+            ),
+            isSelectedForChat: false
+        )
+        let call = InternalToolCall(
+            id: "update-mcp",
+            toolName: GuideToolCatalog.updateMCPServer.name,
+            arguments: #"{"display_name":"Docs New","notes":"新备注","selected_for_chat":true,"configuration":{"type":"http","url":"https://new.example.com/mcp","headers":{"X-Trace-ID":"trace-new"}}}"#
+        )
+
+        let proposal = try GuideMCPServerSettingsSupport.buildProposal(
+            call: call,
+            pageID: "mcp-server",
+            server: original
+        )
+        #expect(!proposal.mutations[0].newValue.prettyPrintedCompact().contains("private-"))
+        let application = try GuideMCPServerSettingsSupport.apply(proposal, to: original)
+        #expect(application.server.id == original.id)
+        #expect(application.server.displayName == "Docs New")
+        #expect(application.server.isSelectedForChat)
+        guard case .http(let endpoint, let apiKey, let headers) = application.server.transport else {
+            Issue.record("更新后应保留 HTTP 传输")
+            return
+        }
+        #expect(endpoint.absoluteString == "https://new.example.com/mcp")
+        #expect(apiKey == "private-api-key")
+        #expect(headers["Authorization"] == "Bearer private-header")
+        #expect(headers["X-Trace-ID"] == "trace-new")
+
+        let undo = try #require(application.execution.undoProposal)
+        let restored = try GuideMCPServerSettingsSupport.apply(undo, to: application.server)
+        #expect(restored.server == original)
+    }
+
+    @Test("MCP 原生敏感工具不能由向导放宽审批")
+    func mcpNativeToolApprovalCannotBeRelaxed() throws {
+        let tool = MCPToolDescription(
+            toolId: "clipboard.write",
+            description: "写入剪贴板",
+            inputSchema: nil,
+            examples: nil
+        )
+        let server = MCPServerConfiguration(
+            displayName: "Native",
+            transport: .builtInPersonalData
+        )
+        let call = InternalToolCall(
+            id: "relax-approval",
+            toolName: GuideToolCatalog.updateMCPTool.name,
+            arguments: #"{"enabled":false,"approval_policy":"always_allow"}"#
+        )
+        let proposal = try GuideMCPToolSettingsSupport.buildProposal(
+            call: call,
+            pageID: "mcp-tool",
+            server: server,
+            tool: tool
+        )
+        let application = try GuideMCPToolSettingsSupport.apply(
+            proposal,
+            server: server,
+            tool: tool
+        )
+        #expect(!application.enabled)
+        #expect(application.approvalPolicy == .askEveryTime)
+    }
+
+    @Test("快捷指令工具提案只修改声明字段并可撤销")
+    func shortcutToolProposalSupportsUndo() throws {
+        let tool = ShortcutToolDefinition(
+            name: "Open Dashboard",
+            runModeHint: .direct,
+            isEnabled: false,
+            userDescription: "旧描述"
+        )
+        let call = InternalToolCall(
+            id: "update-shortcut",
+            toolName: GuideToolCatalog.updateShortcutTool.name,
+            arguments: #"{"enabled":true,"run_mode":"bridge","user_description":"打开仪表盘"}"#
+        )
+        let proposal = try GuideShortcutToolSettingsSupport.buildProposal(
+            call: call,
+            pageID: "shortcut-tool",
+            tool: tool
+        )
+        let application = try GuideShortcutToolSettingsSupport.apply(proposal, tool: tool)
+        #expect(application.enabled)
+        #expect(application.runMode == .bridge)
+        #expect(application.userDescription == "打开仪表盘")
+
+        var changed = tool
+        changed.isEnabled = application.enabled
+        changed.runModeHint = application.runMode
+        changed.userDescription = application.userDescription
+        let undo = try #require(application.execution.undoProposal)
+        let restored = try GuideShortcutToolSettingsSupport.apply(undo, tool: changed)
+        #expect(!restored.enabled)
+        #expect(restored.runMode == .direct)
+        #expect(restored.userDescription == "旧描述")
+    }
+
+    @Test("声明式设置拒绝页面未公开的字段")
+    func declarativeSettingsRejectUndeclaredFields() throws {
+        let settings = [GuidePageSetting.bool("enabled", label: "启用", get: { false }, set: { _ in })]
+        let snapshot = GuideDeclarativeSettingsSupport.snapshot(settings: settings)
+        let call = InternalToolCall(
+            id: "unknown-setting",
+            toolName: GuideDeclarativeSettingsSupport.toolName,
+            arguments: #"{"hidden_setting":true}"#
+        )
+
+        #expect(throws: GuideError.self) {
+            _ = try GuideDeclarativeSettingsSupport.buildProposal(
+                call: call,
+                pageID: "settings",
+                pageTitle: "设置",
+                settings: settings,
+                snapshot: snapshot
+            )
+        }
+    }
+
+    @MainActor
+    @Test("声明式设置按页面声明顺序执行相互依赖字段")
+    func declarativeSettingsExecuteInDeclarationOrder() throws {
+        var mode = "old"
+        var detail = ""
+        let settings: [GuidePageSetting] = [
+            .string(
+                "mode",
+                label: "模式",
+                allowedValues: ["old", "new"],
+                get: { mode },
+                set: { mode = $0 }
+            ),
+            .string(
+                "detail",
+                label: "详情",
+                get: { detail },
+                set: { detail = "\(mode):\($0)" }
+            )
+        ]
+        let proposal = try GuideDeclarativeSettingsSupport.buildProposal(
+            call: InternalToolCall(
+                id: "ordered-settings",
+                toolName: GuideDeclarativeSettingsSupport.toolName,
+                arguments: #"{"detail":"value","mode":"new"}"#
+            ),
+            pageID: "ordered-page",
+            pageTitle: "依赖设置",
+            settings: settings,
+            snapshot: GuideDeclarativeSettingsSupport.snapshot(settings: settings)
+        )
+
+        _ = try GuideDeclarativeSettingsSupport.execute(
+            proposal: proposal,
+            pageID: "ordered-page",
+            pageTitle: "依赖设置",
+            settings: settings
+        )
+        #expect(mode == "new")
+        #expect(detail == "new:value")
+    }
+
+    @Test("终端快捷项规范化组合键并拒绝只有修饰键")
+    func terminalShortcutsValidateKeySequences() throws {
+        let keys = try GuideLocalLinuxTerminalShortcutSettingsSupport.keys(from: .array([
+            .string(LocalLinuxTerminalKey.control.rawValue),
+            .string(LocalLinuxTerminalKey.c.rawValue)
+        ]))
+        #expect(keys == [.control, .c])
+        #expect(throws: GuideError.self) {
+            _ = try GuideLocalLinuxTerminalShortcutSettingsSupport.normalizeKeys(.array([
+                .string(LocalLinuxTerminalKey.control.rawValue),
+                .string(LocalLinuxTerminalKey.option.rawValue)
+            ]))
+        }
+    }
+
+    @Test("结构化请求体选项支持新增并拒绝重复 ID")
+    func requestBodyControlOptionsRemainStructured() throws {
+        let normalized = try GuideRequestBodyControlSettingsSupport.normalizeOptions(.array([
+            .dictionary([
+                "title": .string("快速"),
+                "payload": .dictionary(["reasoning_effort": .string("low")])
+            ])
+        ]))
+        let options = try GuideRequestBodyControlSettingsSupport.options(from: normalized)
+        #expect(options.count == 1)
+        #expect(options[0].title == "快速")
+        #expect(options[0].payload["reasoning_effort"] == .string("low"))
+
+        let duplicateID = "same-id"
+        #expect(throws: GuideError.self) {
+            _ = try GuideRequestBodyControlSettingsSupport.normalizeOptions(.array([
+                .dictionary(["id": .string(duplicateID), "title": .string("一"), "payload": .dictionary([:])]),
+                .dictionary(["id": .string(duplicateID), "title": .string("二"), "payload": .dictionary([:])])
+            ]))
+        }
+    }
+
+    @Test("角色扮演宏只接受不带花括号的名称")
+    func roleplayMacrosValidateNames() throws {
+        let macros = try GuideRoleplayDataSettingsSupport.macros(from: .dictionary([
+            "player": .string("Eric")
+        ]))
+        #expect(macros == ["player": "Eric"])
+        #expect(throws: GuideError.self) {
+            _ = try GuideRoleplayDataSettingsSupport.normalizeMacros(.dictionary([
+                "{{player}}": .string("Eric")
+            ]))
+        }
+    }
+
+    @Test("模型价格保留零价格并拒绝重复工作日")
+    func modelPricingSupportsZeroAndUniqueWeekdays() throws {
+        #expect(try GuideModelPricingSettingsSupport.priceText(from: .double(0)) == "0")
+        let weekday = try #require(ModelPricingWeekday.allCases.first)
+        #expect(throws: GuideError.self) {
+            _ = try GuideModelPricingSettingsSupport.normalizeWeekdays(.array([
+                .int(weekday.rawValue),
+                .int(weekday.rawValue)
+            ]))
+        }
+    }
+
+    @Test("显示快捷项拒绝未知值和重复项")
+    func displayActionsRejectInvalidLists() throws {
+        let item = try #require(MessageActionBarItem.allCases.first)
+        #expect(
+            try GuideDisplayActionSettingsSupport.messageActionItems(from: .array([.string(item.rawValue)])) == [item]
+        )
+        #expect(throws: GuideError.self) {
+            _ = try GuideDisplayActionSettingsSupport.normalizeMessageActionItems(.array([
+                .string(item.rawValue),
+                .string(item.rawValue)
+            ]))
+        }
+    }
+
+    @Test("聊天外观完整往返保留文字样式与自定义规则")
+    func appearanceProfileRoundTripKeepsNestedStyles() throws {
+        var profile = ChatAppearanceProfile(id: "guide-profile", name: "夜间")
+        profile.userBubble = ChatAppearanceColorSlot(isEnabled: true, hex: "112233CC")
+        profile.userLightTextStyles.strong = ChatAppearanceColorSlot(isEnabled: true, hex: "AABBCCFF")
+        profile.userLightTextStyles.customRules = [
+            ChatAppearanceTextColorRule(
+                id: "color-rule",
+                kind: .exactText,
+                exactText: "重要",
+                colorHex: "FF0000FF"
+            )
+        ]
+
+        let restored = try GuideAppearanceSettingsSupport.profile(
+            from: GuideAppearanceSettingsSupport.profileValue(profile),
+            updating: profile
+        )
+        #expect(restored == profile)
+    }
+
+    @Test("消息正则列表支持完整往返并拒绝无效表达式")
+    func messageRegexRulesRoundTripAndValidatePattern() throws {
+        let original = MessageRegexRule(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            name: "隐藏标记",
+            pattern: "<hide>.*?</hide>",
+            replacement: "",
+            scopes: [.assistant],
+            mode: .visualOnly,
+            isEnabled: true
+        )
+        let restored = try GuideMessageRegexSettingsSupport.rules(
+            from: GuideMessageRegexSettingsSupport.rulesValue([original])
+        )
+        #expect(restored == [original])
+        #expect(throws: GuideError.self) {
+            _ = try GuideMessageRegexSettingsSupport.normalizeRule(.dictionary([
+                "name": .string("坏规则"),
+                "pattern": .string("["),
+                "replacement": .string(""),
+                "scopes": .array([.string(MessageRegexRoleScope.user.rawValue)]),
+                "mode": .string(MessageRegexMode.persist.rawValue),
+                "enabled": .bool(true)
+            ]))
+        }
     }
 
     @Test("模型列表 JSON 提案可新增模型、隐藏秘密并完整撤销")

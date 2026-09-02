@@ -26,14 +26,50 @@ struct TTSSettingsView: View {
             playbackParametersSection
         }
         .navigationTitle(NSLocalizedString("TTS 设置", comment: ""))
-        .sheet(isPresented: $isAddingService) {
-            NavigationStack {
-                WatchTTSServiceEditorView(
-                    service: .defaultConfiguration(for: .openAICompatible),
-                    selectsAfterSaving: true
-                )
-            }
+        .navigationDestination(isPresented: $isAddingService) {
+            WatchTTSServiceEditorView(
+                service: .defaultConfiguration(for: .openAICompatible),
+                selectsAfterSaving: true
+            )
         }
+        .guideSettingsPageContext(
+            id: "watch-settings-tts",
+            title: NSLocalizedString("TTS 设置", comment: "TTS 向导上下文标题"),
+            documents: [GuideDocumentReference(id: "tts", title: "Text to Speech")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .string("playback_mode", label: NSLocalizedString("模式", comment: "向导设置字段"), allowedValues: TTSPlaybackMode.allCases.map(\.rawValue), get: { settingsStore.playbackMode.rawValue }, set: { settingsStore.playbackMode = TTSPlaybackMode(rawValue: $0) ?? settingsStore.playbackMode }),
+            .string("selected_service_id", label: NSLocalizedString("当前服务", comment: "向导设置字段"), allowedValues: [""] + serviceStore.services.map { $0.id.uuidString }, get: { serviceStore.selectedServiceID?.uuidString ?? "" }, set: { serviceStore.select(UUID(uuidString: $0)) }),
+            .bool("continue_in_background", label: NSLocalizedString("后台继续朗读", comment: "向导设置字段"), get: { appConfig.continueTTSPlaybackInBackground }, set: { appConfig.continueTTSPlaybackInBackground = $0 }),
+            .bool("cache_network_audio", label: NSLocalizedString("缓存网络音频", comment: "向导设置字段"), get: { appConfig.ttsCacheNetworkAudioForReplay }, set: { appConfig.ttsCacheNetworkAudioForReplay = $0 }),
+            .bool("auto_play_after_response", label: NSLocalizedString("自动朗读回复", comment: "向导设置字段"), get: { settingsStore.autoPlayAfterAssistantResponse }, set: { settingsStore.autoPlayAfterAssistantResponse = $0 }),
+            .string("text_selection_mode", label: NSLocalizedString("朗读内容", comment: "向导设置字段"), allowedValues: TTSTextSelectionMode.allCases.map(\.rawValue), get: { textSelectionModeBinding.wrappedValue.rawValue }, set: { if let mode = TTSTextSelectionMode(rawValue: $0) { textSelectionModeBinding.wrappedValue = mode } }),
+            .bool("watch_lightweight_preprocess", label: NSLocalizedString("轻量预处理", comment: "向导设置字段"), get: { settingsStore.watchUseLightweightPreprocess }, set: { settingsStore.watchUseLightweightPreprocess = $0 }),
+            .integer("watch_max_characters", label: NSLocalizedString("最大字符", comment: "向导设置字段"), range: 500...6_000, get: { settingsStore.watchSpeechMaxCharacters }, set: { settingsStore.watchSpeechMaxCharacters = $0 }),
+            .double("system_speech_rate", label: NSLocalizedString("系统语速", comment: "向导设置字段"), range: 0.1...3, get: { Double(settingsStore.speechRate) }, set: { settingsStore.speechRate = Float($0) }),
+            .double("system_pitch", label: NSLocalizedString("系统音调", comment: "向导设置字段"), range: 0.1...2, get: { Double(settingsStore.pitch) }, set: { settingsStore.pitch = Float($0) }),
+            .double("cloud_playback_speed", label: NSLocalizedString("默认倍速", comment: "向导设置字段"), range: 0.5...2, get: { Double(settingsStore.playbackSpeed) }, set: { settingsStore.playbackSpeed = Float($0) }),
+            .readOnly("services", label: NSLocalizedString("云端语音服务", comment: "向导设置字段"), value: {
+                .array(serviceStore.services.map { service in
+                    .dictionary([
+                        "id": .string(service.id.uuidString),
+                        "name": .string(service.name),
+                        "provider_kind": .string(service.providerKind.rawValue),
+                        "base_url": .string(service.baseURL),
+                        "model_id": .string(service.modelID),
+                        "voice": .string(service.voice),
+                        "api_key": .string(GuideSnapshotField.hiddenValue),
+                        "ready": .bool(service.isReady)
+                    ])
+                })
+            }),
+            .readOnly("playback_status", label: NSLocalizedString("播放状态", comment: "向导设置字段"), value: { .string(ttsManager.playbackState.status.rawValue) })
+        ]
     }
 
     private var playbackSection: some View {
@@ -363,6 +399,15 @@ private struct WatchTTSServiceEditorView: View {
         .navigationTitle(selectsAfterSaving
             ? NSLocalizedString("添加语音服务", comment: "")
             : NSLocalizedString("编辑语音服务", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-settings-tts-service-editor",
+            title: selectsAfterSaving
+                ? NSLocalizedString("添加语音服务", comment: "TTS service guide title")
+                : String(format: NSLocalizedString("语音服务：%@", comment: "TTS service guide title"), draft.name),
+            documents: [GuideDocumentReference(id: "tts", title: "Text to Speech")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("取消", comment: "")) {
@@ -377,6 +422,70 @@ private struct WatchTTSServiceEditorView: View {
                 .disabled(!draft.isReady)
             }
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var result: [GuidePageSetting] = [
+            .string("provider_kind", label: NSLocalizedString("接口类型", comment: "向导设置字段"), allowedValues: TTSProviderKind.allCases.map(\.rawValue), get: { draft.providerKind.rawValue }, set: { if let kind = TTSProviderKind(rawValue: $0) { providerKindBinding.wrappedValue = kind } }),
+            .string("name", label: NSLocalizedString("名称", comment: "向导设置字段"), allowsEmpty: false, get: { draft.name }, set: { draft.name = $0 }),
+            .string("base_url", label: baseURLFieldLabel, allowsEmpty: false, get: { draft.baseURL }, set: { draft.baseURL = $0 }),
+            .writeOnlyString("api_key", label: NSLocalizedString("API Key", comment: "向导设置字段"), isConfigured: { !draft.trimmedAPIKey.isEmpty }, set: { draft.apiKey = $0 }),
+            .string("model_id", label: NSLocalizedString("模型 ID", comment: "向导设置字段"), get: { draft.modelID }, set: { draft.modelID = $0 }),
+            .string("voice", label: voiceFieldLabel, get: { draft.voice }, set: { draft.voice = $0 }),
+            .string("response_format", label: NSLocalizedString("格式", comment: "向导设置字段"), allowedValues: responseFormatOptions.isEmpty ? nil : responseFormatOptions, get: { draft.responseFormat }, set: { draft.responseFormat = $0 }),
+            .string("language", label: NSLocalizedString("语言", comment: "向导设置字段"), allowedValues: languageTypeOptions.isEmpty ? nil : languageTypeOptions, get: { draft.languageType }, set: { draft.languageType = $0 }),
+            .string("emotion", label: NSLocalizedString("情感", comment: "向导设置字段"), allowedValues: miniMaxEmotionOptions.isEmpty ? nil : miniMaxEmotionOptions, get: { draft.miniMaxEmotion }, set: { draft.miniMaxEmotion = $0 })
+        ]
+        if fields.contains(.workspace) {
+            result.append(.string("workspace_id", label: NSLocalizedString("Workspace ID", comment: "向导设置字段"), get: { draft.advancedSettings.workspaceID }, set: { advancedBinding(\.workspaceID).wrappedValue = $0 }))
+        }
+        if fields.contains(.region) {
+            result.append(.string("region", label: NSLocalizedString("区域", comment: "向导设置字段"), get: { draft.advancedSettings.region }, set: { advancedBinding(\.region).wrappedValue = $0 }))
+        }
+        if fields.contains(.instruction) {
+            result.append(.string("instruction", label: NSLocalizedString("语音指令", comment: "向导设置字段"), get: { draft.advancedSettings.instruction }, set: { advancedBinding(\.instruction).wrappedValue = $0 }))
+        }
+        if fields.contains(.speed) {
+            result.append(.double("synthesis_speed", label: NSLocalizedString("合成语速", comment: "向导设置字段"), range: 0.5...2, get: { draft.advancedSettings.speed }, set: { advancedBinding(\.speed).wrappedValue = $0 }))
+        }
+        if fields.contains(.volume) {
+            result.append(.double("synthesis_volume", label: NSLocalizedString("合成音量", comment: "向导设置字段"), range: 0...10, get: { draft.advancedSettings.volume }, set: { advancedBinding(\.volume).wrappedValue = $0 }))
+        }
+        if fields.contains(.pitch) {
+            result.append(.integer("synthesis_pitch", label: NSLocalizedString("合成音调", comment: "向导设置字段"), range: -12...12, get: { draft.advancedSettings.pitch }, set: { advancedBinding(\.pitch).wrappedValue = $0 }))
+        }
+        if fields.contains(.sampleRate) {
+            result.append(.integer("sample_rate", label: NSLocalizedString("采样率", comment: "向导设置字段"), range: 8_000...48_000, get: { draft.advancedSettings.sampleRate }, set: { advancedBinding(\.sampleRate).wrappedValue = $0 }))
+        }
+        if fields.contains(.bitrate) {
+            result.append(.integer("bitrate", label: NSLocalizedString("比特率", comment: "向导设置字段"), range: 32_000...256_000, get: { draft.advancedSettings.bitrate }, set: { advancedBinding(\.bitrate).wrappedValue = $0 }))
+        }
+        if fields.contains(.channels) {
+            result.append(.integer("channels", label: NSLocalizedString("声道", comment: "向导设置字段"), range: 1...2, get: { draft.advancedSettings.channels }, set: { advancedBinding(\.channels).wrappedValue = $0 }))
+        }
+        if fields.contains(.languageBoost) {
+            result.append(.string("language_boost", label: NSLocalizedString("语言增强", comment: "向导设置字段"), get: { draft.advancedSettings.languageBoost }, set: { advancedBinding(\.languageBoost).wrappedValue = $0 }))
+        }
+        if fields.contains(.pronunciationDictionary) {
+            result.append(.string("pronunciation_dictionary", label: NSLocalizedString("发音词典", comment: "向导设置字段"), get: { pronunciationDictionaryBinding.wrappedValue }, set: { pronunciationDictionaryBinding.wrappedValue = $0 }))
+        }
+        if fields.contains(.temperature) {
+            result.append(.double("temperature", label: NSLocalizedString("随机性", comment: "向导设置字段"), range: 0...1, get: { draft.advancedSettings.temperature }, set: { advancedBinding(\.temperature).wrappedValue = $0 }))
+        }
+        if fields.contains(.topP) {
+            result.append(.double("top_p", label: NSLocalizedString("Top P", comment: "向导设置字段"), range: 0...1, get: { draft.advancedSettings.topP }, set: { advancedBinding(\.topP).wrappedValue = $0 }))
+        }
+        if fields.contains(.latency) {
+            result.append(.string("latency", label: NSLocalizedString("延迟模式", comment: "向导设置字段"), allowedValues: ["normal", "balanced", "low"], get: { draft.advancedSettings.latency }, set: { advancedBinding(\.latency).wrappedValue = $0 }))
+        }
+        if fields.contains(.subtitles) {
+            result.append(.bool("subtitles", label: NSLocalizedString("返回字幕", comment: "向导设置字段"), get: { draft.advancedSettings.subtitleEnabled }, set: { advancedBinding(\.subtitleEnabled).wrappedValue = $0 }))
+        }
+        if fields.contains(.optimizeTextPreview) {
+            result.append(.bool("optimize_text_preview", label: NSLocalizedString("优化文本预览", comment: "向导设置字段"), get: { draft.advancedSettings.optimizeTextPreview }, set: { advancedBinding(\.optimizeTextPreview).wrappedValue = $0 }))
+        }
+        result.append(.readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) }))
+        return result
     }
 
     @ViewBuilder

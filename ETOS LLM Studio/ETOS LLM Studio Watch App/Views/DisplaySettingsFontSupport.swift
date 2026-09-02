@@ -186,6 +186,13 @@ struct WatchFontSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("字体设置", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-fonts",
+            title: NSLocalizedString("字体设置", comment: "字体设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: fontGuideSettings
+        )
+        .watchGuideEntry()
         .onAppear {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             reloadData()
@@ -225,6 +232,71 @@ struct WatchFontSettingsView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
+    }
+
+    private var fontGuideSettings: [GuidePageSetting] {
+        [
+            .bool("custom_fonts_enabled", label: NSLocalizedString("启用自定义字体", comment: "字体设置向导字段"), get: { customFontEnabledBinding.wrappedValue }, set: { customFontEnabledBinding.wrappedValue = $0 }),
+            .double("font_scale", label: NSLocalizedString("字号比例", comment: "字体设置向导字段"), range: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale, get: { fontScaleBinding.wrappedValue }, set: { fontScaleBinding.wrappedValue = $0 }),
+            .double("line_spacing_em", label: NSLocalizedString("聊天正文行距", comment: "字体设置向导字段"), range: FontLibrary.minimumLineSpacingEm...FontLibrary.maximumLineSpacingEm, get: { lineSpacingBinding.wrappedValue }, set: { lineSpacingBinding.wrappedValue = $0 }),
+            .string("fallback_scope", label: NSLocalizedString("字体回退范围", comment: "字体设置向导字段"), allowedValues: FontFallbackScope.allCases.map(\.rawValue), get: { fallbackScope.rawValue }, set: { fallbackScopeRawValue = $0 }),
+            .string("selected_style_role", label: NSLocalizedString("样式槽位", comment: "字体设置向导字段"), allowedValues: FontSemanticRole.allCases.map(\.rawValue), get: { selectedRole.rawValue }, set: { selectedRole = FontSemanticRole(rawValue: $0) ?? selectedRole }),
+            .string("import_url", label: NSLocalizedString("字体文件链接", comment: "字体设置向导字段"), get: { importURLText }, set: { importURLText = $0 }),
+            .readOnly("import_method", label: NSLocalizedString("导入方式", comment: "字体设置向导字段"), value: { .string(NSLocalizedString("填写链接后需要点击从链接导入", comment: "字体导入应用方式")) }),
+            .readOnly(
+                "font_assets",
+                label: NSLocalizedString("字体文件", comment: "字体设置向导字段"),
+                value: {
+                    .array(assets.map { asset in
+                        .dictionary([
+                            "id": .string(asset.id.uuidString.lowercased()),
+                            "display_name": .string(asset.displayName),
+                            "postscript_name": .string(asset.postScriptName)
+                        ])
+                    })
+                }
+            ),
+            selectedRoleChainGuideSetting,
+            .readOnly("custom_text_rule_count", label: NSLocalizedString("指定内容字体规则数量", comment: "字体设置向导字段"), value: { .int(routes.customTextRules.count) })
+        ]
+    }
+
+    private var selectedRoleChainGuideSetting: GuidePageSetting {
+        let allowedIDs = assets.map { $0.id.uuidString.lowercased() }
+        return .json(
+            "selected_style_font_chain",
+            label: NSLocalizedString("当前槽位字体优先级", comment: "字体设置向导字段"),
+            schema: .dictionary([
+                "type": .string("array"),
+                "items": .dictionary(["type": .string("string"), "enum": .array(allowedIDs.map(JSONValue.string))]),
+                "uniqueItems": .bool(true)
+            ]),
+            get: { .array(routes.chain(for: selectedRole).map { .string($0.uuidString.lowercased()) }) },
+            normalize: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                var seen = Set<UUID>()
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item,
+                          let id = UUID(uuidString: rawValue),
+                          assets.contains(where: { $0.id == id }),
+                          seen.insert(id).inserted else { throw GuideError.invalidToolArguments }
+                    return id
+                }
+                return .array(ids.map { .string($0.uuidString.lowercased()) })
+            },
+            set: { value in
+                guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                let ids = try items.map { item -> UUID in
+                    guard case .string(let rawValue) = item, let id = UUID(uuidString: rawValue) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return id
+                }
+                routes.setChain(ids, for: selectedRole)
+                FontLibrary.updateChain(ids, for: selectedRole)
+                NotificationCenter.default.post(name: .syncFontsUpdated, object: nil)
+            }
+        )
     }
 
     private func settingsIntroCard(

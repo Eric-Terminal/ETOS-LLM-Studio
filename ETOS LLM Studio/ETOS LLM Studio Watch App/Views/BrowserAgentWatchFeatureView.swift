@@ -118,6 +118,28 @@ struct BrowserAgentWatchFeatureView: View {
             }
         }
         .navigationTitle(NSLocalizedString("Browser Agent", comment: "Browser Agent settings title"))
+        .guideSettingsPageContext(
+            id: "watch-settings-browser-agent",
+            title: NSLocalizedString("Browser Agent", comment: "Browser Agent guide title"),
+            documents: [GuideDocumentReference(id: "browser-agent", title: "Browser Agent")],
+            settings: [
+                .bool("delegate_agent_operations_to_iphone", label: NSLocalizedString("模型操作委托给 iPhone", comment: "向导设置字段"), get: { delegateToIPhone }, set: { delegateToIPhone = $0 }),
+                .bool("persistent_profile_enabled", label: NSLocalizedString("保留网站登录状态", comment: "向导设置字段"), get: { persistentProfileEnabled }, set: { persistentProfileEnabled = $0 }),
+                .readOnly("session_available", label: NSLocalizedString("聊天会话可用", comment: "向导设置字段"), value: { .bool(sessionID != nil) }),
+                .readOnly("unavailable_capabilities", label: NSLocalizedString("本机限制", comment: "向导设置字段"), value: { .array(unavailableCapabilities.map { .string(String(describing: $0)) }) }),
+                .readOnly("tabs", label: NSLocalizedString("本机标签页", comment: "向导设置字段"), value: {
+                    .array(tabs.map { tab in
+                        .dictionary([
+                            "id": .string(tab.id.uuidString),
+                            "title": .string(tab.title),
+                            "url": .string(tab.url ?? ""),
+                            "loading": .bool(tab.isLoading)
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
         .task(id: sessionID) {
             unavailableCapabilities = manager.capabilities().unavailableCapabilities
             refreshTabs()
@@ -221,6 +243,16 @@ private struct BrowserAgentWatchTakeoverView: View {
             }
         }
         .navigationTitle(NSLocalizedString("浏览器", comment: "Browser Agent takeover title"))
+        .guideSettingsPageContext(
+            id: "watch-browser-agent-tab",
+            title: NSLocalizedString("浏览器标签页", comment: "Browser Agent tab guide title"),
+            documents: [GuideDocumentReference(id: "browser-agent", title: "Browser Agent")],
+            settings: [
+                .readOnly("tab_id", label: NSLocalizedString("标签页 ID", comment: "向导设置字段"), value: { .string(tabID.uuidString) }),
+                .readOnly("domain", label: NSLocalizedString("当前域名", comment: "向导设置字段"), value: { .string(currentDomain ?? "") })
+            ]
+        )
+        .watchGuideEntry()
         .onAppear {
             manager.setUserControlling(true, sessionID: sessionID)
             refreshDomain()

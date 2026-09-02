@@ -130,6 +130,26 @@ struct ChatTextColorRuleEditorView: View {
         }
         .navigationTitle(NSLocalizedString("着色规则", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-chat-text-color-rule",
+            title: NSLocalizedString("着色规则", comment: "文字着色规则向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .json(
+                    "rule",
+                    label: NSLocalizedString("着色规则", comment: "文字着色规则向导字段"),
+                    schema: GuideAppearanceSettingsSupport.textColorRuleSchema,
+                    get: { GuideAppearanceSettingsSupport.textColorRuleValue(rule) },
+                    normalize: GuideAppearanceSettingsSupport.normalizeTextColorRule,
+                    set: { rule = try GuideAppearanceSettingsSupport.textColorRule(from: $0) }
+                ),
+                .readOnly(
+                    "regular_expression_valid",
+                    label: NSLocalizedString("正则表达式是否有效", comment: "文字着色规则向导字段"),
+                    value: { .bool(isRegularExpressionValid) }
+                )
+            ]
+        )
         .task(id: regularExpressionValidationPattern) {
             guard let pattern = regularExpressionValidationPattern else {
                 isRegularExpressionValid = true

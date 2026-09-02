@@ -119,6 +119,28 @@ struct MCPConfigurationTransferView: View {
         } message: {
             Text(message ?? "")
         }
+        .guideSettingsPageContext(
+            id: "mcp-configuration-transfer",
+            title: NSLocalizedString("MCP 配置迁移", comment: "MCP 配置迁移向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .readOnly(
+                    "configured_server_count",
+                    label: NSLocalizedString("已配置服务器数量", comment: "MCP 配置迁移向导字段"),
+                    value: { .int(manager.servers.count) }
+                ),
+                .readOnly(
+                    "supported_format",
+                    label: NSLocalizedString("支持的迁移格式", comment: "MCP 配置迁移向导字段"),
+                    value: { .string("mcpServers JSON") }
+                ),
+                .readOnly(
+                    "secrets_are_excluded_by_default",
+                    label: NSLocalizedString("默认去除敏感字段", comment: "MCP 配置迁移向导字段"),
+                    value: { .bool(true) }
+                )
+            ]
+        )
     }
 
     private func prepareExport(includeSecrets: Bool) {

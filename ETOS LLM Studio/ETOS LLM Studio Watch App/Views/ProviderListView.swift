@@ -69,6 +69,7 @@ struct ProviderListView: View {
                 ])
             }
         )
+        .watchGuideEntry()
     }
 }
 
@@ -117,6 +118,58 @@ private struct WatchProviderManagementContentView: View {
                 .environmentObject(viewModel)
             }
         }
+        .guideSettingsPageContext(
+            id: "watch-provider-list",
+            title: NSLocalizedString("提供商管理", comment: "手表提供商管理向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: providerListGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var providerListGuideSettings: [GuidePageSetting] {
+        [
+            .json(
+                "provider_order",
+                label: NSLocalizedString("提供商顺序", comment: "手表提供商管理向导字段"),
+                schema: GuideOrderedSettingsSupport.identifierOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.identifierOrderValue(
+                        viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                        value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                set: { value in
+                    let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                        from: value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                    ChatService.shared.setProviderOrder(try identifiers.map { identifier in
+                        guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                        return id
+                    })
+                }
+            ),
+            .readOnly(
+                "providers",
+                label: NSLocalizedString("已配置提供商", comment: "手表提供商管理向导字段"),
+                value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL),
+                            "api_format": .string(provider.apiFormat)
+                        ])
+                    })
+                }
+            )
+        ]
     }
 
     private func deleteProvider(_ provider: Provider) {
@@ -180,6 +233,63 @@ private struct WatchProviderModelOrderContentView: View {
             }
         }
         .navigationTitle(NSLocalizedString("模型顺序", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-provider-model-order",
+            title: NSLocalizedString("模型顺序", comment: "手表模型顺序向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: modelOrderGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var modelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "groups_by_provider",
+                label: NSLocalizedString("按提供商选择模型", comment: "手表模型顺序向导字段"),
+                get: { appConfig.watchModelPickerGroupsByProvider },
+                set: { appConfig.watchModelPickerGroupsByProvider = $0 }
+            ),
+            .json(
+                "provider_order",
+                label: NSLocalizedString("提供商顺序", comment: "手表模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.identifierOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.identifierOrderValue(
+                        viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeIdentifierOrder(
+                        value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                },
+                set: { value in
+                    let identifiers = try GuideOrderedSettingsSupport.identifierOrder(
+                        from: value,
+                        currentIdentifiers: viewModel.providers.map { $0.id.uuidString.lowercased() }
+                    )
+                    ChatService.shared.setProviderOrder(try identifiers.map { identifier in
+                        guard let id = UUID(uuidString: identifier) else { throw GuideError.invalidToolArguments }
+                        return id
+                    })
+                }
+            ),
+            .readOnly(
+                "providers",
+                label: NSLocalizedString("已配置提供商", comment: "手表模型顺序向导字段"),
+                value: {
+                    .array(viewModel.providers.map { provider in
+                        .dictionary([
+                            "id": .string(provider.id.uuidString.lowercased()),
+                            "name": .string(provider.name),
+                            "base_url": .string(provider.baseURL)
+                        ])
+                    })
+                }
+            )
+        ]
     }
 
     private var modelPickerGroupingBinding: Binding<Bool> {
@@ -268,6 +378,57 @@ private struct WatchProviderModelOrderDetailView: View {
         .onChange(of: organization) { _, updated in
             synchronize(with: updated)
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "watch-provider-model-order-\(provider.id.uuidString.lowercased())"),
+            title: provider.name,
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: providerModelOrderGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var providerModelOrderGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly(
+                "provider",
+                label: NSLocalizedString("提供商信息", comment: "手表单提供商模型顺序向导字段"),
+                value: {
+                    .dictionary([
+                        "id": .string(provider.id.uuidString.lowercased()),
+                        "name": .string(provider.name),
+                        "base_url": .string(provider.baseURL)
+                    ])
+                }
+            ),
+            .json(
+                "boundary_order",
+                label: NSLocalizedString("模型与文件夹边界顺序", comment: "手表单提供商模型顺序向导字段"),
+                schema: GuideOrderedSettingsSupport.modelBoundaryOrderSchema,
+                get: {
+                    GuideOrderedSettingsSupport.modelBoundaryOrderValue(
+                        (editingOrganization ?? organization).boundaryItems
+                    )
+                },
+                normalize: { value in
+                    try GuideOrderedSettingsSupport.normalizeModelBoundaryOrder(
+                        value,
+                        organization: editingOrganization ?? organization
+                    )
+                },
+                set: { value in
+                    let current = editingOrganization ?? organization
+                    let items = try GuideOrderedSettingsSupport.modelBoundaryOrder(
+                        from: value,
+                        organization: current
+                    )
+                    guard let updated = current.applyingBoundaryItems(items) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    synchronize(with: updated)
+                    persist(updated)
+                }
+            )
+        ]
     }
 
     private var organization: RunnableModelPickerOrganization {

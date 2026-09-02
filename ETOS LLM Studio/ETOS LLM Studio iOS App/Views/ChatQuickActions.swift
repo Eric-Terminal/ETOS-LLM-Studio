@@ -152,6 +152,52 @@ struct ChatQuickActionSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能设置页标题"))
+        .guideSettingsPageContext(
+            id: "settings-chat-quick-actions",
+            title: NSLocalizedString("聊天快捷功能", comment: "聊天快捷功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .json(
+                    "actions",
+                    label: NSLocalizedString("已选择的快捷功能", comment: "聊天快捷功能向导字段"),
+                    schema: .dictionary([
+                        "type": .string("array"),
+                        "items": .dictionary([
+                            "type": .string("string"),
+                            "enum": .array(ChatQuickAction.allCases.map { .string($0.rawValue) })
+                        ]),
+                        "minItems": .int(1),
+                        "uniqueItems": .bool(true)
+                    ]),
+                    get: { .array(selectedActions.map { .string($0.rawValue) }) },
+                    normalize: { value in
+                        guard case .array(let items) = value, !items.isEmpty else { throw GuideError.invalidToolArguments }
+                        var seen = Set<ChatQuickAction>()
+                        let actions = try items.map { item -> ChatQuickAction in
+                            guard case .string(let rawValue) = item,
+                                  let action = ChatQuickAction(rawValue: rawValue),
+                                  seen.insert(action).inserted else {
+                                throw GuideError.invalidToolArguments
+                            }
+                            return action
+                        }
+                        return .array(actions.map { .string($0.rawValue) })
+                    },
+                    set: { value in
+                        guard case .array(let items) = value else { throw GuideError.invalidToolArguments }
+                        let actions = try items.map { item -> ChatQuickAction in
+                            guard case .string(let rawValue) = item,
+                                  let action = ChatQuickAction(rawValue: rawValue) else {
+                                throw GuideError.invalidToolArguments
+                            }
+                            return action
+                        }
+                        selectedActions = actions
+                        appConfig.chatQuickActionIDs = ChatQuickActionSelection.encode(actions)
+                    }
+                )
+            ]
+        )
         .onAppear(perform: reloadSelection)
         .onChange(of: appConfig.chatQuickActionIDs) { _, _ in
             reloadSelection()

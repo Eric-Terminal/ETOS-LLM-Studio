@@ -5,6 +5,11 @@ import ETOSCore
 struct GlobalProxySettingsView: View {
     @ObservedObject private var proxyStore = NetworkProxySettingsStore.shared
     @State private var showPassword = false
+    let isGuideContextActive: Bool
+
+    init(isGuideContextActive: Bool = true) {
+        self.isGuideContextActive = isGuideContextActive
+    }
 
     private var numberFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -73,6 +78,7 @@ struct GlobalProxySettingsView: View {
                 documents: [GuideDocumentReference(id: "network-proxy", title: "Global Proxy")],
                 tools: [GuidePageTool(definition: GuideToolCatalog.updateGlobalProxy, access: .proposeChange)]
             ),
+            isActive: isGuideContextActive,
             snapshot: proxyGuideSnapshot,
             buildProposal: buildProxyGuideProposal,
             execute: executeProxyGuideProposal

@@ -68,5 +68,19 @@ struct ChatAnimationSettingsView: View {
         }
         .navigationTitle(NSLocalizedString("聊天动画", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-chat-animation",
+            title: NSLocalizedString("聊天动画", comment: "聊天动画向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .bool("scroll_animation", label: NSLocalizedString("弹性滚动", comment: "聊天动画向导字段"), get: { appConfig.chatScrollAnimationEnabled }, set: { appConfig.chatScrollAnimationEnabled = $0 }),
+                .double("scroll_offset", label: NSLocalizedString("位移幅度", comment: "聊天动画向导字段"), range: 4...60, get: { appConfig.chatScrollAnimationOffset }, set: { appConfig.chatScrollAnimationOffset = $0 }),
+                .double("scroll_spring_response", label: NSLocalizedString("弹簧响应", comment: "聊天动画向导字段"), range: 0.15...1, get: { appConfig.chatScrollAnimationSpringResponse }, set: { appConfig.chatScrollAnimationSpringResponse = $0 }),
+                .double("scroll_spring_damping", label: NSLocalizedString("弹簧阻尼", comment: "聊天动画向导字段"), range: 0.1...0.95, get: { appConfig.chatScrollAnimationSpringDamping }, set: { appConfig.chatScrollAnimationSpringDamping = $0 }),
+                .bool("send_animation", label: NSLocalizedString("发送入场动画", comment: "聊天动画向导字段"), get: { appConfig.chatSendAnimationEnabled }, set: { appConfig.chatSendAnimationEnabled = $0 }),
+                .double("send_spring_response", label: NSLocalizedString("飞入速度", comment: "聊天动画向导字段"), range: 0.2...0.8, get: { appConfig.chatSendAnimationSpringResponse }, set: { appConfig.chatSendAnimationSpringResponse = $0 }),
+                .double("send_spring_damping", label: NSLocalizedString("落点回弹", comment: "聊天动画向导字段"), range: 0.4...1, get: { appConfig.chatSendAnimationSpringDamping }, set: { appConfig.chatSendAnimationSpringDamping = $0 })
+            ]
+        )
     }
 }

@@ -14,6 +14,11 @@ struct SpecializedModelSelectorView: View {
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var ttsServiceStore = TTSServiceStore.shared
     @StateObject private var guideRouter = GuideModelRouter()
+    let isGuideContextActive: Bool
+
+    init(isGuideContextActive: Bool = true) {
+        self.isGuideContextActive = isGuideContextActive
+    }
 
     var body: some View {
         Form {
@@ -81,6 +86,13 @@ struct SpecializedModelSelectorView: View {
             )
         }
         .navigationTitle(NSLocalizedString("专用模型选择器", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-specialized-models",
+            title: NSLocalizedString("专用模型", comment: "专用模型向导上下文标题"),
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            isActive: isGuideContextActive,
+            settings: specializedModelGuideSettings
+        )
         .onAppear {
             syncVideoAnalysisSelection()
             syncImageGenerationSelection()
@@ -89,6 +101,82 @@ struct SpecializedModelSelectorView: View {
             syncVideoAnalysisSelection()
             syncImageGenerationSelection()
         }
+    }
+
+    private var specializedModelGuideSettings: [GuidePageSetting] {
+        let guideModels = guideRouter.availableUserModels
+        return [
+            .string(
+                "guide_route",
+                label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
+                allowedValues: GuideRoute.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { guideRouter.route.rawValue },
+                set: { route in
+                    if route == GuideRoute.builtIn.rawValue {
+                        guideRouter.useBuiltIn()
+                    } else if let selected = guideRouter.selectedUserModel {
+                        guideRouter.selectUserModel(selected)
+                    }
+                }
+            ),
+            .string(
+                "guide_model_id",
+                label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
+                allowedValues: [""] + guideModels.map(\.id),
+                get: { guideRouter.selectedUserModel?.id ?? "" },
+                set: { modelID in
+                    guard let model = guideModels.first(where: { $0.id == modelID }) else { return }
+                    guideRouter.selectUserModel(model)
+                }
+            ),
+            guideModelSetting("speech_model_id", label: NSLocalizedString("语音模型", comment: "专用模型向导字段"), options: viewModel.speechModels, binding: speechModelIdentifierBinding),
+            guideModelSetting("embedding_model_id", label: NSLocalizedString("嵌入模型", comment: "专用模型向导字段"), options: viewModel.embeddingModelOptions, binding: embeddingModelIdentifierBinding),
+            guideModelSetting("title_model_id", label: NSLocalizedString("标题生成模型", comment: "专用模型向导字段"), options: viewModel.titleGenerationModelOptions, binding: titleModelIdentifierBinding),
+            guideModelSetting("daily_pulse_model_id", label: NSLocalizedString("每日脉冲模型", comment: "专用模型向导字段"), options: viewModel.dailyPulseModelOptions, binding: dailyPulseModelIdentifierBinding),
+            guideModelSetting("reasoning_summary_model_id", label: NSLocalizedString("思考摘要模型", comment: "专用模型向导字段"), options: viewModel.reasoningSummaryModelOptions, binding: reasoningSummaryModelIdentifierBinding),
+            guideModelSetting("video_analysis_model_id", label: NSLocalizedString("视频解析模型", comment: "专用模型向导字段"), options: viewModel.videoAnalysisModelOptions, binding: videoAnalysisModelIdentifierBinding, allowsEmpty: false),
+            guideModelSetting("ocr_model_id", label: NSLocalizedString("OCR 模型", comment: "专用模型向导字段"), options: viewModel.ocrModelOptions, binding: ocrModelIdentifierBinding, allowsEmpty: false),
+            guideModelSetting("image_generation_model_id", label: NSLocalizedString("生图模型", comment: "专用模型向导字段"), options: viewModel.imageGenerationModelOptions, binding: imageGenerationModelIdentifierBinding, allowsEmpty: false),
+            .readOnly(
+                "tts_service",
+                label: NSLocalizedString("TTS 服务", comment: "专用模型向导字段"),
+                value: { .string(ttsServiceStore.selectedService?.name ?? "") }
+            ),
+            .readOnly(
+                "available_guide_models",
+                label: NSLocalizedString("可用页面向导模型", comment: "专用模型向导字段"),
+                value: { runnableModelsValue(guideModels) }
+            )
+        ]
+    }
+
+    private func guideModelSetting(
+        _ key: String,
+        label: String,
+        options: [RunnableModel],
+        binding: Binding<String>,
+        allowsEmpty: Bool = true
+    ) -> GuidePageSetting {
+        .string(
+            key,
+            label: label,
+            allowedValues: (allowsEmpty ? [""] : []) + options.map(\.id),
+            allowsEmpty: allowsEmpty,
+            get: { binding.wrappedValue },
+            set: { binding.wrappedValue = $0 }
+        )
+    }
+
+    private func runnableModelsValue(_ models: [RunnableModel]) -> JSONValue {
+        .array(models.map { model in
+            .dictionary([
+                "id": .string(model.id),
+                "name": .string(model.model.displayName),
+                "provider": .string(model.provider.name),
+                "model_name": .string(model.model.modelName)
+            ])
+        })
     }
 
     private var guideModelSection: some View {
@@ -379,6 +467,37 @@ private struct GuideModelRouteSelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString("页面向导模型", comment: "页面向导模型选择标题"))
+        .guideSettingsPageContext(
+            id: "settings-guide-model-route",
+            title: NSLocalizedString("页面向导模型", comment: "页面向导模型向导上下文标题"),
+            documents: [GuideDocumentReference(id: "guide-overview", title: "Guide Overview")],
+            settings: [
+                .string(
+                    "route",
+                    label: NSLocalizedString("页面向导回答线路", comment: "专用模型向导字段"),
+                    allowedValues: GuideRoute.allCases.map(\.rawValue),
+                    allowsEmpty: false,
+                    get: { router.route.rawValue },
+                    set: { route in
+                        if route == GuideRoute.builtIn.rawValue {
+                            router.useBuiltIn()
+                        } else if let selected = router.selectedUserModel {
+                            router.selectUserModel(selected)
+                        }
+                    }
+                ),
+                .string(
+                    "model_id",
+                    label: NSLocalizedString("页面向导模型", comment: "专用模型向导字段"),
+                    allowedValues: [""] + router.availableUserModels.map(\.id),
+                    get: { router.selectedUserModel?.id ?? "" },
+                    set: { modelID in
+                        guard let model = router.availableUserModels.first(where: { $0.id == modelID }) else { return }
+                        router.selectUserModel(model)
+                    }
+                )
+            ]
+        )
     }
 }
 
@@ -417,6 +536,35 @@ private struct RunnableModelIdentifierSelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString(title, comment: "专用模型选择标题"))
+        .guideSettingsPageContext(
+            id: "settings-specialized-model-selection",
+            title: title,
+            documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
+            settings: [
+                .string(
+                    "selected_model_id",
+                    label: NSLocalizedString("当前模型", comment: "专用模型选择向导字段"),
+                    allowedValues: (allowEmptySelection ? [""] : []) + options.map(\.id),
+                    allowsEmpty: allowEmptySelection,
+                    get: { selectionID.wrappedValue },
+                    set: { selectionID.wrappedValue = $0 }
+                ),
+                .readOnly(
+                    "available_models",
+                    label: NSLocalizedString("可用模型", comment: "专用模型选择向导字段"),
+                    value: {
+                        .array(options.map { model in
+                            .dictionary([
+                                "id": .string(model.id),
+                                "name": .string(model.model.displayName),
+                                "provider": .string(model.provider.name),
+                                "model_name": .string(model.model.modelName)
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
     }
 
     private func select(_ identifier: String?) {

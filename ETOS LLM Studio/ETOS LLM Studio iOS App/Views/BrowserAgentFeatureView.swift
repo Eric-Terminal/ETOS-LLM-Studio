@@ -72,14 +72,33 @@ struct BrowserAgentFeatureView: View {
                 .disabled(sessionID == nil)
             }
         }
-        .sheet(isPresented: $isShowingSettings) {
-            NavigationStack {
-                BrowserAgentSettingsView(
-                    persistentProfileEnabled: $persistentProfileEnabled,
-                    sessionID: sessionID
-                )
-            }
+        .navigationDestination(isPresented: $isShowingSettings) {
+            BrowserAgentSettingsView(
+                persistentProfileEnabled: $persistentProfileEnabled,
+                sessionID: sessionID
+            )
         }
+        .guideSettingsPageContext(
+            id: "settings-browser-agent",
+            title: NSLocalizedString("Browser Agent", comment: "Browser Agent guide title"),
+            documents: [GuideDocumentReference(id: "browser-agent", title: "Browser Agent")],
+            settings: [
+                .bool("persistent_profile_enabled", label: NSLocalizedString("保留网站登录状态", comment: "向导设置字段"), get: { persistentProfileEnabled }, set: { persistentProfileEnabled = $0 }),
+                .readOnly("session_available", label: NSLocalizedString("聊天会话可用", comment: "向导设置字段"), value: { .bool(sessionID != nil) }),
+                .readOnly("control_state", label: NSLocalizedString("浏览器控制状态", comment: "向导设置字段"), value: { .string(controlState.controller.rawValue) }),
+                .readOnly("selected_tab_id", label: NSLocalizedString("当前标签页", comment: "向导设置字段"), value: { .string(selectedTabID?.uuidString ?? "") }),
+                .readOnly("tabs", label: NSLocalizedString("标签页", comment: "向导设置字段"), value: {
+                    .array(tabs.map { tab in
+                        .dictionary([
+                            "id": .string(tab.id.uuidString),
+                            "title": .string(tab.title),
+                            "url": .string(tab.url ?? ""),
+                            "loading": .bool(tab.isLoading)
+                        ])
+                    })
+                })
+            ]
+        )
         .task(id: sessionID) {
             await prepareSession()
         }
@@ -522,8 +541,6 @@ private struct BrowserAgentSettingsView: View {
     @Binding var persistentProfileEnabled: Bool
     let sessionID: UUID?
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         Form {
             Section {
@@ -546,13 +563,15 @@ private struct BrowserAgentSettingsView: View {
         }
         .navigationTitle(NSLocalizedString("浏览器设置", comment: "Browser Agent settings title"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(NSLocalizedString("完成", comment: "Done")) {
-                    dismiss()
-                }
-            }
-        }
+        .guideSettingsPageContext(
+            id: "settings-browser-agent-profile",
+            title: NSLocalizedString("浏览器设置", comment: "Browser Agent settings guide title"),
+            documents: [GuideDocumentReference(id: "browser-agent", title: "Browser Agent")],
+            settings: [
+                .bool("persistent_profile_enabled", label: NSLocalizedString("保留网站登录状态", comment: "向导设置字段"), get: { persistentProfileEnabled }, set: { persistentProfileEnabled = $0 }),
+                .readOnly("session_available", label: NSLocalizedString("聊天会话可用", comment: "向导设置字段"), value: { .bool(sessionID != nil) })
+            ]
+        )
     }
 }
 

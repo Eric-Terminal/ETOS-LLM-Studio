@@ -467,6 +467,99 @@ struct ModelAdvancedSettingsView: View {
             }
         }
         .onDisappear(perform: commitContextCompressionReminderThresholdDraft)
+        .guideSettingsPageContext(
+            id: guidePageID,
+            title: destination.title,
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guidePageID: GuidePageID {
+        switch destination {
+        case .conversation: return "settings-conversation"
+        case .prompts: return "settings-prompts"
+        case .output: return "settings-output"
+        }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        switch destination {
+        case .conversation: return conversationGuideSettings
+        case .prompts: return promptGuideSettings
+        case .output: return outputGuideSettings
+        }
+    }
+
+    private var conversationGuideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .bool("auto_session_naming", label: NSLocalizedString("自动生成话题标题", comment: "向导设置字段"), get: { enableAutoSessionNaming }, set: { enableAutoSessionNaming = $0 }),
+            .double("send_delay_seconds", label: NSLocalizedString("延迟发送秒数", comment: "向导设置字段"), range: 0...3_600, get: { normalizedSendDelay(appConfig.chatSendDelaySeconds) }, set: { appConfig.chatSendDelaySeconds = normalizedSendDelay($0) }),
+            .integer("automatic_execution_budget", label: NSLocalizedString("自动执行预算", comment: "向导设置字段"), range: 1...10_000, get: { max(1, appConfig.conversationRuntimeExecutionBudget) }, set: { appConfig.conversationRuntimeExecutionBudget = max(1, $0) }),
+            .integer("max_context_messages", label: NSLocalizedString("最大上下文消息数", comment: "向导设置字段"), range: 1...100_000, get: { maxChatHistory }, set: { maxChatHistory = $0 }),
+            .bool("automatic_history_loading", label: NSLocalizedString("自动管理历史消息", comment: "向导设置字段"), get: { viewModel.automaticHistoryLoadingEnabled }, set: { viewModel.automaticHistoryLoadingEnabled = $0 }),
+            .bool("context_compression_reminder", label: NSLocalizedString("上下文压缩提醒", comment: "向导设置字段"), get: { appConfig.enableContextCompressionReminder }, set: { appConfig.enableContextCompressionReminder = $0 }),
+            .integer("context_compression_token_threshold", label: NSLocalizedString("上下文压缩提醒阈值", comment: "向导设置字段"), range: 1...10_000_000, get: { appConfig.contextCompressionReminderTokenThreshold }, set: { appConfig.contextCompressionReminderTokenThreshold = $0 }),
+            .bool("use_video_analysis_model", label: NSLocalizedString("非原生视频使用解析模型", comment: "向导设置字段"), get: { appConfig.enableVideoAnalysisForNonNativeModels }, set: { appConfig.enableVideoAnalysisForNonNativeModels = $0 }),
+            .string("video_analysis_model", label: NSLocalizedString("视频解析模型", comment: "向导设置字段"), allowedValues: viewModel.videoAnalysisModelOptions.map(\.id), get: { appConfig.videoAnalysisModelIdentifier }, set: { setVideoAnalysisModelIdentifier($0) }),
+            .string("video_frame_mode", label: NSLocalizedString("视频处理方式", comment: "向导设置字段"), allowedValues: VideoFrameExtractionMode.allCases.map(\.rawValue), get: { VideoFrameExtractionMode.normalized(appConfig.videoFrameExtractionMode).rawValue }, set: { appConfig.videoFrameExtractionMode = $0 }),
+            .double("video_frame_fps", label: NSLocalizedString("视频抽帧速率", comment: "向导设置字段"), range: 0.1...5, get: { videoFrameExtractionFPSBinding.wrappedValue }, set: { videoFrameExtractionFPSBinding.wrappedValue = $0 }),
+            .integer("video_frame_maximum_count", label: NSLocalizedString("最多画面数", comment: "向导设置字段"), range: 4...120, get: { videoFrameMaximumCountBinding.wrappedValue }, set: { videoFrameMaximumCountBinding.wrappedValue = $0 })
+        ]
+        if !viewModel.automaticHistoryLoadingEnabled {
+            settings.append(.integer("initial_visible_messages", label: NSLocalizedString("初始显示消息数", comment: "向导设置字段"), range: 1...100_000, get: { lazyLoadMessageCount }, set: { lazyLoadMessageCount = $0 }))
+        }
+        return settings
+    }
+
+    private var promptGuideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .bool("model_picker_prompt_shortcut", label: NSLocalizedString("在模型选择器中显示提示词", comment: "向导设置字段"), get: { appConfig.modelPickerPromptShortcutEnabled }, set: { appConfig.modelPickerPromptShortcutEnabled = $0 }),
+            .readOnly("global_prompt_count", label: NSLocalizedString("全局提示词数量", comment: "向导设置字段"), value: { .int(globalSystemPromptEntries.count) }),
+            .readOnly("selected_global_prompt_id", label: NSLocalizedString("当前全局提示词 ID", comment: "向导设置字段"), value: { .string(selectedGlobalSystemPromptEntryID?.uuidString ?? "") }),
+            .bool("enhanced_prompt_uses_system_role", label: NSLocalizedString("增强提示词使用 System 角色", comment: "向导设置字段"), get: { appConfig.openAITailContextUsesSystemRole }, set: { appConfig.openAITailContextUsesSystemRole = $0 }),
+            .bool("include_system_time", label: NSLocalizedString("发送系统时间", comment: "向导设置字段"), get: { includeSystemTimeInPrompt }, set: { includeSystemTimeInPrompt = $0 }),
+            .string("system_time_position", label: NSLocalizedString("系统时间发送位置", comment: "向导设置字段"), allowedValues: SystemTimeInjectionPosition.allCases.map(\.rawValue), get: { systemTimeInjectionPosition.rawValue }, set: { if let value = SystemTimeInjectionPosition(rawValue: $0) { systemTimeInjectionPosition = value } }),
+            .bool("periodic_time_landmark", label: NSLocalizedString("周期性时间路标", comment: "向导设置字段"), get: { enablePeriodicTimeLandmark }, set: { enablePeriodicTimeLandmark = $0 }),
+            .integer("time_landmark_interval_minutes", label: NSLocalizedString("路标间隔分钟", comment: "向导设置字段"), range: 1...525_600, get: { periodicTimeLandmarkIntervalMinutes }, set: { periodicTimeLandmarkIntervalMinutes = $0 })
+        ]
+        if selectedGlobalPromptEntry != nil {
+            settings.append(.string("selected_global_prompt_content", label: NSLocalizedString("当前全局系统提示词", comment: "向导设置字段"), get: { selectedGlobalPromptEntry?.content ?? "" }, set: { updateSelectedGlobalSystemPromptContent($0) }))
+        }
+        if currentSession != nil {
+            settings.append(.string("current_topic_prompt", label: NSLocalizedString("当前话题提示词", comment: "向导设置字段"), get: { currentSession?.topicPrompt ?? "" }, set: { setTopicPromptFromGuide($0) }))
+            settings.append(.string("current_enhanced_prompt", label: NSLocalizedString("当前增强提示词", comment: "向导设置字段"), get: { currentSession?.enhancedPrompt ?? "" }, set: { setEnhancedPromptFromGuide($0) }))
+        }
+        return settings
+    }
+
+    private var outputGuideSettings: [GuidePageSetting] {
+        [
+            .bool("temperature_enabled", label: NSLocalizedString("自定义 Temperature", comment: "向导设置字段"), get: { aiTemperatureEnabled }, set: { aiTemperatureEnabled = $0 }),
+            .double("temperature", label: NSLocalizedString("Temperature", comment: "向导设置字段"), range: temperatureRange, get: { temperatureBinding.wrappedValue }, set: { temperatureBinding.wrappedValue = $0 }),
+            .bool("top_p_enabled", label: NSLocalizedString("自定义 Top P", comment: "向导设置字段"), get: { aiTopPEnabled }, set: { aiTopPEnabled = $0 }),
+            .double("top_p", label: NSLocalizedString("Top P", comment: "向导设置字段"), range: topPRange, get: { topPBinding.wrappedValue }, set: { topPBinding.wrappedValue = $0 }),
+            .bool("streaming_enabled", label: NSLocalizedString("启用流式输出", comment: "向导设置字段"), get: { enableStreaming }, set: { enableStreaming = $0 }),
+            .bool("stream_include_usage", label: NSLocalizedString("流式附带官方 Token 用量", comment: "向导设置字段"), get: { enableOpenAIStreamIncludeUsage }, set: { enableOpenAIStreamIncludeUsage = $0 }),
+            .bool("reasoning_summary", label: NSLocalizedString("启用思考摘要", comment: "向导设置字段"), get: { enableReasoningSummary }, set: { enableReasoningSummary = $0 }),
+            .string("reasoning_content_echo_mode", label: NSLocalizedString("思维链回传", comment: "向导设置字段"), allowedValues: ReasoningContentEchoMode.allCases.map(\.rawValue), get: { ReasoningContentEchoMode.normalized(appConfig.reasoningContentEchoMode).rawValue }, set: { appConfig.reasoningContentEchoMode = $0 }),
+            .bool("response_speed_metrics", label: NSLocalizedString("启用响应测速", comment: "向导设置字段"), get: { enableResponseSpeedMetrics }, set: { enableResponseSpeedMetrics = $0 })
+        ]
+    }
+
+    private func setTopicPromptFromGuide(_ value: String) {
+        guard var session = currentSession else { return }
+        session.topicPrompt = value
+        currentSession = session
+        ChatService.shared.updateSession(session)
+    }
+
+    private func setEnhancedPromptFromGuide(_ value: String) {
+        guard var session = currentSession else { return }
+        session.enhancedPrompt = value
+        currentSession = session
+        ChatService.shared.updateSession(session)
     }
 
     private var conversationRuntimeBudgetBinding: Binding<Int> {
@@ -856,11 +949,53 @@ private struct GlobalSystemPromptPickerView: View {
             }
         }
         .navigationTitle(NSLocalizedString("全局提示词", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-global-system-prompts",
+            title: NSLocalizedString("全局提示词", comment: "全局提示词列表向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
         .sheet(item: $editingEntry) { entry in
             GlobalSystemPromptEditorView(entry: entry) { title, content in
                 updateGlobalSystemPromptEntry(entry.id, title, content)
             }
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly(
+                "entries",
+                label: NSLocalizedString("全局系统提示词列表", comment: "全局提示词向导字段"),
+                value: {
+                    .array(entries.map { entry in
+                        .dictionary([
+                            "id": .string(entry.id.uuidString),
+                            "title": .string(entry.title),
+                            "content": .string(entry.content)
+                        ])
+                    })
+                }
+            )
+        ]
+        let entryIDs = entries.map { $0.id.uuidString }
+        if !entryIDs.isEmpty {
+            settings.append(
+                .string(
+                    "selected_entry_id",
+                    label: NSLocalizedString("当前提示词", comment: "全局提示词向导字段"),
+                    allowedValues: entryIDs,
+                    allowsEmpty: false,
+                    get: { selectedEntryID?.uuidString ?? entryIDs[0] },
+                    set: { value in
+                        guard let id = UUID(uuidString: value) else { return }
+                        selectGlobalSystemPromptEntry(id)
+                    }
+                )
+            )
+        }
+        return settings
     }
 
     private func displayTitle(for entry: GlobalSystemPromptEntry) -> String {
@@ -907,5 +1042,20 @@ private struct GlobalSystemPromptEditorView: View {
             }
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
         }
+        .guideSettingsPageContext(
+            id: "settings-global-system-prompt-editor",
+            title: NSLocalizedString("编辑提示词", comment: "全局提示词编辑向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-core", title: "Core Settings")],
+            settings: [
+                .string("title", label: NSLocalizedString("提示词名称", comment: "全局提示词向导字段"), get: { title }, set: { title = $0 }),
+                .string("content", label: NSLocalizedString("提示词内容", comment: "全局提示词向导字段"), get: { content }, set: { content = $0 }),
+                .readOnly(
+                    "save_required",
+                    label: NSLocalizedString("修改后需要保存", comment: "向导保存说明"),
+                    value: { .bool(true) }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 }

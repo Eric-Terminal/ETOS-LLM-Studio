@@ -322,6 +322,27 @@ struct ToolCenterView: View {
         .onAppear {
             skillManager.reloadFromDisk()
         }
+        .guideSettingsPageContext(
+            id: "tool-center",
+            title: NSLocalizedString("工具中心", comment: "工具中心向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-tools", title: "Tool Center")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool("built_in_tools_enabled", label: NSLocalizedString("向模型暴露内置工具", comment: "向导设置字段"), get: { appToolManager.chatToolsEnabled }, set: { appToolManager.setChatToolsEnabled($0) }),
+            .bool("mcp_tools_enabled", label: NSLocalizedString("向模型暴露 MCP 工具", comment: "向导设置字段"), get: { mcpManager.chatToolsEnabled }, set: { mcpManager.setChatToolsEnabled($0) }),
+            .bool("shortcut_tools_enabled", label: NSLocalizedString("向模型暴露快捷指令工具", comment: "向导设置字段"), get: { shortcutManager.chatToolsEnabled }, set: { shortcutManager.setChatToolsEnabled($0) }),
+            .bool("agent_skills_enabled", label: NSLocalizedString("向模型暴露 Agent Skills", comment: "向导设置字段"), get: { skillManager.chatToolsEnabled }, set: { skillManager.setChatToolsEnabled($0) }),
+            .readOnly("session_tool_isolation", label: NSLocalizedString("当前会话工具隔离", comment: "向导设置字段"), value: { .bool(currentSessionIsolationActive) }),
+            .readOnly("configured_builtin_count", label: NSLocalizedString("已启用内置工具数", comment: "向导设置字段"), value: { .int(ToolCatalogSupport.configuredEnabledCount(for: builtInStates)) }),
+            .readOnly("configured_mcp_count", label: NSLocalizedString("已启用 MCP 工具数", comment: "向导设置字段"), value: { .int(configuredMCPCount) }),
+            .readOnly("configured_shortcut_count", label: NSLocalizedString("已启用快捷指令工具数", comment: "向导设置字段"), value: { .int(configuredShortcutCount) }),
+            .readOnly("configured_skill_count", label: NSLocalizedString("已启用 Agent Skill 数", comment: "向导设置字段"), value: { .int(configuredSkillCount) })
+        ]
     }
 
     private func settingsIntroCard(

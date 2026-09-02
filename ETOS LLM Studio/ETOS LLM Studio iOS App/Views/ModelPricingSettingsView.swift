@@ -128,6 +128,12 @@ struct ModelPricingSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("价格设置", comment: "Model pricing settings title"))
+        .guideSettingsPageContext(
+            id: "settings-model-pricing",
+            title: NSLocalizedString("价格设置", comment: "模型价格向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-pricing", title: "Model Pricing")],
+            settings: pricingGuideSettings
+        )
         .onAppear {
             draft = ModelPricingDraft(pricing: pricing)
         }
@@ -137,6 +143,31 @@ struct ModelPricingSettingsView: View {
         .onChange(of: draft) { _, _ in
             persistDraft()
         }
+    }
+
+    private var pricingGuideSettings: [GuidePageSetting] {
+        [
+            .string("billing_mode", label: NSLocalizedString("计费方式", comment: "模型价格向导字段"), allowedValues: ModelPricingBillingMode.allCases.map(\.rawValue), get: { draft.billingMode.rawValue }, set: { draft.billingMode = ModelPricingBillingMode(rawValue: $0) ?? draft.billingMode }),
+            guidePriceSetting("per_request_price", label: NSLocalizedString("每次请求价格", comment: "模型价格向导字段"), text: $draft.perRequestPrice),
+            guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型价格向导字段"), text: $draft.inputPrice),
+            guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型价格向导字段"), text: $draft.outputPrice),
+            guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型价格向导字段"), text: $draft.cacheWritePrice),
+            guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型价格向导字段"), text: $draft.cacheReadPrice),
+            .bool("time_overrides_enabled", label: NSLocalizedString("启用峰谷定价", comment: "模型价格向导字段"), get: { draft.timeOverridesEnabled }, set: { draft.timeOverridesEnabled = $0 }),
+            .readOnly("tier_count", label: NSLocalizedString("阶梯数量", comment: "模型价格向导字段"), value: { .int(draft.tiers.count) }),
+            .readOnly("time_override_count", label: NSLocalizedString("峰谷时间段数量", comment: "模型价格向导字段"), value: { .int(draft.timeOverrides.count) })
+        ]
+    }
+
+    private func guidePriceSetting(_ key: String, label: String, text: Binding<String>) -> GuidePageSetting {
+        .json(
+            key,
+            label: label,
+            schema: GuideModelPricingSettingsSupport.optionalPriceSchema,
+            get: { GuideModelPricingSettingsSupport.priceValue(text.wrappedValue) },
+            normalize: GuideModelPricingSettingsSupport.normalizePrice,
+            set: { text.wrappedValue = try GuideModelPricingSettingsSupport.priceText(from: $0) }
+        )
     }
 
     private func persistDraft() {
@@ -275,6 +306,22 @@ private struct ModelPricingTierSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("阶梯价格", comment: "Pricing tier detail title"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-model-pricing-tier-\(tier.id.uuidString.lowercased())"),
+            title: NSLocalizedString("阶梯价格", comment: "模型阶梯价格向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-pricing", title: "Model Pricing")],
+            settings: [
+                .integer("minimum_tokens", label: NSLocalizedString("起始 Tokens", comment: "模型阶梯价格向导字段"), range: 0...Int.max, get: { tier.minimumTokenValue }, set: { tier.minimumTokens = "\($0)" }),
+                guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型阶梯价格向导字段"), text: $tier.inputPrice),
+                guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型阶梯价格向导字段"), text: $tier.outputPrice),
+                guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型阶梯价格向导字段"), text: $tier.cacheWritePrice),
+                guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型阶梯价格向导字段"), text: $tier.cacheReadPrice)
+            ]
+        )
+    }
+
+    private func guidePriceSetting(_ key: String, label: String, text: Binding<String>) -> GuidePageSetting {
+        .json(key, label: label, schema: GuideModelPricingSettingsSupport.optionalPriceSchema, get: { GuideModelPricingSettingsSupport.priceValue(text.wrappedValue) }, normalize: GuideModelPricingSettingsSupport.normalizePrice, set: { text.wrappedValue = try GuideModelPricingSettingsSupport.priceText(from: $0) })
     }
 }
 
@@ -316,6 +363,28 @@ private struct ModelPricingTimeOverridesView: View {
             }
         }
         .navigationTitle(NSLocalizedString("峰谷定价", comment: "Peak valley pricing title"))
+        .guideSettingsPageContext(
+            id: "settings-model-pricing-time-overrides",
+            title: NSLocalizedString("峰谷定价", comment: "模型峰谷定价向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-pricing", title: "Model Pricing")],
+            settings: [
+                .readOnly(
+                    "time_overrides",
+                    label: NSLocalizedString("峰谷时间段", comment: "模型峰谷定价向导字段"),
+                    value: {
+                        .array(draft.timeOverrides.map { item in
+                            .dictionary([
+                                "id": .string(item.id.uuidString.lowercased()),
+                                "start_minute": .int(item.startMinuteOfDay),
+                                "end_minute": .int(item.endMinuteOfDay),
+                                "weekdays": GuideModelPricingSettingsSupport.weekdaysValue(item.weekdays)
+                            ])
+                        })
+                    }
+                ),
+                .readOnly("add_action", label: NSLocalizedString("添加时间段", comment: "模型峰谷定价向导字段"), value: { .string(NSLocalizedString("需要用户在页面点击添加时间段", comment: "向导页面操作说明")) })
+            ]
+        )
     }
 
     private var sortedTimeOverrideBindings: [Binding<ModelPricingTimeOverrideDraft>] {
@@ -442,6 +511,28 @@ private struct ModelPricingTimeOverrideSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("峰谷价格", comment: "Peak valley pricing detail title"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-model-pricing-time-override-\(timeOverride.id.uuidString.lowercased())"),
+            title: NSLocalizedString("峰谷价格", comment: "模型峰谷价格向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-pricing", title: "Model Pricing")],
+            settings: timeOverrideGuideSettings
+        )
+    }
+
+    private var timeOverrideGuideSettings: [GuidePageSetting] {
+        [
+            .integer("start_minute", label: NSLocalizedString("开始时间（当天分钟）", comment: "模型峰谷价格向导字段"), range: 0...1_439, get: { timeOverride.startMinuteOfDay }, set: { timeOverride.startMinuteOfDay = $0 }),
+            .integer("end_minute", label: NSLocalizedString("结束时间（当天分钟）", comment: "模型峰谷价格向导字段"), range: 0...1_439, get: { timeOverride.endMinuteOfDay }, set: { timeOverride.endMinuteOfDay = $0 }),
+            .json("weekdays", label: NSLocalizedString("重复日", comment: "模型峰谷价格向导字段"), schema: GuideModelPricingSettingsSupport.weekdaysSchema, get: { GuideModelPricingSettingsSupport.weekdaysValue(timeOverride.weekdays) }, normalize: GuideModelPricingSettingsSupport.normalizeWeekdays, set: { timeOverride.weekdays = try GuideModelPricingSettingsSupport.weekdays(from: $0) }),
+            guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.inputPrice),
+            guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.outputPrice),
+            guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.cacheWritePrice),
+            guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.cacheReadPrice)
+        ]
+    }
+
+    private func guidePriceSetting(_ key: String, label: String, text: Binding<String>) -> GuidePageSetting {
+        .json(key, label: label, schema: GuideModelPricingSettingsSupport.optionalPriceSchema, get: { GuideModelPricingSettingsSupport.priceValue(text.wrappedValue) }, normalize: GuideModelPricingSettingsSupport.normalizePrice, set: { text.wrappedValue = try GuideModelPricingSettingsSupport.priceText(from: $0) })
     }
 
     private var startTimeBinding: Binding<Date> {
@@ -489,6 +580,14 @@ private struct ModelPricingWeekdaySelectionView: View {
             }
         }
         .navigationTitle(NSLocalizedString("重复", comment: "Pricing schedule repeat title"))
+        .guideSettingsPageContext(
+            id: "settings-model-pricing-weekdays",
+            title: NSLocalizedString("重复", comment: "模型价格重复日向导上下文标题"),
+            documents: [GuideDocumentReference(id: "model-pricing", title: "Model Pricing")],
+            settings: [
+                .json("weekdays", label: NSLocalizedString("重复日", comment: "模型价格重复日向导字段"), schema: GuideModelPricingSettingsSupport.weekdaysSchema, get: { GuideModelPricingSettingsSupport.weekdaysValue(weekdays) }, normalize: GuideModelPricingSettingsSupport.normalizeWeekdays, set: { weekdays = try GuideModelPricingSettingsSupport.weekdays(from: $0) })
+            ]
+        )
     }
 
     private func toggle(_ weekday: ModelPricingWeekday) {

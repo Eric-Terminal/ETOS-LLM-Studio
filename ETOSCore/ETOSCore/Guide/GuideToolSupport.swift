@@ -198,10 +198,11 @@ public enum GuideToolCatalog {
 
     public static let updateMCPPreferences = InternalToolDefinition(
         name: "propose_mcp_preferences",
-        description: "提出 MCP 工具箱总开关修改。",
+        description: "提出 MCP 工具箱总设置与服务器顺序修改。",
         parameters: objectSchema(properties: [
             "chat_tools_enabled": boolProperty("是否向普通聊天模型暴露 MCP 工具"),
-            "tool_call_title_enabled": boolProperty("是否让 AI 生成 MCP 调用标题")
+            "tool_call_title_enabled": boolProperty("是否让 AI 生成 MCP 调用标题"),
+            "server_order": GuideOrderedSettingsSupport.identifierOrderSchema
         ])
     )
 
@@ -220,6 +221,57 @@ public enum GuideToolCatalog {
             ],
             required: ["name", "configuration"]
         )
+    )
+
+    public static let updateMCPServer = InternalToolDefinition(
+        name: "propose_mcp_server_configuration",
+        description: "提出当前 MCP Server 的修改。configuration 只在需要修改连接配置时填写；省略时保留现有连接与秘密。",
+        parameters: objectSchema(properties: [
+            "display_name": stringProperty("服务器显示名称"),
+            "notes": stringProperty("备注，空字符串表示清除"),
+            "selected_for_chat": boolProperty("是否加入普通聊天工具"),
+            "configuration": .dictionary([
+                "type": .string("object"),
+                "description": .string("完整连接配置。HTTP/SSE/stdio 沿用 mcpServers 单项格式；OAuth 使用 type=oauth、url、tokenEndpoint、clientID、grantType，并可写入新的秘密字段。已有秘密不可读取，省略时会保留。")
+            ])
+        ])
+    )
+
+    public static let updateMCPTool = InternalToolDefinition(
+        name: "propose_mcp_tool_configuration",
+        description: "提出当前 MCP 工具的启用状态与审批策略修改。原生敏感能力固定为每次询问。",
+        parameters: objectSchema(properties: [
+            "enabled": boolProperty("是否启用此工具"),
+            "approval_policy": .dictionary([
+                "type": .string("string"),
+                "enum": .array(MCPToolApprovalPolicy.allCases.map { .string($0.rawValue) }),
+                "description": .string("ask_every_time、always_allow 或 always_deny")
+            ])
+        ])
+    )
+
+    public static let updateShortcutPreferences = InternalToolDefinition(
+        name: "propose_shortcut_preferences",
+        description: "提出快捷指令工具箱总设置修改。只填写确实需要变化的字段。",
+        parameters: objectSchema(properties: [
+            "chat_tools_enabled": boolProperty("是否向普通聊天模型暴露快捷指令工具"),
+            "official_import_shortcut_name": stringProperty("官方导入快捷指令在系统中的名称"),
+            "bridge_shortcut_name": stringProperty("桥接快捷指令名称")
+        ])
+    )
+
+    public static let updateShortcutTool = InternalToolDefinition(
+        name: "propose_shortcut_tool_configuration",
+        description: "提出当前快捷指令工具的启用状态、运行模式或自定义描述修改。",
+        parameters: objectSchema(properties: [
+            "enabled": boolProperty("是否启用此工具"),
+            "run_mode": .dictionary([
+                "type": .string("string"),
+                "enum": .array(ShortcutRunModeHint.allCases.map { .string($0.rawValue) }),
+                "description": .string("direct 表示直连优先，bridge 表示桥接优先")
+            ]),
+            "user_description": stringProperty("提供给模型的自定义工具描述，空字符串表示清除")
+        ])
     )
 
     public static let requestModelSetupSecret = InternalToolDefinition(

@@ -190,6 +190,78 @@ struct WorldbookSettingsView: View {
                 )
             }
         }
+        .guideSettingsPageContext(
+            id: "watch-settings-worldbooks",
+            title: NSLocalizedString("世界书", comment: "世界书向导标题"),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .bool("model_picker_shortcut_enabled", label: NSLocalizedString("在模型选择器中显示世界书", comment: "世界书向导字段"), get: { appConfig.modelPickerWorldbookShortcutEnabled }, set: { appConfig.modelPickerWorldbookShortcutEnabled = $0 }),
+            .readOnly("worldbooks", label: NSLocalizedString("已导入世界书", comment: "世界书向导字段"), value: {
+                .array(worldbooks.map { book in
+                    .dictionary([
+                        "id": .string(book.id.uuidString),
+                        "name": .string(book.name),
+                        "description": .string(book.description),
+                        "entry_count": .int(book.entries.count),
+                        "enabled_entry_count": .int(book.entries.filter(\.isEnabled).count),
+                        "bound_to_current_session": .bool(selected.contains(book.id))
+                    ])
+                })
+            })
+        ]
+        if viewModel.currentSession != nil {
+            settings.append(boundWorldbooksSetting)
+        }
+        return settings
+    }
+
+    private var boundWorldbooksSetting: GuidePageSetting {
+        .json(
+            "current_session_worldbook_ids",
+            label: NSLocalizedString("当前会话绑定的世界书", comment: "世界书向导字段"),
+            schema: .dictionary([
+                "type": .string("array"),
+                "items": .dictionary(["type": .string("string"), "enum": .array(worldbooks.map { .string($0.id.uuidString) })]),
+                "uniqueItems": .bool(true)
+            ]),
+            get: { .array((viewModel.currentSession?.lorebookIDs ?? []).map { .string($0.uuidString) }) },
+            normalize: { value in
+                guard case .array(let values) = value else { throw GuideError.invalidToolArguments }
+                let available = Set(worldbooks.map(\.id))
+                let ids = try values.map { item -> UUID in
+                    guard case .string(let rawValue) = item, let id = UUID(uuidString: rawValue), available.contains(id) else {
+                        throw GuideError.invalidToolArguments
+                    }
+                    return id
+                }
+                guard Set(ids).count == ids.count else { throw GuideError.invalidToolArguments }
+                return .array(ids.map { .string($0.uuidString) })
+            },
+            set: { value in
+                guard var session = viewModel.currentSession, case .array(let values) = value else {
+                    throw GuideError.invalidToolArguments
+                }
+                session.lorebookIDs = values.compactMap { item in
+                    guard case .string(let rawValue) = item else { return nil }
+                    return UUID(uuidString: rawValue)
+                }
+                viewModel.currentSession = session
+                selected = Set(session.lorebookIDs)
+                ChatService.shared.updateWorldbookSessionSettings(
+                    sessionID: session.id,
+                    worldbookIDs: session.lorebookIDs,
+                    memoryContextIsolationEnabled: session.memoryContextIsolationEnabled,
+                    toolContextIsolationEnabled: session.toolContextIsolationEnabled,
+                    globalSystemPromptIsolationEnabled: session.globalSystemPromptIsolationEnabled
+                )
+            }
+        )
     }
 
     private func load() {

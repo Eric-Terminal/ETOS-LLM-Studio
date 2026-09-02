@@ -83,6 +83,22 @@ struct WatchWorldbookEntryDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("条目", comment: "Entries section"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "watch-worldbook-entry-\(entry.id.uuidString.lowercased())"),
+            title: String(format: NSLocalizedString("世界书条目：%@", comment: "世界书条目向导标题"), entry.comment.isEmpty ? NSLocalizedString("无注释", comment: "无注释世界书条目") : entry.comment),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: [
+                .readOnly("id", label: NSLocalizedString("条目 ID", comment: "世界书条目向导字段"), value: { .string(entry.id.uuidString) }),
+                .readOnly("comment", label: NSLocalizedString("注释", comment: "世界书条目向导字段"), value: { .string(entry.comment) }),
+                .readOnly("content_preview", label: NSLocalizedString("内容预览", comment: "世界书条目向导字段"), value: { .string(String(entry.content.prefix(2_000))) }),
+                .readOnly("content_character_count", label: NSLocalizedString("内容字符数", comment: "世界书条目向导字段"), value: { .int(entry.content.count) }),
+                .readOnly("keys", label: NSLocalizedString("关键词", comment: "世界书条目向导字段"), value: { .array(entry.keys.map(JSONValue.string)) }),
+                .readOnly("position", label: NSLocalizedString("插入位置", comment: "世界书条目向导字段"), value: { .string(entry.position.rawValue) }),
+                .readOnly("role", label: NSLocalizedString("注入角色", comment: "世界书条目向导字段"), value: { .string(entry.role.rawValue) }),
+                .bool("enabled", label: NSLocalizedString("启用", comment: "世界书条目向导字段"), get: { entry.isEnabled }, set: { enabledBinding.wrappedValue = $0 })
+            ]
+        )
+        .watchGuideEntry()
     }
 }
 
@@ -231,6 +247,34 @@ struct WatchWorldbookEntryEditView: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "watch-worldbook-entry-editor-\(draft.entryID.uuidString.lowercased())"),
+            title: NSLocalizedString("编辑世界书条目", comment: "世界书条目编辑器向导标题"),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: editorGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var editorGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly("requires_save", label: NSLocalizedString("修改后需要保存", comment: "世界书条目编辑器向导字段"), value: { .bool(true) }),
+            .string("comment", label: NSLocalizedString("注释", comment: "世界书条目编辑器向导字段"), get: { draft.comment }, set: { draft.comment = $0 }),
+            .string("content", label: NSLocalizedString("内容", comment: "世界书条目编辑器向导字段"), allowsEmpty: false, get: { draft.content }, set: { draft.content = $0 }),
+            .string("keys", label: NSLocalizedString("关键词（逗号分隔）", comment: "世界书条目编辑器向导字段"), get: { draft.keysText }, set: { draft.keysText = $0 }),
+            .bool("enabled", label: NSLocalizedString("启用", comment: "世界书条目编辑器向导字段"), get: { draft.isEnabled }, set: { draft.isEnabled = $0 }),
+            .bool("constant", label: NSLocalizedString("常驻激活", comment: "世界书条目编辑器向导字段"), get: { draft.constant }, set: { draft.constant = $0 }),
+            .bool("use_regex", label: NSLocalizedString("正则匹配", comment: "世界书条目编辑器向导字段"), get: { draft.useRegex }, set: { draft.useRegex = $0 }),
+            .bool("case_sensitive", label: NSLocalizedString("区分大小写", comment: "世界书条目编辑器向导字段"), get: { draft.caseSensitive }, set: { draft.caseSensitive = $0 }),
+            .integer("order", label: NSLocalizedString("优先级", comment: "世界书条目编辑器向导字段"), range: 0...1_000, get: { draft.order }, set: { orderBinding.wrappedValue = $0 }),
+            .string("position", label: NSLocalizedString("插入位置", comment: "世界书条目编辑器向导字段"), allowedValues: WorldbookPosition.allCases.map(\.rawValue), allowsEmpty: false, get: { draft.position.rawValue }, set: { rawValue in
+                if let position = WorldbookPosition(rawValue: rawValue) { draft.position = position }
+            }),
+            .string("role", label: NSLocalizedString("注入角色", comment: "世界书条目编辑器向导字段"), allowedValues: WorldbookEntryRole.allCases.map(\.rawValue), allowsEmpty: false, get: { draft.role.rawValue }, set: { rawValue in
+                if let role = WorldbookEntryRole(rawValue: rawValue) { draft.role = role }
+            }),
+            .integer("depth", label: NSLocalizedString("注入深度", comment: "世界书条目编辑器向导字段"), range: 0...Int.max, get: { draft.depth }, set: { depthBinding.wrappedValue = $0 })
+        ]
     }
 
     private var hasUnsavedChanges: Bool {
@@ -252,7 +296,7 @@ struct WatchWorldbookEntryEditView: View {
     }
 }
 
-struct WatchWorldbookEntryDraft: Identifiable {
+struct WatchWorldbookEntryDraft: Identifiable, Hashable {
     let id: UUID
     let entryID: UUID
 

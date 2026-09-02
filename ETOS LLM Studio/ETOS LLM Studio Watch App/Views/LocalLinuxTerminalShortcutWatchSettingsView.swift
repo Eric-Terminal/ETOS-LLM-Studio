@@ -62,6 +62,25 @@ struct LocalLinuxTerminalShortcutWatchSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("终端快捷键", comment: "Watch 终端快捷键设置页标题"))
+        .guideSettingsPageContext(
+            id: "settings-local-linux-terminal-shortcuts",
+            title: NSLocalizedString("终端快捷键", comment: "终端快捷键向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .json(
+                    "shortcuts",
+                    label: NSLocalizedString("终端快捷键列表", comment: "终端快捷键向导字段"),
+                    schema: GuideLocalLinuxTerminalShortcutSettingsSupport.shortcutsSchema,
+                    get: { GuideLocalLinuxTerminalShortcutSettingsSupport.value(selectedShortcuts) },
+                    normalize: GuideLocalLinuxTerminalShortcutSettingsSupport.normalize,
+                    set: { value in
+                        selectedShortcuts = try GuideLocalLinuxTerminalShortcutSettingsSupport.shortcuts(from: value)
+                        saveShortcuts()
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
         .onAppear(perform: reloadShortcuts)
         .onChange(of: appConfig.localLinuxTerminalShortcutIDs) { _, _ in
             reloadShortcuts()
@@ -148,6 +167,30 @@ private struct LocalLinuxTerminalShortcutWatchEditorView: View {
             isNewShortcut ? "新增快捷键" : "编辑快捷键",
             comment: "Watch 终端快捷键编辑页标题"
         ))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-local-linux-terminal-shortcut-\(shortcutID.uuidString.lowercased())"),
+            title: NSLocalizedString(
+                isNewShortcut ? "新增快捷键" : "编辑快捷键",
+                comment: "终端快捷键编辑器向导上下文标题"
+            ),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .json(
+                    "keys",
+                    label: NSLocalizedString("快捷键组合", comment: "终端快捷键编辑器向导字段"),
+                    schema: GuideLocalLinuxTerminalShortcutSettingsSupport.keyListSchema,
+                    get: { GuideLocalLinuxTerminalShortcutSettingsSupport.keyValue(selectedKeys) },
+                    normalize: GuideLocalLinuxTerminalShortcutSettingsSupport.normalizeKeys,
+                    set: { selectedKeys = try GuideLocalLinuxTerminalShortcutSettingsSupport.keys(from: $0) }
+                ),
+                .readOnly(
+                    "requires_save",
+                    label: NSLocalizedString("应用方式", comment: "向导设置字段"),
+                    value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 
     @ViewBuilder

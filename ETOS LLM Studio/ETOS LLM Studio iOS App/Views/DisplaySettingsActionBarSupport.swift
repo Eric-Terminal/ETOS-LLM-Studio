@@ -37,9 +37,39 @@ struct MessageActionBarSettingsView: View {
             availableItemsSection
         }
         .navigationTitle(NSLocalizedString("功能栏自定义", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-message-action-bar",
+            title: NSLocalizedString("功能栏自定义", comment: "消息功能栏向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: actionBarGuideSettings
+        )
         .toolbar {
             EditButton()
         }
+    }
+
+    private var actionBarGuideSettings: [GuidePageSetting] {
+        [
+            .string("message_role", label: NSLocalizedString("消息类型", comment: "消息功能栏向导字段"), allowedValues: MessageActionBarRole.allCases.map(\.rawValue), get: { selectedRole.rawValue }, set: { selectedRole = MessageActionBarRole(rawValue: $0) ?? selectedRole }),
+            .string("alignment", label: NSLocalizedString("功能栏位置", comment: "消息功能栏向导字段"), allowedValues: MessageActionBarAlignment.allCases.map(\.rawValue), get: { alignmentBinding.wrappedValue.rawValue }, set: { alignmentBinding.wrappedValue = MessageActionBarAlignment(rawValue: $0) ?? alignmentBinding.wrappedValue }),
+            .bool("outer_border", label: NSLocalizedString("显示外围边框", comment: "消息功能栏向导字段"), get: { outerBorderBinding.wrappedValue }, set: { outerBorderBinding.wrappedValue = $0 }),
+            .double("font_scale", label: NSLocalizedString("字号比例", comment: "消息功能栏向导字段"), range: FontLibrary.minimumFontScale...FontLibrary.maximumFontScale, get: { fontScaleBinding.wrappedValue }, set: { fontScaleBinding.wrappedValue = $0 }),
+            .json(
+                "items",
+                label: NSLocalizedString("已启用项目", comment: "消息功能栏向导字段"),
+                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema,
+                get: { GuideDisplayActionSettingsSupport.messageActionItemsValue(selectedItems) },
+                normalize: GuideDisplayActionSettingsSupport.normalizeMessageActionItems,
+                set: { value in
+                    let items = try GuideDisplayActionSettingsSupport.messageActionItems(from: value)
+                    let supported = Set(MessageActionBarItem.supportedItems(for: selectedRole))
+                    guard items.allSatisfy(supported.contains) else { throw GuideError.invalidToolArguments }
+                    var updated = configuration
+                    updated.setItems(items, for: selectedRole)
+                    configuration = updated
+                }
+            )
+        ]
     }
 
     private var roleSection: some View {

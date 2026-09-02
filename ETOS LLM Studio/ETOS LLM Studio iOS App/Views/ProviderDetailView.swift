@@ -19,6 +19,7 @@ struct ProviderDetailView: View {
     let allowsRemoteModelFetch: Bool
     let allowsModelTesting: Bool
     let allowsManualModelAdd: Bool
+    let isGuideContextActive: Bool
     let onSave: (Provider) -> Void
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isApplyingProviderUpdateFromParent = false
@@ -49,6 +50,7 @@ struct ProviderDetailView: View {
         allowsRemoteModelFetch: Bool = true,
         allowsModelTesting: Bool = true,
         allowsManualModelAdd: Bool = true,
+        isGuideContextActive: Bool = true,
         onSave: @escaping (Provider) -> Void = { _ in }
     ) {
         self.sourceProvider = provider
@@ -58,6 +60,7 @@ struct ProviderDetailView: View {
         self.allowsRemoteModelFetch = allowsRemoteModelFetch
         self.allowsModelTesting = allowsModelTesting
         self.allowsManualModelAdd = allowsManualModelAdd
+        self.isGuideContextActive = isGuideContextActive
         _provider = State(initialValue: provider)
         self.onSave = onSave
     }
@@ -203,6 +206,7 @@ struct ProviderDetailView: View {
                     ? [GuidePageTool(definition: GuideToolCatalog.updateProviderModels, access: .proposeChange)]
                     : []
             ),
+            isActive: isGuideContextActive,
             snapshot: providerModelsGuideSnapshot,
             buildProposal: buildProviderModelsGuideProposal,
             execute: executeProviderModelsGuideProposal

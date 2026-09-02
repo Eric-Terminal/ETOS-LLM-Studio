@@ -471,6 +471,12 @@ public struct AppLockSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("应用锁", comment: ""))
+        .guideSettingsPageContext(
+            id: "settings-app-lock",
+            title: NSLocalizedString("应用锁", comment: "应用锁向导上下文标题"),
+            documents: [GuideDocumentReference(id: "app-lock", title: "App Lock")],
+            settings: guideSettings
+        )
         .onAppear {
             lockManager.refreshState()
         }
@@ -515,6 +521,23 @@ public struct AppLockSettingsView: View {
             databaseEncryptionStateVersion += 1
             lockManager.refreshState()
         }
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var result: [GuidePageSetting] = [
+            // 启停操作必须继续经过密码页面，向导只说明当前状态，不能绕过凭据确认。
+            .readOnly("app_lock_enabled", label: NSLocalizedString("应用锁", comment: "向导设置字段"), value: { .bool(lockManager.isEnabled) }),
+            .integer("background_timeout_seconds", label: NSLocalizedString("后台后锁定", comment: "向导设置字段"), range: 0...3_600, get: { lockManager.timeoutSeconds }, set: { timeoutBinding.wrappedValue = $0 }),
+            .readOnly("database_encryption_enabled", label: NSLocalizedString("数据库物理加密", comment: "向导设置字段"), value: { .bool(isDatabaseEncryptionEnabled) }),
+            .readOnly("database_passphrase_stored_in_keychain", label: NSLocalizedString("在 Keychain 中记住数据库主密码", comment: "向导设置字段"), value: { .bool(DatabaseEncryptionManager.shared.storesPassphraseInKeychain) }),
+            .readOnly("manual_database_unlock_mode", label: NSLocalizedString("数据库手动解锁模式", comment: "向导设置字段"), value: { .bool(isManualDatabaseUnlockMode) }),
+            .readOnly("credential_flow_required", label: NSLocalizedString("安全操作方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("应用锁与数据库加密的启停需要在当前页面进入密码确认流程", comment: "安全设置向导说明")) })
+        ]
+        #if !os(watchOS)
+            result.append(.bool("biometric_unlock_enabled", label: NSLocalizedString("生物识别解锁", comment: "向导设置字段"), get: { lockManager.isBiometricEnabled }, set: { biometricBinding.wrappedValue = $0 }))
+            result.append(.readOnly("biometrics_available", label: NSLocalizedString("生物识别可用", comment: "向导设置字段"), value: { .bool(lockManager.canEvaluateBiometrics()) }))
+        #endif
+        return result
     }
 
     private var appLockEnabledBinding: Binding<Bool> {

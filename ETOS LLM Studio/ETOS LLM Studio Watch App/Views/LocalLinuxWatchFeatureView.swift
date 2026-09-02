@@ -190,6 +190,25 @@ struct LocalLinuxWatchFeatureView: View {
             }
         }
         .navigationTitle(NSLocalizedString("本地 Linux", comment: "Watch local Linux title"))
+        .guideSettingsPageContext(
+            id: "watch-settings-local-linux",
+            title: NSLocalizedString("本地 Linux", comment: "手表本地 Linux 向导上下文标题"),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .bool("enabled", label: NSLocalizedString("启用本地 Linux", comment: "向导设置字段"), get: { appConfig.localLinuxEnabled }, set: { appConfig.localLinuxEnabled = $0 }),
+                .string("default_shell_path", label: NSLocalizedString("默认终端 Shell", comment: "向导设置字段"), allowedValues: availableTerminalShellPaths, allowsEmpty: false, get: { appConfig.localLinuxDefaultShellPath }, set: { appConfig.localLinuxDefaultShellPath = $0 }),
+                .string("default_session_mode", label: NSLocalizedString("新会话默认模式", comment: "向导设置字段"), allowedValues: LocalAgentMode.allCases.map(\.rawValue), get: { appConfig.localLinuxDefaultSessionMode }, set: { appConfig.localLinuxDefaultSessionMode = $0 }),
+                .integer("default_timeout_seconds", label: NSLocalizedString("默认命令超时（秒）", comment: "向导设置字段"), range: 0...4_294_967, get: { appConfig.localLinuxDefaultTimeoutSeconds }, set: { appConfig.localLinuxDefaultTimeoutSeconds = $0 }),
+                .integer("model_output_limit_kb", label: NSLocalizedString("发送给模型的输出上限（KB）", comment: "向导设置字段"), range: 4...4_194_303, get: { max(4, appConfig.localLinuxOutputPreviewBytes / 1_024) }, set: { appConfig.localLinuxOutputPreviewBytes = $0 * 1_024 }),
+                .bool("redact_environment_values", label: NSLocalizedString("发送给模型前隐藏环境变量值", comment: "向导设置字段"), get: { appConfig.localLinuxEnvironmentPrivacyEnabled }, set: { appConfig.localLinuxEnvironmentPrivacyEnabled = $0 }),
+                .bool("command_safety_enabled", label: NSLocalizedString("启用命令安全策略", comment: "向导设置字段"), get: { appConfig.localLinuxCommandSafetyEnabled }, set: { appConfig.localLinuxCommandSafetyEnabled = $0 }),
+                .readOnly("runtime_phase", label: NSLocalizedString("运行时", comment: "向导设置字段"), value: { .string(snapshot.phase.displayName) }),
+                .readOnly("active_job_count", label: NSLocalizedString("命令与浏览器任务", comment: "向导设置字段"), value: { .int(snapshot.activeJobCount) }),
+                .readOnly("active_terminal_count", label: NSLocalizedString("终端", comment: "向导设置字段"), value: { .int(snapshot.activeTerminalCount) }),
+                .readOnly("active_mcp_process_count", label: NSLocalizedString("本地 MCP", comment: "向导设置字段"), value: { .int(snapshot.activeMCPProcessCount) })
+            ]
+        )
+        .watchGuideEntry()
         .task {
             snapshot = await LocalLinuxRuntimeController.shared.refreshInstalledState()
             await refreshAvailableTerminalShellPaths()
@@ -610,6 +629,25 @@ private struct LocalLinuxWatchEnvironmentView: View {
                 .foregroundStyle(.secondary)
         }
         .navigationTitle(NSLocalizedString("环境变量", comment: "Watch Linux environment title"))
+        .guideSettingsPageContext(
+            id: "watch-settings-local-linux-environment",
+            title: NSLocalizedString("环境变量", comment: "Watch Linux environment guide title"),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .readOnly("variables", label: NSLocalizedString("变量", comment: "向导设置字段"), value: {
+                    .array(variables.map { variable in
+                        .dictionary([
+                            "id": .string(variable.id.uuidString),
+                            "name": .string(variable.name),
+                            "enabled": .bool(variable.isEnabled),
+                            "note": .string(variable.note),
+                            "value": .string(GuideSnapshotField.hiddenValue)
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
         .task { await reload() }
         .onAppear { Task { await reload() } }
     }
@@ -645,6 +683,21 @@ private struct LocalLinuxWatchEnvironmentEditorView: View {
         .navigationTitle(isNew
             ? NSLocalizedString("添加变量", comment: "Watch add environment variable title")
             : draft.name)
+        .guideSettingsPageContext(
+            id: "watch-settings-local-linux-environment-editor",
+            title: isNew
+                ? NSLocalizedString("添加变量", comment: "Watch add environment variable guide title")
+                : String(format: NSLocalizedString("环境变量：%@", comment: "Linux environment variable guide title"), draft.name),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .string("name", label: NSLocalizedString("名称", comment: "向导设置字段"), allowsEmpty: false, get: { draft.name }, set: { draft.name = $0 }),
+                .writeOnlyString("value", label: NSLocalizedString("值", comment: "向导设置字段"), isConfigured: { !draft.value.isEmpty }, set: { draft.value = $0 }),
+                .string("note", label: NSLocalizedString("备注", comment: "向导设置字段"), get: { draft.note }, set: { draft.note = $0 }),
+                .bool("enabled", label: NSLocalizedString("启用", comment: "向导设置字段"), get: { draft.isEnabled }, set: { draft.isEnabled = $0 }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
+        .watchGuideEntry()
         .alert(NSLocalizedString("保存失败", comment: "Save failed"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
@@ -715,6 +768,29 @@ private struct LocalLinuxWatchSafetyView: View {
                 .foregroundStyle(.secondary)
         }
         .navigationTitle(NSLocalizedString("安全策略", comment: "Watch Linux safety title"))
+        .guideSettingsPageContext(
+            id: "watch-settings-local-linux-safety",
+            title: NSLocalizedString("命令安全策略", comment: "Watch Linux safety guide title"),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .bool("enabled", label: NSLocalizedString("启用命令安全策略", comment: "向导设置字段"), get: { appConfig.localLinuxCommandSafetyEnabled }, set: { appConfig.localLinuxCommandSafetyEnabled = $0 }),
+                .readOnly("rules", label: NSLocalizedString("规则", comment: "向导设置字段"), value: {
+                    .array(rules.map { rule in
+                        .dictionary([
+                            "id": .string(rule.id.uuidString),
+                            "name": .string(rule.name),
+                            "pattern": .string(rule.pattern),
+                            "match_kind": .string(rule.matchKind.rawValue),
+                            "scope": .string(rule.scope.rawValue),
+                            "action": .string(rule.action.rawValue),
+                            "enabled": .bool(rule.isEnabled),
+                            "priority": .int(rule.sortIndex)
+                        ])
+                    })
+                })
+            ]
+        )
+        .watchGuideEntry()
         .task { await reload() }
         .onAppear { Task { await reload() } }
     }
@@ -775,6 +851,24 @@ private struct LocalLinuxWatchSafetyRuleEditorView: View {
         .navigationTitle(draft.name.isEmpty
             ? NSLocalizedString("命令规则", comment: "Watch Linux command rule title")
             : draft.name)
+        .guideSettingsPageContext(
+            id: "watch-settings-local-linux-safety-rule-editor",
+            title: draft.name.isEmpty
+                ? NSLocalizedString("命令规则", comment: "Watch Linux command rule guide title")
+                : String(format: NSLocalizedString("命令规则：%@", comment: "Linux command rule guide title"), draft.name),
+            documents: [GuideDocumentReference(id: "local-linux", title: "Local Linux")],
+            settings: [
+                .string("name", label: NSLocalizedString("规则名称", comment: "向导设置字段"), get: { draft.name }, set: { draft.name = $0 }),
+                .string("pattern", label: NSLocalizedString("匹配内容", comment: "向导设置字段"), allowsEmpty: false, get: { draft.pattern }, set: { draft.pattern = $0 }),
+                .string("match_kind", label: NSLocalizedString("匹配方式", comment: "向导设置字段"), allowedValues: LocalLinuxCommandRuleMatchKind.allCases.map(\.rawValue), get: { draft.matchKind.rawValue }, set: { draft.matchKind = LocalLinuxCommandRuleMatchKind(rawValue: $0) ?? draft.matchKind }),
+                .string("scope", label: NSLocalizedString("作用范围", comment: "向导设置字段"), allowedValues: LocalLinuxCommandRuleScope.allCases.map(\.rawValue), get: { draft.scope.rawValue }, set: { draft.scope = LocalLinuxCommandRuleScope(rawValue: $0) ?? draft.scope }),
+                .string("action", label: NSLocalizedString("处理", comment: "向导设置字段"), allowedValues: LocalLinuxCommandRuleAction.allCases.map(\.rawValue), get: { draft.action.rawValue }, set: { draft.action = LocalLinuxCommandRuleAction(rawValue: $0) ?? draft.action }),
+                .bool("enabled", label: NSLocalizedString("启用规则", comment: "向导设置字段"), get: { draft.isEnabled }, set: { draft.isEnabled = $0 }),
+                .integer("priority", label: NSLocalizedString("优先级", comment: "向导设置字段"), range: 0...999, get: { draft.sortIndex }, set: { draft.sortIndex = $0 }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
+        .watchGuideEntry()
         .task { validatePattern() }
         .onChange(of: draft.pattern) { _, _ in validatePattern() }
         .onChange(of: draft.matchKind) { _, _ in validatePattern() }

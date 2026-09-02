@@ -86,6 +86,21 @@ struct WorldbookEntryDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("条目", comment: "Entries section"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "worldbook-entry-\(entry.id.uuidString.lowercased())"),
+            title: String(format: NSLocalizedString("世界书条目：%@", comment: "世界书条目向导标题"), entry.comment.isEmpty ? NSLocalizedString("无注释", comment: "无注释世界书条目") : entry.comment),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: [
+                .readOnly("id", label: NSLocalizedString("条目 ID", comment: "世界书条目向导字段"), value: { .string(entry.id.uuidString) }),
+                .readOnly("comment", label: NSLocalizedString("注释", comment: "世界书条目向导字段"), value: { .string(entry.comment) }),
+                .readOnly("content_preview", label: NSLocalizedString("内容预览", comment: "世界书条目向导字段"), value: { .string(String(entry.content.prefix(2_000))) }),
+                .readOnly("content_character_count", label: NSLocalizedString("内容字符数", comment: "世界书条目向导字段"), value: { .int(entry.content.count) }),
+                .readOnly("keys", label: NSLocalizedString("关键词", comment: "世界书条目向导字段"), value: { .array(entry.keys.map(JSONValue.string)) }),
+                .readOnly("position", label: NSLocalizedString("插入位置", comment: "世界书条目向导字段"), value: { .string(entry.position.rawValue) }),
+                .readOnly("role", label: NSLocalizedString("注入角色", comment: "世界书条目向导字段"), value: { .string(entry.role.rawValue) }),
+                .bool("enabled", label: NSLocalizedString("启用", comment: "世界书条目向导字段"), get: { entry.isEnabled }, set: { enabledBinding.wrappedValue = $0 })
+            ]
+        )
     }
 }
 
@@ -403,6 +418,59 @@ struct WorldbookEntryEditView: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Unsaved generic editor alert message"))
         }
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "worldbook-entry-editor-\(draft.entryID.uuidString.lowercased())"),
+            title: isNew
+                ? NSLocalizedString("新增世界书条目", comment: "世界书条目编辑器向导标题")
+                : NSLocalizedString("编辑世界书条目", comment: "世界书条目编辑器向导标题"),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: editorGuideSettings
+        )
+    }
+
+    private var editorGuideSettings: [GuidePageSetting] {
+        [
+            .readOnly("requires_save", label: NSLocalizedString("修改后需要保存", comment: "世界书条目编辑器向导字段"), value: { .bool(true) }),
+            .string("comment", label: NSLocalizedString("注释", comment: "世界书条目编辑器向导字段"), get: { draft.comment }, set: { draft.comment = $0 }),
+            .string("content", label: NSLocalizedString("内容", comment: "世界书条目编辑器向导字段"), allowsEmpty: false, get: { draft.content }, set: { draft.content = $0 }),
+            .string("primary_keys", label: NSLocalizedString("主关键词（逗号或换行分隔）", comment: "世界书条目编辑器向导字段"), get: { draft.keysText }, set: { draft.keysText = $0 }),
+            .string("secondary_keys", label: NSLocalizedString("次级关键词（逗号或换行分隔）", comment: "世界书条目编辑器向导字段"), get: { draft.secondaryKeysText }, set: { draft.secondaryKeysText = $0 }),
+            .bool("secondary_keys_enabled", label: NSLocalizedString("启用次级关键词", comment: "世界书条目编辑器向导字段"), get: { draft.secondaryKeysEnabled }, set: { draft.secondaryKeysEnabled = $0 }),
+            .string("selective_logic", label: NSLocalizedString("次级关键词逻辑", comment: "世界书条目编辑器向导字段"), allowedValues: WorldbookSelectiveLogic.allCases.map(\.rawValue), allowsEmpty: false, get: { draft.selectiveLogic.rawValue }, set: { rawValue in
+                if let logic = WorldbookSelectiveLogic(rawValue: rawValue) { draft.selectiveLogic = logic }
+            }),
+            .bool("enabled", label: NSLocalizedString("启用", comment: "世界书条目编辑器向导字段"), get: { draft.isEnabled }, set: { draft.isEnabled = $0 }),
+            .bool("constant", label: NSLocalizedString("常驻激活", comment: "世界书条目编辑器向导字段"), get: { draft.constant }, set: { draft.constant = $0 }),
+            .bool("use_regex", label: NSLocalizedString("正则匹配", comment: "世界书条目编辑器向导字段"), get: { draft.useRegex }, set: { draft.useRegex = $0 }),
+            .bool("case_sensitive", label: NSLocalizedString("区分大小写", comment: "世界书条目编辑器向导字段"), get: { draft.caseSensitive }, set: { draft.caseSensitive = $0 }),
+            .bool("match_whole_words", label: NSLocalizedString("整词匹配", comment: "世界书条目编辑器向导字段"), get: { draft.matchWholeWords }, set: { draft.matchWholeWords = $0 }),
+            .bool("use_probability", label: NSLocalizedString("启用概率", comment: "世界书条目编辑器向导字段"), get: { draft.useProbability }, set: { draft.useProbability = $0 }),
+            .double("probability", label: NSLocalizedString("触发概率", comment: "世界书条目编辑器向导字段"), range: 1...100, get: { draft.probability }, set: { probabilityBinding.wrappedValue = $0 }),
+            .integer("order", label: NSLocalizedString("优先级", comment: "世界书条目编辑器向导字段"), range: 0...1_000, get: { draft.order }, set: { orderBinding.wrappedValue = $0 }),
+            .string("position", label: NSLocalizedString("插入位置", comment: "世界书条目编辑器向导字段"), allowedValues: WorldbookPosition.allCases.map(\.rawValue), allowsEmpty: false, get: { draft.position.rawValue }, set: { rawValue in
+                if let position = WorldbookPosition(rawValue: rawValue) { draft.position = position }
+            }),
+            .string("role", label: NSLocalizedString("注入角色", comment: "世界书条目编辑器向导字段"), allowedValues: WorldbookEntryRole.allCases.map(\.rawValue), allowsEmpty: false, get: { draft.role.rawValue }, set: { rawValue in
+                if let role = WorldbookEntryRole(rawValue: rawValue) { draft.role = role }
+            }),
+            .integer("depth", label: NSLocalizedString("注入深度", comment: "世界书条目编辑器向导字段"), range: 0...Int.max, get: { draft.depth }, set: { depthBinding.wrappedValue = $0 }),
+            .string("outlet_name", label: NSLocalizedString("Outlet 名称", comment: "世界书条目编辑器向导字段"), get: { draft.outletName }, set: { draft.outletName = $0 }),
+            .bool("override_scan_depth", label: NSLocalizedString("覆盖扫描深度", comment: "世界书条目编辑器向导字段"), get: { draft.enableEntryScanDepth }, set: { draft.enableEntryScanDepth = $0 }),
+            .integer("scan_depth", label: NSLocalizedString("扫描深度", comment: "世界书条目编辑器向导字段"), range: 1...Int.max, get: { draft.scanDepth }, set: { scanDepthBinding.wrappedValue = $0 }),
+            .string("group_name", label: NSLocalizedString("分组名", comment: "世界书条目编辑器向导字段"), get: { draft.groupName }, set: { draft.groupName = $0 }),
+            .bool("group_override", label: NSLocalizedString("组覆盖", comment: "世界书条目编辑器向导字段"), get: { draft.groupOverride }, set: { draft.groupOverride = $0 }),
+            .bool("use_group_scoring", label: NSLocalizedString("组评分", comment: "世界书条目编辑器向导字段"), get: { draft.useGroupScoring }, set: { draft.useGroupScoring = $0 }),
+            .double("group_weight", label: NSLocalizedString("组权重", comment: "世界书条目编辑器向导字段"), range: 0...10, get: { draft.groupWeight }, set: { groupWeightBinding.wrappedValue = $0 }),
+            .bool("enable_sticky", label: NSLocalizedString("启用 Sticky", comment: "世界书条目编辑器向导字段"), get: { draft.enableSticky }, set: { draft.enableSticky = $0 }),
+            .integer("sticky_turns", label: NSLocalizedString("Sticky 回合", comment: "世界书条目编辑器向导字段"), range: 1...Int.max, get: { draft.sticky }, set: { stickyBinding.wrappedValue = $0 }),
+            .bool("enable_cooldown", label: NSLocalizedString("启用 Cooldown", comment: "世界书条目编辑器向导字段"), get: { draft.enableCooldown }, set: { draft.enableCooldown = $0 }),
+            .integer("cooldown_turns", label: NSLocalizedString("Cooldown 回合", comment: "世界书条目编辑器向导字段"), range: 1...Int.max, get: { draft.cooldown }, set: { cooldownBinding.wrappedValue = $0 }),
+            .bool("enable_delay", label: NSLocalizedString("启用 Delay", comment: "世界书条目编辑器向导字段"), get: { draft.enableDelay }, set: { draft.enableDelay = $0 }),
+            .integer("delay_turns", label: NSLocalizedString("Delay 回合", comment: "世界书条目编辑器向导字段"), range: 1...Int.max, get: { draft.delay }, set: { delayBinding.wrappedValue = $0 }),
+            .bool("exclude_recursion", label: NSLocalizedString("排除递归缓冲", comment: "世界书条目编辑器向导字段"), get: { draft.excludeRecursion }, set: { draft.excludeRecursion = $0 }),
+            .bool("prevent_recursion", label: NSLocalizedString("阻止递归触发", comment: "世界书条目编辑器向导字段"), get: { draft.preventRecursion }, set: { draft.preventRecursion = $0 }),
+            .bool("delay_until_recursion", label: NSLocalizedString("仅递归后触发", comment: "世界书条目编辑器向导字段"), get: { draft.delayUntilRecursion }, set: { draft.delayUntilRecursion = $0 })
+        ]
     }
 
     private var hasUnsavedChanges: Bool {

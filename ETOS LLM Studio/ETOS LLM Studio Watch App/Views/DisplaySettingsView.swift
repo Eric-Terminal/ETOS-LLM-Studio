@@ -177,6 +177,35 @@ struct DisplaySettingsView: View {
         .onAppear {
             normalizeBackgroundOpacityIfNeeded()
         }
+        .guideSettingsPageContext(
+            id: "settings-display",
+            title: NSLocalizedString("显示设置", comment: "显示设置向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: guideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        [
+            .bool("background_enabled", label: NSLocalizedString("显示背景", comment: "向导设置字段"), get: { enableBackground }, set: { enableBackground = $0 }),
+            .readOnly("current_background", label: NSLocalizedString("当前背景图", comment: "向导设置字段"), value: { .string(currentBackgroundImage) }),
+            .string("background_content_mode", label: NSLocalizedString("背景填充模式", comment: "向导设置字段"), allowedValues: ["fill", "fit"], get: { backgroundContentMode }, set: { backgroundContentMode = $0 }),
+            .bool("background_auto_rotation", label: NSLocalizedString("背景随机轮换", comment: "向导设置字段"), get: { enableAutoRotateBackground }, set: { enableAutoRotateBackground = $0 }),
+            .double("background_blur", label: NSLocalizedString("背景模糊", comment: "向导设置字段"), range: 0...25, get: { backgroundBlur }, set: { backgroundBlur = $0 }),
+            .double("background_opacity", label: NSLocalizedString("背景不透明度", comment: "向导设置字段"), range: WatchBackgroundOpacitySetting.allowedRange, get: { backgroundOpacityBinding.wrappedValue }, set: { backgroundOpacityBinding.wrappedValue = $0 }),
+            .bool("video_background_continues_when_hidden", label: NSLocalizedString("离开聊天时继续播放视频背景", comment: "向导设置字段"), get: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden }, set: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden = $0 }),
+            .bool("liquid_glass", label: NSLocalizedString("启用液态玻璃", comment: "向导设置字段"), get: { enableLiquidGlass }, set: { enableLiquidGlass = $0 }),
+            .bool("markdown_rendering", label: NSLocalizedString("渲染 Markdown", comment: "向导设置字段"), get: { enableMarkdown }, set: { enableMarkdown = $0 }),
+            .bool("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: "向导设置字段"), get: { enableAdvancedRenderer }, set: { enableAdvancedRenderer = $0 }),
+            .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: "向导设置字段"), get: { enableNoBubbleUI }, set: { enableNoBubbleUI = $0 }),
+            .bool("auto_reasoning_preview", label: NSLocalizedString("自动预览思考过程", comment: "向导设置字段"), get: { enableAutoReasoningPreview }, set: { enableAutoReasoningPreview = $0 }),
+            .bool("responsive_reasoning_preview_height", label: NSLocalizedString("响应式思考预览高度", comment: "向导设置字段"), get: { appConfig.enableResponsiveReasoningPreviewHeight }, set: { appConfig.enableResponsiveReasoningPreviewHeight = $0 }),
+            .double("reasoning_preview_height_percent", label: NSLocalizedString("思考预览高度百分比", comment: "向导设置字段"), range: 1...100, get: { appConfig.reasoningPreviewHeightPercent }, set: { appConfig.reasoningPreviewHeightPercent = $0 }),
+            .string("streaming_display_mode", label: NSLocalizedString("流式显示模式", comment: "向导设置字段"), allowedValues: ChatStreamingDisplayMode.allCases.map(\.rawValue), get: { appConfig.chatStreamingDisplayMode }, set: { appConfig.chatStreamingDisplayMode = $0 }),
+            .string("app_language", label: NSLocalizedString("App 语言", comment: "向导设置字段"), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { appConfig.appLanguage }, set: { appLanguageBinding.wrappedValue = $0 }),
+            .bool("colorful_settings_icons", label: NSLocalizedString("彩色设置图标", comment: "向导设置字段"), get: { appConfig.settingsColorfulIconsEnabled }, set: { appConfig.settingsColorfulIconsEnabled = $0 })
+        ]
     }
     private var normalizedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)

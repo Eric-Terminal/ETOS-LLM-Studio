@@ -144,17 +144,15 @@ struct WorldbookDetailView: View {
         .navigationTitle(NSLocalizedString("世界书详情", comment: "Worldbook detail title"))
         .onAppear(perform: reload)
         .onDisappear(perform: persistPendingBasicInfo)
-        .sheet(item: $editingEntryDraft) { draft in
-            NavigationStack {
-                WorldbookEntryEditView(
-                    draft: draft,
-                    isNew: true,
-                    onSave: { updatedEntry in
-                        upsertEntry(updatedEntry)
-                    },
-                    onDelete: nil
-                )
-            }
+        .navigationDestination(item: $editingEntryDraft) { draft in
+            WorldbookEntryEditView(
+                draft: draft,
+                isNew: true,
+                onSave: { updatedEntry in
+                    upsertEntry(updatedEntry)
+                },
+                onDelete: nil
+            )
         }
         .alert(
             NSLocalizedString("确认删除条目", comment: "Confirm deleting entry"),
@@ -180,6 +178,42 @@ struct WorldbookDetailView: View {
                 Text(NSLocalizedString("删除后不可恢复。", comment: "Delete entry irreversible"))
             }
         )
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "worldbook-\(worldbookID.uuidString.lowercased())"),
+            title: String(format: NSLocalizedString("世界书：%@", comment: "世界书详情向导标题"), worldbook?.name ?? NSLocalizedString("世界书详情", comment: "Worldbook detail title")),
+            documents: [GuideDocumentReference(id: "worldbooks", title: "Worldbooks")],
+            settings: guideSettings
+        )
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        guard let worldbook else {
+            return [.readOnly("worldbook_missing", label: NSLocalizedString("世界书不存在", comment: "世界书详情向导字段"), value: { .bool(true) })]
+        }
+        return [
+            .readOnly("id", label: NSLocalizedString("世界书 ID", comment: "世界书详情向导字段"), value: { .string(worldbook.id.uuidString) }),
+            .string("name", label: NSLocalizedString("世界书名称", comment: "世界书详情向导字段"), allowsEmpty: false, get: { nameDraft }, set: { value in nameDraft = value; saveName() }),
+            .string("description", label: NSLocalizedString("世界书描述", comment: "世界书详情向导字段"), get: { descriptionDraft }, set: { value in descriptionDraft = value; saveDescription(value) }),
+            .integer("scan_depth", label: NSLocalizedString("扫描深度", comment: "世界书详情向导字段"), range: 1...Int.max, get: { worldbook.settings.scanDepth }, set: { settingsScanDepthBinding.wrappedValue = $0 }),
+            .integer("max_recursion_depth", label: NSLocalizedString("最大递归层级", comment: "世界书详情向导字段"), range: 0...Int.max, get: { worldbook.settings.maxRecursionDepth }, set: { settingsMaxRecursionDepthBinding.wrappedValue = $0 }),
+            .integer("max_injected_entries", label: NSLocalizedString("最大注入条目（-1 表示不限制）", comment: "世界书详情向导字段"), range: -1...Int.max, get: { worldbook.settings.maxInjectedEntries }, set: { settingsMaxInjectedEntriesBinding.wrappedValue = $0 }),
+            .integer("max_injected_characters", label: NSLocalizedString("最大注入字符（-1 表示不限制）", comment: "世界书详情向导字段"), range: -1...Int.max, get: { worldbook.settings.maxInjectedCharacters }, set: { settingsMaxInjectedCharsBinding.wrappedValue = $0 }),
+            .string("fallback_position", label: NSLocalizedString("备用插入位置", comment: "世界书详情向导字段"), allowedValues: WorldbookPosition.allCases.map(\.rawValue), allowsEmpty: false, get: { worldbook.settings.fallbackPosition.rawValue }, set: { rawValue in
+                if let position = WorldbookPosition(rawValue: rawValue) { settingsFallbackPositionBinding.wrappedValue = position }
+            }),
+            .readOnly("entries", label: NSLocalizedString("世界书条目", comment: "世界书详情向导字段"), value: {
+                .array(orderedEntries.map { entry in
+                    .dictionary([
+                        "id": .string(entry.id.uuidString),
+                        "comment": .string(entry.comment),
+                        "enabled": .bool(entry.isEnabled),
+                        "keys": .array(entry.keys.map(JSONValue.string)),
+                        "position": .string(entry.position.rawValue),
+                        "content_character_count": .int(entry.content.count)
+                    ])
+                })
+            })
+        ]
     }
 
     private func reload() {

@@ -64,6 +64,37 @@ struct MCPToolCenterDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: String(format: NSLocalizedString("MCP 工具：%@", comment: "MCP 工具向导上下文标题"), tool.toolId),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [GuidePageTool(definition: GuideToolCatalog.updateMCPTool, access: .proposeChange)]
+            ),
+            snapshot: {
+                guard let server = currentServer else { return .empty }
+                return GuideMCPToolSettingsSupport.snapshot(server: server, tool: tool)
+            },
+            buildProposal: { call, _ in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                return try GuideMCPToolSettingsSupport.buildProposal(call: call, pageID: guidePageID, server: server, tool: tool)
+            },
+            execute: { proposal in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                let application = try GuideMCPToolSettingsSupport.apply(proposal, server: server, tool: tool)
+                manager.setToolEnabled(serverID: serverID, toolId: tool.toolId, isEnabled: application.enabled)
+                manager.setToolApprovalPolicy(serverID: serverID, toolId: tool.toolId, policy: application.approvalPolicy)
+                return application.execution
+            }
+        )
+    }
+
+    private var currentServer: MCPServerConfiguration? {
+        manager.servers.first(where: { $0.id == serverID })
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "tool-center-mcp-tool-\(serverID.uuidString.lowercased())-\(tool.toolId)")
     }
 
     private var currentStatusText: String {
@@ -189,6 +220,29 @@ struct MCPToolCategoryDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("MCP 工具", comment: "MCP tools section title"))
+        .guideSettingsPageContext(
+            id: "tool-center-mcp-tools",
+            title: NSLocalizedString("MCP 工具", comment: "MCP 工具向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .bool("chat_tools_enabled", label: NSLocalizedString("向模型暴露 MCP 工具", comment: "向导设置字段"), get: { manager.chatToolsEnabled }, set: { manager.setChatToolsEnabled($0) }),
+                .readOnly("current_session_isolation_active", label: NSLocalizedString("当前会话屏蔽工具上下文", comment: "向导设置字段"), value: { .bool(currentSessionIsolationActive) }),
+                .readOnly("current_session_memory_isolation_active", label: NSLocalizedString("当前会话屏蔽记忆上下文", comment: "向导设置字段"), value: { .bool(currentSessionMemoryIsolationActive) }),
+                .readOnly("visible_tools", label: NSLocalizedString("MCP 工具", comment: "向导设置字段"), value: {
+                    .array(filteredTools.map { available in
+                        .dictionary([
+                            "server_id": .string(available.server.id.uuidString),
+                            "server_name": .string(available.server.displayName),
+                            "tool_id": .string(available.tool.toolId),
+                            "description": .string(available.tool.description ?? ""),
+                            "enabled": .bool(manager.isToolEnabled(serverID: available.server.id, toolId: available.tool.toolId)),
+                            "approval_policy": .string(manager.approvalPolicy(serverID: available.server.id, toolId: available.tool.toolId).rawValue),
+                            "blocked_by_session": .bool(isBlockedBySessionPolicy(available))
+                        ])
+                    })
+                })
+            ]
+        )
     }
 
     private var mcpToolGroupFooterText: String {
@@ -452,6 +506,27 @@ struct ShortcutToolCategoryDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("快捷指令工具", comment: "Shortcut tools section title"))
+        .guideSettingsPageContext(
+            id: "tool-center-shortcut-tools",
+            title: NSLocalizedString("快捷指令工具", comment: "快捷指令工具向导上下文标题"),
+            documents: [GuideDocumentReference(id: "shortcut-tools", title: "Shortcut Toolbox")],
+            settings: [
+                .bool("chat_tools_enabled", label: NSLocalizedString("向模型暴露快捷指令工具", comment: "向导设置字段"), get: { manager.chatToolsEnabled }, set: { manager.setChatToolsEnabled($0) }),
+                .readOnly("current_session_isolation_active", label: NSLocalizedString("当前会话屏蔽工具上下文", comment: "向导设置字段"), value: { .bool(currentSessionIsolationActive) }),
+                .readOnly("visible_tools", label: NSLocalizedString("快捷指令工具", comment: "向导设置字段"), value: {
+                    .array(filteredTools.map { tool in
+                        .dictionary([
+                            "id": .string(tool.id.uuidString),
+                            "shortcut_name": .string(tool.name),
+                            "display_name": .string(tool.displayName),
+                            "description": .string(tool.effectiveDescription),
+                            "enabled": .bool(tool.isEnabled),
+                            "run_mode": .string(tool.runModeHint.rawValue)
+                        ])
+                    })
+                })
+            ]
+        )
     }
 
     private var shortcutGroupFooterText: String {
@@ -576,6 +651,33 @@ struct ShortcutToolCenterDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: "Tool settings title"))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: tool.map {
+                    String(format: NSLocalizedString("快捷指令工具：%@", comment: "快捷指令工具向导上下文标题"), $0.displayName)
+                } ?? NSLocalizedString("快捷指令工具", comment: "快捷指令工具向导上下文标题"),
+                documents: [GuideDocumentReference(id: "shortcut-tools", title: "Shortcut Toolbox")],
+                tools: [GuidePageTool(definition: GuideToolCatalog.updateShortcutTool, access: .proposeChange)]
+            ),
+            snapshot: {
+                guard let tool else { return .empty }
+                return GuideShortcutToolSettingsSupport.snapshot(tool)
+            },
+            buildProposal: { call, _ in
+                guard let tool else { throw GuideError.invalidToolArguments }
+                return try GuideShortcutToolSettingsSupport.buildProposal(call: call, pageID: guidePageID, tool: tool)
+            },
+            execute: { proposal in
+                guard let tool else { throw GuideError.invalidToolArguments }
+                let application = try GuideShortcutToolSettingsSupport.apply(proposal, tool: tool)
+                manager.setToolEnabled(id: toolID, isEnabled: application.enabled)
+                manager.setRunModeHint(id: toolID, runModeHint: application.runMode)
+                manager.updateUserDescription(id: toolID, description: application.userDescription)
+                descriptionDraft = application.userDescription
+                return application.execution
+            }
+        )
         .sheet(isPresented: $isEditingDescription) {
             if let tool {
                 NavigationStack {
@@ -609,6 +711,10 @@ struct ShortcutToolCenterDetailView: View {
                 }
             }
         }
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "tool-center-shortcut-tool-\(toolID.uuidString.lowercased())")
     }
 
     private func currentStatusText(for tool: ShortcutToolDefinition) -> String {

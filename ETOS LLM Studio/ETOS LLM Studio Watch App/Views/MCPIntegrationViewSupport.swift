@@ -114,6 +114,43 @@ struct MCPServerDetailView: View {
             }
             Button(NSLocalizedString("取消", comment: ""), role: .cancel) {}
         }
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: server?.displayName ?? NSLocalizedString("服务器详情", comment: ""),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPServer, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                guard let server else { return .empty }
+                return GuideMCPServerSettingsSupport.snapshot(
+                    server: server,
+                    status: manager.status(for: server)
+                )
+            },
+            buildProposal: { call, _ in
+                guard let server else { throw GuideError.invalidToolArguments }
+                return try GuideMCPServerSettingsSupport.buildProposal(
+                    call: call,
+                    pageID: guidePageID,
+                    server: server
+                )
+            },
+            execute: { proposal in
+                guard let server else { throw GuideError.invalidToolArguments }
+                let application = try GuideMCPServerSettingsSupport.apply(proposal, to: server)
+                manager.save(server: application.server)
+                manager.connectSelectedServersIfNeeded()
+                return application.execution
+            }
+        )
+        .watchGuideEntry()
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "mcp-server-\(serverID.uuidString.lowercased())")
     }
 
     private func statusDescription(for server: MCPServerConfiguration) -> String {
@@ -197,6 +234,27 @@ struct MCPBuiltInServerRestoreView: View {
             }
         }
         .navigationTitle(NSLocalizedString("内置工具", comment: "Built-in tools section title"))
+        .guideSettingsPageContext(
+            id: "watch-mcp-built-in-server-restore",
+            title: NSLocalizedString("内置工具", comment: "手表内置 MCP 恢复向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .readOnly(
+                    "restorable_servers",
+                    label: NSLocalizedString("可恢复的内置服务器", comment: "手表内置 MCP 恢复向导字段"),
+                    value: {
+                        .array(manager.restorableBuiltInServers.map { server in
+                            .dictionary([
+                                "id": .string(server.id.uuidString.lowercased()),
+                                "name": .string(server.displayName),
+                                "notes": .string(server.notes ?? "")
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 }
 
@@ -241,6 +299,60 @@ struct MCPToolSettingsDetailView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具设置", comment: ""))
+        .guidePageContext(
+            descriptor: GuidePageDescriptor(
+                id: guidePageID,
+                title: String(
+                    format: NSLocalizedString("MCP 工具：%@", comment: "MCP 工具向导上下文标题"),
+                    tool.toolId
+                ),
+                documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+                tools: [
+                    GuidePageTool(definition: GuideToolCatalog.updateMCPTool, access: .proposeChange)
+                ]
+            ),
+            snapshot: {
+                guard let server = currentServer else { return .empty }
+                return GuideMCPToolSettingsSupport.snapshot(server: server, tool: tool)
+            },
+            buildProposal: { call, _ in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                return try GuideMCPToolSettingsSupport.buildProposal(
+                    call: call,
+                    pageID: guidePageID,
+                    server: server,
+                    tool: tool
+                )
+            },
+            execute: { proposal in
+                guard let server = currentServer else { throw GuideError.invalidToolArguments }
+                let application = try GuideMCPToolSettingsSupport.apply(
+                    proposal,
+                    server: server,
+                    tool: tool
+                )
+                manager.setToolEnabled(
+                    serverID: serverID,
+                    toolId: tool.toolId,
+                    isEnabled: application.enabled
+                )
+                manager.setToolApprovalPolicy(
+                    serverID: serverID,
+                    toolId: tool.toolId,
+                    policy: application.approvalPolicy
+                )
+                return application.execution
+            }
+        )
+        .watchGuideEntry()
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "mcp-tool-\(serverID.uuidString.lowercased())-\(tool.toolId)")
+    }
+
+    private var currentServer: MCPServerConfiguration? {
+        manager.servers.first(where: { $0.id == serverID })
     }
 
     private var toolBinding: Binding<Bool> {
@@ -311,6 +423,51 @@ struct MCPToolListView: View {
             }
         }
         .navigationTitle(NSLocalizedString("工具列表", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-mcp-tool-list",
+            title: NSLocalizedString("工具列表", comment: "手表 MCP 工具列表向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: mcpToolListGuideSettings
+        )
+        .watchGuideEntry()
+    }
+
+    private var mcpToolListGuideSettings: [GuidePageSetting] {
+        [
+            .bool(
+                "tool_call_title_enabled",
+                label: NSLocalizedString("让 AI 描述 MCP 任务", comment: "手表 MCP 工具列表向导字段"),
+                get: { manager.toolCallTitleEnabled },
+                set: { manager.setToolCallTitleEnabled($0) }
+            ),
+            .readOnly(
+                "chat_tools_enabled",
+                label: NSLocalizedString("向模型暴露 MCP 工具", comment: "手表 MCP 工具列表向导字段"),
+                value: { .bool(manager.chatToolsEnabled) }
+            ),
+            .readOnly(
+                "tools",
+                label: NSLocalizedString("已公布工具", comment: "手表 MCP 工具列表向导字段"),
+                value: {
+                    .array(manager.tools.map { available in
+                        .dictionary([
+                            "server_id": .string(available.server.id.uuidString.lowercased()),
+                            "server_name": .string(available.server.displayName),
+                            "tool_id": .string(available.tool.toolId),
+                            "description": .string(available.tool.description ?? ""),
+                            "enabled": .bool(manager.isToolEnabled(
+                                serverID: available.server.id,
+                                toolId: available.tool.toolId
+                            )),
+                            "approval_policy": .string(manager.approvalPolicy(
+                                serverID: available.server.id,
+                                toolId: available.tool.toolId
+                            ).rawValue)
+                        ])
+                    })
+                }
+            )
+        ]
     }
 }
 
@@ -341,6 +498,28 @@ struct MCPResourceListView: View {
             }
         }
         .navigationTitle(NSLocalizedString("资源列表", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-mcp-resource-list",
+            title: NSLocalizedString("资源列表", comment: "手表 MCP 资源列表向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .readOnly(
+                    "resources",
+                    label: NSLocalizedString("可用资源", comment: "手表 MCP 资源列表向导字段"),
+                    value: {
+                        .array(manager.resources.map { available in
+                            .dictionary([
+                                "server_id": .string(available.server.id.uuidString.lowercased()),
+                                "server_name": .string(available.server.displayName),
+                                "resource_id": .string(available.resource.resourceId),
+                                "description": .string(available.resource.description ?? "")
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 }
 
@@ -377,5 +556,28 @@ struct MCPGovernanceLogListView: View {
             }
         }
         .navigationTitle(NSLocalizedString("治理日志", comment: ""))
+        .guideSettingsPageContext(
+            id: "watch-mcp-governance-log",
+            title: NSLocalizedString("治理日志", comment: "手表 MCP 治理日志向导上下文标题"),
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: [
+                .readOnly(
+                    "entries",
+                    label: NSLocalizedString("治理日志记录", comment: "手表 MCP 治理日志向导字段"),
+                    value: {
+                        .array(manager.governanceLogEntries.suffix(80).map { entry in
+                            .dictionary([
+                                "timestamp": .double(entry.timestamp.timeIntervalSince1970),
+                                "level": .string(entry.level.rawValue),
+                                "category": .string(entry.category.rawValue),
+                                "server_name": .string(entry.serverDisplayName ?? ""),
+                                "message": .string(entry.message)
+                            ])
+                        })
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 }

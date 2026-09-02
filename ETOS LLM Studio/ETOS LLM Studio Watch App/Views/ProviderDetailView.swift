@@ -219,6 +219,7 @@ struct ProviderDetailView: View {
             buildProposal: buildProviderModelsGuideProposal,
             execute: executeProviderModelsGuideProposal
         )
+        .watchGuideEntry()
     }
 
     private var providerModelsGuidePageID: GuidePageID {

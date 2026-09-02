@@ -85,6 +85,7 @@ struct ProviderActionsView: View {
                 ])
             }
         )
+        .watchGuideEntry()
     }
 
     private func updateProvider(_ updatedProvider: Provider) {

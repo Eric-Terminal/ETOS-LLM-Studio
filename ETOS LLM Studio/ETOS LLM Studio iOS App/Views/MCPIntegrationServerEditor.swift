@@ -367,6 +367,169 @@ struct MCPServerEditor: View {
         } message: {
             Text(NSLocalizedString("要保存当前编辑内容，还是放弃更改并离开？", comment: "Generic unsaved changes alert message"))
         }
+        .guideSettingsPageContext(
+            id: guidePageID,
+            title: guidePageTitle,
+            documents: [GuideDocumentReference(id: "mcp-tools", title: "MCP Toolbox")],
+            settings: guideSettings
+        )
+    }
+
+    private var guidePageID: GuidePageID {
+        GuidePageID(rawValue: "mcp-server-editor-\(existingServer?.id.uuidString.lowercased() ?? "new")")
+    }
+
+    private var guidePageTitle: String {
+        existingServer == nil
+            ? NSLocalizedString("新增 MCP Server", comment: "MCP 编辑器向导标题")
+            : NSLocalizedString("编辑 MCP Server", comment: "MCP 编辑器向导标题")
+    }
+
+    private var guideSettings: [GuidePageSetting] {
+        var settings: [GuidePageSetting] = [
+            .readOnly("editor_mode", label: NSLocalizedString("编辑模式", comment: "MCP 编辑器向导字段"), value: {
+                .string(existingServer == nil ? "create" : "edit")
+            }),
+            .readOnly("has_unsaved_changes", label: NSLocalizedString("存在未保存更改", comment: "MCP 编辑器向导字段"), value: {
+                .bool(hasUnsavedChanges)
+            }),
+            .string(
+                "display_name",
+                label: NSLocalizedString("显示名称", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { displayName },
+                set: { displayName = $0 }
+            ),
+            .string(
+                "notes",
+                label: NSLocalizedString("备注", comment: "MCP 编辑器向导字段"),
+                get: { notes },
+                set: { notes = $0 }
+            )
+        ]
+
+        if transportOption.isBuiltIn {
+            settings.append(.readOnly(
+                "transport_type",
+                label: NSLocalizedString("传输类型", comment: "MCP 编辑器向导字段"),
+                value: { .string(transportOption.rawValue) }
+            ))
+            return settings
+        }
+
+        settings.append(.string(
+            "transport_type",
+            label: NSLocalizedString("传输类型", comment: "MCP 编辑器向导字段"),
+            allowedValues: TransportOption.editableCases.map(\.rawValue),
+            allowsEmpty: false,
+            get: { transportOption.rawValue },
+            set: { rawValue in
+                if let option = TransportOption(rawValue: rawValue) {
+                    transportOption = option
+                }
+            }
+        ))
+
+        // 手表打开二级向导后会固定本页声明，因此协议切换及对应草稿必须能在同一份提案中完成。
+        settings.append(contentsOf: [
+            .string(
+                "endpoint",
+                label: NSLocalizedString("Streamable HTTP Endpoint", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { endpoint },
+                set: { endpoint = $0 }
+            ),
+            .string(
+                "sse_endpoint",
+                label: NSLocalizedString("SSE Endpoint", comment: "MCP 编辑器向导字段"),
+                allowsEmpty: false,
+                get: { sseEndpoint },
+                set: { sseEndpoint = $0 }
+            )
+        ])
+        appendHTTPSecretSettings(to: &settings)
+        settings.append(contentsOf: oauthGuideSettings)
+        settings.append(contentsOf: localStdioGuideSettings)
+        return settings
+    }
+
+    private func appendHTTPSecretSettings(to settings: inout [GuidePageSetting]) {
+        settings.append(.writeOnlyString(
+            "api_key",
+            label: NSLocalizedString("Bearer API Key（只能写入，不能读取）", comment: "MCP 编辑器向导字段"),
+            isConfigured: { !apiKey.isEmpty },
+            set: { apiKey = $0 }
+        ))
+        settings.append(.writeOnlyString(
+            "header_override_expressions",
+            label: NSLocalizedString("请求头表达式（每行一个，只能整体写入）", comment: "MCP 编辑器向导字段"),
+            isConfigured: { headerOverrideEntries.contains { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } },
+            set: { value in
+                let expressions = value.components(separatedBy: .newlines).filter {
+                    !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                headerOverrideEntries = expressions.isEmpty
+                    ? [HeaderOverrideEntry(text: "")]
+                    : expressions.map { HeaderOverrideEntry(text: $0) }
+            }
+        ))
+    }
+
+    private var oauthGuideSettings: [GuidePageSetting] {
+        [
+            .string("token_endpoint", label: NSLocalizedString("OAuth Token Endpoint", comment: "MCP 编辑器向导字段"), allowsEmpty: false, get: { tokenEndpoint }, set: { tokenEndpoint = $0 }),
+            .string("client_id", label: NSLocalizedString("Client ID", comment: "MCP 编辑器向导字段"), allowsEmpty: false, get: { clientID }, set: { clientID = $0 }),
+            .string("scope", label: NSLocalizedString("Scope", comment: "MCP 编辑器向导字段"), get: { oauthScope }, set: { oauthScope = $0 }),
+            .string(
+                "grant_type",
+                label: NSLocalizedString("授权类型", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPOAuthGrantType.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { oauthGrantType.rawValue },
+                set: { rawValue in
+                    if let grantType = MCPOAuthGrantType(rawValue: rawValue) {
+                        oauthGrantType = grantType
+                    }
+                }
+            ),
+            .writeOnlyString("client_secret", label: NSLocalizedString("Client Secret（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !clientSecret.isEmpty }, set: { clientSecret = $0 }),
+            .writeOnlyString("authorization_code", label: NSLocalizedString("Authorization Code（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !oauthAuthorizationCode.isEmpty }, set: { oauthAuthorizationCode = $0 }),
+            .string("redirect_uri", label: NSLocalizedString("Redirect URI", comment: "MCP 编辑器向导字段"), get: { oauthRedirectURI }, set: { oauthRedirectURI = $0 }),
+            .writeOnlyString("code_verifier", label: NSLocalizedString("PKCE Code Verifier（只能写入，不能读取）", comment: "MCP 编辑器向导字段"), isConfigured: { !oauthCodeVerifier.isEmpty }, set: { oauthCodeVerifier = $0 })
+        ]
+    }
+
+    private var localStdioGuideSettings: [GuidePageSetting] {
+        [
+            .writeOnlyString(
+                "local_configuration_json",
+                label: NSLocalizedString("stdio 配置 JSON（可能含环境变量，只能整体写入）", comment: "MCP 编辑器向导字段"),
+                isConfigured: { !localConfigurationJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                set: { localConfigurationJSON = $0 }
+            ),
+            .bool("inherit_local_linux_environment", label: NSLocalizedString("继承本地 Linux 环境", comment: "MCP 编辑器向导字段"), get: { localInheritEnvironment }, set: { localInheritEnvironment = $0 }),
+            .double("startup_timeout_seconds", label: NSLocalizedString("启动超时秒数", comment: "MCP 编辑器向导字段"), range: 0...3_600, get: { localStartupTimeoutSeconds }, set: { localStartupTimeoutSeconds = $0 }),
+            .string(
+                "launch_policy",
+                label: NSLocalizedString("启动策略", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPLocalStdioLaunchPolicy.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { localLaunchPolicy.rawValue },
+                set: { rawValue in
+                    if let policy = MCPLocalStdioLaunchPolicy(rawValue: rawValue) { localLaunchPolicy = policy }
+                }
+            ),
+            .string(
+                "idle_policy",
+                label: NSLocalizedString("空闲策略", comment: "MCP 编辑器向导字段"),
+                allowedValues: MCPLocalStdioIdlePolicy.allCases.map(\.rawValue),
+                allowsEmpty: false,
+                get: { localIdlePolicy.rawValue },
+                set: { rawValue in
+                    if let policy = MCPLocalStdioIdlePolicy(rawValue: rawValue) { localIdlePolicy = policy }
+                }
+            )
+        ]
     }
 
     private func saveServer() {

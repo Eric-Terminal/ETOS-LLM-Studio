@@ -27,6 +27,7 @@ struct ProviderEditView: View {
     let navigationTitleOverride: String?
     let saveRequest: Int
     let showsToolbarSaveButton: Bool
+    let isGuideContextActive: Bool
     let onSaveAvailabilityChange: (Bool) -> Void
     let onUnsavedChangesChange: (Bool) -> Void
     let onSave: (Provider) -> Void
@@ -47,6 +48,7 @@ struct ProviderEditView: View {
         navigationTitleOverride: String? = nil,
         saveRequest: Int = 0,
         showsToolbarSaveButton: Bool = true,
+        isGuideContextActive: Bool = true,
         onSaveAvailabilityChange: @escaping (Bool) -> Void = { _ in },
         onUnsavedChangesChange: @escaping (Bool) -> Void = { _ in },
         onSave: @escaping (Provider) -> Void = { _ in }
@@ -69,6 +71,7 @@ struct ProviderEditView: View {
         self.navigationTitleOverride = navigationTitleOverride
         self.saveRequest = saveRequest
         self.showsToolbarSaveButton = showsToolbarSaveButton
+        self.isGuideContextActive = isGuideContextActive
         self.onSaveAvailabilityChange = onSaveAvailabilityChange
         self.onUnsavedChangesChange = onUnsavedChangesChange
         self.onSave = onSave
@@ -254,6 +257,7 @@ struct ProviderEditView: View {
                 documents: [GuideDocumentReference(id: "provider-model-basics", title: "Provider and Model Basics")],
                 tools: [GuidePageTool(definition: GuideToolCatalog.updateProviderConfiguration, access: .proposeChange)]
             ),
+            isActive: isGuideContextActive,
             snapshot: providerGuideSnapshot,
             buildProposal: buildProviderGuideProposal,
             execute: executeProviderGuideProposal

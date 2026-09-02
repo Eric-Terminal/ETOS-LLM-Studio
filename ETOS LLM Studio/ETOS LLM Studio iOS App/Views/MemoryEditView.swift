@@ -162,6 +162,22 @@ struct MemoryEditView: View {
         .navigationTitle(NSLocalizedString("编辑记忆", comment: ""))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hasChanges)
+        .guideSettingsPageContext(
+            id: "settings-memory-editor",
+            title: NSLocalizedString("编辑记忆", comment: "编辑记忆向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-memory", title: "Memory System")],
+            settings: [
+                .string("content", label: NSLocalizedString("记忆内容", comment: "向导设置字段"), allowsEmpty: false, get: { memory.content }, set: { memory.content = $0; hasChanges = true }),
+                .bool("archived", label: NSLocalizedString("已归档", comment: "向导设置字段"), get: { memory.isArchived }, set: { memory.isArchived = $0; hasChanges = true }),
+                .string("kind", label: NSLocalizedString("类型", comment: "向导设置字段"), allowedValues: MemoryKind.allCases.map(\.rawValue), get: { memory.kind.rawValue }, set: { memory.kind = MemoryKind(rawValue: $0) ?? memory.kind; hasChanges = true }),
+                .double("importance", label: NSLocalizedString("重要度", comment: "向导设置字段"), range: 0...1, get: { memory.importance }, set: { memory.importance = $0; hasChanges = true }),
+                .double("confidence", label: NSLocalizedString("置信度", comment: "向导设置字段"), range: 0...1, get: { memory.confidence }, set: { memory.confidence = $0; hasChanges = true }),
+                .string("entities", label: NSLocalizedString("相关实体（用逗号分隔）", comment: "向导设置字段"), get: { entitiesBinding.wrappedValue }, set: { entitiesBinding.wrappedValue = $0 }),
+                .readOnly("memory_id", label: NSLocalizedString("记忆 ID", comment: "向导设置字段"), value: { .string(memory.id.uuidString) }),
+                .readOnly("source", label: NSLocalizedString("来源", comment: "向导设置字段"), value: { .string(memory.source.rawValue) }),
+                .readOnly("requires_save", label: NSLocalizedString("应用方式", comment: "向导设置字段"), value: { .string(NSLocalizedString("修改后需要保存", comment: "向导草稿应用方式")) })
+            ]
+        )
         .alert(item: $reembedAlert) { alert in
             Alert(
                 title: Text(alert.title),

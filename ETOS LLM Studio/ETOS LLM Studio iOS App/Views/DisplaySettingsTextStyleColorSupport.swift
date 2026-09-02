@@ -25,6 +25,30 @@ struct ChatTextStyleColorSettingsView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .guideSettingsPageContext(
+            id: "settings-chat-text-style-colors",
+            title: title,
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .json(
+                    "text_style_colors",
+                    label: NSLocalizedString("文字样式颜色与指定内容规则", comment: "文字颜色向导字段"),
+                    schema: GuideAppearanceSettingsSupport.textStyleColorsSchema,
+                    get: {
+                        GuideAppearanceSettingsSupport.textStyleColorsValue(
+                            body: bodyColor,
+                            styles: styleColors
+                        )
+                    },
+                    normalize: GuideAppearanceSettingsSupport.normalizeTextStyleColors,
+                    set: { value in
+                        let updated = try GuideAppearanceSettingsSupport.textStyleColors(from: value)
+                        bodyColor = updated.body
+                        styleColors = updated.styles
+                    }
+                )
+            ]
+        )
     }
 
     private var customRulesSection: some View {

@@ -116,6 +116,25 @@ struct BackgroundGenerationSettingsView: View {
             }
         }
         .navigationTitle(NSLocalizedString("后台生成", comment: "后台生成设置页标题"))
+        .guideSettingsPageContext(
+            id: "settings-background-generation",
+            title: NSLocalizedString("后台生成", comment: "后台生成向导上下文标题"),
+            documents: [GuideDocumentReference(id: "background-generation", title: "Background Generation")],
+            settings: [
+                .bool("location_keep_alive", label: NSLocalizedString("位置追踪", comment: "向导设置字段"), get: { appConfig.backgroundGenerationKeepAliveEnabled }, set: { keepAliveBinding.wrappedValue = $0 }),
+                .bool("audio_keep_alive", label: NSLocalizedString("音频保活", comment: "向导设置字段"), get: { appConfig.backgroundGenerationAudioKeepAliveEnabled }, set: { audioKeepAliveBinding.wrappedValue = $0 }),
+                .double(
+                    "waiting_audio_volume",
+                    label: NSLocalizedString("等待音量", comment: "向导设置字段"),
+                    range: BackgroundGenerationAudioKeepAliveSettings.minimumVolume...BackgroundGenerationAudioKeepAliveSettings.maximumVolume,
+                    get: { appConfig.backgroundGenerationAudioKeepAliveVolume },
+                    set: { audioVolumeBinding.wrappedValue = $0 }
+                ),
+                .readOnly("location_status", label: NSLocalizedString("位置活动", comment: "向导设置字段"), value: { .string(runningStatusText) }),
+                .readOnly("audio_status", label: NSLocalizedString("音频保活状态", comment: "向导设置字段"), value: { .string(audioKeepAliveStatusText) }),
+                .readOnly("location_authorization", label: NSLocalizedString("定位权限", comment: "向导设置字段"), value: { .string(authorizationStatusText) })
+            ]
+        )
         .onAppear {
             keepAliveManager.refreshStatus()
         }

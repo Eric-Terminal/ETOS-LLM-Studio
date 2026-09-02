@@ -173,6 +173,32 @@ struct WatchInputQuickActionSettingsView: View {
             quickActionSection(for: .trailing)
         }
         .navigationTitle(NSLocalizedString("输入栏快捷功能", comment: "Watch input quick action settings title"))
+        .guideSettingsPageContext(
+            id: "settings-watch-input-quick-actions",
+            title: NSLocalizedString("输入栏快捷功能", comment: "手表输入栏快捷功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                guideActionsSetting(for: .leading),
+                guideActionsSetting(for: .trailing)
+            ]
+        )
+        .watchGuideEntry()
+    }
+
+    private func guideActionsSetting(for edge: WatchInputQuickActionEdge) -> GuidePageSetting {
+        .json(
+            edge.rawValue,
+            label: edge.title,
+            schema: GuideDisplayActionSettingsSupport.watchInputActionsSchema,
+            get: { GuideDisplayActionSettingsSupport.watchInputActionsValue(appConfig.watchInputQuickActionSettings.actions(for: edge)) },
+            normalize: GuideDisplayActionSettingsSupport.normalizeWatchInputActions,
+            set: { value in
+                let actions = try GuideDisplayActionSettingsSupport.watchInputActions(from: value)
+                var configuration = appConfig.watchInputQuickActionSettings
+                configuration.setActions(actions, for: edge)
+                appConfig.watchInputQuickActionSettings = configuration
+            }
+        )
     }
 
     private func quickActionSection(for edge: WatchInputQuickActionEdge) -> some View {
@@ -244,6 +270,28 @@ private struct WatchInputQuickActionPickerView: View {
             )
         }
         .navigationTitle(NSLocalizedString("添加快捷功能", comment: "Add watch input quick action"))
+        .guideSettingsPageContext(
+            id: GuidePageID(rawValue: "settings-watch-input-quick-actions-picker-\(targetEdge.rawValue)"),
+            title: NSLocalizedString("添加快捷功能", comment: "手表添加快捷功能向导上下文标题"),
+            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            settings: [
+                .readOnly("target_edge", label: NSLocalizedString("目标位置", comment: "手表添加快捷功能向导字段"), value: { .string(targetEdge.rawValue) }),
+                .json(
+                    "actions",
+                    label: targetEdge.title,
+                    schema: GuideDisplayActionSettingsSupport.watchInputActionsSchema,
+                    get: { GuideDisplayActionSettingsSupport.watchInputActionsValue(appConfig.watchInputQuickActionSettings.actions(for: targetEdge)) },
+                    normalize: GuideDisplayActionSettingsSupport.normalizeWatchInputActions,
+                    set: { value in
+                        let actions = try GuideDisplayActionSettingsSupport.watchInputActions(from: value)
+                        var configuration = appConfig.watchInputQuickActionSettings
+                        configuration.setActions(actions, for: targetEdge)
+                        appConfig.watchInputQuickActionSettings = configuration
+                    }
+                )
+            ]
+        )
+        .watchGuideEntry()
     }
 
     private func actionSection(

@@ -9,7 +9,7 @@
 import Foundation
 import ETOSCore
 
-struct WorldbookEntryDraft: Identifiable {
+struct WorldbookEntryDraft: Identifiable, Hashable {
     let id: UUID
     let entryID: UUID
 
