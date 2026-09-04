@@ -253,10 +253,16 @@ struct DisplaySettingsView: View {
                         }
                     }
                     Toggle(NSLocalizedString("彩色设置图标", comment: ""), isOn: $appConfig.settingsColorfulIconsEnabled)
+
+                    NavigationLink {
+                        AppIconSettingsView()
+                    } label: {
+                        Label(NSLocalizedString("主屏幕图标", comment: "自定义主屏幕图标设置入口"), systemImage: "app.fill")
+                    }
                 } header: {
                     Text(NSLocalizedString("全局外观", comment: ""))
                 } footer: {
-                    Text(NSLocalizedString("手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标。", comment: ""))
+                    Text(NSLocalizedString("手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标；主屏幕图标可使用你自己的图片。", comment: ""))
                         .etFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
