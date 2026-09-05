@@ -8,30 +8,22 @@ import Foundation
 
 public struct ChatUserMessagePreview: Sendable, Equatable {
     #if os(watchOS)
-    public static let characterLimit = 300
-    public static let lineLimit = 8
+    public static let defaultCharacterLimit = 300
     #else
-    public static let characterLimit = 1_000
-    public static let lineLimit = 12
+    public static let defaultCharacterLimit = 1_000
     #endif
+    public static let characterLimitRange = 1...100_000
 
     public let content: String
     public let isTruncated: Bool
 
     /// 在后台准备预览；按完整字符截取，避免拆开 emoji、组合音标或 CRLF。
-    /// 同时限制显式换行，防止字符很少但行数很多的消息撑长聊天列表。
-    public init(content: String) {
-        var end = content.startIndex
-        var characterCount = 0
-        var lineCount = 1
-        while end < content.endIndex, characterCount < Self.characterLimit {
-            if content[end].isNewline {
-                guard lineCount < Self.lineLimit else { break }
-                lineCount += 1
-            }
-            end = content.index(after: end)
-            characterCount += 1
-        }
+    public init(content: String, characterLimit: Int = ChatUserMessagePreview.defaultCharacterLimit) {
+        let end = content.index(
+            content.startIndex,
+            offsetBy: characterLimit,
+            limitedBy: content.endIndex
+        ) ?? content.endIndex
         isTruncated = end < content.endIndex
         self.content = isTruncated ? String(content[..<end]) + "…" : content
     }

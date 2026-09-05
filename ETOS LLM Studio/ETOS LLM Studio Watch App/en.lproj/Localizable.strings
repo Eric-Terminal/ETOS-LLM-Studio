@@ -7189,3 +7189,9 @@
 
 // 长用户消息全文预览
 "查看完整内容" = "View Full Content";
+
+// 长用户消息预览设置
+"长用户消息" = "Long User Messages";
+"预览字符数" = "Preview Character Limit";
+"仅影响气泡显示；完整内容可在“更多”中查看。" = "Only affects bubble display. View the full content under “More”.";
+"超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。" = "User messages longer than the character limit are truncated in chat bubbles, with no line limit. Changes refresh previews in the current conversation. Saving, sending to the model, copying, and exporting still use the full content. The default is %ld characters; enter a value from 1 to 100000.";

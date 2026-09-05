@@ -115,6 +115,21 @@ struct DisplaySettingsView: View {
                 }
             }
 
+            Section {
+                TextField(
+                    NSLocalizedString("预览字符数", comment: "长用户消息预览设置"),
+                    value: $appConfig.userMessagePreviewCharacterLimit,
+                    format: .number.grouping(.never)
+                )
+                settingsIntroCard
+            } header: {
+                Text(NSLocalizedString("长用户消息", comment: "长用户消息设置分组"))
+            } footer: {
+                Text(NSLocalizedString("仅影响气泡显示；完整内容可在“更多”中查看。", comment: "长用户消息设置说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(
                 header: Text(NSLocalizedString("流式显示", comment: "Streaming response display section")),
                 footer: Text(NSLocalizedString("即时模式优先响应速度，并让新增文字快速淡入；柔和模式会合并更多流式分片，以更舒缓的节奏显示新增文字。", comment: "Streaming response display mode description"))
@@ -188,6 +203,7 @@ struct DisplaySettingsView: View {
 
     private var guideSettings: [GuidePageSetting] {
         [
+            GuideDisplaySettingsSupport.userMessagePreviewCharacterLimit(appConfig: appConfig),
             .bool("background_enabled", label: NSLocalizedString("显示背景", comment: "向导设置字段"), get: { enableBackground }, set: { enableBackground = $0 }),
             .readOnly("current_background", label: NSLocalizedString("当前背景图", comment: "向导设置字段"), value: { .string(currentBackgroundImage) }),
             .string("background_content_mode", label: NSLocalizedString("背景填充模式", comment: "向导设置字段"), allowedValues: ["fill", "fit"], get: { backgroundContentMode }, set: { backgroundContentMode = $0 }),
@@ -207,6 +223,19 @@ struct DisplaySettingsView: View {
             .bool("colorful_settings_icons", label: NSLocalizedString("彩色设置图标", comment: "向导设置字段"), get: { appConfig.settingsColorfulIconsEnabled }, set: { appConfig.settingsColorfulIconsEnabled = $0 })
         ]
     }
+
+    private var settingsIntroCard: some View {
+        DisclosureGroup {
+            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        } label: {
+            Text(NSLocalizedString("进一步了解…", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private var normalizedBackgroundOpacity: Double {
         WatchBackgroundOpacitySetting.normalized(backgroundOpacity)
     }

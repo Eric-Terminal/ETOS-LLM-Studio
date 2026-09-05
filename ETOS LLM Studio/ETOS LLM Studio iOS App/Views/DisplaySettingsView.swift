@@ -26,11 +26,12 @@ struct DisplaySettingsView: View {
 
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+    @State private var selectedTab = 0
 
     let allBackgrounds: [String]
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // MARK: - Tab 1：沉浸背景
             Form {
                 Section(NSLocalizedString("背景图层", comment: "")) {
@@ -117,6 +118,7 @@ struct DisplaySettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("沉浸背景", comment: ""), systemImage: "photo.fill")
             }
+            .tag(0)
 
             // MARK: - Tab 2：对话框视觉
             Form {
@@ -127,6 +129,22 @@ struct DisplaySettingsView: View {
                     }
                     Toggle(NSLocalizedString("关闭助手气泡", comment: ""), isOn: $enableNoBubbleUI)
                     Toggle(NSLocalizedString("顶部毛玻璃渐隐", comment: ""), isOn: $enableChatTopBlurFade)
+                }
+
+                Section {
+                    TextField(
+                        NSLocalizedString("预览字符数", comment: "长用户消息预览设置"),
+                        value: $appConfig.userMessagePreviewCharacterLimit,
+                        format: .number.grouping(.never)
+                    )
+                    .keyboardType(.numberPad)
+                    settingsIntroCard
+                } header: {
+                    Text(NSLocalizedString("长用户消息", comment: "长用户消息设置分组"))
+                } footer: {
+                    Text(NSLocalizedString("仅影响气泡显示；完整内容可在“更多”中查看。", comment: "长用户消息设置说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -231,6 +249,7 @@ struct DisplaySettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("对话框视觉", comment: ""), systemImage: "bubble.left")
             }
+            .tag(1)
             .onChange(of: enableMarkdown) { _, isEnabled in
                 if !isEnabled, enableAdvancedRenderer {
                     enableAdvancedRenderer = false
@@ -242,6 +261,7 @@ struct DisplaySettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("功能栏", comment: ""), systemImage: "ellipsis.rectangle")
             }
+            .tag(2)
 
             // MARK: - Tab 4：界面与交互
             Form {
@@ -304,41 +324,68 @@ struct DisplaySettingsView: View {
             .tabItem {
                 Label(NSLocalizedString("界面与交互", comment: ""), systemImage: "slider.horizontal.3")
             }
+            .tag(3)
         }
         .navigationTitle(NSLocalizedString("显示设置", comment: ""))
         .guideSettingsPageContext(
-            id: "settings-display",
+            id: GuidePageID(rawValue: "settings-display-\(selectedTab)"),
             title: NSLocalizedString("显示设置", comment: "显示设置向导上下文标题"),
             documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            isActive: selectedTab != 2,
             settings: guideSettings
         )
     }
 
     private var guideSettings: [GuidePageSetting] {
-        [
-            .bool("background_enabled", label: NSLocalizedString("显示背景", comment: "向导设置字段"), get: { enableBackground }, set: { enableBackground = $0 }),
-            .readOnly("current_background", label: NSLocalizedString("当前背景图", comment: "向导设置字段"), value: { .string(currentBackgroundImage) }),
-            .string("background_content_mode", label: NSLocalizedString("背景填充模式", comment: "向导设置字段"), allowedValues: ["fill", "fit"], get: { backgroundContentMode }, set: { backgroundContentMode = $0 }),
-            .bool("background_auto_rotation", label: NSLocalizedString("自动轮换背景", comment: "向导设置字段"), get: { enableAutoRotateBackground }, set: { enableAutoRotateBackground = $0 }),
-            .double("background_blur", label: NSLocalizedString("背景模糊", comment: "向导设置字段"), range: 0...25, get: { backgroundBlur }, set: { backgroundBlur = $0 }),
-            .double("background_opacity", label: NSLocalizedString("背景不透明度", comment: "向导设置字段"), range: 0.1...1, get: { backgroundOpacity }, set: { backgroundOpacity = $0 }),
-            .bool("video_background_continues_when_hidden", label: NSLocalizedString("离开聊天时继续播放视频背景", comment: "向导设置字段"), get: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden }, set: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden = $0 }),
-            .bool("liquid_glass", label: NSLocalizedString("液态玻璃效果", comment: "向导设置字段"), get: { enableLiquidGlass }, set: { enableLiquidGlass = $0 }),
-            .double("liquid_glass_tint_opacity", label: NSLocalizedString("玻璃底色不透明度", comment: "向导设置字段"), range: LiquidGlassTintSetting.minimumOpacity...LiquidGlassTintSetting.maximumOpacity, get: { liquidGlassTintOpacityBinding.wrappedValue }, set: { liquidGlassTintOpacityBinding.wrappedValue = $0 }),
-            .bool("markdown_rendering", label: NSLocalizedString("渲染 Markdown", comment: "向导设置字段"), get: { enableMarkdown }, set: { enableMarkdown = $0 }),
-            .bool("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: "向导设置字段"), get: { enableAdvancedRenderer }, set: { enableAdvancedRenderer = $0 }),
-            .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: "向导设置字段"), get: { enableNoBubbleUI }, set: { enableNoBubbleUI = $0 }),
-            .bool("chat_top_blur_fade", label: NSLocalizedString("顶部毛玻璃渐隐", comment: "向导设置字段"), get: { enableChatTopBlurFade }, set: { enableChatTopBlurFade = $0 }),
-            .bool("timeline_navigation", label: NSLocalizedString("四键消息导航", comment: "向导设置字段"), get: { appConfig.chatTimelineNavigationEnabled }, set: { appConfig.chatTimelineNavigationEnabled = $0 }),
-            .string("streaming_display_mode", label: NSLocalizedString("流式显示模式", comment: "向导设置字段"), allowedValues: ChatStreamingDisplayMode.allCases.map(\.rawValue), get: { appConfig.chatStreamingDisplayMode }, set: { appConfig.chatStreamingDisplayMode = $0 }),
-            .bool("auto_reasoning_preview", label: NSLocalizedString("自动预览思考过程", comment: "向导设置字段"), get: { enableAutoReasoningPreview }, set: { enableAutoReasoningPreview = $0 }),
-            .bool("responsive_reasoning_preview_height", label: NSLocalizedString("响应式思考预览高度", comment: "向导设置字段"), get: { appConfig.enableResponsiveReasoningPreviewHeight }, set: { appConfig.enableResponsiveReasoningPreviewHeight = $0 }),
-            .double("reasoning_preview_height_percent", label: NSLocalizedString("思考预览高度百分比", comment: "向导设置字段"), range: 1...100, get: { appConfig.reasoningPreviewHeightPercent }, set: { appConfig.reasoningPreviewHeightPercent = $0 }),
-            .string("app_language", label: NSLocalizedString("App 语言", comment: "向导设置字段"), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { appConfig.appLanguage }, set: { appLanguageBinding.wrappedValue = $0 }),
-            .bool("colorful_settings_icons", label: NSLocalizedString("彩色设置图标", comment: "向导设置字段"), get: { appConfig.settingsColorfulIconsEnabled }, set: { appConfig.settingsColorfulIconsEnabled = $0 }),
-            .string("chat_composer_style", label: NSLocalizedString("输入栏样式", comment: "向导设置字段"), allowedValues: ChatComposerStyle.allCases.map(\.rawValue), get: { ChatComposerStyle.normalized(appConfig.chatComposerStyle).rawValue }, set: { appConfig.chatComposerStyle = $0 }),
-            .bool("hardware_return_sends_message", label: NSLocalizedString("按 Return 发送消息", comment: "向导设置字段"), get: { appConfig.iOSHardwareKeyboardReturnSendsMessage }, set: { appConfig.iOSHardwareKeyboardReturnSendsMessage = $0 })
-        ]
+        // 标签页切换会更新页面身份和字段范围，旧标签页的提案不能继续执行。
+        switch selectedTab {
+        case 0:
+            return [
+                .bool("background_enabled", label: NSLocalizedString("显示背景", comment: "向导设置字段"), get: { enableBackground }, set: { enableBackground = $0 }),
+                .readOnly("current_background", label: NSLocalizedString("当前背景图", comment: "向导设置字段"), value: { .string(currentBackgroundImage) }),
+                .string("background_content_mode", label: NSLocalizedString("背景填充模式", comment: "向导设置字段"), allowedValues: ["fill", "fit"], get: { backgroundContentMode }, set: { backgroundContentMode = $0 }),
+                .bool("background_auto_rotation", label: NSLocalizedString("自动轮换背景", comment: "向导设置字段"), get: { enableAutoRotateBackground }, set: { enableAutoRotateBackground = $0 }),
+                .double("background_blur", label: NSLocalizedString("背景模糊", comment: "向导设置字段"), range: 0...25, get: { backgroundBlur }, set: { backgroundBlur = $0 }),
+                .double("background_opacity", label: NSLocalizedString("背景不透明度", comment: "向导设置字段"), range: 0.1...1, get: { backgroundOpacity }, set: { backgroundOpacity = $0 }),
+                .bool("video_background_continues_when_hidden", label: NSLocalizedString("离开聊天时继续播放视频背景", comment: "向导设置字段"), get: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden }, set: { appConfig.continueVideoBackgroundPlaybackWhenChatHidden = $0 }),
+                .bool("liquid_glass", label: NSLocalizedString("液态玻璃效果", comment: "向导设置字段"), get: { enableLiquidGlass }, set: { enableLiquidGlass = $0 }),
+                .double("liquid_glass_tint_opacity", label: NSLocalizedString("玻璃底色不透明度", comment: "向导设置字段"), range: LiquidGlassTintSetting.minimumOpacity...LiquidGlassTintSetting.maximumOpacity, get: { liquidGlassTintOpacityBinding.wrappedValue }, set: { liquidGlassTintOpacityBinding.wrappedValue = $0 })
+            ]
+        case 1:
+            return [
+                GuideDisplaySettingsSupport.userMessagePreviewCharacterLimit(appConfig: appConfig),
+                .bool("markdown_rendering", label: NSLocalizedString("渲染 Markdown", comment: "向导设置字段"), get: { enableMarkdown }, set: { enableMarkdown = $0 }),
+                .bool("advanced_renderer", label: NSLocalizedString("使用高级渲染器", comment: "向导设置字段"), get: { enableAdvancedRenderer }, set: { enableAdvancedRenderer = $0 }),
+                .bool("hide_assistant_bubble", label: NSLocalizedString("关闭助手气泡", comment: "向导设置字段"), get: { enableNoBubbleUI }, set: { enableNoBubbleUI = $0 }),
+                .bool("chat_top_blur_fade", label: NSLocalizedString("顶部毛玻璃渐隐", comment: "向导设置字段"), get: { enableChatTopBlurFade }, set: { enableChatTopBlurFade = $0 }),
+                .bool("timeline_navigation", label: NSLocalizedString("四键消息导航", comment: "向导设置字段"), get: { appConfig.chatTimelineNavigationEnabled }, set: { appConfig.chatTimelineNavigationEnabled = $0 }),
+                .string("streaming_display_mode", label: NSLocalizedString("流式显示模式", comment: "向导设置字段"), allowedValues: ChatStreamingDisplayMode.allCases.map(\.rawValue), get: { appConfig.chatStreamingDisplayMode }, set: { appConfig.chatStreamingDisplayMode = $0 }),
+                .bool("auto_reasoning_preview", label: NSLocalizedString("自动预览思考过程", comment: "向导设置字段"), get: { enableAutoReasoningPreview }, set: { enableAutoReasoningPreview = $0 }),
+                .bool("responsive_reasoning_preview_height", label: NSLocalizedString("响应式思考预览高度", comment: "向导设置字段"), get: { appConfig.enableResponsiveReasoningPreviewHeight }, set: { appConfig.enableResponsiveReasoningPreviewHeight = $0 }),
+                .double("reasoning_preview_height_percent", label: NSLocalizedString("思考预览高度百分比", comment: "向导设置字段"), range: 1...100, get: { appConfig.reasoningPreviewHeightPercent }, set: { appConfig.reasoningPreviewHeightPercent = $0 })
+            ]
+        case 3:
+            return [
+                .string("app_language", label: NSLocalizedString("App 语言", comment: "向导设置字段"), allowedValues: AppLanguagePreference.allCases.map(\.rawValue), get: { appConfig.appLanguage }, set: { appLanguageBinding.wrappedValue = $0 }),
+                .bool("colorful_settings_icons", label: NSLocalizedString("彩色设置图标", comment: "向导设置字段"), get: { appConfig.settingsColorfulIconsEnabled }, set: { appConfig.settingsColorfulIconsEnabled = $0 }),
+                .string("chat_composer_style", label: NSLocalizedString("输入栏样式", comment: "向导设置字段"), allowedValues: ChatComposerStyle.allCases.map(\.rawValue), get: { ChatComposerStyle.normalized(appConfig.chatComposerStyle).rawValue }, set: { appConfig.chatComposerStyle = $0 }),
+                .bool("hardware_return_sends_message", label: NSLocalizedString("按 Return 发送消息", comment: "向导设置字段"), get: { appConfig.iOSHardwareKeyboardReturnSendsMessage }, set: { appConfig.iOSHardwareKeyboardReturnSendsMessage = $0 })
+            ]
+        default:
+            return []
+        }
+    }
+
+    private var settingsIntroCard: some View {
+        DisclosureGroup {
+            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        } label: {
+            Text(NSLocalizedString("进一步了解…", comment: ""))
+                .etFont(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var appLanguageBinding: Binding<String> {

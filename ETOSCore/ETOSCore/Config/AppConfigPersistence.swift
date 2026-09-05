@@ -460,6 +460,7 @@ extension AppConfigStore {
         case .imageGenerationParameterExpressionsByModel: return .text(imageGenerationParameterExpressionsByModel)
 
         case .enableMarkdown: return .bool(enableMarkdown)
+        case .userMessagePreviewCharacterLimit: return .integer(userMessagePreviewCharacterLimit)
         case .enableAdvancedRenderer: return .bool(enableAdvancedRenderer)
         case .enableExperimentalToolResultDisplay: return .bool(enableExperimentalToolResultDisplay)
         case .enableAutoReasoningPreview: return .bool(enableAutoReasoningPreview)

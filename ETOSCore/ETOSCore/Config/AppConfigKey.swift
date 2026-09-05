@@ -356,6 +356,7 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
     case imageGenerationParameterExpressionsByModel = "imageGenerationParameterExpressionsByModel"
 
     case enableMarkdown = "enableMarkdown"
+    case userMessagePreviewCharacterLimit = "chat.userMessagePreview.characterLimit"
     case enableAdvancedRenderer = "enableAdvancedRenderer"
     case enableExperimentalToolResultDisplay = "enableExperimentalToolResultDisplay"
     case enableAutoReasoningPreview = "enableAutoReasoningPreview"
@@ -710,6 +711,8 @@ public enum AppConfigKey: String, CaseIterable, Sendable {
             #else
             return .real(20.8)
             #endif
+        case .userMessagePreviewCharacterLimit:
+            return .integer(ChatUserMessagePreview.defaultCharacterLimit)
         case .backgroundContentMode:
             return .text("fill")
         case .currentBackgroundImage:

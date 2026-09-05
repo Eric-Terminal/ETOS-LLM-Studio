@@ -262,6 +262,15 @@ public final class AppConfigStore: ObservableObject {
     @Published public var imageGenerationParameterExpressionsByModel: String { didSet { write(.imageGenerationParameterExpressionsByModel, imageGenerationParameterExpressionsByModel) } }
 
     @Published public var enableMarkdown: Bool { didSet { write(.enableMarkdown, enableMarkdown) } }
+    @Published public var userMessagePreviewCharacterLimit: Int {
+        didSet {
+            let normalized = Self.normalizedIntegerValue(userMessagePreviewCharacterLimit, for: .userMessagePreviewCharacterLimit)
+            if userMessagePreviewCharacterLimit != normalized {
+                userMessagePreviewCharacterLimit = normalized
+            }
+            write(.userMessagePreviewCharacterLimit, userMessagePreviewCharacterLimit)
+        }
+    }
     @Published public var enableAdvancedRenderer: Bool { didSet { write(.enableAdvancedRenderer, enableAdvancedRenderer) } }
     @Published public var enableExperimentalToolResultDisplay: Bool { didSet { write(.enableExperimentalToolResultDisplay, enableExperimentalToolResultDisplay) } }
     @Published public var enableAutoReasoningPreview: Bool { didSet { write(.enableAutoReasoningPreview, enableAutoReasoningPreview) } }
@@ -688,6 +697,7 @@ public final class AppConfigStore: ObservableObject {
         enableAutoReasoningPreview = Self.boolValue(.enableAutoReasoningPreview, userDefaults: userDefaults)
         enableResponsiveReasoningPreviewHeight = Self.boolValue(.enableResponsiveReasoningPreviewHeight, userDefaults: userDefaults)
         reasoningPreviewHeightPercent = Self.realValue(.reasoningPreviewHeightPercent, userDefaults: userDefaults)
+        userMessagePreviewCharacterLimit = Self.integerValue(.userMessagePreviewCharacterLimit, userDefaults: userDefaults)
         enableBackground = Self.boolValue(.enableBackground, userDefaults: userDefaults)
         backgroundBlur = Self.realValue(.backgroundBlur, userDefaults: userDefaults)
         backgroundOpacity = Self.realValue(.backgroundOpacity, userDefaults: userDefaults)

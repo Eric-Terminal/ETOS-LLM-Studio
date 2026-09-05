@@ -143,6 +143,8 @@ extension AppConfigStore {
         case .restoreLastSessionWithinMinutes:
             restoreLastSessionWithinMinutes = Self.normalizedIntegerValue(value, for: key)
         case .lazyLoadMessageCount: lazyLoadMessageCount = value
+        case .userMessagePreviewCharacterLimit:
+            userMessagePreviewCharacterLimit = Self.normalizedIntegerValue(value, for: key)
         case .modelConnectivityTestConcurrencyLimit: modelConnectivityTestConcurrencyLimit = Self.normalizedIntegerValue(value, for: key)
         case .conversationRuntimeExecutionBudget:
             conversationRuntimeExecutionBudget = Self.normalizedIntegerValue(value, for: key)
@@ -632,6 +634,9 @@ extension AppConfigStore {
 
     nonisolated static func normalizedIntegerValue(_ value: Int, for key: AppConfigKey) -> Int {
         switch key {
+        case .userMessagePreviewCharacterLimit:
+            let range = ChatUserMessagePreview.characterLimitRange
+            return min(max(value, range.lowerBound), range.upperBound)
         case .contextCompressionReminderTokenThreshold:
             return ContextCompressionReminderPolicy.normalizedTokenThreshold(value)
         case .restoreLastSessionWithinMinutes:

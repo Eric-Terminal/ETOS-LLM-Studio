@@ -342,6 +342,7 @@ extension ChatViewModel {
 
     func scheduleVisualMessagePreparationIfNeeded(for state: ChatMessageRenderState, source message: ChatMessage) {
         let rules = MessageRegexRuleStore.shared.rules
+        let previewCharacterLimit = AppConfigStore.shared.userMessagePreviewCharacterLimit
         let sessionID = currentSession?.id
         let sourceMessages = allMessagesForSession
         let supportsRoleplayRendering = message.role == .assistant || message.role == .user
@@ -372,7 +373,7 @@ extension ChatViewModel {
                     rules: rules
                 )
                 let preview = sourceMessage.role == .user
-                    ? ChatUserMessagePreview(content: visualMessage.content)
+                    ? ChatUserMessagePreview(content: visualMessage.content, characterLimit: previewCharacterLimit)
                     : nil
                 if let preview {
                     visualMessage.content = preview.content

@@ -233,7 +233,23 @@ extension ChatViewModel {
         }
     }
 
+    func observeUserMessagePreviewCharacterLimit() {
+        AppConfigStore.shared.$userMessagePreviewCharacterLimit
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // 包含暂时离开历史窗口的缓存，返回聊天时不会继续显示旧阈值的预览。
+                for state in self.messageStateByID.values where state.message.role == .user {
+                    self.scheduleVisualMessagePreparationIfNeeded(for: state, source: state.message)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
     func setupSubscriptions() {
+        observeUserMessagePreviewCharacterLimit()
         NotificationCenter.default.publisher(for: AppConfigStore.persistentStoreDidLoadNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

@@ -5401,6 +5401,12 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "当前显示第 %d-%d 个字符，共 %d 个字符。" = "Se muestran los caracteres %d-%d de %d.";
 "收起快捷功能" = "Contraer acciones rápidas";
 "查看完整内容" = "Ver contenido completo";
+
+// 长用户消息预览设置
+"长用户消息" = "Mensajes largos del usuario";
+"预览字符数" = "Límite de caracteres de vista previa";
+"仅影响气泡显示；完整内容可在“更多”中查看。" = "Solo afecta a las burbujas. El contenido completo se puede ver en «Más».";
+"超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。" = "Los mensajes del usuario que superan el límite de caracteres se recortan en las burbujas, sin límite de líneas. Los cambios actualizan las vistas previas de la conversación actual. Al guardar, enviar al modelo, copiar y exportar se sigue usando el contenido completo. El valor predeterminado es de %ld caracteres; introduce un valor entre 1 y 100000.";
 "没有其他已配置结构化控制的模型。" = "No hay otros modelos con controles estructurados configurados.";
 "目标续聊会话已经存在。" = "El chat de continuación de destino ya existe.";
 "移除附件 %@" = "Eliminar adjunto %@";
