@@ -155,6 +155,14 @@ struct MessageActionsView: View {
         
         Form {
             Section {
+                if message.role == .user, !message.content.isEmpty {
+                    NavigationLink {
+                        FullMessageContentView(content: message.content)
+                    } label: {
+                        Label(NSLocalizedString("查看完整内容", comment: ""), systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+
                 if !hasAttachments {
                     Button {
                         onEdit()

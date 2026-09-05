@@ -7186,3 +7186,6 @@
 "诊断已发送" = "Diagnostics Sent";
 "已创建反馈 #%lld，可在反馈助手中查看进度或补充操作步骤。" = "Feedback #%lld was created. You can track progress or add reproduction steps in Feedback Assistant.";
 "诊断发送失败" = "Could Not Send Diagnostics";
+
+// 长用户消息全文预览
+"查看完整内容" = "View Full Content";

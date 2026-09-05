@@ -33,7 +33,18 @@ extension ChatBubble {
     func renderContent(_ content: String) -> some View {
         let shouldRenderAsOutgoing = message.role == .user
             || message.role == .error
-        if let extraction = messageState.roleplayHTML,
+        if messageState.isUserContentTruncated {
+            VStack(alignment: .leading) {
+                Text(content)
+                if let onOpenMore, !isSelectionMode {
+                    Button(action: onOpenMore) {
+                        Text(NSLocalizedString("更多", comment: ""))
+                            .etFont(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if let extraction = messageState.roleplayHTML,
            let roleplaySessionID,
            extraction.containsHTML {
             VStack(alignment: .leading) {

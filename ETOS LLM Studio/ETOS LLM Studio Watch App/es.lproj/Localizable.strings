@@ -7263,3 +7263,6 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "诊断已发送" = "Diagnóstico enviado";
 "已创建反馈 #%lld，可在反馈助手中查看进度或补充操作步骤。" = "Se creó el informe #%lld. Puede consultar su progreso o añadir pasos de reproducción en el asistente de comentarios.";
 "诊断发送失败" = "No se pudo enviar el diagnóstico";
+
+// 长用户消息全文预览
+"查看完整内容" = "Ver contenido completo";

@@ -7263,3 +7263,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "诊断已发送" = "Diagnostic envoyé";
 "已创建反馈 #%lld，可在反馈助手中查看进度或补充操作步骤。" = "Le retour #%lld a été créé. Vous pouvez suivre son avancement ou ajouter des étapes de reproduction dans l’assistant de retour.";
 "诊断发送失败" = "Échec de l’envoi du diagnostic";
+
+// 长用户消息全文预览
+"查看完整内容" = "Afficher tout le contenu";

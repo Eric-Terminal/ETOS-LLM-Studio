@@ -116,7 +116,7 @@ extension ChatViewModel {
             if let existing = messageStateByID[message.id] {
                 state = existing
             } else {
-                let created = ChatMessageRenderState(message: message)
+                let created = ChatMessageRenderState(message: message, defersUserContentPreparation: true)
                 messageStateByID[message.id] = created
                 state = created
             }
@@ -169,6 +169,14 @@ extension ChatViewModel {
         let messageID = message.id
         let sourceText = message.content
 
+        // 截断的 Markdown 可能含有未闭合语法；预览统一显示纯文本，全文按需打开。
+        if messageStateByID[messageID]?.isUserContentTruncated == true {
+            markdownPrepareTasks.removeValue(forKey: messageID)?.cancel()
+            markdownPrepareGenerations.removeValue(forKey: messageID)
+            preparedMarkdownByMessageID.removeValue(forKey: messageID)
+            return
+        }
+
         if isActivelyStreaming(message) {
             markdownPrepareTasks[messageID]?.cancel()
             markdownPrepareTasks.removeValue(forKey: messageID)
@@ -207,7 +215,7 @@ extension ChatViewModel {
         let sourceMessages = allMessagesForSession
         let supportsRoleplayRendering = message.role == .assistant || message.role == .user
         let needsRoleplayPreparation = supportsRoleplayRendering && sessionID != nil
-        guard Self.hasVisualRegexRule(in: rules, for: message) || needsRoleplayPreparation else {
+        guard message.role == .user || Self.hasVisualRegexRule(in: rules, for: message) || needsRoleplayPreparation else {
             visualMessagePrepareTasks[message.id]?.cancel()
             visualMessagePrepareTasks.removeValue(forKey: message.id)
             visualMessagePrepareGenerations.removeValue(forKey: message.id)
@@ -218,18 +226,26 @@ extension ChatViewModel {
         }
 
         let messageID = message.id
-        state.updateVisualMessage(message)
+        if message.role != .user {
+            state.updateVisualMessage(message)
+        }
         let generation = (visualMessagePrepareGenerations[messageID] ?? 0) &+ 1
         visualMessagePrepareGenerations[messageID] = generation
         visualMessagePrepareTasks[messageID]?.cancel()
         visualMessagePrepareTasks[messageID] = Task(priority: .utility) { [weak self, messageID, sourceMessage = message, rules, generation, sessionID, sourceMessages] in
             let prepared = await Task.detached(priority: .utility) {
-                let visualMessage = ChatService.visualMessage(
+                var visualMessage = ChatService.visualMessage(
                     from: sourceMessage,
                     sessionID: sessionID,
                     messages: sourceMessages,
                     rules: rules
                 )
+                let preview = sourceMessage.role == .user
+                    ? ChatUserMessagePreview(content: visualMessage.content)
+                    : nil
+                if let preview {
+                    visualMessage.content = preview.content
+                }
                 let htmlRenderingEnabled = sessionID.flatMap {
                     RoleplayStore.shared.binding(sessionID: $0)?.htmlRenderingEnabled
                 } == true
@@ -244,7 +260,8 @@ extension ChatViewModel {
                     return html
                 }
                 let html: RoleplayHTMLExtraction?
-                let supportsRoleplayHTML = sourceMessage.role == .assistant || sourceMessage.role == .user
+                let supportsRoleplayHTML = (sourceMessage.role == .assistant || sourceMessage.role == .user)
+                    && preview?.isTruncated != true
                 if supportsRoleplayHTML, htmlRenderingEnabled, let displayedHTML {
                     html = RoleplayHTMLExtraction(
                         remainingText: "",
@@ -255,7 +272,7 @@ extension ChatViewModel {
                         ? RoleplayHTMLExtractor.extract(from: visualMessage.content)
                         : nil
                 }
-                return (visualMessage, html)
+                return (visualMessage, html, preview?.isTruncated == true)
             }.value
 
             guard !Task.isCancelled, let self else { return }
@@ -264,7 +281,7 @@ extension ChatViewModel {
                   state.message == sourceMessage else {
                 return
             }
-            state.updateVisualMessage(prepared.0)
+            state.updateVisualMessage(prepared.0, isUserContentTruncated: prepared.2)
             state.updateRoleplayHTML(prepared.1?.containsHTML == true ? prepared.1 : nil)
             self.scheduleMarkdownPreparationIfNeeded(for: prepared.0)
             if self.visualMessagePrepareGenerations[messageID] == generation {

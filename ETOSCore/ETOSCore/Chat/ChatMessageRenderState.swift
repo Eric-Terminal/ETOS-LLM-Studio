@@ -14,6 +14,7 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public let id: UUID
     public private(set) var message: ChatMessage
     @Published public private(set) var visualMessage: ChatMessage
+    public private(set) var isUserContentTruncated = false
     @Published public private(set) var roleplayHTML: RoleplayHTMLExtraction?
     public private(set) var layoutRevision: UInt = 0
     public private(set) var rendererHandoffRevision: UInt = 0
@@ -22,10 +23,15 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
     public private(set) var retainsStreamingAssistantWidth: Bool
     public let streamingMarkdownState: ETStreamingMarkdownRenderState
     
-    public init(message: ChatMessage) {
+    public init(message: ChatMessage, defersUserContentPreparation: Bool = false) {
         self.id = message.id
         self.message = message
-        self.visualMessage = message
+        var initialVisualMessage = message
+        // 列表首次展示时也不能把全文交给渲染器；导出等完整展示场景不启用此占位。
+        if defersUserContentPreparation, message.role == .user, !message.content.isEmpty {
+            initialVisualMessage.content = "…"
+        }
+        self.visualMessage = initialVisualMessage
         self.roleplayHTML = nil
         self.lastRendererHandoffAt = nil
         self.retainsStreamingAssistantWidth = Self.isAssistantLoadingPlaceholder(message)
@@ -45,9 +51,10 @@ public final class ChatMessageRenderState: ObservableObject, Identifiable {
         self.message = message
     }
 
-    public func updateVisualMessage(_ message: ChatMessage) {
-        guard visualMessage != message else { return }
+    public func updateVisualMessage(_ message: ChatMessage, isUserContentTruncated: Bool = false) {
+        guard visualMessage != message || self.isUserContentTruncated != isUserContentTruncated else { return }
         layoutRevision &+= 1
+        self.isUserContentTruncated = isUserContentTruncated
         visualMessage = message
     }
 
