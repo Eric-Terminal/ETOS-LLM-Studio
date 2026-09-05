@@ -51,7 +51,6 @@ struct SettingsView: View {
     @ObservedObject private var pulseManager = DailyPulseManager.shared
     @ObservedObject private var deliveryCoordinator = DailyPulseDeliveryCoordinator.shared
     @ObservedObject private var appConfig = AppConfigStore.shared
-    @EnvironmentObject private var guideController: GuideConversationController
     
     // MARK: - 公告管理器
     
@@ -123,7 +122,7 @@ struct SettingsView: View {
                         NavigationLink {
                             WatchGuideModelSetupView(
                                 viewModel: viewModel,
-                                guideController: guideController
+                                guideController: .modelSetup
                             )
                         } label: {
                             Label(NSLocalizedString("引导配置第一个模型", comment: "手表首次模型配置入口"), systemImage: "wand.and.stars")

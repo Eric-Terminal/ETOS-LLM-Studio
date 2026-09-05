@@ -282,6 +282,7 @@ struct WatchGuideModelSetupView: View {
             Label(title, systemImage: draft.choice == choice ? "checkmark.circle.fill" : icon)
         }
         .buttonStyle(.plain)
+        .disabled(guideController.isRestoringHistory)
     }
 
     private func buildSetupProposal(

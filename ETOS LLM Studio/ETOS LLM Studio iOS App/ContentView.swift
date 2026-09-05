@@ -34,7 +34,7 @@ struct ContentView: View {
     @ObservedObject private var appLockManager = AppLockManager.shared
     @ObservedObject private var toolPermissionCenter = ToolPermissionCenter.shared
     @ObservedObject private var guideCoordinator = GuideContextCoordinator.shared
-    @StateObject private var guideController = GuideConversationController()
+    @StateObject private var guideController = GuideConversationController(historyStore: .contextualHelp)
     @State private var settingsDestination: SettingsNavigationDestination?
     @State private var dailyPulsePreparationTask: Task<Void, Never>?
     @State private var launchRecoveryNoticeMessage: String?
@@ -93,6 +93,10 @@ struct ContentView: View {
                     }
                     scheduleDailyPulsePreparation(after: 1_500_000_000)
                 case .background:
+                    Task {
+                        await guideController.persistHistory()
+                        await GuideConversationController.modelSetup.persistHistory()
+                    }
                     LocalLinuxBackgroundTaskManager.shared.sceneDidEnterBackground()
                     TTSManager.shared.setApplicationIsInBackground(true)
                     appLockManager.handleSceneDidEnterBackground()

@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio iOS App
 //
-// 内存向导的紧凑面板与完整会话共用同一内容视图。
+// 向导的紧凑面板与完整会话共用同一内容视图和本机恢复的对话。
 // ============================================================================
 
 import SwiftUI
@@ -308,7 +308,7 @@ struct GuideConversationView: View {
         GuideStreamingObservedContent(state: controller.streamingState) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    // 向导会话不持久化且规模很小。普通栈可避免可选文本固有高度与
+                    // 普通栈可避免可选文本固有高度与
                     // LazyVStack 可见区放置互相触发，在浮窗宽高约束下形成 TextKit 2 布局反馈环。
                     VStack(spacing: 10) {
                         if controller.messages.isEmpty {
@@ -341,7 +341,7 @@ struct GuideConversationView: View {
                             .equatable()
                             .id(message.id)
                         }
-                        if controller.isResponding {
+                        if controller.isResponding || controller.isRestoringHistory {
                             ProgressView()
                                 .controlSize(.small)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -575,6 +575,7 @@ struct GuideConversationView: View {
                 }
                 .disabled(
                     input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || controller.isRestoringHistory
                         || controller.pendingProposal != nil
                         || controller.isAwaitingToolContinuation
                 )
@@ -591,7 +592,9 @@ struct GuideConversationView: View {
 
     private func send() {
         let content = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+        guard !content.isEmpty, !controller.isRestoringHistory,
+              !controller.isResponding, controller.pendingProposal == nil,
+              !controller.isAwaitingToolContinuation else { return }
         input = ""
         followsLatestMessage = true
         controller.send(content)

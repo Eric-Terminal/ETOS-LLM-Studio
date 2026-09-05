@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio Watch App
 //
-// watchOS 不悬浮窗口；设置页进入的二级页面复用同一段内存会话。
+// watchOS 不悬浮窗口；设置页进入的二级页面复用同一段可恢复对话。
 // ============================================================================
 
 import SwiftUI
@@ -168,7 +168,9 @@ struct WatchGuideConversationView: View {
 
     var body: some View {
         List {
-            if controller.messages.isEmpty {
+            if controller.isRestoringHistory {
+                ProgressView()
+            } else if controller.messages.isEmpty {
                 Section {
                     Label(NSLocalizedString("询问当前页面", comment: "手表向导空状态标题"), systemImage: "questionmark.bubble")
                     Text(emptyStateDetail)
@@ -258,6 +260,7 @@ struct WatchGuideConversationView: View {
                     }
                     .disabled(
                         input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || controller.isRestoringHistory
                             || controller.pendingProposal != nil
                             || controller.isAwaitingToolContinuation
                     )
@@ -342,7 +345,9 @@ struct WatchGuideConversationView: View {
 
     private func send() {
         let content = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+        guard !content.isEmpty, !controller.isRestoringHistory,
+              !controller.isResponding, controller.pendingProposal == nil,
+              !controller.isAwaitingToolContinuation else { return }
         input = ""
         controller.send(content)
     }

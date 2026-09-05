@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 向导会话完全驻留内存。读取工具可自动执行，写入工具必须停在原生确认预览。
+// 向导对话可在本机恢复；执行状态只驻留内存，写入工具必须停在原生确认预览。
 // ============================================================================
 
 import Foundation
@@ -41,7 +41,11 @@ public final class GuideStreamingState: ObservableObject {
 
 @MainActor
 public final class GuideConversationController: ObservableObject {
+    /// 首次配置有多个入口，但必须共用同一段对话，避免旧控制器覆盖刚保存的历史。
+    public static let modelSetup = GuideConversationController(historyStore: .modelSetup)
+
     @Published public private(set) var messages: [GuideConversationMessage] = []
+    @Published public private(set) var isRestoringHistory = false
     @Published public private(set) var isResponding = false
     @Published public private(set) var pendingProposal: GuideActionProposal?
     @Published public private(set) var canUndo = false
@@ -60,6 +64,9 @@ public final class GuideConversationController: ObservableObject {
     private let contextCoordinator: GuideContextCoordinator
     private let knowledgeService: GuideKnowledgeService
     private let sourceService: GuideSourceService
+    private let historyStore: GuideConversationHistoryStore?
+    private var historyRestoreTask: Task<Void, Never>?
+    private var historyWriteTask: Task<Void, Never>?
     private var requestHistory: [ChatMessage] = []
     private var currentTask: Task<Void, Never>?
     private var activeTaskID: UUID?
@@ -77,22 +84,47 @@ public final class GuideConversationController: ObservableObject {
         router: GuideModelRouter? = nil,
         contextCoordinator: GuideContextCoordinator? = nil,
         knowledgeService: GuideKnowledgeService = .shared,
-        sourceService: GuideSourceService = .shared
+        sourceService: GuideSourceService = .shared,
+        historyStore: GuideConversationHistoryStore? = nil
     ) {
         self.sessionID = sessionID
         self.router = router ?? GuideModelRouter()
         self.contextCoordinator = contextCoordinator ?? .shared
         self.knowledgeService = knowledgeService
         self.sourceService = sourceService
+        self.historyStore = historyStore
+        if let historyStore {
+            isRestoringHistory = true
+            historyRestoreTask = Task { [weak self] in
+                let restored = await historyStore.load()
+                guard let self, !Task.isCancelled else { return }
+                if let restored {
+                    messages = restored.messages
+                    requestHistory = restored.requestHistory
+                    latestUserMessageID = restored.latestUserMessageID
+                    latestUserMessageAllowsEditing = restored.latestUserMessageAllowsEditing
+                    latestTurnMessageIDs = restored.latestTurnMessageIDs
+                    if let error = messages.last, error.role == .error {
+                        lastError = error.content
+                        lastErrorMessageID = error.id
+                        canRetryWithBuiltIn = self.router.route == .userModel
+                    }
+                }
+                isRestoringHistory = false
+                historyRestoreTask = nil
+            }
+        }
     }
 
     deinit {
         currentTask?.cancel()
+        historyRestoreTask?.cancel()
     }
 
     public func send(_ content: String) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
+              !isRestoringHistory,
               !isResponding,
               pendingProposal == nil,
               !isAwaitingToolContinuation else { return }
@@ -105,11 +137,12 @@ public final class GuideConversationController: ObservableObject {
         latestUserMessageID = message.id
         latestUserMessageAllowsEditing = true
         latestTurnMessageIDs = [message.id]
+        scheduleHistorySave()
         startResponseLoop()
     }
 
     public func sendSetupChoice(_ choice: GuideModelSetupChoice, displayName: String) {
-        guard !isResponding, pendingProposal == nil, !isAwaitingToolContinuation else { return }
+        guard !isRestoringHistory, !isResponding, pendingProposal == nil, !isAwaitingToolContinuation else { return }
         lastError = nil
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
@@ -122,6 +155,7 @@ public final class GuideConversationController: ObservableObject {
         latestUserMessageID = message.id
         latestUserMessageAllowsEditing = false
         latestTurnMessageIDs = [message.id]
+        scheduleHistorySave()
         startResponseLoop()
     }
 
@@ -175,9 +209,14 @@ public final class GuideConversationController: ObservableObject {
         compactRequestHistoryAfterCompletedTurn()
         isResponding = false
         isAwaitingToolContinuation = false
+        scheduleHistorySave()
     }
 
     public func clear() {
+        // 先使恢复任务失效，避免清空后迟到的磁盘读取重新填回旧对话。
+        historyRestoreTask?.cancel()
+        historyRestoreTask = nil
+        isRestoringHistory = false
         cancel()
         messages.removeAll()
         requestHistory.removeAll()
@@ -192,6 +231,7 @@ public final class GuideConversationController: ObservableObject {
         latestUserMessageID = nil
         latestUserMessageAllowsEditing = false
         latestTurnMessageIDs.removeAll()
+        scheduleHistorySave()
     }
 
     public func confirmPendingProposal() {
@@ -213,6 +253,7 @@ public final class GuideConversationController: ObservableObject {
                 let message = GuideConversationMessage(role: .tool, content: execution.message)
                 messages.append(message)
                 latestTurnMessageIDs.insert(message.id)
+                scheduleHistorySave()
                 await runResponseLoop(taskID: taskID)
             } catch is CancellationError {
                 guard activeTaskID == taskID else { return }
@@ -234,6 +275,7 @@ public final class GuideConversationController: ObservableObject {
         let toolMessage = GuideConversationMessage(role: .tool, content: message)
         messages.append(toolMessage)
         latestTurnMessageIDs.insert(toolMessage.id)
+        scheduleHistorySave()
         startResponseLoop()
     }
 
@@ -254,6 +296,7 @@ public final class GuideConversationController: ObservableObject {
                 self.undoProposal = nil
                 canUndo = false
                 messages.append(GuideConversationMessage(role: .tool, content: execution.message))
+                scheduleHistorySave()
                 isResponding = false
                 activeTaskID = nil
                 currentTask = nil
@@ -278,6 +321,7 @@ public final class GuideConversationController: ObservableObject {
         guard isAwaitingToolContinuation, !isResponding else { return }
         isAwaitingToolContinuation = false
         compactRequestHistoryAfterCompletedTurn()
+        scheduleHistorySave()
     }
 
     private func startResponseLoop() {
@@ -310,6 +354,7 @@ public final class GuideConversationController: ObservableObject {
         lastErrorMessageID = nil
         canRetryWithBuiltIn = false
         latestTurnMessageIDs = [messageID]
+        scheduleHistorySave()
         return true
     }
 
@@ -379,6 +424,7 @@ public final class GuideConversationController: ObservableObject {
                 }
                 resetStreamingContent(messageID: placeholderID)
                 requestHistory.append(response)
+                scheduleHistorySave()
 
                 let calls = response.toolCalls ?? []
                 if calls.isEmpty {
@@ -431,6 +477,7 @@ public final class GuideConversationController: ObservableObject {
                     guard proposal.pageID == toolBatchPage?.id else { throw GuideError.pageChanged }
                     pendingProposal = proposal
                     pendingToolCall = call
+                    scheduleHistorySave()
                     isResponding = false
                     activeTaskID = nil
                     currentTask = nil
@@ -531,6 +578,7 @@ public final class GuideConversationController: ObservableObject {
             toolCalls: [resolvedCall]
         ))
         updateVisibleToolCall(resolvedCall)
+        scheduleHistorySave()
     }
 
     private func updateVisibleToolCall(_ resolvedCall: InternalToolCall) {
@@ -577,6 +625,7 @@ public final class GuideConversationController: ObservableObject {
         messages.append(errorMessage)
         lastErrorMessageID = errorMessage.id
         latestTurnMessageIDs.insert(errorMessage.id)
+        scheduleHistorySave()
         isResponding = false
         isAwaitingToolContinuation = false
         activeTaskID = nil
@@ -603,12 +652,40 @@ public final class GuideConversationController: ObservableObject {
                 content: streamingContent,
                 toolCalls: message.toolCalls
             )
+            requestHistory.append(ChatMessage(role: .assistant, content: streamingContent))
         }
         resetStreamingContent(messageID: messageID)
     }
 
     private func resetStreamingContent(messageID: UUID? = nil) {
         streamingState.reset(messageID: messageID)
+    }
+
+    public func restoreHistory() async {
+        await historyRestoreTask?.value
+    }
+
+    /// 后台切换时可额外保存已显示的流式片段，不打断正在生成的请求。
+    public func persistHistory() async {
+        await restoreHistory()
+        scheduleHistorySave()
+        await historyWriteTask?.value
+    }
+
+    private func scheduleHistorySave() {
+        guard let historyStore, !isRestoringHistory else { return }
+        let snapshot = GuideConversationHistorySnapshot(
+            messages: messages, requestHistory: requestHistory,
+            streamingMessageID: streamingMessageID, streamingContent: streamingContent,
+            latestUserMessageID: latestUserMessageID,
+            latestUserMessageAllowsEditing: latestUserMessageAllowsEditing
+        )
+        let previousWrite = historyWriteTask
+        // 按事件顺序落盘；清空必须排在旧写入之后，不能被迟到的保存覆盖。
+        historyWriteTask = Task {
+            await previousWrite?.value
+            await historyStore.save(snapshot)
+        }
     }
 
     /// 工具原文只服务于本轮推理；最终回答形成后保留它只会让下一问重复携带源码和隐藏思考。

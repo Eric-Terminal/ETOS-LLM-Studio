@@ -36,7 +36,7 @@ struct GuideModelSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var viewModel: ChatViewModel
     @StateObject private var draft = GuideModelSetupDraft()
-    @StateObject private var guideController = GuideConversationController()
+    @StateObject private var guideController = GuideConversationController.modelSetup
     @ObservedObject private var appConfig = AppConfigStore.shared
     @State private var isGuidePresented = false
     @State private var isSecretPresented = false
@@ -578,6 +578,7 @@ struct GuideModelSetupView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(guideController.isRestoringHistory)
     }
 
     private var fetchedModelSelection: Binding<String> {

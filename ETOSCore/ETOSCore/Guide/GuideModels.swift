@@ -250,7 +250,7 @@ public enum GuideModelSetupState: String, Codable, Hashable, Sendable {
 }
 
 public struct GuideConversationMessage: Identifiable, Hashable, Sendable {
-    public enum Role: String, Hashable, Sendable {
+    public enum Role: String, Codable, Hashable, Sendable {
         case user
         case assistant
         case tool

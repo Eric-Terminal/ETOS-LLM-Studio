@@ -16,8 +16,8 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @EnvironmentObject var launchStateMachine: AppLaunchStateMachine
     @StateObject var viewModel = ChatViewModel()
-    @StateObject var guideController = GuideConversationController()
-    @StateObject var guideModelSetupController = GuideConversationController()
+    @StateObject var guideController = GuideConversationController(historyStore: .contextualHelp)
+    @StateObject var guideModelSetupController = GuideConversationController.modelSetup
     @StateObject var announcementManager = AnnouncementManager.shared
     @StateObject var surveyManager = SurveyManager.shared
     @StateObject var legacyJSONMigrationManager = LegacyJSONMigrationManager.shared
@@ -307,6 +307,10 @@ struct ContentView: View {
                     didEnterBackgroundSinceLastActivation = false
                 }
             case .background:
+                Task {
+                    await guideController.persistHistory()
+                    await guideModelSetupController.persistHistory()
+                }
                 TTSManager.shared.setApplicationIsInBackground(true)
                 appLockManager.handleSceneDidEnterBackground()
                 ChatService.recordAppDidEnterBackground()
