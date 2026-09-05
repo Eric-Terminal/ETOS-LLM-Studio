@@ -26,6 +26,7 @@ struct ThirdPartyImportView: View {
     @State private var importReport: ThirdPartyImportReport?
     @State private var importError: String?
     @State private var preparationRequestID: UUID?
+    @State private var snapshotRestoreRequest: SnapshotRestoreRequest?
 
     var body: some View {
         List {
@@ -256,6 +257,13 @@ struct ThirdPartyImportView: View {
             }
         }
         .navigationTitle(NSLocalizedString("导入数据", comment: "Import data nav title"))
+        .sheet(item: $snapshotRestoreRequest) { request in
+            NavigationStack {
+                SnapshotImportRestoreView(fileURL: request.fileURL) {
+                    snapshotRestoreRequest = nil
+                }
+            }
+        }
         .fileImporter(
             isPresented: $isFileImporterPresented,
             allowedContentTypes: allowedContentTypes,
@@ -380,6 +388,10 @@ struct ThirdPartyImportView: View {
                     conflictPreview = preview
                     isPreparing = false
                 }
+            } catch let request as SnapshotRestoreRequest {
+                guard preparationRequestID == requestID else { return }
+                snapshotRestoreRequest = request
+                isPreparing = false
             } catch {
                 await MainActor.run {
                     guard preparationRequestID == requestID else { return }

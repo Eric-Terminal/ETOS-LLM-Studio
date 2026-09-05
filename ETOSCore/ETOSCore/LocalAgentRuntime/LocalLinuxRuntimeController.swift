@@ -47,6 +47,7 @@ public actor LocalLinuxRuntimeController {
 
     private var snapshotValue: LocalLinuxRuntimeSnapshot
     private var preparationTask: Task<LocalLinuxRuntimeSnapshot, Error>?
+    private var maintenanceTask: Task<LocalLinuxRuntimeSnapshot, Error>?
     private var updateContinuations: [UUID: AsyncStream<LocalLinuxRuntimeSnapshot>.Continuation] = [:]
     private var didRecoverPersistedJobs = false
     private var runtimeStarted = false
@@ -94,7 +95,10 @@ public actor LocalLinuxRuntimeController {
 
     @discardableResult
     public func refreshInstalledState() async -> LocalLinuxRuntimeSnapshot {
+        // 页面刷新不能把进行中的安装或维护覆盖成“已安装”，否则会放行新的操作。
+        guard preparationTask == nil, maintenanceTask == nil else { return snapshotValue }
         await recoverPersistedJobsIfNeeded()
+        guard preparationTask == nil, maintenanceTask == nil else { return snapshotValue }
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             updateSnapshot(phase: .disabled, progress: nil, error: nil)
             return snapshotValue
@@ -114,6 +118,7 @@ public actor LocalLinuxRuntimeController {
                 targetSeedSHA256: resource.metadata.installationReceiptSHA256
             )
             let integrity = await storage.systemIntegrity()
+            guard preparationTask == nil, maintenanceTask == nil else { return snapshotValue }
             switch integrity {
             case .notInstalled:
                 if runtimeStarted {
@@ -151,16 +156,31 @@ public actor LocalLinuxRuntimeController {
     }
 
     public func ensureReady(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
+        while let maintenanceTask { _ = try await maintenanceTask.value }
+        if let preparationTask { return try await preparationTask.value }
+
+        // 在第一次挂起前登记任务；actor 在 await 期间仍允许其他启动请求进入。
+        let task = Task {
+            defer { preparationTask = nil }
+            return try await prepareIfNeeded(trigger: trigger)
+        }
+        preparationTask = task
+        return try await task.value
+    }
+
+    private func prepareIfNeeded(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
         await recoverPersistedJobsIfNeeded()
+        try Task.checkCancellation()
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             throw LocalLinuxRuntimeError.featureDisabled
         }
         guard snapshotValue.phase != .requiresRelaunch else {
             throw LocalLinuxRuntimeError.requiresRelaunch
         }
-        if snapshotValue.phase == .ready {
+        if snapshotValue.phase == .ready, await bridge.runtimePhase() == 2 {
             switch await storage.systemIntegrity() {
             case .installed:
+                try Task.checkCancellation()
                 return snapshotValue
             case .notInstalled:
                 await transitionToRequiresRelaunch(
@@ -172,16 +192,9 @@ public actor LocalLinuxRuntimeController {
                 throw LocalLinuxRuntimeError.requiresRelaunch
             }
         }
-        if let preparationTask { return try await preparationTask.value }
-
-        let task = Task { try await performPreparation(trigger: trigger) }
-        preparationTask = task
         do {
-            let result = try await task.value
-            preparationTask = nil
-            return result
+            return try await performPreparation(trigger: trigger)
         } catch {
-            preparationTask = nil
             if error is CancellationError {
                 let resource = try? LocalLinuxSeedResource.load(from: seedBundle)
                 switch await storage.systemIntegrity() {
@@ -228,31 +241,47 @@ public actor LocalLinuxRuntimeController {
         guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
             throw LocalLinuxRuntimeError.featureDisabled
         }
-        do {
-            try await stopRuntimeForMaintenance()
-            _ = await refreshInstalledState()
-            return try await ensureReady(trigger: .recipe)
-        } catch {
-            updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
-            throw error
-        }
+        return try await performMaintenance(.restart)
     }
 
     @discardableResult
     public func deleteSystem(deleteUserData: Bool) async throws -> LocalLinuxRuntimeSnapshot {
-        do {
-            try await stopRuntimeForMaintenance()
-            try await storage.deleteSystem(deleteUserData: deleteUserData)
-            let phase: LocalLinuxRuntimePhase = AppConfigStore.boolValue(for: .localLinuxEnabled)
-                ? .notInstalled
-                : .disabled
-            updateSnapshot(phase: phase, progress: nil, error: nil)
-            guard phase != .disabled else { return snapshotValue }
-            return try await ensureReady(trigger: .recipe)
-        } catch {
-            updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
-            throw error
+        try await performMaintenance(.deleteSystem(deleteUserData: deleteUserData))
+    }
+
+    private enum MaintenanceOperation {
+        case restart
+        case deleteSystem(deleteUserData: Bool)
+    }
+
+    private func performMaintenance(_ operation: MaintenanceOperation) async throws -> LocalLinuxRuntimeSnapshot {
+        while let maintenanceTask { _ = try? await maintenanceTask.value }
+        let task = Task {
+            defer { maintenanceTask = nil }
+            do {
+                try await stopRuntimeForMaintenance()
+                switch operation {
+                case .restart:
+                    return try await performPreparation(trigger: .recipe)
+                case .deleteSystem(let deleteUserData):
+                    try await storage.deleteSystem(deleteUserData: deleteUserData)
+                    snapshotValue.seedVersion = nil
+                    snapshotValue.seedSHA256 = nil
+                    // 重置的成功条件是清除系统，不依赖旧设置或下一次安装能否启动。
+                    updateSnapshot(
+                        phase: AppConfigStore.boolValue(for: .localLinuxEnabled) ? .notInstalled : .disabled,
+                        progress: nil,
+                        error: nil
+                    )
+                    return snapshotValue
+                }
+            } catch {
+                updateSnapshot(phase: .failed, progress: nil, error: error.localizedDescription)
+                throw error
+            }
         }
+        maintenanceTask = task
+        return try await task.value
     }
 
     public func markRequiresRelaunch(reason: String) {
@@ -277,14 +306,15 @@ public actor LocalLinuxRuntimeController {
         if let task = preparationTask {
             task.cancel()
             _ = try? await task.value
-            preparationTask = nil
         }
         if let cancelActiveWork { await cancelActiveWork() }
 
         let bridgePhase = await bridge.runtimePhase()
-        guard runtimeStarted || bridgePhase != 0 else { return }
-        updateSnapshot(phase: .starting, progress: nil, error: nil)
-        try await bridge.stopRuntime()
+        if runtimeStarted || bridgePhase != 0 {
+            updateSnapshot(phase: .starting, progress: nil, error: nil)
+            try await bridge.stopRuntime()
+        }
+        await mountManager.runtimeDidStop()
         runtimeStarted = false
         snapshotValue.capabilities = nil
         snapshotValue.activeJobCount = 0
@@ -294,8 +324,19 @@ public actor LocalLinuxRuntimeController {
 
     private func performPreparation(trigger: LocalLinuxRuntimeTrigger) async throws -> LocalLinuxRuntimeSnapshot {
         _ = trigger
+        guard AppConfigStore.boolValue(for: .localLinuxEnabled) else {
+            throw LocalLinuxRuntimeError.featureDisabled
+        }
         guard iSHAppleBridgeAdapter.isAvailable else {
             throw LocalLinuxRuntimeError.unsupportedPlatform
+        }
+        try Task.checkCancellation()
+        // native 启动失败仍可能留下 FAILED/STOPPED 内核；必须先卸载残留挂载再重试。
+        let nativePhase = await bridge.runtimePhase()
+        if nativePhase != 2 { runtimeStarted = false }
+        if !runtimeStarted, nativePhase != 0 {
+            try await bridge.stopRuntime()
+            await mountManager.runtimeDidStop()
         }
         let layout = try await storage.prepareLayout()
         let resource = try LocalLinuxSeedResource.load(from: seedBundle)
@@ -351,8 +392,12 @@ public actor LocalLinuxRuntimeController {
         }
 
         if !runtimeStarted {
+            try Task.checkCancellation()
             updateSnapshot(phase: .starting, resource: resource, progress: nil, error: nil)
             let preparedMounts = try await mountManager.prepareStartupMounts()
+            // mounts 只存 fd 数值，不能让其所有者在跨 actor 调用完成前析构。
+            defer { withExtendedLifetime(preparedMounts) {} }
+            try Task.checkCancellation()
             try await bridge.startRuntime(
                 rootData: layout.rootFSData,
                 sharedDirectory: layout.shared,
@@ -363,6 +408,7 @@ public actor LocalLinuxRuntimeController {
             )
             runtimeStarted = true
         }
+        try Task.checkCancellation()
         try await migrationManager.apply(
             pendingMigrations,
             resource: migrationResource,

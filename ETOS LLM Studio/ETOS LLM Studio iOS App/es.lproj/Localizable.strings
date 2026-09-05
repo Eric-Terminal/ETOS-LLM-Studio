@@ -7481,3 +7481,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "提示词宏使用说明" = "Los prompts de sistema, de sistema de conversación, de tema y de refuerzo admiten macros. Se sustituyen por los valores actuales antes de cada solicitud. Ejemplo para el prompt de refuerzo:";
 "提示词宏增强示例" = "Hora actual: {{cur_datetime}} ({{timezone}})\nBatería (%): {{battery_level}}";
 "提示词宏时间注入说明" = "Normalmente puede dejarse desactivado. Si necesitas la hora, añádela al final o usa una macro en el prompt de refuerzo, sin duplicarla. Una hora cambiante al principio reduce la reutilización de la caché del prefijo.";
+/* 本地 Linux 重置与快照恢复 */
+"正在重置 Linux…" = "Restableciendo Linux…";
+"系统已重置，下次使用时会重新安装内置系统。" = "El sistema se ha restablecido. El sistema integrado se instalará la próxima vez que uses Linux.";
+"快照不包含本地 Linux 的系统或用户文件。恢复会保留 Linux 配置；缺失的系统会在首次使用时重新安装，外部文件夹可能需要重新授权。" = "Las instantáneas no incluyen archivos del sistema ni del usuario de Linux local. Se restauran los ajustes de Linux; si falta el sistema, se reinstala al usarlo por primera vez, y las carpetas externas pueden necesitar una nueva autorización.";

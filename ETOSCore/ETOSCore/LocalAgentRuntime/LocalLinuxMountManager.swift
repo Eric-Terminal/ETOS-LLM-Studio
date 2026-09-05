@@ -119,6 +119,12 @@ public actor LocalLinuxMountManager {
         Persistence.loadLocalLinuxMounts()
     }
 
+    /// 文件授权可用不代表已经挂入当前内核；数据库恢复和宿主文件浏览都会改变前者。
+    public func activeExternalMountIDs() async throws -> [UUID] {
+        let activeIDs = Set(try await bridge.mounts().filter { $0.state == 2 }.map(\.id))
+        return records().filter { $0.isEnabled && activeIDs.contains($0.id) }.map(\.id)
+    }
+
     /// 为宿主界面保留一次安全作用域访问，调用方应在文件浏览界面存续期间持有返回值。
     public func accessExternalDirectory(id: UUID) throws -> LocalLinuxDirectoryAccess {
         guard let record = records().first(where: { $0.id == id }) else {
@@ -393,8 +399,8 @@ public actor LocalLinuxMountManager {
             let bridgeLease = try await bridge.acquireMountLease(id: existing.id)
             existing.leaseCount += 1
             transientSkillMounts[guestPath] = existing
-            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] _ in
-                Task { await self?.releaseTransientSkillMount(guestPath: guestPath) }
+            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] releasedID in
+                Task { await self?.releaseTransientSkillMount(guestPath: guestPath, mountID: releasedID) }
             }
         }
 
@@ -425,8 +431,8 @@ public actor LocalLinuxMountManager {
                 canonicalHostPath: canonicalDirectory.path,
                 leaseCount: 1
             )
-            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] _ in
-                Task { await self?.releaseTransientSkillMount(guestPath: guestPath) }
+            return LocalLinuxMountLease(bridgeLease: bridgeLease) { [weak self] releasedID in
+                Task { await self?.releaseTransientSkillMount(guestPath: guestPath, mountID: releasedID) }
             }
         } catch {
             try? await bridge.removeMount(id: id, force: false)
@@ -442,6 +448,12 @@ public actor LocalLinuxMountManager {
         scopedResources.removeAll()
     }
 
+    public func runtimeDidStop() {
+        scopedResources.removeAll()
+        transientSkillMounts.removeAll()
+        resetStaleLeaseCountsAfterLaunch()
+    }
+
     public func resetStaleLeaseCountsAfterLaunch() {
         _ = Persistence.resetLocalLinuxMountLeaseCounts()
     }
@@ -454,8 +466,9 @@ public actor LocalLinuxMountManager {
         _ = Persistence.updateLocalLinuxMountLeaseCount(id: id, delta: -1)
     }
 
-    private func releaseTransientSkillMount(guestPath: String) async {
-        guard var mount = transientSkillMounts[guestPath] else { return }
+    private func releaseTransientSkillMount(guestPath: String, mountID: UUID) async {
+        // 重启前排队的释放回调不能减少新内核中同一路径的租约。
+        guard var mount = transientSkillMounts[guestPath], mount.id == mountID else { return }
         mount.leaseCount -= 1
         if mount.leaseCount > 0 {
             transientSkillMounts[guestPath] = mount
@@ -501,6 +514,12 @@ public actor LocalLinuxMountManager {
     private func prepareExternalMount(
         _ record: LocalLinuxMountRecord
     ) throws -> (mount: LocalLinuxBridgeMount, descriptor: Int32, resource: LocalLinuxDirectoryAccess) {
+        // 恢复的记录属于外部输入，不能占用 runtime 保留的内部挂载路径或身份。
+        guard record.guestPath == "/mnt/etos/\(record.id.uuidString.lowercased())",
+              ![Self.homeMountID, Self.workspaceMountID, Self.sharedMountID, Self.iCloudMountID].contains(record.id) else {
+            persistAuthorizationState(record, state: .unavailable)
+            throw LocalLinuxRuntimeError.invalidPath(record.guestPath)
+        }
         let resource = try prepareExternalDirectory(record)
         let descriptor = openDirectory(resource.url)
         guard descriptor >= 0 else {
@@ -531,12 +550,19 @@ public actor LocalLinuxMountManager {
             )
         }
         var stale = false
-        let url = try URL(
-            resolvingBookmarkData: bookmark,
-            options: [.withoutUI],
-            relativeTo: nil,
-            bookmarkDataIsStale: &stale
-        )
+        let url: URL
+        do {
+            url = try URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &stale
+            )
+        } catch {
+            // 重装后的书签可能直接抛错，而不是返回 stale；同样不能沿用快照中的 available。
+            persistAuthorizationState(record, state: .needsReauthorization)
+            throw error
+        }
         guard !stale else {
             persistAuthorizationState(record, state: .needsReauthorization)
             throw LocalLinuxRuntimeError.runtimeUnavailable(

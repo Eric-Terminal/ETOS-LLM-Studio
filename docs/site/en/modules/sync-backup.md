@@ -131,6 +131,8 @@ Bottom of the page, **"Restore from Snapshot"** → pick a `.elsbackup` file →
 
 After restore: "Snapshot restored. If the current screen still shows old data, return to the session list and re-enter."
 
+Snapshots preserve Linux settings in the database, but exclude local Linux system, Home, Shared, workspace, and export files. After reinstalling the app and restoring a snapshot, Linux installs the built-in system on first use. Previously installed packages and workspace files are not restored, and external folders may need authorization again. Resetting Linux stops it and clears the system; installation happens on the next use, so a reset does not depend on a successful startup.
+
 #### Launch Backup Point
 
 **"Create Database Backup on Launch"** dumps a recoverable backup to disk on every app launch.
@@ -154,6 +156,8 @@ Pick a **Source**:
 | **ETOS** | `.elsbackup` or ETOS bundle |
 
 After choosing, tap **"Select File and Parse"** to pick the file in Files.
+
+Selecting an `.elsbackup` file opens the same confirmation flow as **Restore from Snapshot**. Both plain and encrypted snapshots restore the databases covered by the snapshot. watchOS uses this flow for downloaded `.elsbackup` files as well. Legacy ETOS JSON bundles and data from other clients continue to use the import preview and merge flow.
 
 After parsing you'll see an **import summary**: how many providers, sessions, memories, MCPs, Skills, worldbooks will be added.
 

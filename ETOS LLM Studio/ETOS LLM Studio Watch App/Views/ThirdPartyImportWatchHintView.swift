@@ -10,6 +10,7 @@ import Foundation
 import ETOSCore
 
 struct ThirdPartyImportWatchHintView: View {
+    @State private var snapshotRestoreRequest: SnapshotRestoreRequest?
     @State private var selectedSource: ThirdPartyImportSource = .etosBackup
     @State private var importURLText: String = ""
     @State private var isPreparing: Bool = false
@@ -174,6 +175,13 @@ struct ThirdPartyImportWatchHintView: View {
             }
         }
         .navigationTitle(NSLocalizedString("导入数据", comment: ""))
+        .sheet(item: $snapshotRestoreRequest) { request in
+            NavigationStack {
+                SnapshotImportRestoreView(fileURL: request.fileURL) {
+                    snapshotRestoreRequest = nil
+                }
+            }
+        }
         .onChange(of: selectedSource) { _, _ in
             resetPreparedState()
         }
@@ -319,6 +327,12 @@ struct ThirdPartyImportWatchHintView: View {
                     isPreparing = false
                     preparationDownloadProgress = nil
                 }
+            } catch let request as SnapshotRestoreRequest {
+                guard preparationRequestID == requestID else { return }
+                selectedFileName = request.fileURL.lastPathComponent
+                snapshotRestoreRequest = request
+                isPreparing = false
+                preparationDownloadProgress = nil
             } catch {
                 await MainActor.run {
                     guard preparationRequestID == requestID else { return }

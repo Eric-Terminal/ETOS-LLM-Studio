@@ -178,7 +178,7 @@ struct LocalLinuxWatchFeatureView: View {
                 if isResettingSystem {
                     HStack {
                         ProgressView()
-                        Text(NSLocalizedString("正在重置并重新启动…", comment: "Watch resetting local Linux status"))
+                        Text(NSLocalizedString("正在重置 Linux…", comment: "正在清除 Linux 系统"))
                     }
                 } else if let resetStatusMessage {
                     Label(resetStatusMessage, systemImage: "checkmark.circle.fill")
@@ -235,9 +235,7 @@ struct LocalLinuxWatchFeatureView: View {
                     defer { isResettingSystem = false }
                     do {
                         snapshot = try await LocalLinuxRuntimeController.shared.deleteSystem(deleteUserData: false)
-                        resetStatusMessage = appConfig.localLinuxEnabled
-                            ? NSLocalizedString("系统已重置并重新启动。", comment: "Watch local Linux reset completed")
-                            : NSLocalizedString("系统已重置。", comment: "Watch disabled local Linux reset completed")
+                        resetStatusMessage = NSLocalizedString("系统已重置，下次使用时会重新安装内置系统。", comment: "Linux 重置完成")
                     } catch { errorMessage = error.localizedDescription }
                 }
             }

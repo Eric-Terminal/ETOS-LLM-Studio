@@ -327,9 +327,12 @@ public actor LocalLinuxJobScheduler {
                 privacyEnabled: AppConfigStore.boolValue(for: .localLinuxEnvironmentPrivacyEnabled),
                 modelByteLimit: UInt64(AppConfigStore.integerValue(for: .localLinuxOutputPreviewBytes))
             )
-            let mountIDs = context?.mountIDs ?? Persistence.loadLocalLinuxMounts()
-                .filter { $0.isEnabled && $0.authorizationState == .available }
-                .map(\.id)
+            let mountIDs: [UUID]
+            if let context {
+                mountIDs = context.mountIDs
+            } else {
+                mountIDs = try await mountManager.activeExternalMountIDs()
+            }
             leases = try await mountManager.acquireLeases(ids: mountIDs)
         } catch {
             job.state = .failed
@@ -487,9 +490,12 @@ public actor LocalLinuxJobScheduler {
                 terminalRows: Int(rows),
                 terminalResponseHandler: { terminalResponseRelay.enqueue($0) }
             )
-            let mountIDs = context?.mountIDs ?? Persistence.loadLocalLinuxMounts()
-                .filter { $0.isEnabled && $0.authorizationState == .available }
-                .map(\.id)
+            let mountIDs: [UUID]
+            if let context {
+                mountIDs = context.mountIDs
+            } else {
+                mountIDs = try await mountManager.activeExternalMountIDs()
+            }
             leases = try await mountManager.acquireLeases(ids: mountIDs)
         } catch {
             job.state = .failed
@@ -638,9 +644,21 @@ public actor LocalLinuxJobScheduler {
 
     /// Linux 热重启只终止依赖 iSH 的作业；浏览器 Agent 使用独立执行链，不应被连带取消。
     public func cancelAllLinuxRuntimeWork() async {
-        activeCommands.values.forEach { try? $0.session.cancel() }
-        activeTerminals.values.forEach { try? $0.session.cancel() }
+        let commands = Array(activeCommands.values)
+        let terminals = Array(activeTerminals.values)
+        commands.forEach { try? $0.session.cancel() }
+        terminals.forEach { try? $0.session.cancel() }
         await MCPLocalStdioActivityRegistry.shared.cancelAll()
+        // stopRuntime 会独占 bridge actor。先等进程退出并释放租约，避免结束回调
+        // 等待 bridge 排空诊断、而 native stop 又等待回调释放租约形成相互等待。
+        for command in commands {
+            _ = await command.session.result()
+            command.mountLeases.forEach { $0.release() }
+        }
+        for terminal in terminals {
+            _ = try? await terminal.session.result()
+            terminal.mountLeases.forEach { $0.release() }
+        }
     }
 
     public func cancelJobs(usingMountID mountID: UUID) async {
@@ -742,6 +760,7 @@ public actor LocalLinuxJobScheduler {
         guard var active = activeCommands.removeValue(forKey: jobID) else {
             preconditionFailure("结构化命令完成时缺少活跃任务记录：\(jobID)")
         }
+        active.mountLeases.forEach { $0.release() }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
         _ = await drainRemainingDiagnostics(scope: 2, requestID: active.job.requestID, jobID: jobID)
@@ -777,6 +796,7 @@ public actor LocalLinuxJobScheduler {
         runtimeSnapshot: LocalLinuxRuntimeSnapshot
     ) async {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
+        active.mountLeases.forEach { $0.release() }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
         let remainingDiagnostics = await drainRemainingDiagnostics(
@@ -818,6 +838,7 @@ public actor LocalLinuxJobScheduler {
         runtimeSnapshot: LocalLinuxRuntimeSnapshot
     ) async {
         guard var active = activeTerminals.removeValue(forKey: jobID) else { return }
+        active.mountLeases.forEach { $0.release() }
         active.diagnosticTask.cancel()
         await active.diagnosticTask.value
         let remainingDiagnostics = await drainRemainingDiagnostics(

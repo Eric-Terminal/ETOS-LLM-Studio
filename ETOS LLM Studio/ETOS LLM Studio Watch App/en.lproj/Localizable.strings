@@ -7167,3 +7167,7 @@
 "提示词宏使用说明" = "System prompts, conversation system prompts, topic prompts and enhancement prompts support macros. They are replaced with current values before each request. For example, put this in the enhancement prompt:";
 "提示词宏增强示例" = "Current time: {{cur_datetime}} ({{timezone}})\nBattery (%): {{battery_level}}";
 "提示词宏时间注入说明" = "Usually this can stay off. When time is needed, use the tail position or a time macro in the enhancement prompt, without sending both. A changing time at the front reduces prefix cache reuse.";
+/* 本地 Linux 重置与快照恢复 */
+"正在重置 Linux…" = "Resetting Linux…";
+"系统已重置，下次使用时会重新安装内置系统。" = "The system was reset. The built-in system will be installed the next time you use Linux.";
+"快照不包含本地 Linux 的系统或用户文件。恢复会保留 Linux 配置；缺失的系统会在首次使用时重新安装，外部文件夹可能需要重新授权。" = "Snapshots do not include local Linux system or user files. Linux settings are restored; a missing system is reinstalled on first use, and external folders may need to be authorized again.";
