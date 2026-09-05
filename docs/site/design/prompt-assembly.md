@@ -35,12 +35,44 @@ description: 一条消息从你按发送到真正出站之前，ETOS 给模型�
   → 组装最终 system prompt（拼接八个上下文块）
   → 截断聊天历史
   → 按需插入时间地标 + 按深度世界书
-  → 追加增强提示词作为独立 system 消息
+  → 追加增强提示词到尾部（按协议选择 system / user）
   → 决定本轮可暴露的工具
   → 发送给选中的模型
 ```
 
-下面把八个上下文块逐个讲清楚——**什么时候出现 / 什么时候缺席 / 适合放什么内容**。
+## 提示词宏
+
+全局系统提示词、会话系统提示词、话题提示词和增强提示词都支持宏。提示词编辑页下方的「提示词宏」提供使用示例，展开「查看可用宏」可查看完整列表。
+
+使用 `{{model_name}}` 或 `{model_name}`，名称不区分大小写，括号内可留空格。每次请求确定实际使用的模型后，系统采集一次环境快照并展开这四类模板。保存的配置仍是原始模板，普通聊天历史不会因此被改写。未知宏保持原文，宏的替换结果不在这一层递归展开；角色宏和高级模板继续由各自的处理链路负责。
+
+| 类别 | 可用宏名称 |
+| --- | --- |
+| 日期与时间 | `cur_date`、`cur_time`、`cur_datetime`、`utc_datetime`、`weekday`、`timestamp`、`timezone`、`timezone_offset` |
+| 模型与供应商 | `model_id`、`model_name`、`provider_id`、`provider_name`、`api_format` |
+| 称呼与会话 | `nickname`、`user`、`char`、`assistant_name`、`chat_id`、`chat_name`、`message_count` |
+| 语言与应用 | `locale`、`language`、`system_locale`、`app_name`、`app_version`、`app_build` |
+| 设备信息 | `platform`、`system_version`、`device_info`、`device_model`、`device_name` |
+| 电量与运行状态 | `battery_level`、`battery_state`、`is_charging`、`low_power_mode`、`thermal_state`、`system_uptime` |
+
+`nickname` 和 `user` 使用当前绑定或默认 Persona 的名称；未设置时使用当前语言中的用户称呼。`char` 和 `assistant_name` 使用角色名称，未绑定角色时使用本轮模型的显示名称。`message_count` 统计本轮准备的用户与助手消息，不包含工具和系统消息。
+
+`cur_date` 使用公历 `yyyy-MM-dd`，`cur_time` 使用 `HH:mm:ss`，`cur_datetime` 合并两者；`utc_datetime` 使用 ISO 8601。`timestamp` 和 `system_uptime` 的单位都是秒。`locale` 跟随 App 内的语言设置，`system_locale` 表示系统的语言区域。
+
+设备宏来自**实际发送请求的设备**，手表不会读取 iPhone 的电量。`battery_level` 是不带 `%` 的 0–100 整数；`battery_state` 为 `unplugged`、`charging`、`full` 或 `unknown`；`is_charging` 为 `true`、`false` 或 `unknown`，已充满时为 `false`。`low_power_mode` 为 `true` 或 `false`；`thermal_state` 为 `nominal`、`fair`、`serious`、`critical` 或 `unknown`。电池监测仅在引用电池宏时短暂开启，读取后恢复原来的监测状态，不进行后台轮询。系统不提供的数据返回 `unknown`。
+
+### 动态信息与缓存
+
+时间、电量等频繁变化的内容建议放入**增强提示词**，例如：
+
+```text
+当前时间：{{cur_datetime}}（{{timezone}}）
+电量（%）：{{battery_level}}
+```
+
+这些宏在发送前展开，随后沿用增强提示词的尾部位置和协议角色设置，不会被合并进前面的全局或话题提示词。这样能保留更多可复用的请求前缀，但实际缓存支持及命中范围仍由供应商和 API 格式决定。将动态宏写入系统或话题提示词，会使对应前缀随请求变化。
+
+「发送系统时间」通常可以保持关闭；确实需要时，可选择末尾位置，或使用增强提示词中的时间宏，避免同时重复附加时间。前置时间也会降低前缀缓存复用。
 
 ## 八个上下文块
 
@@ -143,7 +175,7 @@ ETOS 异步把一段会话压缩成"跨会话可复用摘要"，在后续对话�
 
 ### 8. 增强提示词 `<enhanced_prompt>`
 
-**特别注意：增强提示词不并入前面的总 system prompt**，而是在消息序列**最后追加为一条独立 system 消息**。
+**增强提示词不并入前面的总 system prompt**，而是放在尾部上下文中。OpenAI 适配器按「使用 System 角色发送」选择 `system` 或 `user`，本地模型使用 `system`；Anthropic 和 Gemini 使用 `user`，避免适配器将其提升到系统前缀。需要时会与用户消息合并。
 
 设计原因：
 

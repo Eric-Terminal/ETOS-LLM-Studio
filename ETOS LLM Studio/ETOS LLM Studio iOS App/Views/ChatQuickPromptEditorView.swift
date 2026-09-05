@@ -68,6 +68,8 @@ struct ChatQuickPromptEditorView: View {
             } header: {
                 Text(NSLocalizedString("增强提示词", comment: ""))
             }
+
+            PromptMacroHelpSection()
         }
         .navigationTitle(NSLocalizedString("提示词", comment: "快速提示词编辑器标题"))
         .navigationBarTitleDisplayMode(.inline)

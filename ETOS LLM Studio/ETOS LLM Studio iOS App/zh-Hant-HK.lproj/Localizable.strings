@@ -7374,3 +7374,25 @@
 "越靠上的字体越优先；点“编辑”调整顺序。" = "越靠上的字體越優先；點「編輯」調整順序。";
 "达到档位后，整次请求按该档价格估算。" = "達到檔位後，整次請求按該檔價格估算。";
 "选择按 Token 用量或按请求次数估算。" = "選擇按 Token 用量或按請求次數估算。";
+
+
+// 提示词宏：语法、可用变量与缓存说明。
+"查看可用宏" = "查看可用巨集";
+"提示词宏语法说明" = "支援 {{name}} 和 {name}，名稱不區分大小寫，括號內可留空格。未知巨集保留原文。數值來自實際傳送請求的裝置，無法取得時傳回 unknown。儲存的提示詞會保留原始範本。";
+"日期与时间" = "日期與時間";
+"提示词宏时间列表" = "{{cur_date}} — 本地日期（yyyy-MM-dd）\n{{cur_time}} — 本地時間（HH:mm:ss）\n{{cur_datetime}} — 本地日期與時間\n{{utc_datetime}} — ISO 8601 格式的 UTC 時間\n{{weekday}} — 星期\n{{timestamp}} — Unix 時間戳記，單位為秒\n{{timezone}} — 時區識別碼\n{{timezone_offset}} — UTC 偏移，例如 +08:00";
+"模型与供应商" = "模型與供應商";
+"提示词宏模型列表" = "{{model_id}} — API 模型 ID\n{{model_name}} — 模型顯示名稱\n{{provider_id}} — 供應商 ID\n{{provider_name}} — 供應商名稱\n{{api_format}} — 本次實際使用的 API 格式";
+"称呼与会话" = "稱呼與對話";
+"提示词宏会话列表" = "{{nickname}} / {{user}} — 目前或預設 Persona 的名稱；未設定時為使用者稱呼\n{{char}} / {{assistant_name}} — 角色名稱；未設定時使用模型名稱\n{{chat_id}} — 對話 ID\n{{chat_name}} — 對話名稱\n{{message_count}} — 本次準備的使用者與助手訊息數量";
+"语言与应用" = "語言與應用程式";
+"提示词宏应用列表" = "{{locale}} — App 語言區域識別碼\n{{language}} — App 語言名稱\n{{system_locale}} — 系統語言區域識別碼\n{{app_name}} — App 名稱\n{{app_version}} — App 版本\n{{app_build}} — 組建版本號";
+"设备信息" = "裝置資訊";
+"提示词宏设备列表" = "{{platform}} — 平台，例如 iOS 或 watchOS\n{{system_version}} — 平台與系統版本\n{{device_info}} — 裝置類型與型號識別碼\n{{device_model}} — 硬件型號識別碼\n{{device_name}} — 系統提供的裝置名稱";
+"电量与运行状态" = "電量與運行狀態";
+"提示词宏状态列表" = "{{battery_level}} — 電量百分比，0–100，不含 %\n{{battery_state}} — unplugged（未接電源）、charging（充電中）、full（已充滿）或 unknown\n{{is_charging}} — true、false 或 unknown；已充滿時為 false\n{{low_power_mode}} — 低耗電模式，true 或 false\n{{thermal_state}} — nominal（正常）、fair（溫熱）、serious（較熱）、critical（過熱）或 unknown\n{{system_uptime}} — 開機後經過的秒數\n只在引用電池巨集時讀取電量，不進行背景輪詢。";
+"提示词宏" = "提示詞巨集";
+"提示词宏缓存说明" = "時間、電量等經常變動的資訊建議放入增強提示詞，以保留更多可用於快取的請求前綴。放在系統或話題提示詞中會降低快取重用。快取支援及命中範圍取決於供應商和 API 格式。";
+"提示词宏使用说明" = "系統提示詞、對話系統提示詞、話題提示詞和增強提示詞均支援巨集，每次傳送前會替換為本次實際數值。例如，在增強提示詞中填寫：";
+"提示词宏增强示例" = "目前時間：{{cur_datetime}}（{{timezone}}）\n電量（%）：{{battery_level}}";
+"提示词宏时间注入说明" = "通常毋須開啟。確實需要時間時，可使用末尾位置，或在增強提示詞中填寫時間巨集，避免重複傳送。前置時間持續變動會降低前綴快取重用。";

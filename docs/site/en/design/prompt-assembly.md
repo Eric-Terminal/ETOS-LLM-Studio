@@ -35,12 +35,44 @@ User message
   → Compose final system prompt (concatenate the eight context blocks)
   → Truncate chat history
   → Inject time landmarks + depth-based worldbook entries as needed
-  → Append enhancement prompt as a separate system message
+  → Append enhancement prompt at the tail (system / user according to the API)
   → Decide which tools to expose this turn
   → Send to the selected model
 ```
 
-The eight context blocks below — when each appears, when each is skipped, what each is good for.
+## Prompt Macros
+
+Global system prompts, conversation system prompts, topic prompts and enhancement prompts support macros. The **Prompt macros** section below the editors includes an example and an expandable list of available macros.
+
+Use `{{model_name}}` or `{model_name}`. Names are case-insensitive and may have surrounding spaces. Once the request's actual model is selected, ETOS takes one environment snapshot and expands these four templates. Saved settings keep the original templates, and ordinary chat history is not rewritten by this feature. Unknown macros remain unchanged. Replacement values are not recursively expanded by this layer; roleplay macros and advanced templates retain their own processing paths.
+
+| Category | Macro names |
+| --- | --- |
+| Date and time | `cur_date`, `cur_time`, `cur_datetime`, `utc_datetime`, `weekday`, `timestamp`, `timezone`, `timezone_offset` |
+| Model and provider | `model_id`, `model_name`, `provider_id`, `provider_name`, `api_format` |
+| Names and conversation | `nickname`, `user`, `char`, `assistant_name`, `chat_id`, `chat_name`, `message_count` |
+| Language and app | `locale`, `language`, `system_locale`, `app_name`, `app_version`, `app_build` |
+| Device information | `platform`, `system_version`, `device_info`, `device_model`, `device_name` |
+| Battery and status | `battery_level`, `battery_state`, `is_charging`, `low_power_mode`, `thermal_state`, `system_uptime` |
+
+`nickname` and `user` use the bound or default Persona name, or the localized name for a user if unset. `char` and `assistant_name` use the character name, falling back to the request's model display name. `message_count` counts prepared user and assistant messages, excluding system and tool messages.
+
+`cur_date` uses Gregorian `yyyy-MM-dd`, `cur_time` uses `HH:mm:ss`, and `cur_datetime` combines them. `utc_datetime` uses ISO 8601. Both `timestamp` and `system_uptime` use seconds. `locale` follows the app's language preference; `system_locale` identifies the system locale.
+
+Device values come from **the device sending the request**. A watch reads its own battery. `battery_level` is an integer from 0 to 100 without `%`. `battery_state` is `unplugged`, `charging`, `full` or `unknown`. `is_charging` is `true`, `false` or `unknown`; a full battery means `false`. `low_power_mode` is `true` or `false`. `thermal_state` is `nominal`, `fair`, `serious`, `critical` or `unknown`. Battery monitoring is briefly enabled only when a battery macro is referenced, then restored to its previous state, without background polling. Unavailable readings return `unknown`.
+
+### Changing Values and Caching
+
+Place changing values such as time and battery level in the **enhancement prompt**, for example:
+
+```text
+Current time: {{cur_datetime}} ({{timezone}})
+Battery (%): {{battery_level}}
+```
+
+Macros expand before sending and keep the enhancement prompt's existing tail placement and protocol role settings. They are not merged into the earlier global or topic prompt. This preserves more of the request prefix for reuse; actual cache support and coverage still depend on the provider and API format. Dynamic macros in system or topic prompts make those prefixes change between requests.
+
+**Inject System Time** can usually stay off. When needed, use its tail position or a time macro in the enhancement prompt, without duplicating the time. A changing time at the front also reduces prefix cache reuse.
 
 ## The Eight Context Blocks
 
@@ -143,7 +175,7 @@ This makes worldbook **more than "attach some lore"** — it can target precisel
 
 ### 8. Enhancement Prompt `<enhanced_prompt>`
 
-**Note: the enhancement prompt is not merged into the main system prompt**. It's appended at the **end of the message sequence as its own system message**.
+**The enhancement prompt is not merged into the main system prompt**. It stays in the tail context. OpenAI adapters use `system` or `user` according to “Send using System role”; local models use `system`. Anthropic and Gemini use `user` so their adapters do not move it into the system prefix. It is merged with a user message when needed.
 
 Deliberate, for two reasons:
 

@@ -413,6 +413,8 @@ struct ModelAdvancedSettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
+            PromptMacroHelpSection()
+
             Section {
                 NavigationLink {
                     BuiltInPromptSettingsView(usesCategoryTabs: false)
@@ -441,6 +443,14 @@ struct ModelAdvancedSettingsView: View {
                 }
             } header: {
                 Text(NSLocalizedString("动态时间注入", comment: ""))
+            } footer: {
+                Text(NSLocalizedString(
+                    "提示词宏时间注入说明",
+                    value: "Usually this can stay off. When time is needed, use the tail position or a time macro in the enhancement prompt, without sending both. A changing time at the front reduces prefix cache reuse.",
+                    comment: "时间注入按需启用与缓存提示"
+                ))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
             .onChange(of: periodicTimeLandmarkIntervalMinutes) { _, newValue in
                 if newValue < 1 {
@@ -1296,6 +1306,8 @@ private struct GlobalSystemPromptEditorView: View {
                         onSave(title, newValue)
                     }
                 )
+
+                PromptMacroHelpSection()
             }
             .navigationTitle(NSLocalizedString("编辑提示词", comment: ""))
             .toolbar {

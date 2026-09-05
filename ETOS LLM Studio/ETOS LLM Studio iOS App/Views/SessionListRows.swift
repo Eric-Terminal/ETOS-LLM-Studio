@@ -658,6 +658,8 @@ struct SessionInfoSheet: View {
                     Text(NSLocalizedString("这些提示词只对当前会话生效，App 的工具协议与运行约束不会被替换。", comment: "Conversation prompt editor footer"))
                 }
 
+                PromptMacroHelpSection()
+
                 Section(NSLocalizedString("首选模型", comment: "Preferred conversation model")) {
                     Picker(NSLocalizedString("首选模型", comment: "Preferred conversation model"), selection: preferredModelBinding) {
                         Text(NSLocalizedString("跟随全局模型", comment: "Follow global model"))

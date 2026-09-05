@@ -56,6 +56,9 @@ struct EditSessionNameView: View {
                     TextField(NSLocalizedString("主题提示", comment: ""), text: $topicPrompt.watchKeyboardNewlineBinding())
                     TextField(NSLocalizedString("增强提示词", comment: ""), text: $enhancedPrompt.watchKeyboardNewlineBinding())
                 }
+
+                PromptMacroHelpSection()
+
                 Section(NSLocalizedString("首选模型", comment: "Preferred conversation model")) {
                     Picker(NSLocalizedString("首选模型", comment: "Preferred conversation model"), selection: $preferredModelIdentifier) {
                         Text(NSLocalizedString("跟随全局模型", comment: "Follow global model")).tag("")

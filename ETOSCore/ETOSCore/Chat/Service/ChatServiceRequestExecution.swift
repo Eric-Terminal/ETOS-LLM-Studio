@@ -202,6 +202,20 @@ extension ChatService {
         )
 
         let requestStartedAt = Date()
+        let promptTemplates = await PromptMacroRenderer.render(
+            PromptMacroTemplates(
+                global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
+                conversation: sessionForRequest?.systemPrompt,
+                topic: sessionForRequest?.topicPrompt,
+                enhanced: resolvedEnhancedPrompt
+            ),
+            model: runnableModel,
+            sessionID: currentSessionID,
+            session: sessionForRequest,
+            messages: preparedRequestMessages,
+            now: requestStartedAt,
+            roleplayStore: roleplayStore
+        )
         let modelReference = MessageModelReference(
             providerID: runnableModel.provider.id,
             providerName: runnableModel.provider.name,
@@ -281,9 +295,9 @@ extension ChatService {
             localLinuxToolsEnabled: activeRequestIncludesLocalLinuxTools(sessionID: currentSessionID)
         )
         var finalSystemPrompt = buildFinalSystemPrompt(
-            global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
-            conversationSystem: sessionForRequest?.systemPrompt,
-            topic: sessionForRequest?.topicPrompt,
+            global: promptTemplates.global,
+            conversationSystem: promptTemplates.conversation,
+            topic: promptTemplates.topic,
             includeConversationRuntime: includesConversationTools,
             linkedConversations: linkedConversations,
             memories: memories,
@@ -348,7 +362,7 @@ extension ChatService {
         let apiFormat = runnableModel.effectiveAPIFormat
 
         if let enhancedPromptMessage = makeEnhancedPromptMessage(
-            resolvedEnhancedPrompt,
+            promptTemplates.enhanced,
             apiFormat: apiFormat,
             openAIUsesSystemRole: openAIUsesSystemRole
         ) {

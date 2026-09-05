@@ -197,7 +197,9 @@ struct ModelAdvancedSettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-                Section(header: Text(NSLocalizedString("动态时间注入", comment: ""))) {
+                PromptMacroHelpSection()
+
+                Section {
                     Toggle(NSLocalizedString("发送系统时间", comment: ""), isOn: $includeSystemTimeInPrompt)
                     if includeSystemTimeInPrompt {
                         Picker(NSLocalizedString("发送位置", comment: ""), selection: $systemTimeInjectionPosition) {
@@ -213,6 +215,16 @@ struct ModelAdvancedSettingsView: View {
                         formatter: numberFormatter
                     )
                     .disabled(!enablePeriodicTimeLandmark)
+                } header: {
+                    Text(NSLocalizedString("动态时间注入", comment: ""))
+                } footer: {
+                    Text(NSLocalizedString(
+                        "提示词宏时间注入说明",
+                        value: "Usually this can stay off. When time is needed, use the tail position or a time macro in the enhancement prompt, without sending both. A changing time at the front reduces prefix cache reuse.",
+                        comment: "时间注入按需启用与缓存提示"
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
 
                 Section(header: Text(NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"))) {
@@ -1009,6 +1021,8 @@ private struct GlobalSystemPromptEditorView: View {
                 TextField(NSLocalizedString("提示词名称", comment: ""), text: $title.watchKeyboardNewlineBinding())
                 TextField(NSLocalizedString("提示词内容", comment: ""), text: $content.watchKeyboardNewlineBinding(), axis: .vertical)
                     .lineLimit(4...10)
+
+                PromptMacroHelpSection()
 
                 Button(NSLocalizedString("保存修改", comment: "")) {
                     onSave(title, content)

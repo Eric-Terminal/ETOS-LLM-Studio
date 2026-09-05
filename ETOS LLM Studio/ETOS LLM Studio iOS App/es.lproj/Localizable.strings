@@ -7459,3 +7459,25 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "越靠上的字体越优先；点“编辑”调整顺序。" = "Las fuentes superiores tienen prioridad. Toca Editar para reordenarlas.";
 "达到档位后，整次请求按该档价格估算。" = "Al alcanzar un nivel, su precio se aplica a toda la solicitud.";
 "选择按 Token 用量或按请求次数估算。" = "Elige estimar por tokens o por solicitud.";
+
+
+// 提示词宏：语法、可用变量与缓存说明。
+"查看可用宏" = "Macros disponibles";
+"提示词宏语法说明" = "Usa {{name}} o {name}. Los nombres no distinguen mayúsculas y admiten espacios alrededor. Las macros desconocidas se conservan. Los valores proceden del dispositivo que envía la solicitud; los datos no disponibles devuelven unknown. Los prompts guardados mantienen la plantilla original.";
+"日期与时间" = "Fecha y hora";
+"提示词宏时间列表" = "{{cur_date}} — fecha local (yyyy-MM-dd)\n{{cur_time}} — hora local (HH:mm:ss)\n{{cur_datetime}} — fecha y hora locales\n{{utc_datetime}} — hora UTC en formato ISO 8601\n{{weekday}} — día de la semana\n{{timestamp}} — marca de tiempo Unix en segundos\n{{timezone}} — identificador de zona horaria\n{{timezone_offset}} — desfase UTC, como +08:00";
+"模型与供应商" = "Modelo y proveedor";
+"提示词宏模型列表" = "{{model_id}} — ID del modelo en la API\n{{model_name}} — nombre visible del modelo\n{{provider_id}} — ID del proveedor\n{{provider_name}} — nombre del proveedor\n{{api_format}} — formato de API usado en esta solicitud";
+"称呼与会话" = "Nombres y conversación";
+"提示词宏会话列表" = "{{nickname}} / {{user}} — nombre de la Persona actual o predeterminada; si no existe, denominación del usuario\n{{char}} / {{assistant_name}} — nombre del personaje; si no existe, nombre del modelo\n{{chat_id}} — ID de la conversación\n{{chat_name}} — nombre de la conversación\n{{message_count}} — número de mensajes del usuario y del asistente preparados para esta solicitud";
+"语言与应用" = "Idioma y aplicación";
+"提示词宏应用列表" = "{{locale}} — identificador regional de la app\n{{language}} — nombre del idioma de la app\n{{system_locale}} — identificador regional del sistema\n{{app_name}} — nombre de la app\n{{app_version}} — versión de la app\n{{app_build}} — número de compilación";
+"设备信息" = "Información del dispositivo";
+"提示词宏设备列表" = "{{platform}} — plataforma, como iOS o watchOS\n{{system_version}} — plataforma y versión del sistema\n{{device_info}} — tipo de dispositivo e ID del modelo\n{{device_model}} — identificador del modelo de hardware\n{{device_name}} — nombre del dispositivo facilitado por el sistema";
+"电量与运行状态" = "Batería y estado del sistema";
+"提示词宏状态列表" = "{{battery_level}} — porcentaje de batería, 0–100 sin %\n{{battery_state}} — unplugged (desconectado), charging (cargando), full (carga completa) o unknown\n{{is_charging}} — true, false o unknown; con carga completa es false\n{{low_power_mode}} — modo de bajo consumo, true o false\n{{thermal_state}} — nominal (normal), fair (templado), serious (caliente), critical (sobrecalentamiento) o unknown\n{{system_uptime}} — segundos desde el arranque\nLa batería solo se consulta cuando se usan sus macros, sin sondeos en segundo plano.";
+"提示词宏" = "Macros del prompt";
+"提示词宏缓存说明" = "Coloca los valores variables, como la hora y la batería, en el prompt de refuerzo para conservar más del prefijo de la solicitud para la caché. En los prompts de sistema o de tema pueden reducir la reutilización de la caché. Su compatibilidad y alcance dependen del proveedor y del formato de API.";
+"提示词宏使用说明" = "Los prompts de sistema, de sistema de conversación, de tema y de refuerzo admiten macros. Se sustituyen por los valores actuales antes de cada solicitud. Ejemplo para el prompt de refuerzo:";
+"提示词宏增强示例" = "Hora actual: {{cur_datetime}} ({{timezone}})\nBatería (%): {{battery_level}}";
+"提示词宏时间注入说明" = "Normalmente puede dejarse desactivado. Si necesitas la hora, añádela al final o usa una macro en el prompt de refuerzo, sin duplicarla. Una hora cambiante al principio reduce la reutilización de la caché del prefijo.";

@@ -7368,3 +7368,25 @@
 "越靠上的字体越优先；点“编辑”调整顺序。" = "越靠上的字体越优先；点“编辑”调整顺序。";
 "达到档位后，整次请求按该档价格估算。" = "达到档位后，整次请求按该档价格估算。";
 "选择按 Token 用量或按请求次数估算。" = "选择按 Token 用量或按请求次数估算。";
+
+
+// 提示词宏：语法、可用变量与缓存说明。
+"查看可用宏" = "查看可用宏";
+"提示词宏语法说明" = "支持 {{name}} 和 {name}，名称不区分大小写，括号内可留空格。未知宏保留原文。数值来自实际发送请求的设备，无法获取时返回 unknown。保存的提示词始终保留原始模板。";
+"日期与时间" = "日期与时间";
+"提示词宏时间列表" = "{{cur_date}} — 本地日期（yyyy-MM-dd）\n{{cur_time}} — 本地时间（HH:mm:ss）\n{{cur_datetime}} — 本地日期与时间\n{{utc_datetime}} — ISO 8601 格式的 UTC 时间\n{{weekday}} — 星期\n{{timestamp}} — Unix 时间戳，单位为秒\n{{timezone}} — 时区标识\n{{timezone_offset}} — UTC 偏移，例如 +08:00";
+"模型与供应商" = "模型与供应商";
+"提示词宏模型列表" = "{{model_id}} — API 模型 ID\n{{model_name}} — 模型显示名称\n{{provider_id}} — 供应商 ID\n{{provider_name}} — 供应商名称\n{{api_format}} — 本轮实际使用的 API 格式";
+"称呼与会话" = "称呼与会话";
+"提示词宏会话列表" = "{{nickname}} / {{user}} — 当前或默认 Persona 的名称；未设置时为“用户”\n{{char}} / {{assistant_name}} — 角色名称；未设置时使用模型名称\n{{chat_id}} — 会话 ID\n{{chat_name}} — 会话名称\n{{message_count}} — 本轮准备的用户与助手消息数量";
+"语言与应用" = "语言与应用";
+"提示词宏应用列表" = "{{locale}} — App 语言区域标识\n{{language}} — App 语言名称\n{{system_locale}} — 系统语言区域标识\n{{app_name}} — App 名称\n{{app_version}} — App 版本\n{{app_build}} — 构建版本号";
+"设备信息" = "设备信息";
+"提示词宏设备列表" = "{{platform}} — 平台，例如 iOS 或 watchOS\n{{system_version}} — 平台与系统版本\n{{device_info}} — 设备类型与型号标识\n{{device_model}} — 硬件型号标识\n{{device_name}} — 系统提供的设备名称";
+"电量与运行状态" = "电量与运行状态";
+"提示词宏状态列表" = "{{battery_level}} — 电量百分比，0–100，不含 %\n{{battery_state}} — unplugged（未接电源）、charging（充电中）、full（已充满）或 unknown\n{{is_charging}} — true、false 或 unknown；已充满时为 false\n{{low_power_mode}} — 低电量模式，true 或 false\n{{thermal_state}} — nominal（正常）、fair（温热）、serious（较热）、critical（过热）或 unknown\n{{system_uptime}} — 开机后经过的秒数\n仅在引用电池宏时采集电量，不进行后台轮询。";
+"提示词宏" = "提示词宏";
+"提示词宏缓存说明" = "时间、电量等频繁变化的信息建议放入增强提示词，以保留更多可用于缓存的请求前缀。放在系统或话题提示词中会降低缓存复用。缓存支持及命中范围取决于供应商和 API 格式。";
+"提示词宏使用说明" = "系统提示词、会话系统提示词、话题提示词和增强提示词都支持宏，每次发送前会替换为本轮实际值。例如，在增强提示词中填写：";
+"提示词宏增强示例" = "当前时间：{{cur_datetime}}（{{timezone}}）\n电量（%）：{{battery_level}}";
+"提示词宏时间注入说明" = "通常无需开启。确实需要时间时，可使用末尾位置，或在增强提示词中填写时间宏，避免重复发送。前置时间持续变化会降低前缀缓存复用。";

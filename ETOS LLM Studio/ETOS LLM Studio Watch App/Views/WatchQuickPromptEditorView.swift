@@ -51,6 +51,8 @@ struct WatchQuickPromptEditorView: View {
                 .lineLimit(3...8)
                 .disabled(viewModel.currentSession == nil)
             }
+
+            PromptMacroHelpSection()
         }
         .navigationTitle(NSLocalizedString("提示词", comment: "快速提示词编辑器标题"))
     }
