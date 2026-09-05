@@ -256,7 +256,7 @@
 "模型温度 (Temperature): %.2f" = "النموذج الحرارة (الحرارة): %.2f";
 "核采样 (Top P): %.2f" = "Top P: %.2f";
 "您确定要删除提供商 “%@” 吗？此操作无法撤销。" = "هل تريد حذف المزوّد “%@”؟ لا يمكن التراجع عن هذا الإجراء.";
-"0 表示关闭检索" = "0 يعطل الاسترجاع";
+"0 表示关闭检索" = "0 لإرسال الكل";
 "AI 智能体自主使用内置工具" = "AI agent uses built-in أدوات autonomously";
 "API 地址" = "API العنوان";
 "API 地址应为基础地址，例如: https://api.openai.com/v1" = "API العنوان should يكون الـ base URL, e.g., https://api.openai.com/v1";
@@ -563,15 +563,15 @@ Authorization 等鉴权头请手动填写。" = "Use مفتاح=value إلى إ�
 "表达式说明" = "Expression دليل";
 "认证" = "Auth";
 "认证 Header" = "Auth الرأس";
-"让 AI 根据历史偏好与事件持续优化回答。" = "Let AI continuously improve responses based تشغيل preferences و events.";
+"让 AI 根据历史偏好与事件持续优化回答。" = "احفظ تفضيلاتك والمعلومات المهمة للمحادثات القادمة لتقل الحاجة إلى تكرار شرح الخلفية.";
 "记忆内容" = "ذاكرة المحتوى";
 "记忆列表" = "ذاكرة قائمة";
 "记忆库管理 (系统版本过低)" = "ذاكرة المكتبة الإدارة (OS الإصدار too low)";
 "记忆检索" = "استرجاع الذاكرة";
-"控制记忆如何被选中，并决定发送给模型时附带哪些信息。" = "يتحكم في كيفية اختيار الذكريات والمعلومات الإضافية المرسلة إلى النموذج.";
+"控制记忆如何被选中，并决定发送给模型时附带哪些信息。" = "حدد عدد الذكريات ذات الصلة التي يتلقاها الذكاء الاصطناعي في كل محادثة. زيادة العدد تعني إرسال نص أكثر.";
 "检索数量 (Top K)\n• 大于 0 时，会按当前消息检索最相关的记忆。\n• 设置为 0 时，跳过向量检索，直接发送所有激活记忆原文。\n• 默认 3。\n\n主动检索\n• 开启后会向 AI 暴露 search_memory 工具。\n• AI 可按向量或关键词主动检索，并指定返回数量。\n• 主动检索可能降低上下文缓存命中率。\n\n发送更新时间\n• 开启时，每条记忆会附带最近更新时间。\n• 关闭时，只发送记忆条目内容。" = "عدد نتائج الاسترجاع (Top K)\n• عندما تكون القيمة أكبر من 0، يتم استرجاع أكثر الذكريات صلة بالرسالة الحالية.\n• عند ضبطها على 0، يتم تخطي الاسترجاع المتجهي وإرسال كل نصوص الذكريات النشطة مباشرة.\n• الافتراضي 3.\n\nالاسترجاع النشط\n• عند التفعيل، يمكن للذكاء الاصطناعي استخدام أداة search_memory.\n• يمكن للذكاء الاصطناعي البحث بالمتجهات أو الكلمات المفتاحية واختيار عدد النتائج.\n• قد يقلل الاسترجاع النشط معدل إصابة ذاكرة التخزين المؤقت للسياق.\n\nإرسال وقت التحديث\n• عند التفعيل، تتضمن كل ذاكرة أحدث وقت تحديث.\n• عند الإيقاف، يتم إرسال محتوى إدخال الذاكرة فقط.";
 "发送更新时间" = "إرسال وقت التحديث";
-"Top K 为 0 时不执行检索；默认 3。" = "تعطّل القيمة Top K = 0 الاسترجاع. الافتراضي 3.";
+"Top K 为 0 时不执行检索；默认 3。" = "يُختار افتراضيًا 3 ذكريات ذات صلة. القيمة 0 ترسل جميع الذكريات السارية وقد تزيد طول الطلب كثيرًا.";
 "设置为 0 表示跳过检索，直接注入全部记忆原文。默认 3。" = "تعيين إلى 0 إلى تخطي استرجاع و inject الكل ذاكرة نص. افتراضي هو 3.";
 "设置发送到模型的最近消息数量。例如，设置为10将只发送最后5条用户消息和5条AI回复。设置为0表示不限制。" = "تعيين how many recent رسائل هي مرسل إلى الـ النموذج. لـ مثال, 10 sends الـ last 5 المستخدم + 5 AI رسائل. 0 means لا يوجد limit.";
 "设置进入历史会话时默认加载的最近消息数量。可以有效降低长对话的内存和性能开销。设置为0表示不启用此功能，将加载所有消息。" = "تعيين الـ افتراضي number من recent رسائل عند entering السجل. هذا reduces memory/perf cost لـ long chats. 0 disables و loads الكل رسائل.";
@@ -968,7 +968,7 @@ AI: %@";
 "当前没有可用的生图模型，请先在模型管理中启用。" = "لا يوجد صورة التوليد النموذج هو متاح. تمكين واحد في النموذج الإدارة الأول.";
 "生成相册" = "تم التوليد المعرض";
 "图片相册" = "ألبوم الصور";
-"集中查看当前会话里由助手返回并保存到本机的图片。" = "استعرض الصور التي أرجعها المساعد في الجلسة الحالية والمحفوظة على هذا الجهاز.";
+"集中查看当前会话里由助手返回并保存到本机的图片。" = "اعثر على الصور التي أرسلها الذكاء الاصطناعي في هذه المحادثة لفتحها أو حفظها أو مشاركتها.";
 "这里展示什么\n• 只收录当前会话中助手消息返回的图片。\n• 这些图片来自聊天回复，不是单独的图片生成工作台。\n\n可以做什么\n• 点按图片查看大图与对应提示词上下文。\n• 通过更多菜单保存到系统相册。\n• 删除图片会移除当前消息里的本地图片引用。\n\n使用建议\n• 继续生成或修改图片时，回到聊天里直接描述需求。\n• 需要整理历史结果时，先切到对应会话再打开相册。" = "ما يظهر هنا\n• تُعرض فقط الصور التي أعادتها رسائل المساعد في الجلسة الحالية.\n• تأتي هذه الصور من ردود الدردشة، وليست من مساحة توليد صور منفصلة.\n\nما يمكنك فعله\n• اضغط على الصورة لعرضها بحجم أكبر مع سياق الموجّه المرتبط بها.\n• استخدم قائمة المزيد لحفظها في الصور.\n• حذف الصورة يزيل مرجع الصورة المحلي من الرسالة الحالية.\n\nنصائح\n• لمتابعة صورة أو تعديلها، ارجع إلى الدردشة واكتب ما تحتاجه مباشرة.\n• لتنظيم نتائج أقدم، انتقل أولاً إلى الجلسة المناسبة ثم افتح الألبوم.";
 "当前会话暂无生图结果。" = "لا توجد صور مولدة في هذه الجلسة بعد.";
 "当前会话暂无助手返回的图片。" = "لا توجد صور أرجعها المساعد في هذه الجلسة بعد.";
@@ -1275,8 +1275,8 @@ AI: %@";
 "搜索工具" = "بحث أدوات";
 "当前没有匹配的工具。" = "لا توجد أدوات مطابقة.";
 "内置工具会直接影响聊天时是否向模型暴露记忆相关能力。" = "Built-in أدوات directly تحكم ما إذا memory-related القدرات هي exposed during دردشة.";
-"统一查看各个 MCP Server 公布的聊天工具，并集中调整启用状态与审批策略。" = "Review دردشة أدوات published by MCP خوادم و إدارة ممكّن states و approval policies هنا.";
-"统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。" = "Review تم الاستيراد Shortcuts أدوات و إدارة ممكّن states, تشغيل modes, و descriptions هنا.";
+"统一查看各个 MCP Server 公布的聊天工具，并集中调整启用状态与审批策略。" = "اختر أدوات الخادم المتاحة للذكاء الاصطناعي وما إذا كان كل استدعاء يتطلب تأكيدك.";
+"统一查看已导入的快捷指令工具，并集中调整启用状态、运行模式与描述。" = "فعّل الاختصارات التي تريد أن يشغّلها الذكاء الاصطناعي ووضّح غرضها ليسهل عليه اختيار الإجراء المناسب.";
 "长期记忆写入" = "طويل الأمد ذاكرة كتابة";
 "允许模型调用 save_memory，将有长期价值的信息写入记忆。" = "السماح الـ النموذج إلى استدعاء حفظ_ذاكرة إلى store معلومات مع طويل الأمد value.";
 "长期记忆主动检索" = "طويل الأمد ذاكرة بحث";
@@ -1286,8 +1286,8 @@ AI: %@";
 "当前未允许写入新的记忆。" = "الكتابة جديد ذكريات هو معطل.";
 "已允许主动检索，Top K = %d。" = "نشط استرجاع هو ممكّن. Top K = %d.";
 "当前未允许主动检索。" = "نشط استرجاع هو معطل.";
-"当前 Top K 为 0，聊天时不会暴露检索工具。" = "Top K هو 0, so الـ استرجاع أداة سوف ليس يكون exposed في دردشة.";
-"总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。" = "عند الـ عام تبديل هو إيقاف, per-tool الإعدادات remain but الـ أدوات سوف ليس يكون exposed في دردشة.";
+"当前 Top K 为 0，聊天时不会暴露检索工具。" = "عند ضبط Top K على 0 تُرسل جميع الذكريات السارية، لذا لا تُقدَّم أداة البحث النشط.";
+"总开关关闭后，下面的单项配置会保留，但聊天时不会实际暴露这些工具。" = "يوقف المفتاح العام هذه المجموعة من الأدوات مع الاحتفاظ بإعداداتها الفردية.";
 "已停用。" = "معطل.";
 "已启用。" = "ممكّن.";
 "当前审批策略为始终拒绝，聊天时不会调用该工具。" = "Approval هو تعيين إلى Always Deny, so هذا أداة سوف ليس يكون called في دردشة.";
@@ -1443,7 +1443,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "watchOS 兼容与性能" = "التوافق والأداء لنظام watchOS";
 "watchOS 最大朗读字符" = "watchOS Max قراءة الأحرف";
 "专用模型" = "نموذج مخصص";
-"为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。" = "توفير ملفات مهارات مخصصة للنماذج، يتم استدعاؤها عند الطلب عبر أداة use_skill في الدردشة.";
+"为模型提供自定义技能文件，通过 use_skill 工具在聊天中按需调用。" = "احفظ إرشادات الكتابة أو خطوات العمل أو المراجع كمهارات يرجع إليها الذكاء الاصطناعي عند الحاجة.";
 "云端" = "سحاب";
 "云端快捷预设" = "الإعدادات المسبقة السحابية السريعة";
 "云端提供商" = "مزود السحابة";
@@ -1469,8 +1469,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "删除字体文件失败。" = "فشل في حذف ملف الخط.";
 "删除技能" = "حذف المهارة";
 "后续可重新生成或手动编辑。" = "يمكن التجديد لاحقًا أو التعديل يدويًا.";
-"向模型暴露 Agent Skills（use_skill）" = "كشف مهارات الوكيل للنموذج (use_skill)";
-"向模型暴露快捷指令工具" = "فضح أدوات الاختصار للنموذج";
+"向模型暴露 Agent Skills（use_skill）" = "السماح للذكاء الاصطناعي باستخدام المهارات";
+"向模型暴露快捷指令工具" = "السماح للذكاء الاصطناعي بتشغيل الاختصارات";
 "启用" = "يُمكَِن";
 "设为默认" = "تعيين كافتراضي";
 "启用倒计时自动批准" = "تمكين الموافقة التلقائية للعد التنازلي";
@@ -1553,7 +1553,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "粗体" = "عريض";
 "系统语速" = "معدل كلام النظام";
 "系统音调" = "الملعب النظام";
-"统一管理快捷指令工具的导入、启用状态与运行模式。" = "إدارة موحدة لاستيراد أداة الاختصار وتمكين الحالة ووضع التشغيل.";
+"统一管理快捷指令工具的导入、启用状态与运行模式。" = "اسمح للذكاء الاصطناعي بتشغيل اختصارات Siri التي أعددتها لتنفيذ إجراءاتك الآلية من المحادثة.";
 "编辑用户画像" = "تحرير ملف تعريف المستخدم";
 "聊天工具总开关" = "أدوات الدردشة الرئيسية التبديل";
 "自动" = "آلي";
@@ -1573,7 +1573,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "这里只列出支持嵌入能力的模型，记忆嵌入请求会使用所选模型发送。也可以在“提供商与模型管理 > 专用模型”中统一设置。" = "تم إدراج النماذج التي تدعم التضمين فقط. ستستخدم طلبات تضمين الذاكرة النموذج المحدد. يمكن تهيئتها أيضًا في إدارة الموفر والنموذج > النماذج المخصصة.";
 "这里展示跨会话注入用的摘要，可按条删除或一键清空。" = "يعرض الملخصات المستخدمة للحقن عبر الجلسات. يمكن حذفها بشكل فردي أو مسح الكل.";
 "这里管理跨对话记忆的触发门槛、注入数量和画像日更策略。" = "يدير عتبة تشغيل الذاكرة عبر الجلسات وعدد الحقن واستراتيجية تحديث الملف الشخصي اليومي.";
-"进一步了解…" = "معرفة المزيد…";
+"进一步了解…" = "طريقة الاستخدام";
 "重名冲突" = "الصراع على الاسم";
 "预设适合快速上手；若需手动输入，可在下方高级参数中覆盖。" = "الإعدادات المسبقة جيدة للبدء السريع؛ بالنسبة للإدخال اليدوي، قم بتجاوز المعلمات المتقدمة أدناه.";
 "默认会按“直连 -> 桥接”执行；若工具运行模式设为桥接，则按“桥接 -> 直连”。" = "الافتراضي ينفذ المباشر -> الجسر؛ إذا تم ضبط وضع تشغيل الأداة على Bridge، فسيتم تنفيذ Bridge -> Direct.";
@@ -1775,7 +1775,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "发送位置" = "موضع الإرسال";
 "前置发送" = "إرسال في المقدمة";
 "末尾发送" = "إرسال في النهاية";
-"警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。" = "تحذير: قد يؤدي إدراج <time> مباشرةً في موجه النظام الأمامي إلى خفض معدل إصابة ذاكرة التخزين المؤقت للسياق. إذا أمكن، فالأفضل إرساله في النهاية أو استخدام أداة الحصول على وقت النظام.";
+"警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。" = "يساعد وضع الوقت في نهاية التعليمات على إعادة استخدام ذاكرة الطلبات المؤقتة. ويمكن للذكاء الاصطناعي استخدام أداة الوقت عند الحاجة.";
 "获取系统时间" = "الحصول على وقت النظام";
 "返回当前设备系统时间。" = "يعيد وقت نظام الجهاز الحالي.";
 "工具详情：获取系统时间" = "تفاصيل الأداة: الحصول على وقت النظام";
@@ -1803,7 +1803,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "Mode Injection 绑定功能将与助手注入页对齐，当前版本先保留 Lorebook 绑定。" = "Mode Injection binding will align with the assistant injection page. This version keeps Lorebook binding for now.";
 "PKCE Code Verifier (可选)" = "PKCE Code Verifier (optional)";
 "Pulse 任务" = "Pulse Tasks";
-"Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。" = "Pulse tasks are kept across days and used as items that still need progress when the next Daily Pulse is generated.";
+"Pulse 任务会跨天保留，并在下一次每日脉冲生成时作为“还需要推进的事情”参与策展。" = "تبقى المهام غير المكتملة للأيام التالية وتُراعى في البطاقات الجديدة لمساعدتك على متابعتها.";
 "SQLite 迁移已完成。建议删除旧 JSON 文件释放空间，后续版本可能不再支持旧格式。" = "SQLite migration is complete. Delete old JSON files to free space; future versions may no longer support the legacy format.";
 "Token %d · 错误 %d" = "Token %d · Errors %d";
 "WebSocket 默认端口: 8765（可用 host:wsPort:httpPort 显式指定回退端口）" = "Default WebSocket port: 8765 (use host:wsPort:httpPort to specify a fallback port)";
@@ -1880,7 +1880,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "关闭时不会对任何请求使用全局代理。" = "When off, the global proxy is not used for any request.";
 "关闭该工具自动批准" = "Disable Auto-approval for This Tool";
 "其他" = "Other";
-"内置工具会直接影响聊天时是否向模型暴露记忆能力、网页卡片渲染能力与结构化问答能力。" = "Built-in tools directly control whether memory, web card rendering, and structured Q&A are exposed to the model during chat.";
+"内置工具会直接影响聊天时是否向模型暴露记忆能力、网页卡片渲染能力与结构化问答能力。" = "اسمح للذكاء الاصطناعي بحفظ الذكريات وعرض بطاقات الويب وطرح أسئلة بخيارات والتحقق من الوقت الحالي.";
 "冲突预览为本地启发式估算，最终结果以导入完成后的统计为准。" = "Conflict preview is a local heuristic estimate. Final results are based on the stats after import completes.";
 "准备中" = "جارٍ التحضير";
 "分段 %d/%d" = "Segment %d/%d";
@@ -1917,7 +1917,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "同步" = "Sync";
 "同步与备份" = "Sync & Backup";
 "同步到 iCloud" = "Sync to iCloud";
-"向模型暴露 MCP 工具" = "Expose MCP Tools to Model";
+"向模型暴露 MCP 工具" = "السماح للذكاء الاصطناعي باستخدام أدوات MCP";
 "启动保护备份" = "Startup Protection Backup";
 "启动时创建数据库备份点" = "Create Database Backup on Launch";
 "启动时打开历史会话" = "Open History on Launch";
@@ -2062,7 +2062,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "快速切换与管理" = "Quick Switch & Manage";
 "思考内容" = "Reasoning Content";
 "思考耗时" = "Reasoning Time";
-"总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。" = "When the main switch is off, per-skill enablement is preserved but these skills are not exposed during chat.";
+"总开关关闭后，下面的单项启用状态会保留，但聊天时不会实际暴露这些技能。" = "يوقف المفتاح العام جميع المهارات مع الاحتفاظ بملفاتها وإعداداتها الفردية.";
 "总行数" = "Total Lines";
 "总超时 %ds" = "Total timeout %ds";
 "恢复该工具自动批准" = "Restore Auto-approval for This Tool";
@@ -2251,7 +2251,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "清空外部信号历史" = "Clear External Signal History";
 "清空所有日志" = "Clear All Logs";
 "清空搜索关键词" = "Clear Search Keywords";
-"清空明日策展" = "Clear Tomorrow Curation";
+"清空明日策展" = "مسح خطة الغد";
 "清空治理日志" = "Clear Governance Logs";
 "激活模型" = "Active Models";
 "点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。" = "اضغط «تحرير» في أعلى اليمين، ثم اسحب المقبض الأيمن لضبط الأولوية. استخدم «إضافة خط إلى الخانة الحالية» لإضافة الخطوط الناقصة؛ واسحب الخط داخل الخانة يمينًا لإزالته. كلما كان العنصر أعلى زادت أولويته.";
@@ -2303,7 +2303,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "绑定世界书" = "Bind Worldbook";
 "结束批量选择" = "End Batch Selection";
 "结果：%@" = "Result: %@";
-"统一查看已安装技能，并集中调整聊天暴露与单项启用状态。" = "Review installed skills and adjust chat exposure and per-skill enablement in one place.";
+"统一查看已安装技能，并集中调整聊天暴露与单项启用状态。" = "اختر المهارات المتاحة في المحادثة ليرجع الذكاء الاصطناعي إلى تعليماتها ومراجعها عند الحاجة.";
 "统计" = "Stats";
 "统计范围" = "Stats Range";
 "继续聊" = "Continue Chat";
@@ -2373,7 +2373,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "这个会话的消息文件已经丢失了，只剩下一个空壳在这里游荡。\n\n要帮它超度吗？" = "This session's message file is missing, leaving only an empty shell here.\n\nDelete it?";
 "这张卡片已经在 Pulse 任务列表里。" = "This card is already in the Pulse task list.";
 "这次生成的卡片都被你隐藏了。你可以重新生成一份新的每日脉冲。" = "All cards from this generation were hidden. You can regenerate a new Daily Pulse.";
-"这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。" = "This works like Pulse's “what to see tomorrow.” When the target date arrives and Daily Pulse is generated, this curation input is prioritized.";
+"这里更像 Pulse 的“明天想看什么”。下一次到达目标日期并生成每日脉冲时，会优先纳入这段策展输入。" = "اكتب ما تريد رؤيته أو العمل عليه غدًا ليُعطى الأولوية عند إنشاء بطاقات ذلك اليوم.";
 "这里的内容会参与下一次每日脉冲生成，用来告诉 AI 你最近最想优先看的方向。" = "This content is used in the next Daily Pulse generation to tell the AI what you want prioritized recently.";
 "进度 %.0f" = "Progress %.0f";
 "进度 %.0f / %.0f" = "Progress %.0f / %.0f";
@@ -2524,7 +2524,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "当前主密码" = "Current Master Password";
 "当前密码" = "Current Password";
 "当前设备未启用或不支持生物识别，请继续使用应用锁密码。" = "Biometrics are unavailable or not enabled on this device. Continue using the app lock password.";
-"快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。" = "Snapshots are written to the \"ETOS LLM Studio Backups\" folder in iCloud Drive. If iCloud Documents is unavailable, they are written to a local Documents folder with the same name. Strong derivation uses PBKDF2-HMAC-SHA512 for 256000 iterations.";
+"快照会写入 iCloud Drive 的“ETOS LLM Studio Backups”文件夹；若未开启 iCloud Documents 能力，系统会改写入本机 Documents 同名文件夹。高强度派生会使用 PBKDF2-HMAC-SHA512 迭代 256000 次。" = "تُحفظ النسخ في مجلد «ETOS LLM Studio Backups» على iCloud Drive. إذا لم يدعم هذا الإصدار تخزين ملفات iCloud، يُستخدم مجلد بالاسم نفسه ضمن ملفات التطبيق المحلية. ستحتاج إلى كلمة مرور النسخة عند استعادتها. يستغرق التشفير الأقوى وقتًا أطول للمعالجة.";
 "快照已上传（HTTP %d）。" = "Snapshot uploaded (HTTP %d).";
 "快照已上传（HTTP %d）：%@" = "Snapshot uploaded (HTTP %d): %@";
 "快照已保存到：%@" = "Snapshot saved to: %@";
@@ -2648,7 +2648,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "关闭后不会显示 S3/R2 配置与上传入口。" = "عند الإيقاف، تُخفى إعدادات S3/R2 ومدخل الرفع.";
 "对象存储配置" = "إعدادات تخزين الكائنات";
 "配置用于上传和读取远端快照。" = "تُستخدم لرفع اللقطات وقراءة اللقطات البعيدة.";
-"会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。" = "يستخدم AWS Signature V4 لرفع ملف .elsbackup عبر PUT إلى bucket/prefix/اسم الملف. في R2 تكون Region عادة auto؛ أما AWS S3 فيحتاج المنطقة الفعلية.";
+"会使用 AWS Signature V4 生成签名请求，将 .elsbackup 以 PUT 上传到 bucket/prefix/文件名。R2 的 Region 通常填写 auto，AWS S3 请填写实际区域。" = "أدخل حاوية S3 أو R2 وبيانات الوصول ومسار الحفظ لرفع النسخ إلى تخزينك السحابي. يستخدم R2 عادة auto في Region، بينما يحتاج AWS S3 إلى منطقة الحاوية.";
 "请先输入对象存储 Endpoint。" = "أدخل Endpoint لتخزين الكائنات أولاً.";
 "对象存储 Endpoint 必须是完整的 http/https URL。" = "يجب أن يكون Endpoint لتخزين الكائنات رابط http/https كاملاً.";
 "计算备份文件校验值失败：%@" = "فشل حساب قيمة التحقق لملف النسخة الاحتياطية: %@";
@@ -2957,7 +2957,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "从 URL 下载并恢复" = "Download from URL and Restore";
 "从上到下对应气泡下方的显示顺序。" = "Top to bottom maps to the display order below the bubble.";
 "会优先参考最近聊天、记忆系统、请求日志、反馈历史、明日策展与当前关注焦点，并可选结合外部上下文生成约 3 张卡片。" = "Uses recent chats, memory, request logs, feedback history, tomorrow curation, and current focus first, and can optionally include external context to generate about 3 cards.";
-"会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。" = "Creates an .elsbackup first, then uploads it to S3/R2 using AWS Signature V4. For R2, Region is usually auto.";
+"会先生成 .elsbackup，再使用 AWS Signature V4 上传到 S3/R2；R2 的 Region 通常填写 auto。" = "يمكنك رفع النسخة بعد إنشائها إلى حاوية S3 أو R2 الخاصة بك. أدخل بيانات الوصول ومسار الحفظ أولًا. يستخدم R2 عادة auto في Region.";
 "会话 %d/%d" = "Sessions %d/%d";
 "会话与上下文" = "Conversation & Context";
 "会话列表操作" = "Session List Actions";
@@ -3007,7 +3007,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "只支持只读 SQL：%@。" = "Only read-only SQL is supported: %@.";
 "只读 SQL" = "Read-only SQL";
 "向反馈助手提交问题或建议工单，并返回工单编号与状态。" = "Submit a bug or suggestion ticket to Feedback Assistant and return its ticket number and status.";
-"向模型暴露 Agent Skills" = "Expose Agent Skills to Model";
+"向模型暴露 Agent Skills" = "السماح للذكاء الاصطناعي باستخدام المهارات";
 "启用后，AI 将拥有记忆系统能力。它会在每次对话前检索相关记忆，并能通过工具主动学习。" = "When enabled, AI gains memory capabilities. It retrieves relevant memories before each chat and can actively learn through tools.";
 "启用获取系统时间工具" = "Enable system time tool";
 "响应测速与统计" = "Response Speed & Statistics";
@@ -3227,14 +3227,14 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "第 %d 名" = "Rank %d";
 "第 %d-%d 行" = "Lines %d-%d";
 "等待时可取消，完成后可复用提示词。" = "You can cancel while waiting. After completion, reuse the prompt.";
-"管理世界书并绑定到当前会话。" = "Manage worldbooks and bind them to the current session.";
+"管理世界书并绑定到当前会话。" = "احفظ الشخصيات والأماكن والخلفيات ليحصل عليها الذكاء الاصطناعي تلقائيًا عند الحديث عنها.";
 "管理入口" = "Management Entry";
-"管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。" = "Manage on-demand skill bundles and control whether the use_skill tool is exposed to the model.";
+"管理可按需加载的技能包，并控制是否向模型暴露 use_skill 工具。" = "احفظ إرشادات الكتابة أو خطوات العمل أو المراجع كمهارات يرجع إليها الذكاء الاصطناعي عند الحاجة.";
 "系统朗读未能启动，请重试或切换云端。" = "System speech could not start. Try again or switch to cloud TTS.";
 "系统朗读长时间无响应，已自动恢复。" = "System speech did not respond for a long time and was restored automatically.";
 "绑定 SQL 参数失败。" = "Failed to bind SQL parameters.";
 "结构化问答" = "Structured Q&A";
-"统一管理语音输入与语音朗读。" = "Manage voice input and text-to-speech in one place.";
+"统一管理语音输入与语音朗读。" = "حوّل كلامك إلى نص أو استمع إلى إجابات الذكاء الاصطناعي.";
 "统计会从升级到此版本后开始累计。" = "Stats start accumulating after upgrading to this version.";
 "绿墙" = "Green Wall";
 "自动批准" = "Auto-approve";
@@ -3246,7 +3246,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "行" = "Rows";
 "表" = "Tables";
 "触发" = "Trigger";
-"警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。" = "Warning: inserting <time> directly into the leading system prompt may reduce context cache hit rate. If possible, send it at the end or use the system time tool instead.\n\nWhen landmarks are enabled, a system landmark is automatically inserted into history by time window to indicate the request time at that position.";
+"警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。\n\n开启路标后会按时间窗口在历史消息中自动插入一条 system 路标，提示对应位置的请求时间。" = "يساعد الوقت الحالي الذكاء الاصطناعي على فهم «اليوم» أو «قبل قليل». وضعه في النهاية يسهل إعادة استخدام الذاكرة المؤقتة، ويمكن استخدام أداة الوقت بدلًا منه.\n\nتحدد علامات الوقت توقيت الطلبات في السجل لتمييز أجزاء المحادثة التي جرت في أوقات مختلفة.";
 "记录" = "Records";
 "记忆系统嵌入已停止自动重试，请前往“记忆设置”检查嵌入模型。" = "Automatic memory embedding retries have stopped. Go to Memory Settings to check the embedding model.";
 "该工具已从自动批准名单中排除。" = "This tool has been removed from the automatic approval list.";
@@ -3349,7 +3349,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "怎么用（建议顺序）\n1. 先在“字体文件”导入你要用的字体。\n2. 选择样式槽位（正文 / 斜体 / 粗体 / 代码）。\n3. 点击右上角“编辑”，拖拽右侧把手调整顺序。\n4. 在编辑状态使用“添加字体到当前槽位”，把漏掉的字体补进来。\n5. 对槽位内字体右滑可“移除”，仅移出当前槽位，不会删除字体文件。\n\n规则说明\n• 每个槽位都有独立优先级链。\n• 字体可同时存在于多个槽位。\n• 槽位内字体都不可用时，会回退到系统字体。" = "How to use (recommended order)\n1. Import the fonts you want under Font Files.\n2. Choose a style slot (body / italic / bold / code).\n3. Tap Edit in the top-right corner and drag the handles to reorder.\n4. While editing, use Add Font to Current Slot to fill in missing fonts.\n5. Swipe a font in a slot to Remove it; this only removes it from the slot and does not delete the font file.\n\nRules\n• Each slot has its own priority chain.\n• The same font can appear in multiple slots.\n• If no font in a slot is available, the system font is used as fallback.";
 "思考摘要模型" = "Reasoning summary model";
 "技能描述" = "Skill description";
-"按规则在发送消息时自动激活并注入，独立于记忆系统。" = "Activates by rules when sending messages and injects context independently of memory.";
+"按规则在发送消息时自动激活并注入，独立于记忆系统。" = "احفظ الشخصيات والأماكن والخلفيات ليحصل عليها الذكاء الاصطناعي تلقائيًا عند الحديث عنها.";
 "日详情" = "Day details";
 "月详情" = "Month details";
 "标题生成模型" = "Title generation model";
@@ -3364,14 +3364,14 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "用于记忆向量化与检索；也可在“记忆库管理”中修改。" = "Used for memory vectorization and retrieval; can also be changed in Memory Library Management.";
 "用于语音转文字；也可在“偏好设置”中修改。" = "Used for speech-to-text; can also be changed in Preferences.";
 "留空时跟随当前对话模型。" = "Leave empty to follow the current chat model.";
-"管理每个样式槽位的字体候选链；越靠上优先级越高。" = "Manage the font fallback chain for each style slot; higher entries have higher priority.";
-"统一管理 MCP Server 的连接、聊天暴露与能力调试。" = "Manage MCP Server connections, chat exposure, and capability debugging in one place.";
+"管理每个样式槽位的字体候选链；越靠上优先级越高。" = "اختر خطوط النص العادي والعريض والشيفرة. إذا تعذر عرض حرف، يُجرَّب الخط التالي في القائمة.";
+"统一管理 MCP Server 的连接、聊天暴露与能力调试。" = "اربط خدمة MCP ليستخدم الذكاء الاصطناعي أدوات البحث أو الملفات أو غيرها مما توفره الخدمة أثناء المحادثة.";
 "能力说明\n• 世界书会根据触发规则在发送消息时自动注入上下文。\n• 它是“静态规则知识”，不参与记忆系统写入。\n\n怎么用（建议顺序）\n1. 先导入世界书（支持 JSON/PNG 或 URL）。\n2. 在“当前会话”绑定需要生效的世界书。\n3. 按需启用“隔离发送”，让会话只发送提示词与世界书上下文。\n\n关键参数与状态\n• 绑定数量：显示当前会话已绑定 / 总世界书数。\n• 启用条目：显示每本世界书里启用条目占比。\n• 已启用隔离发送：会屏蔽记忆、MCP、快捷指令等外部工具上下文。\n\n管理建议\n• 大型世界书优先维护条目启用状态，避免注入冗余内容。\n• 导入后先看“最近导入结果”，及时处理失败条目和冲突。\n• 重要世界书建议定期导出备份。" = "What it does\n• Worldbooks inject context automatically when messages are sent based on trigger rules.\n• They are static rule knowledge and do not write to the memory system.\n\nHow to use (recommended order)\n1. Import a worldbook first (JSON/PNG or URL supported).\n2. Bind the worldbooks that should apply to the current session.\n3. Enable isolated sending when needed so the session sends only prompts and worldbook context.\n\nKey parameters and status\n• Binding count: current session bindings / total worldbooks.\n• Enabled entries: enabled entry ratio for each worldbook.\n• Isolated sending enabled: blocks memory, MCP, Shortcuts, and other external tool context.\n\nManagement tips\n• For large worldbooks, maintain entry enabled states first to avoid redundant injections.\n• After importing, check Recent Import Result to handle failed entries and conflicts.\n• Export important worldbooks regularly as backups.";
 "能力说明\n• 记忆系统会在每次回复前参与检索，帮助模型关联你过去的偏好与上下文。\n• 与“世界书”不同，记忆系统是可持续积累、可读可写的动态知识。\n\n关键开关\n• 启用记忆功能：总开关。关闭后不会检索、也不会写入新记忆。\n• 允许写入新的记忆：仅控制“写入”，关闭后仍可读取已有记忆。\n\n推荐用法\n1. 先开启总开关观察回答是否更贴合长期习惯。\n2. 如果担心噪声记忆，先关闭写入，仅保留读取。\n3. 通过“记忆库管理”定期清理低质量或过时记忆。\n\n常见问题\n• 回答变得重复：可能记忆冗余，建议进入记忆库整理。\n• 明明开了但没效果：先确认会话未被世界书隔离策略屏蔽相关工具。" = "What it does\n• The memory system participates in retrieval before each reply, helping the model connect your past preferences and context.\n• Unlike worldbooks, memory is dynamic knowledge that can be accumulated, read, and written.\n\nKey switches\n• Enable memory: the master switch. When off, memory is not retrieved or written.\n• Allow writing new memories: controls writing only; existing memories can still be read when off.\n\nRecommended use\n1. Turn on the master switch first and see whether replies better match long-term habits.\n2. If noisy memories are a concern, disable writing and keep reading only.\n3. Use Memory Library Management regularly to clean low-quality or outdated memories.\n\nCommon issues\n• Repetitive answers may indicate redundant memories; organize them in the memory library.\n• If it is enabled but has no effect, check whether session isolation from worldbooks is blocking related tools.";
-"让 AI 在多轮对话里持续记住你的偏好、背景与目标。" = "Let AI keep remembering your preferences, background, and goals across conversations.";
+"让 AI 在多轮对话里持续记住你的偏好、背景与目标。" = "احفظ تفضيلاتك والمعلومات المهمة للمحادثات القادمة لتقل الحاجة إلى تكرار شرح الخلفية.";
 "语音朗读（TTS）" = "Speech playback (TTS)";
 "这个页面适合做什么\n• 集中管理非核心聊天流程的进阶能力。\n• 快速进入维护、导入、调试等工具入口。\n\n各入口怎么选\n• 反馈助手：提交问题和追踪处理进度。\n• 远程文件访问：在局域网内访问 Documents 做排查或批量处理。\n• 存储管理：清理模型、文件、缓存，回收空间。\n• 导入数据：导入 ETOS 导出包或第三方应用迁移数据。\n\n使用建议\n• 不常用的功能可按需开启，避免主流程过载。\n• 涉及导入与清理时，建议先备份关键数据再执行。" = "What this page is for\n• Manage advanced capabilities outside the core chat flow.\n• Quickly open maintenance, import, debugging, and other tool entries.\n\nChoosing entries\n• Feedback Assistant: submit issues and track progress.\n• Remote File Access: access Documents on the local network for diagnosis or batch work.\n• Storage Management: clean models, files, and caches to recover space.\n• Import Data: import ETOS packages or migrate from third-party apps.\n\nTips\n• Enable less-used features only when needed to keep the main flow focused.\n• Back up important data before import or cleanup operations.";
-"这里集中放置进阶能力、调试入口与跨平台工具集成。" = "Advanced capabilities, debugging entries, and cross-platform tool integrations are collected here.";
+"这里集中放置进阶能力、调试入口与跨平台工具集成。" = "شغّل النماذج على جهازك، واعثر على صور المحادثات، واستورد المحادثات القديمة، أو وفر مساحة التخزين.";
 "适用场景\n• 你希望让模型调用 iOS 快捷指令完成自动化任务。\n• 你需要统一管理导入来源、启用状态和运行模式。\n\n怎么用（建议顺序）\n1. 先在“官方导入快捷指令”下载并运行导入助手。\n2. 再用“从剪贴板导入清单”批量导入工具定义。\n3. 打开“向模型暴露快捷指令工具”总开关。\n4. 逐个工具检查描述、启用状态和运行模式。\n\n导入模式说明\n• 轻度导入：只导入名称，适合先快速接入。\n• 深度导入：尝试解析 iCloud 分享内容并生成描述；失败会自动降级为仅链接。\n\n关键参数说明\n• 导入快捷指令名称：用于匹配官方导入助手名称。\n• 桥接快捷指令名称：桥接执行链路所用的快捷指令名称。\n• 运行模式（单工具）：\n  - 直连优先：先尝试直接执行，再回退桥接。\n  - 桥接优先：先走桥接，再回退直连。\n• 倒计时自动批准：审批等待秒数，范围 1~30 秒。\n\n常见问题\n• 工具没被调用：先查总开关是否开启、单项是否启用。\n• 导入失败：看“最近导入结果”中的新增/跳过/无效和冲突名称。\n• 执行超时：优先确认快捷指令本身可独立运行，再检查桥接名称是否一致。\n• urlshim / URL Scheme 跳转失败：回到本页先复制清单到剪贴板，再点“从剪贴板导入清单”即可继续。" = "When to use this\n• You want the model to call iOS Shortcuts for automation tasks.\n• You need to manage import sources, enabled states, and run modes in one place.\n\nHow to use (recommended order)\n1. Download and run the import helper from Official Import Shortcut.\n2. Use Import List from Clipboard to bulk import tool definitions.\n3. Turn on the master switch that exposes Shortcut tools to the model.\n4. Review each tool description, enabled state, and run mode.\n\nImport modes\n• Light import: imports names only, good for quick setup.\n• Deep import: tries to parse iCloud shares and generate descriptions; falls back to link-only on failure.\n\nKey parameters\n• Import shortcut name: used to match the official import helper.\n• Bridge shortcut name: the shortcut used by the bridge execution path.\n• Run mode (per tool):\n  - Direct first: try direct execution first, then fall back to bridge.\n  - Bridge first: use bridge first, then fall back to direct.\n• Countdown auto-approval: approval wait time from 1 to 30 seconds.\n\nCommon issues\n• Tool not called: check the master switch and the individual enabled state.\n• Import failed: review Added / Skipped / Invalid and conflict names in Recent Import Result.\n• Execution timeout: confirm the shortcut itself can run, then check bridge name consistency.\n• If urlshim / URL Scheme fails to open on iPhone, copy the list to the clipboard on this page and use Import List from Clipboard.";
 "适用场景\n• 你想快速判断“当前会话到底能用哪些工具”。\n• 你想统一调整不同类型工具的启用与审批策略。\n\n页面怎么看\n• 配置已启用：表示你在设置层面已打开。\n• 当前会话可用：在“总开关 + 审批策略 + 会话隔离”等条件下，聊天时真的可用。\n• 两个数字不一致通常不是 bug，而是被会话条件限制（例如世界书隔离发送）。\n\n推荐使用流程\n1. 先看概览区，确认五类工具的可用数量。\n2. 用“仅显示已启用”快速聚焦当前生效配置。\n3. 分别进入内置/拓展/MCP/Skills/快捷指令分类做单项微调。\n\n关键开关说明\n• 启用记忆系统：决定记忆相关内置工具是否可参与聊天。\n• 各分类“向模型暴露…工具”：控制该类工具是否整体开放给模型。\n• 审批策略：决定调用前是否确认、自动通过或拒绝。\n\n排查建议\n• 工具不生效：优先核对“当前会话可用”而不是“配置已启用”。\n• 会话隔离提示为橙色时：记忆、MCP、Agent Skills、快捷指令会被会话级策略屏蔽。" = "When to use this\n• You want to quickly see which tools the current session can actually use.\n• You want to adjust enabled states and approval policies for different tool types in one place.\n\nHow to read the page\n• Configured enabled: enabled at the settings level.\n• Available in current session: actually usable after master switches, approval policies, and session isolation.\n• Different numbers are usually not a bug; session conditions such as isolated worldbook sending may limit availability.\n\nRecommended flow\n1. Check the overview first to confirm available counts for the five tool groups.\n2. Use Show Enabled Only to focus on active configuration.\n3. Enter Built-in / Extension / MCP / Skills / Shortcuts categories for item-level tuning.\n\nKey switches\n• Enable memory: controls whether memory-related built-in tools can participate in chat.\n• Expose tools to model switches: control whether each category is open to the model.\n• Approval policy: controls whether calls require confirmation, auto-allow, or deny.\n\nTroubleshooting\n• If a tool does not work, check Available in current session before Configured enabled.\n• When the isolation notice is orange, memory, MCP, Agent Skills, and Shortcuts may be blocked by session policy.";
 "适用场景\n• 你想把外部服务能力接入聊天（例如检索、执行工具、读取资源）。\n• 你需要快速定位“为什么工具没被模型调用”这类问题。\n\n怎么用（建议顺序）\n1. 在“已配置服务器”添加或编辑 MCP Server，先确保连接正常。\n2. 打开“向模型暴露 MCP 工具”，否则聊天阶段不会调用 MCP。\n3. 在“连接概览”确认“已连接数量 / 参与聊天数量”。\n4. 用“快速调试”先做一次手动调用，确认参数、返回和超时策略都正常。\n\n关键参数说明\n• 倒计时自动批准：自动审批等待秒数，范围 1~30 秒。\n• 工具 ID：必须填写服务端公布的 toolId。\n• 工具 Payload（JSON）：调用参数对象，必须是合法 JSON 字典。\n• 资源 ID：资源读取标识符。\n• 资源 Query（JSON）：可选查询参数，留空等价于不传。\n\n常见状态解读\n• 已连接并参与聊天：可被模型正常调用。\n• 已连接：可调试，但当前未参与聊天。\n• 重连中 / 失败：优先检查 Endpoint、鉴权头和网络可达性。\n\n排查建议\n• 模型不调用工具：先看总开关、工具是否启用、审批策略是否 alwaysDeny。\n• 调用失败：看“活跃调用”“治理日志”“最新响应”三处信息定位。" = "When to use this\n• You want to connect external service capabilities to chat, such as retrieval, tool execution, or resource reading.\n• You need to quickly diagnose why tools are not being called by the model.\n\nHow to use (recommended order)\n1. Add or edit MCP Servers under Configured Servers and make sure they connect successfully.\n2. Turn on Expose MCP tools to model; otherwise MCP is not called during chat.\n3. Check Connected count / Chat participants in the connection overview.\n4. Use Quick Debug to make one manual call and verify parameters, results, and timeout policy.\n\nKey parameters\n• Countdown auto-approval: automatic approval wait time from 1 to 30 seconds.\n• Tool ID: must match the server-published toolId.\n• Tool Payload (JSON): call parameter object and must be a valid JSON dictionary.\n• Resource ID: resource read identifier.\n• Resource Query (JSON): optional query parameters; empty means no query.\n\nCommon status\n• Connected and participating in chat: can be called by the model.\n• Connected: can be debugged but is not participating in current chat.\n• Reconnecting / Failed: check endpoint, auth headers, and network reachability first.\n\nTroubleshooting\n• If the model does not call a tool, check the master switch, tool enabled state, and whether approval policy is alwaysDeny.\n• If a call fails, inspect Active calls, Governance log, and Latest response.";
@@ -3781,10 +3781,10 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "请调用 app_get_system_time 工具获取当前设备时间，不要直接回答。" = "استخدم أداة app_get_system_time للحصول على وقت الجهاز الحالي. لا تجب مباشرة.";
 "思维链回传" = "إرجاع سلسلة التفكير";
 "常驻" = "دائمًا";
-"仅 Tool Call" = "استدعاءات الأدوات فقط";
+"仅 Tool Call" = "عند استدعاء الأدوات فقط";
 "不回传" = "عدم الإرجاع";
 "选择“不回传”后，某些要求回传 reasoning_content 的 API 可能会返回 400 错误。" = "عند اختيار عدم الإرجاع، قد ترجع بعض واجهات API التي تتطلب reasoning_content خطأ 400.";
-"该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。" = "يتحكم هذا الإعداد في إرجاع reasoning_content في الطلبات المتوافقة مع OpenAI، وقيم thoughtSignature لاستدعاءات أدوات Gemini، وكتل thinking/redacted_thinking في سجل استدعاءات أدوات Anthropic. تتطلب Gemini وAnthropic رسميًا الاحتفاظ ببيانات التوقيع هذه عند متابعة استدعاءات الأدوات؛ ولا يمكن حاليًا إعادة بناء كتل التفكير الأصلية الكاملة خارج استدعاءات الأدوات بشكل موثوق، لذلك لن ينشئها التطبيق اصطناعيًا.";
+"该设置会控制 OpenAI 兼容请求中的 reasoning_content、Gemini 工具调用的 thoughtSignature，以及 Anthropic 工具调用历史中的 thinking/redacted_thinking 块回传。Gemini 与 Anthropic 官方要求工具调用延续时保留这些签名元数据；非工具调用的完整原始思考块当前无法可靠重建，因此不会额外伪造回传。" = "تحتاج بعض النماذج إلى نص التفكير أو التوقيعات من الدور السابق لمتابعة التفكير أو إكمال استدعاء أداة. يحدد إرجاع التفكير ما إذا كانت هذه المعلومات تُضمَّن في الطلب التالي.\n\nتُحفظ المعلومات المدعومة افتراضيًا، ويمكنك إرسالها لاستدعاءات الأدوات فقط. يحتفظ التطبيق بما تدعمه كل واجهة، لذا يختلف المحتوى بين الخدمات. إذا تسبب تعطيله في أخطاء، فاستعد الإعداد الافتراضي وحاول مجددًا.";
 "选择“不回传”后，某些要求回传 reasoning_content 或思考签名元数据的 API 可能会返回 400 错误。" = "عند اختيار عدم الإرجاع، قد ترجع بعض واجهات API التي تتطلب إرجاع reasoning_content أو بيانات توقيع التفكير خطأ 400.";
 "全屏编辑" = "تحرير بملء الشاشة";
 "编辑技能" = "تحرير المهارة";
@@ -3973,8 +3973,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "稳健问答" = "أسئلة وأجوبة مستقرة";
 "空" = "فارغ";
 "等价字符串" = "السلسلة المكافئة";
-"管理手表端本地 GGUF 权重、提供商开关与高级调参。" = "إدارة أوزان GGUF المحلية ومفتاح المزود والضبط المتقدم على Apple Watch.";
-"管理本机 GGUF 权重、提供商开关与高级调参。" = "إدارة أوزان GGUF المحلية ومفتاح المزود والضبط المتقدم على هذا الجهاز.";
+"管理手表端本地 GGUF 权重、提供商开关与高级调参。" = "استورد نموذج GGUF لتشغيل الذكاء الاصطناعي على جهازك دون خدمة محادثة سحابية.";
+"管理本机 GGUF 权重、提供商开关与高级调参。" = "استورد نموذج GGUF لتشغيل الذكاء الاصطناعي على جهازك دون خدمة محادثة سحابية.";
 "粘贴 GBNF grammar 文本来约束输出格式。" = "الصق نص grammar بصيغة GBNF لتقييد تنسيق الإخراج.";
 "维护全局模型顺序，模型选择列表会按这里的顺序展示。" = "يحافظ على ترتيب النماذج العام. تُعرض قوائم اختيار النماذج بهذا الترتيب.";
 "缺少取值。" = "القيمة مفقودة.";
@@ -4015,7 +4015,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "默认" = "افتراضي";
 "默认轻量" = "افتراضي خفيف";
 "本地模型设置指南" = "دليل إعداد النموذج المحلي";
-"这里管理当前 GGUF 权重的运行参数、采样行为和 llama.cpp-style 导入。先保持默认跑通，再按需要打开“自定义”逐项覆盖。" = "يمكنك هنا إدارة معلمات التشغيل وسلوك أخذ العينات واستيراد نمط llama.cpp لأوزان GGUF الحالية. ابدأ بالقيم الافتراضية، ثم فعّل مخصص فقط للعناصر التي تحتاج إلى تجاوزها.";
+"这里管理当前 GGUF 权重的运行参数、采样行为和 llama.cpp-style 导入。先保持默认跑通，再按需要打开“自定义”逐项覆盖。" = "اضبط مقدار المحادثة الذي يستخدمه النموذج المحلي وطول الرد وتنوع الإجابات. جرّب القيم الافتراضية أولًا ثم عدّل ما تحتاجه.";
 "先确认能聊天" = "تأكد أولاً أنه يستطيع الدردشة";
 "导入权重并加入候选模型后，先用默认参数发一条短消息。" = "بعد استيراد الأوزان وإضافة النموذج إلى المرشحين، أرسل أولاً رسالة قصيرة بالمعلمات الافتراضية.";
 "再调整容量" = "ثم اضبط السعة";
@@ -4042,7 +4042,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "重复检查窗口和重复惩罚用来减少复读；长回复重复时，提高惩罚或扩大窗口。" = "تقلل نافذة فحص التكرار وعقوبات التكرار من الحلقات. إذا تكرر الرد الطويل، ارفع العقوبة أو وسّع النافذة.";
 "固定随机种子可以复现实验；想每次都自然变化就保持随机。" = "تجعل البذرة الثابتة التجارب قابلة للتكرار. اتركها عشوائية إذا أردت تغيّراً طبيعياً في كل مرة.";
 "高级区与导入" = "المنطقة المتقدمة والاستيراد";
-"这里更接近 llama.cpp 底层能力，建议一次只改一类。" = "هذه المنطقة أقرب إلى قدرات llama.cpp الداخلية. يُنصح بتغيير فئة واحدة فقط في كل مرة.";
+"这里更接近 llama.cpp 底层能力，建议一次只改一类。" = "استخدم Grammar لتحديد تنسيق ثابت للمخرجات، أو استورد معلمات llama.cpp وراجع الإعدادات الناتجة.";
 "KV Offload 和 Flash Attention 属于 Metal 稳定性开关；遇到 GPU/Metal 报错时先尝试关闭 Flash Attention 或 KV Offload。" = "KV Offload وFlash Attention هما مفتاحا استقرار Metal. عند ظهور أخطاء GPU/Metal، جرّب أولاً تعطيل Flash Attention أو KV Offload.";
 "Grammar 适合约束 JSON、枚举或固定格式输出；语法不合法会直接影响生成。" = "يناسب Grammar تقييد JSON أو القوائم أو الإخراج بتنسيق ثابت. القواعد غير الصالحة تؤثر مباشرة في التوليد.";
 "采样器链会改变候选 token 的处理顺序，建议只在你知道每个 sampler 作用时再自定义。" = "تغيّر سلسلة المعيّنات ترتيب معالجة الرموز المرشحة. خصصها فقط إذا كنت تعرف دور كل sampler.";
@@ -4053,7 +4053,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "加载慢通常来自大权重、大上下文或缓存未命中；可以降低上下文、减少 GPU 层数，或打开模型缓存。" = "غالباً ما ينتج التحميل البطيء عن أوزان كبيرة أو سياق كبير أو عدم إصابة الذاكرة المؤقتة. اخفض السياق أو قلل طبقات GPU أو فعّل ذاكرة النموذج المؤقتة.";
 "输出短或提前结束时，检查最大输出 token、Grammar 和“忽略 EOS”。" = "إذا كان الإخراج قصيراً أو انتهى مبكراً، فتحقق من الحد الأقصى لرموز الإخراج وGrammar وتجاهل EOS.";
 "回复发散、复读或格式不稳时，先恢复采样器链默认，再少量调整 Temperature、Top-P 和重复惩罚。" = "إذا تباعدت الردود أو تكررت أو أصبح التنسيق غير ثابت، فأعد أولاً سلسلة المعيّنات إلى الافتراضي، ثم اضبط قليلاً Temperature وTop-P وعقوبات التكرار.";
-"先读指南，再进入各参数二级页编辑；这样可以减少手表端误触。" = "اقرأ الدليل أولاً، ثم حرر المعلمات في صفحاتها التفصيلية لتقليل اللمسات غير المقصودة على Apple Watch.";
+"先读指南，再进入各参数二级页编辑；这样可以减少手表端误触。" = "اضبط مقدار المحادثة الذي يستخدمه النموذج المحلي وطول الرد وتنوع الإجابات. جرّب القيم الافتراضية أولًا ثم عدّل ما تحتاجه.";
 "只覆盖必要项目" = "تجاوز الضروري فقط";
 "没有打开“自定义”的项目会继续使用 App 默认值或聊天页全局采样设置。" = "العناصر التي لا يكون مخصص مفعلاً لها ستستمر في استخدام افتراضيات التطبيق أو إعدادات أخذ العينات العامة من صفحة الدردشة.";
 "上下文越大越占内存；手表端建议从较小值开始，确认稳定后再提高。" = "السياق الأكبر يستخدم ذاكرة أكثر. على Apple Watch، ابدأ بقيمة أصغر ولا ترفعها إلا بعد تأكيد الاستقرار.";
@@ -4080,13 +4080,13 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "最近一次重新嵌入成功。" = "اكتملت آخر عملية إعادة تضمين بنجاح.";
 "如果当前页面有未保存更改，会先保存再重新嵌入。" = "إذا كانت هناك تغييرات غير محفوظة في هذه الصفحة، فسيتم حفظها قبل إعادة التضمين.";
 "未找到这条记忆，无法重新嵌入。" = "لم يتم العثور على هذه الذاكرة، لذلك تعذر إعادة تضمينها.";
-"保护本机界面，也可选择加密本机数据库文件。" = "Protect the local app interface, with optional encryption for local database files.";
+"保护本机界面，也可选择加密本机数据库文件。" = "أضف قفلًا بكلمة مرور للتطبيق، ويمكنك أيضًا تشفير قواعد المحادثات والإعدادات والذكريات المحفوظة.";
 "只影响这台设备，不随同步发送。" = "Only affects this device and is not sent through sync.";
 "离开后台超过所选时间后重新验证。" = "Re-authenticate after the app stays in the background longer than the selected time.";
 "用于保护被离线提取的数据库文件。" = "Protects database files if they are extracted offline.";
 "应用锁用于保护已经解锁设备上的 App 界面。开启后，回到前台或手动锁定时，需要输入应用锁密码；iOS 上可额外开启 Face ID / Touch ID，失败后仍能回退到密码。" = "App Lock protects the app interface on an already unlocked device. After it is enabled, returning to the foreground or locking manually requires the App Lock password; on iOS, Face ID / Touch ID can also be enabled, with password fallback.";
 "自动锁定只在应用进入后台后计时。选择“立即”会在每次离开后重新验证；选择更长时间则适合频繁切换应用的场景。" = "Auto-lock starts counting only after the app enters the background. Choose Immediately to verify every time you leave; choose a longer delay when switching between apps frequently.";
-"数据库物理加密是另一层保护：它会把聊天、配置和记忆三处分库迁移为 SQLCipher 加密文件，主密码保存在本机 Keychain 中，用于启动时透明解锁。" = "Database encryption is a separate layer: it migrates the chat, configuration, and memory databases into SQLCipher-encrypted files. The master password is stored in the local Keychain for transparent unlock on launch.";
+"数据库物理加密是另一层保护：它会把聊天、配置和记忆三处分库迁移为 SQLCipher 加密文件，主密码保存在本机 Keychain 中，用于启动时透明解锁。" = "يحمي تشفير قاعدة البيانات المحادثات والإعدادات والذكريات المحفوظة، فتحتاج نسخة ملف القاعدة أيضًا إلى كلمة مرور لقراءتها. تُحفظ كلمة المرور الرئيسية افتراضيًا في سلسلة مفاتيح الجهاز لفتح القواعد تلقائيًا عند التشغيل.";
 "两者保护的对象不同：应用锁防止别人直接打开界面，数据库物理加密防止数据库文件被离线提取后读取。快照导出仍使用单独的导出密码，不会复用数据库主密码。" = "They protect different things: App Lock prevents direct access to the interface, while database encryption prevents offline reading of extracted database files. Snapshot exports still use a separate export password and do not reuse the database master password.";
 "应用锁和数据库主密码都只保存在本机，不会随 CloudKit、WatchConnectivity 或备份同步到其他设备。换设备使用时，需要在新设备上重新设置。" = "App Lock and the database master password are stored only on this device. They are not synced to other devices through CloudKit, WatchConnectivity, or backups. Set them up again on a new device.";
 "失败后仍可输入应用锁密码。" = "If it fails, you can still enter the App Lock password.";
@@ -4152,7 +4152,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "填入地址并连接" = "ملء العنوان والاتصال";
 "自动发现失败: %@" = "فشل الاكتشاف التلقائي: %@";
 "自动发现解析失败: %@" = "فشل حل الاكتشاف التلقائي: %@";
-"先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。" = "راجع نوع اللقطة ومكان الحفظ وطريقة الرفع ومخاطر الاستعادة قبل استخدام الإجراءات أدناه.";
+"先了解快照类型、保存位置、上传方式和恢复风险，再执行下面的操作。" = "احفظ المحادثات والإعدادات والذكريات في ملف احتياطي. اختر لقطة كاملة لتضمين المرفقات أيضًا.";
 "当前选择：%@" = "الاختيار الحالي: %@";
 "上传前请确认对象存储配置。" = "تأكد من إعدادات تخزين الكائنات قبل الرفع.";
 "恢复前请确认快照来源可信。" = "تأكد من موثوقية مصدر اللقطة قبل الاستعادة.";
@@ -4170,12 +4170,12 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "远端快照列表解析失败。" = "فشل تحليل قائمة اللقطات البعيدة.";
 "无法生成对象存储列表地址。" = "تعذر إنشاء عنوان قائمة تخزين الكائنات.";
 "远端快照路径为空。" = "مسار اللقطة البعيدة فارغ.";
-"先区分手动快照、启动保护和设备同步，再选择要执行的操作。" = "ميّز أولًا بين اللقطات اليدوية وحماية بدء التشغيل ومزامنة الأجهزة، ثم اختر الإجراء.";
+"先区分手动快照、启动保护和设备同步，再选择要执行的操作。" = "زامن المحادثات والإعدادات بين الأجهزة، أو احفظ نسخة احتياطية للانتقال إلى جهاز جديد أو استعادة البيانات.";
 "手动导出或恢复 .elsbackup 快照。" = "صدّر أو استعد لقطات .elsbackup يدويًا.";
 "只在启动时写入本机可恢复备份点。" = "يكتب نقطة نسخ احتياطي محلية قابلة للاستعادة عند بدء التشغيل فقط.";
 "开启后同步 iPhone 与 Apple Watch 支持的数据。" = "عند التفعيل، يزامن البيانات المدعومة بين iPhone و Apple Watch.";
 "用于同一 Apple ID 下的多设备漫游。" = "يُستخدم للتنقل بين الأجهزة ضمن Apple ID نفسه.";
-"同步与备份说明正文" = "تُستخدم لقطات قاعدة البيانات لتصدير ملفات .elsbackup أو استعادتها يدويًا، وهي مناسبة لتبديل الأجهزة والتعافي بين الأجهزة والنسخ الاحتياطي اليدوي.\n\nحماية بدء التشغيل مخصصة فقط لمنع تلف قاعدة بيانات SQLite. عند تفعيلها، يكتب كل تشغيل نقطة نسخ احتياطي إضافية قابلة للاستعادة على القرص.\n\nمزامنة التجوال عبر iCloud هي المسار الموصى به للتجربة السلسة. أبقها مفعّلة ضمن Apple ID نفسه كي يرفع التطبيق البيانات المدعومة ويجلبها تلقائيًا، بحيث تبقى أجهزة iPhone و iPad و Apple Watch متقاربة قدر الإمكان.\n\nمزامنة Apple Watch القريبة مخصصة لترتيب البيانات يدويًا بين iPhone و Apple Watch. إذا لم يتم تفعيل iCloud Sync على الطرفين منذ البداية، فقد تكون قواعد البيانات قد تفرعت مثل تاريخين منفصلين، ولا يكون الدمج المباشر موثوقًا. يتيح الاستبدال حسب قاعدة البيانات اختيار نسخة iPhone أو Apple Watch للاحتفاظ بها لكل من الدردشات والإعدادات والذاكرة؛ وسيتم استبدال قاعدة البيانات المقابلة على الطرف الآخر. قبل الاستبدال، يمكنك إرسال المحادثات المهمة واحدة تلو الأخرى إلى الجهاز الآخر من قائمة المحادثات.\n\nيبقى محرك الدمج القديم متاحًا يدويًا، لكنه قد يعيد مزودين أو إعدادات أو محادثات حُذفت من طرف واحد فقط. استخدمه فقط إذا كنت تقبل هذا الخطر.";
+"同步与备份说明正文" = "لمتابعة المحادثة على عدة أجهزة، فعّل مزامنة iCloud على الأجهزة التي تستخدم Apple ID نفسه. تتحدث المحادثات والإعدادات والذكريات المدعومة تلقائيًا. إن كنت تستخدم جهازًا واحدًا فقد تكفيك النسخ الاحتياطية.\n\nللاحتفاظ بنسخة قابلة للاستعادة، صدّر ملف .elsbackup. تحفظ لقطة قاعدة البيانات المحادثات والإعدادات والذكريات، وتضيف اللقطة الكاملة المرفقات والملفات الأخرى، وهي مفيدة قبل تغيير الجهاز.\n\nتساعد حماية بدء التشغيل عند تلف قاعدة البيانات. تنشئ نقطة استعادة محلية وتحتفظ بآخر نسخة تم التحقق منها فقط. يسأل التطبيق قبل الاستعادة عند اكتشاف التلف؛ وهذا لا يغني عن نسخ احتياطية متعددة الإصدارات.\n\nتنقل مزامنة Apple Watch القريبة البيانات يدويًا. تتيح الكتابة فوق قواعد البيانات اختيار جانب الاحتفاظ لكل من المحادثات والإعدادات والذكريات، وتستبدل القاعدة المقابلة على الجهاز الآخر. إن كانت لدى الطرفين محادثات مهمة، فأرسل ما تريد الاحتفاظ به منفردًا أولًا. قد يعيد الدمج القديم بيانات حُذفت على الجهاز الآخر.";
 "系统打开了一个数据库快照文件。确认来源可信后再恢复。" = "فتح النظام ملف لقطة قاعدة بيانات. لا تستعده إلا بعد التأكد من موثوقية المصدر.";
 "正在检查快照…" = "جارٍ فحص اللقطة…";
 "正在恢复快照…" = "جارٍ استعادة اللقطة…";
@@ -4205,7 +4205,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "正在使用 iCloud 数据替换此设备…" = "جارٍ استبدال بيانات هذا الجهاز ببيانات iCloud…";
 "正在使用此设备数据重建 iCloud…" = "جارٍ إعادة إنشاء iCloud من بيانات هذا الجهاز…";
 "iCloud 新数据集校验失败，原有同步基线未被替换。" = "تعذر التحقق من مجموعة بيانات iCloud الجديدة. لم يتم استبدال خط أساس المزامنة الحالي.";
-"iCloud 首次同步裁决说明" = "تستخدم مزامنة iCloud المتجولة تغييرات تزايدية لكل سجل، ويحتفظ كل جهاز بمؤشره الخاص. فعّلها فقط لمشاركة البيانات بين iPhone أو iPad أو Apple Watch باستخدام Apple ID نفسه. لا حاجة إليها لجهاز واحد أو عند استخدام اللقطات اليدوية فقط. بعد انقطاع الاتصال أو إيقاف التشغيل، يجلب الجهاز التغييرات التي لم يعالجها فقط.\n\nيجلب «التحقق والمزامنة الآن» أولاً الإضافات والتعديلات والحذف التي حدثت بعد المؤشر. كما يحمي التغييرات والحذف المحليين المعلقين حتى لا يعيد سجل بعيد قديم عنصراً ينتظر رفع حذفه. ثم يرفع التغييرات المحلية، ولا يحفظ المؤشر وخط الأساس الجديدين إلا بعد نجاح كل الخطوات.\n\nعند غياب خط أساس موثوق، يتطلب أي اختلاف بين الجهاز وiCloud اختياراً، حتى لو كان أحد الطرفين فارغاً. بعد اختيار اتجاه الاستبدال يجب كتابة عبارة التأكيد المعروضة. استخدام iCloud يستبدل البيانات المحلية بالكامل، واستخدام هذا الجهاز ينشر جيلاً سحابياً جديداً. يتم إنشاء نسخة احتياطية آمنة قبل أي استبدال.";
+"iCloud 首次同步裁决说明" = "يتلقى «التحقق والمزامنة الآن» تغييرات الأجهزة الأخرى ثم يرفع التغييرات المحلية. استخدمه لاستكمال المزامنة بعد انقطاع الاتصال؛ ولا يستبدل بيانات طرف بالكامل ببيانات الآخر.\n\nعند الاتصال الأول، إذا اختلفت بيانات الجهاز وiCloud، يسألك التطبيق أي نسخة تحتفظ بها. اختيار iCloud يستبدل البيانات المتزامنة على الجهاز. واختيار هذا الجهاز يستبدل بيانات السحابة ثم تتبعه الأجهزة الأخرى. يلزم اختيارك حتى لو كان أحد الطرفين فارغًا.\n\nقبل الاستبدال، ينشئ التطبيق لقطة أمان ويطلب كتابة نص التأكيد المعروض. تحقق من النسخة التي تحتوي على المعلومات التي تريد الاحتفاظ بها.";
 "iCloud 漫游同步已关闭" = "iCloud Roaming Sync is Off";
 
 "当前 .elsbackup 快照已加密。导入数据入口暂不支持解密合并，请改用“从快照恢复”入口，或选择未加密快照。" = "لقطة .elsbackup هذه مشفرة. لا يمكن لمدخل استيراد البيانات فك تشفيرها ودمجها بعد؛ استخدم الاستعادة من لقطة، أو اختر لقطة غير مشفرة.";
@@ -4250,8 +4250,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "下载进度" = "تقدم التنزيل";
 "已下载 %@ / %@" = "تم تنزيل %@ / %@";
 
-"先看当前会话能用什么，再按工具来源进入细分设置。" = "Check what the current session can use, then drill into settings by tool source.";
-"工具中心新版说明正文" = "When to use\n• Quickly check which tools are truly available in the current session.\n• Adjust enablement and approval policies across different tool sources.\n\nHow to read this page\n• Configured enabled means the setting is turned on.\n• Available in current session means it can actually be sent to chat after global switches, approval policy, and session isolation are applied.\n• If the two numbers differ, it is usually because session conditions are limiting the tool, such as Block Tools.\n\nRecommended flow\n1. Start with the overview and check available counts for each tool type.\n2. Use Show Enabled Only to focus on active configuration.\n3. Enter the relevant tool source. App tools are grouped by basic interaction, memory, files, database, and feedback.\n4. Open a specific tool to adjust enablement, approval policy, or run mode.\n\nKey switches\n• Enable Memory controls whether memory-related built-in tools can participate in chat.\n• Expose tools to model controls whether an entire source is available to the model.\n• Approval policy decides whether calls ask first, pass automatically, or are denied.\n\nTroubleshooting\n• If a tool does not work, check Available in current session before Configured enabled.\n• Block Tools makes all tool sources unavailable. Block Memory affects only memory context and memory tools.";
+"先看当前会话能用什么，再按工具来源进入细分设置。" = "تتيح الأدوات للذكاء الاصطناعي البحث والعمل على الملفات وتشغيل الاختصارات. اختر هنا الأدوات التي تسمح له باستخدامها.";
+"工具中心新版说明正文" = "تتيح الأدوات للذكاء الاصطناعي تنفيذ أعمال إلى جانب الإجابة، مثل البحث وقراءة الملفات وتشغيل الاختصارات. اختر المصدر وفعّل مفتاحه الرئيسي والأدوات المطلوبة، ثم صف مهمتك بكلماتك المعتادة.\n\nتعني «مفعّل في الإعدادات» أن الأداة مفتوحة، بينما تراعي «متاح في هذه المحادثة» قيود المحادثة أيضًا. إذا غابت أداة، تحقق من حظر الأدوات في المحادثة ومفتاح مصدرها. تحتاج أدوات MCP كذلك إلى اتصال صالح بالخادم.\n\nاختر من تفاصيل الأداة السؤال قبل الاستخدام أو السماح أو الرفض. خيار عرض الأدوات المفعلة فقط يرشح القائمة ولا يعطل غيرها. تعتمد أدوات الذاكرة أيضًا على مفتاح الذاكرة.";
 "拓展工具已按用途分组；进入分类后再查看具体工具、启用状态与审批策略。" = "App tools are grouped by purpose. Enter a category to review specific tools, enablement, and approval policy.";
 "分类 %d 个" = "%d categories";
 "按用途查看本地工具，先选类别，再调整具体工具。" = "Browse local tools by purpose. Choose a category first, then adjust specific tools.";
@@ -4259,12 +4259,12 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "工具 %d 个" = "%d tools";
 "技能" = "Skills";
 "当前还没有已导入的快捷指令工具。" = "No Shortcut tools have been imported yet.";
-"把已安装技能通过 use_skill 暴露给模型。" = "Expose installed skills to the model through use_skill.";
-"Agent Skills 工具说明正文" = "Agent Skills are useful for packaged workflows or specialized domain capabilities.\n\nThe global switch decides whether use_skill is exposed to the chat model. Individual switches decide whether each skill can be selected. If the current session blocks tools, skill settings are kept but not actually sent during chat.";
-"把已导入的 Siri 快捷指令作为聊天工具使用。" = "Use imported Siri Shortcuts as chat tools.";
-"快捷指令工具说明正文" = "Shortcut tools are useful for system automation, cross-app actions, or workflows you have already organized in Shortcuts.\n\nHere you can manage chat exposure, individual enablement, run mode, and tool descriptions. Calls still go through tool approval, which keeps higher-risk automation behind user confirmation.";
-"系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。" = "System-provided capabilities live here. Adjust memory, web cards, Q&A, and time tools one by one.";
-"内置工具说明正文" = "Built-in tools are provided directly by the app. They control core capabilities such as memory writing, active retrieval, web cards, structured Q&A, and system time.\n\nRecommendations\n• Check the Memory System switch first, then adjust memory writing and active retrieval.\n• Web cards, user questions, and system time are lightweight capabilities you can enable individually.\n• Block Tools makes every built-in tool unavailable. Block Memory affects only memory writing and retrieval.";
+"把已安装技能通过 use_skill 暴露给模型。" = "احفظ إرشادات الكتابة أو خطوات العمل أو المراجع كمهارات يرجع إليها الذكاء الاصطناعي عند الحاجة.";
+"Agent Skills 工具说明正文" = "اختر المهارات المثبتة التي يمكن للذكاء الاصطناعي الرجوع إليها. يتيح المفتاح العام اكتشاف المهارات، وتحدد المفاتيح الفردية المتاح منها. افتح إدارة المهارات لإضافة مهارة أو تعديل تعليماتها.\n\nتساعد الأوصاف النموذج على معرفة وقت استخدامها. إذا لم يختر مهارة، فاذكر اسمها في طلبك وتحقق من عدم حظر الأدوات في المحادثة.";
+"把已导入的 Siri 快捷指令作为聊天工具使用。" = "اسمح للذكاء الاصطناعي بتشغيل اختصارات Siri التي أعددتها لتنفيذ إجراءاتك الآلية من المحادثة.";
+"快捷指令工具说明正文" = "اختر الاختصارات المستوردة التي يستطيع الذكاء الاصطناعي تشغيلها، وصف غرضها ومدخلاتها المطلوبة. تساعد الأوصاف المحددة على اختيار الإجراء الصحيح.\n\nيتحكم المفتاح العام في جميع الاختصارات، والفردي في اختصار واحد. يحدد وضع التشغيل كيفية البدء، وإعداد الموافقة طريقة التأكيد قبل الاستخدام. تعتمد النتائج الممكنة على الاختصار نفسه.";
+"系统自带能力集中在这里，按单项调整记忆、网页卡片、问答与时间工具。" = "اسمح للذكاء الاصطناعي بحفظ الذكريات وعرض بطاقات الويب وطرح أسئلة بخيارات والتحقق من الوقت الحالي.";
+"内置工具说明正文" = "تأتي هذه الأدوات مع التطبيق ولا تحتاج إلى خادم منفصل. يستطيع الذكاء الاصطناعي حفظ المعلومات والبحث في الذكريات وعرض بطاقات الويب وطرح أسئلة بخيارات ومعرفة الوقت.\n\nفعّل الأدوات التي تحتاجها. تتطلب كتابة الذكريات والبحث فيها تفعيل نظام الذاكرة أيضًا. إذا حظرت المحادثة الأدوات، فلن تُقدَّم للنموذج حتى لو كانت مفعلة.";
 "启用记忆系统后，记忆写入与主动检索工具才可能参与聊天。" = "After the Memory System is enabled, memory writing and active retrieval tools can participate in chat.";
 
 // 内建 AppTool MCP 服务器
@@ -4419,8 +4419,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "语音输入模式" = "وضع الإدخال الصوتي";
 "录音后可先转写到输入框，也可在模型支持音频输入时作为音频附件发送。" = "يمكن نسخ التسجيلات أولًا إلى حقل الإدخال، أو إرسالها كمرفقات صوتية عندما يدعم النموذج إدخال الصوت.";
 "语音转写\n• 关闭“模型支持时发送音频”时，录音会先发送给语音识别模型转写。\n• 识别结果会先进入预览，点完成后再补到输入框；取消会丢弃本次结果。\n\n音频直发\n• 开启“模型支持时发送音频”时，录音会作为音频附件发送给当前聊天模型。\n• 只有当前聊天模型在模型设置中开启“可处理音频”，并且提供商实际支持音频输入时，才适合使用音频直发。\n• 如果当前聊天模型不支持音频输入，请关闭该开关，改用语音识别模型转写。\n\n模型选择\n• 语音识别模型可以在本页选择，也可以在“提供商与模型管理 > 专用模型”中统一设置。" = "نسخ الكلام\n• عند إيقاف «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل أولًا إلى نموذج التعرف على الكلام لنسخه.\n• تظهر النتيجة أولًا في معاينة، ولا تُضاف إلى حقل الإدخال إلا بعد الضغط على تم؛ يؤدي الإلغاء إلى تجاهل هذه النتيجة.\n\nإرسال الصوت مباشرة\n• عند تشغيل «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل إلى نموذج المحادثة الحالي كمرفق صوتي.\n• استخدم ذلك فقط عندما يكون «يمكنه معالجة الصوت» مفعّلًا للنموذج الحالي في إعدادات النموذج، وعندما يدعم المزوّد إدخال الصوت فعليًا.\n• إذا كان نموذج المحادثة الحالي لا يدعم إدخال الصوت، فأوقف هذا الخيار واستخدم النسخ عبر نموذج التعرف على الكلام.\n\nاختيار النموذج\n• يمكنك اختيار نموذج التعرف على الكلام هنا، أو ضبطه عمومًا من المزوّدون والنماذج > النماذج المتخصصة.";
-"录音可用系统内建识别或 OpenAI Audio Transcriptions 兼容模型转写，也可在聊天模型支持音频时直发。" = "يمكن نسخ التسجيلات باستخدام التعرف المدمج في النظام أو نموذج متوافق مع OpenAI Audio Transcriptions، ويمكن إرسالها مباشرة عندما يدعم نموذج المحادثة الصوت.";
-"语音输入模式详情：转写接口与模型来源" = "نسخ الكلام\n• عند إيقاف «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل أولًا إلى نموذج التعرف على الكلام لنسخه.\n• تظهر النتيجة أولًا في معاينة، ولا تُضاف إلى حقل الإدخال إلا بعد الضغط على تم؛ يؤدي الإلغاء إلى تجاهل هذه النتيجة.\n• تتضمن قائمة النماذج SFSpeechRecognizer المدمج في النظام، ويمكنه استخدام التعرف الصوتي للنظام مباشرة.\n\nصيغة نموذج التعرف على الكلام\n• يجب أن تكون نماذج التعرف على الكلام الخارجية متوافقة مع واجهة OpenAI Audio Transcriptions: POST /audio/transcriptions، ورفع file و model عبر multipart/form-data، وإرجاع حقل text.\n• لأن واجهة إضافة النماذج ليست مكانًا مناسبًا لإضافة مفتاح بروتوكول خاص، لا يضع التطبيق علامة منفصلة لهذه الصيغة ضمن قدرات النموذج. يرجى التأكد من الدعم عبر وثائق المزوّد أو اختباراتك.\n• يمكن استخدام خدمات مثل FunAudioLLM/SenseVoiceSmall كنماذج تعرف على الكلام إذا كانت متوافقة مع هذه الواجهة.\n• أين تجد هذه النماذج؟ هذا التطبيق لا يعلن عن المزوّدين؛ يمكنك سؤال AI للمساعدة في العثور على واجهات API للتعرف على الكلام أو خيارات نشر محلية متوافقة مع OpenAI Audio Transcriptions.\n\nإرسال الصوت مباشرة\n• عند تشغيل «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل إلى نموذج المحادثة الحالي كمرفق صوتي.\n• استخدم ذلك فقط عندما يكون «يمكنه معالجة الصوت» مفعّلًا للنموذج الحالي في إعدادات النموذج، وعندما يدعم المزوّد إدخال الصوت فعليًا.\n• إذا كان نموذج المحادثة الحالي لا يدعم إدخال الصوت، فأوقف هذا الخيار واستخدم النسخ عبر نموذج التعرف على الكلام.\n\nاختيار النموذج\n• يمكنك اختيار نموذج التعرف على الكلام هنا، أو ضبطه عمومًا من المزوّدون والنماذج > النماذج المتخصصة.";
+"录音可用系统内建识别或 OpenAI Audio Transcriptions 兼容模型转写，也可在聊天模型支持音频时直发。" = "حوّل كلامك إلى نص وراجعه قبل الإرسال، أو أرسل التسجيل مباشرة إلى نموذج يدعم الصوت.";
+"语音输入模式详情：转写接口与模型来源" = "للإملاء بدل الكتابة، عطّل إرسال الصوت عند دعمه واختر نموذج تعرف على الكلام. يتحول التسجيل إلى نص تراجعه؛ أكمل لإضافته إلى حقل الإدخال أو ألغِ لحذف النتيجة. لا يحتاج التعرف المدمج إلى إعداد API منفصل، ويمكنك أيضًا اختيار خدمة تفريغ سحابية.\n\nلإضافة خدمة سحابية، أنشئ نموذجًا لغرض التعرف على الكلام في إدارة المزوّدين والنماذج. يجب أن يدعم واجهة OpenAI Audio Transcriptions ‏(/audio/transcriptions)، ولا تكفي واجهة محادثة عادية. فعّل النموذج ثم اختره هنا.\n\nليسمع الذكاء الاصطناعي التسجيل مباشرة، فعّل إرسال الصوت عند دعمه. يجب أن يدعم النموذج والمزوّد إدخال الصوت مع تفعيل معالجته في إعدادات النموذج. وإلا فاستخدم التفريغ النصي.";
 "语音转写\n• 关闭“模型支持时发送音频”时，录音会先发送给语音识别模型转写。\n• 识别结果会先进入预览，点完成后再补到输入框；取消会丢弃本次结果。\n• 模型列表里包含系统内建的 SFSpeechRecognizer，可直接使用系统语音识别。\n\n语音识别模型格式\n• 第三方语音识别模型需要兼容 OpenAI Audio Transcriptions 接口：POST /audio/transcriptions，multipart/form-data 上传 file 和 model，并返回 text 字段。\n• 因为添加模型的界面不适合再增加专门协议开关，App 不会在模型能力里单独标记这个格式；请按提供商文档或自测结果判断是否支持。\n• FunAudioLLM/SenseVoiceSmall 这类服务如果已经兼容该接口，就可以作为语音识别模型使用。\n\n音频直发\n• 开启“模型支持时发送音频”时，录音会作为音频附件发送给当前聊天模型。\n• 只有当前聊天模型在模型设置中开启“可处理音频”，并且提供商实际支持音频输入时，才适合使用音频直发。\n• 如果当前聊天模型不支持音频输入，请关闭该开关，改用语音识别模型转写。\n\n模型选择\n• 语音识别模型可以在本页选择，也可以在“提供商与模型管理 > 专用模型”中统一设置。" = "نسخ الكلام\n• عند إيقاف «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل أولًا إلى نموذج التعرف على الكلام لنسخه.\n• تظهر النتيجة أولًا في معاينة، ولا تُضاف إلى حقل الإدخال إلا بعد الضغط على تم؛ يؤدي الإلغاء إلى تجاهل هذه النتيجة.\n• تتضمن قائمة النماذج SFSpeechRecognizer المدمج في النظام، ويمكنه استخدام التعرف الصوتي للنظام مباشرة.\n\nصيغة نموذج التعرف على الكلام\n• يجب أن تكون نماذج التعرف على الكلام الخارجية متوافقة مع واجهة OpenAI Audio Transcriptions: POST /audio/transcriptions، ورفع file و model عبر multipart/form-data، وإرجاع حقل text.\n• لأن واجهة إضافة النماذج ليست مكانًا مناسبًا لإضافة مفتاح بروتوكول خاص، لا يضع التطبيق علامة منفصلة لهذه الصيغة ضمن قدرات النموذج. يرجى التأكد من الدعم عبر وثائق المزوّد أو اختباراتك.\n• يمكن استخدام خدمات مثل FunAudioLLM/SenseVoiceSmall كنماذج تعرف على الكلام إذا كانت متوافقة مع هذه الواجهة.\n\nإرسال الصوت مباشرة\n• عند تشغيل «إرسال الصوت عند دعم النموذج»، يُرسل التسجيل إلى نموذج المحادثة الحالي كمرفق صوتي.\n• استخدم ذلك فقط عندما يكون «يمكنه معالجة الصوت» مفعّلًا للنموذج الحالي في إعدادات النموذج، وعندما يدعم المزوّد إدخال الصوت فعليًا.\n• إذا كان نموذج المحادثة الحالي لا يدعم إدخال الصوت، فأوقف هذا الخيار واستخدم النسخ عبر نموذج التعرف على الكلام.\n\nاختيار النموذج\n• يمكنك اختيار نموذج التعرف على الكلام هنا، أو ضبطه عمومًا من المزوّدون والنماذج > النماذج المتخصصة.";
 
 // MCP built-in server restore
@@ -4630,7 +4630,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "主要内容" = "المحتوى الرئيسي";
 "结果内容" = "محتوى النتيجة";
 "分支: %@" = "فرع: %@";
-"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。" = "سيتم تضمين أول خيارين في أوصاف القدرات القابلة للاستدعاء؛ وتتضمن \"النتائج الخارجية الأخيرة\" أحدث نتائج الاختصارات / MCP وسجل الإشارات؛ وتتضمن \"الإعلانات وإشارات الاتجاهات\" إعلانات التطبيق الحالية ومقاطع الاتجاهات المتراكمة.";
+"前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令 / MCP 的最近结果与历史信号；“公告与趋势信号”则会纳入应用当前公告与已积累的趋势片段。" = "تخبر خيارات MCP والاختصارات نموذج إنشاء البطاقات بالأدوات المتاحة. تضيف النتائج الخارجية الأخيرة معلومات أعادتها الأدوات سابقًا، وتضيف الإعلانات والاتجاهات إعلانات التطبيق ومعلومات الاتجاهات التي جُمعت.";
 "前两项会纳入可调用能力描述；“最近外部结果”会纳入快捷指令与 MCP 的最近结果；“公告与趋势信号”会纳入应用公告和已积累的趋势片段。" = "سيتم تضمين أول خيارين في أوصاف القدرات القابلة للاستدعاء؛ وتتضمن \"النتائج الخارجية الأخيرة\" أحدث نتائج الاختصارات وMCP؛ وتتضمن \"الإعلانات وإشارات الاتجاهات\" إعلانات التطبيق ومقاطع الاتجاهات المتراكمة.";
 "当前范围内还没有来源统计。" = "لا توجد إحصاءات مصادر في النطاق الحالي.";
 "空文件夹" = "مجلد فارغ";
@@ -4639,27 +4639,27 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "附件_%@" = "مرفق_%@";
 
 // 第三轮补齐：设置说明卡与本地模型相关入口本地化 key
-"Agent Skills 管理说明正文" = "When to use\n• Package reusable prompts, workflows, or domain knowledge as skills the model can call with use_skill.\n• Keep imported skills, enablement, and SKILL.md content in one place.\n\nRecommended flow\n1. Add a skill by pasting SKILL.md, importing a local file, or importing from GitHub.\n2. Confirm the skill is enabled.\n3. Turn on “Expose Agent Skills to model”.\n4. Ask in chat as usual; the model can call use_skill when the skill is relevant.\n\nSKILL.md format\n• Frontmatter can declare name, description, when_to_use, and related fields.\n• If a directory or repository omits name, the folder name is used; if description is omitted, the first body paragraph is used.\n• The body can contain instructions, parameters, examples, and other Markdown content.\n\nTroubleshooting\n• If the model does not call a skill, check the global switch and the individual enabled state.\n• If import fails, verify the repository or file, or paste SKILL.md manually.";
-"MCP 工具箱说明正文" = "When to use\n• Connect external service capabilities to chat, such as retrieval, tool execution, or resource reading.\n• Diagnose why a tool is not available or not being called.\n\nRecommended flow\n1. Add or edit an MCP Server and confirm it connects.\n2. Turn on “Expose MCP tools to model”.\n3. Check the connection overview and published capabilities.\n4. Review individual tools, enabled state, and approval policy.\n\nKey settings\n• Auto-approve countdown controls how long approval waits before allowing a call.\n• Tool enablement decides whether a specific tool is visible to the model.\n• Approval policy can allow, deny, or ask every time.\n\nTroubleshooting\n• If a tool is not called, check the global switch, enabled state, approval policy, and session isolation.\n• If a call fails, inspect active calls, governance logs, and the latest response.";
-"世界书说明正文" = "What it does\n• Worldbooks inject context by rules when a message is sent.\n• They are static rule knowledge and do not write into the memory system.\n\nRecommended flow\n1. Import a worldbook from JSON, PNG, or URL.\n2. Bind the needed worldbooks to the current session.\n3. Use the independent switches under Current Session to block memory, tools, or the global system prompt as needed. These settings work independently of worldbooks.\n\nKey status\n• Binding count shows how many worldbooks are bound to the session.\n• Enabled entries show how dense each worldbook is.\n\nTips\n• For large worldbooks, keep disabled entries pruned so context stays focused.\n• After import, check the latest report for failed entries and conflicts.\n• Export important worldbooks regularly as backups.";
-"为模型提供自定义技能，通过 use_skill 在聊天中按需调用。" = "Provide custom skills to the model and call them on demand in chat through use_skill.";
-"图片相册说明正文" = "What appears here\n• Images returned by assistant messages in the current session.\n• These are chat results, not a separate image generation workspace.\n\nWhat you can do\n• Open an image to view it larger and inspect its prompt context when available.\n• Save or share images from the action menu.\n• Deleting an image removes the local image reference from that message.\n\nTips\n• To keep generating or editing images, return to chat and describe the change.\n• To organize older results, switch to the relevant session first.";
-"在手表端查看并管理已同步的快捷指令工具。" = "View and manage synced Shortcut tools on Apple Watch.";
-"在手表端查看服务器状态、工具能力和治理日志。" = "اعرض على Apple Watch حالة الخوادم وقدرات الأدوات وسجلات الحوكمة.";
-"字体样式优先级说明正文" = "Recommended flow\n1. Import the font files you want to use.\n2. Choose a style slot, such as body, italic, bold, or code.\n3. Reorder fonts so the preferred one is higher.\n4. Add missing fonts to the current slot when needed.\n5. To change only part of chat text, add a Fonts for Specific Content rule and choose exact text, delimiters, or a regular expression.\n6. Reorder fonts inside the rule; matched text uses this local chain first.\n7. Removing a font from a slot or rule does not delete the font file.\n\nRules\n• Outer style slots define global fonts; local rules override only matched chat text.\n• Rules and fonts inside each rule both use top-to-bottom priority.\n• The same font can appear in multiple slots and rules.\n• If no candidate is available, the app falls back to the outer font or system font.";
+"Agent Skills 管理说明正文" = "المهارة تعليمات قابلة لإعادة الاستخدام، مثل قواعد مراجعة النصوص أو خطوات البحث أو المراجع المتخصصة. يرى الذكاء الاصطناعي وصفها أولًا ثم يستخدم use_skill لقراءة النص والملفات عند الحاجة.\n\nالصق SKILL.md أو استورد من GitHub أو رابط أو حزمة محلية. فعّل المهارة ومفتاح المحادثة ثم صف المهمة. يساعد وصف يوضح متى تُستخدم المهارة وما تفعله النموذج على اختيارها.\n\nيمكن أن تتضمن ترويسة SKILL.md الحقول name وdescription وwhen_to_use، والمتن خطوات وأمثلة. تتطلب السكربتات وضع Agent مع Linux المحلي، وتخضع لإعدادات تفويض السكربتات قبل التشغيل. استيراد المهارة وحده لا يشغّلها.";
+"MCP 工具箱说明正文" = "توفر خدمات MCP البحث وعمليات الملفات وغيرها للذكاء الاصطناعي. أضف عنوان الخادم وبيانات الاعتماد اللازمة، واتصل به وراجع أدواته، ثم فعّل مفتاح أدوات المحادثة والأدوات التي تريدها.\n\nتستخدم الخدمات البعيدة HTTP أو SSE. تحتاج خدمات stdio المحلية إلى Linux المحلي والأوامر والبرامج التي تعتمد عليها. استيراد الإعدادات لا يثبت هذه المتطلبات.\n\nيمكن لكل أداة أن تسأل كل مرة أو تسمح دائمًا أو ترفض دائمًا. يستمر التنفيذ عند انتهاء العد التنازلي للموافقة التلقائية، فاضبطه بما يناسب عملك.\n\nعند فشل الاتصال، تحقق من العنوان وبيانات الاعتماد. إذا اتصلت الأداة ولم تتوفر، فتحقق من مفاتيحها وقواعد الموافقة وحظر الأدوات في المحادثة. تعرض سجلات الاستدعاء تفاصيل الأخطاء.";
+"世界书说明正文" = "يحفظ كتاب العالم خلفية القصة وعلاقات الشخصيات والأماكن والمصطلحات. مثلًا، أضف وصفًا مرتبطًا بكلمة «الميناء» ليصل إلى الذكاء الاصطناعي عند ذكره دون لصقه كل مرة.\n\nاستورد JSON أو PNG أو رابطًا، واربط الكتاب بالمحادثة الحالية، ثم تحقق من تفعيل المدخلات وكلماتها المفتاحية. تُضاف عند الإرسال المدخلات المطابقة للقواعد فقط؛ عدد المدخلات المفعلة لا يعني أنها تُرسل كلها في كل طلب.\n\nهذه مراجع تديرها بنفسك ولا تتحول تلقائيًا إلى ذكريات طويلة الأمد. كثرة المعلومات قد تطيل الطلبات، لذا احتفظ بما يخص القصة أو المهمة الحالية.";
+"为模型提供自定义技能，通过 use_skill 在聊天中按需调用。" = "احفظ إرشادات الكتابة أو خطوات العمل أو المراجع كمهارات يرجع إليها الذكاء الاصطناعي عند الحاجة.";
+"图片相册说明正文" = "يجمع الألبوم الصور التي أرسلها الذكاء الاصطناعي في المحادثة الحالية. افتح صورة لتكبيرها وعرض سياق طلبها إن توفر، واستخدم قائمة الإجراءات لحفظها أو مشاركتها.\n\nلإنشاء صورة أخرى أو تعديلها، ارجع إلى المحادثة وصف ما تريد. بدّل المحادثة أولًا للعثور على صور من محادثة أخرى.\n\nيزيل الحذف مرجع الصورة المحلية من الرسالة، فلا تعود تظهر في الألبوم.";
+"在手表端查看并管理已同步的快捷指令工具。" = "اسمح للذكاء الاصطناعي بتشغيل اختصارات Siri التي أعددتها لتنفيذ إجراءاتك الآلية من المحادثة.";
+"在手表端查看服务器状态、工具能力和治理日志。" = "اربط خدمة MCP ليستخدم الذكاء الاصطناعي أدوات البحث أو الملفات أو غيرها مما توفره الخدمة أثناء المحادثة.";
+"字体样式优先级说明正文" = "لاستخدام خط للنص وآخر للشيفرة، استورد ملفات الخطوط وفعّل الخطوط المخصصة ثم أضفها إلى الأنماط المناسبة. للخطوط الأعلى أولوية، وتُجرَّب التالية عند غياب حرف.\n\nلتغيير جزء فقط، مثل الحوار بين علامتي اقتباس، أضف قاعدة خط باستخدام نص محدد أو علامات بداية ونهاية أو تعبير نمطي. تؤثر القاعدة في النص المطابق فقط وتُجرَّب خطوطها بالترتيب.\n\nيمكن استخدام الخط نفسه في عدة أنماط وقواعد. إزالته من القائمة لا تحذف ملفه. إذا لم يصلح أي خط، يُستخدم النمط المحيط أو خط النظام.";
 "当前对话模型不支持图片输入时，用于先把图片识别为文字；手表端默认不选择。" = "When the current chat model does not support image input, use this to recognize images as text first; no default is selected on watchOS.";
-"快捷指令工具箱说明正文" = "When to use\n• Let the model call iOS Shortcuts during chat for automation tasks.\n• Manage import sources, enabled state, run mode, and approval behavior in one place.\n\nRecommended flow\n1. Import tools on iPhone with the official shortcut or clipboard manifest.\n2. Confirm the tool list has synced to Apple Watch if you use watchOS.\n3. Turn on “Expose shortcut tools to model”.\n4. Review each tool description, enabled state, run mode, and approval countdown.\n\nImport modes\n• Light import only reads names and is good for quick setup.\n• Deep import tries to parse iCloud shares and generate descriptions; if it fails, it falls back to links only.\n\nTroubleshooting\n• If a tool is not called, check the global switch and the individual enabled state.\n• If URL Scheme or urlshim navigation fails, import again from the clipboard manifest.";
-"拓展功能说明正文" = "What this page is for\n• Manage advanced capabilities that are outside the core chat flow.\n• Jump quickly into maintenance, import, debugging, voice, and tool integration pages.\n\nHow to choose\n• Memory System / Worldbook manage long-term context and rule knowledge.\n• MCP / Shortcuts / Agent Skills expose external capabilities or reusable skills to the model.\n• Storage Management / Remote File Access help with cleanup and troubleshooting.\n\nTips\n• Enable advanced features as needed so the main chat flow stays focused.\n• Back up important data before imports, restores, or cleanup.";
-"按关键词规则注入上下文，不会写入记忆系统。" = "Injects context by keyword rules without writing to memory.";
-"按槽位管理字体顺序，越靠上优先级越高。" = "Manage font order by slot; higher entries have higher priority.";
+"快捷指令工具箱说明正文" = "جهّز أولًا إجراءً آليًا يعمل في تطبيق الاختصارات على iPhone. استورده باستخدام اختصار الاستيراد في هذه الصفحة أو قائمة من الحافظة. زامن النتائج قبل استخدامها على الساعة.\n\nيقرأ الاستيراد الخفيف الأسماء فقط. يحاول الاستيراد العميق قراءة خطوات العمل من رابط المشاركة وإنشاء وصف. في الحالتين، وضّح الغرض والمدخلات المطلوبة ليفهم الذكاء الاصطناعي متى يشغّله.\n\nفعّل المفتاح العام والأدوات الفردية ثم اطلب المهمة في المحادثة. تتيح التفاصيل تغيير وضع التشغيل وطريقة التأكيد. إذا فشل الانتقال للاستيراد، انسخ القائمة على iPhone واختر الاستيراد من الحافظة.";
+"拓展功能说明正文" = "لتشغيل الذكاء الاصطناعي على جهازك، افتح النماذج المحلية واستورد ملف GGUF. وللعثور على الصور التي أرسلها، افتح ألبوم الصور الذي يعرض صور المحادثة الحالية.\n\nاستخدم استيراد البيانات لنقل محادثات من تطبيق آخر. افتح إدارة التخزين لتصفح الملفات وتوفير مساحة، أو الوصول البعيد للملفات لفتح ملفات التطبيق من حاسوب.\n\nتفتح الأوامر السريعة إجراءات من حقل الإدخال. ويساعد التوليد في الخلفية على تقليل انقطاع الردود عند تبديل التطبيقات. يمكن لقفل التطبيق طلب كلمة مرور للدخول، مع إمكانية تفعيل تشفير قاعدة البيانات بشكل منفصل.";
+"按关键词规则注入上下文，不会写入记忆系统。" = "احفظ الشخصيات والأماكن والخلفيات ليحصل عليها الذكاء الاصطناعي تلقائيًا عند الحديث عنها.";
+"按槽位管理字体顺序，越靠上优先级越高。" = "اختر خطوط النص العادي والعريض والشيفرة. إذا تعذر عرض حرف، يُجرَّب الخط التالي في القائمة.";
 "用于图片生成，也可在图片生成功能中修改。" = "Used for image generation; can also be changed in Image Generation.";
 "用于文字转语音，也可在 TTS 设置中修改。" = "Used for text-to-speech; can also be changed in TTS Settings.";
 "用于记忆嵌入，也可在记忆库管理中修改。" = "Used for memory embeddings; can also be changed in Memory Library Management.";
 "用于语音转文字，也可在偏好设置中修改。" = "Used for speech-to-text; can also be changed in Preferences.";
-"让 AI 持续理解你的长期偏好和上下文。" = "Let AI continuously understand your long-term preferences and context.";
-"记忆检索说明正文" = "عدد نتائج الاسترجاع (Top K)\n• عند قيمة أكبر من 0 يدمج الترتيب الدلالة والكلمات المفتاحية والكيانات والزمن والأهمية والثقة وقوة الاستخدام.\n• يستمر البحث المحلي عند تعذر خدمة التضمين.\n• عند 0 ترسل كل الذكريات النشطة والسارية؛ والقيمة الافتراضية 3.\n\nالاسترجاع النشط\n• عند تفعيله تتاح أداة search_memory للذكاء الاصطناعي.\n• يمكنه استخدام hybrid (موصى به) أو vector أو keyword وتحديد العدد.\n• قد يقلل ذلك إصابات ذاكرة التخزين المؤقت للسياق.\n\nسمات الذاكرة\n• يحدد النوع الغرض، وتحفظ الصلاحية الحقائق القديمة كتاريخ من دون التأثير في الإجابات الحالية.\n• تؤثر الأهمية والثقة وتطابق الكيانات وقوة الاستخدام في الترتيب.\n\nإرسال وقت التحديث\n• عند تفعيله يضاف آخر وقت تحديث. وتظل السمات المنظمة مرسلة عند تعطيله.";
-"记忆系统说明正文" = "What it does\n• The memory system retrieves historical information before replies, helping the model connect past preferences and context.\n• Unlike Worldbook, memory is dynamic knowledge that can be accumulated, read, and written.\n\nKey switches\n• Enable Memory is the global switch. When off, the app neither retrieves nor writes new memories.\n• Allow writing new memories only controls writing; existing memories can still be read.\n\nRecommended use\n1. Turn on the global switch first and observe whether replies fit long-term preferences better.\n2. If noisy memories are a concern, disable writing and keep reading only.\n3. Clean low-quality or outdated memories in Memory Library regularly.";
-"集中管理工具集成、语音能力与系统维护入口。" = "Manage tool integrations, voice features, and system maintenance entries in one place.";
+"让 AI 持续理解你的长期偏好和上下文。" = "احفظ تفضيلاتك والمعلومات المهمة للمحادثات القادمة لتقل الحاجة إلى تكرار شرح الخلفية.";
+"记忆检索说明正文" = "يحدد Top K عدد الذكريات المختارة تلقائيًا، والقيمة الافتراضية 3. تقليله يقلل النص المرسل وزيادته توفر خلفية أوسع. القيمة 0 تتجاوز التصفية وترسل جميع الذكريات السارية؛ ولا تعطل الذاكرة.\n\nيجمع التطبيق بين المعنى والكلمات المفتاحية والوقت وعوامل أخرى لاختيار الذكريات. يستمر البحث المحلي إذا تعذرت خدمة التضمين.\n\nيتيح البحث النشط للذكاء الاصطناعي استخدام search_memory للبحث عن معلومات إضافية أثناء الرد. يجب أن تكون الذاكرة والأدوات متاحتين، وقد يؤثر ذلك في إعادة استخدام ذاكرة الطلبات المؤقتة.\n\nإرسال وقت التحديث يخبر الذكاء الاصطناعي بآخر تعديل للسجل. تؤثر الأهمية والثقة وفترة الصلاحية في الاختيار. يمكنك تعديل المحتوى القديم أو أرشفته.";
+"记忆系统说明正文" = "تحتفظ الذاكرة بالمعلومات المفيدة على المدى الطويل، مثل أسلوب الإجابات المفضل ومشاريعك الحالية والخلفيات التي تكرر شرحها. عند تفعيلها، يرسل التطبيق الذكريات ذات الصلة إلى النموذج قبل الرد، ولا يعيد إرسال جميع المحادثات القديمة.\n\nلحفظ معلومة، اطلب من الذكاء الاصطناعي تذكرها مع تفعيل كتابة الذاكرة والأدوات المعنية، أو أضفها يدويًا إلى مكتبة الذاكرة. تعطيل الكتابة يبقي قراءة الذكريات الموجودة متاحة. أما المفتاح الرئيسي فيوقف القراءة والكتابة معًا.\n\nيمكنك مراجعة السجلات وتعديلها وحذفها وأرشفتها في المكتبة. تبقي الأرشفة السجل محفوظًا لكنها تستبعده من الإجابات المعتادة. صحح هناك المعلومات القديمة أو غير الدقيقة.";
+"集中管理工具集成、语音能力与系统维护入口。" = "تحدث بالصوت، وأتح للذكاء الاصطناعي حفظ الذكريات واستخدام الأدوات، وأدر النماذج والملفات على ساعتك.";
 "默认技能模板" = "---\nname: my-skill\ndescription: \"وصف المهارة\"\n---\n\nاكتب تعليمات المهارة هنا.";
 "提示词设置" = "Prompt Settings";
 "内置提示词" = "Built-in Prompts";
@@ -4835,7 +4835,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "数据库主密码未保存到 Keychain 时，数据库解锁会接管本机界面保护，普通应用锁会暂时停用。" = "When the database master password is not saved to Keychain, database unlock takes over local interface protection and the regular app lock is temporarily disabled.";
 "当前不会把数据库主密码保存到 Keychain；冷启动时需要先输入主密码，验证成功后只暂存在内存中。" = "The database master password is not currently saved to Keychain. On cold launch, enter the master password first; after verification it stays only in memory.";
 "用于保护被离线提取的数据库文件。默认会把主密码保存在本机 Keychain 中，以便启动时自动解锁。" = "Protects database files if they are extracted offline. By default, the master password is saved in this device's Keychain so startup can unlock automatically.";
-"如果关闭 Keychain 保存，应用会在冷启动时要求输入数据库主密码；主密码验证通过后只暂存在当前进程内存里，数据库未解锁前不会启动聊天、同步或每日脉冲等数据访问任务。" = "If Keychain storage is off, the app will ask for the database master password on cold launch. After verification, the master password stays only in current process memory, and chat, sync, Daily Pulse, and other data access tasks do not start until the database is unlocked.";
+"如果关闭 Keychain 保存，应用会在冷启动时要求输入数据库主密码；主密码验证通过后只暂存在当前进程内存里，数据库未解锁前不会启动聊天、同步或每日脉冲等数据访问任务。" = "عند تعطيل الحفظ في سلسلة المفاتيح، يلزم إدخال كلمة المرور الرئيسية في كل تشغيل جديد للتطبيق. لا تتاح المحادثة أو المزامنة قبل الفتح، وتُحفظ كلمة المرور خلال جلسة التطبيق الحالية فقط.";
 "记住数据库主密码" = "Remember Database Master Password";
 "关闭 Keychain 保存" = "Turn Off Keychain Storage";
 "保存到 Keychain" = "Save to Keychain";
@@ -5018,7 +5018,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "角色卡" = "Character Cards";
 "用户身份" = "Personas";
 "SillyTavern 角色卡" = "SillyTavern Character Cards";
-"导入 V2/V3 JSON 或 PNG 角色卡；内嵌世界书、角色正则、助手脚本和扩展字段会一起保留。" = "Import V2/V3 JSON or PNG cards while preserving embedded lorebooks, scoped regexes, helper scripts, and extension fields.";
+"导入 V2/V3 JSON 或 PNG 角色卡；内嵌世界书、角色正则、助手脚本和扩展字段会一起保留。" = "تحدد بطاقة الشخصية دور الذكاء الاصطناعي وأسلوب كلامه ورسالته الافتتاحية. استورد بطاقات SillyTavern بصيغة JSON أو PNG مع كتب العالم والقواعد والسكربتات المرفقة.";
 "导入角色卡" = "Import Character Card";
 "角色卡 (%d)" = "Character Cards (%d)";
 "暂无角色卡。" = "No character cards.";
@@ -5364,7 +5364,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "文件夹“%@”开始" = "بداية المجلد «%@»";
 "文件夹“%@”结束" = "نهاية المجلد «%@»";
 "如何配置模型" = "كيفية إعداد نموذج";
-"先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "ابدأ بمعرّف النموذج والغرض منه، واضبط Body المخصص وعناصر التحكم المنظمة فقط عند الحاجة إلى معاملات متقدمة.";
+"先填写模型 ID 与用途；只有需要高级参数时，才配置自定义 Body 和结构化控制。" = "حدد النموذج المطلوب وما إذا كان يدعم النصوص أو الصور أو الصوت. يمكنك ترك المعلمات المتقدمة فارغة.";
 "Split by nested paths" = "تقسيم حسب المسارات المتداخلة";
 "Split nested control footer" = "يستبدل عنصر التحكم هذا بعدة عناصر تحمل الاسم نفسه. يحتفظ كل عنصر بمسار ورقي كامل واحد، مع بقاء أسماء الخيارات وترتيبها، وتُدمج العناصر المفعلة تكراريًا عند الإرسال.";
 "Nested parameters and structured control merging" = "المعاملات المتداخلة ودمج عناصر التحكم\nعندما يلزم ضبط معاملات متداخلة بشكل مستقل، أنشئ عنصر تحكم منظمًا لكل بُعد، مثل عنصر لـ reasoning.effort وآخر لـ reasoning.summary. تُدمج عناصر التحكم المفعلة تكراريًا داخل الكائن الأب نفسه. إذا كان على خيار واحد تغيير عدة حقول مترابطة معًا، فضع البُنى الكاملة في ذلك الخيار لتطبيقها كوحدة واحدة. إذا كتبت عدة عناصر في المسار الكامل نفسه، تكون الأولوية للعنصر الأخير في القائمة.";
@@ -5689,7 +5689,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "后台生成" = "التوليد في الخلفية";
 "减少切换 App 后长回复中断。" = "تقليل انقطاع الردود الطويلة بعد التبديل بين التطبيقات.";
 "后台持续生成" = "متابعة التوليد في الخلفية";
-"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "متابعة استقبال رد الذكاء الاصطناعي الجاري عند الانتقال إلى تطبيق آخر.";
+"切换到其他 App 时，尽量让正在进行的 AI 回复继续接收。" = "انتظر الردود الطويلة أثناء استخدام تطبيق آخر. اختر نشاط موقع في الخلفية أو صوت انتظار للمساعدة في تقليل انقطاع الاتصال.";
 "后台持续生成说明正文" = "عند التفعيل، ينشئ ETOS نشاط موقع في الخلفية من النظام فقط أثناء توليد رد بدأته أنت. يقلل ذلك احتمال إيقاف iOS لاتصال الرد بعد الانتقال إلى تطبيق آخر. قد يعرض iOS مؤشر موقع أزرق في الخلفية. لا يطلب ETOS تحديثات الموقع ولا يقرأ إحداثياتك أو يحفظها أو يرفعها. ينتهي النشاط فور اكتمال الرد أو فشله أو إلغائه. قد تزيد هذه الميزة من استهلاك الطاقة، ولا تضمن إبقاء الاتصال نشطًا في جميع الحالات.";
 "仅在 AI 回复正在生成时创建定位后台活动；回复完成、失败或取消后会立即停止。" = "ينشئ نشاط موقع في الخلفية فقط أثناء توليد رد الذكاء الاصطناعي، ويتوقف فور اكتماله أو فشله أو إلغائه.";
 "运行状态" = "حالة التشغيل";
@@ -6404,7 +6404,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "温度状态" = "الحالة الحرارية";
 "资源状态" = "حالة الموارد";
 "本地 Linux 使用指南" = "دليل Linux المحلي";
-"从首次启用到终端、Agent、本地 MCP、文件管理与系统恢复。" = "من التفعيل الأول إلى الطرفيات وAgent وMCP المحلي وإدارة الملفات واستعادة النظام.";
+"从首次启用到终端、Agent、本地 MCP、文件管理与系统恢复。" = "نفّذ أوامر Linux وثبّت برامج سطر الأوامر داخل التطبيق، أو دع الوكيل يستخدمها لمعالجة الملفات وتشغيل السكربتات.";
 "快速开始" = "بدء سريع";
 "Chat、Agent 与终端" = "Chat وAgent والطرفيات";
 "软件与本地 MCP" = "البرامج وMCP المحلي";
@@ -6903,7 +6903,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "内置向导服务暂时不可用。" = "The built-in guide service is temporarily unavailable.";
 "分组名称" = "Group Name";
 "可用工具数量" = "Available Tool Count";
-"向导会看到什么" = "What the Guide Can See";
+"向导会看到什么" = "مساعدة في الإعدادات";
 "向导已了解“%@”页面公开的设置与文档。可以直接问它在哪里配置，或让它生成一份待确认的修改。" = "The guide knows the settings and documents exposed by the “%@” page. Ask where to configure something, or request a change for review.";
 "向导服务返回了无法识别的响应。" = "The guide service returned an unrecognized response.";
 "向导返回的修改参数无法读取。" = "The guide returned change parameters that could not be read.";
@@ -6939,7 +6939,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "当前网络已有向导请求正在生成，请稍后再试。" = "A guide request is already running on this network. Try again shortly.";
 "当前页面" = "Current Page";
 "当前页面不支持向导工具“%@”。" = "The current page does not support the guide tool “%@”.";
-"当前页面会明确提供页面名称、相关文档和经过筛选的配置快照。密钥、密码与令牌只显示为已隐藏。" = "The current page explicitly provides its name, relevant documents, and a filtered configuration snapshot. Keys, passwords, and tokens appear only as hidden.";
+"当前页面会明确提供页面名称、相关文档和经过筛选的配置快照。密钥、密码与令牌只显示为已隐藏。" = "اسأل الدليل عندما لا تفهم إعدادًا. يمكنه شرح الصفحة واقتراح تعديلات تراجعها قبل تطبيقها.";
 "当前页面尚未接入向导。" = "The current page has not been connected to the guide.";
 "所选向导模型当前不可用。" = "The selected guide model is currently unavailable.";
 "手动填写" = "Enter Manually";
@@ -7009,7 +7009,7 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "配置第一个模型" = "Set Up the First Model";
 "页面向导" = "Page Guide";
 "页面向导与隐私" = "Page Guide and Privacy";
-"页面向导只读取每个页面主动声明的字段，不会截取屏幕、遍历辅助功能树或导出数据库。现有 API Key、密码和令牌不会发送给模型，但你可以在原生安全输入框中填写新值。向导提出的设置修改会先显示原生预览，只有你确认后才执行。对话、工具状态和撤销记录只保存在内存中，清空上下文或结束 App 进程后不会保留。默认先查内置文档；文档不足时才按当前构建的完整 Commit 读取公开源码。" = "The page guide reads only fields explicitly declared by each page. It does not capture the screen, traverse the accessibility tree, or export the database. Existing API keys, passwords, and tokens are never sent to the model, though you may enter new values in a native secure field. Suggested setting changes appear in a native preview and run only after you confirm. Conversations, tool state, and undo history stay in memory and disappear when you clear the context or quit the app. Built-in documents are searched first; public source code is read at this build’s full commit only when the documents are insufficient.";
+"页面向导只读取每个页面主动声明的字段，不会截取屏幕、遍历辅助功能树或导出数据库。现有 API Key、密码和令牌不会发送给模型，但你可以在原生安全输入框中填写新值。向导提出的设置修改会先显示原生预览，只有你确认后才执行。对话、工具状态和撤销记录只保存在内存中，清空上下文或结束 App 进程后不会保留。默认先查内置文档；文档不足时才按当前构建的完整 Commit 读取公开源码。" = "افتح الدليل في صفحة إعدادات واسأل عن وظيفة خيار أو صف الإعداد الذي تريده. يعتمد على شرح الصفحة وإعداداتها المتاحة، ويمكنه الرجوع إلى الشيفرة العامة للتطبيق عند الحاجة.\n\nفي التعديلات المدعومة، يعرض ما سيتغير وينتظر تأكيدك قبل الحفظ. لا تُرسل المفاتيح وكلمات المرور والرموز الموجودة إلى نموذج الدليل. أدخل القيم السرية الجديدة في حقول التطبيق الآمنة.\n\nيقرأ الدليل المعلومات التي تقدمها الصفحة فقط، ولا يستطيع تصفح محادثاتك وقواعد بياناتك بحرية. تبقى محادثاته وسجلات التراجع خلال جلسة التطبيق الحالية فقط، وتضيع عند مسح السياق أو انتهاء عملية التطبيق.";
 "页面向导可以解释每个字段；所有持久化写入仍由原生界面确认。" = "The page guide can explain each field; all persistent changes still require confirmation in the native interface.";
 "页面向导设置" = "Page Guide Settings";
 "页面已经变化，请重新生成这项修改。" = "The page has changed. Generate this change again.";
@@ -7371,8 +7371,8 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 /* أيقونة شاشة رئيسية مخصصة */
 "主屏幕图标" = "أيقونة الشاشة الرئيسية";
 "使用自己的图片" = "استخدام صورتك";
-"选择图片并生成只在本机传输的主屏幕图标。" = "اختر صورة وأنشئ أيقونة للشاشة الرئيسية تُنقل على هذا الجهاز فقط.";
-"自定义主屏幕图标说明正文" = "تنشئ هذه الميزة أيقونة Web Clip قابلة للإزالة على الشاشة الرئيسية من الصورة التي تختارها. تفتح الأيقونة التطبيق عبر مخطط URL الخاص بـ ETOS ولا تستبدل أيقونة التطبيق الأصلية المسجلة في النظام، ولذلك لا تظهر شارات الإشعارات أو الإجراءات السريعة عند الضغط المطول على الأيقونة المخصصة.\n\nتتم معالجة الصورة وملف تعريف التكوين على هذا الجهاز فقط. يشغّل التطبيق مؤقتًا خدمة تنزيل تستمع إلى عنوان الاسترجاع المحلي فقط، ثم يغلقها فور حصول المتصفح على ملف التعريف.\n\nيكتمل التثبيت في إعدادات iOS. يمكنك إبقاء الأيقونة الأصلية على الشاشة الرئيسية أو إزالتها من الشاشة الرئيسية مع إبقاء التطبيق في مكتبة التطبيقات.";
+"选择图片并生成只在本机传输的主屏幕图标。" = "استخدم صورتك لإنشاء اختصار يفتح ETOS على الشاشة الرئيسية. لا يعرض شارات الإشعارات أو الإجراءات السريعة.";
+"自定义主屏幕图标说明正文" = "اختر صورة وأدخل اسمًا وأنشئ الأيقونة، ثم اتبع التعليمات لتثبيت ملف التعريف في إعدادات iOS. سيُضاف اختصار يفتح ETOS على الشاشة الرئيسية.\n\nتبقى أيقونة التطبيق الأصلية. لا تعرض الجديدة شارات الإشعارات أو الإجراءات السريعة للأصلية. يمكنك إزالة الأصلية من الشاشة الرئيسية مع إبقائها في مكتبة التطبيقات.\n\nتُعالج الصورة وملف التثبيت وتُنقل محليًا فقط. لإزالة الأيقونة المخصصة لاحقًا، احذف ملف تعريفها من الإعدادات ← عام ← VPN وإدارة الجهاز.";
 "选择图标图片" = "اختيار صورة الأيقونة";
 "重新选择图片" = "اختيار صورة أخرى";
 "图标图片" = "صورة الأيقونة";
@@ -7406,6 +7406,9 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "描述文件传输失败：%@" = "فشل نقل ملف تعريف التكوين: %@";
 "等待浏览器下载超时，请重试。" = "انتهت مهلة انتظار تنزيل المتصفح. حاول مرة أخرى.";
 "手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标；主屏幕图标可使用你自己的图片。" = "اختر لغة واجهة التطبيق يدويًا، أو فعّل أيقونات الإعدادات الدائرية الملونة، أو استخدم صورتك لأيقونة الشاشة الرئيسية.";
+"提示词设置简介" = "حدد لغة ردود الذكاء الاصطناعي ونبرتها وتنسيقها، واحفظ التعليمات التي تكررها كثيرًا.";
+"会话设置简介" = "اختر استئناف المحادثة أو بدء واحدة جديدة عند فتح التطبيق، واضبط مهلة الإرسال وعرض السجل ومعالجة الفيديو.";
+"回复设置简介" = "اضبط تنوع الإجابات، واعرض الرد أثناء توليده، أو لخّص التفكير، أو استمع إلى الإجابة بصوت عالٍ.";
 /* Anthropic 缓存分档计费 */
 "缓存创建价格（5 分钟）" = "سعر الكتابة في ذاكرة التخزين المؤقت (5 دقائق)";
 "缓存创建价格（1 小时）" = "سعر الكتابة في ذاكرة التخزين المؤقت (ساعة واحدة)";
@@ -7414,3 +7417,5 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "缓存计费" = "تسعير التخزين المؤقت";
 "两档缓存创建价格，缓存命中共用一个价格。" = "سعران للكتابة وسعر مشترك للقراءة من ذاكرة التخزين المؤقت.";
 "Anthropic 默认使用 5 分钟缓存。两档创建费用按返回用量分别计算，缓存命中共用一个价格。切换到其他适配器后，保留 5 分钟价格作为单档价格，并清除 1 小时价格。" = "يستخدم Anthropic مدة تخزين مؤقت افتراضية تبلغ 5 دقائق. تُحسب تكلفة الكتابة لكل مدة على حدة وفق الاستخدام المُعاد، مع سعر مشترك للقراءة. عند التبديل إلى محوّل آخر، يُحتفظ بسعر 5 دقائق كسعر كتابة موحّد ويُحذف سعر الساعة الواحدة.";
+"提示词设置使用说明" = "استخدم تعليمات النظام العامة لتفضيلاتك المعتادة، مثل لغة الرد أو تقديم الخلاصة أولًا أو اتباع تنسيق محدد. ضع الأدوار والمهام الخاصة بمحادثة واحدة في تعليمات موضوعها.\n\nتُضاف تعليمات التعزيز إلى نهاية آخر رسالة منك لتكرار متطلبات التنسيق. أما التعليمات المدمجة فتخدم وظائف التطبيق مثل التلخيص؛ تتبع لغة التطبيق حتى تعدّلها، ثم تستخدم النص الذي حفظته.\n\nلإطلاع الذكاء الاصطناعي على الوقت الحالي، فعّل إدراج الوقت أو أداة الوقت. وضع وقت متغير في بداية التعليمات قد يقلل إعادة استخدام الذاكرة المؤقتة، لذا يُفضّل عادة وضعه في النهاية. تحدد علامات الوقت توقيت الطلبات في سجل المحادثة.";
+"回复设置使用说明" = "تجعل قيم Temperature المنخفضة الإجابات أكثر ثباتًا عادة، بينما تزيد القيم المرتفعة تنوع التعبير. يؤثر Top-P في التنوع أيضًا، لذا ابدأ بتعديل أحدهما فقط. عطّل التخصيص لاستخدام القيم الافتراضية للنموذج أو المزوّد. بعض النماذج لا تقبل هذه المعلمات.\n\nيعرض البث الرد أثناء توليده لتبدأ القراءة مبكرًا. عند تعطيله، يظهر الرد كاملًا بعد انتهائه.\n\nلسماع الردود، افتح إعدادات القراءة الصوتية واختر صوت النظام أو خدمة سحابية، ثم فعّل القراءة التلقائية بعد اكتمال الرد.";

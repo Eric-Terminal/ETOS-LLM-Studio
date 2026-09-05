@@ -671,26 +671,11 @@ struct ModelAdvancedSettingsView: View {
     private var settingsIntroSummary: String {
         switch destination {
         case .conversation:
-            return [
-                NSLocalizedString("启动与发送", comment: "Conversation launch and send settings section"),
-                NSLocalizedString("上下文窗口管理", comment: ""),
-                NSLocalizedString("消息规则", comment: ""),
-                NSLocalizedString("视频发送", comment: "Video sending settings section")
-            ].joined(separator: " · ")
+            return NSLocalizedString("会话设置简介", comment: "说明会话、发送和历史消息设置的用途")
         case .prompts:
-            return [
-                NSLocalizedString("全局系统提示词", comment: ""),
-                NSLocalizedString("增强提示词", comment: ""),
-                NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"),
-                NSLocalizedString("动态时间注入", comment: "")
-            ].joined(separator: " · ")
+            return NSLocalizedString("提示词设置简介", comment: "说明提示词能改变的回答习惯")
         case .output:
-            return [
-                NSLocalizedString("采样参数", comment: ""),
-                NSLocalizedString("流式输出", comment: ""),
-                NSLocalizedString("思考与推理", comment: "Output reasoning settings section"),
-                NSLocalizedString("语音朗读", comment: "TTS output settings section")
-            ].joined(separator: " · ")
+            return NSLocalizedString("回复设置简介", comment: "说明回复风格、流式显示与朗读的用途")
         }
     }
 
@@ -722,22 +707,13 @@ struct ModelAdvancedSettingsView: View {
                 )
             ])
         case .prompts:
-            return introDetails([
-                (
-                    NSLocalizedString("提示词", comment: "Core prompt settings title"),
-                    [
-                        NSLocalizedString("在二级菜单中可右滑删除、左滑更多（编辑），点选条目会自动返回。", comment: ""),
-                        NSLocalizedString("该提示词会附加在您的最后一条消息末尾，以增强指令效果。", comment: ""),
-                        NSLocalizedString("警告：直接在前置系统提示词中插入 <time> 可能会降低上下文缓存命中率。若可行，优先使用末尾发送，或改用获取系统时间工具。", comment: "")
-                    ].joined(separator: "\n\n")
-                ),
-                (
-                    NSLocalizedString("内置提示词", comment: "Built-in prompt settings section"),
-                    NSLocalizedString("未自定义时会跟随应用语言使用内置模板；自定义后会固定使用保存内容。", comment: "Built-in prompt settings footer")
-                )
-            ])
+            return NSLocalizedString("提示词设置使用说明", comment: "用例、作用范围与时间提示的使用方法")
         case .output:
             return introDetails([
+                (
+                    NSLocalizedString("输出", comment: "回复设置使用说明标题"),
+                    NSLocalizedString("回复设置使用说明", comment: "采样、流式输出与朗读的使用方法")
+                ),
                 (
                     NSLocalizedString("思考与推理", comment: "Output reasoning settings section"),
                     reasoningContentEchoDetails
