@@ -54,6 +54,11 @@ struct ContentView: View {
     
     var body: some View {
         contentWithMigrationOverlays
+            .localLinuxDiagnosticFeedback(
+                blocked: rootToolPermissionAutoPresentationBlocked
+                    || toolPermissionCenter.activeRequest != nil
+                    || toolPermissionCenter.hasAutoPresentationBlockers(excluding: ["ios.root.presentation"])
+            )
             // 启动时检查公告
             .task {
                 await handleLaunchTasks()

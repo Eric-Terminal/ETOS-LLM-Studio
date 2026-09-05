@@ -96,6 +96,7 @@ struct LocalLinuxFeatureView: View {
                 snapshot = update
             }
         }
+        .localLinuxDiagnosticFeedback(priority: 1, blocked: errorMessage != nil || showResetConfirmation)
         .alert(
             NSLocalizedString("本地 Linux 操作失败", comment: "Local Linux operation error title"),
             isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })

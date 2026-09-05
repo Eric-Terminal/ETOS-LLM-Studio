@@ -241,6 +241,7 @@ struct LocalLinuxWatchFeatureView: View {
             }
             Button(NSLocalizedString("取消", comment: "Cancel"), role: .cancel) {}
         }
+        .localLinuxDiagnosticFeedback(priority: 1, blocked: errorMessage != nil || showResetConfirmation)
         .alert(NSLocalizedString("操作失败", comment: "Watch Linux operation failed"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(NSLocalizedString("好", comment: "Dismiss"), role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
@@ -434,6 +435,7 @@ struct LocalLinuxWatchTerminalView: View {
         }
         .preferredColorScheme(.dark)
         .navigationTitle(terminalNavigationTitle)
+        .localLinuxDiagnosticFeedback(priority: 2, active: isPresentationActive, blocked: errorMessage != nil)
         .task(id: isPresentationActive) {
             guard isPresentationActive else {
                 outputTask?.cancel()

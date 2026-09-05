@@ -168,6 +168,7 @@ struct LocalLinuxTerminalView: View {
                 .accessibilityLabel(NSLocalizedString("终端操作", comment: "Terminal actions menu"))
             }
         }
+        .localLinuxDiagnosticFeedback(priority: 2, blocked: errorMessage != nil)
         .task { await openInitialTerminal() }
         .onAppear(perform: reloadTerminalShortcuts)
         .onChange(of: appConfig.localLinuxTerminalShortcutIDs) { _, _ in

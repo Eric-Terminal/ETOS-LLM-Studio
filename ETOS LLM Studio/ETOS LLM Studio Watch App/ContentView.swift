@@ -202,6 +202,7 @@ struct ContentView: View {
             FontLibrary.preloadRuntimeCacheAsync(forceReload: true)
             refreshRootBodyFont()
         }
+        .localLinuxDiagnosticFeedback(blocked: watchToolPermissionAutoPresentationBlocked || toolPermissionCenter.activeRequest != nil)
         .onChange(of: appConfig.fontFallbackScope) { _, _ in
             refreshRootBodyFont()
         }

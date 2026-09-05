@@ -787,7 +787,8 @@ struct LocalAgentRuntimeTests {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let recorder = LocalLinuxDiagnosticsRecorder(
-            storage: LocalLinuxStorageManager(documentsDirectory: directory, appGroupLayout: nil)
+            storage: LocalLinuxStorageManager(documentsDirectory: directory, appGroupLayout: nil),
+            feedbackBuffer: LocalLinuxDiagnosticFeedbackBuffer { _ in }
         )
         let olderJobID = UUID()
         let newerJobID = UUID()

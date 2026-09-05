@@ -13,10 +13,17 @@ public actor LocalLinuxDiagnosticsRecorder {
     public static let shared = LocalLinuxDiagnosticsRecorder()
 
     private let storage: LocalLinuxStorageManager
+    private let feedbackBuffer: LocalLinuxDiagnosticFeedbackBuffer
     private var eventsByJobID: [UUID: [LocalLinuxBridgeDiagnosticEvent]] = [:]
 
     public init(storage: LocalLinuxStorageManager = .shared) {
         self.storage = storage
+        self.feedbackBuffer = .shared
+    }
+
+    init(storage: LocalLinuxStorageManager, feedbackBuffer: LocalLinuxDiagnosticFeedbackBuffer) {
+        self.storage = storage
+        self.feedbackBuffer = feedbackBuffer
     }
 
     public func append(_ events: [LocalLinuxBridgeDiagnosticEvent], jobID: UUID) async {
@@ -40,6 +47,7 @@ public actor LocalLinuxDiagnosticsRecorder {
         } catch {
             // 数据库摘要仍会保留；诊断附件写入失败不应掩盖原命令结果。
         }
+        await feedbackBuffer.append(events, jobID: jobID)
     }
 
     public func latestEvent(jobID: UUID) -> LocalLinuxBridgeDiagnosticEvent? {
@@ -53,8 +61,9 @@ public actor LocalLinuxDiagnosticsRecorder {
         signal: Int32?,
         linuxError: Int32?,
         runtime: LocalLinuxRuntimeSnapshot
-    ) -> UUID? {
+    ) async -> UUID? {
         let events = eventsByJobID.removeValue(forKey: job.id) ?? []
+        await feedbackBuffer.finish(jobID: job.id)
         guard !events.isEmpty || completionReason != .exited || exitCode != 0 else { return nil }
         let first = events.first
         let category = diagnosticCategory(
