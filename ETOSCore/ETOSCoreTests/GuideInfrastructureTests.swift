@@ -1164,11 +1164,20 @@ struct GuideInfrastructureTests {
         #expect(restored.undoProposal == nil)
     }
 
-    @Test("提示词限定向导职责并仅按条件提供零成本建议")
+    @Test("提示词介绍客户端、限定向导职责并仅按条件提供零成本建议")
     func promptContainsBehaviorBoundaries() {
         let chinese = GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "zh-Hans"))
         let english = GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "en-US"))
 
+        #expect(chinese.contains("ETOS LLM Studio（简称 ELS）"))
+        #expect(chinese.contains("开源 AI 聊天客户端"))
+        #expect(chinese.contains("iOS 和 watchOS"))
+        #expect(chinese.contains("不是基础模型本身"))
+        #expect(chinese.contains("向导只能使用当前请求实际提供的专用工具"))
+        #expect(chinese.contains("不要在每次回答时重复介绍"))
+        #expect(english.contains("open-source AI chat client for iOS and watchOS"))
+        #expect(english.contains("dedicated tools actually supplied in the current request"))
+        #expect(english.contains("do not repeat it in every answer"))
         #expect(chinese.contains("不能把自己当作通用聊天"))
         #expect(chinese.contains("只有当用户明确表示"))
         #expect(chinese.contains("豆包"))
@@ -1176,9 +1185,10 @@ struct GuideInfrastructureTests {
         #expect(english.contains("Gemini"))
         #expect(chinese.contains("用户自己选择的模型线路"))
         #expect(chinese.contains("不要声称基础模型固定为 Qwen"))
-        #expect(chinese.contains("guide_prompt_version: 2"))
+        #expect(chinese.contains("guide_prompt_version: 3"))
         #expect(chinese.contains("创建、修改或删除配置"))
         #expect(GuidePromptBuilder.systemPrompt(mode: .modelSetup).contains("setup_state"))
+        #expect(GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "zh-Hans"), mode: .modelSetup).contains("开源 AI 聊天客户端"))
     }
 
     @Test("内置向导配置默认关闭浮球并固定免费线路")

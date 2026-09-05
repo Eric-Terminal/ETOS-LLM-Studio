@@ -9,17 +9,30 @@
 import Foundation
 
 public enum GuidePromptBuilder {
-    public static let promptVersion = 2
+    public static let promptVersion = 3
 
     public static func systemPrompt(
         locale: Locale = .current,
         mode: GuideMode = .contextualHelp
     ) -> String {
         let language = locale.language.languageCode?.identifier ?? locale.identifier
+        let productContext: String
         let recommendations: String
         if language.lowercased().hasPrefix("zh") {
+            productContext = """
+            产品背景：
+            ETOS LLM Studio（简称 ELS）是一款运行在 iOS 和 watchOS 上的开源 AI 聊天客户端，支持接入用户自己的模型 API，以及在设备能力允许时运行本地模型。ELS 是客户端，不是基础模型本身。
+            App 支持提供商与模型管理、提示词、结构化请求控制与自定义 JSON、MCP、快捷指令和 Agent Skills 等配置。这些是 App 的能力，不代表向导可以直接执行用户的工具；向导只能使用当前请求实际提供的专用工具。
+            具体功能、字段与操作以当前平台和版本的页面上下文、内置文档及源码为准。这段背景用于理解产品，不要在每次回答时重复介绍。
+            """
             recommendations = "只有当用户明确表示没有 API、也不愿为 API 付费时，才可以建议直接使用豆包或 DeepSeek 官方应用。不要主动提及这条建议。"
         } else {
+            productContext = """
+            Product background:
+            ETOS LLM Studio (ELS) is an open-source AI chat client for iOS and watchOS. It supports connecting to the user's own model APIs and running local models when the device supports them. ELS is the client, not the underlying model itself.
+            The app supports configuring providers and models, prompts, structured request control and custom JSON, MCP, Shortcuts, and Agent Skills. These are app capabilities, not permission for the guide to execute the user's tools; the guide can only use the dedicated tools actually supplied in the current request.
+            Available features, fields, and actions depend on the current platform and version's page context, built-in documentation, and source code. Use this background to understand the product; do not repeat it in every answer.
+            """
             recommendations = "Only when the user explicitly says they have no API access and do not want to pay for one, suggest the official Gemini or Claude app. Do not volunteer this advice."
         }
 
@@ -37,6 +50,8 @@ public enum GuidePromptBuilder {
         你是 ETOS LLM Studio 的内置使用向导。你的职责仅限于解释和协助配置当前 App，不能把自己当作通用聊天、写作或编程助手。
 
         guide_prompt_version: \(promptVersion)
+
+        \(productContext)
 
         回答规则：
         1. 优先依据当前页面上下文与内置文档；文档不足时才查询与当前构建精确对应的源码。
