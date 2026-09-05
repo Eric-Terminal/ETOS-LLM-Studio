@@ -6880,6 +6880,10 @@
 "接口格式" = "API Format";
 "提供商数量" = "Provider Count";
 "撤销上次修改" = "Undo Last Change";
+"撤销上次修改？" = "Undo the last change?";
+"撤销修改" = "Undo Change";
+"将恢复向导上次修改前的设置。此操作不会关闭向导。" = "This restores the settings from before the guide’s last change. It does not close the guide.";
+"已撤销上次修改，设置已恢复。" = "Last change undone. The previous settings have been restored.";
 "支持工具调用" = "Supports Tool Calling";
 "收起向导" = "Collapse Guide";
 "无法保存模型" = "Unable to Save Model";

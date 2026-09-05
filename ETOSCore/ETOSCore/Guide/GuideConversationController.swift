@@ -290,12 +290,18 @@ public final class GuideConversationController: ObservableObject {
         currentTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let execution = try await contextCoordinator.execute(undoProposal)
+                _ = try await contextCoordinator.execute(undoProposal)
                 try Task.checkCancellation()
                 guard activeTaskID == taskID else { return }
                 self.undoProposal = nil
                 canUndo = false
-                messages.append(GuideConversationMessage(role: .tool, content: execution.message))
+                // 执行器也被正向修改复用，其“已更新”文案无法说明这是撤销。
+                let message = NSLocalizedString(
+                    "已撤销上次修改，设置已恢复。",
+                    value: "Last change undone. The previous settings have been restored.",
+                    comment: "向导撤销成功反馈"
+                )
+                messages.append(GuideConversationMessage(role: .tool, content: message))
                 scheduleHistorySave()
                 isResponding = false
                 activeTaskID = nil

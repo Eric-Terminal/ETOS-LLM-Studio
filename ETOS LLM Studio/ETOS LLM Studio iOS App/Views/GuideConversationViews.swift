@@ -657,12 +657,7 @@ struct GuideFullConversationView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if controller.canUndo {
-                        Button {
-                            controller.undoLastChange()
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward")
-                        }
-                        .accessibilityLabel(NSLocalizedString("撤销上次修改", comment: "向导撤销按钮"))
+                        GuideUndoButton(controller: controller)
                     }
                     Button {
                         controller.clear()

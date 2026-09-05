@@ -100,6 +100,70 @@ extension GuideInfrastructureTests {
     }
 
     @MainActor
+    @Test("撤销只有成功后才反馈设置已恢复，失败时保留撤销机会", arguments: [true, false])
+    func undoReportsRestorationOnlyAfterSuccess(allowUndo: Bool) async throws {
+        let coordinator = GuideContextCoordinator()
+        let pageID = GuidePageID(rawValue: "undo-settings")
+        var reminderEnabled = false
+        var executions = 0
+        coordinator.register(
+            descriptor: GuidePageDescriptor(id: pageID, title: "会话", tools: [
+                GuidePageTool(definition: GuideToolCatalog.updateModelConfiguration, access: .proposeChange)
+            ]),
+            snapshot: { .empty },
+            buildProposal: { call, _ in
+                GuideActionProposal(pageID: pageID, toolCallID: call.id, toolName: call.toolName,
+                                    summary: "开启压缩提醒", mutations: [], arguments: [:])
+            },
+            execute: { proposal in
+                executions += 1
+                if proposal.toolName == "restore_reminder" {
+                    guard allowUndo else { throw GuideError.pageChanged }
+                    reminderEnabled = false
+                    // 执行器可以复用正向修改文案；控制器必须明确区分撤销结果。
+                    return GuideActionExecution(message: "已更新设置")
+                }
+                reminderEnabled = true
+                let undo = GuideActionProposal(
+                    pageID: pageID, toolCallID: "undo-\(proposal.toolCallID)", toolName: "restore_reminder",
+                    summary: "恢复压缩提醒", mutations: [], arguments: [:]
+                )
+                return GuideActionExecution(message: "已更新设置", undoProposal: undo)
+            }
+        )
+        let client = GuideBatchRecordingClient(calls: [batchCall("enable-reminder", write: true)])
+        let router = GuideModelRouter(builtInClient: client)
+        let previousRoute = router.route
+        defer { router.route = previousRoute }
+        router.useBuiltIn()
+        let controller = GuideConversationController(router: router, contextCoordinator: coordinator)
+
+        controller.send("开启压缩提醒")
+        try await waitForGuidePause(controller)
+        #expect(!reminderEnabled)
+        #expect(executions == 0)
+        controller.confirmPendingProposal()
+        try await waitForGuidePause(controller)
+        #expect(reminderEnabled)
+        #expect(controller.canUndo)
+        #expect(executions == 1)
+
+        controller.undoLastChange()
+        try await waitForGuidePause(controller)
+        let successMessage = NSLocalizedString(
+            "已撤销上次修改，设置已恢复。",
+            value: "Last change undone. The previous settings have been restored.",
+            comment: "向导撤销成功反馈"
+        )
+        #expect(executions == 2)
+        #expect(reminderEnabled == !allowUndo)
+        #expect(controller.canUndo == !allowUndo)
+        #expect((controller.lastError == nil) == allowUndo)
+        #expect(controller.messages.contains { $0.role == .tool && $0.content == successMessage } == allowUndo)
+        #expect(client.requests.count == 2)
+    }
+
+    @MainActor
     @Test("页面变化时剩余提案不能写到新页面，失败结果仍配对返回")
     func queuedToolsStayOnTheirOriginalPage() async throws {
         let coordinator = GuideContextCoordinator()
