@@ -7329,3 +7329,11 @@
 "描述文件传输失败：%@" = "Configuration profile transfer failed: %@";
 "等待浏览器下载超时，请重试。" = "The browser download timed out. Try again.";
 "手动选择 App 界面语言；开启彩色图标后，设置入口会使用彩色圆形图标；主屏幕图标可使用你自己的图片。" = "Choose the app language manually; enable colorful icons for colored circular settings icons; or use your own image for the Home Screen icon.";
+/* Anthropic 缓存分档计费 */
+"缓存创建价格（5 分钟）" = "Cache write price (5 minutes)";
+"缓存创建价格（1 小时）" = "Cache write price (1 hour)";
+"缓存创建（5 分钟）" = "Cache write (5 minutes)";
+"缓存创建（1 小时）" = "Cache write (1 hour)";
+"缓存计费" = "Cache pricing";
+"两档缓存创建价格，缓存命中共用一个价格。" = "Two cache write prices, with one shared cache read price.";
+"Anthropic 默认使用 5 分钟缓存。两档创建费用按返回用量分别计算，缓存命中共用一个价格。切换到其他适配器后，保留 5 分钟价格作为单档价格，并清除 1 小时价格。" = "Anthropic uses a 5-minute cache by default. Cache writes are billed separately using the returned usage for each duration, while cache reads share one price. Switching to another adapter keeps the 5-minute price as the single cache write price and clears the 1-hour price.";

@@ -103,7 +103,10 @@ extension ConfigLoader {
                     requestBodyOverrideMode: model.requestBodyOverrideMode.rawValue,
                     rawRequestBodyJSON: model.rawRequestBodyJSON,
                     requestBodyControlsJSON: encodeJSON(model.requestBodyControls),
-                    pricingJSON: model.pricing.flatMap { encodeJSON($0.normalized) },
+                    pricingJSON: model.pricing.flatMap {
+                        let pricing = $0.normalized(forAPIFormat: model.effectiveAPIFormat(providerAPIFormat: provider.apiFormat))
+                        return pricing.isEffectivelyEmpty ? nil : encodeJSON(pricing)
+                    },
                     sortIndex: modelIndex,
                     updatedAt: now
                 )

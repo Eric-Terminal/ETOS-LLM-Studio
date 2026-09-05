@@ -440,6 +440,16 @@ extension Persistence {
 
     static func accumulateRequestTokens(_ usage: MessageTokenUsage?, to totals: inout RequestLogTokenTotals) {
         guard let usage else { return }
+        if totals.uncachedInputTokens != nil || usage.uncachedInputTokens != nil {
+            totals.uncachedInputTokens = (totals.uncachedInputTokens ?? max(0, totals.sentTokens - totals.cacheReadTokens))
+                + ModelCostCalculator.billableInputTokens(for: usage)
+        }
+        if totals.cacheWriteFiveMinuteTokens != nil || usage.cacheWriteFiveMinuteTokens != nil {
+            totals.cacheWriteFiveMinuteTokens = (totals.cacheWriteFiveMinuteTokens ?? 0) + (usage.cacheWriteFiveMinuteTokens ?? 0)
+        }
+        if totals.cacheWriteOneHourTokens != nil || usage.cacheWriteOneHourTokens != nil {
+            totals.cacheWriteOneHourTokens = (totals.cacheWriteOneHourTokens ?? 0) + (usage.cacheWriteOneHourTokens ?? 0)
+        }
         totals.sentTokens += usage.promptTokens ?? 0
         totals.receivedTokens += usage.completionTokens ?? 0
         totals.thinkingTokens += usage.thinkingTokens ?? 0

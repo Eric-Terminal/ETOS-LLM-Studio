@@ -89,6 +89,7 @@ extension PersistenceGRDBStore {
                     sql: """
                     SELECT day_key, request_count, success_count, failed_count, cancelled_count,
                            sent_tokens, received_tokens, thinking_tokens, cache_write_tokens,
+                           cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                            cache_read_tokens, total_tokens
                     FROM usage_daily_totals
                     \(filter.sql)
@@ -114,6 +115,7 @@ extension PersistenceGRDBStore {
                     SELECT day_key, provider_name, model_id, request_source, request_count,
                            success_count, failed_count, cancelled_count,
                            sent_tokens, received_tokens, thinking_tokens, cache_write_tokens,
+                           cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                            cache_read_tokens, total_tokens
                     FROM usage_daily_model_totals
                     \(filter.sql)
@@ -142,6 +144,7 @@ extension PersistenceGRDBStore {
                            requested_at, finished_at, day_key, is_streaming, status, http_status_code,
                            error_kind, prompt_tokens, completion_tokens, thinking_tokens,
                            cache_write_tokens, cache_read_tokens, total_tokens,
+                           cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                            origin_device_id, origin_platform
                     FROM usage_request_events
                     \(dayKeyFilter.sql)
@@ -224,8 +227,9 @@ extension PersistenceGRDBStore {
                 requested_at, finished_at, day_key, is_streaming, status, http_status_code,
                 error_kind, prompt_tokens, completion_tokens, thinking_tokens,
                 cache_write_tokens, cache_read_tokens, total_tokens,
+                cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                 origin_device_id, origin_platform
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 event.eventID.uuidString,
@@ -247,6 +251,9 @@ extension PersistenceGRDBStore {
                 event.tokenUsage?.cacheWriteTokens,
                 event.tokenUsage?.cacheReadTokens,
                 event.tokenUsage?.totalTokens,
+                event.tokenUsage?.cacheWriteFiveMinuteTokens,
+                event.tokenUsage?.cacheWriteOneHourTokens,
+                event.tokenUsage?.uncachedInputTokens,
                 event.originDeviceID,
                 event.originPlatform
             ]
@@ -277,6 +284,7 @@ extension PersistenceGRDBStore {
             INSERT INTO usage_daily_totals (
                 day_key, request_count, success_count, failed_count, cancelled_count,
                 sent_tokens, received_tokens, thinking_tokens, cache_write_tokens,
+                cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                 cache_read_tokens, total_tokens
             )
             SELECT
@@ -289,6 +297,9 @@ extension PersistenceGRDBStore {
                 COALESCE(SUM(completion_tokens), 0) AS received_tokens,
                 COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens,
                 COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+                SUM(cache_write_five_minute_tokens) AS cache_write_five_minute_tokens,
+                SUM(cache_write_one_hour_tokens) AS cache_write_one_hour_tokens,
+                CASE WHEN COUNT(uncached_input_tokens) > 0 THEN SUM(COALESCE(uncached_input_tokens, MAX(0, COALESCE(prompt_tokens, 0) - COALESCE(cache_read_tokens, 0)))) END AS uncached_input_tokens,
                 COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
             FROM usage_request_events
@@ -304,6 +315,7 @@ extension PersistenceGRDBStore {
                 day_key, provider_name, model_id, request_source, request_count,
                 success_count, failed_count, cancelled_count,
                 sent_tokens, received_tokens, thinking_tokens, cache_write_tokens,
+                cache_write_five_minute_tokens, cache_write_one_hour_tokens, uncached_input_tokens,
                 cache_read_tokens, total_tokens
             )
             SELECT
@@ -319,6 +331,9 @@ extension PersistenceGRDBStore {
                 COALESCE(SUM(completion_tokens), 0) AS received_tokens,
                 COALESCE(SUM(thinking_tokens), 0) AS thinking_tokens,
                 COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+                SUM(cache_write_five_minute_tokens) AS cache_write_five_minute_tokens,
+                SUM(cache_write_one_hour_tokens) AS cache_write_one_hour_tokens,
+                CASE WHEN COUNT(uncached_input_tokens) > 0 THEN SUM(COALESCE(uncached_input_tokens, MAX(0, COALESCE(prompt_tokens, 0) - COALESCE(cache_read_tokens, 0)))) END AS uncached_input_tokens,
                 COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
             FROM usage_request_events
@@ -341,8 +356,11 @@ extension PersistenceGRDBStore {
                 receivedTokens: row["received_tokens"],
                 thinkingTokens: row["thinking_tokens"],
                 cacheWriteTokens: row["cache_write_tokens"],
+                cacheWriteFiveMinuteTokens: row["cache_write_five_minute_tokens"],
+                cacheWriteOneHourTokens: row["cache_write_one_hour_tokens"],
                 cacheReadTokens: row["cache_read_tokens"],
-                totalTokens: row["total_tokens"]
+                totalTokens: row["total_tokens"],
+                uncachedInputTokens: row["uncached_input_tokens"]
             )
         )
     }
@@ -362,8 +380,11 @@ extension PersistenceGRDBStore {
                 receivedTokens: row["received_tokens"],
                 thinkingTokens: row["thinking_tokens"],
                 cacheWriteTokens: row["cache_write_tokens"],
+                cacheWriteFiveMinuteTokens: row["cache_write_five_minute_tokens"],
+                cacheWriteOneHourTokens: row["cache_write_one_hour_tokens"],
                 cacheReadTokens: row["cache_read_tokens"],
-                totalTokens: row["total_tokens"]
+                totalTokens: row["total_tokens"],
+                uncachedInputTokens: row["uncached_input_tokens"]
             )
         )
     }
@@ -381,7 +402,10 @@ extension PersistenceGRDBStore {
             totalTokens: totalTokens,
             thinkingTokens: thinkingTokens,
             cacheWriteTokens: cacheWriteTokens,
-            cacheReadTokens: cacheReadTokens
+            cacheWriteFiveMinuteTokens: row["cache_write_five_minute_tokens"],
+            cacheWriteOneHourTokens: row["cache_write_one_hour_tokens"],
+            cacheReadTokens: cacheReadTokens,
+            uncachedInputTokens: row["uncached_input_tokens"]
         )
 
         return UsageAnalyticsEvent(

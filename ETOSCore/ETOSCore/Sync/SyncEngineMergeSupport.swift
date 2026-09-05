@@ -286,6 +286,7 @@ extension SyncEngine {
         hasher.combine(pricing.inputPerMillionTokens ?? -1)
         hasher.combine(pricing.outputPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheWritePerMillionTokens ?? -1)
+        hasher.combine(pricing.cacheWriteOneHourPerMillionTokens ?? -1)
         hasher.combine(pricing.cacheReadPerMillionTokens ?? -1)
         hasher.combine(pricing.billingMode.rawValue)
         hasher.combine(pricing.perRequestPrice ?? -1)
@@ -296,6 +297,7 @@ extension SyncEngine {
             hasher.combine(tier.inputPerMillionTokens ?? -1)
             hasher.combine(tier.outputPerMillionTokens ?? -1)
             hasher.combine(tier.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(tier.cacheWriteOneHourPerMillionTokens ?? -1)
             hasher.combine(tier.cacheReadPerMillionTokens ?? -1)
         }
         for timeOverride in pricing.timeOverrides {
@@ -308,6 +310,7 @@ extension SyncEngine {
             hasher.combine(timeOverride.inputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.outputPerMillionTokens ?? -1)
             hasher.combine(timeOverride.cacheWritePerMillionTokens ?? -1)
+            hasher.combine(timeOverride.cacheWriteOneHourPerMillionTokens ?? -1)
             hasher.combine(timeOverride.cacheReadPerMillionTokens ?? -1)
         }
     }
@@ -410,6 +413,9 @@ extension SyncEngine {
         hasher.combine(message.tokenUsage?.totalTokens ?? -1)
         hasher.combine(message.tokenUsage?.thinkingTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheWriteTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheWriteFiveMinuteTokens ?? -1)
+        hasher.combine(message.tokenUsage?.cacheWriteOneHourTokens ?? -1)
+        hasher.combine(message.tokenUsage?.uncachedInputTokens ?? -1)
         hasher.combine(message.tokenUsage?.cacheReadTokens ?? -1)
         hasher.combine(message.modelReference?.providerName ?? "")
         hasher.combine(message.modelReference?.modelName ?? "")
@@ -754,7 +760,10 @@ extension SyncEngine {
                 totalTokens: maxOptional(lhs.totalTokens, rhs.totalTokens),
                 thinkingTokens: maxOptional(lhs.thinkingTokens, rhs.thinkingTokens),
                 cacheWriteTokens: maxOptional(lhs.cacheWriteTokens, rhs.cacheWriteTokens),
-                cacheReadTokens: maxOptional(lhs.cacheReadTokens, rhs.cacheReadTokens)
+                cacheWriteFiveMinuteTokens: maxOptional(lhs.cacheWriteFiveMinuteTokens, rhs.cacheWriteFiveMinuteTokens),
+                cacheWriteOneHourTokens: maxOptional(lhs.cacheWriteOneHourTokens, rhs.cacheWriteOneHourTokens),
+                cacheReadTokens: maxOptional(lhs.cacheReadTokens, rhs.cacheReadTokens),
+                uncachedInputTokens: maxOptional(lhs.uncachedInputTokens, rhs.uncachedInputTokens)
             )
         }
     }

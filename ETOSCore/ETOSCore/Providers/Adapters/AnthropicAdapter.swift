@@ -61,6 +61,12 @@ public class AnthropicAdapter: APIAdapter {
             let output_tokens: Int?
             let cache_creation_input_tokens: Int?
             let cache_read_input_tokens: Int?
+            let cache_creation: CacheCreation?
+
+            struct CacheCreation: Decodable {
+                let ephemeral_5m_input_tokens: Int?
+                let ephemeral_1h_input_tokens: Int?
+            }
         }
         
         struct Error: Decodable {
@@ -645,16 +651,26 @@ public class AnthropicAdapter: APIAdapter {
         if usage.input_tokens == nil
             && usage.output_tokens == nil
             && usage.cache_creation_input_tokens == nil
+            && usage.cache_creation?.ephemeral_5m_input_tokens == nil
+            && usage.cache_creation?.ephemeral_1h_input_tokens == nil
             && usage.cache_read_input_tokens == nil {
             return nil
         }
+        let fiveMinuteTokens = usage.cache_creation?.ephemeral_5m_input_tokens
+        let oneHourTokens = usage.cache_creation?.ephemeral_1h_input_tokens
+        let cacheWriteTokens = usage.cache_creation_input_tokens
+            ?? ((fiveMinuteTokens != nil || oneHourTokens != nil)
+                ? (fiveMinuteTokens ?? 0) + (oneHourTokens ?? 0) : nil)
         return MessageTokenUsage(
             promptTokens: usage.input_tokens,
             completionTokens: usage.output_tokens,
             totalTokens: nil,
             thinkingTokens: nil,
-            cacheWriteTokens: usage.cache_creation_input_tokens,
-            cacheReadTokens: usage.cache_read_input_tokens
+            cacheWriteTokens: cacheWriteTokens,
+            cacheWriteFiveMinuteTokens: fiveMinuteTokens,
+            cacheWriteOneHourTokens: oneHourTokens,
+            cacheReadTokens: usage.cache_read_input_tokens,
+            uncachedInputTokens: usage.input_tokens
         )
     }
     

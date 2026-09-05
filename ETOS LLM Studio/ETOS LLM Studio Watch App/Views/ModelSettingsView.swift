@@ -94,7 +94,7 @@ struct ModelSettingsView: View {
                 footer: Text(NSLocalizedString("用于在消息详情中估算本地费用，仅供参考。", comment: "Watch model pricing section footer"))
             ) {
                 NavigationLink {
-                    ModelPricingSettingsView(pricing: $model.pricing)
+                    ModelPricingSettingsView(pricing: $model.pricing, apiFormat: effectiveAPIFormat)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(NSLocalizedString("价格设置", comment: "Model pricing settings row title"))
@@ -402,7 +402,11 @@ struct ModelSettingsView: View {
     private var apiFormatOverrideBinding: Binding<String> {
         Binding(
             get: { Model.normalizedAPIFormatOverride(model.apiFormatOverride) ?? "" },
-            set: { model.apiFormatOverride = Model.normalizedAPIFormatOverride($0) }
+            set: {
+                model.apiFormatOverride = Model.normalizedAPIFormatOverride($0)
+                let pricing = model.pricing?.normalized(forAPIFormat: effectiveAPIFormat)
+                model.pricing = pricing?.isEffectivelyEmpty == true ? nil : pricing
+            }
         )
     }
 
@@ -526,6 +530,7 @@ extension ModelSettingsView {
             pricing.inputPerMillionTokens,
             pricing.outputPerMillionTokens,
             pricing.cacheWritePerMillionTokens,
+            pricing.cacheWriteOneHourPerMillionTokens,
             pricing.cacheReadPerMillionTokens
         ].compactMap { $0 }.count
         var parts: [String] = []

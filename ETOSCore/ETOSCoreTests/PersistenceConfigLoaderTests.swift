@@ -12,6 +12,43 @@ import GRDB
 @testable import ETOSCore
 
 extension PersistenceTests {
+    @Test("提供商和模型适配器切换按最终格式收回缓存价格")
+    func cachePricingFollowsEffectiveAdapterWhenSaving() throws {
+        let pricing = ModelPricing(cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6)
+        var provider = Provider(
+            name: "缓存价格适配器回归", baseURL: "https://example.com", apiKeys: [], apiFormat: "anthropic",
+            models: [
+                Model(modelName: "inherited", pricing: pricing),
+                Model(modelName: "overridden-anthropic", apiFormatOverride: "anthropic", pricing: pricing),
+                Model(modelName: "overridden-openai", apiFormatOverride: "openai-compatible", pricing: pricing)
+            ]
+        )
+        defer { ConfigLoader.deleteProvider(provider) }
+        ConfigLoader.saveProvider(provider)
+        var restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[0].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+        #expect(restored.models[2].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+
+        provider = restored
+        provider.apiFormat = "openai-compatible"
+        ConfigLoader.saveProvider(provider)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[0].pricing?.cacheWritePerMillionTokens == 3.75)
+        #expect(restored.models[0].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == 6)
+
+        restored.models[1].apiFormatOverride = nil
+        ConfigLoader.saveProvider(restored)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models[1].pricing?.cacheWriteOneHourPerMillionTokens == nil)
+        restored.apiFormat = "anthropic"
+        ConfigLoader.saveProvider(restored)
+        restored = try #require(ConfigLoader.loadProviders().first { $0.id == provider.id })
+        #expect(restored.models.allSatisfy { $0.pricing?.cacheWriteOneHourPerMillionTokens == nil })
+        #expect(restored.models.allSatisfy { $0.pricing?.cacheWritePerMillionTokens == 3.75 })
+    }
+
     private struct LegacyProviderSnapshot: Encodable {
         let id: UUID
         let name: String

@@ -497,6 +497,9 @@ public struct RequestLogTokenTotals: Codable, Hashable, Sendable {
     public var receivedTokens: Int
     public var thinkingTokens: Int
     public var cacheWriteTokens: Int
+    public var cacheWriteFiveMinuteTokens: Int?
+    public var cacheWriteOneHourTokens: Int?
+    public var uncachedInputTokens: Int?
     public var cacheReadTokens: Int
     public var totalTokens: Int
 
@@ -505,13 +508,19 @@ public struct RequestLogTokenTotals: Codable, Hashable, Sendable {
         receivedTokens: Int = 0,
         thinkingTokens: Int = 0,
         cacheWriteTokens: Int = 0,
+        cacheWriteFiveMinuteTokens: Int? = nil,
+        cacheWriteOneHourTokens: Int? = nil,
         cacheReadTokens: Int = 0,
-        totalTokens: Int = 0
+        totalTokens: Int = 0,
+        uncachedInputTokens: Int? = nil
     ) {
         self.sentTokens = sentTokens
         self.receivedTokens = receivedTokens
         self.thinkingTokens = thinkingTokens
         self.cacheWriteTokens = cacheWriteTokens
+        self.cacheWriteFiveMinuteTokens = cacheWriteFiveMinuteTokens
+        self.cacheWriteOneHourTokens = cacheWriteOneHourTokens
+        self.uncachedInputTokens = uncachedInputTokens
         self.cacheReadTokens = cacheReadTokens
         self.totalTokens = totalTokens
     }

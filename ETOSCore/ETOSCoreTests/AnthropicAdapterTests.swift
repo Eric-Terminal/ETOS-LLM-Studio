@@ -14,6 +14,36 @@ import Foundation
 struct AnthropicAdapterTests {
     private let adapter = AnthropicAdapter()
 
+    @Test("Anthropic 解析混合缓存时长并保留非缓存输入量")
+    func parsesMixedCacheDurationUsage() throws {
+        let data = Data(#"{"content":[],"usage":{"input_tokens":20,"output_tokens":8,"cache_creation_input_tokens":300,"cache_read_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200}}}"#.utf8)
+        let usage = try #require(adapter.parseResponse(data: data).tokenUsage)
+        #expect(usage.promptTokens == 20)
+        #expect(usage.uncachedInputTokens == 20)
+        #expect(usage.cacheWriteTokens == 300)
+        #expect(usage.cacheWriteFiveMinuteTokens == 100)
+        #expect(usage.cacheWriteOneHourTokens == 200)
+        #expect(ModelCostCalculator.tierBasisTokens(for: usage) == 820)
+    }
+
+    @Test("Anthropic 流式起始和增量事件保留缓存时长且允许省略总量")
+    func parsesCacheDurationStreamingEvents() throws {
+        let start = #"data: {"type":"message_start","message":{"usage":{"input_tokens":20,"cache_creation":{"ephemeral_5m_input_tokens":100,"ephemeral_1h_input_tokens":200}}}}"#
+        let usage = try #require(adapter.parseStreamingResponse(line: start)?.tokenUsage)
+        #expect(usage.cacheWriteTokens == 300)
+        #expect(usage.cacheWriteFiveMinuteTokens == 100)
+        #expect(usage.cacheWriteOneHourTokens == 200)
+        let delta = #"data: {"type":"message_delta","usage":{"output_tokens":8,"cache_creation_input_tokens":350,"cache_creation":{"ephemeral_5m_input_tokens":150,"ephemeral_1h_input_tokens":200}}}"#
+        let updated = try #require(adapter.parseStreamingResponse(line: delta)?.tokenUsage)
+        #expect(updated.cacheWriteFiveMinuteTokens == 150)
+        #expect(updated.cacheWriteOneHourTokens == 200)
+        #expect(updated.uncachedInputTokens == nil)
+        let outputOnly = #"data: {"type":"message_delta","usage":{"output_tokens":9}}"#
+        let output = try #require(adapter.parseStreamingResponse(line: outputOnly)?.tokenUsage)
+        #expect(output.cacheWriteFiveMinuteTokens == nil)
+        #expect(output.cacheWriteOneHourTokens == nil)
+    }
+
     @Test("Anthropic 响应可解析缓存 Token 字段")
     func testAnthropicResponseParsesCacheTokens() throws {
         let payload = """

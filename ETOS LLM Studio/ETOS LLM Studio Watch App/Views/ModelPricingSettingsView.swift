@@ -10,7 +10,13 @@ import ETOSCore
 
 struct ModelPricingSettingsView: View {
     @Binding var pricing: ModelPricing?
+    let apiFormat: String
     @State private var draft = ModelPricingDraft()
+    @State private var showsCachePricingDetails = false
+
+    private var usesAnthropicCachePricing: Bool {
+        ProviderAPIFormatFamily(apiFormat: apiFormat) == .anthropic
+    }
 
     var body: some View {
         List {
@@ -40,7 +46,10 @@ struct ModelPricingSettingsView: View {
                 ) {
                     ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $draft.inputPrice)
                     ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $draft.outputPrice)
-                    ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $draft.cacheWritePrice)
+                    ModelPricingTextField(title: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $draft.cacheWritePrice)
+                    if usesAnthropicCachePricing {
+                        ModelPricingTextField(title: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $draft.cacheWriteOneHourPrice)
+                    }
                     ModelPricingTextField(title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"), text: $draft.cacheReadPrice)
                 }
 
@@ -50,7 +59,7 @@ struct ModelPricingSettingsView: View {
                 ) {
                     ForEach(sortedTierBindings, id: \.wrappedValue.id) { tierBinding in
                         NavigationLink {
-                            ModelPricingTierSettingsView(tier: tierBinding)
+                            ModelPricingTierSettingsView(tier: tierBinding, usesAnthropicCachePricing: usesAnthropicCachePricing)
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 let tier = tierBinding.wrappedValue
@@ -78,7 +87,7 @@ struct ModelPricingSettingsView: View {
 
                     if draft.timeOverridesEnabled {
                         NavigationLink {
-                            ModelPricingTimeOverridesView(draft: $draft)
+                            ModelPricingTimeOverridesView(draft: $draft, usesAnthropicCachePricing: usesAnthropicCachePricing)
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(NSLocalizedString("时间段价格", comment: "Peak valley time range prices row"))
@@ -93,6 +102,12 @@ struct ModelPricingSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+            }
+
+            if usesAnthropicCachePricing && draft.billingMode == .token {
+                Section {
+                    settingsIntroCard
                 }
             }
 
@@ -115,12 +130,16 @@ struct ModelPricingSettingsView: View {
         )
         .watchGuideEntry()
         .onAppear {
-            draft = ModelPricingDraft(pricing: pricing)
+            draft = ModelPricingDraft(pricing: pricing?.normalized(forAPIFormat: apiFormat))
         }
         .onDisappear {
             persistDraft()
         }
         .onChange(of: draft, initial: false) { _, _ in
+            persistDraft()
+        }
+        .onChange(of: apiFormat) { _, _ in
+            draft = ModelPricingDraft(pricing: draft.modelPricing?.normalized(forAPIFormat: apiFormat))
             persistDraft()
         }
     }
@@ -131,12 +150,39 @@ struct ModelPricingSettingsView: View {
             guidePriceSetting("per_request_price", label: NSLocalizedString("每次请求价格", comment: "模型价格向导字段"), text: $draft.perRequestPrice),
             guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型价格向导字段"), text: $draft.inputPrice),
             guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型价格向导字段"), text: $draft.outputPrice),
-            guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型价格向导字段"), text: $draft.cacheWritePrice),
+            guidePriceSetting("cache_write_price", label: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "模型价格向导字段"), text: $draft.cacheWritePrice),
             guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型价格向导字段"), text: $draft.cacheReadPrice),
             .bool("time_overrides_enabled", label: NSLocalizedString("启用峰谷定价", comment: "模型价格向导字段"), get: { draft.timeOverridesEnabled }, set: { draft.timeOverridesEnabled = $0 }),
             .readOnly("tier_count", label: NSLocalizedString("阶梯数量", comment: "模型价格向导字段"), value: { .int(draft.tiers.count) }),
             .readOnly("time_override_count", label: NSLocalizedString("峰谷时间段数量", comment: "模型价格向导字段"), value: { .int(draft.timeOverrides.count) })
-        ]
+        ] + (usesAnthropicCachePricing ? [
+            guidePriceSetting("cache_write_one_hour_price", label: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $draft.cacheWriteOneHourPrice)
+        ] : [])
+    }
+
+    private var settingsIntroCard: some View {
+        VStack(alignment: .leading) {
+            Text(NSLocalizedString("缓存计费", comment: "缓存价格说明标题"))
+                .font(.headline)
+            Text(NSLocalizedString("两档缓存创建价格，缓存命中共用一个价格。", comment: "缓存价格说明摘要"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button(NSLocalizedString("进一步了解…", comment: "展开缓存价格说明")) {
+                showsCachePricingDetails = true
+            }
+            .buttonStyle(.plain)
+        }
+        .sheet(isPresented: $showsCachePricingDetails) {
+            NavigationStack {
+                ScrollView {
+                    Text(NSLocalizedString("Anthropic 默认使用 5 分钟缓存。两档创建费用按返回用量分别计算，缓存命中共用一个价格。切换到其他适配器后，保留 5 分钟价格作为单档价格，并清除 1 小时价格。", comment: "缓存计费与适配器切换说明"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                }
+                .navigationTitle(NSLocalizedString("缓存计费", comment: "缓存价格说明标题"))
+            }
+        }
     }
 
     private func guidePriceSetting(_ key: String, label: String, text: Binding<String>) -> GuidePageSetting {
@@ -151,7 +197,8 @@ struct ModelPricingSettingsView: View {
     }
 
     private func persistDraft() {
-        pricing = draft.modelPricing
+        let normalized = draft.modelPricing?.normalized(forAPIFormat: apiFormat)
+        pricing = normalized?.isEffectivelyEmpty == true ? nil : normalized
     }
 
     private func deleteTiers(at offsets: IndexSet) {
@@ -193,7 +240,8 @@ struct ModelPricingSettingsView: View {
         let priceParts = [
             priceSummary(title: NSLocalizedString("输入", comment: "Cost component input title"), text: tier.inputPrice, inheritedText: draft.inputPrice),
             priceSummary(title: NSLocalizedString("输出", comment: "Cost component output title"), text: tier.outputPrice, inheritedText: draft.outputPrice),
-            priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: tier.cacheWritePrice, inheritedText: draft.cacheWritePrice),
+            priceSummary(title: usesAnthropicCachePricing ? NSLocalizedString("缓存创建（5 分钟）", comment: "5 分钟缓存费用") : NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: tier.cacheWritePrice, inheritedText: draft.cacheWritePrice),
+            usesAnthropicCachePricing ? priceSummary(title: NSLocalizedString("缓存创建（1 小时）", comment: "1 小时缓存费用"), text: tier.cacheWriteOneHourPrice, inheritedText: draft.cacheWriteOneHourPrice) : nil,
             priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: tier.cacheReadPrice, inheritedText: draft.cacheReadPrice)
         ].compactMap { $0 }
         return priceParts.isEmpty
@@ -248,6 +296,7 @@ private struct ModelPricingTextField: View {
 
 private struct ModelPricingTierSettingsView: View {
     @Binding var tier: ModelPricingTierDraft
+    let usesAnthropicCachePricing: Bool
 
     var body: some View {
         List {
@@ -264,7 +313,10 @@ private struct ModelPricingTierSettingsView: View {
             ) {
                 ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $tier.inputPrice)
                 ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $tier.outputPrice)
-                ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $tier.cacheWritePrice)
+                ModelPricingTextField(title: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $tier.cacheWritePrice)
+                if usesAnthropicCachePricing {
+                    ModelPricingTextField(title: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $tier.cacheWriteOneHourPrice)
+                }
                 ModelPricingTextField(title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"), text: $tier.cacheReadPrice)
             }
         }
@@ -277,9 +329,11 @@ private struct ModelPricingTierSettingsView: View {
                 .integer("minimum_tokens", label: NSLocalizedString("起始 Tokens", comment: "模型阶梯价格向导字段"), range: 0...Int.max, get: { tier.minimumTokenValue }, set: { tier.minimumTokens = "\($0)" }),
                 guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型阶梯价格向导字段"), text: $tier.inputPrice),
                 guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型阶梯价格向导字段"), text: $tier.outputPrice),
-                guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型阶梯价格向导字段"), text: $tier.cacheWritePrice),
+                guidePriceSetting("cache_write_price", label: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "模型阶梯价格向导字段"), text: $tier.cacheWritePrice),
                 guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型阶梯价格向导字段"), text: $tier.cacheReadPrice)
-            ]
+            ] + (usesAnthropicCachePricing ? [
+                guidePriceSetting("cache_write_one_hour_price", label: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $tier.cacheWriteOneHourPrice)
+            ] : [])
         )
         .watchGuideEntry()
     }
@@ -291,6 +345,7 @@ private struct ModelPricingTierSettingsView: View {
 
 private struct ModelPricingTimeOverridesView: View {
     @Binding var draft: ModelPricingDraft
+    let usesAnthropicCachePricing: Bool
     @Environment(\.calendar) private var calendar
 
     var body: some View {
@@ -301,7 +356,7 @@ private struct ModelPricingTimeOverridesView: View {
             ) {
                 ForEach(sortedTimeOverrideBindings, id: \.wrappedValue.id) { timeOverrideBinding in
                     NavigationLink {
-                        ModelPricingTimeOverrideSettingsView(timeOverride: timeOverrideBinding)
+                        ModelPricingTimeOverrideSettingsView(timeOverride: timeOverrideBinding, usesAnthropicCachePricing: usesAnthropicCachePricing)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             let timeOverride = timeOverrideBinding.wrappedValue
@@ -396,7 +451,8 @@ private struct ModelPricingTimeOverridesView: View {
         let priceParts = [
             priceSummary(title: NSLocalizedString("输入", comment: "Cost component input title"), text: timeOverride.inputPrice, inheritedText: draft.inputPrice),
             priceSummary(title: NSLocalizedString("输出", comment: "Cost component output title"), text: timeOverride.outputPrice, inheritedText: draft.outputPrice),
-            priceSummary(title: NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: timeOverride.cacheWritePrice, inheritedText: draft.cacheWritePrice),
+            priceSummary(title: usesAnthropicCachePricing ? NSLocalizedString("缓存创建（5 分钟）", comment: "5 分钟缓存费用") : NSLocalizedString("缓存创建", comment: "Cost component cache write title"), text: timeOverride.cacheWritePrice, inheritedText: draft.cacheWritePrice),
+            usesAnthropicCachePricing ? priceSummary(title: NSLocalizedString("缓存创建（1 小时）", comment: "1 小时缓存费用"), text: timeOverride.cacheWriteOneHourPrice, inheritedText: draft.cacheWriteOneHourPrice) : nil,
             priceSummary(title: NSLocalizedString("缓存命中", comment: "Cost component cache read title"), text: timeOverride.cacheReadPrice, inheritedText: draft.cacheReadPrice)
         ].compactMap { $0 }
         let priceText = priceParts.isEmpty
@@ -420,6 +476,7 @@ private struct ModelPricingTimeOverridesView: View {
 
 private struct ModelPricingTimeOverrideSettingsView: View {
     @Binding var timeOverride: ModelPricingTimeOverrideDraft
+    let usesAnthropicCachePricing: Bool
     @Environment(\.calendar) private var calendar
 
     var body: some View {
@@ -461,7 +518,10 @@ private struct ModelPricingTimeOverrideSettingsView: View {
             ) {
                 ModelPricingTextField(title: NSLocalizedString("输入价格", comment: "Input token price"), text: $timeOverride.inputPrice)
                 ModelPricingTextField(title: NSLocalizedString("输出价格", comment: "Output token price"), text: $timeOverride.outputPrice)
-                ModelPricingTextField(title: NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $timeOverride.cacheWritePrice)
+                ModelPricingTextField(title: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "Cache write token price"), text: $timeOverride.cacheWritePrice)
+                if usesAnthropicCachePricing {
+                    ModelPricingTextField(title: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $timeOverride.cacheWriteOneHourPrice)
+                }
                 ModelPricingTextField(title: NSLocalizedString("缓存命中价格", comment: "Cache read token price"), text: $timeOverride.cacheReadPrice)
             }
         }
@@ -482,9 +542,11 @@ private struct ModelPricingTimeOverrideSettingsView: View {
             .json("weekdays", label: NSLocalizedString("重复日", comment: "模型峰谷价格向导字段"), schema: GuideModelPricingSettingsSupport.weekdaysSchema, get: { GuideModelPricingSettingsSupport.weekdaysValue(timeOverride.weekdays) }, normalize: GuideModelPricingSettingsSupport.normalizeWeekdays, set: { timeOverride.weekdays = try GuideModelPricingSettingsSupport.weekdays(from: $0) }),
             guidePriceSetting("input_price", label: NSLocalizedString("输入价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.inputPrice),
             guidePriceSetting("output_price", label: NSLocalizedString("输出价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.outputPrice),
-            guidePriceSetting("cache_write_price", label: NSLocalizedString("缓存创建价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.cacheWritePrice),
+            guidePriceSetting("cache_write_price", label: usesAnthropicCachePricing ? NSLocalizedString("缓存创建价格（5 分钟）", comment: "5 分钟缓存价格") : NSLocalizedString("缓存创建价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.cacheWritePrice),
             guidePriceSetting("cache_read_price", label: NSLocalizedString("缓存命中价格", comment: "模型峰谷价格向导字段"), text: $timeOverride.cacheReadPrice)
-        ]
+        ] + (usesAnthropicCachePricing ? [
+            guidePriceSetting("cache_write_one_hour_price", label: NSLocalizedString("缓存创建价格（1 小时）", comment: "1 小时缓存价格"), text: $timeOverride.cacheWriteOneHourPrice)
+        ] : [])
     }
 
     private func guidePriceSetting(_ key: String, label: String, text: Binding<String>) -> GuidePageSetting {
@@ -563,6 +625,7 @@ struct ModelPricingDraft: Equatable {
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
+    var cacheWriteOneHourPrice: String = ""
     var cacheReadPrice: String = ""
     var tiers: [ModelPricingTierDraft] = []
     var timeOverridesEnabled: Bool = false
@@ -577,6 +640,7 @@ struct ModelPricingDraft: Equatable {
         inputPrice = Self.string(from: pricing?.inputPerMillionTokens)
         outputPrice = Self.string(from: pricing?.outputPerMillionTokens)
         cacheWritePrice = Self.string(from: pricing?.cacheWritePerMillionTokens)
+        cacheWriteOneHourPrice = Self.string(from: pricing?.cacheWriteOneHourPerMillionTokens)
         cacheReadPrice = Self.string(from: pricing?.cacheReadPerMillionTokens)
         tiers = pricing?.tiers.map { ModelPricingTierDraft(tier: $0) } ?? []
         timeOverridesEnabled = pricing?.timeOverridesEnabled ?? false
@@ -589,6 +653,7 @@ struct ModelPricingDraft: Equatable {
             && inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && cacheWriteOneHourPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && tiers.isEmpty
             && !timeOverridesEnabled
@@ -600,6 +665,7 @@ struct ModelPricingDraft: Equatable {
             inputPerMillionTokens: Self.double(from: inputPrice),
             outputPerMillionTokens: Self.double(from: outputPrice),
             cacheWritePerMillionTokens: Self.double(from: cacheWritePrice),
+            cacheWriteOneHourPerMillionTokens: Self.double(from: cacheWriteOneHourPrice),
             cacheReadPerMillionTokens: Self.double(from: cacheReadPrice),
             tiers: tiers.compactMap(\.modelPricingTier),
             timeOverridesEnabled: timeOverridesEnabled,
@@ -628,6 +694,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
+    var cacheWriteOneHourPrice: String = ""
     var cacheReadPrice: String = ""
 
     nonisolated init() {}
@@ -638,6 +705,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
         inputPrice = ModelPricingDraft.string(from: tier.inputPerMillionTokens)
         outputPrice = ModelPricingDraft.string(from: tier.outputPerMillionTokens)
         cacheWritePrice = ModelPricingDraft.string(from: tier.cacheWritePerMillionTokens)
+        cacheWriteOneHourPrice = ModelPricingDraft.string(from: tier.cacheWriteOneHourPerMillionTokens)
         cacheReadPrice = ModelPricingDraft.string(from: tier.cacheReadPerMillionTokens)
     }
 
@@ -649,6 +717,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
         !inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !cacheWriteOneHourPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -659,6 +728,7 @@ struct ModelPricingTierDraft: Identifiable, Equatable {
             inputPerMillionTokens: ModelPricingDraft.double(from: inputPrice),
             outputPerMillionTokens: ModelPricingDraft.double(from: outputPrice),
             cacheWritePerMillionTokens: ModelPricingDraft.double(from: cacheWritePrice),
+            cacheWriteOneHourPerMillionTokens: ModelPricingDraft.double(from: cacheWriteOneHourPrice),
             cacheReadPerMillionTokens: ModelPricingDraft.double(from: cacheReadPrice)
         )
         return tier.isEffectivelyEmpty ? nil : tier
@@ -673,6 +743,7 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
     var inputPrice: String = ""
     var outputPrice: String = ""
     var cacheWritePrice: String = ""
+    var cacheWriteOneHourPrice: String = ""
     var cacheReadPrice: String = ""
 
     nonisolated init() {}
@@ -685,6 +756,7 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
         inputPrice = ModelPricingDraft.string(from: timeOverride.inputPerMillionTokens)
         outputPrice = ModelPricingDraft.string(from: timeOverride.outputPerMillionTokens)
         cacheWritePrice = ModelPricingDraft.string(from: timeOverride.cacheWritePerMillionTokens)
+        cacheWriteOneHourPrice = ModelPricingDraft.string(from: timeOverride.cacheWriteOneHourPerMillionTokens)
         cacheReadPrice = ModelPricingDraft.string(from: timeOverride.cacheReadPerMillionTokens)
     }
 
@@ -692,6 +764,7 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
         !inputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !outputPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !cacheWritePrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !cacheWriteOneHourPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !cacheReadPrice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -705,6 +778,7 @@ struct ModelPricingTimeOverrideDraft: Identifiable, Equatable {
             inputPerMillionTokens: ModelPricingDraft.double(from: inputPrice),
             outputPerMillionTokens: ModelPricingDraft.double(from: outputPrice),
             cacheWritePerMillionTokens: ModelPricingDraft.double(from: cacheWritePrice),
+            cacheWriteOneHourPerMillionTokens: ModelPricingDraft.double(from: cacheWriteOneHourPrice),
             cacheReadPerMillionTokens: ModelPricingDraft.double(from: cacheReadPrice)
         )
         return timeOverride.isEffectivelyEmpty ? nil : timeOverride

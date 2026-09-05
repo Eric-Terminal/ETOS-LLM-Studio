@@ -600,6 +600,14 @@ final class PersistenceGRDBStore {
             """)
         }
 
+        migrator.registerMigration("v18_anthropic_cache_pricing_usage") { db in
+            for table in ["usage_request_events", "usage_daily_totals", "usage_daily_model_totals"] {
+                try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN cache_write_five_minute_tokens INTEGER")
+                try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN cache_write_one_hour_tokens INTEGER")
+                try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN uncached_input_tokens INTEGER")
+            }
+        }
+
         try migrator.migrate(dbPool)
         try repairCoreSchemaIfNeeded()
     }

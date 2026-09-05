@@ -12,6 +12,26 @@ import Combine
 @testable import ETOSCore
 
 extension ChatServiceTests {
+    @Test("流式输出分片不会覆盖缓存时长和非缓存输入量")
+    func streamingUsagePreservesCacheDurations() {
+        let start = MessageTokenUsage(
+            promptTokens: 20, completionTokens: 0, totalTokens: nil,
+            cacheWriteTokens: 300, cacheWriteFiveMinuteTokens: 100, cacheWriteOneHourTokens: 200,
+            cacheReadTokens: 500, uncachedInputTokens: 20
+        )
+        let output = MessageTokenUsage(promptTokens: nil, completionTokens: 8, totalTokens: nil)
+        let merged = chatService.mergeTokenUsage(existing: start, incoming: output)
+        #expect(merged.completionTokens == 8)
+        #expect(merged.cacheWriteFiveMinuteTokens == 100)
+        #expect(merged.cacheWriteOneHourTokens == 200)
+        #expect(merged.uncachedInputTokens == 20)
+        let updated = MessageTokenUsage(
+            promptTokens: nil, completionTokens: nil, totalTokens: nil,
+            cacheWriteTokens: 200, cacheWriteFiveMinuteTokens: 0, cacheWriteOneHourTokens: 200
+        )
+        #expect(chatService.mergeTokenUsage(existing: merged, incoming: updated).cacheWriteFiveMinuteTokens == 0)
+    }
+
     @Test("重试 assistant 失败时不会把错误写入版本历史")
     func testRetryAssistantFailureDoesNotPersistErrorAsVersion() async {
         await cleanup()

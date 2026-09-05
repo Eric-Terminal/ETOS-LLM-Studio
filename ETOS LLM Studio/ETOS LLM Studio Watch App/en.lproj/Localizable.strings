@@ -7106,3 +7106,11 @@
 "聊天快捷功能" = "Chat Quick Actions";
 "聊天缩略图" = "Chat Thumbnails";
 "输入栏样式" = "Input Bar Style";
+/* Anthropic 缓存分档计费 */
+"缓存创建价格（5 分钟）" = "Cache write price (5 minutes)";
+"缓存创建价格（1 小时）" = "Cache write price (1 hour)";
+"缓存创建（5 分钟）" = "Cache write (5 minutes)";
+"缓存创建（1 小时）" = "Cache write (1 hour)";
+"缓存计费" = "Cache pricing";
+"两档缓存创建价格，缓存命中共用一个价格。" = "Two cache write prices, with one shared cache read price.";
+"Anthropic 默认使用 5 分钟缓存。两档创建费用按返回用量分别计算，缓存命中共用一个价格。切换到其他适配器后，保留 5 分钟价格作为单档价格，并清除 1 小时价格。" = "Anthropic uses a 5-minute cache by default. Cache writes are billed separately using the returned usage for each duration, while cache reads share one price. Switching to another adapter keeps the 5-minute price as the single cache write price and clears the 1-hour price.";

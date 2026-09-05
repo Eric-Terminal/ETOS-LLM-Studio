@@ -4,6 +4,54 @@ import Foundation
 
 @Suite("用量统计同步测试", .serialized)
 struct UsageAnalyticsSyncTests {
+    @MainActor
+    @Test("缓存时长在日包同步和日汇总中保留并用于费用估算")
+    func cacheDurationUsageSurvivesPersistenceAndSync() async throws {
+        let originalBundles = Persistence.loadUsageStatsDayBundles()
+        let provider = Provider(
+            name: "缓存分档回归", baseURL: "https://example.com", apiKeys: [], apiFormat: "anthropic",
+            models: [Model(modelName: "claude-cache", pricing: ModelPricing(
+                inputPerMillionTokens: 3, outputPerMillionTokens: 15,
+                cacheWritePerMillionTokens: 3.75, cacheWriteOneHourPerMillionTokens: 6,
+                cacheReadPerMillionTokens: 0.3
+            ))]
+        )
+        defer {
+            ConfigLoader.deleteProvider(provider)
+            Persistence.clearUsageAnalyticsData()
+            _ = Persistence.mergeUsageStatsDayBundles(originalBundles)
+        }
+        Persistence.clearUsageAnalyticsData()
+        ConfigLoader.saveProvider(provider)
+        let usage = MessageTokenUsage(
+            promptTokens: 2_048, completionTokens: 503, totalTokens: nil,
+            cacheWriteTokens: 248, cacheWriteFiveMinuteTokens: 148, cacheWriteOneHourTokens: 100,
+            cacheReadTokens: 1_800, uncachedInputTokens: 2_048
+        )
+        Persistence.appendUsageAnalyticsEvent(makeEvent(
+            eventID: UUID(), requestSource: .chat, sessionID: nil, providerID: provider.id,
+            providerName: provider.name, modelID: "claude-cache", requestedAt: Date(), status: .success,
+            tokenUsage: usage
+        ))
+        let bundles = Persistence.loadUsageStatsDayBundles()
+        #expect(bundles.first?.events.first?.tokenUsage == usage)
+        let encoded = try JSONEncoder().encode(bundles)
+        let decoded = try JSONDecoder().decode([UsageStatsDayBundle].self, from: encoded)
+        Persistence.clearUsageAnalyticsData()
+        _ = Persistence.mergeUsageStatsDayBundles(decoded)
+        #expect(Persistence.loadUsageStatsDayBundles().first?.events.first?.tokenUsage == usage)
+
+        let daily = try #require(Persistence.loadUsageDailyTotals().first)
+        #expect(daily.tokenTotals.cacheWriteFiveMinuteTokens == 148)
+        #expect(daily.tokenTotals.cacheWriteOneHourTokens == 100)
+        #expect(daily.tokenTotals.uncachedInputTokens == 2_048)
+        let modelDaily = try #require(Persistence.loadUsageDailyModelTotals().first)
+        #expect(modelDaily.tokenTotals == daily.tokenTotals)
+        let viewModel = UsageAnalyticsDashboardViewModel(calendar: UsageAnalyticsRuntimeContext.calendar())
+        try await waitForDashboard(viewModel) { !$0.state.isLoading }
+        let estimate = try #require(viewModel.state.activeOverviewCard?.costSummary.totals.first)
+        #expect(abs(estimate.totalCost - 0.015384) < 0.000001)
+    }
 
     @Test("缓存命中率会兼容不同服务商 Token 口径")
     func cacheHitRateHandlesProviderTokenShapes() {

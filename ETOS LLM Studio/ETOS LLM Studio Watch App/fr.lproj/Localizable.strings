@@ -7183,3 +7183,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "聊天快捷功能" = "Chat Quick Actions";
 "聊天缩略图" = "Chat Thumbnails";
 "输入栏样式" = "Input Bar Style";
+/* Anthropic 缓存分档计费 */
+"缓存创建价格（5 分钟）" = "Prix d’écriture en cache (5 minutes)";
+"缓存创建价格（1 小时）" = "Prix d’écriture en cache (1 heure)";
+"缓存创建（5 分钟）" = "Écriture en cache (5 minutes)";
+"缓存创建（1 小时）" = "Écriture en cache (1 heure)";
+"缓存计费" = "Tarification du cache";
+"两档缓存创建价格，缓存命中共用一个价格。" = "Deux prix d’écriture et un prix de lecture commun.";
+"Anthropic 默认使用 5 分钟缓存。两档创建费用按返回用量分别计算，缓存命中共用一个价格。切换到其他适配器后，保留 5 分钟价格作为单档价格，并清除 1 小时价格。" = "Anthropic utilise par défaut un cache de 5 minutes. Les écritures sont facturées séparément selon l’utilisation renvoyée pour chaque durée, avec un prix de lecture commun. Le passage à un autre adaptateur conserve le prix de 5 minutes comme prix unique d’écriture et efface celui d’une heure.";

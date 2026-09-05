@@ -26,6 +26,8 @@ public struct ModelPricing: Codable, Hashable, Sendable {
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
+    /// Anthropic 的默认 5 分钟档沿用通用缓存创建价格，1 小时档单独计价。
+    public var cacheWriteOneHourPerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
     public var tiers: [ModelPricingTier]
     public var timeOverridesEnabled: Bool
@@ -37,6 +39,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
+        cacheWriteOneHourPerMillionTokens: Double? = nil,
         cacheReadPerMillionTokens: Double? = nil,
         tiers: [ModelPricingTier] = [],
         timeOverridesEnabled: Bool = false,
@@ -47,6 +50,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
         self.inputPerMillionTokens = Self.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = Self.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = Self.normalizedPrice(cacheWritePerMillionTokens)
+        self.cacheWriteOneHourPerMillionTokens = Self.normalizedPrice(cacheWriteOneHourPerMillionTokens)
         self.cacheReadPerMillionTokens = Self.normalizedPrice(cacheReadPerMillionTokens)
         self.tiers = Self.normalizedTiers(tiers)
         self.timeOverridesEnabled = timeOverridesEnabled
@@ -60,6 +64,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             && inputPerMillionTokens == nil
             && outputPerMillionTokens == nil
             && cacheWritePerMillionTokens == nil
+            && cacheWriteOneHourPerMillionTokens == nil
             && cacheReadPerMillionTokens == nil
             && perRequestPrice == nil
             && tiers.isEmpty
@@ -71,6 +76,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheWriteOneHourPerMillionTokens: cacheWriteOneHourPerMillionTokens,
             cacheReadPerMillionTokens: cacheReadPerMillionTokens,
             tiers: tiers,
             timeOverridesEnabled: timeOverridesEnabled,
@@ -105,6 +111,7 @@ public struct ModelPricing: Codable, Hashable, Sendable {
             inputPerMillionTokens: timeOverride?.inputPerMillionTokens ?? selectedTier?.inputPerMillionTokens ?? inputPerMillionTokens,
             outputPerMillionTokens: timeOverride?.outputPerMillionTokens ?? selectedTier?.outputPerMillionTokens ?? outputPerMillionTokens,
             cacheWritePerMillionTokens: timeOverride?.cacheWritePerMillionTokens ?? selectedTier?.cacheWritePerMillionTokens ?? cacheWritePerMillionTokens,
+            cacheWriteOneHourPerMillionTokens: timeOverride?.cacheWriteOneHourPerMillionTokens ?? selectedTier?.cacheWriteOneHourPerMillionTokens ?? cacheWriteOneHourPerMillionTokens,
             cacheReadPerMillionTokens: timeOverride?.cacheReadPerMillionTokens ?? selectedTier?.cacheReadPerMillionTokens ?? cacheReadPerMillionTokens
         )
     }
@@ -158,10 +165,26 @@ public struct ModelPricing: Codable, Hashable, Sendable {
 }
 
 extension ModelPricing {
+    public func normalized(forAPIFormat apiFormat: String) -> ModelPricing {
+        var pricing = self
+        if ProviderAPIFormatFamily(apiFormat: apiFormat) != .anthropic {
+            // 切换协议后以默认 5 分钟价格收回单档，避免隐藏的 1 小时价格继续生效。
+            pricing.cacheWriteOneHourPerMillionTokens = nil
+            for index in pricing.tiers.indices {
+                pricing.tiers[index].cacheWriteOneHourPerMillionTokens = nil
+            }
+            for index in pricing.timeOverrides.indices {
+                pricing.timeOverrides[index].cacheWriteOneHourPerMillionTokens = nil
+            }
+        }
+        return pricing.normalized
+    }
+
     private enum CodingKeys: String, CodingKey {
         case inputPerMillionTokens
         case outputPerMillionTokens
         case cacheWritePerMillionTokens
+        case cacheWriteOneHourPerMillionTokens
         case cacheReadPerMillionTokens
         case tiers
         case timeOverridesEnabled
@@ -175,6 +198,7 @@ extension ModelPricing {
         let inputPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens)
         let outputPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens)
         let cacheWritePerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens)
+        let cacheWriteOneHourPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .cacheWriteOneHourPerMillionTokens)
         let cacheReadPerMillionTokens = try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens)
         let tiers = try container.decodeIfPresent([ModelPricingTier].self, forKey: .tiers) ?? []
         let timeOverridesEnabled = try container.decodeIfPresent(Bool.self, forKey: .timeOverridesEnabled) ?? false
@@ -186,6 +210,7 @@ extension ModelPricing {
                 inputPerMillionTokens: inputPerMillionTokens,
                 outputPerMillionTokens: outputPerMillionTokens,
                 cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+                cacheWriteOneHourPerMillionTokens: cacheWriteOneHourPerMillionTokens,
                 cacheReadPerMillionTokens: cacheReadPerMillionTokens,
                 tiers: tiers,
                 timeOverrides: timeOverrides
@@ -194,6 +219,7 @@ extension ModelPricing {
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheWriteOneHourPerMillionTokens: cacheWriteOneHourPerMillionTokens,
             cacheReadPerMillionTokens: cacheReadPerMillionTokens,
             tiers: tiers,
             timeOverridesEnabled: timeOverridesEnabled,
@@ -208,6 +234,7 @@ extension ModelPricing {
         try container.encodeIfPresent(inputPerMillionTokens, forKey: .inputPerMillionTokens)
         try container.encodeIfPresent(outputPerMillionTokens, forKey: .outputPerMillionTokens)
         try container.encodeIfPresent(cacheWritePerMillionTokens, forKey: .cacheWritePerMillionTokens)
+        try container.encodeIfPresent(cacheWriteOneHourPerMillionTokens, forKey: .cacheWriteOneHourPerMillionTokens)
         try container.encodeIfPresent(cacheReadPerMillionTokens, forKey: .cacheReadPerMillionTokens)
         if !tiers.isEmpty {
             try container.encode(tiers, forKey: .tiers)
@@ -229,6 +256,7 @@ extension ModelPricing {
         inputPerMillionTokens: Double?,
         outputPerMillionTokens: Double?,
         cacheWritePerMillionTokens: Double?,
+        cacheWriteOneHourPerMillionTokens: Double?,
         cacheReadPerMillionTokens: Double?,
         tiers: [ModelPricingTier],
         timeOverrides: [ModelPricingTimeOverride]
@@ -237,6 +265,7 @@ extension ModelPricing {
            inputPerMillionTokens == nil,
            outputPerMillionTokens == nil,
            cacheWritePerMillionTokens == nil,
+           cacheWriteOneHourPerMillionTokens == nil,
            cacheReadPerMillionTokens == nil,
            tiers.isEmpty,
            timeOverrides.isEmpty {
@@ -252,6 +281,7 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
+    public var cacheWriteOneHourPerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
 
     public init(
@@ -260,6 +290,7 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
+        cacheWriteOneHourPerMillionTokens: Double? = nil,
         cacheReadPerMillionTokens: Double? = nil
     ) {
         self.id = id
@@ -267,6 +298,7 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
         self.inputPerMillionTokens = ModelPricing.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = ModelPricing.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = ModelPricing.normalizedPrice(cacheWritePerMillionTokens)
+        self.cacheWriteOneHourPerMillionTokens = ModelPricing.normalizedPrice(cacheWriteOneHourPerMillionTokens)
         self.cacheReadPerMillionTokens = ModelPricing.normalizedPrice(cacheReadPerMillionTokens)
     }
 
@@ -274,6 +306,7 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
         inputPerMillionTokens == nil
             && outputPerMillionTokens == nil
             && cacheWritePerMillionTokens == nil
+            && cacheWriteOneHourPerMillionTokens == nil
             && cacheReadPerMillionTokens == nil
     }
 
@@ -284,6 +317,7 @@ public struct ModelPricingTier: Codable, Identifiable, Hashable, Sendable {
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheWriteOneHourPerMillionTokens: cacheWriteOneHourPerMillionTokens,
             cacheReadPerMillionTokens: cacheReadPerMillionTokens
         )
     }
@@ -298,6 +332,7 @@ public struct ModelPricingEffectivePrices: Hashable, Sendable {
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
+    public var cacheWriteOneHourPerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
 }
 
@@ -343,6 +378,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
     public var inputPerMillionTokens: Double?
     public var outputPerMillionTokens: Double?
     public var cacheWritePerMillionTokens: Double?
+    public var cacheWriteOneHourPerMillionTokens: Double?
     public var cacheReadPerMillionTokens: Double?
 
     public init(
@@ -353,6 +389,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         inputPerMillionTokens: Double? = nil,
         outputPerMillionTokens: Double? = nil,
         cacheWritePerMillionTokens: Double? = nil,
+        cacheWriteOneHourPerMillionTokens: Double? = nil,
         cacheReadPerMillionTokens: Double? = nil
     ) {
         self.id = id
@@ -362,6 +399,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         self.inputPerMillionTokens = ModelPricing.normalizedPrice(inputPerMillionTokens)
         self.outputPerMillionTokens = ModelPricing.normalizedPrice(outputPerMillionTokens)
         self.cacheWritePerMillionTokens = ModelPricing.normalizedPrice(cacheWritePerMillionTokens)
+        self.cacheWriteOneHourPerMillionTokens = ModelPricing.normalizedPrice(cacheWriteOneHourPerMillionTokens)
         self.cacheReadPerMillionTokens = ModelPricing.normalizedPrice(cacheReadPerMillionTokens)
     }
 
@@ -369,6 +407,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
         inputPerMillionTokens == nil
             && outputPerMillionTokens == nil
             && cacheWritePerMillionTokens == nil
+            && cacheWriteOneHourPerMillionTokens == nil
             && cacheReadPerMillionTokens == nil
     }
 
@@ -389,6 +428,7 @@ public struct ModelPricingTimeOverride: Codable, Identifiable, Hashable, Sendabl
             inputPerMillionTokens: inputPerMillionTokens,
             outputPerMillionTokens: outputPerMillionTokens,
             cacheWritePerMillionTokens: cacheWritePerMillionTokens,
+            cacheWriteOneHourPerMillionTokens: cacheWriteOneHourPerMillionTokens,
             cacheReadPerMillionTokens: cacheReadPerMillionTokens
         )
     }
@@ -433,6 +473,7 @@ extension ModelPricingTimeOverride {
         case inputPerMillionTokens
         case outputPerMillionTokens
         case cacheWritePerMillionTokens
+        case cacheWriteOneHourPerMillionTokens
         case cacheReadPerMillionTokens
     }
 
@@ -449,6 +490,7 @@ extension ModelPricingTimeOverride {
             inputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .inputPerMillionTokens),
             outputPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .outputPerMillionTokens),
             cacheWritePerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheWritePerMillionTokens),
+            cacheWriteOneHourPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheWriteOneHourPerMillionTokens),
             cacheReadPerMillionTokens: try container.decodeIfPresent(Double.self, forKey: .cacheReadPerMillionTokens)
         )
     }
@@ -464,6 +506,7 @@ extension ModelPricingTimeOverride {
         try container.encodeIfPresent(inputPerMillionTokens, forKey: .inputPerMillionTokens)
         try container.encodeIfPresent(outputPerMillionTokens, forKey: .outputPerMillionTokens)
         try container.encodeIfPresent(cacheWritePerMillionTokens, forKey: .cacheWritePerMillionTokens)
+        try container.encodeIfPresent(cacheWriteOneHourPerMillionTokens, forKey: .cacheWriteOneHourPerMillionTokens)
         try container.encodeIfPresent(cacheReadPerMillionTokens, forKey: .cacheReadPerMillionTokens)
     }
 }
@@ -601,6 +644,8 @@ public enum MessageCostComponentKind: String, Codable, CaseIterable, Hashable, S
     case input
     case output
     case cacheWrite
+    case cacheWriteFiveMinute
+    case cacheWriteOneHour
     case cacheRead
 
     public var localizedTitle: String {
@@ -613,6 +658,10 @@ public enum MessageCostComponentKind: String, Codable, CaseIterable, Hashable, S
             return NSLocalizedString("输出", comment: "Cost component output title")
         case .cacheWrite:
             return NSLocalizedString("缓存创建", comment: "Cost component cache write title")
+        case .cacheWriteFiveMinute:
+            return NSLocalizedString("缓存创建（5 分钟）", comment: "5 分钟缓存创建费用")
+        case .cacheWriteOneHour:
+            return NSLocalizedString("缓存创建（1 小时）", comment: "1 小时缓存创建费用")
         case .cacheRead:
             return NSLocalizedString("缓存命中", comment: "Cost component cache read title")
         }
@@ -719,12 +768,30 @@ public enum ModelCostCalculator {
             pricePerMillionTokens: effective.outputPerMillionTokens,
             to: &components
         )
-        appendComponent(
-            kind: .cacheWrite,
-            tokens: usage.cacheWriteTokens,
-            pricePerMillionTokens: effective.cacheWritePerMillionTokens,
-            to: &components
-        )
+        if usage.cacheWriteFiveMinuteTokens != nil || usage.cacheWriteOneHourTokens != nil {
+            let oneHourTokens = max(0, usage.cacheWriteOneHourTokens ?? 0)
+            // 兼容只返回总量及部分时长明细的代理，未区分的余额沿用默认 5 分钟档。
+            let fiveMinuteTokens = max(0, (usage.cacheWriteTokens ?? 0) - oneHourTokens)
+            appendComponent(
+                kind: .cacheWriteFiveMinute,
+                tokens: max(fiveMinuteTokens, usage.cacheWriteFiveMinuteTokens ?? 0),
+                pricePerMillionTokens: effective.cacheWritePerMillionTokens,
+                to: &components
+            )
+            appendComponent(
+                kind: .cacheWriteOneHour,
+                tokens: oneHourTokens,
+                pricePerMillionTokens: effective.cacheWriteOneHourPerMillionTokens,
+                to: &components
+            )
+        } else {
+            appendComponent(
+                kind: .cacheWrite,
+                tokens: usage.cacheWriteTokens,
+                pricePerMillionTokens: effective.cacheWritePerMillionTokens,
+                to: &components
+            )
+        }
         appendComponent(
             kind: .cacheRead,
             tokens: usage.cacheReadTokens,
@@ -787,7 +854,10 @@ public enum ModelCostCalculator {
         )
     }
 
-    private static func billableInputTokens(for usage: MessageTokenUsage) -> Int {
+    static func billableInputTokens(for usage: MessageTokenUsage) -> Int {
+        if let uncachedInputTokens = usage.uncachedInputTokens {
+            return max(0, uncachedInputTokens)
+        }
         let promptTokens = max(0, usage.promptTokens ?? 0)
         let cacheReadTokens = max(0, usage.cacheReadTokens ?? 0)
         return max(0, promptTokens - cacheReadTokens)
