@@ -64,6 +64,9 @@ public final class GuideConversationController: ObservableObject {
     private var currentTask: Task<Void, Never>?
     private var activeTaskID: UUID?
     private var pendingToolCall: InternalToolCall?
+    private var remainingToolCalls: ArraySlice<InternalToolCall> = []
+    private var toolBatchPage: GuidePageDescriptor?
+    private var unavailableReadTools = Set<String>()
     private var undoProposal: GuideActionProposal?
     private var latestUserMessageID: UUID?
     private var latestUserMessageAllowsEditing = false
@@ -114,7 +117,7 @@ public final class GuideConversationController: ObservableObject {
         messages.append(message)
         requestHistory.append(ChatMessage(
             role: .user,
-            content: "<guide_setup_choice version=\"1\">{\"choice\":\"(choice.rawValue)\"}</guide_setup_choice>"
+            content: "<guide_setup_choice version=\"1\">{\"choice\":\"\(choice.rawValue)\"}</guide_setup_choice>"
         ))
         latestUserMessageID = message.id
         latestUserMessageAllowsEditing = false
@@ -166,6 +169,7 @@ public final class GuideConversationController: ObservableObject {
         let task = currentTask
         currentTask = nil
         task?.cancel()
+        discardToolBatch()
         commitStreamingContent()
         removeEmptyAssistantMessages()
         compactRequestHistoryAfterCompletedTurn()
@@ -300,7 +304,7 @@ public final class GuideConversationController: ObservableObject {
         }
         messages.removeSubrange((messageIndex + 1)..<messages.endIndex)
         requestHistory.removeSubrange((historyIndex + 1)..<requestHistory.endIndex)
-        pendingToolCall = nil
+        discardToolBatch()
         isAwaitingToolContinuation = false
         lastError = nil
         lastErrorMessageID = nil
@@ -312,8 +316,10 @@ public final class GuideConversationController: ObservableObject {
     private func runResponseLoop(taskID: UUID) async {
         do {
             guard activeTaskID == taskID else { return }
+            // 确认或拒绝提案后，先补齐同一条 assistant 消息的全部工具结果。
+            // 提前请求模型会留下悬空的 tool_call_id，并让兼容接口拒绝整轮请求。
+            guard try await processRemainingToolCalls(taskID: taskID) else { return }
             let resolved = try router.resolvedClient()
-            var unavailableReadTools = Set<String>()
             for _ in 0..<8 {
                 try Task.checkCancellation()
                 guard activeTaskID == taskID else { return }
@@ -384,33 +390,9 @@ public final class GuideConversationController: ObservableObject {
                     return
                 }
 
-                for call in calls {
-                    if isProposalTool(call.toolName, context: context) {
-                        let proposal = try await contextCoordinator.makeProposal(for: call)
-                        try Task.checkCancellation()
-                        guard activeTaskID == taskID else { return }
-                        pendingProposal = proposal
-                        pendingToolCall = call
-                        removeEmptyAssistantMessage(id: placeholderID)
-                        isResponding = false
-                        activeTaskID = nil
-                        currentTask = nil
-                        return
-                    }
-                    do {
-                        let result = try await executeReadTool(call)
-                        try Task.checkCancellation()
-                        guard activeTaskID == taskID else { return }
-                        appendToolResult(call: call, content: result, disposition: .completed)
-                    } catch {
-                        if error is CancellationError { throw error }
-                        guard activeTaskID == taskID else { return }
-                        // 知识检索失败属于一次工具结果，交还模型改用文档或换关键词，不能终止整段向导会话。
-                        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                        appendToolResult(call: call, content: message, disposition: .failed)
-                        unavailableReadTools.insert(call.toolName)
-                    }
-                }
+                remainingToolCalls = calls[...]
+                toolBatchPage = context.descriptor
+                guard try await processRemainingToolCalls(taskID: taskID) else { return }
                 removeEmptyAssistantMessage(id: placeholderID)
             }
             isAwaitingToolContinuation = true
@@ -429,8 +411,55 @@ public final class GuideConversationController: ObservableObject {
         }
     }
 
-    private func isProposalTool(_ name: String, context: GuidePageContext) -> Bool {
-        context.descriptor.tools.contains { $0.access == .proposeChange && $0.definition.name == name }
+    private func processRemainingToolCalls(taskID: UUID) async throws -> Bool {
+        while let call = remainingToolCalls.popFirst() {
+            try Task.checkCancellation()
+            guard activeTaskID == taskID else { return false }
+            let pageTool = toolBatchPage?.tools.first { $0.definition.name == call.toolName }
+            do {
+                // 同名工具可能出现在多个设置页，不能把上一页排队的修改应用到新页面。
+                if pageTool != nil {
+                    let current = try await contextCoordinator.currentContext()
+                    try Task.checkCancellation()
+                    guard activeTaskID == taskID else { return false }
+                    guard current.descriptor.id == toolBatchPage?.id else { throw GuideError.pageChanged }
+                }
+                if pageTool?.access == .proposeChange {
+                    let proposal = try await contextCoordinator.makeProposal(for: call)
+                    try Task.checkCancellation()
+                    guard activeTaskID == taskID else { return false }
+                    guard proposal.pageID == toolBatchPage?.id else { throw GuideError.pageChanged }
+                    pendingProposal = proposal
+                    pendingToolCall = call
+                    isResponding = false
+                    activeTaskID = nil
+                    currentTask = nil
+                    return false
+                }
+                let result = try await executeReadTool(call)
+                try Task.checkCancellation()
+                guard activeTaskID == taskID else { return false }
+                appendToolResult(call: call, content: result, disposition: .completed)
+            } catch {
+                if error is CancellationError { throw error }
+                guard activeTaskID == taskID else { return false }
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                appendToolResult(call: call, content: message, disposition: .failed)
+                if pageTool?.access != .proposeChange {
+                    unavailableReadTools.insert(call.toolName)
+                }
+            }
+        }
+        toolBatchPage = nil
+        return true
+    }
+
+    private func discardToolBatch() {
+        pendingProposal = nil
+        pendingToolCall = nil
+        remainingToolCalls = []
+        toolBatchPage = nil
+        unavailableReadTools.removeAll()
     }
 
     private func executeReadTool(_ call: InternalToolCall) async throws -> String {
@@ -537,6 +566,7 @@ public final class GuideConversationController: ObservableObject {
 
     private func finishWithError(_ error: Error, taskID: UUID) {
         guard activeTaskID == taskID else { return }
+        discardToolBatch()
         commitStreamingContent()
         removeEmptyAssistantMessages()
         compactRequestHistoryAfterCompletedTurn()
@@ -583,6 +613,7 @@ public final class GuideConversationController: ObservableObject {
 
     /// 工具原文只服务于本轮推理；最终回答形成后保留它只会让下一问重复携带源码和隐藏思考。
     private func compactRequestHistoryAfterCompletedTurn() {
+        unavailableReadTools.removeAll()
         requestHistory.removeAll { message in
             message.role == .tool || (message.role == .assistant && !(message.toolCalls ?? []).isEmpty)
         }
