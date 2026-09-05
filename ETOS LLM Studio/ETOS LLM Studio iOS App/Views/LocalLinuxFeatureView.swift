@@ -220,7 +220,7 @@ struct LocalLinuxFeatureView: View {
                 }
                 .pickerStyle(.navigationLink)
             } footer: {
-                Text(NSLocalizedString("只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。", comment: "Default interactive Linux shell footer"))
+                Text(NSLocalizedString("仅影响新终端，Agent 脚本仍使用 /bin/sh。", comment: "默认终端 Shell 页脚"))
             }
 
             Section {
@@ -888,6 +888,14 @@ private struct LocalLinuxMountsView: View {
             }
 
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("外部文件夹", comment: "外部挂载说明标题"),
+                    summary: NSLocalizedString("让 App 和 AI 访问你选择的文件夹。", comment: "外部挂载说明摘要"),
+                    details: NSLocalizedString("外部目录使用系统授权书签；只读权限会在存储管理和 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。", comment: "外部挂载使用说明")
+                )
+            }
+
+            Section {
                 Picker(
                     NSLocalizedString("新挂载权限", comment: "New Linux mount access"),
                     selection: $appConfig.localLinuxDefaultMountAccess
@@ -906,7 +914,7 @@ private struct LocalLinuxMountsView: View {
                     }
                 }
             } footer: {
-                Text(NSLocalizedString("外部目录使用系统授权书签；只读权限会在存储管理和 Linux mount 层执行。iCloud Drive 固定映射到 /mnt/icloud。", comment: "Linux mount behavior footer"))
+                Text(NSLocalizedString("只读可保护原文件；读写操作会直接修改原文件。", comment: "外部挂载权限页脚"))
             }
 
             Section(NSLocalizedString("外部挂载", comment: "External Linux mounts section")) {

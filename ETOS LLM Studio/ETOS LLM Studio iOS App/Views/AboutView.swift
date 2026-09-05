@@ -188,6 +188,11 @@ struct AboutView: View {
             }
 
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("性能与诊断", comment: ""),
+                    summary: NSLocalizedString("了解性能数据的内容和发送方式。", comment: "性能数据简介"),
+                    details: NSLocalizedString("开启后，App 会发送 Apple MetricKit 提供的 CPU、内存、启动、卡顿、磁盘、网络和匿名诊断调用栈，以及关键功能阶段的耗时。不会发送聊天内容、请求体、响应体、API Key、服务器地址或用户标识。待发送原文可在应用日志中查看，关闭后会停止收集并清除待发送数据。", comment: "性能数据详细说明")
+                )
                 Toggle(
                     NSLocalizedString("帮助 ETOS LLM Studio 改进性能", comment: "Performance telemetry toggle"),
                     isOn: $appConfig.performanceTelemetryEnabled
@@ -211,8 +216,8 @@ struct AboutView: View {
             } footer: {
                 Text(
                     NSLocalizedString(
-                        "开启后，App 会发送 Apple MetricKit 提供的 CPU、内存、启动、卡顿、磁盘、网络和匿名诊断调用栈，以及关键功能阶段的耗时。不会发送聊天内容、请求体、响应体、API Key、服务器地址或用户标识。待发送原文可在应用日志中查看，关闭后会停止收集并清除待发送数据。",
-                        comment: "Performance telemetry disclosure"
+                        "不含聊天内容或密钥，可随时关闭。",
+                        comment: "性能数据简短提示"
                     )
                 )
             }

@@ -15,9 +15,16 @@ struct MCPConfigurationTransferWatchView: View {
 
     var body: some View {
         List {
+            Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("MCP 迁移", comment: "MCP 迁移说明标题"),
+                    summary: NSLocalizedString("用 JSON 文件迁移 MCP 服务器配置。", comment: "MCP 迁移说明摘要"),
+                    details: NSLocalizedString("可通过 iPhone 键盘粘贴配置。不会自动安装本地命令或依赖；导出会移除敏感字段。", comment: "手表 MCP 迁移使用说明")
+                )
+            }
             Section(
                 header: Text(NSLocalizedString("mcpServers JSON", comment: "Watch MCP JSON section")),
-                footer: Text(NSLocalizedString("可通过 iPhone 键盘粘贴配置。不会自动安装本地命令或依赖；导出会移除敏感字段。", comment: "Watch MCP JSON footer"))
+                footer: Text(NSLocalizedString("可通过 iPhone 键盘粘贴配置。", comment: "手表 MCP 迁移页脚"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             ) {

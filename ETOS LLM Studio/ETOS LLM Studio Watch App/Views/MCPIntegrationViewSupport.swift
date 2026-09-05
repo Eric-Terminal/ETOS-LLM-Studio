@@ -409,7 +409,7 @@ struct MCPToolListView: View {
 
             Section(
                 header: Text(NSLocalizedString("工具调用标题", comment: "MCP tool call title section")),
-                footer: Text(NSLocalizedString("开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。", comment: "MCP tool call title setting footer"))
+                footer: Text(NSLocalizedString("在聊天中用简短标题说明工具正在做什么。", comment: "工具标题简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             ) {

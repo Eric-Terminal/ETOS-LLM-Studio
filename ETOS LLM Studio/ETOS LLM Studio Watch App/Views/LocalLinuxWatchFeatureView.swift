@@ -98,6 +98,11 @@ struct LocalLinuxWatchFeatureView: View {
             LocalLinuxWatchResourceStatusView()
 
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("默认终端 Shell", comment: "终端 Shell 说明标题"),
+                    summary: NSLocalizedString("选择新终端使用的命令解释器。", comment: "终端 Shell 说明摘要"),
+                    details: NSLocalizedString("只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。", comment: "终端 Shell 使用说明")
+                )
                 Picker(
                     NSLocalizedString("默认终端 Shell", comment: "Watch default interactive Linux shell setting"),
                     selection: $appConfig.localLinuxDefaultShellPath
@@ -107,7 +112,7 @@ struct LocalLinuxWatchFeatureView: View {
                     }
                 }
             } footer: {
-                Text(NSLocalizedString("只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。", comment: "Watch default interactive Linux shell footer"))
+                Text(NSLocalizedString("仅影响新终端，Agent 脚本仍使用 /bin/sh。", comment: "默认终端 Shell 页脚"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

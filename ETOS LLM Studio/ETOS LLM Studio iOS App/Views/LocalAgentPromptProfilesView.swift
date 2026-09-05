@@ -21,6 +21,13 @@ struct LocalAgentPromptProfilesView: View {
     var body: some View {
         List {
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("Agent 提示词", comment: ""),
+                    summary: NSLocalizedString("为 Agent 保存常用的 Linux 操作要求。", comment: "Agent 提示词简介"),
+                    details: NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Agent 提示词使用说明")
+                )
+            }
+            Section {
                 FullscreenMultilineTextInput(
                     identity: selectedID,
                     placeholder: NSLocalizedString("提示词内容", comment: "Agent prompt content"),
@@ -101,7 +108,7 @@ struct LocalAgentPromptProfilesView: View {
             } header: {
                 Text(NSLocalizedString("提示词列表", comment: "Agent prompt profiles section"))
             } footer: {
-                Text(NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Agent prompt profiles footer"))
+                Text(NSLocalizedString("仅在 Agent 模式生效，点按即可选用。", comment: "Agent 提示词简短提示"))
             }
         }
         .navigationTitle(NSLocalizedString("Agent 提示词", comment: "Agent prompt title"))

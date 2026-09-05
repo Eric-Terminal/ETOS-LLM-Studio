@@ -260,7 +260,7 @@ struct ModelAdvancedSettingsView: View {
 
                 Section(
                     header: Text(NSLocalizedString("上下文窗口管理", comment: "")),
-                    footer: Text(NSLocalizedString("开启后会在接近边缘时自动加载并回收历史气泡。关闭后按设置显示最近消息，每次向上加载 5 条；回到底部时恢复初始范围。设为 0 时显示全部历史。", comment: "自动管理聊天历史窗口说明"))
+                    footer: Text(NSLocalizedString("自动加载历史消息；关闭后按指定数量显示。", comment: "历史消息简短提示"))
                 ) {
                     HStack {
                         Text(NSLocalizedString("最大上下文消息数", comment: ""))

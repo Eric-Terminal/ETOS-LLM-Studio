@@ -109,7 +109,7 @@ struct DeviceSyncSettingsView: View {
             } header: {
                 Text(NSLocalizedString("iCloud 漫游同步", comment: ""))
             } footer: {
-                Text(NSLocalizedString("仅在需要让 iPhone、iPad 或 Apple Watch 通过同一 Apple ID 保持数据互通时开启。点击后会先拉取并应用远端增删改，再上传本机尚未同步的变化，全部成功后才保存新游标；首次同步且两端状态不一致时，会先让你选择数据来源。", comment: ""))
+                Text(NSLocalizedString("让同一 Apple ID 的设备自动同步数据。", comment: "iCloud 同步简短提示"))
             }
 
             Section(NSLocalizedString("iCloud 状态", comment: "")) {

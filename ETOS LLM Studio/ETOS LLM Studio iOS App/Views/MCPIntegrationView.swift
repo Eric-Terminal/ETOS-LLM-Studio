@@ -310,7 +310,7 @@ struct MCPIntegrationView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("MCP 工具箱", comment: "MCP toolbox intro title"),
                     summary: NSLocalizedString("统一管理 MCP Server 的连接、聊天暴露与能力调试。", comment: "MCP toolbox intro summary"),
-                    details: NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"),
+                    details: "\(NSLocalizedString("MCP 工具箱说明正文", comment: "MCP toolbox intro details"))\n\n\(NSLocalizedString("开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。", comment: "工具调用标题详细说明"))",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -356,7 +356,7 @@ struct MCPIntegrationView: View {
             } header: {
                 Text(NSLocalizedString("工具调用标题", comment: "MCP tool call title section"))
             } footer: {
-                Text(NSLocalizedString("开启后，模型会为每次 MCP 工具调用生成简短标题，并显示在聊天缩略图中。标题只供 ETOS 显示，不会发送给 MCP Server；关闭后继续使用原有的参数与结果预览。", comment: "MCP tool call title setting footer"))
+                Text(NSLocalizedString("在聊天中用简短标题说明工具正在做什么。", comment: "工具标题简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

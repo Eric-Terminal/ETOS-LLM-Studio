@@ -22,6 +22,13 @@ struct LocalModelManagementView: View {
     var body: some View {
         List {
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("本地模型", comment: ""),
+                    summary: NSLocalizedString("在设备上运行模型，并按内存余量选择缓存。", comment: "本地模型缓存简介"),
+                    details: "\(NSLocalizedString("模型缓存", comment: "模型缓存说明标题"))\n\(NSLocalizedString("打开后会复用最近一次加载的 GGUF 权重，减少重复加载耗时；关闭会释放当前缓存。", comment: "模型缓存说明"))\n\n\(NSLocalizedString("对话 KV 缓存", comment: "对话缓存说明标题"))\n\(NSLocalizedString("打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。", comment: "对话缓存说明"))"
+                )
+            }
+            Section {
                 Toggle(NSLocalizedString("启用本地模型提供商", comment: "Enable local model provider"), isOn: localModelsEnabledBinding)
             } footer: {
                 Text(NSLocalizedString("关闭后不会删除权重；重新开启时会自动把“本地模型”提供商加回模型管理。", comment: "Local provider toggle footer"))
@@ -40,7 +47,7 @@ struct LocalModelManagementView: View {
             Section {
                 Toggle(NSLocalizedString("模型缓存", comment: "Local model cache toggle"), isOn: localModelCacheEnabledBinding)
             } footer: {
-                Text(NSLocalizedString("打开后会复用最近一次加载的 GGUF 权重，减少重复加载耗时；关闭会释放当前缓存。", comment: "Local model cache footer"))
+                Text(NSLocalizedString("减少重复加载；关闭后释放缓存。", comment: "模型缓存简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -48,7 +55,7 @@ struct LocalModelManagementView: View {
             Section {
                 Toggle(NSLocalizedString("对话 KV 缓存", comment: "Conversation KV cache toggle"), isOn: localModelKVCacheEnabledBinding)
             } footer: {
-                Text(NSLocalizedString("打开后，本地文本模型会保留当前对话的 KV 缓存，让下一轮只处理新增内容；切换对话或关闭开关时释放。此功能会额外占用内存，且不复用于多模态对话。", comment: "Conversation KV cache footer"))
+                Text(NSLocalizedString("加快连续文字对话，但会额外占用内存。", comment: "对话缓存简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

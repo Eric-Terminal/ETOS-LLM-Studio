@@ -107,11 +107,18 @@ struct AppLogsView: View {
     @ViewBuilder
     private var requestLogSections: some View {
         Section {
+            SettingsHelpCard(
+                title: NSLocalizedString("API 请求日志", comment: "请求日志使用说明标题"),
+                summary: NSLocalizedString("记录请求和响应，方便排查连接问题。", comment: "请求日志简介"),
+                details: NSLocalizedString("关闭后不会保存请求与响应事务；开启后可选择是否记录聊天原文，图片、音频和文件的 Base64 始终隐藏。请求日志只保存在本机，不会自动上传。", comment: "请求日志详细说明")
+            )
+        }
+        Section {
             Toggle(NSLocalizedString("启用 API 请求日志", comment: ""), isOn: $appConfig.requestLogEnabled)
             Toggle(NSLocalizedString("记录请求明文消息", comment: ""), isOn: $appConfig.requestLogPlainMessageEnabled)
                 .disabled(!appConfig.requestLogEnabled)
         } footer: {
-            Text(NSLocalizedString("关闭后不会保存请求与响应事务；开启后可选择是否记录聊天原文，图片、音频和文件的 Base64 始终隐藏。请求日志只保存在本机，不会自动上传。", comment: ""))
+            Text(NSLocalizedString("仅保存在本机；记录明文会包含聊天文字。", comment: "请求日志简短提示"))
         }
 
         if logCenter.logDayFolders.isEmpty {
@@ -140,6 +147,13 @@ struct AppLogsView: View {
     @ViewBuilder
     private var telemetrySections: some View {
         Section {
+            SettingsHelpCard(
+                title: NSLocalizedString("性能与诊断", comment: ""),
+                summary: NSLocalizedString("查看即将发送的性能数据原文。", comment: "待发送性能数据简介"),
+                details: NSLocalizedString("以下内容与自动发送的数据完全一致，不包含聊天内容、请求体、响应体、API Key、服务器地址或用户标识。原始调用栈需要对应构建的 dSYM 才能解析为代码位置。", comment: "性能数据原文说明")
+            )
+        }
+        Section {
             LabeledContent(
                 NSLocalizedString("性能改进", comment: "Performance improvement"),
                 value: appConfig.performanceTelemetryEnabled
@@ -161,7 +175,7 @@ struct AppLogsView: View {
                     .foregroundStyle(.secondary)
             }
         } footer: {
-            Text(NSLocalizedString("以下内容与自动发送的数据完全一致，不包含聊天内容、请求体、响应体、API Key、服务器地址或用户标识。原始调用栈需要对应构建的 dSYM 才能解析为代码位置。", comment: "Telemetry viewer disclosure"))
+            Text(NSLocalizedString("显示的原文就是将要发送的内容。", comment: "性能数据原文简短提示"))
         }
 
         if telemetryCenter.pendingRecords.isEmpty {

@@ -48,6 +48,10 @@ private struct LocalLinuxGuideView: View {
                 body: "本地 Linux 指南：Chat、Agent 与终端"
             )
             guideSection(
+                title: "默认终端 Shell",
+                body: "只列出当前 Linux 系统中已安装的 Shell。新终端会以登录 Shell 启动；Agent 的脚本命令仍固定使用 /bin/sh。"
+            )
+            guideSection(
                 title: "软件与本地 MCP",
                 body: "本地 Linux 指南：软件与本地 MCP"
             )

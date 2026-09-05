@@ -70,7 +70,7 @@ struct MemorySettingsView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("记忆检索", comment: "Memory retrieval intro title"),
                     summary: NSLocalizedString("控制记忆如何被选中，并决定发送给模型时附带哪些信息。", comment: "Memory retrieval intro summary"),
-                    details: NSLocalizedString("记忆检索说明正文", comment: "Memory retrieval intro details"),
+                    details: "\(NSLocalizedString("记忆检索说明正文", comment: "Memory retrieval intro details"))\n\n\(NSLocalizedString("长期记忆自动整理说明", comment: "记忆自动整理详细规则"))",
                     isExpanded: $isShowingRetrievalIntroDetails
                 )
                 LabeledContent(NSLocalizedString("检索数量 (Top K)", comment: "")) {
@@ -108,7 +108,7 @@ struct MemorySettingsView: View {
             } header: {
                 Text(NSLocalizedString("自动整理", comment: "Memory auto consolidation section title"))
             } footer: {
-                Text(NSLocalizedString("长期记忆自动整理说明", comment: "Memory auto consolidation footer"))
+                Text(NSLocalizedString("自动归档重复记忆、标记过时信息，不删除记录。", comment: "自动整理简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

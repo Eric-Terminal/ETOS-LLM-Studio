@@ -218,8 +218,13 @@ struct RequestBodyControlDetailView: View {
             if control.kind == .optionGroup {
                 Section(
                     header: Text(NSLocalizedString("滑块", comment: "")),
-                    footer: Text(NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。", comment: ""))
+                    footer: Text(NSLocalizedString("至少需要两个选项。", comment: "启用滑块的条件"))
                 ) {
+                    SettingsHelpCard(
+                        title: NSLocalizedString("滑块", comment: "滑块说明标题"),
+                        summary: NSLocalizedString("用滑动来切换档位或调节数值。", comment: "滑块说明摘要"),
+                        details: NSLocalizedString("启用后，字符串选项会吸附到档位，数字选项可在档位之间连续调节。数字粒度默认取相邻档位最小差值的 10%，也可手动覆盖。至少需要两个选项。", comment: "滑块使用说明")
+                    )
                     Toggle(NSLocalizedString("启用滑块", comment: ""), isOn: $control.isSliderEnabled)
                         .disabled(control.options.count < 2)
 

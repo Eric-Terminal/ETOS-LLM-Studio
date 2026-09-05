@@ -21,6 +21,13 @@ struct LocalLinuxWatchPromptView: View {
 
     var body: some View {
         List {
+            Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("Agent 提示词", comment: "Agent 提示词说明标题"),
+                    summary: NSLocalizedString("为 Agent 保存常用的 Linux 操作要求。", comment: "Agent 提示词说明摘要"),
+                    details: NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Agent 提示词使用说明")
+                )
+            }
             Section(NSLocalizedString("Agent 提示词", comment: "Watch Agent prompt editor section")) {
                 TextField(
                     NSLocalizedString("提示词内容", comment: "Watch Agent prompt content"),
@@ -90,7 +97,7 @@ struct LocalLinuxWatchPromptView: View {
                 }
             }
 
-            Text(NSLocalizedString("这里的内容会作为 Linux 操作说明合并进系统上下文，不会替代用户已有的人设与会话提示词；只有 Agent 模式会插入。点按可选中，向左滑可删除自定义项，向右滑可编辑。", comment: "Watch Agent prompt profiles footer"))
+            Text(NSLocalizedString("仅在 Agent 模式生效，点按即可选用。", comment: "Agent 提示词页脚"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

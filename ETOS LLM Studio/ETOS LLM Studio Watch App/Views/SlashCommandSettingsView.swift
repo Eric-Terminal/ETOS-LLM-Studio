@@ -16,12 +16,19 @@ struct SlashCommandSettingsView: View {
     var body: some View {
         List {
             Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("快速指令", comment: ""),
+                    summary: NSLocalizedString("用短命令打开操作或填入常用提示词。", comment: "快速指令简介"),
+                    details: NSLocalizedString("默认关闭。启用后，提交以 / 开头的输入即可显示命令；内建命令会直接执行，自定义命令会将提示词填入输入框。", comment: "手表快速指令使用说明")
+                )
+            }
+            Section {
                 Toggle(
                     NSLocalizedString("启用快速指令", comment: "Enable quick commands toggle"),
                     isOn: $appConfig.enableSlashCommands
                 )
             } footer: {
-                Text(NSLocalizedString("默认关闭。启用后，提交以 / 开头的输入即可显示命令；内建命令会直接执行，自定义命令会将提示词填入输入框。", comment: "Watch slash commands setting footer"))
+                Text(NSLocalizedString("开启后，提交以 / 开头的输入来选择命令。", comment: "手表快速指令简短提示"))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
             }

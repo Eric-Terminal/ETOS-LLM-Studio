@@ -762,6 +762,11 @@ struct LocalLinuxRecipesView: View {
     @ViewBuilder
     private var mirrorRecommendationSection: some View {
         Section {
+            SettingsHelpCard(
+                title: NSLocalizedString("推荐下载源", comment: "下载源说明标题"),
+                summary: NSLocalizedString("按当前网络选择合适的软件下载源。", comment: "下载源说明摘要"),
+                details: NSLocalizedString("测速只访问各站的 Alpine 软件索引，不会读取位置。安装命令只在本次执行中使用所示下载源，不会修改 /etc/apk/repositories。", comment: "下载源使用说明")
+            )
             if isTestingMirrors {
                 HStack {
                     ProgressView()
@@ -800,8 +805,8 @@ struct LocalLinuxRecipesView: View {
         } footer: {
             Text(
                 mirrorRecommendationIsMeasured
-                    ? NSLocalizedString("已根据当前网络选择响应最快的可用下载源。测速只访问各站的 Alpine 软件索引，不会读取位置。", comment: "Measured Linux mirror recommendation explanation")
-                    : NSLocalizedString("测速只访问各站的 Alpine 软件索引，不会读取位置。安装命令只在本次执行中使用所示下载源，不会修改 /etc/apk/repositories。", comment: "Linux mirror recommendation privacy explanation")
+                    ? NSLocalizedString("已选择当前响应最快的下载源。", comment: "下载源测速结果提示")
+                    : NSLocalizedString("下载源只用于本次安装。", comment: "下载源使用范围提示")
             )
         }
     }

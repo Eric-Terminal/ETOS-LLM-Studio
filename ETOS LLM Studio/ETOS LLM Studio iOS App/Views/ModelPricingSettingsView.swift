@@ -22,9 +22,16 @@ struct ModelPricingSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                SettingsHelpCard(
+                    title: NSLocalizedString("价格设置", comment: "模型价格说明标题"),
+                    summary: NSLocalizedString("按用量或请求次数估算聊天费用。", comment: "模型价格说明摘要"),
+                    details: pricingDetailsText
+                )
+            }
             Section(
                 header: Text(NSLocalizedString("计费方式", comment: "Model pricing billing mode section")),
-                footer: Text(NSLocalizedString("按 Token 时继续使用输入、输出和缓存 token 单价；按次时每条模型请求使用固定价格。", comment: "Model pricing billing mode footer"))
+                footer: Text(NSLocalizedString("选择按 Token 用量或按请求次数估算。", comment: "计费方式页脚"))
             ) {
                 Picker(NSLocalizedString("计费方式", comment: "Model pricing billing mode picker"), selection: $draft.billingMode) {
                     ForEach(ModelPricingBillingMode.allCases, id: \.self) { mode in
@@ -38,7 +45,7 @@ struct ModelPricingSettingsView: View {
             if draft.billingMode == .perRequest {
                 Section(
                     header: Text(NSLocalizedString("按次价格", comment: "Per-request pricing section")),
-                    footer: Text(NSLocalizedString("按次计费每条模型请求只计算一次固定价格，不依赖服务商是否返回 token 用量。", comment: "Per-request pricing footer"))
+                    footer: Text(NSLocalizedString("每条模型请求计费一次。", comment: "按次价格页脚"))
                 ) {
                     ModelPricingTextField(
                         title: NSLocalizedString("每次请求价格", comment: "Per-request price field"),
@@ -76,7 +83,7 @@ struct ModelPricingSettingsView: View {
 
                 Section(
                     header: Text(NSLocalizedString("阶梯价格", comment: "Tiered model pricing section")),
-                    footer: Text(NSLocalizedString("阶梯依据为输入 Tokens + 缓存创建 Tokens + 缓存命中 Tokens。命中某个起始值后，整条请求使用该档位价格；阶梯留空的价格继承基础价格。", comment: "Tiered pricing rule hint"))
+                    footer: Text(NSLocalizedString("达到档位后，整次请求按该档价格估算。", comment: "阶梯价格页脚"))
                 ) {
                     if draft.tiers.isEmpty {
                         Text(NSLocalizedString("当前没有阶梯价格。", comment: "No tiered pricing empty state"))
@@ -107,7 +114,7 @@ struct ModelPricingSettingsView: View {
 
                 Section(
                     header: Text(NSLocalizedString("峰谷定价", comment: "Peak valley pricing section")),
-                    footer: Text(NSLocalizedString("默认关闭；开启后，只在命中的重复日和时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "Peak valley pricing section footer"))
+                    footer: Text(NSLocalizedString("仅在指定的重复日和时间段覆盖价格。", comment: "峰谷价格页脚"))
                 ) {
                     Toggle(NSLocalizedString("启用峰谷定价", comment: "Enable peak valley pricing toggle"), isOn: $draft.timeOverridesEnabled)
 
@@ -165,6 +172,20 @@ struct ModelPricingSettingsView: View {
             draft = ModelPricingDraft(pricing: draft.modelPricing?.normalized(forAPIFormat: apiFormat))
             persistDraft()
         }
+    }
+
+    private var pricingDetailsText: String {
+        """
+        \(NSLocalizedString("计费方式", comment: "计费方式说明标题"))
+        \(NSLocalizedString("按 Token 时继续使用输入、输出和缓存 token 单价；按次时每条模型请求使用固定价格。", comment: "计费方式说明"))
+        \(NSLocalizedString("按次计费每条模型请求只计算一次固定价格，不依赖服务商是否返回 token 用量。", comment: "按次计费说明"))
+
+        \(NSLocalizedString("阶梯价格", comment: "阶梯价格说明标题"))
+        \(NSLocalizedString("阶梯依据为输入 Tokens + 缓存创建 Tokens + 缓存命中 Tokens。命中某个起始值后，整条请求使用该档位价格；阶梯留空的价格继承基础价格。", comment: "阶梯价格说明"))
+
+        \(NSLocalizedString("峰谷定价", comment: "峰谷价格说明标题"))
+        \(NSLocalizedString("默认关闭；开启后，只在命中的重复日和时间段覆盖价格，其他时间仍按基础/阶梯价格估算。", comment: "峰谷价格说明"))
+        """
     }
 
     private var pricingGuideSettings: [GuidePageSetting] {
@@ -395,8 +416,13 @@ private struct ModelPricingTimeOverridesView: View {
         Form {
             Section(
                 header: Text(NSLocalizedString("峰谷时间段", comment: "Peak valley pricing ranges section")),
-                footer: Text(NSLocalizedString("时间段命中后只覆盖这里填写的价格；每个时间段可单独选择重复日，未填写的价格继续继承基础价格和已命中的阶梯价格。", comment: "Peak valley pricing ranges footer"))
+                footer: Text(NSLocalizedString("留空时继承基础价格和已命中的阶梯价格。", comment: "峰谷价格继承提示"))
             ) {
+                SettingsHelpCard(
+                    title: NSLocalizedString("峰谷定价", comment: "峰谷定价说明标题"),
+                    summary: NSLocalizedString("为不同日期和时段设置价格。", comment: "峰谷定价说明摘要"),
+                    details: NSLocalizedString("时间段命中后只覆盖这里填写的价格；每个时间段可单独选择重复日，未填写的价格继续继承基础价格和已命中的阶梯价格。", comment: "峰谷定价使用说明")
+                )
                 if draft.timeOverrides.isEmpty {
                     Text(NSLocalizedString("当前没有峰谷时间段。", comment: "No peak valley pricing ranges empty state"))
                         .foregroundStyle(.secondary)

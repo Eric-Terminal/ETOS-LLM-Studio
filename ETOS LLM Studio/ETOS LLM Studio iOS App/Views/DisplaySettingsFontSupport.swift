@@ -48,7 +48,7 @@ struct FontSettingsView: View {
                 settingsIntroCard(
                     title: NSLocalizedString("字体样式优先级", comment: "Font style priority intro title"),
                     summary: NSLocalizedString("管理每个样式槽位的字体候选链；越靠上优先级越高。", comment: "Font style priority intro summary"),
-                    details: NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"),
+                    details: "\(NSLocalizedString("字体样式优先级说明正文", comment: "Font style priority intro details"))\n\n\(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。", comment: "字体排序操作说明"))",
                     isExpanded: $isShowingIntroDetails
                 )
             }
@@ -412,7 +412,7 @@ struct FontSettingsView: View {
     private var stylePrioritySection: some View {
         Section(
             header: Text(NSLocalizedString("样式优先级", comment: "")),
-            footer: Text(NSLocalizedString("点击右上角“编辑”后，可拖拽右侧把手调整优先级，并通过“添加字体到当前槽位”补入未加入的字体。对槽位内字体右滑可移除。越靠上优先级越高。", comment: ""))
+            footer: Text(NSLocalizedString("越靠上的字体越优先；点“编辑”调整顺序。", comment: "字体排序简短提示"))
         ) {
             Picker(NSLocalizedString("样式槽位", comment: ""), selection: $selectedRole) {
                 ForEach(FontSemanticRole.allCases) { role in
