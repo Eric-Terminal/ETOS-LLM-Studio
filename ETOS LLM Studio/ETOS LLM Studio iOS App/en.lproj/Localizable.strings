@@ -7386,7 +7386,7 @@
 
 // 提示词宏：语法、可用变量与缓存说明。
 "查看可用宏" = "Available macros";
-"提示词宏语法说明" = "Use {{name}} or {name}; names are case-insensitive and may have surrounding spaces. Unknown macros stay unchanged. Values come from the device sending the request. Unavailable readings return unknown. Saved prompts keep the original template.";
+"提示词宏语法说明" = "Macro names are case-insensitive and may have surrounding spaces. Single braces, {name}, also expand. Unknown macros stay unchanged. Values come from the device sending the request; unavailable readings return unknown.";
 "日期与时间" = "Date and time";
 "提示词宏时间列表" = "{{cur_date}} — local date (yyyy-MM-dd)\n{{cur_time}} — local time (HH:mm:ss)\n{{cur_datetime}} — local date and time\n{{utc_datetime}} — UTC time in ISO 8601\n{{weekday}} — day of the week\n{{timestamp}} — Unix timestamp in seconds\n{{timezone}} — time zone ID\n{{timezone_offset}} — UTC offset, such as +08:00";
 "模型与供应商" = "Model and provider";
@@ -7400,10 +7400,11 @@
 "电量与运行状态" = "Battery and system status";
 "提示词宏状态列表" = "{{battery_level}} — battery percentage, 0–100 without %\n{{battery_state}} — unplugged, charging, full or unknown\n{{is_charging}} — true, false or unknown; full means false\n{{low_power_mode}} — low power mode, true or false\n{{thermal_state}} — nominal, fair, serious, critical or unknown\n{{system_uptime}} — time since boot in seconds\nBattery readings are collected only when referenced, without background polling.";
 "提示词宏" = "Prompt macros";
-"提示词宏缓存说明" = "Put changing values such as time and battery level in the enhancement prompt to preserve more of the request prefix for caching. Using them in system or topic prompts can reduce cache reuse. Cache support and reuse depend on the provider and API format.";
-"提示词宏使用说明" = "System prompts, conversation system prompts, topic prompts and enhancement prompts support macros. They are replaced with current values before each request. For example, put this in the enhancement prompt:";
-"提示词宏增强示例" = "Current time: {{cur_datetime}} ({{timezone}})\nBattery (%): {{battery_level}}";
-"提示词宏时间注入说明" = "Usually this can stay off. When time is needed, use the tail position or a time macro in the enhancement prompt, without sending both. A changing time at the front reduces prefix cache reuse.";
+"提示词宏缓存说明" = "Changing values may reduce cache reuse from their position onward. Enhancement prompts are placed at the end. You choose where to use macros; actual caching depends on the provider and API format.";
+"提示词宏使用说明" = "System prompts, conversation system prompts, topic prompts, enhancement prompts and chat input all support macros. Saved prompts and user messages keep their original text. Macros are evaluated again for every request, including those in historical user messages sent with it.";
+"提示词宏双三括号说明" = "Double braces read the current value. Triple braces send the literal macro text without expanding it. For example, when the battery is at 90%:";
+"提示词宏展开示例" = "{{battery_level}} → 90\n{{{battery_level}}} → {{battery_level}}";
+"提示词宏时间注入说明" = "System time can be added at the beginning or end, or inserted anywhere using prompt macros. Changing time may reduce cache reuse from that position onward.";
 /* 本地 Linux 重置与快照恢复 */
 "正在重置 Linux…" = "Resetting Linux…";
 "系统已重置，下次使用时会重新安装内置系统。" = "The system was reset. The built-in system will be installed the next time you use Linux.";

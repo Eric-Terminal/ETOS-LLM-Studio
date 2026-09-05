@@ -7226,7 +7226,7 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 
 // 提示词宏：语法、可用变量与缓存说明。
 "查看可用宏" = "Macros disponibles";
-"提示词宏语法说明" = "Utilisez {{name}} ou {name}. Les noms ne sont pas sensibles à la casse et peuvent être entourés d’espaces. Les macros inconnues restent inchangées. Les valeurs proviennent de l’appareil qui envoie la requête ; une mesure indisponible donne unknown. Les prompts enregistrés conservent le modèle d’origine.";
+"提示词宏语法说明" = "Les noms de macros ne sont pas sensibles à la casse et acceptent des espaces à l’intérieur des accolades. Les accolades simples, {name}, sont aussi développées. Les macros inconnues restent inchangées. Les valeurs proviennent de l’appareil qui envoie la requête ; une valeur indisponible renvoie unknown.";
 "日期与时间" = "Date et heure";
 "提示词宏时间列表" = "{{cur_date}} — date locale (yyyy-MM-dd)\n{{cur_time}} — heure locale (HH:mm:ss)\n{{cur_datetime}} — date et heure locales\n{{utc_datetime}} — heure UTC au format ISO 8601\n{{weekday}} — jour de la semaine\n{{timestamp}} — horodatage Unix en secondes\n{{timezone}} — identifiant du fuseau horaire\n{{timezone_offset}} — décalage UTC, par exemple +08:00";
 "模型与供应商" = "Modèle et fournisseur";
@@ -7240,10 +7240,11 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "电量与运行状态" = "Batterie et état du système";
 "提示词宏状态列表" = "{{battery_level}} — pourcentage de batterie, 0–100 sans %\n{{battery_state}} — unplugged (débranché), charging (en charge), full (chargé) ou unknown\n{{is_charging}} — true, false ou unknown ; false lorsque la charge est complète\n{{low_power_mode}} — mode économie d’énergie, true ou false\n{{thermal_state}} — nominal (normal), fair (tiède), serious (chaud), critical (surchauffe) ou unknown\n{{system_uptime}} — durée depuis le démarrage en secondes\nLa batterie est lue uniquement si ses macros sont utilisées, sans interrogation en arrière-plan.";
 "提示词宏" = "Macros de prompt";
-"提示词宏缓存说明" = "Placez les valeurs variables, comme l’heure et la batterie, dans le prompt de renforcement afin de préserver davantage le préfixe de la requête pour le cache. Dans les prompts système ou de sujet, elles peuvent réduire la réutilisation du cache. La prise en charge et la portée du cache dépendent du fournisseur et du format d’API.";
-"提示词宏使用说明" = "Les prompts système, système de conversation, de sujet et de renforcement acceptent les macros. Elles sont remplacées par les valeurs actuelles avant chaque requête. Exemple à saisir dans le prompt de renforcement :";
-"提示词宏增强示例" = "Heure actuelle : {{cur_datetime}} ({{timezone}})\nBatterie (%) : {{battery_level}}";
-"提示词宏时间注入说明" = "Cette option peut généralement rester désactivée. Si l’heure est nécessaire, ajoutez-la à la fin ou utilisez une macro dans le prompt de renforcement, sans doublon. Une heure changeante au début réduit la réutilisation du cache de préfixe.";
+"提示词宏缓存说明" = "Les valeurs qui changent peuvent réduire la réutilisation du cache à partir de leur position. Les instructions complémentaires sont placées à la fin. Vous choisissez où utiliser les macros ; le cache dépend du fournisseur et du format API.";
+"提示词宏使用说明" = "Les instructions système, celles de la conversation, les instructions du sujet, les instructions complémentaires et la saisie du chat acceptent les macros. Les instructions et messages utilisateur enregistrés conservent leur texte original. Les macros sont réévaluées à chaque requête, y compris dans les anciens messages utilisateur envoyés avec celle-ci.";
+"提示词宏双三括号说明" = "Les doubles accolades insèrent la valeur actuelle. Les triples accolades envoient le texte de la macro sans la développer. Par exemple, avec une batterie à 90 % :";
+"提示词宏展开示例" = "{{battery_level}} → 90\n{{{battery_level}}} → {{battery_level}}";
+"提示词宏时间注入说明" = "L’heure système peut être ajoutée au début ou à la fin, ou insérée ailleurs avec les macros. Ses changements peuvent réduire la réutilisation du cache à partir de cette position.";
 /* 本地 Linux 重置与快照恢复 */
 "正在重置 Linux…" = "Réinitialisation de Linux…";
 "系统已重置，下次使用时会重新安装内置系统。" = "Le système a été réinitialisé. Le système intégré sera réinstallé à la prochaine utilisation de Linux.";

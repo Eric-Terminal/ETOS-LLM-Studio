@@ -16,12 +16,12 @@ struct PromptMacroTemplates: Sendable, Equatable {
         [global, conversation, topic, enhanced].compactMap { $0 }
     }
 
-    func rendered(values: [String: String]) -> Self {
+    func rendered(values: [String: String], literalTransform: (String) -> String = { $0 }) -> Self {
         Self(
-            global: global.map { PromptMacroResolver.render($0, values: values) },
-            conversation: conversation.map { PromptMacroResolver.render($0, values: values) },
-            topic: topic.map { PromptMacroResolver.render($0, values: values) },
-            enhanced: enhanced.map { PromptMacroResolver.render($0, values: values) }
+            global: global.map { PromptMacroResolver.render($0, values: values, literalTransform: literalTransform) },
+            conversation: conversation.map { PromptMacroResolver.render($0, values: values, literalTransform: literalTransform) },
+            topic: topic.map { PromptMacroResolver.render($0, values: values, literalTransform: literalTransform) },
+            enhanced: enhanced.map { PromptMacroResolver.render($0, values: values, literalTransform: literalTransform) }
         )
     }
 }
@@ -40,9 +40,9 @@ enum PromptMacroResolver {
         "low_power_mode", "thermal_state", "system_uptime"
     ])
 
-    // 括号边界避免把未闭合或三重括号模板的一部分误识别成单括号宏。
+    // 三重括号优先识别为字面量；边界避免从不完整或更多层括号中截取宏。
     private static let expression = try! NSRegularExpression(
-        pattern: #"(?<!\{)(?:\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}|\{\s*([a-z_][a-z0-9_]*)\s*\})(?!\})"#,
+        pattern: #"(?<!\{)(?:\{(\{\{\s*[a-z_][a-z0-9_]*\s*\}\})\}|\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}|\{\s*([a-z_][a-z0-9_]*)\s*\})(?!\})"#,
         options: [.caseInsensitive]
     )
 
@@ -51,6 +51,8 @@ enum PromptMacroResolver {
         for template in templates {
             let source = template as NSString
             for match in expression.matches(in: template, range: NSRange(location: 0, length: source.length)) {
+                // 字面量不请求环境数据，单独写三重括号不会启动电池监测。
+                guard match.range(at: 1).location == NSNotFound else { continue }
                 let name = macroName(in: match, source: source)
                 if supportedNames.contains(name) {
                     names.insert(name)
@@ -60,7 +62,11 @@ enum PromptMacroResolver {
         return names
     }
 
-    static func render(_ template: String, values: [String: String]) -> String {
+    static func render(
+        _ template: String,
+        values: [String: String],
+        literalTransform: (String) -> String = { $0 }
+    ) -> String {
         let source = template as NSString
         let matches = expression.matches(in: template, range: NSRange(location: 0, length: source.length))
         guard !matches.isEmpty else { return template }
@@ -69,12 +75,16 @@ enum PromptMacroResolver {
         var cursor = 0
         for match in matches {
             parts.append(source.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
-            let name = macroName(in: match, source: source)
-            if supportedNames.contains(name), let value = values[name] {
-                parts.append(value)
+            if match.range(at: 1).location != NSNotFound {
+                parts.append(literalTransform(source.substring(with: match.range(at: 1))))
             } else {
-                // 未知宏留给原有角色宏、脚本或用户文本，不静默删除。
-                parts.append(source.substring(with: match.range))
+                let name = macroName(in: match, source: source)
+                if supportedNames.contains(name), let value = values[name] {
+                    parts.append(value)
+                } else {
+                    // 未知宏留给原有角色宏、脚本或用户文本，不静默删除。
+                    parts.append(source.substring(with: match.range))
+                }
             }
             cursor = NSMaxRange(match.range)
         }
@@ -111,7 +121,7 @@ enum PromptMacroResolver {
     }
 
     private static func macroName(in match: NSTextCheckingResult, source: NSString) -> String {
-        let range = match.range(at: 1).location == NSNotFound ? match.range(at: 2) : match.range(at: 1)
+        let range = match.range(at: 2).location == NSNotFound ? match.range(at: 3) : match.range(at: 2)
         return source.substring(with: range).lowercased()
     }
 }

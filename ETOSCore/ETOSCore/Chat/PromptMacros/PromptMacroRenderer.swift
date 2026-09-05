@@ -1,7 +1,7 @@
 // ============================================================================
 // PromptMacroRenderer.swift
 // ============================================================================
-// 普通提示词共享同一份请求快照，配置原文与聊天历史不在这里改写。
+// 提示词与用户消息共享同一份请求快照，持久化原文不在这里改写。
 // ============================================================================
 
 import Foundation
@@ -15,10 +15,13 @@ enum PromptMacroRenderer {
         messages: [ChatMessage],
         now: Date,
         roleplayStore: RoleplayStore
-    ) async -> PromptMacroTemplates {
+    ) async -> PromptMacroRequest {
         await Task.detached(priority: .userInitiated) {
-            let names = PromptMacroResolver.referencedNames(in: templates.texts)
-            guard !names.isEmpty else { return templates }
+            let userTexts = messages.filter { $0.role == .user }.map(\.content)
+            let names = PromptMacroResolver.referencedNames(in: templates.texts + userTexts)
+            guard !names.isEmpty else {
+                return PromptMacroRequest(templates: templates, messages: messages, values: [:])
+            }
 
             // 设置和角色库可能触发磁盘读取，模板扫描与格式化也统一留在后台。
             let preference = AppLanguagePreference.storedPreference
@@ -61,7 +64,7 @@ enum PromptMacroRenderer {
                 ]) { _, new in new }
             }
             values.merge(await PromptMacroEnvironment.capture(referencedNames: names)) { _, new in new }
-            return templates.rendered(values: values)
+            return PromptMacroRequest(templates: templates, messages: messages, values: values)
         }.value
     }
 }

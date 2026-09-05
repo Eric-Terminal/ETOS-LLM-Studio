@@ -446,8 +446,8 @@ struct ModelAdvancedSettingsView: View {
             } footer: {
                 Text(NSLocalizedString(
                     "提示词宏时间注入说明",
-                    value: "Usually this can stay off. When time is needed, use the tail position or a time macro in the enhancement prompt, without sending both. A changing time at the front reduces prefix cache reuse.",
-                    comment: "时间注入按需启用与缓存提示"
+                    value: "System time can be added at the beginning or end, or inserted anywhere using prompt macros. Changing time may reduce cache reuse from that position onward.",
+                    comment: "时间注入位置选择与缓存效果"
                 ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)

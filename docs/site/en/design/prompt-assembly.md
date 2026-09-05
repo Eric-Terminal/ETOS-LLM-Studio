@@ -42,9 +42,16 @@ User message
 
 ## Prompt Macros
 
-Global system prompts, conversation system prompts, topic prompts and enhancement prompts support macros. The **Prompt macros** section below the editors includes an example and an expandable list of available macros.
+Global system prompts, conversation system prompts, topic prompts, enhancement prompts and chat input all support macros. The **Prompt macros** introduction card below the editors explains the syntax and includes an expandable list of available macros.
 
-Use `{{model_name}}` or `{model_name}`. Names are case-insensitive and may have surrounding spaces. Once the request's actual model is selected, ETOS takes one environment snapshot and expands these four templates. Saved settings keep the original templates, and ordinary chat history is not rewritten by this feature. Unknown macros remain unchanged. Replacement values are not recursively expanded by this layer; roleplay macros and advanced templates retain their own processing paths.
+Double braces, `{{model_name}}`, expand dynamically; single braces, `{model_name}`, also expand. Names are case-insensitive and may have surrounding spaces. Triple braces send literal macro text: `{{{battery_level}}}` becomes `{{battery_level}}`, without reading the battery or expanding it again during subsequent roleplay template processing. For example, with a battery level of 90%:
+
+| Input | Content sent to the model |
+| --- | --- |
+| `Battery: {{battery_level}}%` | `Battery: 90%` |
+| `Explain {{{battery_level}}}` | `Explain {{battery_level}}` |
+
+Once the request's actual model is selected, ETOS takes one environment snapshot shared by all four prompt types and the user messages sent with that request. Saved settings, messages and their displayed text keep the originals. Dynamic macros in historical user messages are evaluated again on later requests; they do not retain the value from the first send. Assistant replies and tool results do not participate in this environment macro expansion. Unknown macros remain unchanged. Replacement values are not recursively expanded by this layer; roleplay macros and advanced templates retain their own processing paths.
 
 | Category | Macro names |
 | --- | --- |
@@ -63,16 +70,16 @@ Device values come from **the device sending the request**. A watch reads its ow
 
 ### Changing Values and Caching
 
-Place changing values such as time and battery level in the **enhancement prompt**, for example:
+Changing values such as time and battery level can be used anywhere macros are supported. For example:
 
 ```text
 Current time: {{cur_datetime}} ({{timezone}})
 Battery (%): {{battery_level}}
 ```
 
-Macros expand before sending and keep the enhancement prompt's existing tail placement and protocol role settings. They are not merged into the earlier global or topic prompt. This preserves more of the request prefix for reuse; actual cache support and coverage still depend on the provider and API format. Dynamic macros in system or topic prompts make those prefixes change between requests.
+Macros keep the placement of their source text. Enhancement prompts retain their tail placement and protocol role settings without being merged into the earlier global or topic prompt. Changing values in system prompts, topic prompts or historical user messages may reduce prefix cache reuse from that position onward. You choose where to use macros; actual cache support and coverage depend on the provider and API format.
 
-**Inject System Time** can usually stay off. When needed, use its tail position or a time macro in the enhancement prompt, without duplicating the time. A changing time at the front also reduces prefix cache reuse.
+**Inject System Time** supports a beginning or end position, while time macros can appear anywhere macros are supported. These options work independently; using both adds time in both places.
 
 ## The Eight Context Blocks
 

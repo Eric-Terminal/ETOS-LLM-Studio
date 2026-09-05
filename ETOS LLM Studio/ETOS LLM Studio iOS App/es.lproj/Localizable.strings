@@ -7463,7 +7463,7 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 // 提示词宏：语法、可用变量与缓存说明。
 "查看可用宏" = "Macros disponibles";
-"提示词宏语法说明" = "Usa {{name}} o {name}. Los nombres no distinguen mayúsculas y admiten espacios alrededor. Las macros desconocidas se conservan. Los valores proceden del dispositivo que envía la solicitud; los datos no disponibles devuelven unknown. Los prompts guardados mantienen la plantilla original.";
+"提示词宏语法说明" = "Los nombres de macros no distinguen mayúsculas y admiten espacios dentro de las llaves. Las llaves simples, {name}, también se expanden. Las macros desconocidas se conservan. Los valores proceden del dispositivo que envía la solicitud; si no están disponibles, se devuelve unknown.";
 "日期与时间" = "Fecha y hora";
 "提示词宏时间列表" = "{{cur_date}} — fecha local (yyyy-MM-dd)\n{{cur_time}} — hora local (HH:mm:ss)\n{{cur_datetime}} — fecha y hora locales\n{{utc_datetime}} — hora UTC en formato ISO 8601\n{{weekday}} — día de la semana\n{{timestamp}} — marca de tiempo Unix en segundos\n{{timezone}} — identificador de zona horaria\n{{timezone_offset}} — desfase UTC, como +08:00";
 "模型与供应商" = "Modelo y proveedor";
@@ -7477,10 +7477,11 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "电量与运行状态" = "Batería y estado del sistema";
 "提示词宏状态列表" = "{{battery_level}} — porcentaje de batería, 0–100 sin %\n{{battery_state}} — unplugged (desconectado), charging (cargando), full (carga completa) o unknown\n{{is_charging}} — true, false o unknown; con carga completa es false\n{{low_power_mode}} — modo de bajo consumo, true o false\n{{thermal_state}} — nominal (normal), fair (templado), serious (caliente), critical (sobrecalentamiento) o unknown\n{{system_uptime}} — segundos desde el arranque\nLa batería solo se consulta cuando se usan sus macros, sin sondeos en segundo plano.";
 "提示词宏" = "Macros del prompt";
-"提示词宏缓存说明" = "Coloca los valores variables, como la hora y la batería, en el prompt de refuerzo para conservar más del prefijo de la solicitud para la caché. En los prompts de sistema o de tema pueden reducir la reutilización de la caché. Su compatibilidad y alcance dependen del proveedor y del formato de API.";
-"提示词宏使用说明" = "Los prompts de sistema, de sistema de conversación, de tema y de refuerzo admiten macros. Se sustituyen por los valores actuales antes de cada solicitud. Ejemplo para el prompt de refuerzo:";
-"提示词宏增强示例" = "Hora actual: {{cur_datetime}} ({{timezone}})\nBatería (%): {{battery_level}}";
-"提示词宏时间注入说明" = "Normalmente puede dejarse desactivado. Si necesitas la hora, añádela al final o usa una macro en el prompt de refuerzo, sin duplicarla. Una hora cambiante al principio reduce la reutilización de la caché del prefijo.";
+"提示词宏缓存说明" = "Los valores que cambian pueden reducir la reutilización de la caché desde su posición. Las instrucciones complementarias se colocan al final. Tú eliges dónde usar las macros; la caché depende del proveedor y del formato de API.";
+"提示词宏使用说明" = "Las instrucciones del sistema, del sistema de la conversación, del tema, las instrucciones complementarias y la entrada del chat admiten macros. Las instrucciones y los mensajes del usuario guardados conservan su texto original. Las macros se evalúan de nuevo en cada solicitud, incluidos los mensajes anteriores del usuario enviados con ella.";
+"提示词宏双三括号说明" = "Las llaves dobles insertan el valor actual. Las llaves triples envían el texto literal de la macro sin expandirla. Por ejemplo, con la batería al 90 %:";
+"提示词宏展开示例" = "{{battery_level}} → 90\n{{{battery_level}}} → {{battery_level}}";
+"提示词宏时间注入说明" = "La hora del sistema se puede añadir al principio o al final, o insertar en cualquier lugar mediante macros. Sus cambios pueden reducir la reutilización de la caché desde esa posición.";
 /* 本地 Linux 重置与快照恢复 */
 "正在重置 Linux…" = "Restableciendo Linux…";
 "系统已重置，下次使用时会重新安装内置系统。" = "El sistema se ha restablecido. El sistema integrado se instalará la próxima vez que uses Linux.";

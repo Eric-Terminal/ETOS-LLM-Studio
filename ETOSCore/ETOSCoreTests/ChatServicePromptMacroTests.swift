@@ -3,19 +3,19 @@ import Testing
 @testable import ETOSCore
 
 extension ChatServiceTests {
-    @Test("四类提示词发送时展开宏，持久化模板和普通用户消息保持原文")
+    @Test("提示词与用户消息共享请求快照，三括号保留字面宏且持久化保持原文")
     func promptMacrosRenderAtRequestBoundary() async throws {
         await cleanup()
         setupMockResponsesForChatAndTitle()
         let model = try #require(activatedChatModels().first { $0.id != dummyModel.id })
         var session = createPermanentTestSession(name: "宏测试会话")
         session.preferredModelIdentifier = model.id
-        session.systemPrompt = "conversation:{model_id}"
+        session.systemPrompt = "conversation:{model_id} literal:{{{user}}}"
         session.topicPrompt = "topic:{{chat_name}}"
         session.enhancedPrompt = "tail:clock[{{cur_datetime}}] battery[{{battery_level}}]"
         session.toolContextIsolationEnabled = true
         chatService.setCurrentSession(session)
-        let userText = "请解释 {{model_id}} 这个宏"
+        let userText = "model:{{model_id}} clock[{{cur_datetime}}] literal:{{{model_id}}}"
 
         await chatService.sendAndProcessMessage(
             content: userText,
@@ -36,17 +36,55 @@ extension ChatServiceTests {
         let tail = try #require(sent.first { $0.content.contains("tail:") }).content
         #expect(system.contains("global:\(model.model.displayName)"))
         #expect(system.contains("conversation:\(model.model.modelName)"))
+        #expect(system.contains("literal:{{user}}"))
         #expect(system.contains("topic:宏测试会话"))
         #expect(!system.contains("{{cur_datetime}}"))
         #expect(!system.contains("tail:"))
         #expect(!tail.contains("{{battery_level}}"))
         let clock = try #require(system.components(separatedBy: "clock[").last?.components(separatedBy: "]").first)
         #expect(tail.contains("clock[\(clock)]"))
-        #expect(sent.contains { $0.role == .user && $0.content.contains(userText) })
+        let sentUser = try #require(sent.first { $0.role == .user && $0.content.contains("model:") })
+        #expect(sentUser.content.contains("model:\(model.model.modelName) clock[\(clock)] literal:{{model_id}}"))
+        #expect(Persistence.loadMessages(for: session.id).first { $0.id == sentUser.id }?.content == userText)
         let stored = try #require(Persistence.loadChatSessions().first { $0.id == session.id })
         #expect(stored.systemPrompt == session.systemPrompt)
         #expect(stored.topicPrompt == session.topicPrompt)
         #expect(stored.enhancedPrompt == session.enhancedPrompt)
+        await cleanup()
+    }
+
+    @Test("后续请求重新展开历史用户消息中的宏，切换模型后仍保留存储原文")
+    func historicalUserMacrosFollowTheCurrentRequestModel() async throws {
+        await cleanup()
+        setupMockResponsesForChatAndTitle()
+        let nextModel = try #require(activatedChatModels().first { $0.id != dummyModel.id })
+        var session = createPermanentTestSession(name: "历史宏测试")
+        session.preferredModelIdentifier = dummyModel.id
+        session.toolContextIsolationEnabled = true
+        chatService.setCurrentSession(session)
+        let userText = "current={{model_id}}, literal={{{model_id}}}"
+
+        await chatService.sendAndProcessMessage(
+            content: userText, aiTemperature: 0, aiTopP: 1, systemPrompt: "",
+            maxChatHistory: 10, enableStreaming: false, enhancedPrompt: nil,
+            enableMemory: false, enableMemoryWrite: false, includeSystemTime: false
+        )
+        let firstMessages = try #require(mockAdapter.receivedMessages)
+        let firstUser = try #require(firstMessages.first { $0.role == .user && $0.content.contains("current=") })
+        #expect(firstUser.content == "current=\(dummyModel.model.modelName), literal={{model_id}}")
+
+        session.preferredModelIdentifier = nextModel.id
+        chatService.setCurrentSession(session)
+        await chatService.sendAndProcessMessage(
+            content: "继续", aiTemperature: 0, aiTopP: 1, systemPrompt: "",
+            maxChatHistory: 10, enableStreaming: false, enhancedPrompt: nil,
+            enableMemory: false, enableMemoryWrite: false, includeSystemTime: false
+        )
+        let secondMessages = try #require(mockAdapter.receivedMessages)
+        #expect(mockAdapter.receivedChatModel?.id == nextModel.id)
+        #expect(secondMessages.first { $0.id == firstUser.id }?.content
+            == "current=\(nextModel.model.modelName), literal={{model_id}}")
+        #expect(Persistence.loadMessages(for: session.id).first { $0.id == firstUser.id }?.content == userText)
         await cleanup()
     }
 

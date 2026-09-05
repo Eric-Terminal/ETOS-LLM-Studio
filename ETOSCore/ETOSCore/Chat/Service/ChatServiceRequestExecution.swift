@@ -97,15 +97,59 @@ extension ChatService {
             loadingMessageID: loadingMessageID,
             session: sessionForRequest
         )
+        let sessionPreferredModel = sessionForRequest?.preferredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+        }
+        let runConfiguredModelIdentifier = conversationRunIDs(for: currentSessionID).flatMap { runIDs in
+            Persistence.loadConversationRun(id: runIDs.runID)?.requestConfiguration.modelIdentifier
+        }
+        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
+            activatedConversationModels.first(where: { $0.id == identifier })
+                ?? selectedModelSubject.value.flatMap { $0.id == identifier ? $0 : nil }
+        }
+        if runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
+        guard let runnableModel = runConfiguredModel ?? sessionPreferredModel ?? selectedModelSubject.value else {
+            addErrorMessage(
+                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
+                sessionID: currentSessionID
+            )
+            emitSessionRequestStatus(.error, sessionID: currentSessionID)
+            return
+        }
+
+        // 先按实际模型展开发送副本，并保护字面宏，再交给角色与脚本模板处理。
+        let requestStartedAt = Date()
+        let promptMacroRequest = await PromptMacroRenderer.render(
+            PromptMacroTemplates(
+                global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
+                conversation: sessionForRequest?.systemPrompt,
+                topic: sessionForRequest?.topicPrompt,
+                enhanced: resolvedEnhancedPrompt
+            ),
+            model: runnableModel,
+            sessionID: currentSessionID,
+            session: sessionForRequest,
+            messages: preparedRequestMessages,
+            now: requestStartedAt,
+            roleplayStore: roleplayStore
+        )
+        let promptTemplates = promptMacroRequest.templates
         var resolvedRoleplay = RoleplayRuntime.resolve(
             sessionID: currentSessionID,
-            messages: preparedRequestMessages,
+            messages: promptMacroRequest.messages,
             store: roleplayStore
         )
-        var requestMessages = preparedRequestMessages
+        var requestMessages = promptMacroRequest.messages
         if var resolved = resolvedRoleplay {
             requestMessages = RoleplayRuntime.transformedRequestMessages(
-                preparedRequestMessages,
+                promptMacroRequest.messages,
                 resolved: &resolved
             )
             if resolved.variables != roleplayStore.variableSnapshot(sessionID: currentSessionID) {
@@ -135,7 +179,12 @@ extension ChatService {
             if topK == 0 {
                 memories = await self.memoryManager.getActiveMemories()
             } else {
-                let queryText = buildMemoryQueryContext(from: requestMessages, fallbackUserMessage: userMessage)
+                // 检索使用可读文本，字面宏的临时保护标记只留在模板处理链路内。
+                let messagesBeforeMemoryQuery = requestMessages
+                let memoryQueryMessages = await Task.detached(priority: .userInitiated) {
+                    promptMacroRequest.restoringLiterals(in: messagesBeforeMemoryQuery)
+                }.value
+                let queryText = buildMemoryQueryContext(from: memoryQueryMessages, fallbackUserMessage: userMessage)
                 let queryImages = await memoryQueryImageAttachments(
                     currentImages: currentImageAttachments,
                     currentFiles: currentFileAttachments
@@ -169,53 +218,11 @@ extension ChatService {
             conversationUserProfile = nil
         }
 
-        let sessionPreferredModel = sessionForRequest?.preferredModelIdentifier.flatMap { identifier in
-            activatedConversationModels.first(where: { $0.id == identifier })
-        }
-        let runConfiguredModelIdentifier = conversationRunIDs(for: currentSessionID).flatMap { runIDs in
-            Persistence.loadConversationRun(id: runIDs.runID)?.requestConfiguration.modelIdentifier
-        }
-        let runConfiguredModel = runConfiguredModelIdentifier.flatMap { identifier in
-            activatedConversationModels.first(where: { $0.id == identifier })
-                ?? selectedModelSubject.value.flatMap { $0.id == identifier ? $0 : nil }
-        }
-        if runConfiguredModelIdentifier != nil, runConfiguredModel == nil {
-            addErrorMessage(
-                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
-                sessionID: currentSessionID
-            )
-            emitSessionRequestStatus(.error, sessionID: currentSessionID)
-            return
-        }
-        guard let runnableModel = runConfiguredModel ?? sessionPreferredModel ?? selectedModelSubject.value else {
-            addErrorMessage(
-                NSLocalizedString("错误: 没有选中的可用模型。请在设置中激活一个模型。", comment: "No active model error"),
-                sessionID: currentSessionID
-            )
-            emitSessionRequestStatus(.error, sessionID: currentSessionID)
-            return
-        }
-
         let effectiveStreaming = resolvedRequestStreamingEnabled(
             preference: enableStreaming,
             overrides: runnableModel.effectiveOverrideParameters
         )
 
-        let requestStartedAt = Date()
-        let promptTemplates = await PromptMacroRenderer.render(
-            PromptMacroTemplates(
-                global: sessionForRequest?.isGlobalSystemPromptIsolationActive == true ? nil : systemPrompt,
-                conversation: sessionForRequest?.systemPrompt,
-                topic: sessionForRequest?.topicPrompt,
-                enhanced: resolvedEnhancedPrompt
-            ),
-            model: runnableModel,
-            sessionID: currentSessionID,
-            session: sessionForRequest,
-            messages: preparedRequestMessages,
-            now: requestStartedAt,
-            roleplayStore: roleplayStore
-        )
         let modelReference = MessageModelReference(
             providerID: runnableModel.provider.id,
             providerName: runnableModel.provider.name,
@@ -398,6 +405,10 @@ extension ChatService {
                 outlets: worldbookOutlets
             )
         }
+        let messagesBeforeLiteralRestoration = messagesToSend
+        messagesToSend = await Task.detached(priority: .userInitiated) {
+            promptMacroRequest.restoringLiterals(in: messagesBeforeLiteralRestoration)
+        }.value
 
         // 续聊上下文是已持久化的固定交接，不参与角色模板、正则和宏替换。
         // 将它放在首个系统提示词之后，也确保 maxChatHistory 永远不会裁掉这段上下文。
