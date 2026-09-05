@@ -29,6 +29,17 @@ struct DisplaySettingsView: View {
 
     @ObservedObject private var appConfig = AppConfigStore.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
+    @State private var showsUserMessagePreviewHelp = false
+
+    // watchOS 的数值输入仅提供 Formatter 重载，整数计数保持无分组分隔符。
+    private static let characterCountFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.allowsFloats = false
+        formatter.maximumFractionDigits = 0
+        return formatter
+    }()
     
     // MARK: - 属性
     
@@ -119,7 +130,7 @@ struct DisplaySettingsView: View {
                 TextField(
                     NSLocalizedString("预览字符数", comment: "长用户消息预览设置"),
                     value: $appConfig.userMessagePreviewCharacterLimit,
-                    format: .number.grouping(.never)
+                    formatter: Self.characterCountFormatter
                 )
                 settingsIntroCard
             } header: {
@@ -224,13 +235,23 @@ struct DisplaySettingsView: View {
         ]
     }
 
+    @ViewBuilder
     private var settingsIntroCard: some View {
-        DisclosureGroup {
-            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
-                .etFont(.footnote)
-                .foregroundStyle(.secondary)
+        // watchOS 没有 DisclosureGroup；按钮独占一行，避免说明文字触发误点。
+        Button {
+            showsUserMessagePreviewHelp.toggle()
         } label: {
-            Text(NSLocalizedString("进一步了解…", comment: ""))
+            HStack {
+                Text(NSLocalizedString("进一步了解…", comment: ""))
+                Spacer()
+                Image(systemName: showsUserMessagePreviewHelp ? "chevron.up" : "chevron.down")
+            }
+            .etFont(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        if showsUserMessagePreviewHelp {
+            Text(String(format: NSLocalizedString("超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。", comment: "长用户消息预览教程"), ChatUserMessagePreview.defaultCharacterLimit))
                 .etFont(.footnote)
                 .foregroundStyle(.secondary)
         }
