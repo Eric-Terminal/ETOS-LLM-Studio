@@ -7187,3 +7187,13 @@
 "预览字符数" = "預覽字元數";
 "仅影响气泡显示；完整内容可在“更多”中查看。" = "僅影響氣泡顯示；完整內容可在「更多」中查看。";
 "超过设定字符数的用户消息会在气泡中截断，不限制行数。修改后会更新当前会话的预览，保存、发送给模型、复制和导出仍使用完整内容。默认值为 %ld 字符，可填写 1–100000。" = "超過設定字元數的使用者訊息會在氣泡中截斷，不限制行數。修改後會更新目前對話的預覽，儲存、傳送給模型、複製和匯出仍使用完整內容。預設值為 %ld 字元，可填寫 1–100000。";
+
+// 提示词宏：音频、屏幕、容量与称呼教程。
+"音量与音频" = "音量與音訊";
+"提示词宏音频列表" = "{{volume_level}} — 系統回報的輸出音量，0–100，不含 %\n{{audio_output_type}} — 目前輸出類型，例如 speaker、headphones、bluetooth 或 airplay\n{{audio_output_name}} — 目前輸出裝置名稱\n{{audio_input_type}} — 目前輸入類型，例如 microphone 或 headset_microphone\n{{audio_input_name}} — 目前輸入裝置名稱\n{{other_audio_playing}} — 系統是否回報其他 App 正在播放音訊，true 或 false\n沒有回報音訊路由時回傳 none，多個連接埠以逗號分隔。輸出音量、鈴聲音量及靜音模式各有不同含義。這些值是系統回報的快照，返回 App 或切換音訊裝置後可能延遲更新。";
+"屏幕信息" = "螢幕資訊";
+"提示词宏屏幕列表" = "{{screen_brightness}} — 螢幕亮度，0–100，不含 %；僅 iOS，watchOS 回傳 unknown\n{{screen_width}} / {{screen_height}} — 螢幕寬度與高度，單位為點\n{{screen_scale}} — 每點像素數\niOS 讀取 App 場景所在的螢幕，沒有可用場景時回傳 unknown。";
+"存储与硬件资源" = "儲存與硬件資源";
+"提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — 儲存卷宗的可用與總容量，單位為位元組\n{{storage_free_gb}} / {{storage_total_gb}} — 儲存卷宗的可用與總容量，單位為 GB\n{{storage_free_percent}} — 剩餘容量百分比，0–100，不含 %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — 總物理記憶體，單位為位元組或 GB\n{{processor_count}} / {{active_processor_count}} — 邏輯處理器數量與目前活躍數量\n儲存指 App 文件目錄所在的卷宗。GB 按 1,000,000,000 位元組計算，保留兩位小數。物理記憶體表示總 RAM，不表示剩餘 RAM。";
+"提示词宏称呼说明" = "{{nickname}} 和 {{user}} 是同一個使用者稱呼，來自目前綁定或預設 Persona（使用者身分）的名字，未設定時使用「使用者」。{{char}} 和 {{assistant_name}} 使用第一個綁定角色的名字；未綁定角色時使用本次模型的顯示名稱。";
+"提示词宏称呼示例" = "你是 {{char}}，請稱呼我為 {{user}}。";

@@ -12,10 +12,10 @@ extension ChatServiceTests {
         session.preferredModelIdentifier = model.id
         session.systemPrompt = "conversation:{model_id} literal:{{{user}}}"
         session.topicPrompt = "topic:{{chat_name}}"
-        session.enhancedPrompt = "tail:clock[{{cur_datetime}}] battery[{{battery_level}}]"
+        session.enhancedPrompt = "tail:clock[{{cur_datetime}}] battery[{{battery_level}}] volume[{{volume_level}}] storage[{{storage_free_gb}}]"
         session.toolContextIsolationEnabled = true
         chatService.setCurrentSession(session)
-        let userText = "model:{{model_id}} clock[{{cur_datetime}}] literal:{{{model_id}}}"
+        let userText = "model:{{model_id}} clock[{{cur_datetime}}] literal:{{{model_id}}} volume[{{volume_level}}] literal_volume:{{{volume_level}}}"
 
         await chatService.sendAndProcessMessage(
             content: userText,
@@ -41,10 +41,15 @@ extension ChatServiceTests {
         #expect(!system.contains("{{cur_datetime}}"))
         #expect(!system.contains("tail:"))
         #expect(!tail.contains("{{battery_level}}"))
+        #expect(!tail.contains("{{volume_level}}"))
+        #expect(!tail.contains("{{storage_free_gb}}"))
         let clock = try #require(system.components(separatedBy: "clock[").last?.components(separatedBy: "]").first)
         #expect(tail.contains("clock[\(clock)]"))
+        let volume = try #require(tail.components(separatedBy: "volume[").last?.components(separatedBy: "]").first)
+        #expect(volume == "unknown" || Int(volume).map { (0...100).contains($0) } == true)
         let sentUser = try #require(sent.first { $0.role == .user && $0.content.contains("model:") })
         #expect(sentUser.content.contains("model:\(model.model.modelName) clock[\(clock)] literal:{{model_id}}"))
+        #expect(sentUser.content.contains("volume[\(volume)] literal_volume:{{volume_level}}"))
         #expect(Persistence.loadMessages(for: session.id).first { $0.id == sentUser.id }?.content == userText)
         let stored = try #require(Persistence.loadChatSessions().first { $0.id == session.id })
         #expect(stored.systemPrompt == session.systemPrompt)

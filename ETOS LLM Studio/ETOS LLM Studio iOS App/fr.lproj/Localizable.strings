@@ -7506,3 +7506,13 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "诊断已发送" = "Diagnostic envoyé";
 "已创建反馈 #%lld，可在反馈助手中查看进度或补充操作步骤。" = "Le retour #%lld a été créé. Vous pouvez suivre son avancement ou ajouter des étapes de reproduction dans l’assistant de retour.";
 "诊断发送失败" = "Échec de l’envoi du diagnostic";
+
+// 提示词宏：音频、屏幕、容量与称呼教程。
+"音量与音频" = "Volume et audio";
+"提示词宏音频列表" = "{{volume_level}} — volume de sortie indiqué par le système, 0–100 sans %\n{{audio_output_type}} — type de sortie actuel, par exemple speaker, headphones, bluetooth ou airplay\n{{audio_output_name}} — nom de l’appareil de sortie actuel\n{{audio_input_type}} — type d’entrée actuel, par exemple microphone ou headset_microphone\n{{audio_input_name}} — nom de l’appareil d’entrée actuel\n{{other_audio_playing}} — le système indique-t-il qu’une autre app lit de l’audio, true ou false\nSans route signalée, la valeur est none ; plusieurs ports sont séparés par des virgules. Le volume de sortie, celui de la sonnerie et le mode silencieux sont distincts. Ces valeurs sont un instantané du système ; leur mise à jour peut tarder après un retour dans l’app ou un changement d’appareil audio.";
+"屏幕信息" = "Informations sur l’écran";
+"提示词宏屏幕列表" = "{{screen_brightness}} — luminosité, 0–100 sans % ; iOS uniquement, unknown sur watchOS\n{{screen_width}} / {{screen_height}} — largeur et hauteur de l’écran en points\n{{screen_scale}} — nombre de pixels par point\niOS lit l’écran d’une scène de l’app ; sans scène disponible, les valeurs sont unknown.";
+"存储与硬件资源" = "Stockage et ressources matérielles";
+"提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — capacité libre et totale du volume en octets\n{{storage_free_gb}} / {{storage_total_gb}} — capacité libre et totale du volume en GB\n{{storage_free_percent}} — pourcentage libre, 0–100 sans %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — mémoire physique totale en octets ou GB\n{{processor_count}} / {{active_processor_count}} — nombre de processeurs logiques et nombre actuellement actifs\nLe stockage désigne le volume contenant les documents de l’app. Un GB vaut 1 000 000 000 octets, avec deux décimales. La mémoire physique est la RAM totale, pas la RAM disponible.";
+"提示词宏称呼说明" = "{{nickname}} et {{user}} désignent le nom de votre Persona actuelle ou par défaut (identité utilisateur), ou « Utilisateur » si aucun nom n’est défini. {{char}} et {{assistant_name}} utilisent le nom du premier personnage associé, ou le nom affiché du modèle de cette requête si aucun personnage n’est associé.";
+"提示词宏称呼示例" = "Tu es {{char}}. Appelle-moi {{user}}, s’il te plaît.";

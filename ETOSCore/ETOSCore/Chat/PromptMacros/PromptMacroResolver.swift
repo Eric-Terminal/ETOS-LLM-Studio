@@ -32,13 +32,25 @@ enum PromptMacroResolver {
         "timezone", "timezone_offset"
     ]
     static let batteryNames: Set<String> = ["battery_level", "battery_state", "is_charging"]
-    static let supportedNames: Set<String> = timeNames.union(batteryNames).union([
-        "model_id", "model_name", "provider_id", "provider_name", "api_format",
-        "nickname", "user", "char", "assistant_name", "chat_id", "chat_name", "message_count",
-        "locale", "language", "system_locale", "app_name", "app_version", "app_build",
-        "platform", "system_version", "device_info", "device_model", "device_name",
-        "low_power_mode", "thermal_state", "system_uptime"
-    ])
+    static let audioNames: Set<String> = [
+        "volume_level", "audio_output_type", "audio_output_name",
+        "audio_input_type", "audio_input_name", "other_audio_playing"
+    ]
+    static let screenNames: Set<String> = ["screen_brightness", "screen_width", "screen_height", "screen_scale"]
+    static let storageNames: Set<String> = [
+        "storage_free_bytes", "storage_total_bytes", "storage_free_gb", "storage_total_gb", "storage_free_percent"
+    ]
+    static let hardwareNames: Set<String> = [
+        "physical_memory_bytes", "physical_memory_gb", "processor_count", "active_processor_count"
+    ]
+    static let supportedNames: Set<String> = timeNames.union(batteryNames)
+        .union(audioNames).union(screenNames).union(storageNames).union(hardwareNames).union([
+            "model_id", "model_name", "provider_id", "provider_name", "api_format",
+            "nickname", "user", "char", "assistant_name", "chat_id", "chat_name", "message_count",
+            "locale", "language", "system_locale", "app_name", "app_version", "app_build",
+            "platform", "system_version", "device_info", "device_model", "device_name",
+            "low_power_mode", "thermal_state", "system_uptime"
+        ])
 
     // 三重括号优先识别为字面量；边界避免从不完整或更多层括号中截取宏。
     private static let expression = try! NSRegularExpression(

@@ -7506,3 +7506,13 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 "诊断已发送" = "Diagnóstico enviado";
 "已创建反馈 #%lld，可在反馈助手中查看进度或补充操作步骤。" = "Se creó el informe #%lld. Puede consultar su progreso o añadir pasos de reproducción en el asistente de comentarios.";
 "诊断发送失败" = "No se pudo enviar el diagnóstico";
+
+// 提示词宏：音频、屏幕、容量与称呼教程。
+"音量与音频" = "Volumen y audio";
+"提示词宏音频列表" = "{{volume_level}} — volumen de salida indicado por el sistema, 0–100 sin %\n{{audio_output_type}} — tipo de salida actual, como speaker, headphones, bluetooth o airplay\n{{audio_output_name}} — nombre del dispositivo de salida actual\n{{audio_input_type}} — tipo de entrada actual, como microphone o headset_microphone\n{{audio_input_name}} — nombre del dispositivo de entrada actual\n{{other_audio_playing}} — si el sistema indica que otra app reproduce audio, true o false\nSi no se informa de una ruta, se devuelve none; varios puertos se separan con comas. El volumen de salida, el del timbre y el modo silencio son distintos. Son valores informados por el sistema; pueden actualizarse con retraso al volver a la app o cambiar de dispositivo de audio.";
+"屏幕信息" = "Información de la pantalla";
+"提示词宏屏幕列表" = "{{screen_brightness}} — brillo, 0–100 sin %; solo iOS, unknown en watchOS\n{{screen_width}} / {{screen_height}} — ancho y alto de la pantalla en puntos\n{{screen_scale}} — píxeles por punto\niOS lee la pantalla de una escena de la app; si no hay una escena disponible, los valores son unknown.";
+"存储与硬件资源" = "Almacenamiento y recursos de hardware";
+"提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — capacidad libre y total del volumen en bytes\n{{storage_free_gb}} / {{storage_total_gb}} — capacidad libre y total del volumen en GB\n{{storage_free_percent}} — porcentaje de espacio libre, 0–100 sin %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — memoria física total en bytes o GB\n{{processor_count}} / {{active_processor_count}} — número de procesadores lógicos y número actualmente activo\nEl almacenamiento corresponde al volumen que contiene los documentos de la app. GB equivale a 1.000.000.000 bytes, con dos decimales. La memoria física es la RAM total, no la RAM disponible.";
+"提示词宏称呼说明" = "{{nickname}} y {{user}} son alias del nombre de tu Persona actual o predeterminada (identidad del usuario); si no hay nombre, se usa «Usuario». {{char}} y {{assistant_name}} usan el nombre del primer personaje vinculado o, si no hay ninguno, el nombre visible del modelo de esta solicitud.";
+"提示词宏称呼示例" = "Eres {{char}}. Por favor, llámame {{user}}.";

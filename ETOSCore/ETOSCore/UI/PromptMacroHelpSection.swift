@@ -104,6 +104,30 @@ public struct PromptMacroHelpSection: View {
                 comment: "电量宏单位、状态枚举与按需采集说明"
             )
         )
+        macroGroup(
+            NSLocalizedString("音量与音频", value: "Volume and audio", comment: "提示词宏分组"),
+            description: NSLocalizedString(
+                "提示词宏音频列表",
+                value: "{{volume_level}} — reported output volume, 0–100 without %\n{{audio_output_type}} — current output type, such as speaker, headphones, bluetooth or airplay\n{{audio_output_name}} — current output device name\n{{audio_input_type}} — current input type, such as microphone or headset_microphone\n{{audio_input_name}} — current input device name\n{{other_audio_playing}} — whether the system reports another app playing audio, true or false\nNo reported route returns none; multiple ports are separated by commas. Volume is separate from ringer volume and silent mode. These values are system-reported snapshots; updates may lag after returning to the app or changing audio devices.",
+                comment: "音频宏及音量、路由快照的含义"
+            )
+        )
+        macroGroup(
+            NSLocalizedString("屏幕信息", value: "Screen information", comment: "提示词宏分组"),
+            description: NSLocalizedString(
+                "提示词宏屏幕列表",
+                value: "{{screen_brightness}} — screen brightness, 0–100 without %; iOS only, unknown on watchOS\n{{screen_width}} / {{screen_height}} — screen width and height in points\n{{screen_scale}} — pixels per point\niOS reads the screen of an app scene; values are unknown when no scene is available.",
+                comment: "屏幕宏的单位与双端差异"
+            )
+        )
+        macroGroup(
+            NSLocalizedString("存储与硬件资源", value: "Storage and hardware resources", comment: "提示词宏分组"),
+            description: NSLocalizedString(
+                "提示词宏资源列表",
+                value: "{{storage_free_bytes}} / {{storage_total_bytes}} — free and total volume capacity in bytes\n{{storage_free_gb}} / {{storage_total_gb}} — free and total volume capacity in GB\n{{storage_free_percent}} — free capacity percentage, 0–100 without %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — total physical memory in bytes or GB\n{{processor_count}} / {{active_processor_count}} — logical processor count and currently active count\nStorage refers to the volume containing the app's documents. GB uses 1,000,000,000 bytes with two decimal places. Physical memory is total RAM, not available RAM.",
+                comment: "容量、内存与处理器宏的单位和来源"
+            )
+        )
     }
 
     private var settingsIntroCard: some View {
@@ -122,6 +146,17 @@ public struct PromptMacroHelpSection: View {
                 "提示词宏展开示例",
                 value: "{{battery_level}} → 90\n{{{battery_level}}} → {{battery_level}}",
                 comment: "输入语法与发送结果，保留括号层数"
+            ))
+            .monospaced()
+            Text(NSLocalizedString(
+                "提示词宏称呼说明",
+                value: "{{nickname}} and {{user}} are aliases for the name in your current or default Persona (user identity), falling back to User. {{char}} and {{assistant_name}} use the first bound character's name, or this request's model display name when no character is bound.",
+                comment: "解释用户称呼、角色称呼及未配置时的来源"
+            ))
+            Text(NSLocalizedString(
+                "提示词宏称呼示例",
+                value: "You are {{char}}. Please call me {{user}}.",
+                comment: "称呼宏的实际提示词写法"
             ))
             .monospaced()
         }

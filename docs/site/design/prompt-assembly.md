@@ -61,12 +61,40 @@ description: 一条消息从你按发送到真正出站之前，ETOS 给模型�
 | 语言与应用 | `locale`、`language`、`system_locale`、`app_name`、`app_version`、`app_build` |
 | 设备信息 | `platform`、`system_version`、`device_info`、`device_model`、`device_name` |
 | 电量与运行状态 | `battery_level`、`battery_state`、`is_charging`、`low_power_mode`、`thermal_state`、`system_uptime` |
+| 音量与音频 | `volume_level`、`audio_output_type`、`audio_output_name`、`audio_input_type`、`audio_input_name`、`other_audio_playing` |
+| 屏幕信息 | `screen_brightness`、`screen_width`、`screen_height`、`screen_scale` |
+| 存储与硬件资源 | `storage_free_bytes`、`storage_total_bytes`、`storage_free_gb`、`storage_total_gb`、`storage_free_percent`、`physical_memory_bytes`、`physical_memory_gb`、`processor_count`、`active_processor_count` |
 
-`nickname` 和 `user` 使用当前绑定或默认 Persona 的名称；未设置时使用当前语言中的用户称呼。`char` 和 `assistant_name` 使用角色名称，未绑定角色时使用本轮模型的显示名称。`message_count` 统计本轮准备的用户与助手消息，不包含工具和系统消息。
+当前共支持 **56 个通用宏名称，包含别名**。
+
+`nickname` 和 `user` 是同一个用户称呼，使用当前绑定或默认 Persona（用户身份）的名称；未设置时使用当前语言中的“用户”。`char` 和 `assistant_name` 是同一个助手称呼，使用第一个绑定角色的名称，未绑定角色时使用本轮模型的显示名称。它们读取的是 App 中配置的用户身份和角色。
+
+例如，用户身份叫 Eric、角色叫“小晖”时，`你是 {{char}}，请称呼我为 {{user}}。` 会发送为 `你是 小晖，请称呼我为 Eric。`。`message_count` 统计本轮准备的用户与助手消息，不包含工具和系统消息。
 
 `cur_date` 使用公历 `yyyy-MM-dd`，`cur_time` 使用 `HH:mm:ss`，`cur_datetime` 合并两者；`utc_datetime` 使用 ISO 8601。`timestamp` 和 `system_uptime` 的单位都是秒。`locale` 跟随 App 内的语言设置，`system_locale` 表示系统的语言区域。
 
 设备宏来自**实际发送请求的设备**，手表不会读取 iPhone 的电量。`battery_level` 是不带 `%` 的 0–100 整数；`battery_state` 为 `unplugged`、`charging`、`full` 或 `unknown`；`is_charging` 为 `true`、`false` 或 `unknown`，已充满时为 `false`。`low_power_mode` 为 `true` 或 `false`；`thermal_state` 为 `nominal`、`fair`、`serious`、`critical` 或 `unknown`。电池监测仅在引用电池宏时短暂开启，读取后恢复原来的监测状态，不进行后台轮询。系统不提供的数据返回 `unknown`。
+
+### 音量、屏幕与容量
+
+| 宏 | 数值与单位 |
+| --- | --- |
+| `volume_level` | 系统报告的输出音量，0–100 整数，不带 `%` |
+| `audio_output_type` / `audio_input_type` | 当前输出／输入路由类型；常见值为 `speaker`、`receiver`、`headphones`、`microphone`、`headset_microphone`、`bluetooth`、`airplay`、`usb`、`hdmi`、`line_in`、`line_out`、`car_audio`；其他类型保留系统原始标识 |
+| `audio_output_name` / `audio_input_name` | 当前路由设备名称；系统未提供名称时为 `unknown` |
+| `other_audio_playing` | 系统是否报告其他 App 正在播放音频，`true` 或 `false` |
+| `screen_brightness` | 屏幕亮度，0–100 整数，不带 `%`；仅 iOS，watchOS 返回 `unknown` |
+| `screen_width` / `screen_height` | 屏幕宽高，单位为点 |
+| `screen_scale` | 每点对应的像素数，例如 `2.0`、`3.0` |
+| `storage_free_bytes` / `storage_total_bytes` | App 文档目录所在卷的可用／总容量，单位为字节 |
+| `storage_free_gb` / `storage_total_gb` | 同一卷的可用／总容量，十进制 GB，保留两位小数 |
+| `storage_free_percent` | 剩余容量百分比，0–100 整数，不带 `%` |
+| `physical_memory_bytes` / `physical_memory_gb` | 设备总物理内存，单位为字节或十进制 GB；不表示当前剩余 RAM |
+| `processor_count` / `active_processor_count` | 逻辑处理器数量／当前活跃数量 |
+
+音频宏读取系统当前报告的快照。没有报告路由时，类型和名称均返回 `none`；多端口按顺序以逗号分隔。蓝牙类型只表示蓝牙音频路由，不能据此判断一定连接了耳机。输出音量、铃声音量和静音模式分别表示不同信息，音量为零不等于开启静音模式。宏采集不会切换音频类别、激活音频会话、播放声音或请求录音权限；前后台切换、输出设备切换之后，系统读数可能延迟更新。
+
+iOS 的屏幕值来自 App 关联的场景，无可用场景时返回 `unknown`；watchOS 读取手表屏幕的尺寸和缩放倍率。存储、音频、屏幕及硬件信息都按引用分组采集，磁盘读取在后台完成。GB 使用 `1,000,000,000` 字节，小数固定使用 `.`。
 
 ### 动态信息与缓存
 
@@ -75,6 +103,9 @@ description: 一条消息从你按发送到真正出站之前，ETOS 给模型�
 ```text
 当前时间：{{cur_datetime}}（{{timezone}}）
 电量（%）：{{battery_level}}
+音量（%）：{{volume_level}}
+音频输出：{{audio_output_type}}（{{audio_output_name}}）
+可用空间：{{storage_free_gb}} GB / {{storage_total_gb}} GB
 ```
 
 宏沿用所在内容的位置。增强提示词位于尾部，保持原有的协议角色设置，不会被合并进前面的全局或话题提示词。系统、话题提示词与历史用户消息中的动态值变化，可能减少从对应位置起的前缀缓存复用。使用位置由用户自行选择，实际缓存支持及命中范围由供应商和 API 格式决定。

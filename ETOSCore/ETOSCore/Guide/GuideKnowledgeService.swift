@@ -153,11 +153,19 @@ public enum GuideDocumentCatalog {
         GuideDocument(
             id: "settings-core",
             title: "会话、提示词与输出设置",
-            keywords: ["会话", "提示词", "输出", "流式", "上下文", "Temperature", "正则"],
+            keywords: ["会话", "提示词", "输出", "流式", "上下文", "Temperature", "正则", "宏", "音量", "电量", "nickname", "user", "char"],
             content: """
             核心设置按会话、提示词和输出分组。会话设置控制启动方式、发送延迟、协作执行预算、历史窗口、压缩提醒、视频解析与消息正则替换；提示词设置控制全局系统提示词、当前话题提示词、增强提示词和时间注入；输出设置控制采样参数、流式输出、思考回传、测速与语音朗读。
 
             页面向导只修改当前页声明的字段。提示词列表、正则规则等有独立二级页面；编辑器中的草稿经向导修改后，仍需按页面提示点击保存。删除规则或提示词等破坏性操作必须由用户在页面发起，或者在完整列表提案中明确确认。
+
+            全局系统、会话系统、话题、增强提示词和普通用户消息都支持通用宏。{{battery_level}} 会在每轮请求中展开，{{{battery_level}}} 则发送字面量 {{battery_level}}。存储和显示保留原文，历史用户消息中的动态宏也会按本轮设备状态重新求值。未知宏保持原文，已支持但无法读取的值返回 unknown。放置位置由用户选择；动态值可能减少从所在位置起的前缀缓存复用，增强提示词位于尾部。
+
+            nickname 与 user 是同一个用户称呼，来自当前绑定或默认 Persona（用户身份）的名字，未设置时回退为本地化的“用户”。char 与 assistant_name 是同一个助手称呼，来自第一个绑定角色的名字，未绑定时回退为本轮模型名称。例子：用户身份叫 Eric、角色叫“小晖”时，“你是 {{char}}，请称呼我为 {{user}}”发送为“你是 小晖，请称呼我为 Eric”。
+
+            通用宏完整名称：cur_date、cur_time、cur_datetime、utc_datetime、weekday、timestamp、timezone、timezone_offset；model_id、model_name、provider_id、provider_name、api_format；nickname、user、char、assistant_name、chat_id、chat_name、message_count；locale、language、system_locale、app_name、app_version、app_build；platform、system_version、device_info、device_model、device_name；battery_level、battery_state、is_charging、low_power_mode、thermal_state、system_uptime；volume_level、audio_output_type、audio_output_name、audio_input_type、audio_input_name、other_audio_playing；screen_brightness、screen_width、screen_height、screen_scale；storage_free_bytes、storage_total_bytes、storage_free_gb、storage_total_gb、storage_free_percent、physical_memory_bytes、physical_memory_gb、processor_count、active_processor_count。
+
+            电量、音量、亮度和存储剩余百分比是 0–100 的整数，不带百分号。GB 按十进制保留两位小数；存储来自 App 文档目录所在卷，物理内存表示总 RAM。屏幕宽高单位是点，screen_scale 是每点像素数；watchOS 不开放亮度读数，因此 screen_brightness 返回 unknown。音量和输入输出路由只读取系统报告的音频快照，前后台或路由切换后可能延迟更新；不更改音频会话、不播放声音、不请求录音权限。没有报告路由时返回 none，多端口以逗号分隔。音量为零不代表开启静音模式。
             """
         ),
         GuideDocument(

@@ -48,18 +48,38 @@ enum PromptMacroEnvironment {
             let hardware = hardwareIdentifier()
             values.merge(await deviceValues(hardware: hardware, includesBattery: needsBattery)) { _, new in new }
         }
+        if !referencedNames.isDisjoint(with: PromptMacroResolver.audioNames) {
+            values.merge(PromptMacroAudioEnvironment.capture()) { _, new in new }
+        }
+        if !referencedNames.isDisjoint(with: PromptMacroResolver.screenNames) {
+            values.merge(await PromptMacroScreenEnvironment.capture()) { _, new in new }
+        }
+        if !referencedNames.isDisjoint(with: PromptMacroResolver.storageNames) {
+            values.merge(PromptMacroResourceEnvironment.captureStorage()) { _, new in new }
+        }
+        if !referencedNames.isDisjoint(with: PromptMacroResolver.hardwareNames) {
+            values.merge([
+                "physical_memory_bytes": String(process.physicalMemory),
+                "physical_memory_gb": PromptMacroResourceEnvironment.gigabytes(Double(process.physicalMemory)),
+                "processor_count": String(process.processorCount),
+                "active_processor_count": String(process.activeProcessorCount)
+            ]) { _, new in new }
+        }
         return values
     }
 
     static func batteryValues(level: Float, state: String) -> [String: String] {
         // 模拟器和暂不可用的传感器会返回 -1，不能把它当成 0% 或假定正在放电。
-        let percentage = level.isFinite && (0...1).contains(level)
-            ? String(Int((level * 100).rounded())) : "unknown"
         return [
-            "battery_level": percentage,
+            "battery_level": percentageValue(level),
             "battery_state": state,
             "is_charging": state == "unknown" ? "unknown" : (state == "charging" ? "true" : "false")
         ]
+    }
+
+    static func percentageValue(_ value: Float) -> String {
+        value.isFinite && (0...1).contains(value)
+            ? String(Int((value * 100).rounded())) : "unknown"
     }
 
     @MainActor
