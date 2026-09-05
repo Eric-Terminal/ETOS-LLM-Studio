@@ -120,14 +120,6 @@ struct SettingsView: View {
                             .etFont(.footnote)
                             .foregroundStyle(.secondary)
                         NavigationLink {
-                            WatchGuideModelSetupView(
-                                viewModel: viewModel,
-                                guideController: .modelSetup
-                            )
-                        } label: {
-                            Label(NSLocalizedString("引导配置第一个模型", comment: "手表首次模型配置入口"), systemImage: "wand.and.stars")
-                        }
-                        NavigationLink {
                             ProviderListView()
                                 .environmentObject(viewModel)
                         } label: {

@@ -60,14 +60,6 @@ extension ChatView {
                 Text(NSLocalizedString("请先在设置中启用模型", comment: ""))
                     .etFont(.footnote)
                     .foregroundStyle(.secondary)
-                Button(NSLocalizedString("引导配置第一个模型", comment: "模型选择器引导配置按钮")) {
-                    dismissModelPickerSheet()
-                    DispatchQueue.main.async {
-                        isGuideModelSetupPresented = true
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
                 Button(NSLocalizedString("手动配置", comment: "模型选择器手动配置按钮")) {
                     dismissModelPickerSheet()
                     DispatchQueue.main.async {

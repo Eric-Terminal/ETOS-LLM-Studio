@@ -112,33 +112,6 @@ extension ChatView {
         }
     }
 
-    var guideModelSetupCompactStatus: some View {
-        HStack {
-            Label(
-                NSLocalizedString("先配置一个模型", comment: "聊天历史上方模型配置提示"),
-                systemImage: "exclamationmark.bubble"
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-
-            Spacer()
-
-            Button(NSLocalizedString("使用配置向导", comment: "聊天历史上方配置向导按钮")) {
-                isGuideModelSetupPresented = true
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-
-            Button(NSLocalizedString("手动配置", comment: "聊天历史上方手动配置按钮")) {
-                NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-
     /// 收起键盘和输入栏临时面板；外部点击只改变输入状态，不触发消息内容。
     func dismissComposerInput() {
         composerFocused = false

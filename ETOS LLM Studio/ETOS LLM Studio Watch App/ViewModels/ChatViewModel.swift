@@ -106,8 +106,6 @@ class ChatViewModel: ObservableObject {
     @Published var configuredModelsByID: [String: RunnableModel] = [:]
     @Published var configuredModelOrganizationsByProviderID: [UUID: RunnableModelPickerOrganization] = [:]
     @Published var selectedModel: RunnableModel?
-    /// GRDB 恢复完成前，空模型列表只代表状态未知，不能据此判定用户尚未配置。
-    @Published var hasLoadedPersistentModelConfiguration = false
     @Published var activatedModels: [RunnableModel] = []
     @Published var activatedConversationModels: [RunnableModel] = []
     @Published var activatedConversationModelGroups: [RunnableModelProviderGroup] = []

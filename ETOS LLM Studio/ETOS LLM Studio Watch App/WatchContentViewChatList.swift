@@ -18,21 +18,6 @@ extension ContentView {
             isSending: viewModel.isSendingMessage
         )
         return List {
-            if GuideModelSetupEntryPolicy.shouldPresent(
-                hasLoadedPersistentModelConfiguration: viewModel.hasLoadedPersistentModelConfiguration,
-                hasRunnableConversationModel: !viewModel.activatedConversationModels.isEmpty
-            ) {
-                NavigationLink {
-                    WatchGuideModelSetupView(
-                        viewModel: viewModel,
-                        guideController: guideModelSetupController
-                    )
-                } label: {
-                    Label(NSLocalizedString("配置聊天模型", comment: "手表聊天页首次模型配置入口"), systemImage: "wand.and.stars")
-                }
-                .listRowBackground(Color.clear)
-            }
-
             if viewModel.messages.isEmpty && continuationContext == nil {
                 Spacer().frame(height: emptyStateSpacerHeight).listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }

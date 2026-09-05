@@ -87,7 +87,6 @@ struct ChatView: View {
     @State var quickModelSettingsTarget: RunnableModel?
     @State var isQuickPromptEditorPresented = false
     @State var isQuickWorldbookBindingPresented = false
-    @State var isGuideModelSetupPresented = false
     @State var selectedModelPickerProviderID: UUID?
     @State var modelPickerShowsAllModels = false
     @State var isChatLayoutLandscape = false

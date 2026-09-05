@@ -1224,24 +1224,18 @@ struct GuideInfrastructureTests {
         #expect(GuideModelSetupStateResolver.resolve(providers: [providerWithKey], selectedModel: runnable) == .ready)
     }
 
-    @Test("首次模型向导只在持久化配置确认为空后显示")
-    func modelSetupEntryWaitsForPersistentConfiguration() {
-        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
-            hasLoadedPersistentModelConfiguration: false,
-            hasRunnableConversationModel: false
-        ))
-        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
-            hasLoadedPersistentModelConfiguration: false,
-            hasRunnableConversationModel: true
-        ))
-        #expect(!GuideModelSetupEntryPolicy.shouldPresent(
-            hasLoadedPersistentModelConfiguration: true,
-            hasRunnableConversationModel: true
-        ))
-        #expect(GuideModelSetupEntryPolicy.shouldPresent(
-            hasLoadedPersistentModelConfiguration: true,
-            hasRunnableConversationModel: false
-        ))
+    @Test("撤下首次配置界面后文档不再推荐旧入口，保留设置页帮助")
+    func guideCatalogKeepsContextualHelpWithoutFirstModelSetup() async throws {
+        let service = GuideKnowledgeService()
+        #expect(await service.document(id: "first-model-setup") == nil)
+        let setupResults = await service.search("首次 初始化 配置")
+        #expect(!setupResults.contains { $0.id == "first-model-setup" })
+
+        let overview = try #require(await service.document(id: "guide-overview"))
+        #expect(!overview.content.contains("首次模型配置"))
+        #expect(overview.content.contains("页面向导只在设置与配置页面工作"))
+        #expect(overview.content.contains("内置免费向导始终可用"))
+        #expect(await service.document(id: "provider-model-basics") != nil)
     }
 
     @Test("首次配置只接受完整的 HTTP 基础地址")

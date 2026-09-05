@@ -75,7 +75,6 @@ extension ChatViewModel {
         providers = chatService.providersSubject.value
         applyActivatedConversationModels(chatService.activatedConversationModels)
         selectedModel = chatService.selectedModelSubject.value
-        hasLoadedPersistentModelConfiguration = true
         MessageRegexRuleStore.shared.reload()
         refreshVisualMessagesAfterRegexRulesChange()
         syncSpeechModelSelection()

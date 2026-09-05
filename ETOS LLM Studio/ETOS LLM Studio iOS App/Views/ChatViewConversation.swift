@@ -120,20 +120,6 @@ extension ChatView {
                         }
                         .frame(width: 0, height: 0)
 
-                        if GuideModelSetupEntryPolicy.shouldPresent(
-                            hasLoadedPersistentModelConfiguration: viewModel.hasLoadedPersistentModelConfiguration,
-                            hasRunnableConversationModel: !viewModel.activatedConversationModels.isEmpty
-                        ), sessionMessages.isEmpty {
-                            GuideModelSetupEntryCard(
-                                action: { isGuideModelSetupPresented = true },
-                                manualAction: {
-                                    NotificationCenter.default.post(name: .requestGuideModelManagement, object: nil)
-                                }
-                            )
-                            .padding(.top, navBarHeight + 12)
-                            .padding(.bottom)
-                        }
-
                         LazyVStack(spacing: 0) {
                             // 顶部留白（为导航栏留出空间）
                             Color.clear
@@ -627,12 +613,6 @@ extension ChatView {
                             )
                             .padding(.horizontal, 12)
                             .padding(.bottom, 6)
-                        }
-
-                        if viewModel.hasLoadedPersistentModelConfiguration,
-                           viewModel.selectedModel == nil,
-                           !sessionMessages.isEmpty {
-                            guideModelSetupCompactStatus
                         }
 
                         telegramInputBar
