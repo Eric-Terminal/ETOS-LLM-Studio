@@ -7286,3 +7286,12 @@ If فقط الـ أرشفة state changes, لا يوجد re-embedding هو perfo
 "提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — سعة وحدة التخزين المتاحة والإجمالية بالبايت\n{{storage_free_gb}} / {{storage_total_gb}} — سعة وحدة التخزين المتاحة والإجمالية بوحدة GB\n{{storage_free_percent}} — نسبة السعة المتاحة، من 0 إلى 100 دون %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — إجمالي الذاكرة الفعلية بالبايت أو GB\n{{processor_count}} / {{active_processor_count}} — عدد المعالجات المنطقية وعدد النشط منها حاليًا\nيشير التخزين إلى الوحدة التي تحتوي على مستندات التطبيق. GB يساوي 1,000,000,000 بايت، بمنزلتين عشريتين. الذاكرة الفعلية هي إجمالي RAM، وليست RAM المتاحة.";
 "提示词宏称呼说明" = "{{nickname}} و{{user}} اسمان بديلان للاسم في Persona الحالية أو الافتراضية (هوية المستخدم)، مع الرجوع إلى «المستخدم» إذا لم يُضبط اسم. يستخدم {{char}} و{{assistant_name}} اسم أول شخصية مرتبطة، أو الاسم المعروض لنموذج هذا الطلب إذا لم توجد شخصية مرتبطة.";
 "提示词宏称呼示例" = "أنت {{char}}. يُرجى مناداتي {{user}}.";
+/* 向导辅助结构化请求控制 */
+"提供商 ID" = "معرّف المزوّد";
+"控制项当前状态" = "الحالة الحالية لعناصر التحكم";
+"当前有效请求参数" = "معلمات الطلب الفعلية";
+"修改结构化控制" = "تعديل عناصر التحكم المنظّمة";
+"修改结构化控制（包含疑似认证字段，请仔细确认）" = "تعديل عناصر التحكم المنظّمة (قد تحتوي على بيانات اعتماد؛ راجعها بعناية)";
+"已保存结构化控制，后续请求将使用更新后的配置。" = "تم حفظ عناصر التحكم المنظّمة. ستستخدم الطلبات التالية الإعدادات المحدّثة.";
+"guide.controls.introduction" = "يمكنك أن تطلب من المساعد إنشاء مفتاح تبديل أو مجموعة خيارات أو شريط تمرير لمعلمات الطلب، مثل ميزانية التفكير أو درجة الحرارة أو JSON مخصص. اشرح ما تريده، ثم راجع التغييرات المقترحة وأكّدها. القيم الافتراضية واختيار المحادثة الحالي منفصلان؛ وضّح إن كنت تريد تغيير القيمة الحالية أيضًا. تعتمد المعلمات المتاحة على المزوّد والنموذج.";
+"guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";

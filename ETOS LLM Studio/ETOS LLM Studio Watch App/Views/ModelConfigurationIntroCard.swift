@@ -36,6 +36,8 @@ struct ModelConfigurationIntroCard: View {
                         .etFont(.caption2)
                     Text(NSLocalizedString("Nested parameters and structured control merging", comment: "模型配置嵌套参数合并教程"))
                         .etFont(.caption2)
+                    Text(NSLocalizedString("guide.controls.introduction", value: "You can ask the page guide to create a switch, preset group or slider for request parameters such as reasoning budgets, temperature or custom JSON. Explain what you want, then review and confirm the proposed changes. Defaults and the current chat selection are separate; say whether you also want to switch the current value. Available parameters depend on your provider and model.", comment: "向导辅助结构化控制的使用说明"))
+                        .etFont(.caption2)
                 }
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

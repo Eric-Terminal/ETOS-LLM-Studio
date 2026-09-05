@@ -49,6 +49,10 @@ public actor GuideKnowledgeService {
                 let score = terms.reduce(into: 0) { result, term in
                     if title.contains(term) { result += 8 }
                     if keywords.contains(term) { result += 4 }
+                    // 中文常整句输入，不能只用空格分词后拿整句匹配文档。
+                    else if document.keywords.contains(where: { keyword in
+                        keyword.count >= 2 && term.contains(keyword.lowercased())
+                    }) { result += 4 }
                     if body.contains(term) { result += 1 }
                 }
                 return score > 0 ? (document, score) : nil
@@ -94,16 +98,7 @@ public enum GuideDocumentCatalog {
             测试连接不会替代保存。编辑完成后先执行原生连接测试，再在最终预览中确认提供商与模型配置，最后一次性保存并选中，避免产生半配置状态。
             """
         ),
-        GuideDocument(
-            id: "model-request-body",
-            title: "模型请求体与结构化控制",
-            keywords: ["请求体", "JSON", "结构化", "覆盖", "temperature", "参数", "control"],
-            content: """
-            模型的请求体配置分为键值控制与原始 JSON 两种方式。键值控制适合把常用参数公开成开关、输入框、枚举或滑块；原始 JSON 适合上游需要复杂嵌套结构时整体覆盖。
-
-            模型级覆盖优先于全局 temperature、top_p 等默认参数。切换模式前应确认另一种模式中的草稿是否仍需保留。向导提出结构化修改时会展示字段路径、原值与新值；确认前不会写入模型配置。
-            """
-        ),
+        GuideRequestBodyControlKnowledge.document(),
         GuideDocument(
             id: "network-proxy",
             title: "全局代理与提供商独立代理",

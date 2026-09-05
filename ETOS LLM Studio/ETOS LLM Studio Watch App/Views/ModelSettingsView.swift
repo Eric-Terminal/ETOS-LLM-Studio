@@ -212,7 +212,8 @@ struct ModelSettingsView: View {
                 ],
                 tools: [
                     GuidePageTool(definition: GuideToolCatalog.updateModelConfiguration, access: .proposeChange),
-                    GuidePageTool(definition: GuideToolCatalog.replaceModelRequestBody, access: .proposeChange)
+                    GuidePageTool(definition: GuideToolCatalog.replaceModelRequestBody, access: .proposeChange),
+                    GuidePageTool(definition: GuideModelRequestBodyControls.toolDefinition, access: .proposeChange)
                 ]
             ),
             snapshot: modelGuideSnapshot,
@@ -227,7 +228,17 @@ struct ModelSettingsView: View {
     }
 
     private func modelGuideSnapshot() async -> GuidePageSnapshot {
-        GuidePageSnapshot(fields: [
+        let controls = model.requestBodyControls
+        let base = model.overrideParameters
+        let modelKey = RunnableModel(provider: provider, model: model).id
+        var fields = await Task.detached(priority: .userInitiated) {
+            let state = ModelRequestBodyControlRuntimeStore.state(forModelKey: modelKey, controls: controls)
+            return GuideModelRequestBodyControls.snapshotFields(controls: controls, state: state, base: base)
+        }.value
+        fields["provider_name"] = GuideSnapshotField(label: NSLocalizedString("提供商", comment: "模型向导提供商"), value: .string(provider.name), access: .readOnly)
+        fields["provider_id"] = GuideSnapshotField(label: NSLocalizedString("提供商 ID", value: "Provider ID", comment: "模型向导提供商标识"), value: .string(provider.id.uuidString), access: .readOnly)
+        fields["effective_api_format"] = GuideSnapshotField(label: NSLocalizedString("API 格式", comment: "模型向导实际协议"), value: .string(effectiveAPIFormat), access: .readOnly)
+        fields.merge([
             "display_name": GuideSnapshotField(label: NSLocalizedString("模型名称", comment: "手表模型向导快照字段"), value: .string(model.displayName)),
             "model_id": GuideSnapshotField(label: NSLocalizedString("模型ID", comment: "手表模型向导快照字段"), value: .string(model.modelName)),
             "picker_group": GuideSnapshotField(label: NSLocalizedString("分组名称", comment: "手表模型向导快照字段"), value: .string(model.pickerGroupName ?? "")),
@@ -239,7 +250,8 @@ struct ModelSettingsView: View {
                 label: NSLocalizedString("自定义请求体", comment: "手表模型向导快照字段"),
                 value: .dictionary(model.overrideParameters)
             )
-        ])
+        ]) { _, new in new }
+        return GuidePageSnapshot(fields: fields)
     }
 
     private func buildModelGuideProposal(
@@ -248,6 +260,10 @@ struct ModelSettingsView: View {
     ) throws -> GuideActionProposal {
         let arguments = try GuideToolArguments.decode(call.arguments)
         switch call.toolName {
+        case GuideModelRequestBodyControls.toolDefinition.name:
+            return try GuideModelRequestBodyControls.buildProposal(
+                call: call, pageID: modelGuidePageID, controls: model.requestBodyControls, snapshot: snapshot
+            )
         case GuideToolCatalog.updateModelConfiguration.name:
             if let format = try GuideToolArguments.optionalString("api_format_override", in: arguments),
                !["", "openai-compatible", "openai-responses", "gemini", "anthropic"].contains(format) {
@@ -317,6 +333,26 @@ struct ModelSettingsView: View {
     }
 
     private func executeModelGuideProposal(_ proposal: GuideActionProposal) async throws -> GuideActionExecution {
+        if proposal.toolName == GuideModelRequestBodyControls.toolDefinition.name || proposal.toolName == GuideModelRequestBodyControls.restoreToolName {
+            let controls = model.requestBodyControls
+            let modelKey = RunnableModel(provider: provider, model: model).id
+            let application = try await Task.detached(priority: .userInitiated) {
+                let state = ModelRequestBodyControlRuntimeStore.state(forModelKey: modelKey, controls: controls)
+                return try GuideModelRequestBodyControls.apply(proposal, controls: controls, state: state)
+            }.value
+            try Task.checkCancellation()
+            guard model.requestBodyControls == controls else { throw GuideError.pageChanged }
+            model.requestBodyControls = application.controls
+            // 只保存控制列表，不把其他尚未确认的请求体编辑草稿一并写入。
+            onSave()
+            await Task.detached(priority: .userInitiated) {
+                ModelRequestBodyControlRuntimeStore.save(application.state, forModelKey: modelKey, controls: application.controls)
+            }.value
+            return GuideActionExecution(
+                message: NSLocalizedString("已保存结构化控制，后续请求将使用更新后的配置。", value: "Structured controls saved. Future requests will use the updated configuration.", comment: "向导控制保存结果"),
+                undoProposal: application.undoProposal
+            )
+        }
         let oldArguments: [String: JSONValue]
         switch proposal.toolName {
         case GuideToolCatalog.updateModelConfiguration.name:

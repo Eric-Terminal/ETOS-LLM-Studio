@@ -7443,3 +7443,12 @@
 "提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — free and total volume capacity in bytes\n{{storage_free_gb}} / {{storage_total_gb}} — free and total volume capacity in GB\n{{storage_free_percent}} — free capacity percentage, 0–100 without %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — total physical memory in bytes or GB\n{{processor_count}} / {{active_processor_count}} — logical processor count and currently active count\nStorage refers to the volume containing the app's documents. GB uses 1,000,000,000 bytes with two decimal places. Physical memory is total RAM, not available RAM.";
 "提示词宏称呼说明" = "{{nickname}} and {{user}} are aliases for the name in your current or default Persona (user identity), falling back to User. {{char}} and {{assistant_name}} use the first bound character's name, or this request's model display name when no character is bound.";
 "提示词宏称呼示例" = "You are {{char}}. Please call me {{user}}.";
+/* 向导辅助结构化请求控制 */
+"提供商 ID" = "Provider ID";
+"控制项当前状态" = "Current Control State";
+"当前有效请求参数" = "Effective Request Overrides";
+"修改结构化控制" = "Modify Structured Controls";
+"修改结构化控制（包含疑似认证字段，请仔细确认）" = "Modify structured controls (may contain credentials; review carefully)";
+"已保存结构化控制，后续请求将使用更新后的配置。" = "Structured controls saved. Future requests will use the updated configuration.";
+"guide.controls.introduction" = "You can ask the page guide to create a switch, preset group or slider for request parameters such as reasoning budgets, temperature or custom JSON. Explain what you want, then review and confirm the proposed changes. Defaults and the current chat selection are separate; say whether you also want to switch the current value. Available parameters depend on your provider and model.";
+"guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";

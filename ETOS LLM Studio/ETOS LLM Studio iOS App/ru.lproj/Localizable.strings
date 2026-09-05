@@ -7436,3 +7436,12 @@
 "提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — свободная и общая ёмкость тома в байтах\n{{storage_free_gb}} / {{storage_total_gb}} — свободная и общая ёмкость тома в GB\n{{storage_free_percent}} — процент свободного места, 0–100 без %\n{{physical_memory_bytes}} / {{physical_memory_gb}} — общий объём физической памяти в байтах или GB\n{{processor_count}} / {{active_processor_count}} — число логических процессоров и число активных\nХранилище относится к тому с документами приложения. GB равен 1 000 000 000 байт, значения содержат два знака после точки. Физическая память — общий объём RAM, а не свободная RAM.";
 "提示词宏称呼说明" = "{{nickname}} и {{user}} — псевдонимы имени текущей или стандартной Persona (личности пользователя); если имя не задано, используется «Пользователь». {{char}} и {{assistant_name}} берут имя первого привязанного персонажа, а при его отсутствии — отображаемое имя модели этого запроса.";
 "提示词宏称呼示例" = "Ты — {{char}}. Пожалуйста, называй меня {{user}}.";
+/* 向导辅助结构化请求控制 */
+"提供商 ID" = "ID провайдера";
+"控制项当前状态" = "Текущее состояние элементов управления";
+"当前有效请求参数" = "Действующие параметры запроса";
+"修改结构化控制" = "Изменить структурированные элементы управления";
+"修改结构化控制（包含疑似认证字段，请仔细确认）" = "Изменить структурированные элементы управления (возможны учётные данные; внимательно проверьте)";
+"已保存结构化控制，后续请求将使用更新后的配置。" = "Структурированные элементы управления сохранены. Следующие запросы будут использовать обновлённые настройки.";
+"guide.controls.introduction" = "Можно попросить помощника создать переключатель, набор вариантов или ползунок для параметров запроса: бюджета рассуждений, температуры или собственного JSON. Опишите желаемый результат, затем проверьте и подтвердите изменения. Значения по умолчанию и текущий выбор в чате задаются отдельно; уточните, нужно ли также изменить текущее значение. Доступные параметры зависят от провайдера и модели.";
+"guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";

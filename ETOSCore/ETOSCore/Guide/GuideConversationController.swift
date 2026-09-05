@@ -75,6 +75,7 @@ public final class GuideConversationController: ObservableObject {
     private var toolBatchPage: GuidePageDescriptor?
     private var unavailableReadTools = Set<String>()
     private var undoProposal: GuideActionProposal?
+    private var lastActionFeedback: GuideActionFeedback?
     private var latestUserMessageID: UUID?
     private var latestUserMessageAllowsEditing = false
     private var latestTurnMessageIDs: Set<UUID> = []
@@ -223,6 +224,7 @@ public final class GuideConversationController: ObservableObject {
         pendingProposal = nil
         pendingToolCall = nil
         undoProposal = nil
+        lastActionFeedback = nil
         canUndo = false
         lastError = nil
         lastErrorMessageID = nil
@@ -249,7 +251,9 @@ public final class GuideConversationController: ObservableObject {
                 guard activeTaskID == taskID else { return }
                 undoProposal = execution.undoProposal
                 canUndo = execution.undoProposal != nil
-                appendToolResult(call: call, content: execution.message, disposition: .completed)
+                let feedback = GuideActionFeedback(status: .executed, pageID: proposal.pageID, toolName: call.toolName, message: execution.message)
+                lastActionFeedback = feedback
+                appendToolResult(call: call, content: feedback.encodedResult, disposition: .completed)
                 let message = GuideConversationMessage(role: .tool, content: execution.message)
                 messages.append(message)
                 latestTurnMessageIDs.insert(message.id)
@@ -267,11 +271,13 @@ public final class GuideConversationController: ObservableObject {
     }
 
     public func rejectPendingProposal() {
-        guard let call = pendingToolCall, !isResponding else { return }
+        guard let call = pendingToolCall, let proposal = pendingProposal, !isResponding else { return }
         pendingProposal = nil
         pendingToolCall = nil
         let message = NSLocalizedString("用户没有应用这项修改。", comment: "Guide proposal rejected tool result")
-        appendToolResult(call: call, content: message, disposition: .rejected)
+        let feedback = GuideActionFeedback(status: .rejected, pageID: proposal.pageID, toolName: call.toolName, message: message)
+        lastActionFeedback = feedback
+        appendToolResult(call: call, content: feedback.encodedResult, disposition: .rejected)
         let toolMessage = GuideConversationMessage(role: .tool, content: message)
         messages.append(toolMessage)
         latestTurnMessageIDs.insert(toolMessage.id)
@@ -302,6 +308,7 @@ public final class GuideConversationController: ObservableObject {
                     comment: "向导撤销成功反馈"
                 )
                 messages.append(GuideConversationMessage(role: .tool, content: message))
+                lastActionFeedback = GuideActionFeedback(status: .undone, pageID: undoProposal.pageID, toolName: undoProposal.toolName, message: message)
                 scheduleHistorySave()
                 isResponding = false
                 activeTaskID = nil
@@ -385,7 +392,8 @@ public final class GuideConversationController: ObservableObject {
                 let outbound = GuidePromptBuilder.requestMessages(
                     history: requestHistory,
                     context: context,
-                    includesClientSystemPrompt: resolved.includesClientSystemPrompt
+                    includesClientSystemPrompt: resolved.includesClientSystemPrompt,
+                    lastActionFeedback: lastActionFeedback
                 )
                 let placeholderID = UUID()
                 messages.append(GuideConversationMessage(id: placeholderID, role: .assistant, content: ""))

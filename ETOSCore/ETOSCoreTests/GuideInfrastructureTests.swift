@@ -1185,7 +1185,7 @@ struct GuideInfrastructureTests {
         #expect(english.contains("Gemini"))
         #expect(chinese.contains("用户自己选择的模型线路"))
         #expect(chinese.contains("不要声称基础模型固定为 Qwen"))
-        #expect(chinese.contains("guide_prompt_version: 3"))
+        #expect(chinese.contains("guide_prompt_version: 4"))
         #expect(chinese.contains("创建、修改或删除配置"))
         #expect(GuidePromptBuilder.systemPrompt(mode: .modelSetup).contains("setup_state"))
         #expect(GuidePromptBuilder.systemPrompt(locale: Locale(identifier: "zh-Hans"), mode: .modelSetup).contains("开源 AI 聊天客户端"))
@@ -1375,7 +1375,7 @@ struct GuideInfrastructureTests {
 
     @Test("内置文档支持关键词检索和按 ID 读取")
     func knowledgeSearchFindsRelevantDocument() async throws {
-        let service = GuideKnowledgeService()
+        let service = GuideKnowledgeService(documents: [GuideRequestBodyControlKnowledge.document(locale: Locale(identifier: "zh-Hans"))])
         let results = await service.search("结构化 请求体 JSON")
         #expect(results.contains { $0.id == "model-request-body" })
         let document = await service.document(id: "model-request-body")

@@ -7202,3 +7202,12 @@
 "提示词宏资源列表" = "{{storage_free_bytes}} / {{storage_total_bytes}} — ボリュームの空き容量と総容量（バイト）\n{{storage_free_gb}} / {{storage_total_gb}} — ボリュームの空き容量と総容量（GB）\n{{storage_free_percent}} — 空き容量の割合、0–100（% なし）\n{{physical_memory_bytes}} / {{physical_memory_gb}} — 物理メモリの総容量（バイトまたは GB）\n{{processor_count}} / {{active_processor_count}} — 論理プロセッサ数と現在稼働中の数\nストレージはアプリの書類フォルダがあるボリュームを指します。1 GB は 1,000,000,000 バイト、小数点以下 2 桁です。物理メモリは RAM の総容量で、空き RAM ではありません。";
 "提示词宏称呼说明" = "{{nickname}} と {{user}} は同じユーザー名を表し、現在または既定の Persona（ユーザーの設定上の人物像）の名前を使います。未設定の場合は「ユーザー」になります。{{char}} と {{assistant_name}} は最初に紐付けられたキャラクターの名前を使い、未設定の場合は今回のモデルの表示名になります。";
 "提示词宏称呼示例" = "あなたは {{char}} です。私を {{user}} と呼んでください。";
+/* 向导辅助结构化请求控制 */
+"提供商 ID" = "プロバイダー ID";
+"控制项当前状态" = "コントロールの現在の状態";
+"当前有效请求参数" = "現在有効なリクエストパラメータ";
+"修改结构化控制" = "構造化コントロールを変更";
+"修改结构化控制（包含疑似认证字段，请仔细确认）" = "構造化コントロールを変更（認証情報を含む可能性があります。よく確認してください）";
+"已保存结构化控制，后续请求将使用更新后的配置。" = "構造化コントロールを保存しました。次回以降のリクエストには更新した設定が使われます。";
+"guide.controls.introduction" = "ページガイドに、思考予算、温度、カスタム JSON などのリクエストパラメータ用のスイッチ、選択肢グループ、スライダーの作成を依頼できます。希望を伝え、変更案を確認して適用してください。初期値とチャットで現在選択している値は別です。現在の値も切り替える場合は、その旨を伝えてください。対応するパラメータはプロバイダーとモデルによって異なります。";
+"guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";

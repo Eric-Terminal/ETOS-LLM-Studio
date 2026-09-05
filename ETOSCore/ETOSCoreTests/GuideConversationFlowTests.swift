@@ -97,6 +97,11 @@ extension GuideInfrastructureTests {
         let results = nextRequest.filter { $0.role == .tool }.flatMap { $0.toolCalls ?? [] }
         #expect(results.map(\.id) == calls.map(\.id))
         #expect(results[1].resultDisposition == (acceptFirst ? .completed : .rejected))
+        let firstFeedback = try GuideToolArguments.decode(try #require(results[1].result))
+        #expect(firstFeedback["status"] == .string(acceptFirst ? "executed" : "rejected"))
+        #expect(firstFeedback["requires_confirmation"] == .bool(false))
+        let lastFeedback = try GuideToolArguments.decode(try #require(results[3].result))
+        #expect(lastFeedback["status"] == .string("executed"))
     }
 
     @MainActor
@@ -161,6 +166,19 @@ extension GuideInfrastructureTests {
         #expect((controller.lastError == nil) == allowUndo)
         #expect(controller.messages.contains { $0.role == .tool && $0.content == successMessage } == allowUndo)
         #expect(client.requests.count == 2)
+        if allowUndo {
+            controller.send("现在提醒是什么状态？")
+            try await waitForGuidePause(controller)
+            let request = try #require(client.requests.last)
+            let context = try #require(request.first { $0.content.contains("<guide_runtime_context") })
+            #expect(context.content.contains("\"status\":\"undone\""))
+            #expect(context.content.contains("\"requires_confirmation\":false"))
+            controller.clear()
+            controller.send("新问题")
+            try await waitForGuidePause(controller)
+            let clearedContext = try #require(client.requests.last?.first { $0.content.contains("<guide_runtime_context") })
+            #expect(!clearedContext.content.contains("last_page_action"))
+        }
     }
 
     @MainActor

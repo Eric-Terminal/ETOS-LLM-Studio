@@ -9,7 +9,7 @@
 import Foundation
 
 public enum GuidePromptBuilder {
-    public static let promptVersion = 3
+    public static let promptVersion = 4
 
     public static func systemPrompt(
         locale: Locale = .current,
@@ -70,9 +70,10 @@ public enum GuidePromptBuilder {
     @MainActor
     public static func runtimeContextMessage(
         _ context: GuidePageContext,
-        bundle: Bundle = .main
+        bundle: Bundle = .main,
+        lastActionFeedback: GuideActionFeedback? = nil
     ) -> ChatMessage {
-        let payload = encodedContext(context, bundle: bundle)
+        let payload = encodedContext(context, bundle: bundle, lastActionFeedback: lastActionFeedback)
         return ChatMessage(
             role: .user,
             content: """
@@ -88,31 +89,36 @@ public enum GuidePromptBuilder {
     public static func requestMessages(
         history: [ChatMessage],
         context: GuidePageContext,
-        includesClientSystemPrompt: Bool
+        includesClientSystemPrompt: Bool,
+        lastActionFeedback: GuideActionFeedback? = nil
     ) -> [ChatMessage] {
         var messages: [ChatMessage] = []
         if includesClientSystemPrompt {
             messages.append(ChatMessage(role: .system, content: systemPrompt(mode: context.descriptor.mode)))
         }
-        messages.append(runtimeContextMessage(context))
+        messages.append(runtimeContextMessage(context, lastActionFeedback: lastActionFeedback))
         messages.append(contentsOf: history)
         return messages
     }
 
     @MainActor
-    private static func encodedContext(_ context: GuidePageContext, bundle: Bundle) -> String {
+    private static func encodedContext(_ context: GuidePageContext, bundle: Bundle, lastActionFeedback: GuideActionFeedback?) -> String {
+        let locale = AppLanguagePreference.preferredLocale(rawValue: AppConfigStore.shared.appLanguage)
         let runtime = RuntimeContext(
             guidePromptVersion: promptVersion,
             guideMode: context.descriptor.mode,
             platform: platformName,
-            appLanguage: AppLanguagePreference.preferredLocale(
-                rawValue: AppConfigStore.shared.appLanguage
-            ).identifier,
+            appLanguage: locale.identifier,
             appVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
             appBuild: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
             gitCommit: GuideBuildVersion.fullCommitSHA(bundle: bundle),
             page: context.descriptor,
-            configuration: context.snapshot
+            configuration: context.snapshot,
+            configurationGuidance: GuideRequestBodyControlKnowledge.orientation(for: context.descriptor, locale: locale),
+            actionResultGuidance: locale.language.languageCode?.identifier == "zh"
+                ? "status=executed 表示用户已确认且页面执行器已经完成，不要再次要求确认同一个提案；按 message 和最新快照区分保存成功与仅更新编辑草稿。status=rejected 表示未应用；status=undone 表示用户已撤销，要以恢复后的快照为准，不要沿用之前回答里的已开启状态。"
+                : "status=executed means the user confirmed and the page executor finished; do not ask to confirm the same proposal again. Use message and the latest snapshot to distinguish a saved change from an editor draft update. rejected means not applied; undone means the user reverted the change. Trust the restored snapshot, not a previous answer claiming it is enabled.",
+            lastPageAction: lastActionFeedback
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -141,6 +147,9 @@ public enum GuidePromptBuilder {
         let gitCommit: String?
         let page: GuidePageDescriptor
         let configuration: GuidePageSnapshot
+        let configurationGuidance: String
+        let actionResultGuidance: String
+        let lastPageAction: GuideActionFeedback?
 
         private enum CodingKeys: String, CodingKey {
             case guidePromptVersion = "guide_prompt_version"
@@ -152,6 +161,9 @@ public enum GuidePromptBuilder {
             case gitCommit = "git_commit"
             case page
             case configuration
+            case configurationGuidance = "configuration_guidance"
+            case actionResultGuidance = "action_result_guidance"
+            case lastPageAction = "last_page_action"
         }
     }
 }
