@@ -70,6 +70,7 @@ struct ChatBubble: View {
     @State var webHTMLPageItem: WatchWebHTMLPageItem?
     @State var showRawToolResultInDetailSheet: Bool = false
     @ObservedObject var toolPermissionCenter = ToolPermissionCenter.shared
+    @ObservedObject var mcpManager = MCPManager.shared
     @ObservedObject private var appearanceProfileManager = ChatAppearanceProfileManager.shared
     @ObservedObject var appConfig = AppConfigStore.shared
     @Environment(\.displayScale) var displayScale

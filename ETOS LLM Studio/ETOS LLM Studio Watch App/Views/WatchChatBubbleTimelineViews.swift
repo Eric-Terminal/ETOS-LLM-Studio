@@ -424,6 +424,7 @@ struct WatchTimelineReasoningStepView: View {
 
 struct WatchTimelineToolCallStepContent: View {
     let label: String
+    let displayTitle: String?
     let statusTitle: String
     let statusIconName: String
     let statusColor: Color
@@ -431,7 +432,11 @@ struct WatchTimelineToolCallStepContent: View {
     let customTextColor: Color?
 
     private var titleText: String {
-        "\(NSLocalizedString("调用工具", comment: "Tool call timeline title"))：\(label)"
+        displayTitle ?? String(
+            format: NSLocalizedString("%@：%@", comment: ""),
+            NSLocalizedString("调用工具", comment: "Tool call timeline title"),
+            label
+        )
     }
 
     var body: some View {

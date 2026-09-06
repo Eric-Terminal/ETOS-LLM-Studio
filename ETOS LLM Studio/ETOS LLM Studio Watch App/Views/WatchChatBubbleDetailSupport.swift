@@ -204,7 +204,8 @@ extension ChatBubble {
 
     @ViewBuilder
     func toolCallSummaryRow(for call: InternalToolCall) -> some View {
-        let label = toolDisplayLabel(for: call.toolName)
+        let label = messageState.toolCallDisplayTitle(for: call.id, isEnabled: mcpManager.toolCallTitleEnabled)
+            ?? toolDisplayLabel(for: call.toolName)
         let status = toolCallStatus(for: call)
         Button {
             showRawToolResultInDetailSheet = false

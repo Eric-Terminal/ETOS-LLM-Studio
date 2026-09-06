@@ -323,6 +323,7 @@ extension ChatBubble {
         } label: {
             WatchTimelineToolCallStepContent(
                 label: label,
+                displayTitle: messageState.toolCallDisplayTitle(for: call.id, isEnabled: mcpManager.toolCallTitleEnabled),
                 statusTitle: status.title,
                 statusIconName: status.iconName,
                 statusColor: status.accentColor,

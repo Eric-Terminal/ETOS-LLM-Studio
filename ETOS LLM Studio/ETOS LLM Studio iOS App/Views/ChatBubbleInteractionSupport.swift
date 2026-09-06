@@ -297,6 +297,7 @@ extension ChatBubble {
         } label: {
             TimelineToolCallStepContent(
                 label: label,
+                displayTitle: messageState.toolCallDisplayTitle(for: call.id, isEnabled: mcpManager.toolCallTitleEnabled),
                 statusTitle: status.title,
                 statusIconName: status.iconName,
                 statusColor: status.accentColor,
@@ -462,7 +463,8 @@ extension ChatBubble {
 
     @ViewBuilder
     func toolCallSummaryRow(for call: InternalToolCall) -> some View {
-        let label = toolDisplayLabel(for: call.toolName)
+        let label = messageState.toolCallDisplayTitle(for: call.id, isEnabled: mcpManager.toolCallTitleEnabled)
+            ?? toolDisplayLabel(for: call.toolName)
         let status = toolCallStatus(for: call)
         Button {
             showRawToolResultInDetailSheet = false
