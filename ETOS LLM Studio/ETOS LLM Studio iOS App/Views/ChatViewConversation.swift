@@ -707,7 +707,6 @@ extension ChatView {
                     Spacer()
                     TTSFloatingController()
                 }
-                .animation(.easeInOut(duration: 0.2), value: ttsManager.isSpeaking)
 
                 if let notice = viewModel.memoryRetryStoppedNoticeMessage {
                     VStack {

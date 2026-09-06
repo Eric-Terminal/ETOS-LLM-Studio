@@ -7548,3 +7548,10 @@ If solo el Archivar state changes, Sin re-embedding es performed.";
 
 // 功能栏朗读快捷入口
 "添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。" = "Añade «Leer mensaje» para iniciar o detener la lectura directamente debajo de los mensajes del asistente.";
+
+// 朗读浮窗的播放与完成操作
+"重新朗读" = "Leer de nuevo";
+"暂停朗读" = "Pausar lectura";
+"继续朗读" = "Reanudar lectura";
+"快进 5 秒" = "Avanzar 5 segundos";
+"朗读速度" = "Velocidad de lectura";

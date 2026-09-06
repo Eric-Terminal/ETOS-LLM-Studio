@@ -7471,3 +7471,10 @@
 
 // 功能栏朗读快捷入口
 "添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。" = "Add Read Message to start or stop reading directly below assistant messages.";
+
+// 朗读浮窗的播放与完成操作
+"重新朗读" = "Read Again";
+"暂停朗读" = "Pause Reading";
+"继续朗读" = "Resume Reading";
+"快进 5 秒" = "Forward 5 Seconds";
+"朗读速度" = "Reading Speed";
