@@ -1,0 +1,19 @@
+// 由 scripts/sync-extension-localizations.py 生成，请在对应主 App 中维护翻译。
+// 仅打包本扩展及其共享入口代码需要的文案，保留全部支持语言。
+
+"Agent" = "Agente";
+"Chat" = "Charla";
+"会话" = "Sesiones";
+"共享内容" = "Contenido compartido";
+"共享项目" = "Elemento compartido";
+"内容会先进入 ETOS 预览，确认后才会发送。" = "El contenido se previsualiza en ETOS y solo se envía después de confirmar.";
+"发送到 ETOS" = "Enviar a ETOS";
+"取消" = "Cancelar";
+"处理方式" = "Modo";
+"好" = "Good";
+"新会话" = "Nueva conversación";
+"无法保存" = "Unable to Save";
+"正在读取…" = "Leyendo…";
+"没有可导入的内容。" = "No hay contenido compatible para importar.";
+"目标会话" = "Conversación de destino";
+"继续" = "Continuar";

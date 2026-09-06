@@ -6,6 +6,9 @@ ROOT_PATH="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
 IOS_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/Config/iOSInfo.plist"
 WATCH_PLIST_PATH="$ROOT_PATH/ETOS LLM Studio/ETOS LLM Studio Watch App/Info.plist"
 
+# 扩展只携带自身需要的翻译，新增文案必须先同步，不能带着缺失翻译发布。
+python3 "$ROOT_PATH/scripts/sync-extension-localizations.py" --check
+
 # 云端构建写入完整 Commit，界面展示时再截为 7 位；源码向导必须依赖精确版本。
 if [ -n "${CI_COMMIT:-}" ]; then
     COMMIT_HASH="$(printf '%s' "$CI_COMMIT" | tr '[:upper:]' '[:lower:]')"

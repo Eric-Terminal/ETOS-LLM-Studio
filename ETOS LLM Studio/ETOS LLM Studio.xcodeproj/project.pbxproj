@@ -197,38 +197,10 @@
 			);
 			target = 074340BF302B0EC000F29D76 /* ETOS Workspace Provider */;
 		};
-		07434155302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Agent Share" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"/Localized: Localizable.strings",
-			);
-			target = 0743408F302B0CB900F29D76 /* ETOS Agent Share */;
-		};
-		07434156302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Agent Widgets" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"/Localized: Localizable.strings",
-			);
-			target = 074340A4302B0DB700F29D76 /* ETOS Agent Widgets */;
-		};
-		07434157302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Workspace Provider" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"/Localized: Localizable.strings",
-			);
-			target = 074340BF302B0EC000F29D76 /* ETOS Workspace Provider */;
-		};
 		0743416D302B4A3B00F29D76 /* Exceptions for "ETOS Agent Watch Widgets" folder in "ETOS Agent Watch WidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-			);
-			target = 0743415B302B4A2F00F29D76 /* ETOS Agent Watch WidgetsExtension */;
-		};
-		07B81F14302B56B00028B43A /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS Agent Watch WidgetsExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"/Localized: Localizable.strings",
 			);
 			target = 0743415B302B4A2F00F29D76 /* ETOS Agent Watch WidgetsExtension */;
 		};
@@ -237,11 +209,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		073CA6DD2E8CFD65004516A0 /* ETOS LLM Studio iOS App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				07434155302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Agent Share" target */,
-				07434156302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Agent Widgets" target */,
-				07434157302B49A100F29D76 /* Exceptions for "ETOS LLM Studio iOS App" folder in "ETOS Workspace Provider" target */,
-			);
 			path = "ETOS LLM Studio iOS App";
 			sourceTree = "<group>";
 		};
@@ -281,7 +248,6 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				0733CA502F23B450007931E8 /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS LLM Studio Watch App" target */,
-				07B81F14302B56B00028B43A /* Exceptions for "ETOS LLM Studio Watch App" folder in "ETOS Agent Watch WidgetsExtension" target */,
 			);
 			path = "ETOS LLM Studio Watch App";
 			sourceTree = "<group>";
