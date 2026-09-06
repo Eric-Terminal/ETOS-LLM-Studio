@@ -48,6 +48,12 @@ You can use only app tools, only MCP, or only Skills. Don't feel forced to enabl
 
 A search field ("Search tools") appears when you have many tools.
 
+### Device Support for Apple-Native Tools
+
+Native tools appear only when supported by the current device, OS version, and hardware. Apple Watch omits clipboard, AlarmKit alarms, NFC, audio-file transcription, the system photo library, Vision image analysis, and writes to contacts, calendars, or reminders. These native operations are not delegated to iPhone. Supported weather, HomeKit, Bluetooth, and contact-reading tools run on the watch itself.
+
+Listed tools may still require system permission, a network connection, or compatible accessories. Notification and media tools manage only notifications and players created by ETOS. Route calculation supports driving, walking, and cycling; use the Maps opening tool for public transit. The system URL tool on Apple Watch accepts only `tel` and `sms`.
+
 ### Approval Policies — Three Levels
 
 This is the **most important concept** in the tool system. It stops the AI from running risky operations without your consent.

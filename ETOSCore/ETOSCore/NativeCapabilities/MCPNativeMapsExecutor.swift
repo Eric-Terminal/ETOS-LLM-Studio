@@ -131,9 +131,14 @@ private extension MCPNativeMapsExecutor {
                 NSLocalizedString("url 必须是完整有效的 URL。", comment: "Invalid native open URL")
             )
         }
+        #if os(watchOS)
+        // openSystemURL 在 watchOS 只提供电话与短信入口。
+        let allowedSchemes: Set<String> = ["tel", "sms"]
+        #else
         let allowedSchemes: Set<String> = [
             "http", "https", "mailto", "tel", "sms", "facetime", "facetime-audio", "maps"
         ]
+        #endif
         guard allowedSchemes.contains(scheme) else {
             throw MCPNativeCapabilityError.invalidArgument(
                 NSLocalizedString("该 URL scheme 不在允许列表中。", comment: "Native open URL scheme denied")
@@ -147,7 +152,7 @@ private extension MCPNativeMapsExecutor {
         await MainActor.run {
             WKApplication.shared().openSystemURL(url)
         }
-        return ["opened": true, "url": url.absoluteString]
+        return ["requested": true, "url": url.absoluteString]
         #else
         throw MCPNativeCapabilityError.unavailable(
             NSLocalizedString("当前平台不能打开系统 URL。", comment: "System URL opening unavailable")
@@ -195,11 +200,10 @@ private extension MCPNativeMapsExecutor {
         switch value {
         case "automobile": return .automobile
         case "walking": return .walking
-        case "transit": return .transit
         case "cycling": return .cycling
         default:
             throw MCPNativeCapabilityError.invalidArgument(
-                NSLocalizedString("transport_type 必须是 automobile、walking、transit 或 cycling。", comment: "Invalid directions transport type")
+                NSLocalizedString("transport_type 必须是 automobile、walking 或 cycling。", comment: "Invalid directions transport type")
             )
         }
     }

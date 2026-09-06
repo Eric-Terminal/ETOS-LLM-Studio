@@ -501,7 +501,8 @@ actor MCPBuiltInPersonalDataServerEngine {
               let name = params["name"] as? String else {
             return errorToolResult(message: "Missing tool name")
         }
-        guard MCPBuiltInPersonalDataServer.toolIDs.contains(name) else {
+        guard MCPBuiltInPersonalDataServer.toolIDs.contains(name),
+              MCPBuiltInPersonalDataServer.isToolAvailableOnCurrentPlatform(name) else {
             return errorToolResult(message: "Unknown built-in personal data tool: \(name)")
         }
         let arguments = params["arguments"] as? [String: Any] ?? [:]

@@ -36,10 +36,7 @@ actor MCPNativeNFCExecutor {
             throw MCPNativeCapabilityError.unsupportedTool(toolName)
         }
         #else
-        return try await MCPNativeCapabilityCompanionRelay.shared.execute(
-            toolName: toolName,
-            arguments: arguments
-        )
+        throw MCPNativeCapabilityError.unsupportedTool(toolName)
         #endif
     }
 }

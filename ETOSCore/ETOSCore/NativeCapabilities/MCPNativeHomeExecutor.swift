@@ -250,7 +250,7 @@ private extension MCPNativeHomeExecutor {
 actor MCPNativeHomeExecutor {
     static let shared = MCPNativeHomeExecutor()
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
-        try await MCPNativeCapabilityCompanionRelay.shared.execute(toolName: toolName, arguments: arguments)
+        throw MCPNativeCapabilityError.unsupportedTool(toolName)
     }
 }
 #endif

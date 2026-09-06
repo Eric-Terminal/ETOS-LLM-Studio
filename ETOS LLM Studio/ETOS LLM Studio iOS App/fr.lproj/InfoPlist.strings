@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "Lit, crée et modifie les rappels autorisés lorsque vous utilisez explicitement un outil Rappels.";
 "NSRemindersUsageDescription" = "Lit, crée et modifie les rappels autorisés lorsque vous utilisez explicitement un outil Rappels.";
 "NSSpeechRecognitionUsageDescription" = "Convertit la parole en texte lorsque vous utilisez la saisie vocale ou la transcription.";
+"NSAlarmKitUsageDescription" = "Programme des alarmes uniquement lorsque vous utilisez explicitement un outil d’alarme et confirmez.";

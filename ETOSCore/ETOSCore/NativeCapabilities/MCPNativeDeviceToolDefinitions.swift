@@ -23,13 +23,17 @@ enum MCPNativeDeviceToolDefinitions {
         toolIDs.contains(toolID)
     }
 
+    static var availableDescriptions: [MCPToolDescription] {
+        descriptions.filter { MCPNativeCapabilityAvailability.isToolAvailableOnCurrentPlatform($0.toolId) }
+    }
+
     static var descriptions: [MCPToolDescription] {
         [
-            tool("clipboard.read", "读取当前剪贴板中的纯文本。watchOS 会在可达时委托给配对 iPhone。", object()),
-            tool("clipboard.write", "把纯文本写入剪贴板。该操作始终逐次确认；watchOS 会委托给配对 iPhone。", object([
+            tool("clipboard.read", "读取当前设备剪贴板中的纯文本。", object()),
+            tool("clipboard.write", "把纯文本写入当前设备的剪贴板，并始终逐次确认。", object([
                 "text": string("要写入剪贴板的文本。")
             ], required: ["text"])),
-            tool("clipboard.clear", "清空剪贴板。该操作始终逐次确认；watchOS 会委托给配对 iPhone。", object()),
+            tool("clipboard.clear", "清空当前设备的剪贴板，并始终逐次确认。", object()),
             tool("notifications.list_pending", "列出由当前应用登记、尚未触发的本地通知。", object()),
             tool("notifications.schedule", "登记当前应用的本地通知。正式调用时请求通知权限，且始终逐次确认。", object([
                 "identifier": string("通知 ID；省略时自动生成。"),
@@ -47,7 +51,7 @@ enum MCPNativeDeviceToolDefinitions {
             tool("notifications.remove_delivered", "从通知中心移除一个或多个当前应用的已送达通知。该操作始终逐次确认。", object([
                 "identifiers": stringArray("要移除的通知 ID。")
             ], required: ["identifiers"])),
-            tool("alarms.list", "列出当前应用通过 AlarmKit 建立的闹钟。仅 iOS 26 及更高版本可用；watchOS 委托给 iPhone，不会降级为通知。", object()),
+            tool("alarms.list", "列出当前应用通过 AlarmKit 建立的闹钟。仅 iOS 26 及更高版本可用。", object()),
             tool("alarms.schedule", "使用 AlarmKit 建立固定时间闹钟。仅 iOS 26 及更高版本可用，绝不降级为通知，并始终逐次确认。", object([
                 "title": string("闹钟标题。"),
                 "fire_date": string("ISO-8601 响铃时间。"),
@@ -62,7 +66,7 @@ enum MCPNativeDeviceToolDefinitions {
                 "source_longitude": number("起点经度。"),
                 "destination_latitude": number("终点纬度。"),
                 "destination_longitude": number("终点经度。"),
-                "transport_type": enumeration("交通方式。", ["automobile", "walking", "transit", "cycling"]),
+                "transport_type": enumeration("交通方式。", ["automobile", "walking", "cycling"]),
                 "alternates": boolean("是否返回备选路线。")
             ], required: ["source_latitude", "source_longitude", "destination_latitude", "destination_longitude"])),
             tool("maps.open", "在系统地图中打开地点或路线。该操作会切换应用并始终逐次确认。", object([
@@ -71,7 +75,7 @@ enum MCPNativeDeviceToolDefinitions {
                 "name": string("地点名称。"),
                 "directions_mode": enumeration("可选路线模式。", ["driving", "walking", "transit", "cycling"])
             ], required: ["latitude", "longitude"])),
-            tool("device.open_url", "使用系统打开受支持的 URL。仅允许 http、https、mailto、tel、sms、facetime、facetime-audio 与 maps，并始终逐次确认。", object([
+            tool("device.open_url", openURLDescription, object([
                 "url": string("要打开的完整 URL。")
             ], required: ["url"])),
             tool("device.get_status", "读取当前设备的系统版本、低电量模式、热状态、电池与可用存储等非跟踪状态。", object())
@@ -82,6 +86,14 @@ enum MCPNativeDeviceToolDefinitions {
                 inputSchema: description.schema
             )
         }
+    }
+
+    private static var openURLDescription: String {
+        #if os(watchOS)
+        return "使用系统打开电话或短信 URL。仅允许 tel 与 sms，并始终逐次确认。"
+        #else
+        return "使用系统打开受支持的 URL。仅允许 http、https、mailto、tel、sms、facetime、facetime-audio 与 maps，并始终逐次确认。"
+        #endif
     }
 
     private struct Description {

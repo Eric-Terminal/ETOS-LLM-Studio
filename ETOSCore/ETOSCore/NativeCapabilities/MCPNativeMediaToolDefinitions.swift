@@ -26,6 +26,10 @@ enum MCPNativeMediaToolDefinitions {
         toolIDs.contains(toolID)
     }
 
+    static var availableDescriptions: [MCPToolDescription] {
+        descriptions.filter { MCPNativeCapabilityAvailability.isToolAvailableOnCurrentPlatform($0.toolId) }
+    }
+
     static var descriptions: [MCPToolDescription] {
         definitions.map { definition in
             MCPToolDescription(
@@ -46,7 +50,7 @@ enum MCPNativeMediaToolDefinitions {
                 "volume": number("音量 0 到 1，默认 1。")
             ], required: ["text"])),
             tool("speech.stop", "停止 ETOS 当前发起的系统语音朗读，并始终逐次确认。", object()),
-            tool("speech.transcribe_file", "转写 Documents 中 app:// 音频文件。正式调用时申请语音识别权限；watchOS 委托给 iPhone。", object([
+            tool("speech.transcribe_file", "转写当前设备 Documents 中的 app:// 音频文件，正式调用时申请语音识别权限。", object([
                 "source": string("音频文件 app:// URI。"),
                 "locale": string("可选 BCP-47 识别语言代码。"),
                 "punctuation": boolean("是否自动添加标点，默认 true。")
@@ -102,8 +106,8 @@ enum MCPNativeMediaToolDefinitions {
             tool("bluetooth.disconnect", "断开当前会话或 Run 中的 BLE 外设并清理订阅。", object([
                 "peripheral_id": string("外设 UUID。")
             ], required: ["peripheral_id"])),
-            tool("nfc.scan", "显示系统 NFC 扫描界面并读取一次标签类型与标识。仅 iPhone 支持；watchOS 委托给 iPhone，并始终逐次确认。", object()),
-            tool("nfc.read_ndef", "显示系统 NFC 界面并读取一次 NDEF 消息。仅 iPhone 支持；watchOS 委托给 iPhone，并始终逐次确认。", object()),
+            tool("nfc.scan", "显示系统 NFC 扫描界面并读取一次标签类型与标识。需要支持 NFC 的 iPhone，并始终逐次确认。", object()),
+            tool("nfc.read_ndef", "显示系统 NFC 界面并读取一次 NDEF 消息。需要支持 NFC 的 iPhone，并始终逐次确认。", object()),
             tool("nfc.write_ndef", "预览并写入一次 NDEF 记录。必须显式 confirmed=true，仍会经过逐次审批和系统 NFC 界面。", object([
                 "records": ndefRecordsSchema(),
                 "confirmed": boolean("确认写入预览中的全部记录。")

@@ -283,11 +283,15 @@ public enum MCPBuiltInAppToolServer {
         }
 
         if category == .deviceOperations {
-            return MCPNativeDeviceToolDefinitions.descriptions
+            return includeUnavailablePlatformTools
+                ? MCPNativeDeviceToolDefinitions.descriptions
+                : MCPNativeDeviceToolDefinitions.availableDescriptions
         }
 
         if category == .mediaEnvironment {
-            return MCPNativeMediaToolDefinitions.descriptions
+            return includeUnavailablePlatformTools
+                ? MCPNativeMediaToolDefinitions.descriptions
+                : MCPNativeMediaToolDefinitions.availableDescriptions
         }
 
         if category == .visionLanguage {
@@ -673,6 +677,12 @@ actor MCPBuiltInAppToolServerEngine {
         var arguments = params["arguments"] as? [String: Any] ?? [:]
         let argumentsJSON: String
         do {
+            // 旧缓存或手动 MCP 请求也不能越过本机能力边界。
+            if category == .deviceOperations || category == .mediaEnvironment || category == .visionLanguage {
+                guard MCPNativeCapabilityAvailability.isToolAvailableOnCurrentPlatform(name) else {
+                    throw MCPNativeCapabilityError.unsupportedTool(name)
+                }
+            }
             if category == .conversation {
                 guard let rawSourceSessionID = arguments.removeValue(
                     forKey: MCPBuiltInAppToolServer.conversationSourceSessionIDArgument

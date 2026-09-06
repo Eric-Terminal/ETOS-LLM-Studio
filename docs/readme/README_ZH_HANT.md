@@ -79,7 +79,7 @@
 *   **工作區、掛載與環境變數**：每個會話有獨立工作區，可將 App、iCloud Drive 或使用者明確授權的外部資料夾以唯讀或讀寫方式掛載至 Linux。環境變數儲存在 GRDB 並於程序啟動時注入，提供給模型、日誌與診斷的副本可遮蔽敏感值。
 *   **統一檔案工具與本地 MCP**：現有檔案工具同時理解 `app://`、`linux://` 與 `mount://`。本地 stdio MCP 與 HTTP / SSE 伺服器共用管理頁、排序、工具開關與審批規則，並支援常見 `mcpServers` JSON 匯入匯出。
 *   **Browser Agent**：iOS 受控 WKWebView 支援會話隔離分頁、DOM / 輔助使用快照、點擊、輸入、捲動、JavaScript、截圖、下載與使用者接管；watchOS 會探測本機真實能力，並可在使用者開啟後將缺失操作委託給配對 iPhone。
-*   **64 個 Apple 原生工具**：依裝置、媒體與環境、個人資料、視覺與語言分為四組，涵蓋剪貼簿、通知、AlarmKit、地圖、裝置狀態、語音、媒體、WeatherKit、HomeKit、Bluetooth、NFC、聯絡人、照片、定位、Vision 與 NaturalLanguage。工具會回報真實平台可用性，寫入與外部副作用仍需逐次審批。
+*   **Apple 原生工具**：四組目錄共包含 64 項裝置、媒體與環境、個人資料、視覺與語言能力，依本機平台、系統版本和硬件顯示。watchOS 不顯示本機不支援的工具，也不透過 iPhone 代執行；天氣、HomeKit、藍牙等支援的能力在本機執行。寫入與外部副作用仍需逐次審批。
 *   **持久會話協作**：Agent 可建立隱藏子代理或可見協作會話，選擇等待結果、背景交付或完成後續寫目前會話。結果依 session / run / tool 歸屬，避免多會話並行時互相串線。
 *   **即時動態與背景完成通知**：iOS 會在鎖定畫面與動態島顯示 Chat / Agent 的執行、等待、完成或失敗狀態。App 進入背景後會使用 iOS 授予的有限執行時間繼續回覆或 Linux 任務；只有回覆確實在背景完成時才發送本地通知，系統掛起則會準確記錄為中斷。
 
@@ -180,7 +180,7 @@ ETOSCore/ETOSCore/                         ← 平台無關業務邏輯（481 �
 ├── Math/                               ← LaTeX/數學公式渲染引擎
 ├── MCP/                                ← MCP 客戶端、內建伺服器、伺服器儲存、Streamable HTTP / SSE 傳輸（基於官方 swift-sdk）
 ├── Memory/ + SimilaritySearch/         ← 本地 RAG、嵌入、分塊、SQLite 向量檢索
-├── NativeCapabilities/                 ← 64 個 Apple 原生能力的定義、執行器、權限與雙端委託
+├── NativeCapabilities/                 ← Apple 原生能力的定義、執行器、權限與本機可用性
 ├── Parsing/                            ← 請求頭與參數表達式解析
 ├── Persistence/                        ← GRDB 主庫/輔助庫、遷移、啟動備份、媒體與檔案儲存
 ├── Providers/                          ← Provider 模型、代理設定與 OpenAI / Anthropic / Gemini 適配器

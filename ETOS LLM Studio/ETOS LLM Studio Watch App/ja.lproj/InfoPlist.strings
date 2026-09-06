@@ -1,3 +1,6 @@
-"NSLocationWhenInUseUsageDescription" = "「バックグラウンド生成」が有効で AI が応答中の場合にのみ、位置情報のバックグラウンドアクティビティを維持します。座標の読み取り、保存、アップロードは行いません。";
+"NSLocationWhenInUseUsageDescription" = "位置ツールを明示的に使用したときに現在地を読み取り、バックグラウンド生成が有効な場合は応答を維持します。";
 "NSHealthShareUsageDescription" = "ヘルスケアツールを明示的に使用したとき、許可した健康、睡眠、運動データを読み取ります。";
 "NSHealthUpdateUsageDescription" = "ヘルスケアツールを明示的に使用したとき、許可した健康記録を書き込みます。";
+"NSBluetoothAlwaysUsageDescription" = "Bluetooth ツールを明示的に使用したときだけ、近くのデバイスを検索して接続します。";
+"NSHomeKitUsageDescription" = "ホームツールを明示的に使用したときだけ、許可したホームとアクセサリを読み取り、操作します。";
+"NSContactsUsageDescription" = "連絡先ツールを明示的に呼び出した場合のみ、許可された連絡先を読み取ります。";

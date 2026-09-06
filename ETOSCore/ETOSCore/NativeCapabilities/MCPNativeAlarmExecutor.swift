@@ -14,12 +14,7 @@ import SwiftUI
 
 actor MCPNativeAlarmExecutor {
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
-        #if os(watchOS)
-        return try await MCPNativeCapabilityCompanionRelay.shared.execute(
-            toolName: toolName,
-            arguments: arguments
-        )
-        #elseif canImport(AlarmKit) && os(iOS)
+        #if canImport(AlarmKit) && os(iOS)
         guard #available(iOS 26.0, *) else {
             throw unavailableError
         }

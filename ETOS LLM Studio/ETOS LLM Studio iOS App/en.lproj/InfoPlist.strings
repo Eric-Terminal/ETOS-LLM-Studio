@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "Reads, creates, and updates authorized reminders when you explicitly use a Reminders tool.";
 "NSRemindersUsageDescription" = "Reads, creates, and updates authorized reminders when you explicitly use a Reminders tool.";
 "NSSpeechRecognitionUsageDescription" = "Converts speech to text when you use voice input or explicitly use transcription.";
+"NSAlarmKitUsageDescription" = "Schedule alarms only when you explicitly invoke an alarm tool and confirm.";

@@ -142,8 +142,8 @@ extension MCPManager {
         case .builtInPersonalData:
             return MCPBuiltInPersonalDataServer.isToolAvailableOnCurrentPlatform(toolID)
         case .builtInAppTool(let category):
-            guard category == .visionLanguage else { return true }
-            return MCPNativeVisionLanguageToolDefinitions.isToolAvailableOnCurrentPlatform(toolID)
+            guard category == .deviceOperations || category == .mediaEnvironment || category == .visionLanguage else { return true }
+            return MCPNativeCapabilityAvailability.isToolAvailableOnCurrentPlatform(toolID)
         default:
             return true
         }

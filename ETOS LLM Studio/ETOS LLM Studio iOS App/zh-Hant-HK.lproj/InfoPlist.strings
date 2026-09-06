@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "AI 工具在你明確呼叫提醒事項功能時，需要讀取、建立和修改你授權的提醒事項。";
 "NSRemindersUsageDescription" = "AI 工具在你明確呼叫提醒事項功能時，需要讀取、建立和修改你授權的提醒事項。";
 "NSSpeechRecognitionUsageDescription" = "在你使用語音輸入或明確呼叫轉錄工具時，把語音轉換為文字。";
+"NSAlarmKitUsageDescription" = "只在你明確呼叫鬧鐘工具並確認後，建立鬧鐘。";

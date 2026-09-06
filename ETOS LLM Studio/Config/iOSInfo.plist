@@ -92,6 +92,8 @@
 	<string>LocalBuild</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Schedule alarms only when you explicitly invoke an alarm tool and confirm.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Scan and connect to nearby Bluetooth devices only when you explicitly invoke a Bluetooth tool.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

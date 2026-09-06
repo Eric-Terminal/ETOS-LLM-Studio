@@ -2,11 +2,38 @@
 // NativeCapabilityInfrastructureTests.swift
 // ============================================================================
 
+import Foundation
 import Testing
 @testable import ETOSCore
 
 @Suite("原生 MCP 能力基础设施测试")
 struct NativeCapabilityInfrastructureTests {
+    @Test("宿主权限配置覆盖已提供的原生工具")
+    func nativeHostConfigurationDeclaresRequiredCapabilities() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let appRoot = root.appendingPathComponent("ETOS LLM Studio")
+        let iOSInfo = try plist(at: appRoot.appendingPathComponent("Config/iOSInfo.plist"))
+        let watchInfo = try plist(at: appRoot.appendingPathComponent("ETOS LLM Studio Watch App/Info.plist"))
+        #expect((iOSInfo["NSAlarmKitUsageDescription"] as? String)?.isEmpty == false)
+        for key in ["NSBluetoothAlwaysUsageDescription", "NSContactsUsageDescription", "NSHomeKitUsageDescription"] {
+            #expect((watchInfo[key] as? String)?.isEmpty == false)
+        }
+        for path in [
+            "ETOS LLM Studio iOS App/ETOS LLM Studio iOS App.entitlements",
+            "ETOS LLM Studio AppRelease.entitlements",
+            "ETOS LLM Studio Watch App/ETOS LLM Studio Watch App.entitlements"
+        ] {
+            let entitlements = try plist(at: appRoot.appendingPathComponent(path))
+            #expect(entitlements["com.apple.developer.weatherkit"] as? Bool == true)
+            #expect(entitlements["com.apple.developer.homekit"] as? Bool == true)
+        }
+    }
+
+    private func plist(at url: URL) throws -> [String: Any] {
+        try #require(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any])
+    }
+
     @Test("四类原生服务器公开完整且无重复的工具目录")
     func nativeToolCatalogsAreComplete() {
         let personal = Set(MCPNativePersonalDataToolDefinitions.descriptions.map(\.toolId))

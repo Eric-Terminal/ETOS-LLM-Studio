@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "Lee, crea y modifica recordatorios autorizados cuando usas explícitamente una herramienta de Recordatorios.";
 "NSRemindersUsageDescription" = "Lee, crea y modifica recordatorios autorizados cuando usas explícitamente una herramienta de Recordatorios.";
 "NSSpeechRecognitionUsageDescription" = "Convierte voz en texto cuando usas la entrada de voz o la transcripción.";
+"NSAlarmKitUsageDescription" = "Programa alarmas solo cuando utilizas explícitamente una herramienta de alarma y confirmas.";

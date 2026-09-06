@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "リマインダーツールを明示的に使用したとき、許可したリマインダーを読み取り、作成、変更します。";
 "NSRemindersUsageDescription" = "リマインダーツールを明示的に使用したとき、許可したリマインダーを読み取り、作成、変更します。";
 "NSSpeechRecognitionUsageDescription" = "音声入力または文字起こしを使用するとき、音声をテキストに変換します。";
+"NSAlarmKitUsageDescription" = "アラームツールを明示的に呼び出し、確認した場合のみアラームを作成します。";

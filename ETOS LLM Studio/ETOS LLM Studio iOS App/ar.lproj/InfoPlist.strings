@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "يقرأ التذكيرات المصرح بها وينشئها ويعدّلها عند استخدام أداة التذكيرات صراحةً.";
 "NSRemindersUsageDescription" = "يقرأ التذكيرات المصرح بها وينشئها ويعدّلها عند استخدام أداة التذكيرات صراحةً.";
 "NSSpeechRecognitionUsageDescription" = "يحوّل الكلام إلى نص عند استخدام الإدخال الصوتي أو النسخ صراحةً.";
+"NSAlarmKitUsageDescription" = "ينشئ منبهات فقط عندما تستدعي أداة منبه صراحةً وتؤكد ذلك.";

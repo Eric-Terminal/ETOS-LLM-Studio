@@ -3,7 +3,7 @@
 // ============================================================================
 // ETOS LLM Studio
 //
-// 剪贴板只读写纯文本；watchOS 通过配对 iPhone 执行。
+// 剪贴板只读写当前设备的纯文本。
 // ============================================================================
 
 import Foundation
@@ -13,27 +13,21 @@ import UIKit
 
 actor MCPNativeClipboardExecutor {
     func execute(toolName: String, arguments: [String: Any]) async throws -> [String: Any] {
-        #if os(watchOS)
-        return try await MCPNativeCapabilityCompanionRelay.shared.execute(
-            toolName: toolName,
-            arguments: arguments
-        )
-        #elseif canImport(UIKit)
+        #if os(iOS) && canImport(UIKit)
         return try await MainActor.run {
             switch toolName {
             case "clipboard.read":
                 let text = UIPasteboard.general.string
                 return [
                     "text": text ?? NSNull(),
-                    "has_text": text != nil,
-                    "delegated_to_iphone": false
+                    "has_text": text != nil
                 ]
             case "clipboard.write":
                 UIPasteboard.general.string = try arguments.nativeRequiredString("text")
-                return ["written": true, "delegated_to_iphone": false]
+                return ["written": true]
             case "clipboard.clear":
                 UIPasteboard.general.items = []
-                return ["cleared": true, "delegated_to_iphone": false]
+                return ["cleared": true]
             default:
                 throw MCPNativeCapabilityError.unsupportedTool(toolName)
             }

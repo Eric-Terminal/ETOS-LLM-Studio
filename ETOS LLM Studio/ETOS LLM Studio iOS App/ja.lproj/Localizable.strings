@@ -4174,7 +4174,7 @@
 "已下载 %@ / %@" = "ダウンロード済み %@ / %@";
 
 "先看当前会话能用什么，再按工具来源进入细分设置。" = "ツールを使うと、AI が情報を調べたり、ファイルを操作したり、ショートカットを実行できます。使わせるツールをここで選びます。";
-"工具中心新版说明正文" = "ツールを使うと、情報検索、ファイルの読み取り、ショートカット実行などを AI に頼めます。利用元のスイッチと必要なツールを有効にし、チャットで普段どおりに作業を伝えます。\n\n「設定で有効」は設定上オンであること、「この会話で利用可能」は会話ごとの制限も含めた状態です。見つからないツールは、会話のツール制限と利用元のスイッチを確認します。MCP ツールはサーバーへの接続も必要です。\n\nツールの詳細では、実行前に確認するか、許可するか、拒否するかを選べます。「有効なもののみ表示」は一覧の絞り込みで、他のツールを無効にはしません。記憶ツールには記憶のスイッチも関わります。";
+"工具中心新版说明正文" = "ツールを使うと、情報検索、ファイルの読み取り、ショートカット実行などを AI に頼めます。利用元のスイッチと必要なツールを有効にし、チャットで普段どおりに作業を伝えます。\n\n「設定で有効」は設定上オンであること、「この会話で利用可能」は会話ごとの制限も含めた状態です。見つからないツールは、会話のツール制限と利用元のスイッチを確認します。MCP ツールはサーバーへの接続も必要です。\n\nツールの詳細では、実行前に確認するか、許可するか、拒否するかを選べます。「有効なもののみ表示」は一覧の絞り込みで、他のツールを無効にはしません。記憶ツールには記憶のスイッチも関わります。\n\nApple のネイティブツールは、このデバイス、OS バージョン、ハードウェアが対応している場合にのみ表示されます。Apple Watch は非対応のネイティブツールを iPhone に代行させません。表示されるツールでも、システムの許可、ネットワーク、対応アクセサリが必要な場合があります。通知とメディアのツールは ETOS が作成したものだけを管理します。経路計算は自動車、徒歩、自転車に対応します。公共交通の経路はマップを開くツールで確認できます。Apple Watch のシステム URL ツールは tel と sms のみ受け付けます。";
 "拓展工具已按用途分组；进入分类后再查看具体工具、启用状态与审批策略。" = "App tools are grouped by purpose. Enter a category to review specific tools, enablement, and approval policy.";
 "分类 %d 个" = "%d categories";
 "按用途查看本地工具，先选类别，再调整具体工具。" = "Browse local tools by purpose. Choose a category first, then adjust specific tools.";
@@ -7439,3 +7439,16 @@
 "已保存结构化控制，后续请求将使用更新后的配置。" = "構造化コントロールを保存しました。次回以降のリクエストには更新した設定が使われます。";
 "guide.controls.introduction" = "ページガイドに、思考予算、温度、カスタム JSON などのリクエストパラメータ用のスイッチ、選択肢グループ、スライダーの作成を依頼できます。希望を伝え、変更案を確認して適用してください。初期値とチャットで現在選択している値は別です。現在の値も切り替える場合は、その旨を伝えてください。対応するパラメータはプロバイダーとモデルによって異なります。";
 "guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";
+
+"读取当前设备剪贴板中的纯文本。" = "このデバイスのクリップボードからプレーンテキストを読み取ります。";
+"把纯文本写入当前设备的剪贴板，并始终逐次确认。" = "このデバイスのクリップボードにプレーンテキストを書き込みます。毎回確認が必要です。";
+"清空当前设备的剪贴板，并始终逐次确认。" = "このデバイスのクリップボードを消去します。毎回確認が必要です。";
+"列出当前应用通过 AlarmKit 建立的闹钟。仅 iOS 26 及更高版本可用。" = "このアプリが AlarmKit で作成したアラームを一覧表示します。iOS 26 以降が必要です。";
+"使用系统打开电话或短信 URL。仅允许 tel 与 sms，并始终逐次确认。" = "電話または SMS の URL をシステムで開きます。tel と sms のみ許可され、毎回確認が必要です。";
+"转写当前设备 Documents 中的 app:// 音频文件，正式调用时申请语音识别权限。" = "このデバイスの Documents にある app:// 音声ファイルを文字起こしします。呼び出し時に音声認識の許可を求めます。";
+"显示系统 NFC 扫描界面并读取一次标签类型与标识。需要支持 NFC 的 iPhone，并始终逐次确认。" = "システムの NFC スキャン画面でタグの種類と識別子を一度読み取ります。NFC 対応の iPhone と毎回の確認が必要です。";
+"显示系统 NFC 界面并读取一次 NDEF 消息。需要支持 NFC 的 iPhone，并始终逐次确认。" = "システムの NFC 画面で NDEF メッセージを一度読み取ります。NFC 対応の iPhone と毎回の確認が必要です。";
+"transport_type 必须是 automobile、walking 或 cycling。" = "transport_type は automobile、walking、cycling のいずれかにしてください。";
+"不支持的原生工具：%@" = "未対応のネイティブツール：%@";
+"该 URL scheme 不在允许列表中。" = "この URL スキームは許可されていません。";
+"使用系统打开受支持的 URL。仅允许 http、https、mailto、tel、sms、facetime、facetime-audio 与 maps，并始终逐次确认。" = "対応する URL をシステムで開きます。http、https、mailto、tel、sms、facetime、facetime-audio、maps のみ使用でき、毎回確認が必要です。";

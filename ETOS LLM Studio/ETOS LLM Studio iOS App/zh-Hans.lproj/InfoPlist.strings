@@ -16,3 +16,4 @@
 "NSRemindersFullAccessUsageDescription" = "AI 工具在你明确调用提醒事项能力时，需要读取、创建和修改你授权的提醒事项。";
 "NSRemindersUsageDescription" = "AI 工具在你明确调用提醒事项能力时，需要读取、创建和修改你授权的提醒事项。";
 "NSSpeechRecognitionUsageDescription" = "在你使用语音输入或明确调用转写工具时，把语音转换为文本。";
+"NSAlarmKitUsageDescription" = "仅在你明确调用闹钟工具并确认后，创建闹钟。";

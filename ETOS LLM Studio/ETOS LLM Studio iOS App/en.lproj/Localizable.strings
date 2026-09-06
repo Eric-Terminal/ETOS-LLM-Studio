@@ -4227,7 +4227,7 @@
 "已下载 %@ / %@" = "Downloaded %@ / %@";
 
 "先看当前会话能用什么，再按工具来源进入细分设置。" = "Tools let the AI look things up, work with files or run shortcuts. Choose which ones it can use here.";
-"工具中心新版说明正文" = "Tools let the AI take actions as well as answer, such as searching for information, reading files or running shortcuts. Choose a source, enable its main switch and the tools you need, then describe your task in normal conversation.\n\n“Enabled in settings” means a tool is switched on. “Available in this conversation” also accounts for this chat’s restrictions. If a tool is missing, check the conversation’s tool block and its source switch. MCP tools also need a working server connection.\n\nOpen a tool’s details to choose whether to ask before use, allow it or deny it. “Show enabled only” filters the list without disabling anything. Memory tools also depend on the memory switch.";
+"工具中心新版说明正文" = "Tools let the AI take actions as well as answer, such as searching for information, reading files or running shortcuts. Choose a source, enable its main switch and the tools you need, then describe your task in normal conversation.\n\n“Enabled in settings” means a tool is switched on. “Available in this conversation” also accounts for this chat’s restrictions. If a tool is missing, check the conversation’s tool block and its source switch. MCP tools also need a working server connection.\n\nOpen a tool’s details to choose whether to ask before use, allow it or deny it. “Show enabled only” filters the list without disabling anything. Memory tools also depend on the memory switch.\n\nApple-native tools appear only when supported by this device, OS version and hardware. Apple Watch does not run unsupported native tools through iPhone. A listed tool may still require system permission, a network connection or compatible accessories. Notifications and media tools manage only items created by ETOS. Route calculation supports driving, walking and cycling; use the Maps opening tool for public transit. On Apple Watch, the system URL tool accepts only tel and sms.";
 "拓展工具已按用途分组；进入分类后再查看具体工具、启用状态与审批策略。" = "App tools are grouped by purpose. Enter a category to review specific tools, enablement, and approval policy.";
 "分类 %d 个" = "%d categories";
 "按用途查看本地工具，先选类别，再调整具体工具。" = "Browse local tools by purpose. Choose a category first, then adjust specific tools.";
@@ -7446,3 +7446,16 @@
 "已保存结构化控制，后续请求将使用更新后的配置。" = "Structured controls saved. Future requests will use the updated configuration.";
 "guide.controls.introduction" = "You can ask the page guide to create a switch, preset group or slider for request parameters such as reasoning budgets, temperature or custom JSON. Explain what you want, then review and confirm the proposed changes. Defaults and the current chat selection are separate; say whether you also want to switch the current value. Available parameters depend on your provider and model.";
 "guide.controls.tool.description" = "Propose creating, updating or explicitly deleting structured request controls on this model. Omit id to create; use an existing id to patch only supplied fields. Payloads are arbitrary JSON objects, not limited to reasoning. Supplied payload/options replace that field; omitted fields and hidden credentials are preserved. options is a complete list with stable option IDs. current_* changes the current selection, while default_* only changes defaults. Requires native user confirmation before saving. Read model-request-body first; inspect exact-version source if app behavior is unclear.";
+
+"读取当前设备剪贴板中的纯文本。" = "Read plain text from this device's clipboard.";
+"把纯文本写入当前设备的剪贴板，并始终逐次确认。" = "Write plain text to this device's clipboard. Confirmation is required each time.";
+"清空当前设备的剪贴板，并始终逐次确认。" = "Clear this device's clipboard. Confirmation is required each time.";
+"列出当前应用通过 AlarmKit 建立的闹钟。仅 iOS 26 及更高版本可用。" = "List alarms created by this app with AlarmKit. Requires iOS 26 or later.";
+"使用系统打开电话或短信 URL。仅允许 tel 与 sms，并始终逐次确认。" = "Ask the system to open a phone or text-message URL. Only tel and sms are allowed; confirmation is required each time.";
+"转写当前设备 Documents 中的 app:// 音频文件，正式调用时申请语音识别权限。" = "Transcribe an app:// audio file in this device's Documents folder. Requests speech recognition permission when called.";
+"显示系统 NFC 扫描界面并读取一次标签类型与标识。需要支持 NFC 的 iPhone，并始终逐次确认。" = "Show the system NFC scanner and read one tag's type and identifier. Requires an NFC-capable iPhone and confirmation each time.";
+"显示系统 NFC 界面并读取一次 NDEF 消息。需要支持 NFC 的 iPhone，并始终逐次确认。" = "Show the system NFC interface and read one NDEF message. Requires an NFC-capable iPhone and confirmation each time.";
+"transport_type 必须是 automobile、walking 或 cycling。" = "transport_type must be automobile, walking, or cycling.";
+"不支持的原生工具：%@" = "Unsupported native tool: %@";
+"该 URL scheme 不在允许列表中。" = "This URL scheme is not allowed.";
+"使用系统打开受支持的 URL。仅允许 http、https、mailto、tel、sms、facetime、facetime-audio 与 maps，并始终逐次确认。" = "Ask the system to open a supported URL. Only http, https, mailto, tel, sms, facetime, facetime-audio and maps are allowed; confirmation is required each time.";

@@ -27,19 +27,6 @@ actor MCPNativeSpeechExecutor {
             throw MCPNativeCapabilityError.unsupportedTool(toolName)
         }
     }
-
-    #if os(iOS) && canImport(Speech)
-    func executeRelayedTranscription(
-        arguments: [String: Any],
-        fileURL: URL
-    ) async throws -> [String: Any] {
-        try await transcribe(
-            fileURL: fileURL,
-            source: arguments.nativeString("source") ?? fileURL.lastPathComponent,
-            arguments: arguments
-        )
-    }
-    #endif
 }
 
 private extension MCPNativeSpeechExecutor {
@@ -80,10 +67,7 @@ private extension MCPNativeSpeechExecutor {
         let url = try MCPNativeFileAccess.readableURL(for: source)
         return try await transcribe(fileURL: url, source: source, arguments: arguments)
         #else
-        return try await MCPNativeCapabilityCompanionRelay.shared.execute(
-            toolName: "speech.transcribe_file",
-            arguments: arguments
-        )
+        throw MCPNativeCapabilityError.unsupportedTool("speech.transcribe_file")
         #endif
     }
 
