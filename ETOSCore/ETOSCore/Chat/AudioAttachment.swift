@@ -8,7 +8,9 @@
 
 import Foundation
 
-public struct AudioAttachment: Sendable {
+public struct AudioAttachment: Sendable, Identifiable {
+    // 同名录音也可能是新的草稿，试听生命周期不能只依赖文件名。
+    public let id = UUID()
     public let data: Data
     public let mimeType: String
     public let format: String

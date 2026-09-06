@@ -188,12 +188,18 @@ extension ContentView {
             }
 
             if let audio = viewModel.pendingAudioAttachment {
-                WatchPendingAttachmentRowView(
-                    systemImage: "waveform",
-                    title: NSLocalizedString("语音文件", comment: ""),
-                    fileName: audio.fileName,
-                    tint: .blue
-                )
+                NavigationLink {
+                    WatchAudioAttachmentPreviewView(attachment: audio, viewModel: viewModel)
+                        .id(audio.id)
+                } label: {
+                    WatchPendingAttachmentRowView(
+                        systemImage: "play.circle",
+                        title: NSLocalizedString("试听语音", value: "Preview Audio", comment: "手表草稿音频试听入口"),
+                        fileName: audio.fileName,
+                        tint: .blue
+                    )
+                }
+                .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
