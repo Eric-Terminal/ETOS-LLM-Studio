@@ -22,7 +22,6 @@ const zh = {
     localModel: '端侧 LLM',
     features: '功能矩阵',
     mcpSkills: '工具与技能',
-    personalize: '个性化',
     privacy: '隐私与安全',
     tech: '技术栈',
     docs: '文档',
@@ -194,22 +193,6 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
       }
     ]
   },
-  personalize: {
-    title: '一眼认得出，是你的 Studio。',
-    lead: '上传一张壁纸、挑一个对话框颜色、要不要 AI 气泡——右边这台实时跟着变。',
-    pickerHint: '调下面三项，右侧实时预览',
-    wallpaperLabel: '背景图层',
-    wallpaperAction: '选择背景图',
-    colorLabel: '颜色配置',
-    hideBubbleLabel: '关闭助手气泡',
-    reset: '恢复默认',
-    chat: {
-      title: '问候与帮助',
-      user: '你好',
-      bot: '你好！👋\n很高兴见到你，有什么想聊的或者需要帮忙的吗？无论是端侧 GGUF 调参、MCP 工具配置、Agent Skills 导入，还是日常问答，都可以直接告诉我。',
-      placeholder: '输入消息…'
-    }
-  },
   features: {
     title: '不是套壳。是把模型当 Apple 平台公民来设计。',
     lead: '主界面只留聊天，其余全部收进设置。下面这些是你装好之后会陆续找到的能力。',
@@ -336,7 +319,6 @@ const en = {
     localModel: 'On-Device LLM',
     features: 'Features',
     mcpSkills: 'MCP & Skills',
-    personalize: 'Personalize',
     privacy: 'Privacy & Security',
     tech: 'Stack',
     docs: 'Docs',
@@ -508,22 +490,6 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
       }
     ]
   },
-  personalize: {
-    title: 'Unmistakably yours.',
-    lead: 'Upload a wallpaper, pick a bubble color, keep or drop the AI bubble — the phone on the right updates live.',
-    pickerHint: 'Tweak these three; preview on the right',
-    wallpaperLabel: 'Background Layer',
-    wallpaperAction: 'Select background image',
-    colorLabel: 'Color profiles',
-    hideBubbleLabel: 'Hide Assistant Bubbles',
-    reset: 'Reset to default',
-    chat: {
-      title: 'Greetings & Help',
-      user: 'Hi',
-      bot: "Hi! 👋\nGreat to meet you — anything you'd like to chat about or need a hand with? GGUF local model tuning, MCP tools, Agent Skills, or prompt engineering, just ask!",
-      placeholder: 'Message'
-    }
-  },
   features: {
     title: "Not a wrapper. A native Apple-platform citizen.",
     lead: 'The main view is just chat. Everything else lives in Settings. Here is what you will gradually find.',
@@ -650,7 +616,6 @@ const ja = {
     localModel: 'ローカル LLM',
     features: '機能',
     mcpSkills: 'ツールとスキル',
-    personalize: 'カスタマイズ',
     privacy: 'プライバシー',
     tech: '技術スタック',
     docs: 'ドキュメント',
@@ -822,22 +787,6 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
       }
     ]
   },
-  personalize: {
-    title: 'あなただけの Studio。',
-    lead: '壁紙をアップロードし、バブルの色を選び、AI バブルの表示をカスタマイズ。右側のプレビューがリアルタイムで更新されます。',
-    pickerHint: '下で調整、右側でリアルタイム確認',
-    wallpaperLabel: '背景レイヤー',
-    wallpaperAction: '背景画像を選択',
-    colorLabel: 'カラープロファイル',
-    hideBubbleLabel: '助手バブルを非表示',
-    reset: 'デフォルトに戻す',
-    chat: {
-      title: '挨拶とサポート',
-      user: 'こんにちは',
-      bot: 'こんにちは！👋\n何かお手伝いできることはありますか？ローカル GGUF モデルの調整、MCP ツール、Agent Skills のインポートなど、何でもお気軽にどうぞ！',
-      placeholder: 'メッセージを入力…'
-    }
-  },
   features: {
     title: '単なる Web ラッパーではありません。',
     lead: 'メイン画面はチャットのみ。その他はすべて設定に集約。',
@@ -955,7 +904,6 @@ const ru = {
     localModel: 'Локальный LLM',
     features: 'Возможности',
     mcpSkills: 'MCP и Инструменты',
-    personalize: 'Персонализация',
     privacy: 'Конфиденциальность',
     tech: 'Стек',
     docs: 'Доки',
@@ -1127,22 +1075,6 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
       }
     ]
   },
-  personalize: {
-    title: 'Ваш уникальный Studio.',
-    lead: 'Загрузите обои, выберите цвет баббла, настройте стиль AI — предпросмотр справа меняется в реальном времени.',
-    pickerHint: 'Настройте элементы слева',
-    wallpaperLabel: 'Фоновый слой',
-    wallpaperAction: 'Выбрать обои',
-    colorLabel: 'Цветовой профиль',
-    hideBubbleLabel: 'Скрыть баббл ассистента',
-    reset: 'Сбросить',
-    chat: {
-      title: 'Приветствие',
-      user: 'Привет',
-      bot: 'Привет! 👋\nЧем я могу помочь? Локальные GGUF модели, MCP инструменты, Agent Skills или промпты — обращайтесь!',
-      placeholder: 'Сообщение…'
-    }
-  },
   features: {
     title: 'Не просто оболочка. Нативный гражданин экосистемы Apple.',
     lead: 'Главный экран — это только чат. Всё остальное бережно убрано в Настройки.',
@@ -1260,7 +1192,6 @@ const zhHant = {
     localModel: '端側 LLM',
     features: '功能矩陣',
     mcpSkills: '工具與技能',
-    personalize: '個性化',
     privacy: '隱私與安全',
     tech: '技術棧',
     docs: '文檔',
@@ -1431,22 +1362,6 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
 );`
       }
     ]
-  },
-  personalize: {
-    title: '一眼認得出，是你的 Studio。',
-    lead: '上傳一張桌布、挑一個對話框顏色、要不要 AI 氣泡——右邊這台實時跟著變。',
-    pickerHint: '調下面三項，右側實時預覽',
-    wallpaperLabel: '背景圖層',
-    wallpaperAction: '選擇背景圖',
-    colorLabel: '顏色配置',
-    hideBubbleLabel: '關閉助手氣泡',
-    reset: '恢復預設',
-    chat: {
-      title: '問候與幫助',
-      user: '你好',
-      bot: '你好！👋\n很高興見到你，有什麼想聊的或者需要幫忙的嗎？無論是端側 GGUF 調參、MCP 工具配置、Agent Skills 導入，還是日常問答，都可以直接告訴我。',
-      placeholder: '輸入訊息…'
-    }
   },
   features: {
     title: '不是套殼。是把模型當 Apple 平台公民來設計。',
