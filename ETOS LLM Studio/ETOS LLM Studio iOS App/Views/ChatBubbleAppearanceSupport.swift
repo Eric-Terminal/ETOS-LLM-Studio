@@ -179,6 +179,11 @@ extension ChatBubble {
             }
             .buttonStyle(.plain)
             .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
+        case .readAloud:
+            MessageReadAloudButton(messageID: message.id) { messageState.message }
+                .etFont(.system(size: 13 * messageActionBarFontScale))
+                .fontWeight(.semibold)
+                .messageActionBarItemStyle(foreground: messageActionBarForegroundColor)
         case .requestTime:
             Label(messageRequestTimeText, systemImage: item.systemImage)
                 .etFont(.system(size: 12 * messageActionBarFontScale))
@@ -258,6 +263,8 @@ extension ChatBubble {
             return canRetry
         case .copyMessage:
             return !message.content.isEmpty
+        case .readAloud:
+            return MessageActionBarAvailability.canReadAloud(message)
         case .requestTime:
             return messageRequestDate != nil
         case .inputTokens:

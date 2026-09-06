@@ -7317,3 +7317,6 @@ If seulement le Archiver state changes, Aucun re-embedding est performed.";
 "正在准备试听…" = "Préparation de l’aperçu…";
 "无法试听此音频，请重新录制或选择其他文件。" = "Impossible d’écouter cet audio. Enregistrez à nouveau ou choisissez un autre fichier.";
 "转动数码表冠调整进度。试听不会发送语音。" = "Tournez la Digital Crown pour ajuster la position. L’écoute n’envoie pas l’audio.";
+
+// 功能栏朗读快捷入口
+"添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。" = "Ajoutez « Lire le message » pour démarrer ou arrêter la lecture directement sous les messages de l’assistant.";

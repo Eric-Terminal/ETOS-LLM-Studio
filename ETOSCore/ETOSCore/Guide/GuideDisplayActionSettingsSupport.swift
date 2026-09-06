@@ -9,10 +9,12 @@
 import Foundation
 
 public enum GuideDisplayActionSettingsSupport {
-    public static let messageActionItemsSchema: JSONValue = stringArraySchema(
-        values: MessageActionBarItem.allCases.map(\.rawValue),
-        minimumCount: 0
-    )
+    public static func messageActionItemsSchema(for role: MessageActionBarRole) -> JSONValue {
+        stringArraySchema(
+            values: MessageActionBarItem.supportedItems(for: role).map(\.rawValue),
+            minimumCount: 0
+        )
+    }
 
     public static let watchInputActionsSchema: JSONValue = stringArraySchema(
         values: WatchInputQuickAction.allCases.map(\.rawValue),

@@ -7240,3 +7240,6 @@
 "正在准备试听…" = "Preparing preview…";
 "无法试听此音频，请重新录制或选择其他文件。" = "This audio cannot be previewed. Record again or choose another file.";
 "转动数码表冠调整进度。试听不会发送语音。" = "Turn the Digital Crown to seek. Previewing does not send the audio.";
+
+// 功能栏朗读快捷入口
+"添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。" = "Add Read Message to start or stop reading directly below assistant messages.";

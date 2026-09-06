@@ -40,7 +40,10 @@ struct MessageActionBarSettingsView: View {
         .guideSettingsPageContext(
             id: "settings-message-action-bar",
             title: NSLocalizedString("功能栏自定义", comment: "消息功能栏向导上下文标题"),
-            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            documents: [
+                GuideDocumentReference(id: "settings-display", title: "Display Settings"),
+                GuideDocumentReference(id: "tts", title: "Text to Speech")
+            ],
             settings: actionBarGuideSettings
         )
         .toolbar {
@@ -57,7 +60,7 @@ struct MessageActionBarSettingsView: View {
             .json(
                 "items",
                 label: NSLocalizedString("已启用项目", comment: "消息功能栏向导字段"),
-                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema,
+                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema(for: selectedRole),
                 get: { GuideDisplayActionSettingsSupport.messageActionItemsValue(selectedItems) },
                 normalize: GuideDisplayActionSettingsSupport.normalizeMessageActionItems,
                 set: { value in
@@ -150,7 +153,7 @@ struct MessageActionBarSettingsView: View {
     }
 
     private var availableItemsSection: some View {
-        Section(NSLocalizedString("可添加项目", comment: "")) {
+        Section {
             if availableItems.isEmpty {
                 Text(NSLocalizedString("所有项目都已加入。", comment: ""))
                     .foregroundStyle(.secondary)
@@ -162,6 +165,14 @@ struct MessageActionBarSettingsView: View {
                         Label(item.title, systemImage: item.systemImage)
                     }
                 }
+            }
+        } header: {
+            Text(NSLocalizedString("可添加项目", comment: ""))
+        } footer: {
+            if selectedRole == .assistant {
+                Text(NSLocalizedString("添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。", value: "Add Read Message to start or stop reading directly below assistant messages.", comment: "功能栏朗读说明"))
+                    .etFont(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -263,6 +274,8 @@ extension MessageActionBarItem {
             return NSLocalizedString("快捷重试", comment: "")
         case .copyMessage:
             return NSLocalizedString("复制消息", comment: "")
+        case .readAloud:
+            return NSLocalizedString("朗读消息", value: "Read Message", comment: "功能栏朗读项目")
         case .requestTime:
             return NSLocalizedString("请求时间", comment: "")
         case .inputTokens:
@@ -282,6 +295,8 @@ extension MessageActionBarItem {
             return "arrow.clockwise"
         case .copyMessage:
             return "doc.on.doc"
+        case .readAloud:
+            return "speaker.wave.2"
         case .requestTime:
             return "clock"
         case .inputTokens:
@@ -301,6 +316,8 @@ extension MessageActionBarItem {
             return .orange
         case .copyMessage:
             return .blue
+        case .readAloud:
+            return .teal
         case .requestTime:
             return .secondary
         case .inputTokens:

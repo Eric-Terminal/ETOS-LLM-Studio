@@ -90,7 +90,7 @@ struct WatchMessageActionBarSettingsView: View {
                 }
             }
 
-            Section(NSLocalizedString("可添加项目", comment: "")) {
+            Section {
                 if availableItems.isEmpty {
                     Text(NSLocalizedString("所有项目都已加入。", comment: ""))
                         .etFont(.footnote)
@@ -104,13 +104,24 @@ struct WatchMessageActionBarSettingsView: View {
                         }
                     }
                 }
+            } header: {
+                Text(NSLocalizedString("可添加项目", comment: ""))
+            } footer: {
+                if role == .assistant {
+                    Text(NSLocalizedString("添加“朗读消息”后，可直接在助手气泡下方开始或停止朗读。", value: "Add Read Message to start or stop reading directly below assistant messages.", comment: "功能栏朗读说明"))
+                        .etFont(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .navigationTitle(role.title)
         .guideSettingsPageContext(
             id: GuidePageID(rawValue: "settings-message-action-bar-\(role.rawValue)"),
             title: role.title,
-            documents: [GuideDocumentReference(id: "settings-display", title: "Display Settings")],
+            documents: [
+                GuideDocumentReference(id: "settings-display", title: "Display Settings"),
+                GuideDocumentReference(id: "tts", title: "Text to Speech")
+            ],
             settings: actionBarGuideSettings
         )
         .watchGuideEntry()
@@ -125,7 +136,7 @@ struct WatchMessageActionBarSettingsView: View {
             .json(
                 "items",
                 label: NSLocalizedString("已启用项目", comment: "消息功能栏向导字段"),
-                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema,
+                schema: GuideDisplayActionSettingsSupport.messageActionItemsSchema(for: role),
                 get: { GuideDisplayActionSettingsSupport.messageActionItemsValue(selectedItems) },
                 normalize: GuideDisplayActionSettingsSupport.normalizeMessageActionItems,
                 set: { value in
@@ -226,7 +237,7 @@ extension MessageActionBarAlignment {
 extension MessageActionBarItem {
     var isSupportedOnCurrentPlatform: Bool {
         switch self {
-        case .quickRetry, .copyMessage, .requestTime, .inputTokens, .outputTokens, .costEstimate, .versionSwitcher:
+        case .quickRetry, .copyMessage, .readAloud, .requestTime, .inputTokens, .outputTokens, .costEstimate, .versionSwitcher:
             return true
         }
     }
@@ -237,6 +248,8 @@ extension MessageActionBarItem {
             return NSLocalizedString("快捷重试", comment: "")
         case .copyMessage:
             return NSLocalizedString("复制消息", comment: "")
+        case .readAloud:
+            return NSLocalizedString("朗读消息", value: "Read Message", comment: "功能栏朗读项目")
         case .requestTime:
             return NSLocalizedString("请求时间", comment: "")
         case .inputTokens:
@@ -256,6 +269,8 @@ extension MessageActionBarItem {
             return "arrow.clockwise"
         case .copyMessage:
             return "doc.on.doc"
+        case .readAloud:
+            return "speaker.wave.2"
         case .requestTime:
             return "clock"
         case .inputTokens:

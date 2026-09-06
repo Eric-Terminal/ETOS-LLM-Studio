@@ -25,6 +25,7 @@ public enum MessageActionBarAlignment: String, CaseIterable, Identifiable, Codab
 public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, Sendable {
     case quickRetry
     case copyMessage
+    case readAloud
     case requestTime
     case inputTokens
     case outputTokens
@@ -39,7 +40,7 @@ public enum MessageActionBarItem: String, CaseIterable, Identifiable, Codable, S
             return allCases
         case .user:
             return allCases.filter { item in
-                item != .quickRetry && item != .versionSwitcher
+                item != .quickRetry && item != .versionSwitcher && item != .readAloud
             }
         }
     }
@@ -197,6 +198,12 @@ public struct MessageActionBarConfiguration: Codable, Equatable, Sendable {
 }
 
 public enum MessageActionBarAvailability {
+    public static func canReadAloud(_ message: ChatMessage) -> Bool {
+        // 与消息更多菜单的朗读范围保持一致；空的流式占位不显示入口。
+        let supportsSpeech = message.role == .assistant || message.role == .tool || message.role == .system
+        return supportsSpeech && !message.content.isEmpty
+    }
+
     public static func retryableMessageIDs(in messages: [ChatMessage], isSending: Bool) -> Set<UUID> {
         if isSending {
             guard let lastMessage = messages.last else { return [] }

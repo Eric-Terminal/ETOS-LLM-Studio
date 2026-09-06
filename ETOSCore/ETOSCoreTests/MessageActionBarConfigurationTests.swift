@@ -131,4 +131,49 @@ struct MessageActionBarConfigurationTests {
         #expect(idleIDs == Set(messages.map(\.id)))
         #expect(sendingIDs == [lastUser.id])
     }
+
+    @Test("朗读项目往返保留顺序并过滤用户气泡中的朗读入口")
+    func readAloudConfigurationRoundTrip() {
+        let configuration = MessageActionBarConfiguration(
+            assistantItems: [.readAloud, .copyMessage, .readAloud, .versionSwitcher],
+            userItems: [.copyMessage, .readAloud],
+            assistantAlignment: .leading,
+            userAlignment: .trailing
+        )
+        let restored = MessageActionBarConfiguration.decoded(from: configuration.encodedString())
+
+        #expect(restored.assistantItems == [.readAloud, .copyMessage, .versionSwitcher])
+        #expect(restored.userItems == [.copyMessage])
+        #expect(MessageActionBarItem.supportedItems(for: .assistant).contains(.readAloud))
+        #expect(!MessageActionBarItem.supportedItems(for: .user).contains(.readAloud))
+    }
+
+    @Test("功能栏朗读仅提供给有正文的助手、工具和系统消息")
+    func readAloudAvailabilityMatchesMessageActions() {
+        for role in [MessageRole.assistant, .tool, .system] {
+            #expect(MessageActionBarAvailability.canReadAloud(ChatMessage(role: role, content: "可朗读的正文")))
+            #expect(!MessageActionBarAvailability.canReadAloud(ChatMessage(role: role, content: "")))
+        }
+        for role in [MessageRole.user, .error] {
+            #expect(!MessageActionBarAvailability.canReadAloud(ChatMessage(role: role, content: "不提供朗读入口")))
+        }
+    }
+
+    @Test("向导接受朗读配置并随消息类型更新可选值")
+    func guideReadAloudSchemaFollowsRole() throws {
+        let value = JSONValue.array([.string("readAloud"), .string("copyMessage")])
+        #expect(try GuideDisplayActionSettingsSupport.normalizeMessageActionItems(value) == value)
+        #expect(try GuideDisplayActionSettingsSupport.messageActionItems(from: value) == [.readAloud, .copyMessage])
+
+        for role in MessageActionBarRole.allCases {
+            let schema = GuideDisplayActionSettingsSupport.messageActionItemsSchema(for: role)
+            guard case .dictionary(let fields) = schema,
+                  case .dictionary(let items)? = fields["items"],
+                  case .array(let values)? = items["enum"] else {
+                Issue.record("功能栏向导缺少可选项目声明")
+                return
+            }
+            #expect(values.contains(.string("readAloud")) == (role == .assistant))
+        }
+    }
 }
